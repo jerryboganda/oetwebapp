@@ -27,23 +27,21 @@ public sealed class VoiceDesignRegenerationService(
                 "Conversation template audio regeneration is not supported by this batch worker yet.");
         }
 
-        var isRecallBatch = string.Equals(request.AudioType, "recalls", StringComparison.OrdinalIgnoreCase);
+        // ElevenLabs is the only TTS provider — every audio type generates
+        // through it, using the admin-configured model + default voice unless
+        // the request overrides them.
         var options = await optionsProvider.GetAsync(ct);
-        var providerName = isRecallBatch
-            ? "elevenlabs"
-            : request.ProviderName ?? "digitalocean-qwen3-tts";
-        var modelVariant = request.ModelVariant
-            ?? (isRecallBatch ? options.ElevenLabsModel : "flash");
-        var voiceId = request.VoiceId
-            ?? (isRecallBatch ? options.ElevenLabsDefaultVoiceId : "Cherry");
+        const string providerName = "elevenlabs";
+        var modelVariant = request.ModelVariant ?? options.ElevenLabsModel;
+        var voiceId = request.VoiceId ?? options.ElevenLabsDefaultVoiceId;
         var isDryRun = request.DryRun ?? false;
         var forceRegenerate = request.ForceRegenerate ?? false;
 
-        if (isRecallBatch && string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+        if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
         {
             throw ApiException.Validation(
                 "elevenlabs_api_key_required",
-                "Save an ElevenLabs API key in Admin Settings before starting recall audio generation.");
+                "Save an ElevenLabs API key in Admin Voice Design before starting audio generation.");
         }
 
         int totalItems = 0;
@@ -136,9 +134,9 @@ public sealed class VoiceDesignRegenerationService(
                     Locale: "en-GB",
                     BatchId: batchId,
                     ModelVariant: modelVariant,
-                        Instructions: request.Instructions,
-                        ProviderName: request.ProviderName,
-                        ForceRegenerate: forceRegenerate), ct);
+                    Instructions: request.Instructions,
+                    ProviderName: providerName,
+                    ForceRegenerate: forceRegenerate), ct);
             }
             logger.LogInformation("Enqueued {Count} vocabulary terms for batch {BatchId}", vocabTerms.Count, batchId);
         }

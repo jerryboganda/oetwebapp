@@ -26,9 +26,9 @@ namespace OetLearner.Api.Services.Listening;
 //   4. SHA-256 the blob and write through `IFileStorage` at a content-
 //      addressed key. Persist the key + duration onto the extract.
 //
-// Real DigitalOcean Qwen3 / OpenAI TTS integration plugs into the same
-// `IListeningTtsSynthesisProvider` seam — see CLAUDE.md project memory and
-// the Conversation TTS selector for the shape.
+// Real ElevenLabs synthesis plugs into the same `IListeningTtsSynthesisProvider`
+// seam via ElevenLabsListeningTtsSynthesisProvider (selected when
+// Listening:TtsProvider=elevenlabs).
 // ═════════════════════════════════════════════════════════════════════════════
 
 public interface IListeningTtsService

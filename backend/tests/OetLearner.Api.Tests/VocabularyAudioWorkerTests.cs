@@ -135,7 +135,9 @@ public sealed class VocabularyAudioWorkerTests
     [Fact]
     public async Task RecallTermsRejectNonElevenLabsJobs()
     {
-        await using var fixture = await Fixture.CreateAsync(ttsProvider: "mock");
+        // A recall job whose ProviderName is not "elevenlabs" (here: the default
+        // null) must be rejected by the worker before synthesis.
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs");
         fixture.Db.VocabularyTerms.Add(new VocabularyTerm
         {
             Id = "VOC-RECALL-BLOCKED",
@@ -328,13 +330,12 @@ public sealed class VocabularyAudioWorkerTests
                     ElevenLabsDefaultVoiceId = "voice-default",
                     ElevenLabsModel = "eleven_multilingual_v2",
                 }));
-            if (string.Equals(ttsProvider, "elevenlabs", StringComparison.OrdinalIgnoreCase))
+            // ElevenLabs is the only TTS provider. Register the test double for
+            // any non-"off" setting (the selector resolves "auto"/"elevenlabs"
+            // to it); "off" registers nothing so the selector returns null.
+            if (!string.Equals(ttsProvider, "off", StringComparison.OrdinalIgnoreCase))
             {
                 services.AddScoped<IConversationTtsProvider, TestElevenLabsTtsProvider>();
-            }
-            else
-            {
-                services.AddScoped<IConversationTtsProvider, MockConversationTtsProvider>();
             }
             services.AddScoped<IConversationTtsProviderSelector, ConversationTtsProviderSelector>();
 

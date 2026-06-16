@@ -26,7 +26,10 @@ public class ConversationSettingsRow
     [MaxLength(32)]
     public string? TtsProvider { get; set; }
 
-    // Azure Speech (both ASR + TTS)
+    // Azure Speech (ASR). AzureTtsDefaultVoice is DEPRECATED dead config — see
+    // the deprecation note above the CosyVoice block; kept only so the live
+    // schema is unchanged this release. Scheduled for removal in a follow-up
+    // drop migration (expand/contract).
     public string? AzureSpeechKeyEncrypted { get; set; }
     [MaxLength(64)] public string? AzureSpeechRegion { get; set; }
     [MaxLength(16)] public string? AzureLocale { get; set; }
@@ -86,6 +89,16 @@ public class ConversationSettingsRow
     public double? ElevenLabsSimilarityBoost { get; set; }
     public double? ElevenLabsStyle { get; set; }
     public bool? ElevenLabsUseSpeakerBoost { get; set; }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DEPRECATED — dead TTS-provider config. ElevenLabs is now the only TTS
+    // provider; the conversation/options/admin code no longer reads or writes
+    // any of the CosyVoice / ChatTTS / Qwen3 / GPT-SoVITS columns below (nor
+    // AzureTtsDefaultVoice above). They are intentionally retained for ONE
+    // release so the live schema is unchanged during blue/green cutover
+    // (expand/contract): a follow-up "drop" migration removes them once no
+    // running container maps them. Do not add new readers.
+    // ─────────────────────────────────────────────────────────────────────
 
     // CosyVoice
     [MaxLength(256)] public string? CosyVoiceBaseUrl { get; set; }

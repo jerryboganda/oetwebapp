@@ -497,7 +497,7 @@ public static class DatabaseBootstrapper
         {
             await db.Database.ExecuteSqlRawAsync(
                 """
-                ALTER TABLE IF EXISTS "AudioRegenerationBatches" ADD COLUMN IF NOT EXISTS "ProviderName" character varying(64) NOT NULL DEFAULT 'digitalocean-qwen3-tts';
+                ALTER TABLE IF EXISTS "AudioRegenerationBatches" ADD COLUMN IF NOT EXISTS "ProviderName" character varying(64) NOT NULL DEFAULT 'elevenlabs';
                 ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsOutputFormat" character varying(64);
                 ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsPronunciationDictionaryId" character varying(128);
                 ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsPronunciationDictionaryVersionId" character varying(128);
@@ -524,7 +524,7 @@ public static class DatabaseBootstrapper
 
         if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
         {
-            await AddSqliteColumnIfMissingAsync(db, "AudioRegenerationBatches", @"""ProviderName"" TEXT NOT NULL DEFAULT 'digitalocean-qwen3-tts'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "AudioRegenerationBatches", @"""ProviderName"" TEXT NOT NULL DEFAULT 'elevenlabs'", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsOutputFormat"" TEXT NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsPronunciationDictionaryId"" TEXT NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsPronunciationDictionaryVersionId"" TEXT NULL", cancellationToken);

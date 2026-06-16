@@ -39,7 +39,7 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
     // ─── BuildSeeds (pure) ────────────────────────────────────────────────
 
     [Fact]
-    public void BuildSeeds_AllConfigured_EmitsSevenRows()
+    public void BuildSeeds_AllConfigured_EmitsSixRows()
     {
         var conv = new ConversationOptions
         {
@@ -56,8 +56,9 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
 
         var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
 
-        Assert.Equal(7, seeds.Count);
-        Assert.Contains(seeds, s => s.Code == "azure-tts" && s.Category == AiProviderCategory.Tts);
+        // ElevenLabs is the only TTS provider — azure-tts is no longer seeded.
+        Assert.Equal(6, seeds.Count);
+        Assert.DoesNotContain(seeds, s => s.Code == "azure-tts");
         Assert.Contains(seeds, s => s.Code == "elevenlabs-tts" && s.Category == AiProviderCategory.Tts);
         Assert.Contains(seeds, s => s.Code == "azure-asr" && s.Category == AiProviderCategory.Asr);
         Assert.Contains(seeds, s => s.Code == "elevenlabs-stt" && s.Category == AiProviderCategory.Asr && s.Dialect == AiProviderDialect.ElevenLabsStt);
@@ -74,7 +75,7 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
     }
 
     [Fact]
-    public void BuildSeeds_OnlyAzure_EmitsTtsAsrAndPhoneme()
+    public void BuildSeeds_OnlyAzure_EmitsAsrAndPhoneme()
     {
         var conv = new ConversationOptions
         {
@@ -87,8 +88,9 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
 
         var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
 
-        Assert.Equal(3, seeds.Count);
-        Assert.Contains(seeds, s => s.Code == "azure-tts");
+        // Azure TTS is no longer seeded — only ASR + phoneme remain for Azure.
+        Assert.Equal(2, seeds.Count);
+        Assert.DoesNotContain(seeds, s => s.Code == "azure-tts");
         Assert.Contains(seeds, s => s.Code == "azure-asr");
         Assert.Contains(seeds, s => s.Code == "azure-phoneme");
     }
@@ -147,7 +149,7 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
 
         await using var db = new LearnerDbContext(_options);
         var rows = await db.AiProviders.AsNoTracking().ToListAsync();
-        Assert.Equal(3, rows.Count);  // azure-tts, azure-asr, elevenlabs-tts
+        Assert.Equal(2, rows.Count);  // azure-asr, elevenlabs-tts
         Assert.All(rows, r => Assert.True(r.IsActive));
         Assert.All(rows, r => Assert.Equal(string.Empty, r.EncryptedApiKey));
     }

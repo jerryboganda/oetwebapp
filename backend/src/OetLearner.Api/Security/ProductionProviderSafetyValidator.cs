@@ -127,25 +127,18 @@ public static class ProductionProviderSafetyValidator
         if (requested == "mock")
             throw MockNotAllowed("Conversation TTS", "Conversation:TtsProvider");
 
-        var hasAzure = HasAzureSpeech(options.AzureSpeechKey, options.AzureSpeechRegion);
+        // ElevenLabs is the only supported TTS provider. "auto"/"elevenlabs"
+        // resolve to ElevenLabs; any other (legacy) value warns rather than
+        // throwing so a stale env var cannot crash production boot.
         var hasElevenLabs = !string.IsNullOrWhiteSpace(options.ElevenLabsApiKey);
-        var hasCosyVoice = HasPair(options.CosyVoiceBaseUrl, options.CosyVoiceApiKey);
-        var hasChatTts = HasPair(options.ChatTtsBaseUrl, options.ChatTtsApiKey);
-        var hasGptSoVits = HasPair(options.GptSoVitsBaseUrl, options.GptSoVitsApiKey);
-        var configured = requested switch
+        if (requested is not ("auto" or "elevenlabs"))
         {
-            "auto" => hasAzure || hasElevenLabs || hasCosyVoice || hasChatTts || hasGptSoVits,
-            "azure" => hasAzure,
-            "elevenlabs" => hasElevenLabs,
-            "cosyvoice" => hasCosyVoice,
-            "chattts" => hasChatTts,
-            "gptsovits" => hasGptSoVits,
-            _ => throw new InvalidOperationException($"Unsupported Conversation:TtsProvider value '{options.TtsProvider}'.")
-        };
+            Console.Error.WriteLine($"[ProductionProviderSafetyValidator] WARN: Conversation:TtsProvider value '{options.TtsProvider}' is no longer supported — ElevenLabs is the only TTS provider. Treating as 'elevenlabs'. Set Conversation:TtsProvider=elevenlabs or off to silence this warning.");
+        }
 
-        if (!configured)
+        if (!hasElevenLabs)
         {
-            Console.Error.WriteLine("[ProductionProviderSafetyValidator] WARN: Conversation TTS provider credentials missing. Configure via /admin/settings or set Conversation:TtsProvider=off.");
+            Console.Error.WriteLine("[ProductionProviderSafetyValidator] WARN: ElevenLabs TTS API key missing. Configure via /admin/voice-design or set Conversation:TtsProvider=off.");
         }
     }
 

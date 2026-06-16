@@ -6,17 +6,29 @@ const {
   mockGetAudioRegenerationBatches,
   mockRegenerateAllAudio,
   mockRetryAudioRegenerationBatch,
+  mockGetElevenLabsVoices,
+  mockUploadDictionary,
 } = vi.hoisted(() => ({
   mockGetAdminVoiceDesignConfig: vi.fn(),
   mockGetAudioRegenerationBatches: vi.fn(),
   mockRegenerateAllAudio: vi.fn(),
   mockRetryAudioRegenerationBatch: vi.fn(),
+  mockGetElevenLabsVoices: vi.fn(),
+  mockUploadDictionary: vi.fn(),
 }));
 
 vi.mock('@/components/domain/admin-route-surface', () => ({
   AdminRouteWorkspace: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
   AdminRoutePanel: ({ title, children }: { title: string; children: React.ReactNode }) => <section aria-label={title}>{children}</section>,
   AdminRouteSectionHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
+}));
+
+vi.mock('@/components/admin/layout/admin-page-shell', () => ({
+  AdminPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/admin/ui/page-header', () => ({
+  PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -40,7 +52,7 @@ vi.mock('@/components/ui/alert', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  probeAdminQwen3Voices: vi.fn(),
+  getElevenLabsVoices: mockGetElevenLabsVoices,
   previewAdminVoiceDesign: vi.fn(),
   regenerateAllAudio: mockRegenerateAllAudio,
   getAudioRegenerationBatches: mockGetAudioRegenerationBatches,
@@ -48,18 +60,12 @@ vi.mock('@/lib/api', () => ({
   retryAudioRegenerationBatch: mockRetryAudioRegenerationBatch,
   getAdminVoiceDesignConfig: mockGetAdminVoiceDesignConfig,
   saveAdminVoiceDesignConfig: vi.fn(),
-  uploadElevenLabsPronunciationDictionary: vi.fn(),
+  uploadElevenLabsPronunciationDictionary: mockUploadDictionary,
 }));
 
 import AdminVoiceDesignPage from './page';
 
 const voiceDesignConfig = {
-  modelVariant: 'flash' as const,
-  voiceId: 'Cherry',
-  voiceInstructions: '',
-  speed: 1,
-  pitch: 0,
-  emotion: '',
   elevenLabsTtsBaseUrl: 'https://api.elevenlabs.io/v1',
   elevenLabsDefaultVoiceId: 'auq43ws1oslv0tO4BDa7',
   elevenLabsModel: 'eleven_multilingual_v2',
@@ -75,16 +81,18 @@ const voiceDesignConfig = {
   lastUpdatedBy: null,
 };
 
-describe('Admin voice design recall audio controls', () => {
+describe('Admin voice design (ElevenLabs)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAdminVoiceDesignConfig.mockResolvedValue(voiceDesignConfig);
     mockGetAudioRegenerationBatches.mockResolvedValue({ batches: [] });
     mockRegenerateAllAudio.mockResolvedValue({ batchId: 'batch-1', totalItems: 12 });
     mockRetryAudioRegenerationBatch.mockResolvedValue({ batchId: 'batch-retry' });
+    mockGetElevenLabsVoices.mockResolvedValue({ voices: [] });
+    mockUploadDictionary.mockResolvedValue({ dictionaryId: 'd1', versionId: 'v1' });
   });
 
-  it('blocks recall preview when ElevenLabs settings are missing', async () => {
+  it('blocks regeneration preview when ElevenLabs API key is missing', async () => {
     mockGetAdminVoiceDesignConfig.mockResolvedValueOnce({
       ...voiceDesignConfig,
       elevenLabsApiKeyPresent: false,
@@ -98,7 +106,7 @@ describe('Admin voice design recall audio controls', () => {
     expect(mockRegenerateAllAudio).not.toHaveBeenCalled();
   });
 
-  it('blocks recall preview when saved ElevenLabs settings are dirty', async () => {
+  it('blocks regeneration preview when saved ElevenLabs settings are dirty', async () => {
     const user = userEvent.setup();
     render(<AdminVoiceDesignPage />);
 
@@ -112,7 +120,7 @@ describe('Admin voice design recall audio controls', () => {
     expect(screen.getByText(/Save a valid ElevenLabs API key/i)).toBeInTheDocument();
   });
 
-  it('sends recall preview requests through the ElevenLabs provider payload', async () => {
+  it('sends regeneration preview through the ElevenLabs payload', async () => {
     const user = userEvent.setup();
     render(<AdminVoiceDesignPage />);
 
@@ -130,6 +138,35 @@ describe('Admin voice design recall audio controls', () => {
     }));
   });
 
+  it('fetches ElevenLabs voices and selecting one updates the default voice id', async () => {
+    mockGetElevenLabsVoices.mockResolvedValueOnce({
+      voices: [{ voiceId: 'voice-aria', name: 'Aria', category: 'premade', previewUrl: null, labels: null }],
+    });
+    const user = userEvent.setup();
+    render(<AdminVoiceDesignPage />);
+
+    await waitFor(() => expect(mockGetAdminVoiceDesignConfig).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: /Fetch Voices/i }));
+
+    await user.click(await screen.findByRole('button', { name: /^Select$/i }));
+
+    expect((screen.getByLabelText(/Default Voice ID/) as HTMLInputElement).value).toBe('voice-aria');
+  });
+
+  it('surfaces the ElevenLabs error detail when a PLS upload fails', async () => {
+    mockUploadDictionary.mockRejectedValueOnce(new Error('ElevenLabs dictionary upload failed (422): invalid lexeme'));
+    const user = userEvent.setup();
+    render(<AdminVoiceDesignPage />);
+
+    await waitFor(() => expect(mockGetAdminVoiceDesignConfig).toHaveBeenCalled());
+
+    const file = new File(['<lexicon/>'], 'terms.pls', { type: 'application/pls+xml' });
+    await user.upload(screen.getByLabelText('PLS Pronunciation Dictionary'), file);
+    await user.click(screen.getByRole('button', { name: /Upload PLS/i }));
+
+    expect(await screen.findByText(/invalid lexeme/i)).toBeInTheDocument();
+  });
+
   it('retries failed recall batches from the job tracker', async () => {
     mockGetAudioRegenerationBatches.mockResolvedValueOnce({
       batches: [{
@@ -142,6 +179,10 @@ describe('Admin voice design recall audio controls', () => {
         failedItems: 3,
         voiceId: 'auq43ws1oslv0tO4BDa7',
         modelVariant: 'eleven_multilingual_v2',
+        providerName: 'elevenlabs',
+        speed: 1,
+        pitch: 0,
+        emotion: '',
         startedAt: '2026-05-23T00:00:00Z',
         completedAt: '2026-05-23T00:01:00Z',
         requestedBy: 'admin-1',

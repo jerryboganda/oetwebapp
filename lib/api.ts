@@ -9675,72 +9675,18 @@ export async function adminConversationTtsPreview(body: { text?: string; voice?:
   });
 }
 
-// ── Qwen3 Voice Studio (Phase Q1) ──────────────────────────────────
-// Probe the 46 known flash-preset voices so the admin can audition each
-// one in the UI. Each probe synthesises a 1-char clip server-side via the
-// already-registered Qwen3 provider (concurrency-capped). Returns voice
-// metadata + an availability flag + the synthesis time so the admin can
-// see at a glance which presets are healthy on the upstream provider.
-export interface AdminQwen3VoiceProbeResult {
-  id: string;
-  label: string;
-  gender: 'male' | 'female' | 'neutral' | string;
-  available: boolean;
-  errorMessage?: string | null;
-  durationMs?: number | null;
-  bytes?: number;
+// A voice from the ElevenLabs catalogue (GET /v1/voices), surfaced so admins
+// can browse, audition, and pick the platform default voice id.
+export interface AdminElevenLabsVoice {
+  voiceId: string;
+  name: string;
+  category?: string | null;
+  previewUrl?: string | null;
+  labels?: Record<string, string> | null;
 }
 
-export async function probeAdminQwen3Voices(): Promise<{ voices: AdminQwen3VoiceProbeResult[] }> {
-  return apiRequest<{ voices: AdminQwen3VoiceProbeResult[] }>('/v1/admin/conversation/tts/qwen3/voices/probe');
-}
-
-// Per-voice preview — returns a Blob the caller can wrap in an Audio() and
-// play. Reuses the same admin DTO as the generic TTS preview so the
-// backend handler can stay simple.
-export async function previewAdminQwen3Voice(body: {
-  modelVariant: 'flash' | 'voicedesign';
-  voiceId?: string;
-  instructions?: string;
-  text?: string;
-  locale?: string;
-}): Promise<Blob> {
-  return apiBlobRequest('/v1/admin/conversation/tts/qwen3/preview-voice', {
-    method: 'POST',
-    body: JSON.stringify({
-      modelVariant: body.modelVariant,
-      voice: body.voiceId ?? '',
-      instructions: body.instructions ?? '',
-      text: body.text ?? '',
-      locale: body.locale ?? 'en-GB',
-    }),
-  });
-}
-
-// Bulk regenerate vocabulary audio with a pinned voice. dryRun=true returns
-// the projected count without enqueuing — used by the confirm modal so the
-// admin sees exactly how many terms will be (re)synthesised before they
-// commit.
-export interface AdminVocabularyAudioRegenerateResult {
-  batchId: string;
-  queuedCount: number;
-  scope: 'all' | 'missing' | 'different-voice';
-  dryRun: boolean;
-  modelVariant: 'flash' | 'voicedesign';
-}
-
-export async function regenerateVocabularyAudio(body: {
-  scope: 'all' | 'missing' | 'different-voice';
-  modelVariant: 'flash' | 'voicedesign';
-  voiceId?: string;
-  instructions?: string;
-  professionId?: string;
-  dryRun?: boolean;
-}): Promise<AdminVocabularyAudioRegenerateResult> {
-  return apiRequest<AdminVocabularyAudioRegenerateResult>('/v1/admin/vocabulary/audio/regenerate', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+export async function getElevenLabsVoices(): Promise<{ voices: AdminElevenLabsVoice[] }> {
+  return apiRequest<{ voices: AdminElevenLabsVoice[] }>('/v1/admin/voice-design/elevenlabs/voices');
 }
 
 export async function fetchAdminConversationSessions(params?: {
@@ -13581,16 +13527,11 @@ export async function fetchInterlocutorPracticeQueue(): Promise<InterlocutorPrac
 
 // ── Voice Design Studio API ─────────────────────────────────────────
 
-/** Preview a voice with full design params (speed, pitch, emotion) */
+/** Preview an ElevenLabs voice (returns an MP3 Blob). */
 export async function previewAdminVoiceDesign(body: {
-  modelVariant: 'flash' | 'voicedesign';
   voiceId?: string;
-  instructions?: string;
   text: string;
   locale?: string;
-  speed?: number;
-  pitch?: number;
-  emotion?: string;
 }): Promise<Blob> {
   return apiBlobRequest('/v1/admin/voice-design/preview', {
     method: 'POST',
@@ -13678,12 +13619,6 @@ export async function retryAudioRegenerationBatch(batchId: string): Promise<Admi
 
 /** Get the current globally configured voice settings */
 export interface AdminVoiceDesignConfig {
-  modelVariant: 'flash' | 'voicedesign';
-  voiceId: string;
-  voiceInstructions: string;
-  speed: number;
-  pitch: number;
-  emotion: string;
   elevenLabsTtsBaseUrl: string;
   elevenLabsDefaultVoiceId: string;
   elevenLabsModel: string;
@@ -13705,12 +13640,6 @@ export async function getAdminVoiceDesignConfig(): Promise<AdminVoiceDesignConfi
 
 /** Save voice design configuration globally */
 export async function saveAdminVoiceDesignConfig(body: {
-  modelVariant: 'flash' | 'voicedesign';
-  voiceId?: string;
-  instructions?: string;
-  speed?: number;
-  pitch?: number;
-  emotion?: string;
   elevenLabsApiKey?: string;
   elevenLabsTtsBaseUrl?: string;
   elevenLabsDefaultVoiceId?: string;

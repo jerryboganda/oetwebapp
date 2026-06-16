@@ -12,8 +12,8 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 - Strict mock enforcement applies to final-readiness and explicit exam-mode mocks.
 - Mock booking reschedule limit is admin-configurable, default `2`.
 - Real Content import stages only missing/non-duplicate content as Drafts.
-- LiveKit, AI routing, TTS/backfill provider choices are admin-panel configurable.
-- Listening backfill may use DigitalOcean Serverless Inference Qwen3 TTS when configured.
+- LiveKit and AI routing choices are admin-panel configurable.
+- All text-to-speech (vocabulary, conversation, recall, and listening audio) is generated via ElevenLabs, configured in admin Voice Design.
 
 ## Worktree Snapshot
 

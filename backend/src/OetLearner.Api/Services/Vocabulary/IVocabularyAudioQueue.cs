@@ -13,10 +13,9 @@ public sealed record VocabularyAudioJob(
     string Locale,
     string BatchId,
     int AttemptCount = 0,
-    // Phase Q1 — Qwen3 Voice Studio. When set, overrides the admin-configured
-    // ConversationOptions for this specific synthesis. Used by the
-    // "regenerate vocabulary audio" admin endpoint so a single run can rewrite
-    // every term to a specific preset voice or voicedesign prompt.
+    // When set, overrides the admin-configured ConversationOptions for this
+    // specific synthesis. ModelVariant selects the ElevenLabs model id; used by
+    // the bulk "regenerate audio" path so a single run can pin a model/voice.
     string? ModelVariant = null,
     string? Instructions = null,
     string? ProviderName = null,

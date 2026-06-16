@@ -92,6 +92,7 @@ x-learner-api-slot: &learner-api-slot
     Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY:-}
     Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER:-}
     Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY:-}
+    Listening__TtsProvider: ${LISTENING__TTSPROVIDER:-elevenlabs}
     Conversation__RealtimeSttEnabled: ${CONVERSATION__REALTIMESTTENABLED:-false}
     Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER:-}
     Conversation__RealtimeSttAllowRealProvider: ${CONVERSATION__REALTIMESTTALLOWREALPROVIDER:-false}

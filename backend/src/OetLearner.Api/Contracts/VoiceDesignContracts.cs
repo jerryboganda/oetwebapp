@@ -1,12 +1,6 @@
 namespace OetLearner.Api.Contracts;
 
 public record AdminVoiceDesignConfigRequest(
-    string? ModelVariant,
-    string? VoiceId,
-    string? Instructions,
-    double? Speed,
-    double? Pitch,
-    string? Emotion,
     string? ElevenLabsApiKey,
     string? ElevenLabsTtsBaseUrl,
     string? ElevenLabsDefaultVoiceId,
@@ -20,12 +14,6 @@ public record AdminVoiceDesignConfigRequest(
     bool? ElevenLabsUseSpeakerBoost);
 
 public record AdminVoiceDesignConfigResponse(
-    string ModelVariant,
-    string VoiceId,
-    string VoiceInstructions,
-    double Speed,
-    double Pitch,
-    string Emotion,
     string ElevenLabsTtsBaseUrl,
     string ElevenLabsDefaultVoiceId,
     string ElevenLabsModel,
@@ -43,12 +31,15 @@ public record AdminVoiceDesignConfigResponse(
 public record AdminVoiceDesignPreviewRequest(
     string? Text,
     string? VoiceId,
-    string? Locale,
-    string? ModelVariant,
-    string? Instructions,
-    double? Speed,
-    double? Pitch,
-    string? Emotion);
+    string? Locale);
+
+/// <summary>A voice returned by the ElevenLabs GET /v1/voices catalogue.</summary>
+public record AdminElevenLabsVoiceDto(
+    string VoiceId,
+    string Name,
+    string? Category,
+    string? PreviewUrl,
+    IReadOnlyDictionary<string, string>? Labels);
 
 public record AdminAudioRegenerateRequest(
     string AudioType,     // "all" | "listening" | "vocabulary" | "conversation" | "recalls"

@@ -30,19 +30,6 @@ public sealed class ElevenLabsConversationTtsProvider(
         var baseUrl = ElevenLabsApiEndpoint.NormalizeBaseUrl(options.ElevenLabsTtsBaseUrl);
         var url = $"{baseUrl}/text-to-speech/{Uri.EscapeDataString(voice)}?output_format={Uri.EscapeDataString(outputFormat)}";
 
-        var dictionaryLocators = !string.IsNullOrWhiteSpace(options.ElevenLabsPronunciationDictionaryId)
-            ? new[]
-            {
-                new
-                {
-                    pronunciation_dictionary_id = options.ElevenLabsPronunciationDictionaryId,
-                    version_id = string.IsNullOrWhiteSpace(options.ElevenLabsPronunciationDictionaryVersionId)
-                        ? null
-                        : options.ElevenLabsPronunciationDictionaryVersionId,
-                },
-            }
-            : null;
-
         var payloadMap = new Dictionary<string, object?>
         {
             ["text"] = request.Text,
@@ -55,9 +42,13 @@ public sealed class ElevenLabsConversationTtsProvider(
                 use_speaker_boost = options.ElevenLabsUseSpeakerBoost,
             },
         };
-        if (dictionaryLocators is not null)
+
+        var locator = ElevenLabsPronunciationLocator.Build(
+            options.ElevenLabsPronunciationDictionaryId,
+            options.ElevenLabsPronunciationDictionaryVersionId);
+        if (locator is not null)
         {
-            payloadMap["pronunciation_dictionary_locators"] = dictionaryLocators;
+            payloadMap["pronunciation_dictionary_locators"] = new[] { locator };
         }
 
         var payload = JsonSerializer.Serialize(payloadMap);
@@ -75,7 +66,7 @@ public sealed class ElevenLabsConversationTtsProvider(
         }
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         return new ConversationTtsResult(bytes, "audio/mpeg",
-            AzureConversationTtsProvider.ApproxDurationMs(request.Text), Name, $"elevenlabs voice={voice}");
+            ConversationTtsDuration.ApproxDurationMs(request.Text), Name, $"elevenlabs voice={voice}");
     }
 
     private static string NormalizeMp3OutputFormat(string? outputFormat)

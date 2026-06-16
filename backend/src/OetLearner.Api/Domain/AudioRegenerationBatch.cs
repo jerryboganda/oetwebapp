@@ -24,13 +24,13 @@ public class AudioRegenerationBatch
     public int FailedItems { get; set; }
 
     [MaxLength(64)]
-    public string VoiceId { get; set; } = "Cherry";
+    public string VoiceId { get; set; } = string.Empty;
 
     [MaxLength(32)]
-    public string ModelVariant { get; set; } = "flash";
+    public string ModelVariant { get; set; } = "eleven_multilingual_v2";
 
     [MaxLength(64)]
-    public string ProviderName { get; set; } = "digitalocean-qwen3-tts";
+    public string ProviderName { get; set; } = "elevenlabs";
 
     public double Speed { get; set; } = 1.0;
     public double Pitch { get; set; } = 0;

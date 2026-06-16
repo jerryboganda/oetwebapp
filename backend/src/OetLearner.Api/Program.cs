@@ -811,8 +811,8 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IDirectAiCallRecorder, 
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAExtractionService, OetLearner.Api.Services.Listening.ListeningPartAExtractionService>();
 // Listening TTS synthesis. The DI seam picks between provider implementations
 // based on appsettings `Listening:TtsProvider`. Supported values:
-//   "stub"  — emits silence, in-process, no creds (default in dev/CI).
-//   real providers (e.g. "qwen", "openai", "azure") plug in here when wired.
+//   "stub"        — emits silence, in-process, no creds (default in dev/CI).
+//   "elevenlabs"  — real ElevenLabs synthesis (pcm_16000). Set in production.
 // The full synthesis pipeline (segment concat, SHA-256, IFileStorage write,
 // audit log) is provider-agnostic and lives in ListeningTtsService.
 {
@@ -831,14 +831,18 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAExtr
             {
                 Console.WriteLine(
                     "[ProductionProviderSafetyValidator] WARN: Listening:TtsProvider is 'stub'. "
-                    + "Configure a real provider (e.g. 'qwen', 'openai', 'azure') via "
-                    + "LISTENING__TTSPROVIDER environment variable before TTS features will function.");
+                    + "Set LISTENING__TTSPROVIDER=elevenlabs before listening TTS features will function.");
             }
+            break;
+        case "elevenlabs":
+            builder.Services.AddSingleton<
+                OetLearner.Api.Services.Listening.IListeningTtsSynthesisProvider,
+                OetLearner.Api.Services.Listening.ElevenLabsListeningTtsSynthesisProvider>();
             break;
         default:
             throw new InvalidOperationException(
                 $"Listening:TtsProvider '{ttsProvider}' is not registered. Add the provider's "
-                + "DI registration above this switch or set the value to 'stub' for dev/CI.");
+                + "DI registration above this switch or set the value to 'stub' (dev/CI) or 'elevenlabs'.");
     }
 }
 builder.Services.AddScoped<
@@ -1011,8 +1015,7 @@ builder.Services.Configure<OetLearner.Api.Configuration.ConversationOptions>(
 foreach (var name in new[]
 {
     "ConversationAzureClient", "ConversationWhisperClient", "ConversationDeepgramClient",
-    "ConversationAzureTtsClient", "ConversationElevenLabsClient",
-    "ConversationCosyVoiceClient", "ConversationChatTtsClient", "ConversationDigitalOceanQwenTtsClient", "ConversationGptSoVitsClient",
+    "ConversationElevenLabsClient",
 })
 {
     builder.Services.AddHttpClient(name, c => { c.Timeout = TimeSpan.FromMinutes(2); });
@@ -1040,19 +1043,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Content.IPaperExtractionProvi
     OetLearner.Api.Services.Content.PaperExtractionProviderSelector>();
 
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
-    OetLearner.Api.Services.Conversation.Tts.MockConversationTtsProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
-    OetLearner.Api.Services.Conversation.Tts.AzureConversationTtsProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
     OetLearner.Api.Services.Conversation.Tts.ElevenLabsConversationTtsProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
-    OetLearner.Api.Services.Conversation.Tts.CosyVoiceConversationTtsProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
-    OetLearner.Api.Services.Conversation.Tts.ChatTtsConversationTtsProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
-    OetLearner.Api.Services.Conversation.Tts.DigitalOceanQwen3TtsConversationProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
-    OetLearner.Api.Services.Conversation.Tts.GptSoVitsConversationTtsProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProviderSelector,
     OetLearner.Api.Services.Conversation.Tts.ConversationTtsProviderSelector>();
 

@@ -82,7 +82,6 @@ public sealed class ConversationOptionsProvider(
         if (!string.IsNullOrEmpty(azureKey)) o.AzureSpeechKey = azureKey;
         if (!string.IsNullOrWhiteSpace(r.AzureSpeechRegion)) o.AzureSpeechRegion = r.AzureSpeechRegion;
         if (!string.IsNullOrWhiteSpace(r.AzureLocale)) o.AzureLocale = r.AzureLocale;
-        if (!string.IsNullOrWhiteSpace(r.AzureTtsDefaultVoice)) o.AzureTtsDefaultVoice = r.AzureTtsDefaultVoice;
 
         if (!string.IsNullOrWhiteSpace(r.WhisperBaseUrl)) o.WhisperBaseUrl = r.WhisperBaseUrl;
         var whisperKey = Unprotect(r.WhisperApiKeyEncrypted);
@@ -143,30 +142,6 @@ public sealed class ConversationOptionsProvider(
         if (r.ElevenLabsStyle.HasValue) o.ElevenLabsStyle = r.ElevenLabsStyle.Value;
         if (r.ElevenLabsUseSpeakerBoost.HasValue) o.ElevenLabsUseSpeakerBoost = r.ElevenLabsUseSpeakerBoost.Value;
 
-        if (!string.IsNullOrWhiteSpace(r.CosyVoiceBaseUrl)) o.CosyVoiceBaseUrl = r.CosyVoiceBaseUrl;
-        var cosyKey = Unprotect(r.CosyVoiceApiKeyEncrypted);
-        if (!string.IsNullOrEmpty(cosyKey)) o.CosyVoiceApiKey = cosyKey;
-        if (!string.IsNullOrWhiteSpace(r.CosyVoiceDefaultVoice)) o.CosyVoiceDefaultVoice = r.CosyVoiceDefaultVoice;
-
-        if (!string.IsNullOrWhiteSpace(r.ChatTtsBaseUrl)) o.ChatTtsBaseUrl = r.ChatTtsBaseUrl;
-        var chatKey = Unprotect(r.ChatTtsApiKeyEncrypted);
-        if (!string.IsNullOrEmpty(chatKey)) o.ChatTtsApiKey = chatKey;
-        if (!string.IsNullOrWhiteSpace(r.ChatTtsDefaultVoice)) o.ChatTtsDefaultVoice = r.ChatTtsDefaultVoice;
-
-        // Phase Q1 — Qwen3 Voice Studio overrides. Instructions are NOT a
-        // secret (free-form voice description), so no encryption layer.
-        if (!string.IsNullOrWhiteSpace(r.Qwen3ModelVariant)) o.Qwen3ModelVariant = r.Qwen3ModelVariant;
-        if (!string.IsNullOrWhiteSpace(r.Qwen3VoiceId)) o.Qwen3VoiceId = r.Qwen3VoiceId;
-        if (!string.IsNullOrWhiteSpace(r.Qwen3VoiceInstructions)) o.Qwen3VoiceInstructions = r.Qwen3VoiceInstructions;
-        if (r.Qwen3Speed.HasValue) o.Qwen3Speed = r.Qwen3Speed.Value;
-        if (r.Qwen3Pitch.HasValue) o.Qwen3Pitch = r.Qwen3Pitch.Value;
-        if (!string.IsNullOrWhiteSpace(r.Qwen3Emotion)) o.Qwen3Emotion = r.Qwen3Emotion;
-
-        if (!string.IsNullOrWhiteSpace(r.GptSoVitsBaseUrl)) o.GptSoVitsBaseUrl = r.GptSoVitsBaseUrl;
-        var gptsovitsKey = Unprotect(r.GptSoVitsApiKeyEncrypted);
-        if (!string.IsNullOrEmpty(gptsovitsKey)) o.GptSoVitsApiKey = gptsovitsKey;
-        if (!string.IsNullOrWhiteSpace(r.GptSoVitsDefaultVoice)) o.GptSoVitsDefaultVoice = r.GptSoVitsDefaultVoice;
-
         if (r.MaxAudioBytes.HasValue && r.MaxAudioBytes.Value > 0) o.MaxAudioBytes = r.MaxAudioBytes.Value;
         if (r.AudioRetentionDays.HasValue && r.AudioRetentionDays.Value > 0) o.AudioRetentionDays = r.AudioRetentionDays.Value;
         if (r.PrepDurationSeconds.HasValue && r.PrepDurationSeconds.Value > 0) o.PrepDurationSeconds = r.PrepDurationSeconds.Value;
@@ -189,30 +164,16 @@ public sealed class ConversationOptionsProvider(
     }
 
     /// <summary>
-    /// Phase 6c — apply registry-first overrides for the four conversation
-    /// voice provider codes (<c>azure-tts</c>, <c>azure-asr</c>,
-    /// <c>elevenlabs-tts</c>, <c>whisper-asr</c>). Each lookup is skipped
-    /// silently if the row is missing, inactive, or has an empty
-    /// EncryptedApiKey, so this method is strictly additive and cannot
-    /// break a deployment that has not yet seeded voice credentials.
+    /// Phase 6c — apply registry-first overrides for the conversation voice
+    /// provider codes (<c>azure-asr</c>, <c>elevenlabs-tts</c>,
+    /// <c>whisper-asr</c>). Each lookup is skipped silently if the row is
+    /// missing, inactive, or has an empty EncryptedApiKey, so this method is
+    /// strictly additive and cannot break a deployment that has not yet
+    /// seeded voice credentials.
     /// </summary>
     private static async Task ApplyRegistryVoiceOverridesAsync(
         ConversationOptions o, IAiProviderRegistry registry, CancellationToken ct)
     {
-        // Azure TTS (region used for both ASR + TTS — Azure speech key is shared).
-        var azureTts = await registry.FindByCodeAsync("azure-tts", ct);
-        if (azureTts is { IsActive: true } && !string.IsNullOrEmpty(azureTts.EncryptedApiKey))
-        {
-            var key = await registry.GetPlatformKeyAsync(azureTts.Code, ct);
-            if (!string.IsNullOrEmpty(key))
-            {
-                o.AzureSpeechKey = key;
-                if (!string.IsNullOrWhiteSpace(azureTts.DefaultModel)) o.AzureTtsDefaultVoice = azureTts.DefaultModel;
-                var region = ExtractAzureRegion(azureTts.BaseUrl);
-                if (!string.IsNullOrWhiteSpace(region)) o.AzureSpeechRegion = region;
-            }
-        }
-
         // Azure ASR — separate row code, but in practice shares the same
         // Azure Speech subscription key. Override only when this row carries
         // a key (operator may genuinely have two distinct subscriptions).
@@ -328,7 +289,6 @@ public sealed class ConversationOptionsProvider(
         ElevenLabsSttEnableProviderLogging = src.ElevenLabsSttEnableProviderLogging,
         ElevenLabsSttTokenTtlSeconds = src.ElevenLabsSttTokenTtlSeconds,
         TtsProvider = src.TtsProvider,
-        AzureTtsDefaultVoice = src.AzureTtsDefaultVoice,
         ElevenLabsApiKey = src.ElevenLabsApiKey,
         ElevenLabsTtsBaseUrl = src.ElevenLabsTtsBaseUrl,
         ElevenLabsDefaultVoiceId = src.ElevenLabsDefaultVoiceId,
@@ -340,21 +300,6 @@ public sealed class ConversationOptionsProvider(
         ElevenLabsSimilarityBoost = src.ElevenLabsSimilarityBoost,
         ElevenLabsStyle = src.ElevenLabsStyle,
         ElevenLabsUseSpeakerBoost = src.ElevenLabsUseSpeakerBoost,
-        CosyVoiceBaseUrl = src.CosyVoiceBaseUrl,
-        CosyVoiceApiKey = src.CosyVoiceApiKey,
-        CosyVoiceDefaultVoice = src.CosyVoiceDefaultVoice,
-        ChatTtsBaseUrl = src.ChatTtsBaseUrl,
-        ChatTtsApiKey = src.ChatTtsApiKey,
-        ChatTtsDefaultVoice = src.ChatTtsDefaultVoice,
-        Qwen3ModelVariant = src.Qwen3ModelVariant,
-        Qwen3VoiceId = src.Qwen3VoiceId,
-        Qwen3VoiceInstructions = src.Qwen3VoiceInstructions,
-        Qwen3Speed = src.Qwen3Speed,
-        Qwen3Pitch = src.Qwen3Pitch,
-        Qwen3Emotion = src.Qwen3Emotion,
-        GptSoVitsBaseUrl = src.GptSoVitsBaseUrl,
-        GptSoVitsApiKey = src.GptSoVitsApiKey,
-        GptSoVitsDefaultVoice = src.GptSoVitsDefaultVoice,
         MaxAudioBytes = src.MaxAudioBytes,
         AllowedMimeTypes = src.AllowedMimeTypes,
         AudioRetentionDays = src.AudioRetentionDays,

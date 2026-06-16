@@ -175,11 +175,6 @@ public sealed class VocabularyAudioWorker(
             return;
         }
 
-        if (string.Equals(provider.Name, "mock", StringComparison.OrdinalIgnoreCase))
-        {
-            logger.LogWarning("Vocab audio job {TermId} using mock TTS provider (placeholder audio)", job.TermId);
-        }
-
         // Respect global cooldown set by a previous 429 response.
         DateTimeOffset gate;
         lock (_gateLock) { gate = _nextAllowedAt; }
@@ -275,21 +270,11 @@ public sealed class VocabularyAudioWorker(
         term.AudioUrl = key.Length > MaxAudioUrlChars ? key[..MaxAudioUrlChars] : key;
         term.AudioBatchId = job.BatchId;
         // Provenance — lets the admin filter "regenerate where voice ≠ current"
-        // without re-listening to every term. AudioVoice for Qwen3 voicedesign
-        // is a SHA-8 of the instructions prompt so prompt changes register as
-        // a different voice.
+        // without re-listening to every term. AudioVoice is the ElevenLabs voice
+        // id; AudioModelVariant is the ElevenLabs model id.
         term.AudioProvider = provider.Name;
         term.AudioModelVariant = job.ModelVariant;
-        if (string.Equals(job.ModelVariant, "voicedesign", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(job.Instructions))
-        {
-            var promptHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(job.Instructions!))).ToLowerInvariant();
-            term.AudioVoice = "vd-" + promptHash[..8];
-        }
-        else
-        {
-            term.AudioVoice = job.Voice;
-        }
+        term.AudioVoice = job.Voice;
         term.AudioGeneratedAt = DateTimeOffset.UtcNow;
         term.UpdatedAt = DateTimeOffset.UtcNow;
 

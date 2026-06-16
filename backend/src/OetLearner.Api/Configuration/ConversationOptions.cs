@@ -53,9 +53,9 @@ public class ConversationOptions
     public bool ElevenLabsSttEnableProviderLogging { get; set; } = false;
     public int ElevenLabsSttTokenTtlSeconds { get; set; } = 900;
 
-    // TTS
+    // TTS — ElevenLabs is the only supported provider. TtsProvider is the
+    // on/off switch ("off" disables TTS; any other value resolves to ElevenLabs).
     public string TtsProvider { get; set; } = "auto";
-    public string AzureTtsDefaultVoice { get; set; } = "en-GB-SoniaNeural";
     public string ElevenLabsApiKey { get; set; } = string.Empty;
     public string ElevenLabsTtsBaseUrl { get; set; } = "https://api.elevenlabs.io/v1";
     public string ElevenLabsDefaultVoiceId { get; set; } = "auq43ws1oslv0tO4BDa7";
@@ -67,27 +67,6 @@ public class ConversationOptions
     public double ElevenLabsSimilarityBoost { get; set; } = 0.85;
     public double ElevenLabsStyle { get; set; } = 0;
     public bool ElevenLabsUseSpeakerBoost { get; set; } = true;
-    public string CosyVoiceBaseUrl { get; set; } = string.Empty;
-    public string CosyVoiceApiKey { get; set; } = string.Empty;
-    public string CosyVoiceDefaultVoice { get; set; } = "default";
-    public string ChatTtsBaseUrl { get; set; } = string.Empty;
-    public string ChatTtsApiKey { get; set; } = string.Empty;
-    public string ChatTtsDefaultVoice { get; set; } = "default";
-
-    // DigitalOcean Qwen3 TTS — Voice Studio overrides (Phase Q1).
-    // Variant: "flash" → preset voice catalogue (use Qwen3VoiceId).
-    //          "voicedesign" → free-form prompt (use Qwen3VoiceInstructions).
-    // Defaults pick a sensible flash preset so vocabulary audio is consistent
-    // out of the box even before an admin opens the Voice Studio.
-    public string Qwen3ModelVariant { get; set; } = "flash";
-    public string Qwen3VoiceId { get; set; } = "Cherry";
-    public string Qwen3VoiceInstructions { get; set; } = string.Empty;
-    public double Qwen3Speed { get; set; } = 1.0;
-    public double Qwen3Pitch { get; set; } = 0;
-    public string Qwen3Emotion { get; set; } = string.Empty;
-    public string GptSoVitsBaseUrl { get; set; } = string.Empty;
-    public string GptSoVitsApiKey { get; set; } = string.Empty;
-    public string GptSoVitsDefaultVoice { get; set; } = "default";
 
     // Audio
     public long MaxAudioBytes { get; set; } = 15 * 1024 * 1024;

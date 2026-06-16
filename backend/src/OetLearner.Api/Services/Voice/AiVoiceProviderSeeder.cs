@@ -123,21 +123,7 @@ public sealed class AiVoiceProviderSeeder(
     {
         var seeds = new List<VoiceProviderSeed>();
 
-        // Conversation TTS — Azure
-        if (!string.IsNullOrWhiteSpace(conversation.AzureSpeechKey)
-            && !string.IsNullOrWhiteSpace(conversation.AzureSpeechRegion))
-        {
-            seeds.Add(new VoiceProviderSeed(
-                Code: "azure-tts",
-                Name: "Azure Speech (TTS)",
-                Category: AiProviderCategory.Tts,
-                Dialect: AiProviderDialect.AzureTts,
-                BaseUrl: $"https://{conversation.AzureSpeechRegion}.tts.speech.microsoft.com",
-                DefaultModel: conversation.AzureTtsDefaultVoice,
-                FailoverPriority: 0));
-        }
-
-        // Conversation TTS — ElevenLabs
+        // Conversation TTS — ElevenLabs (the only supported TTS provider)
         if (!string.IsNullOrWhiteSpace(conversation.ElevenLabsApiKey))
         {
             seeds.Add(new VoiceProviderSeed(
@@ -147,7 +133,7 @@ public sealed class AiVoiceProviderSeeder(
                 Dialect: AiProviderDialect.ElevenLabsTts,
                 BaseUrl: "https://api.elevenlabs.io/v1",
                 DefaultModel: conversation.ElevenLabsModel,
-                FailoverPriority: 1));
+                FailoverPriority: 0));
         }
 
         // Conversation ASR — Azure (shares speech key with TTS)

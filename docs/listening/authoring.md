@@ -88,10 +88,13 @@ segments only.
 
 ## TTS pipeline (Wave 4 — planned)
 
-- Provider abstraction reuses
-  [`Services/Conversation/Tts/ConversationTtsProviderSelector.cs`](../../backend/src/OetLearner.Api/Services/Conversation/Tts/ConversationTtsProviderSelector.cs).
-- Preferred provider: DigitalOcean Serverless Inference Qwen3 (set
-  `DO_TTS_API_KEY` / endpoint via configuration).
+- Synthesis uses the ElevenLabs-backed `IListeningTtsSynthesisProvider`
+  ([`Services/Listening/ElevenLabsListeningTtsSynthesisProvider.cs`](../../backend/src/OetLearner.Api/Services/Listening/ElevenLabsListeningTtsSynthesisProvider.cs)),
+  selected when `Listening:TtsProvider=elevenlabs`. The dev/CI default is the
+  silence `stub`.
+- Provider: ElevenLabs (the platform's only TTS vendor). It requests raw
+  `pcm_16000` audio; the configured API key / default voice live in admin
+  Voice Design settings.
 - Per-segment synthesis → ms-aligned silence padding to honour
   `AudioStartMs` / `AudioEndMs` boundaries → upload via `IFileStorage` →
   write SHA + URL onto `ListeningExtract.AudioContentSha` (column to be

@@ -8,11 +8,10 @@ public interface IConversationTtsProviderSelector
     Task<bool> IsTtsDisabledAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Resolve a specific provider by name without consulting the admin
-    /// TtsProvider preference. Used by the Voice Studio probe/preview
-    /// endpoints so admins can audition the Qwen3 provider even when the
-    /// active TtsProvider is something else. Returns the provider only if
-    /// it is registered AND configured.
+    /// Resolve a specific provider by name. ElevenLabs is the only supported
+    /// TTS provider, so this returns the ElevenLabs provider when
+    /// <paramref name="providerName"/> is "elevenlabs" and it is configured;
+    /// otherwise it returns null.
     /// </summary>
     Task<IConversationTtsProvider?> TrySelectAsync(string providerName, CancellationToken ct = default);
 }
@@ -31,39 +30,31 @@ public sealed class ConversationTtsProviderSelector(
     public async Task<IConversationTtsProvider?> TrySelectAsync(CancellationToken ct = default)
     {
         var options = await optionsProvider.GetAsync(ct);
+        // ElevenLabs is the only TTS provider. Any value other than "off"
+        // resolves to ElevenLabs; "off" disables TTS entirely.
         if (string.Equals(options.TtsProvider, "off", StringComparison.OrdinalIgnoreCase)) return null;
-        var requested = (options.TtsProvider ?? "auto").Trim().ToLowerInvariant();
-        var all = providers.ToList();
-        IConversationTtsProvider? Find(string name) =>
-            all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        if (requested is "azure" or "digitalocean-qwen3-tts" or "elevenlabs" or "cosyvoice" or "chattts" or "gptsovits" or "mock")
+        var elevenLabs = providers.FirstOrDefault(p => string.Equals(p.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase));
+        if (elevenLabs is null)
         {
-            var p = Find(requested);
-            if (p is null) { logger.LogWarning("TTS '{Name}' not registered.", requested); return Find("mock"); }
-            if (!p.IsConfigured && requested != "mock")
-            {
-                logger.LogWarning("TTS '{Name}' not configured, falling back to mock.", requested);
-                return Find("mock");
-            }
-            return p;
+            logger.LogWarning("ElevenLabs TTS provider is not registered.");
+            return null;
         }
-
-        foreach (var candidate in new[] { "azure", "digitalocean-qwen3-tts", "cosyvoice", "chattts", "gptsovits", "elevenlabs" })
+        if (!elevenLabs.IsConfigured)
         {
-            var p = Find(candidate);
-            if (p is { IsConfigured: true }) return p;
+            logger.LogWarning("ElevenLabs TTS is not configured (missing API key).");
+            return null;
         }
-        return Find("mock");
+        return elevenLabs;
     }
 
     public Task<IConversationTtsProvider?> TrySelectAsync(string providerName, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(providerName)) return Task.FromResult<IConversationTtsProvider?>(null);
-        var p = providers.FirstOrDefault(x => string.Equals(x.Name, providerName, StringComparison.OrdinalIgnoreCase));
-        if (p is null) return Task.FromResult<IConversationTtsProvider?>(null);
-        if (!p.IsConfigured && !string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase))
+        // Used by the admin Voice Design preview so the provider can be
+        // auditioned regardless of the global on/off switch.
+        if (!string.Equals(providerName, "elevenlabs", StringComparison.OrdinalIgnoreCase))
             return Task.FromResult<IConversationTtsProvider?>(null);
-        return Task.FromResult<IConversationTtsProvider?>(p);
+        var elevenLabs = providers.FirstOrDefault(p => string.Equals(p.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(elevenLabs is { IsConfigured: true } ? elevenLabs : null);
     }
 }

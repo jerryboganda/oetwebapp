@@ -14,7 +14,7 @@ Learners practise the OET Speaking sub-test with a grounded AI partner that:
 
 1. Stays in the role defined by a CMS-authored scenario (patient for role-plays, colleague for handovers).
 2. Transcribes speech through a pluggable ASR provider. The current stable path is whole-turn upload; realtime STT is being added behind `RealtimeSttEnabled` and server-mediated provider controls.
-3. Replies in character with optional TTS (Azure / ElevenLabs / CosyVoice / ChatTTS / GPT-SoVITS).
+3. Replies in character with optional TTS (ElevenLabs — the platform's only TTS provider).
 4. Evaluates the completed transcript against the 4-criterion OET Speaking rubric, projected to 0–500.
 5. Seeds Review Module items for every rule-cited mistake.
 
@@ -188,11 +188,9 @@ Conversation:
   ElevenLabsSttLanguage: auto
   ElevenLabsSttAudioFormat: pcm_16000
   ElevenLabsSttCommitStrategy: manual
-  AzureTtsDefaultVoice
   ElevenLabsApiKey / ElevenLabsDefaultVoiceId / ElevenLabsModel
-  CosyVoiceBaseUrl / CosyVoiceApiKey / CosyVoiceDefaultVoice
-  ChatTtsBaseUrl   / ChatTtsApiKey   / ChatTtsDefaultVoice
-  GptSoVitsBaseUrl / GptSoVitsApiKey / GptSoVitsDefaultVoice
+  ElevenLabsOutputFormat / ElevenLabsPronunciationDictionaryId / ElevenLabsPronunciationDictionaryVersionId
+  ElevenLabsStability / ElevenLabsSimilarityBoost / ElevenLabsStyle / ElevenLabsUseSpeakerBoost
 ```
 
 ---

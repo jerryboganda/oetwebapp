@@ -9,10 +9,9 @@ public interface IConversationTtsProvider
 
 public sealed record ConversationTtsRequest(
     string Text, string Voice, string Locale, double? Rate = null, double? Pitch = null,
-    // Phase Q1 — Qwen3 Voice Studio overrides used by the per-voice preview
-    // endpoint and the vocabulary regenerate worker. When non-null they take
-    // priority over the admin-configured ConversationOptions for this single
-    // synthesis call; other providers ignore them.
+    // Per-call overrides. ModelVariant selects the ElevenLabs model id for this
+    // single synthesis call (falling back to the admin-configured model when
+    // null); Instructions is reserved and currently unused by ElevenLabs.
     string? ModelVariant = null, string? Instructions = null);
 
 public sealed record ConversationTtsResult(

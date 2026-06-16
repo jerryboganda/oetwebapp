@@ -96,9 +96,6 @@ services:
       Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER}
       Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY}
       Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER}
-      Conversation__ChatTtsBaseUrl: ${CONVERSATION__CHATTTSBASEURL}
-      Conversation__ChatTtsApiKey: ${CONVERSATION__CHATTTSAPIKEY}
-      Conversation__ChatTtsDefaultVoice: ${CONVERSATION__CHATTTSDEFAULTVOICE}
       MaxUploadBytes: '${MAX_UPLOAD_BYTES}'
       Storage__LocalRootPath: /var/opt/oet-learner/storage
       Features__EnableSwagger: 'true'

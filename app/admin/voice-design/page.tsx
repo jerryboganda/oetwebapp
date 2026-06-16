@@ -9,7 +9,6 @@ import {
   Loader2,
   Lock,
   Mic2,
-  Pause,
   Play,
   RefreshCw,
   Settings2,
@@ -26,7 +25,7 @@ import { Toast } from '@/components/ui/alert';
 import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
 import { PageHeader } from '@/components/admin/ui/page-header';
 import {
-  probeAdminQwen3Voices,
+  getElevenLabsVoices,
   previewAdminVoiceDesign,
   regenerateAllAudio,
   getAudioRegenerationBatches,
@@ -35,7 +34,7 @@ import {
   getAdminVoiceDesignConfig,
   saveAdminVoiceDesignConfig,
   uploadElevenLabsPronunciationDictionary,
-  type AdminQwen3VoiceProbeResult,
+  type AdminElevenLabsVoice,
   type AdminAudioBatch,
 } from '@/lib/api';
 
@@ -51,7 +50,7 @@ interface VoiceDesignSample {
 
 type AudioBatch = AdminAudioBatch;
 
-interface ElevenLabsRecallSettings {
+interface ElevenLabsSettings {
   apiKey: string;
   apiKeyPresent: boolean;
   baseUrl: string;
@@ -75,7 +74,7 @@ const OET_SAMPLES = [
   'The results show elevated levels which may indicate an underlying condition.',
 ];
 
-const DEFAULT_ELEVEN_SETTINGS: ElevenLabsRecallSettings = {
+const DEFAULT_ELEVEN_SETTINGS: ElevenLabsSettings = {
   apiKey: '',
   apiKeyPresent: false,
   baseUrl: 'https://api.elevenlabs.io/v1',
@@ -99,14 +98,8 @@ function useCollapsible(initial = true) {
 
 /* ─── Page Component ─── */
 export default function AdminVoiceDesignPage() {
-  // Voice browser
-  const [variant, setVariant] = useState<'flash' | 'voicedesign'>('flash');
-  const [selectedVoice, setSelectedVoice] = useState('');
-  const [voiceInstructions, setVoiceInstructions] = useState('');
-  const [speed, setSpeed] = useState(1.0);
-  const [pitch, setPitch] = useState(0);
-  const [emotion, setEmotion] = useState('');
-  const [voices, setVoices] = useState<AdminQwen3VoiceProbeResult[] | null>(null);
+  // Voice browser (ElevenLabs catalogue)
+  const [voices, setVoices] = useState<AdminElevenLabsVoice[] | null>(null);
   const [probing, setProbing] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
 
@@ -114,17 +107,18 @@ export default function AdminVoiceDesignPage() {
   const [samples, setSamples] = useState<VoiceDesignSample[]>([]);
   const [generatingSamples, setGeneratingSamples] = useState(false);
   const [sampleProgress, setSampleProgress] = useState(0);
-  const [voiceApproved, setVoiceApproved] = useState(false);
   const [customSampleText, setCustomSampleText] = useState('');
 
   // Regeneration state
-  const [audioType, setAudioType] = useState<'all' | 'listening' | 'vocabulary' | 'conversation' | 'recalls'>('recalls');
+  const [audioType, setAudioType] = useState<'all' | 'listening' | 'vocabulary' | 'recalls'>('recalls');
   const [scope, setScope] = useState<'all' | 'missing' | 'different-voice'>('all');
   const [dryRunResult, setDryRunResult] = useState<{ count: number } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
-  const [elevenSettings, setElevenSettings] = useState<ElevenLabsRecallSettings>(DEFAULT_ELEVEN_SETTINGS);
-  const [savedElevenSettings, setSavedElevenSettings] = useState<ElevenLabsRecallSettings>(DEFAULT_ELEVEN_SETTINGS);
+
+  // ElevenLabs settings
+  const [elevenSettings, setElevenSettings] = useState<ElevenLabsSettings>(DEFAULT_ELEVEN_SETTINGS);
+  const [savedElevenSettings, setSavedElevenSettings] = useState<ElevenLabsSettings>(DEFAULT_ELEVEN_SETTINGS);
   const [dictionaryFile, setDictionaryFile] = useState<File | null>(null);
   const [savingEleven, setSavingEleven] = useState(false);
   const [uploadingDictionary, setUploadingDictionary] = useState(false);
@@ -138,7 +132,6 @@ export default function AdminVoiceDesignPage() {
 
   // Section collapse
   const voiceBrowser = useCollapsible(true);
-  const voiceControls = useCollapsible(true);
   const previewPanel = useCollapsible(true);
   const recallAudio = useCollapsible(true);
   const bulkRegen = useCollapsible(true);
@@ -182,13 +175,7 @@ export default function AdminVoiceDesignPage() {
       try {
         const config = await getAdminVoiceDesignConfig();
         if (cancelled) return;
-        setVariant(config.modelVariant);
-        setSelectedVoice(config.voiceId);
-        setVoiceInstructions(config.voiceInstructions);
-        setSpeed(config.speed);
-        setPitch(config.pitch);
-        setEmotion(config.emotion);
-        const loadedElevenSettings = {
+        const loaded: ElevenLabsSettings = {
           apiKey: '',
           apiKeyPresent: config.elevenLabsApiKeyPresent,
           baseUrl: config.elevenLabsTtsBaseUrl || DEFAULT_ELEVEN_SETTINGS.baseUrl,
@@ -202,8 +189,8 @@ export default function AdminVoiceDesignPage() {
           style: config.elevenLabsStyle,
           useSpeakerBoost: config.elevenLabsUseSpeakerBoost,
         };
-        setElevenSettings(loadedElevenSettings);
-        setSavedElevenSettings(loadedElevenSettings);
+        setElevenSettings(loaded);
+        setSavedElevenSettings(loaded);
       } catch {
         setToast({ variant: 'error', message: 'Failed to load voice settings' });
       }
@@ -211,48 +198,32 @@ export default function AdminVoiceDesignPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const updateElevenSettings = useCallback(<K extends keyof ElevenLabsRecallSettings>(
+  const updateElevenSettings = useCallback(<K extends keyof ElevenLabsSettings>(
     key: K,
-    value: ElevenLabsRecallSettings[K],
+    value: ElevenLabsSettings[K],
   ) => {
     setElevenSettings((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  const buildRegenerationPayload = useCallback((dryRun: boolean) => {
-    if (audioType === 'recalls') {
-      return {
-        audioType,
-        scope,
-        dryRun,
-        providerName: 'elevenlabs',
-        modelVariant: elevenSettings.model,
-        voiceId: elevenSettings.voiceId,
-        forceRegenerate: scope === 'all',
-      } as const;
-    }
-
-    return {
-      audioType,
-      scope,
-      dryRun,
-      voiceId: selectedVoice,
-      modelVariant: variant,
-      instructions: variant === 'voicedesign' ? voiceInstructions : undefined,
-      speed,
-      pitch,
-      emotion: emotion || undefined,
-    } as const;
-  }, [audioType, scope, elevenSettings.model, elevenSettings.voiceId, selectedVoice, variant, voiceInstructions, speed, pitch, emotion]);
+  const buildRegenerationPayload = useCallback((dryRun: boolean) => ({
+    audioType,
+    scope,
+    dryRun,
+    providerName: 'elevenlabs',
+    modelVariant: elevenSettings.model,
+    voiceId: elevenSettings.voiceId,
+    forceRegenerate: scope === 'all',
+  } as const), [audioType, scope, elevenSettings.model, elevenSettings.voiceId]);
 
   // ─── Handlers ───
   const handleFetchVoices = useCallback(async () => {
     setProbing(true);
     try {
-      const result = await probeAdminQwen3Voices();
+      const result = await getElevenLabsVoices();
       setVoices(result.voices);
-      setToast({ variant: 'success', message: `Loaded ${result.voices.length} voices` });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to fetch voices' });
+      setToast({ variant: 'success', message: `Loaded ${result.voices.length} ElevenLabs voices` });
+    } catch (err) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Failed to fetch voices' });
     } finally {
       setProbing(false);
     }
@@ -261,15 +232,7 @@ export default function AdminVoiceDesignPage() {
   const handlePreviewVoice = useCallback(async (voiceId: string) => {
     try {
       setPlayingVoiceId(voiceId);
-      const blob = await previewAdminVoiceDesign({
-        voiceId,
-        modelVariant: variant,
-        instructions: variant === 'voicedesign' ? voiceInstructions : undefined,
-        speed,
-        pitch,
-        emotion: emotion || undefined,
-        text: OET_SAMPLES[0],
-      });
+      const blob = await previewAdminVoiceDesign({ voiceId, text: OET_SAMPLES[0] });
       if (audioRef.current) {
         audioRef.current.pause();
         URL.revokeObjectURL(audioRef.current.src);
@@ -279,11 +242,11 @@ export default function AdminVoiceDesignPage() {
       audioRef.current = audio;
       audio.onended = () => setPlayingVoiceId(null);
       await audio.play();
-    } catch {
+    } catch (err) {
       setPlayingVoiceId(null);
-      setToast({ variant: 'error', message: 'Preview failed' });
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Preview failed' });
     }
-  }, [variant, voiceInstructions, speed, pitch, emotion]);
+  }, []);
 
   const handleGenerateSamples = useCallback(async () => {
     const texts = [...OET_SAMPLES];
@@ -300,19 +263,10 @@ export default function AdminVoiceDesignPage() {
     setSamples(initial);
     setGeneratingSamples(true);
     setSampleProgress(0);
-    setVoiceApproved(false);
 
     for (let i = 0; i < texts.length; i++) {
       try {
-        const blob = await previewAdminVoiceDesign({
-          voiceId: selectedVoice,
-          modelVariant: variant,
-          instructions: variant === 'voicedesign' ? voiceInstructions : undefined,
-          speed,
-          pitch,
-          emotion: emotion || undefined,
-          text: texts[i],
-        });
+        const blob = await previewAdminVoiceDesign({ voiceId: elevenSettings.voiceId, text: texts[i] });
         const url = URL.createObjectURL(blob);
         setSamples((prev) =>
           prev.map((s, idx) => (idx === i ? { ...s, audioUrl: url, loading: false } : s)),
@@ -325,7 +279,7 @@ export default function AdminVoiceDesignPage() {
       setSampleProgress(i + 1);
     }
     setGeneratingSamples(false);
-  }, [selectedVoice, variant, voiceInstructions, speed, pitch, emotion, customSampleText]);
+  }, [elevenSettings.voiceId, customSampleText]);
 
   const handleDryRun = useCallback(async () => {
     try {
@@ -354,12 +308,6 @@ export default function AdminVoiceDesignPage() {
     setSavingEleven(true);
     try {
       await saveAdminVoiceDesignConfig({
-        modelVariant: variant,
-        voiceId: selectedVoice,
-        instructions: voiceInstructions,
-        speed,
-        pitch,
-        emotion,
         ...(elevenSettings.apiKey.trim() ? { elevenLabsApiKey: elevenSettings.apiKey.trim() } : {}),
         elevenLabsTtsBaseUrl: elevenSettings.baseUrl.trim(),
         elevenLabsDefaultVoiceId: elevenSettings.voiceId.trim(),
@@ -372,23 +320,19 @@ export default function AdminVoiceDesignPage() {
         elevenLabsStyle: elevenSettings.style,
         elevenLabsUseSpeakerBoost: elevenSettings.useSpeakerBoost,
       });
-      setElevenSettings((prev) => ({
-        ...prev,
-        apiKey: '',
-        apiKeyPresent: prev.apiKeyPresent || Boolean(prev.apiKey.trim()),
-      }));
+      setElevenSettings((prev) => ({ ...prev, apiKey: '', apiKeyPresent: prev.apiKeyPresent || Boolean(prev.apiKey.trim()) }));
       setSavedElevenSettings((prev) => ({
         ...elevenSettings,
         apiKey: '',
         apiKeyPresent: prev.apiKeyPresent || Boolean(elevenSettings.apiKey.trim()),
       }));
-      setToast({ variant: 'success', message: 'ElevenLabs recall settings saved' });
+      setToast({ variant: 'success', message: 'ElevenLabs settings saved' });
     } catch {
       setToast({ variant: 'error', message: 'Failed to save ElevenLabs settings' });
     } finally {
       setSavingEleven(false);
     }
-  }, [variant, selectedVoice, voiceInstructions, speed, pitch, emotion, elevenSettings]);
+  }, [elevenSettings]);
 
   const handleUploadDictionary = useCallback(async () => {
     if (!dictionaryFile) return;
@@ -402,8 +346,9 @@ export default function AdminVoiceDesignPage() {
       }));
       setDictionaryFile(null);
       setToast({ variant: 'success', message: 'Pronunciation dictionary uploaded' });
-    } catch {
-      setToast({ variant: 'error', message: 'Dictionary upload failed' });
+    } catch (err) {
+      // Surface the real ElevenLabs / validation error rather than a flat message.
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Dictionary upload failed' });
     } finally {
       setUploadingDictionary(false);
     }
@@ -450,26 +395,22 @@ export default function AdminVoiceDesignPage() {
   const successRate = batches.length > 0
     ? Math.round((batches.reduce((s, b) => s + b.completedItems, 0) / Math.max(1, batches.reduce((s, b) => s + b.totalItems, 0))) * 100)
     : 0;
-  const canPreviewCount = audioType === 'recalls'
-    ? Boolean(elevenSettings.voiceId.trim())
-    : Boolean(selectedVoice);
   const elevenSettingsDirty = JSON.stringify({ ...elevenSettings, apiKey: '' }) !== JSON.stringify({ ...savedElevenSettings, apiKey: '' })
     || Boolean(elevenSettings.apiKey.trim());
-  const recallsSettingsReady = Boolean(elevenSettings.apiKeyPresent)
+  const settingsReady = Boolean(elevenSettings.apiKeyPresent)
     && Boolean(elevenSettings.voiceId.trim())
     && Boolean(elevenSettings.baseUrl.trim())
     && Boolean(elevenSettings.model.trim())
     && !elevenSettingsDirty;
-  const canStartRegeneration = audioType === 'recalls'
-    ? Boolean(dryRunResult) && recallsSettingsReady && !regenerating
-    : voiceApproved && Boolean(dryRunResult) && !regenerating;
+  const canPreviewCount = settingsReady;
+  const canStartRegeneration = Boolean(dryRunResult) && settingsReady && !regenerating;
 
   return (
     <AdminRouteWorkspace>
       <AdminPageShell>
         <PageHeader
           title="Voice Design Studio"
-          description="Configure TTS voice settings and manage bulk audio regeneration across the platform."
+          description="Browse ElevenLabs voices, configure the platform voice, and manage bulk audio regeneration."
           breadcrumbs={[
             { label: 'Admin', href: '/admin' },
             { label: 'Voice Design' },
@@ -477,12 +418,11 @@ export default function AdminVoiceDesignPage() {
           icon={<AudioWaveform className="h-5 w-5" aria-hidden="true" />}
         />
 
-      {/* Global Voice Lock Indicator */}
+      {/* Global Voice Indicator */}
       <div className="flex items-center gap-2 rounded-admin-lg border border-admin-border bg-admin-bg-surface px-4 py-2.5">
         <Lock className="h-4 w-4 text-[var(--admin-primary)]" />
-        <span className="text-xs font-bold text-admin-text-muted">Global Voice:</span>
-        <Badge variant="info" size="sm">{selectedVoice || 'Not configured'}</Badge>
-        {voiceApproved && <Badge variant="success" size="sm">Approved</Badge>}
+        <span className="text-xs font-bold text-admin-text-muted">ElevenLabs Voice:</span>
+        <Badge variant="info" size="sm">{elevenSettings.voiceId || 'Not configured'}</Badge>
       </div>
 
       {/* ─── Section 1: Voice Browser ─── */}
@@ -497,59 +437,27 @@ export default function AdminVoiceDesignPage() {
               className="overflow-hidden"
             >
               <div className="space-y-4 p-4">
-                {/* Mode Toggle */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setVariant('flash')}
-                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${variant === 'flash' ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : 'bg-admin-surface-raised text-admin-text-muted hover:text-admin-text'}`}
-                  >
-                    Flash (Presets)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVariant('voicedesign')}
-                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${variant === 'voicedesign' ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : 'bg-admin-surface-raised text-admin-text-muted hover:text-admin-text'}`}
-                  >
-                    Voice Design (Custom)
-                  </button>
-                  <div className="ml-auto">
-                    <Button variant="secondary" size="sm" loading={probing} onClick={handleFetchVoices}>
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      Fetch All Voices
-                    </Button>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-admin-text-muted">Voices fetched live from your ElevenLabs account.</p>
+                  <Button variant="secondary" size="sm" loading={probing} onClick={handleFetchVoices}>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Fetch Voices
+                  </Button>
                 </div>
 
-                {/* Voice Design Instructions */}
-                {variant === 'voicedesign' && (
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-admin-text-muted">Voice Instructions (max 1000 chars)</label>
-                    <textarea
-                      value={voiceInstructions}
-                      onChange={(e) => setVoiceInstructions(e.target.value.slice(0, 1000))}
-                      placeholder="Describe the voice: e.g., warm, professional female with a slight British accent..."
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
-                      rows={4}
-                    />
-                    <div className="text-right text-xs text-admin-text-muted">{voiceInstructions.length}/1000</div>
-                  </div>
-                )}
-
-                {/* Voice Grid */}
                 {voices && (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {voices.map((voice) => (
                       <div
-                        key={voice.id}
-                        className={`relative rounded-xl border p-3 transition-colors ${selectedVoice === voice.id ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)]' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
+                        key={voice.voiceId}
+                        className={`relative rounded-xl border p-3 transition-colors ${elevenSettings.voiceId === voice.voiceId ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)]' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-admin-text">{voice.label}</p>
-                            <p className="mt-0.5 text-xs text-admin-text-muted line-clamp-2">{voice.id}</p>
+                            <p className="truncate text-sm font-bold text-admin-text">{voice.name}</p>
+                            <p className="mt-0.5 truncate text-xs text-admin-text-muted">{voice.voiceId}</p>
                           </div>
-                          {playingVoiceId === voice.id && (
+                          {playingVoiceId === voice.voiceId && (
                             <div className="ml-2 flex items-center gap-0.5">
                               {[1, 2, 3].map((bar) => (
                                 <motion.div
@@ -562,35 +470,27 @@ export default function AdminVoiceDesignPage() {
                             </div>
                           )}
                         </div>
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <Badge variant={voice.gender === 'female' ? 'rose' : 'sky'} size="sm">
-                            {voice.gender}
-                          </Badge>
-                          {voice.available ? (
-                            <Badge variant="success" size="sm">Available</Badge>
-                          ) : (
-                            <Badge variant="danger" size="sm">Unavailable</Badge>
-                          )}
-                        </div>
+                        {voice.category && (
+                          <div className="mt-2">
+                            <Badge variant="muted" size="sm">{voice.category}</Badge>
+                          </div>
+                        )}
                         <div className="mt-3 flex gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handlePreviewVoice(voice.id)}
-                            disabled={playingVoiceId === voice.id}
+                            onClick={() => handlePreviewVoice(voice.voiceId)}
+                            disabled={playingVoiceId === voice.voiceId}
                           >
                             <Volume2 className="mr-1 h-3.5 w-3.5" />
                             Preview
                           </Button>
                           <Button
-                            variant={selectedVoice === voice.id ? 'primary' : 'secondary'}
+                            variant={elevenSettings.voiceId === voice.voiceId ? 'primary' : 'secondary'}
                             size="sm"
-                            onClick={() => {
-                              setSelectedVoice(voice.id);
-                              setVoiceApproved(false);
-                            }}
+                            onClick={() => updateElevenSettings('voiceId', voice.voiceId)}
                           >
-                            {selectedVoice === voice.id ? 'Selected' : 'Select'}
+                            {elevenSettings.voiceId === voice.voiceId ? 'Selected' : 'Select'}
                           </Button>
                         </div>
                       </div>
@@ -600,7 +500,7 @@ export default function AdminVoiceDesignPage() {
 
                 {!voices && !probing && (
                   <p className="py-8 text-center text-sm text-admin-text-muted">
-                    Click &quot;Fetch All Voices&quot; to load available voices.
+                    Click &quot;Fetch Voices&quot; to load your ElevenLabs voices. Selecting one sets the default voice — remember to Save below.
                   </p>
                 )}
               </div>
@@ -609,103 +509,7 @@ export default function AdminVoiceDesignPage() {
         </AnimatePresence>
       </AdminRoutePanel>
 
-      {/* ─── Section 2: Voice Controls ─── */}
-      <AdminRoutePanel title="Voice Controls" className="overflow-visible">
-        <SectionToggle label="Voice Controls" open={voiceControls.open} onToggle={voiceControls.toggle} />
-        <AnimatePresence initial={false}>
-          {voiceControls.open && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="space-y-6 p-4">
-                {/* Speed */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-admin-text-muted">Speed</label>
-                    <span className="text-sm font-bold text-admin-text">{speed.toFixed(1)}x</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0.25}
-                    max={2.0}
-                    step={0.05}
-                    value={speed}
-                    onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                    className="w-full accent-[var(--admin-primary)]"
-                  />
-                  <div className="flex justify-between text-xs text-admin-text-muted">
-                    <span>0.25x</span>
-                    <span>2.0x</span>
-                  </div>
-                </div>
-
-                {/* Pitch */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-admin-text-muted">Pitch</label>
-                    <span className="text-sm font-bold text-admin-text">{pitch >= 0 ? `+${pitch}` : pitch}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={-100}
-                    max={100}
-                    step={1}
-                    value={pitch}
-                    onChange={(e) => setPitch(parseInt(e.target.value, 10))}
-                    className="w-full accent-[var(--admin-primary)]"
-                  />
-                  <div className="flex justify-between text-xs text-admin-text-muted">
-                    <span>-100</span>
-                    <span>+100</span>
-                  </div>
-                </div>
-
-                {/* Emotion */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-admin-text-muted">Emotion / Style</label>
-                  <input
-                    type="text"
-                    value={emotion}
-                    onChange={(e) => setEmotion(e.target.value)}
-                    placeholder="e.g., calm, professional, warm"
-                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
-                  />
-                </div>
-
-                {/* Sample Sentences */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-admin-text-muted">Sample Sentences (OET Medical)</label>
-                  <div className="space-y-1.5">
-                    {OET_SAMPLES.map((text, i) => (
-                      <div key={i} className="flex items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-xs font-bold text-[var(--admin-primary)]">{i + 1}</span>
-                        <span className="text-xs text-admin-text">{text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Sample */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-admin-text-muted">Custom Sample (optional)</label>
-                  <textarea
-                    value={customSampleText}
-                    onChange={(e) => setCustomSampleText(e.target.value)}
-                    placeholder="Type a custom sentence to test..."
-                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
-                    rows={2}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </AdminRoutePanel>
-
-      {/* ─── Section 3: Preview Panel ─── */}
+      {/* ─── Section 2: Multi-Sample Preview ─── */}
       <AdminRoutePanel title="Multi-Sample Preview" className="overflow-visible">
         <SectionToggle label="Preview Panel" open={previewPanel.open} onToggle={previewPanel.toggle} />
         <AnimatePresence initial={false}>
@@ -717,13 +521,22 @@ export default function AdminVoiceDesignPage() {
               className="overflow-hidden"
             >
               <div className="space-y-4 p-4">
-                {/* Generate Button + Status */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-admin-text-muted">Custom Sample (optional)</label>
+                  <textarea
+                    value={customSampleText}
+                    onChange={(e) => setCustomSampleText(e.target.value)}
+                    placeholder="Type a custom sentence to test (added to the OET samples)…"
+                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                    rows={2}
+                  />
+                </div>
                 <div className="flex items-center gap-3">
                   <Button
                     variant="primary"
                     size="sm"
                     loading={generatingSamples}
-                    disabled={!selectedVoice || generatingSamples}
+                    disabled={!elevenSettings.voiceId || generatingSamples}
                     onClick={handleGenerateSamples}
                   >
                     <Mic2 className="mr-1.5 h-3.5 w-3.5" />
@@ -734,15 +547,8 @@ export default function AdminVoiceDesignPage() {
                       Progress: {sampleProgress}/{OET_SAMPLES.length + (customSampleText.trim() ? 1 : 0)}
                     </span>
                   )}
-                  {!generatingSamples && samples.length > 0 && !voiceApproved && (
-                    <Badge variant="warning" size="sm">Ready for Review</Badge>
-                  )}
-                  {voiceApproved && (
-                    <Badge variant="success" size="sm">Approved ✓</Badge>
-                  )}
                 </div>
 
-                {/* Sample Players */}
                 {samples.length > 0 && (
                   <div className="space-y-3">
                     {samples.map((sample) => (
@@ -757,40 +563,20 @@ export default function AdminVoiceDesignPage() {
                           ) : sample.error ? (
                             <span className="text-xs text-red-400">{sample.error}</span>
                           ) : sample.audioUrl ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => playSample(sample.audioUrl!)}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-[var(--admin-primary)] hover:bg-[var(--admin-primary-tint-strong)]"
-                              >
-                                <Play className="h-3.5 w-3.5" />
-                              </button>
-                              {/* Waveform Bars */}
-                              <div className="flex items-end gap-0.5">
-                                {Array.from({ length: 20 }).map((_, i) => (
-                                  <div
-                                    key={i}
-                                    className="w-1 rounded-full bg-[var(--admin-primary)]/40"
-                                    style={{ height: `${Math.random() * 16 + 4}px` }}
-                                  />
-                                ))}
-                              </div>
-                            </>
+                            <button
+                              type="button"
+                              onClick={() => playSample(sample.audioUrl!)}
+                              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-[var(--admin-primary)] hover:bg-[var(--admin-primary-tint-strong)]"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                            </button>
                           ) : null}
 
-                          {/* Star Rating */}
                           {!sample.loading && sample.audioUrl && (
                             <div className="ml-auto flex items-center gap-0.5">
                               {[1, 2, 3, 4, 5].map((star) => (
-                                <button
-                                  key={star}
-                                  type="button"
-                                  onClick={() => handleRateSample(sample.id, star)}
-                                  className="p-0.5"
-                                >
-                                  <Star
-                                    className={`h-4 w-4 ${star <= sample.rating ? 'fill-amber-400 text-amber-400' : 'text-admin-text-muted/30'}`}
-                                  />
+                                <button key={star} type="button" onClick={() => handleRateSample(sample.id, star)} className="p-0.5">
+                                  <Star className={`h-4 w-4 ${star <= sample.rating ? 'fill-amber-400 text-amber-400' : 'text-admin-text-muted/30'}`} />
                                 </button>
                               ))}
                             </div>
@@ -800,33 +586,15 @@ export default function AdminVoiceDesignPage() {
                     ))}
                   </div>
                 )}
-
-                {/* Approve / Reject */}
-                {samples.length > 0 && !generatingSamples && !voiceApproved && (
-                  <div className="flex gap-3 pt-2">
-                    <Button variant="primary" onClick={() => setVoiceApproved(true)}>
-                      Approve Voice
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setSamples([]);
-                        setVoiceApproved(false);
-                      }}
-                    >
-                      Reject &amp; Try Another
-                    </Button>
-                  </div>
-                )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </AdminRoutePanel>
 
-      {/* ─── Section 4: ElevenLabs Recall Audio ─── */}
-      <AdminRoutePanel title="ElevenLabs Recall Audio" className="overflow-visible">
-        <SectionToggle label="ElevenLabs Recall Audio" open={recallAudio.open} onToggle={recallAudio.toggle} />
+      {/* ─── Section 3: ElevenLabs Settings ─── */}
+      <AdminRoutePanel title="ElevenLabs Settings" className="overflow-visible">
+        <SectionToggle label="ElevenLabs Settings" open={recallAudio.open} onToggle={recallAudio.toggle} />
         <AnimatePresence initial={false}>
           {recallAudio.open && (
             <motion.div
@@ -871,7 +639,7 @@ export default function AdminVoiceDesignPage() {
                         onChange={(event) => updateElevenSettings('voiceId', event.target.value)}
                         className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
-                      <p className="text-[11px] text-admin-text-muted">Used for recall batches and future ElevenLabs generations when no override is set.</p>
+                      <p className="text-[11px] text-admin-text-muted">Used for all ElevenLabs generations (recalls, vocabulary, conversation, listening) when no override is set.</p>
                     </label>
                     <label className="block space-y-1.5">
                       <span className="text-xs font-bold text-admin-text-muted">Model</span>
@@ -945,7 +713,7 @@ export default function AdminVoiceDesignPage() {
                   </label>
                   <div className="space-y-2 rounded-lg border border-admin-border bg-admin-surface-raised p-3">
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">PLS Dictionary</span>
+                      <span className="text-xs font-bold text-admin-text-muted">PLS Pronunciation Dictionary</span>
                       <input
                         type="file"
                         accept=".pls,application/pls+xml,text/xml,application/xml"
@@ -979,12 +747,11 @@ export default function AdminVoiceDesignPage() {
               className="overflow-hidden"
             >
               <div className="space-y-6 p-4">
-                {/* Audio Type */}
                 <fieldset className="space-y-2">
-                  <legend className="text-xs font-bold text-admin-text-muted">Audio Type</legend>
+                  <legend className="text-xs font-bold text-admin-text-muted">Audio Type (all generated via ElevenLabs)</legend>
                   <div className="space-y-1.5">
                     {([
-                      ['recalls', 'Recall Words Only (ElevenLabs)'],
+                      ['recalls', 'Recall Words Only'],
                       ['all', 'All Platform Audio (listening + vocabulary)'],
                       ['listening', 'Listening Module Only'],
                       ['vocabulary', 'Vocabulary Module Only'],
@@ -1004,7 +771,6 @@ export default function AdminVoiceDesignPage() {
                   </div>
                 </fieldset>
 
-                {/* Scope */}
                 <fieldset className="space-y-2">
                   <legend className="text-xs font-bold text-admin-text-muted">Scope</legend>
                   <div className="space-y-1.5">
@@ -1028,7 +794,6 @@ export default function AdminVoiceDesignPage() {
                   </div>
                 </fieldset>
 
-                {/* Dry Run Result */}
                 {dryRunResult && (
                   <div className="rounded-xl border border-[var(--admin-primary)]/20 bg-[var(--admin-primary-tint)] p-4">
                     <p className="text-sm text-admin-text">
@@ -1038,33 +803,18 @@ export default function AdminVoiceDesignPage() {
                   </div>
                 )}
 
-                {/* Action Buttons */}
                 <div className="flex gap-3">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleDryRun}
-                    disabled={!canPreviewCount || (audioType === 'recalls' && !recallsSettingsReady)}
-                  >
+                  <Button variant="secondary" size="sm" onClick={handleDryRun} disabled={!canPreviewCount}>
                     <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                     Preview Count
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={!canStartRegeneration}
-                    loading={regenerating}
-                    onClick={() => setConfirmModal(true)}
-                  >
+                  <Button variant="primary" size="sm" disabled={!canStartRegeneration} loading={regenerating} onClick={() => setConfirmModal(true)}>
                     Start Regeneration
                   </Button>
                 </div>
 
-                {audioType !== 'recalls' && !voiceApproved && (
-                  <p className="text-xs text-amber-400">Voice must be approved before starting regeneration.</p>
-                )}
-                {audioType === 'recalls' && !recallsSettingsReady && (
-                  <p className="text-xs text-amber-400">Save a valid ElevenLabs API key, voice, model, and dictionary settings before previewing or starting recall audio.</p>
+                {!settingsReady && (
+                  <p className="text-xs text-amber-400">Save a valid ElevenLabs API key, voice, base URL and model before previewing or starting regeneration.</p>
                 )}
               </div>
             </motion.div>
@@ -1084,7 +834,6 @@ export default function AdminVoiceDesignPage() {
               className="overflow-hidden"
             >
               <div className="space-y-4 p-4">
-                {/* Summary Stats */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-3 text-center">
                     <p className="text-lg font-bold text-admin-text">{todayCount.toLocaleString()}</p>
@@ -1100,7 +849,6 @@ export default function AdminVoiceDesignPage() {
                   </div>
                 </div>
 
-                {/* Manual Refresh */}
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => void fetchBatches()} loading={loadingBatches}>
                     <RefreshCw className="mr-1 h-3.5 w-3.5" />
@@ -1109,7 +857,6 @@ export default function AdminVoiceDesignPage() {
                   <span className="text-xs text-admin-text-muted">Auto-refreshes every 5s</span>
                 </div>
 
-                {/* Active Batches */}
                 {activeBatches.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">Active</h4>
@@ -1119,7 +866,6 @@ export default function AdminVoiceDesignPage() {
                   </div>
                 )}
 
-                {/* Completed Batches */}
                 {completedBatches.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">History (last 10)</h4>
@@ -1144,7 +890,7 @@ export default function AdminVoiceDesignPage() {
           <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-admin-text-muted">Voice:</span>
-              <span className="font-bold text-admin-text">{audioType === 'recalls' ? elevenSettings.voiceId : selectedVoice}</span>
+              <span className="font-bold text-admin-text">{elevenSettings.voiceId}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-admin-text-muted">Audio Type:</span>
@@ -1250,7 +996,6 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
         </div>
       </div>
 
-      {/* Progress Bar */}
       <div className="space-y-1">
         <div className="h-2 w-full overflow-hidden rounded-full bg-admin-surface">
           <div
@@ -1264,7 +1009,6 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
         </div>
       </div>
 
-      {/* Meta */}
       <div className="flex flex-wrap gap-3 text-xs text-admin-text-muted">
         <span>Voice: {batch.voiceId}</span>
         <span>Provider: {batch.providerName}</span>

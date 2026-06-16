@@ -31,12 +31,6 @@ public static class VoiceDesignAdminEndpoints
             var opts = await optionsProvider.GetAsync(ct);
             var row = await db.ConversationSettings.AsNoTracking().FirstOrDefaultAsync(r => r.Id == "default", ct);
             return Results.Ok(new AdminVoiceDesignConfigResponse(
-                ModelVariant: opts.Qwen3ModelVariant ?? "flash",
-                VoiceId: opts.Qwen3VoiceId ?? "Cherry",
-                VoiceInstructions: opts.Qwen3VoiceInstructions ?? "",
-                Speed: opts.Qwen3Speed,
-                Pitch: opts.Qwen3Pitch,
-                Emotion: opts.Qwen3Emotion ?? "",
                 ElevenLabsTtsBaseUrl: opts.ElevenLabsTtsBaseUrl,
                 ElevenLabsDefaultVoiceId: opts.ElevenLabsDefaultVoiceId,
                 ElevenLabsModel: opts.ElevenLabsModel,
@@ -67,14 +61,6 @@ public static class VoiceDesignAdminEndpoints
                 db.ConversationSettings.Add(row);
             }
 
-            if (request.ModelVariant is not null) row.Qwen3ModelVariant = request.ModelVariant;
-            if (request.VoiceId is not null) row.Qwen3VoiceId = request.VoiceId;
-            if (request.Instructions is not null)
-                row.Qwen3VoiceInstructions = request.Instructions.Length > 1000
-                    ? request.Instructions[..1000] : request.Instructions;
-            if (request.Speed is not null) row.Qwen3Speed = request.Speed;
-            if (request.Pitch is not null) row.Qwen3Pitch = request.Pitch;
-            if (request.Emotion is not null) row.Qwen3Emotion = request.Emotion;
             if (request.ElevenLabsTtsBaseUrl is not null) row.ElevenLabsTtsBaseUrl = ElevenLabsApiEndpoint.NormalizeBaseUrl(request.ElevenLabsTtsBaseUrl);
             if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
             if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
@@ -142,7 +128,8 @@ public static class VoiceDesignAdminEndpoints
             using var form = new MultipartFormDataContent();
             await using var stream = file.OpenReadStream();
             using var fileContent = new StreamContent(stream);
-            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pls+xml");
+            // ElevenLabs add-from-file expects the lexicon as a binary upload.
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
             form.Add(fileContent, "file", file.FileName);
             form.Add(new StringContent(string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(file.FileName) : name.Trim()), "name");
 
@@ -154,7 +141,12 @@ public static class VoiceDesignAdminEndpoints
             using var response = await client.SendAsync(request, ct);
             var responseText = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
-                return Results.Problem($"ElevenLabs dictionary upload failed ({(int)response.StatusCode}).", statusCode: StatusCodes.Status502BadGateway);
+                // Surface the actual ElevenLabs error so the admin can act on it
+                // (previously this returned a generic "failed" with no detail).
+                return Results.Problem(
+                    detail: $"ElevenLabs dictionary upload failed ({(int)response.StatusCode}): {Truncate(responseText, 1000)}",
+                    statusCode: StatusCodes.Status502BadGateway,
+                    title: "elevenlabs_dictionary_upload_failed");
 
             var dictionaryId = TryReadString(responseText, "id")
                 ?? TryReadString(responseText, "pronunciation_dictionary_id");
@@ -162,7 +154,10 @@ public static class VoiceDesignAdminEndpoints
                 ?? TryReadNestedString(responseText, "version", "id")
                 ?? TryReadNestedString(responseText, "latest_version", "id");
             if (string.IsNullOrWhiteSpace(dictionaryId))
-                return Results.Problem("ElevenLabs dictionary upload response did not include an id.", statusCode: StatusCodes.Status502BadGateway);
+                return Results.Problem(
+                    detail: $"ElevenLabs dictionary upload response did not include an id: {Truncate(responseText, 1000)}",
+                    statusCode: StatusCodes.Status502BadGateway,
+                    title: "elevenlabs_dictionary_upload_no_id");
 
             var row = await db.ConversationSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
             if (row is null)
@@ -192,27 +187,49 @@ public static class VoiceDesignAdminEndpoints
             return Results.Ok(new { dictionaryId, versionId });
         }).DisableAntiforgery().WithAdminWrite("AdminAiConfig");
 
-        // POST /preview — preview voice with full params
+        // GET /elevenlabs/voices — list the ElevenLabs voice catalogue so admins
+        // can browse + select the default voice id.
+        group.MapGet("/elevenlabs/voices", async (
+            IHttpClientFactory httpClientFactory,
+            IConversationOptionsProvider optionsProvider,
+            CancellationToken ct) =>
+        {
+            var options = await optionsProvider.GetAsync(ct);
+            if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+                return Results.Problem("ElevenLabs API key is not configured.", statusCode: StatusCodes.Status409Conflict);
+
+            var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
+            var baseUrl = ElevenLabsApiEndpoint.NormalizeBaseUrl(options.ElevenLabsTtsBaseUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/voices");
+            request.Headers.Add("xi-api-key", options.ElevenLabsApiKey);
+            using var response = await client.SendAsync(request, ct);
+            var responseText = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+                return Results.Problem(
+                    $"ElevenLabs voices request failed ({(int)response.StatusCode}): {Truncate(responseText, 1000)}",
+                    statusCode: StatusCodes.Status502BadGateway);
+
+            var voices = ParseElevenLabsVoices(responseText);
+            return Results.Ok(new { voices });
+        }).WithAdminRead("AdminAiConfig");
+
+        // POST /preview — synthesize a short preview clip via ElevenLabs.
         group.MapPost("/preview", async (
             [FromBody] AdminVoiceDesignPreviewRequest request,
             IConversationTtsProviderSelector selector,
             CancellationToken ct) =>
         {
-            var provider = await selector.TrySelectAsync("digitalocean-qwen3-tts", ct);
+            var provider = await selector.TrySelectAsync("elevenlabs", ct);
             if (provider is null)
-                return Results.Problem("Qwen3 TTS provider not configured or unavailable.");
+                return Results.Problem("ElevenLabs TTS provider not configured or unavailable.");
 
             var ttsReq = new ConversationTtsRequest(
                 Text: request.Text ?? "Good morning. I'm going to check your vitals today.",
-                Voice: request.VoiceId ?? "Cherry",
-                Locale: request.Locale ?? "en-GB",
-                Rate: request.Speed,
-                Pitch: request.Pitch,
-                ModelVariant: request.ModelVariant ?? "flash",
-                Instructions: request.Instructions);
+                Voice: request.VoiceId ?? string.Empty,
+                Locale: request.Locale ?? "en-GB");
 
             var result = await provider.SynthesizeAsync(ttsReq, ct);
-            return Results.File(result.Audio, result.MimeType, "preview.wav");
+            return Results.File(result.Audio, result.MimeType, "preview.mp3");
             // POST mutation verb: needs the per-user write limiter even though
             // authorization is read-scoped (it only previews audio, no mutation).
         }).WithAdminRead("AdminAiConfig").RequireRateLimiting("PerUserWrite");
@@ -311,6 +328,47 @@ public static class VoiceDesignAdminEndpoints
            && outputFormat.StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
             ? outputFormat.Trim()
             : "mp3_44100_128";
+
+    internal static string Truncate(string? value, int max)
+        => string.IsNullOrEmpty(value) ? string.Empty : (value.Length <= max ? value : value[..max]);
+
+    internal static List<AdminElevenLabsVoiceDto> ParseElevenLabsVoices(string json)
+    {
+        var result = new List<AdminElevenLabsVoiceDto>();
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("voices", out var voices) || voices.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var v in voices.EnumerateArray())
+            {
+                var voiceId = v.TryGetProperty("voice_id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() : null;
+                if (string.IsNullOrWhiteSpace(voiceId)) continue;
+                var name = v.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? voiceId : voiceId;
+                var category = v.TryGetProperty("category", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+                var previewUrl = v.TryGetProperty("preview_url", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+
+                Dictionary<string, string>? labels = null;
+                if (v.TryGetProperty("labels", out var lbl) && lbl.ValueKind == JsonValueKind.Object)
+                {
+                    labels = new Dictionary<string, string>();
+                    foreach (var prop in lbl.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                            labels[prop.Name] = prop.Value.GetString() ?? string.Empty;
+                    }
+                }
+
+                result.Add(new AdminElevenLabsVoiceDto(voiceId!, name, category, previewUrl, labels));
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed payloads surface as an empty catalogue rather than a 500.
+        }
+        return result;
+    }
 
     private static async Task<string?> ValidatePlsAsync(IFormFile file, CancellationToken ct)
     {
