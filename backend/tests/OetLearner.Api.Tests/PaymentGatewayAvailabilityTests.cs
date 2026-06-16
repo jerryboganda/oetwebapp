@@ -56,6 +56,58 @@ public class PaymentGatewayAvailabilityTests : IClassFixture<TestWebApplicationF
         Assert.DoesNotContain("stripe", gateways);
     }
 
+    [Fact]
+    public async Task PaymentGateways_Methods_CarryModeMetadataForStripeAndPayPal()
+    {
+        using var client = CreateLearnerClient(_factory, $"gw-methods-{Guid.NewGuid():N}");
+
+        var response = await client.GetAsync("/v1/billing/payment-gateways");
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var methods = json.RootElement.GetProperty("methods").EnumerateArray().ToList();
+
+        var stripe = methods.Single(m => m.GetProperty("name").GetString() == "stripe");
+        Assert.Equal("redirect", stripe.GetProperty("mode").GetString());
+
+        var paypal = methods.Single(m => m.GetProperty("name").GetString() == "paypal");
+        // PayPal renders the in-page SDK (Smart Buttons / card fields), not a redirect.
+        Assert.Equal("embedded", paypal.GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task PaymentGateways_WithCheckoutComConfigured_AdvertisesItAsRedirectMethod()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    // Sandbox off so only credential-backed gateways surface; a
+                    // Checkout.com secret makes that gateway "configured".
+                    ["Billing:AllowSandboxFallbacks"] = "false",
+                    ["Billing:CheckoutCom:SecretKey"] = "sk_cko_test_stub",
+                });
+            });
+        });
+        using var client = CreateLearnerClient(factory, $"gw-cko-{Guid.NewGuid():N}");
+
+        var response = await client.GetAsync("/v1/billing/payment-gateways");
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        var gateways = json.RootElement.GetProperty("gateways")
+            .EnumerateArray().Select(e => e.GetString()).ToArray();
+        Assert.Contains("checkoutcom", gateways);
+        Assert.DoesNotContain("stripe", gateways); // no Stripe key + sandbox off
+
+        var methods = json.RootElement.GetProperty("methods").EnumerateArray().ToList();
+        var cko = methods.Single(m => m.GetProperty("name").GetString() == "checkoutcom");
+        Assert.Equal("redirect", cko.GetProperty("mode").GetString());
+    }
+
     private static HttpClient CreateLearnerClient(WebApplicationFactory<Program> factoryLike, string userId)
     {
         var client = factoryLike.CreateClient();

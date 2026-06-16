@@ -180,11 +180,11 @@ describe('Billing page', () => {
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
-  it('passes the selected gateway into review credit checkout sessions', async () => {
+  it('routes review-credit purchases to the checkout picker with the selected gateway', async () => {
     const user = userEvent.setup();
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const push = vi.fn();
 
-    renderWithRouter(<BillingPage />);
+    renderWithRouter(<BillingPage />, { router: { push } });
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
@@ -192,15 +192,14 @@ describe('Billing page', () => {
     await user.click(screen.getByRole('button', { name: /purchase credits/i }));
 
     await waitFor(() => {
-      expect(mockCreateBillingCheckoutSession).toHaveBeenCalledWith(expect.objectContaining({
-        productType: 'review_credits',
-        quantity: 5,
-        priceId: 'credits-5',
-        gateway: 'paypal',
-      }));
+      expect(push).toHaveBeenCalledWith(expect.stringContaining('/checkout/review?'));
     });
-
-    openSpy.mockRestore();
+    const target = String(push.mock.calls.at(-1)?.[0] ?? '');
+    const params = new URLSearchParams(target.split('?')[1] ?? '');
+    expect(params.get('productType')).toBe('review_credits');
+    expect(params.get('quantity')).toBe('5');
+    expect(params.get('priceId')).toBe('credits-5');
+    expect(params.get('gateway')).toBe('paypal');
   });
 
   it('fails closed for paid actions when freeze status cannot be verified', async () => {
@@ -217,7 +216,7 @@ describe('Billing page', () => {
 
   it('allows checkout when a freeze is scheduled for the future', async () => {
     const user = userEvent.setup();
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const push = vi.fn();
     mockFetchFreezeStatus.mockResolvedValueOnce({
       currentFreeze: {
         id: 'freeze-1',
@@ -233,14 +232,13 @@ describe('Billing page', () => {
       history: [],
     });
 
-    renderWithRouter(<BillingPage />);
+    renderWithRouter(<BillingPage />, { router: { push } });
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
     await user.click(screen.getByRole('button', { name: /purchase credits/i }));
 
-    await waitFor(() => expect(mockCreateBillingCheckoutSession).toHaveBeenCalled());
-    openSpy.mockRestore();
+    await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringContaining('/checkout/review?')));
   });
 
   it('blocks rapid double-click on top-up by ignoring overlapping calls', async () => {
@@ -333,39 +331,104 @@ describe('Billing page', () => {
 
   it('shows the dismissible quote bar with a held quote and clears coupon on dismiss', async () => {
     const user = userEvent.setup();
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
-    mockFetchBillingQuote.mockResolvedValueOnce({
-      quoteId: 'quote-coupon',
-      status: 'ready',
-      currency: 'AUD',
-      subtotalAmount: 29,
-      discountAmount: 5,
-      totalAmount: 24,
-      planCode: null,
-      couponCode: 'WELCOME10',
-      addOnCodes: ['credits-5'],
-      items: [],
-      expiresAt: '2026-06-27T00:00:00Z',
-      summary: 'Quote ready',
-      validation: {},
+    // The validated-quote bar surfaces a quote held in billing data (e.g. one
+    // created earlier on the checkout picker and not yet consumed).
+    mockFetchBilling.mockResolvedValueOnce({
+      currentPlan: 'Pro',
+      currentPlanId: 'plan-pro',
+      currentPlanCode: 'pro',
+      planName: 'Pro',
+      planDescription: 'Current learner plan.',
+      reviewCredits: 3,
+      nextRenewal: '2026-06-27',
+      price: '$49',
+      interval: 'month',
+      status: 'Active',
+      activeAddOns: [],
+      entitlements: {
+        productiveSkillReviewsEnabled: true,
+        supportedReviewSubtests: ['Writing', 'Speaking'],
+        invoiceDownloadsAvailable: true,
+      },
+      plans: [
+        {
+          id: 'pro',
+          code: 'pro',
+          badge: 'Current',
+          tier: 'Pro',
+          label: 'Pro',
+          description: 'Current learner plan.',
+          price: '$49',
+          interval: 'month',
+          reviewCredits: 3,
+          canChangeTo: false,
+          changeDirection: 'current',
+          status: 'active',
+          durationMonths: 1,
+          isVisible: true,
+          isRenewable: true,
+          trialDays: 0,
+          displayOrder: 1,
+          includedSubtests: ['Writing', 'Speaking'],
+          entitlements: {
+            productiveSkillReviewsEnabled: true,
+            supportedReviewSubtests: ['Writing', 'Speaking'],
+            invoiceDownloadsAvailable: true,
+          },
+        },
+      ],
+      addOns: [
+        {
+          id: 'credits-5',
+          code: 'credits-5',
+          name: 'Review credits pack',
+          productType: 'review_credits',
+          quantity: 5,
+          price: '$29',
+          currency: 'AUD',
+          interval: 'one-time',
+          status: 'active',
+          description: 'Add more review credits.',
+          grantCredits: 5,
+          durationDays: 30,
+          isRecurring: false,
+          appliesToAllPlans: true,
+          quantityStep: 1,
+          maxQuantity: null,
+          compatiblePlanCodes: ['pro'],
+        },
+      ],
+      coupons: [],
+      quote: {
+        quoteId: 'quote-coupon',
+        status: 'ready',
+        currency: 'AUD',
+        subtotalAmount: 29,
+        discountAmount: 5,
+        totalAmount: 24,
+        planCode: null,
+        couponCode: 'WELCOME10',
+        addOnCodes: ['credits-5'],
+        items: [],
+        expiresAt: '2026-06-27T00:00:00Z',
+        summary: 'Quote ready',
+        validation: {},
+      },
+      invoices: [],
     });
 
     renderWithRouter(<BillingPage />);
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
+    // The held quote surfaces the validated-quote bar (use the exact eyebrow label
+    // to avoid colliding with the InlineAlert success message and coupon hint).
+    await waitFor(() => expect(screen.getByText('Validated quote')).toBeInTheDocument());
 
+    // Seed the coupon field so we can confirm dismissing the held quote clears it.
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
     const couponInput = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
-    // Type uppercase directly to avoid controlled-input transform races with
-    // user-event keystroke timing.
     await user.type(couponInput, 'WELCOME10');
     await waitFor(() => expect(couponInput.value).toContain('W'));
-
-    await user.click(screen.getByRole('button', { name: /purchase credits/i }));
-
-    // Quote bar appears (use the exact eyebrow label inside the quote bar to
-    // avoid colliding with the InlineAlert success message and coupon hint).
-    await waitFor(() => expect(screen.getByText('Validated quote')).toBeInTheDocument());
 
     // Dismiss it.
     await user.click(screen.getByRole('button', { name: /dismiss/i }));
@@ -373,8 +436,6 @@ describe('Billing page', () => {
     expect(screen.queryByText('Validated quote')).not.toBeInTheDocument();
     // Coupon should now be cleared because the dismissed quote carried one.
     expect((screen.getByLabelText(/coupon code/i) as HTMLInputElement).value).toBe('');
-
-    openSpy.mockRestore();
   });
 
   it('renders an empty state when no top-up tiers are configured', async () => {
@@ -392,7 +453,7 @@ describe('Billing page', () => {
   });
 
   it('starts add-on checkout from catalog deep links with the selected parent subscription', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const push = vi.fn();
     mockFetchBilling.mockResolvedValueOnce({
       currentPlan: 'Speaking Crash',
       currentPlanId: 'speaking-crash',
@@ -434,27 +495,23 @@ describe('Billing page', () => {
     });
 
     renderWithRouter(<BillingPage />, {
+      router: { push },
       searchParams: new URLSearchParams('addOn=speaking-1session&parent=sub_speaking'),
       pathname: '/billing',
     });
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
 
+    // The deep link auto-routes to the unified checkout picker, carrying the add-on
+    // and its parent subscription so the chosen gateway resolves the same purchase.
     await waitFor(() => {
-      expect(mockFetchBillingQuote).toHaveBeenCalledWith(expect.objectContaining({
-        productType: 'addon_purchase',
-        quantity: 1,
-        priceId: 'speaking-1session',
-        parentSubscriptionId: 'sub_speaking',
-      }));
-      expect(mockCreateBillingCheckoutSession).toHaveBeenCalledWith(expect.objectContaining({
-        productType: 'addon_purchase',
-        quantity: 1,
-        priceId: 'speaking-1session',
-        parentSubscriptionId: 'sub_speaking',
-      }));
+      expect(push).toHaveBeenCalledWith(expect.stringContaining('/checkout/review?'));
     });
-
-    openSpy.mockRestore();
+    const target = String(push.mock.calls.find((call) => String(call[0]).includes('/checkout/review'))?.[0] ?? '');
+    const params = new URLSearchParams(target.split('?')[1] ?? '');
+    expect(params.get('productType')).toBe('addon_purchase');
+    expect(params.get('quantity')).toBe('1');
+    expect(params.get('priceId')).toBe('speaking-1session');
+    expect(params.get('parentSubscriptionId')).toBe('sub_speaking');
   });
 });

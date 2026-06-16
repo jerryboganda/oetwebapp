@@ -365,23 +365,43 @@ public static class LearnerEndpoints
         // Configured payment gateways. Lets the frontend offer only the gateways
         // that can actually create a checkout session in this environment, so a
         // learner never picks an option that would fail with a server error.
+        //
+        // Returns both a back-compat `gateways: string[]` (gateway names) and a
+        // richer `methods[]` ({ name, label, iconName, mode }) that drives the
+        // unified payment-method picker. `mode` is "embedded" for the in-page
+        // PayPal SDK flow and "redirect" for hosted-checkout gateways. Stripe and
+        // PayPal honour sandbox fallbacks (so they appear in dev); the regional
+        // gateways (Checkout.com / Paymob / PayTabs) only appear once their live
+        // credentials are configured, since they have no sandbox stand-in.
         billing.MapGet("/payment-gateways", async (
             IRuntimeSettingsProvider runtimeSettings,
             IOptions<BillingOptions> billingOptions,
             CancellationToken ct) =>
         {
-            var settings = (await runtimeSettings.GetAsync(ct)).Billing;
+            var effective = await runtimeSettings.GetAsync(ct);
+            var billingSettings = effective.Billing;
             var sandbox = billingOptions.Value.AllowSandboxFallbacks;
-            var gateways = new List<string>();
-            if (sandbox || !string.IsNullOrWhiteSpace(settings.StripeSecretKey))
+
+            var stripeOk = sandbox || !string.IsNullOrWhiteSpace(billingSettings.StripeSecretKey);
+            var paypalOk = sandbox || (!string.IsNullOrWhiteSpace(billingSettings.PayPalClientId)
+                                       && !string.IsNullOrWhiteSpace(billingSettings.PayPalClientSecret));
+
+            var candidates = new (string Name, string Label, string IconName, string Mode, bool Available)[]
             {
-                gateways.Add("stripe");
-            }
-            if (sandbox || (!string.IsNullOrWhiteSpace(settings.PayPalClientId) && !string.IsNullOrWhiteSpace(settings.PayPalClientSecret)))
-            {
-                gateways.Add("paypal");
-            }
-            return Results.Ok(new { gateways });
+                ("stripe", "Credit or debit card", "credit-card", "redirect", stripeOk),
+                ("paypal", "PayPal", "paypal", "embedded", paypalOk),
+                ("checkoutcom", "Card (Checkout.com)", "credit-card", "redirect", effective.CheckoutCom.IsConfigured),
+                ("paymob", "Paymob (cards & wallets)", "wallet", "redirect", effective.Paymob.IsConfigured),
+                ("paytabs", "PayTabs", "credit-card", "redirect", effective.PayTabs.IsConfigured),
+            };
+
+            var available = candidates.Where(c => c.Available).ToList();
+            var gateways = available.Select(c => c.Name).ToList();
+            var methods = available
+                .Select(c => new { name = c.Name, label = c.Label, iconName = c.IconName, mode = c.Mode })
+                .ToList();
+
+            return Results.Ok(new { gateways, methods });
         });
 
         // PayPal Expanded (embedded) checkout config for the browser SDK. Exposes ONLY the
@@ -436,6 +456,32 @@ public static class LearnerEndpoints
                 ? Results.StatusCode(StatusCodes.Status400BadRequest)
                 : Results.Ok(outcome);
         });
+
+        // Regional gateways — same raw-body → verify → idempotent-fulfil contract as
+        // Stripe/PayPal. Dormant until an admin configures the gateway's credentials
+        // (the learner availability endpoint only advertises configured gateways).
+        async Task<IResult> HandleGatewayWebhook(
+            HttpContext http,
+            Func<string, IReadOnlyDictionary<string, string>, CancellationToken, Task<object>> handler,
+            CancellationToken ct)
+        {
+            var payload = await new StreamReader(http.Request.Body).ReadToEndAsync(ct);
+            var headers = http.Request.Headers.ToDictionary(
+                header => header.Key,
+                header => header.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase);
+            var outcome = await handler(payload, headers, ct);
+            return LearnerService.IsRejectedWebhookOutcome(outcome)
+                ? Results.StatusCode(StatusCodes.Status400BadRequest)
+                : Results.Ok(outcome);
+        }
+
+        webhooks.MapPost("/checkoutcom", (HttpContext http, LearnerService service, CancellationToken ct) =>
+            HandleGatewayWebhook(http, service.HandleCheckoutComWebhookAsync, ct));
+        webhooks.MapPost("/paymob", (HttpContext http, LearnerService service, CancellationToken ct) =>
+            HandleGatewayWebhook(http, service.HandlePaymobWebhookAsync, ct));
+        webhooks.MapPost("/paytabs", (HttpContext http, LearnerService service, CancellationToken ct) =>
+            HandleGatewayWebhook(http, service.HandlePayTabsWebhookAsync, ct));
 
         // Exam family reference
         v1.MapGet("/reference/exam-families", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetExamFamiliesAsync(ct)));

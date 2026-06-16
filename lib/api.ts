@@ -1450,7 +1450,7 @@ export interface WalletTopUpResponse {
 
 export async function createWalletTopUp(
   amount: number,
-  gateway: 'stripe' | 'paypal',
+  gateway: string,
   idempotencyKey?: string,
 ): Promise<WalletTopUpResponse> {
   return apiRequest<WalletTopUpResponse>('/v1/billing/wallet/top-up', {
@@ -1477,8 +1477,25 @@ export async function fetchWalletTopUpTiers(): Promise<WalletTopUpTiersResponse>
   return apiRequest<WalletTopUpTiersResponse>('/v1/billing/wallet/top-up-tiers');
 }
 
+/** How a payment method initiates: an in-page SDK ("embedded", e.g. PayPal) or a
+ *  hosted-checkout redirect ("redirect", e.g. Stripe / Checkout.com / Paymob / PayTabs). */
+export type PaymentMethodMode = 'embedded' | 'redirect';
+
+export interface PaymentMethodOption {
+  /** Gateway name passed back to checkout / top-up (e.g. "stripe", "paypal", "checkoutcom"). */
+  name: string;
+  /** Learner-facing label for the method. */
+  label: string;
+  /** Icon hint (e.g. "credit-card", "paypal", "wallet"). */
+  iconName: string;
+  /** "embedded" renders an in-page SDK; "redirect" opens a hosted checkout. */
+  mode: PaymentMethodMode;
+}
+
 export interface AvailablePaymentGatewaysResponse {
   gateways: string[];
+  /** Rich metadata for the unified payment-method picker. Absent on older API builds. */
+  methods?: PaymentMethodOption[];
 }
 
 export async function fetchAvailablePaymentGateways(): Promise<AvailablePaymentGatewaysResponse> {
@@ -4301,7 +4318,7 @@ export async function createBillingCheckoutSession(input: {
   addOnCodes?: string[];
   parentSubscriptionId?: string | null;
   quoteId?: string | null;
-  gateway?: 'stripe' | 'paypal';
+  gateway?: string;
   idempotencyKey?: string;
 }): Promise<{ checkoutUrl: string; checkoutSessionId: string; quoteId?: string | null; totalAmount?: number; currency?: string }> {
   const response = await apiRequest<ApiRecord>('/v1/billing/checkout-sessions', {

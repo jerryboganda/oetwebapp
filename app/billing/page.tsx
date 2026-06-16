@@ -32,7 +32,6 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { analytics } from '@/lib/analytics';
 import {
   fetchFreezeStatus,
-  createBillingCheckoutSession,
   createWalletTopUp,
   downloadInvoice,
   fetchAiPackages,
@@ -40,14 +39,13 @@ import {
   fetchBilling,
   fetchBillingChangePreview,
   fetchBillingContent,
-  fetchBillingQuote,
   fetchWalletTopUpTiers,
   fetchWalletTransactions,
   pauseSubscription,
   resumeSubscription,
 } from '@/lib/api';
 import { makeBillingCopy } from '@/lib/billing-copy-defaults';
-import type { WalletTopUpTier } from '@/lib/api';
+import type { WalletTopUpTier, PaymentMethodOption } from '@/lib/api';
 import type {
   AiPackage,
   AiPackagesResponse,
@@ -73,10 +71,6 @@ function formatOptionalDate(value?: string | null) {
   if (!value) return 'Not scheduled';
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 'Not scheduled' : new Date(time).toLocaleDateString();
-}
-
-function prettyProductType(productType: BillingProductType) {
-  return productType.replace(/_/g, ' ');
 }
 
 function billingAddOnCheckoutProductType(productType: string): BillingProductType {
@@ -191,7 +185,8 @@ export default function BillingPage() {
   // Gateways the backend can actually create checkout sessions for. Defaults to
   // card-only so an unconfigured PayPal account is never offered to the learner.
   const [availableGateways, setAvailableGateways] = useState<string[]>(['stripe']);
-  const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
+  const [selectedGateway, setSelectedGateway] = useState<string>('stripe');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
   const [pauseLoading, setPauseLoading] = useState(false);
 
   // Double-submit guard shared across all paid-action handlers; complements
@@ -254,11 +249,10 @@ export default function BillingPage() {
         if (gatewaysResult.status === 'fulfilled' && Array.isArray(gatewaysResult.value?.gateways) && gatewaysResult.value.gateways.length > 0) {
           const gateways = gatewaysResult.value.gateways;
           setAvailableGateways(gateways);
-          if (!gateways.includes('paypal')) {
-            setSelectedGateway('stripe');
-          } else if (!gateways.includes('stripe')) {
-            setSelectedGateway('paypal');
-          }
+          setPaymentMethods(gatewaysResult.value.methods ?? []);
+          // Keep the learner's selection if it's still offered, else fall back to the
+          // first available method (the picker on /checkout/review is authoritative).
+          setSelectedGateway((current) => (gateways.includes(current) ? current : gateways[0]));
         }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
@@ -335,55 +329,20 @@ export default function BillingPage() {
       setError(billingBlockedMessage);
       return;
     }
-    // PayPal Expanded checkout runs embedded on the review page; route there with the
-    // selected product so the buyer pays in-page (PayPal/Venmo/Pay Later or card) without
-    // a hosted-portal redirect. Stripe keeps the existing inline hosted flow below.
-    if (selectedGateway === 'paypal') {
-      const params = new URLSearchParams();
-      params.set('productType', productType);
-      if (priceId) params.set('priceId', priceId);
-      params.set('quantity', String(quantity));
-      params.set('gateway', 'paypal');
-      if (parentSubscriptionId) params.set('parentSubscriptionId', parentSubscriptionId);
-      const paypalCoupon = couponCode.trim();
-      if (paypalCoupon) params.set('couponCode', paypalCoupon);
-      router.push(`/checkout/review?${params.toString()}`);
-      return;
-    }
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    const coupon = couponCode.trim() || null;
-    const quoteKey = `${productType}:${priceId ?? quantity}`;
-    setBusyKey(quoteKey);
-    setError(null);
-    setSuccess(null);
-    try {
-      const quoteResponse = await fetchBillingQuote({ productType, quantity, priceId, couponCode: coupon, parentSubscriptionId });
-      setQuote(quoteResponse);
-      setQuoteLabel(label ?? prettyProductType(productType));
-      const checkoutPayload = {
-        productType,
-        quantity,
-        priceId,
-        couponCode: coupon,
-        parentSubscriptionId,
-        quoteId: quoteResponse.quoteId,
-        gateway: selectedGateway,
-        // Optimistic idempotency key. Impl D should formally accept this in
-        // CheckoutSessionCreateRequest; until then the helper internally
-        // generates one too, so this is harmless.
-        idempotencyKey: newIdempotencyKey(),
-      } as Parameters<typeof createBillingCheckoutSession>[0];
-      const response = await createBillingCheckoutSession(checkoutPayload);
-      await openCheckoutUrl(response.checkoutUrl);
-      setSuccess(`${label ?? prettyProductType(productType)} checkout opened with a validated quote.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start checkout.');
-    } finally {
-      setBusyKey(null);
-      submittingRef.current = false;
-    }
-  }, [billingBlockedMessage, billingMutationsBlocked, couponCode, selectedGateway]);
+    // Unified checkout: every purchase routes to the review page, where the learner
+    // picks a payment method (card / PayPal / regional gateway) and pays — embedded
+    // for PayPal, hosted-redirect for the rest. The billing-page selection is carried
+    // through as the initial preference; the picker reconciles it against availability.
+    const params = new URLSearchParams();
+    params.set('productType', productType);
+    if (priceId) params.set('priceId', priceId);
+    params.set('quantity', String(quantity));
+    if (selectedGateway) params.set('gateway', selectedGateway);
+    if (parentSubscriptionId) params.set('parentSubscriptionId', parentSubscriptionId);
+    const coupon = couponCode.trim();
+    if (coupon) params.set('couponCode', coupon);
+    router.push(`/checkout/review?${params.toString()}`);
+  }, [billingBlockedMessage, billingMutationsBlocked, couponCode, router, selectedGateway]);
 
   const loadPreview = useCallback(async (planId: string) => {
     if (billingMutationsBlocked) {
@@ -1064,23 +1023,30 @@ export default function BillingPage() {
               />
 
               {availableGateways.length > 1 ? (
-                <div className="mb-5 flex items-center gap-3">
+                <div className="mb-5 flex flex-wrap items-center gap-3">
                   <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.wallet.payWith')}</p>
-                  <div className="inline-flex rounded-xl border border-border bg-background-light p-1">
-                    {(['stripe', 'paypal'] as const).filter((gw) => availableGateways.includes(gw)).map((gw) => (
-                      <button
-                        key={gw}
-                        type="button"
-                        onClick={() => setSelectedGateway(gw)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] duration-200 ${
-                          selectedGateway === gw
-                            ? 'bg-emerald-700 text-white shadow-sm'
-                            : 'text-navy hover:bg-surface'
-                        }`}
-                      >
-                        {gw === 'stripe' ? copy('billing.wallet.gateway.stripe') : copy('billing.wallet.gateway.paypal')}
-                      </button>
-                    ))}
+                  <div className="inline-flex flex-wrap rounded-xl border border-border bg-background-light p-1">
+                    {availableGateways.map((gw) => {
+                      const gatewayLabel = gw === 'stripe'
+                        ? copy('billing.wallet.gateway.stripe')
+                        : gw === 'paypal'
+                          ? copy('billing.wallet.gateway.paypal')
+                          : paymentMethods.find((method) => method.name === gw)?.label ?? gw;
+                      return (
+                        <button
+                          key={gw}
+                          type="button"
+                          onClick={() => setSelectedGateway(gw)}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] duration-200 ${
+                            selectedGateway === gw
+                              ? 'bg-emerald-700 text-white shadow-sm'
+                              : 'text-navy hover:bg-surface'
+                          }`}
+                        >
+                          {gatewayLabel}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}

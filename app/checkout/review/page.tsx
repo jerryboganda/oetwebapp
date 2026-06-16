@@ -3,14 +3,21 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CreditCard, ShieldCheck, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, CreditCard, ShieldCheck, ShoppingBag, Wallet } from 'lucide-react';
 
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
 import { useAuth } from '@/contexts/auth-context';
-import { createBillingCheckoutSession, fetchBillingQuote, type PaymentCaptureResult } from '@/lib/api';
+import {
+  createBillingCheckoutSession,
+  fetchAvailablePaymentGateways,
+  fetchBillingQuote,
+  type PaymentCaptureResult,
+  type PaymentMethodMode,
+  type PaymentMethodOption,
+} from '@/lib/api';
 import type { BillingProductType, BillingQuote } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
 import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
@@ -49,7 +56,10 @@ function CheckoutReviewContent() {
   const productType = normalizeProductType(searchParams?.get('productType'));
   const priceId = searchParams?.get('priceId') ?? searchParams?.get('plan') ?? searchParams?.get('addOn') ?? '';
   const parentSubscriptionId = searchParams?.get('parentSubscriptionId') ?? searchParams?.get('parent') ?? null;
-  const gateway = (searchParams?.get('gateway') === 'paypal' ? 'paypal' : 'stripe') as 'stripe' | 'paypal';
+  // The URL `gateway` param is the learner's preferred method (e.g. routed from the
+  // billing page); it becomes the initial selection, but the picker always reconciles
+  // it against the methods the backend reports as actually available.
+  const initialGateway = searchParams?.get('gateway') ?? '';
   const initialCoupon = searchParams?.get('couponCode') ?? '';
   const quantity = Number(searchParams?.get('quantity') ?? '1') || 1;
 
@@ -63,8 +73,19 @@ function CheckoutReviewContent() {
   // When PayPal Expanded checkout is selected but the embedded config is unavailable
   // (no public client id), fall back to the hosted-portal redirect button.
   const [paypalUnavailable, setPaypalUnavailable] = useState(false);
+  // Unified payment-method picker: the methods the backend says are usable here, plus
+  // the learner's current selection.
+  const [methods, setMethods] = useState<PaymentMethodOption[]>([]);
+  const [selectedGateway, setSelectedGateway] = useState<string>(initialGateway);
   const quoteStartedRef = useRef(false);
   const quoteRefreshingRef = useRef(false);
+
+  const selectedMethod = useMemo(
+    () => methods.find((method) => method.name === selectedGateway) ?? null,
+    [methods, selectedGateway],
+  );
+  const selectedMode: PaymentMethodMode =
+    selectedMethod?.mode ?? (selectedGateway === 'paypal' ? 'embedded' : 'redirect');
 
   const nextHref = useMemo(() => {
     const query = searchParams?.toString();
@@ -121,6 +142,41 @@ function CheckoutReviewContent() {
     void loadQuote();
   }, [authLoading, isAuthenticated, loadQuote, nextHref, router]);
 
+  // Load the payment methods the backend can actually process in this environment so
+  // the learner never picks an option that would fail. Falls back gracefully when the
+  // API predates the richer `methods[]` shape (derive from the gateway-name list), and
+  // to a single Stripe redirect if the lookup itself fails.
+  useEffect(() => {
+    let cancelled = false;
+    const deriveMethod = (name: string): PaymentMethodOption => ({
+      name,
+      label: name === 'paypal' ? 'PayPal' : 'Credit or debit card',
+      iconName: name === 'paypal' ? 'paypal' : 'credit-card',
+      mode: name === 'paypal' ? 'embedded' : 'redirect',
+    });
+    (async () => {
+      let options: PaymentMethodOption[];
+      try {
+        const res = await fetchAvailablePaymentGateways();
+        options = res.methods && res.methods.length > 0
+          ? res.methods
+          : (res.gateways ?? []).map(deriveMethod);
+      } catch {
+        options = [deriveMethod('stripe')];
+      }
+      if (cancelled) return;
+      if (options.length === 0) options = [deriveMethod('stripe')];
+      setMethods(options);
+      setSelectedGateway((current) =>
+        current && options.some((option) => option.name === current)
+          ? current
+          : options[0]!.name);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Quotes are valid for a limited window. Surface the remaining time and
   // refresh automatically at expiry so the learner never hits the backend's
   // billing_quote_expired error mid-checkout.
@@ -162,7 +218,7 @@ function CheckoutReviewContent() {
         couponCode: couponCode.trim() || null,
         parentSubscriptionId,
         quoteId: quote.quoteId,
-        gateway,
+        gateway: selectedGateway,
         idempotencyKey: newIdempotencyKey(),
       });
       const opened = await openCheckoutUrl(checkout.checkoutUrl);
@@ -197,11 +253,11 @@ function CheckoutReviewContent() {
       couponCode: couponCode.trim() || null,
       parentSubscriptionId,
       quoteId: quote.quoteId,
-      gateway: 'paypal',
+      gateway: selectedGateway || 'paypal',
       idempotencyKey: newIdempotencyKey(),
     });
     return checkout.checkoutSessionId;
-  }, [quote, productType, quantity, priceId, couponCode, parentSubscriptionId]);
+  }, [quote, productType, quantity, priceId, couponCode, parentSubscriptionId, selectedGateway]);
 
   const handlePaypalCaptured = useCallback(
     (result: PaymentCaptureResult) => {
@@ -299,7 +355,36 @@ function CheckoutReviewContent() {
           >
             Apply coupon
           </Button>
-          {gateway === 'paypal' && !paypalUnavailable ? (
+          {methods.length > 1 ? (
+            <fieldset className="mt-5">
+              <legend className="text-sm font-medium">Payment method</legend>
+              <div className="mt-2 space-y-2">
+                {methods.map((method) => (
+                  <label
+                    key={method.name}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${
+                      selectedGateway === method.name
+                        ? 'border-primary ring-1 ring-primary'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={method.name}
+                      checked={selectedGateway === method.name}
+                      onChange={() => setSelectedGateway(method.name)}
+                      className="accent-primary"
+                    />
+                    <MethodIcon iconName={method.iconName} />
+                    <span className="font-medium">{method.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
+
+          {selectedMode === 'embedded' && !paypalUnavailable ? (
             <div className="mt-3">
               <PayPalExpandedCheckout
                 createOrder={createPaypalOrder}
@@ -332,6 +417,15 @@ function CheckoutReviewContent() {
       </section>
     </main>
   );
+}
+
+function MethodIcon({ iconName }: { iconName: string }) {
+  if (iconName === 'wallet') {
+    return <Wallet className="h-4 w-4 text-muted" />;
+  }
+  // "paypal", "credit-card", and any unknown hint render the neutral card icon —
+  // lucide has no PayPal brand mark and the label already names the method.
+  return <CreditCard className="h-4 w-4 text-muted" />;
 }
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {

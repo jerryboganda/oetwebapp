@@ -441,6 +441,17 @@ public class WalletService(
                 "This payment method is temporarily unavailable. Please pay by card instead.",
                 [new ApiFieldError("gateway", "unavailable", "Choose a different payment method.")]);
         }
+        catch (PaymentGatewayApiException)
+        {
+            // The payment provider's API rejected the request (e.g. expired/invalid key,
+            // declined params). Surface a clean, retryable 503 instead of an opaque 500 —
+            // mirrors CreateCheckoutSessionAsync. The provider detail is already logged
+            // inside the gateway and is never shown to learners.
+            throw ApiException.ServiceUnavailable(
+                "payment_gateway_error",
+                "We couldn't start your payment right now. Please try again in a moment or choose another payment method.",
+                retryable: true);
+        }
 
         var now = DateTimeOffset.UtcNow;
 

@@ -9185,6 +9185,19 @@ public partial class LearnerService(
     public Task<object> HandlePayPalWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
         => HandlePaymentWebhookAsync("paypal", payload, headers, ct);
 
+    // Regional gateways. Each gateway's HandleWebhookAsync verifies its own
+    // signature/HMAC; HandlePaymentWebhookAsync then runs the same idempotent
+    // dedup + fulfillment as Stripe/PayPal. These only receive traffic once an
+    // admin configures the gateway's credentials in Runtime Settings.
+    public Task<object> HandleCheckoutComWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync("checkoutcom", payload, headers, ct);
+
+    public Task<object> HandlePaymobWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync("paymob", payload, headers, ct);
+
+    public Task<object> HandlePayTabsWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync("paytabs", payload, headers, ct);
+
     public static bool IsRejectedWebhookOutcome(object outcome)
         => outcome.GetType().GetProperty("received")?.GetValue(outcome) is false;
 
