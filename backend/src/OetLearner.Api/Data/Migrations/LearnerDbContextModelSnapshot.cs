@@ -5749,6 +5749,32 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("AzureTtsDefaultVoice")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ChatTtsApiKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ChatTtsBaseUrl")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ChatTtsDefaultVoice")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CosyVoiceApiKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CosyVoiceBaseUrl")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CosyVoiceDefaultVoice")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("DeepgramApiKeyEncrypted")
                         .HasColumnType("text");
 
@@ -5852,6 +5878,17 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int?>("FreeTierWindowDays")
                         .HasColumnType("integer");
 
+                    b.Property<string>("GptSoVitsApiKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GptSoVitsBaseUrl")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("GptSoVitsDefaultVoice")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<long?>("MaxAudioBytes")
                         .HasColumnType("bigint");
 
@@ -5863,6 +5900,27 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<int?>("PrepDurationSeconds")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Qwen3Emotion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Qwen3ModelVariant")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<double?>("Qwen3Pitch")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Qwen3Speed")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Qwen3VoiceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Qwen3VoiceInstructions")
+                        .HasColumnType("text");
 
                     b.Property<string>("RealtimeAsrProvider")
                         .HasMaxLength(64)
