@@ -370,12 +370,17 @@ public static class VoiceDesignAdminEndpoints
         return result;
     }
 
-    private static async Task<string?> ValidatePlsAsync(IFormFile file, CancellationToken ct)
+    internal static async Task<string?> ValidatePlsAsync(IFormFile file, CancellationToken ct)
     {
         try
         {
             var settings = new XmlReaderSettings
             {
+                // Async MUST be true — XDocument.LoadAsync throws
+                // InvalidOperationException otherwise (this was the real cause of
+                // the PLS upload 500: the validator crashed before the file ever
+                // reached ElevenLabs).
+                Async = true,
                 DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null,
                 MaxCharactersInDocument = 1024 * 1024,
@@ -389,8 +394,10 @@ public static class VoiceDesignAdminEndpoints
                 return "dictionary_file_too_many_entries";
             return null;
         }
-        catch (XmlException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Any malformed-file / parser failure becomes a clean 400 instead of
+            // an unhandled 500. Cancellation still propagates.
             return "dictionary_file_invalid_xml";
         }
     }

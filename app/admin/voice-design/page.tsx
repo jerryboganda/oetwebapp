@@ -9,7 +9,6 @@ import {
   Loader2,
   Lock,
   Mic2,
-  Play,
   RefreshCw,
   Settings2,
   Sparkles,
@@ -138,8 +137,18 @@ export default function AdminVoiceDesignPage() {
   const jobTracker = useCollapsible(true);
 
   // Refs
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null); // voice-browser transient preview only
+  const samplesRef = useRef<VoiceDesignSample[]>([]);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep a ref of the latest samples so cleanup can revoke their object URLs.
+  useEffect(() => { samplesRef.current = samples; }, [samples]);
+
+  // Revoke any outstanding audio object URLs on unmount (avoid leaks).
+  useEffect(() => () => {
+    samplesRef.current.forEach((s) => { if (s.audioUrl) URL.revokeObjectURL(s.audioUrl); });
+    if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
+  }, []);
 
   // ─── Toast auto-dismiss ───
   useEffect(() => {
@@ -251,6 +260,9 @@ export default function AdminVoiceDesignPage() {
   const handleGenerateSamples = useCallback(async () => {
     const texts = [...OET_SAMPLES];
     if (customSampleText.trim()) texts.push(customSampleText.trim());
+
+    // Free the previous batch's audio URLs before creating a new one.
+    samplesRef.current.forEach((s) => { if (s.audioUrl) URL.revokeObjectURL(s.audioUrl); });
 
     const initial: VoiceDesignSample[] = texts.map((text, i) => ({
       id: `sample-${i}`,
@@ -376,16 +388,6 @@ export default function AdminVoiceDesignPage() {
 
   const handleRateSample = useCallback((sampleId: string, rating: number) => {
     setSamples((prev) => prev.map((s) => (s.id === sampleId ? { ...s, rating } : s)));
-  }, []);
-
-  const playSample = useCallback((url: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      URL.revokeObjectURL(audioRef.current.src);
-    }
-    const audio = new Audio(url);
-    audioRef.current = audio;
-    void audio.play();
   }, []);
 
   // ─── Computed ───
@@ -521,6 +523,9 @@ export default function AdminVoiceDesignPage() {
               className="overflow-hidden"
             >
               <div className="space-y-4 p-4">
+                <p className="text-xs text-admin-text-muted">
+                  Hear your selected voice (<span className="font-bold text-admin-text">{elevenSettings.voiceId || 'not set'}</span>) speak realistic OET clinical lines. Add a custom line to test specific words — e.g. drug names like &ldquo;Amlodipine&rdquo; — then press Generate. Each clip has full playback controls (replay, seek, volume) and an optional star rating to compare voices.
+                </p>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-admin-text-muted">Custom Sample (optional)</label>
                   <textarea
@@ -554,34 +559,44 @@ export default function AdminVoiceDesignPage() {
                     {samples.map((sample) => (
                       <div key={sample.id} className="rounded-xl border border-admin-border bg-admin-surface-raised p-3">
                         <p className="mb-2 text-xs text-admin-text">{sample.text}</p>
-                        <div className="flex items-center gap-3">
-                          {sample.loading ? (
-                            <div className="flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-primary)]" />
-                              <span className="text-xs text-admin-text-muted">Generating...</span>
-                            </div>
-                          ) : sample.error ? (
-                            <span className="text-xs text-red-400">{sample.error}</span>
-                          ) : sample.audioUrl ? (
-                            <button
-                              type="button"
-                              onClick={() => playSample(sample.audioUrl!)}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-[var(--admin-primary)] hover:bg-[var(--admin-primary-tint-strong)]"
+                        {sample.loading ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-primary)]" />
+                            <span className="text-xs text-admin-text-muted">Generating…</span>
+                          </div>
+                        ) : sample.error ? (
+                          <span className="text-xs text-red-400">{sample.error}</span>
+                        ) : sample.audioUrl ? (
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            {/* Native player: replay, pause, seek, volume, download — keyboard + screen-reader accessible. */}
+                            <audio
+                              controls
+                              preload="metadata"
+                              src={sample.audioUrl}
+                              aria-label={`Audio for: ${sample.text}`}
+                              className="h-9 w-full sm:max-w-sm"
+                            />
+                            <div
+                              className="flex items-center gap-0.5 sm:ml-auto"
+                              role="radiogroup"
+                              aria-label={`Rate the voice for: ${sample.text}`}
                             >
-                              <Play className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
-
-                          {!sample.loading && sample.audioUrl && (
-                            <div className="ml-auto flex items-center gap-0.5">
                               {[1, 2, 3, 4, 5].map((star) => (
-                                <button key={star} type="button" onClick={() => handleRateSample(sample.id, star)} className="p-0.5">
+                                <button
+                                  key={star}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={sample.rating === star}
+                                  aria-label={`${star} star${star > 1 ? 's' : ''}`}
+                                  onClick={() => handleRateSample(sample.id, star)}
+                                  className="p-0.5"
+                                >
                                   <Star className={`h-4 w-4 ${star <= sample.rating ? 'fill-amber-400 text-amber-400' : 'text-admin-text-muted/30'}`} />
                                 </button>
                               ))}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>

@@ -10,7 +10,7 @@ namespace OetLearner.Api.Domain;
 /// env-var defaults and returns a computed <c>ConversationOptions</c>.
 ///
 /// Secret fields (API keys) are encrypted via ASP.NET Data Protection with
-/// the purpose <c>ConversationOptions.Secret.v1</c> — never stored plain.
+/// the purpose <c>ConversationOptions.Secret.v1</c> - never stored plain.
 /// </summary>
 public class ConversationSettingsRow
 {
@@ -26,14 +26,10 @@ public class ConversationSettingsRow
     [MaxLength(32)]
     public string? TtsProvider { get; set; }
 
-    // Azure Speech (ASR). AzureTtsDefaultVoice is DEPRECATED dead config — see
-    // the deprecation note above the CosyVoice block; kept only so the live
-    // schema is unchanged this release. Scheduled for removal in a follow-up
-    // drop migration (expand/contract).
+    // Azure Speech (ASR)
     public string? AzureSpeechKeyEncrypted { get; set; }
     [MaxLength(64)] public string? AzureSpeechRegion { get; set; }
     [MaxLength(16)] public string? AzureLocale { get; set; }
-    [MaxLength(128)] public string? AzureTtsDefaultVoice { get; set; }
 
     // Whisper (OpenAI-compatible)
     [MaxLength(256)] public string? WhisperBaseUrl { get; set; }
@@ -77,7 +73,7 @@ public class ConversationSettingsRow
     public bool? ElevenLabsSttEnableProviderLogging { get; set; }
     public int? ElevenLabsSttTokenTtlSeconds { get; set; }
 
-    // ElevenLabs
+    // ElevenLabs (the only supported TTS provider)
     public string? ElevenLabsApiKeyEncrypted { get; set; }
     [MaxLength(256)] public string? ElevenLabsTtsBaseUrl { get; set; }
     [MaxLength(64)] public string? ElevenLabsDefaultVoiceId { get; set; }
@@ -89,48 +85,6 @@ public class ConversationSettingsRow
     public double? ElevenLabsSimilarityBoost { get; set; }
     public double? ElevenLabsStyle { get; set; }
     public bool? ElevenLabsUseSpeakerBoost { get; set; }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // DEPRECATED — dead TTS-provider config. ElevenLabs is now the only TTS
-    // provider; the conversation/options/admin code no longer reads or writes
-    // any of the CosyVoice / ChatTTS / Qwen3 / GPT-SoVITS columns below (nor
-    // AzureTtsDefaultVoice above). They are intentionally retained for ONE
-    // release so the live schema is unchanged during blue/green cutover
-    // (expand/contract): a follow-up "drop" migration removes them once no
-    // running container maps them. Do not add new readers.
-    // ─────────────────────────────────────────────────────────────────────
-
-    // CosyVoice
-    [MaxLength(256)] public string? CosyVoiceBaseUrl { get; set; }
-    public string? CosyVoiceApiKeyEncrypted { get; set; }
-    [MaxLength(64)] public string? CosyVoiceDefaultVoice { get; set; }
-
-    // ChatTTS
-    [MaxLength(256)] public string? ChatTtsBaseUrl { get; set; }
-    public string? ChatTtsApiKeyEncrypted { get; set; }
-    [MaxLength(64)] public string? ChatTtsDefaultVoice { get; set; }
-
-    // DigitalOcean Qwen3 TTS Voice Studio (Phase Q1 — 2026-05-24).
-    // Reuses ChatTtsBaseUrl / ChatTtsApiKey for the gateway credentials,
-    // but adds three Qwen3-specific knobs so admins can pin a consistent
-    // voice across vocabulary audio regeneration runs.
-    //  - <c>Qwen3ModelVariant</c>: "flash" (preset voice) or "voicedesign" (prompt).
-    //  - <c>Qwen3VoiceId</c>: case-sensitive preset id when variant = "flash"
-    //    (e.g. "Cherry", "Ethan", "Jada"). Ignored for voicedesign.
-    //  - <c>Qwen3VoiceInstructions</c>: free-form natural-language voice
-    //    description for voicedesign (≤ 100 chars per Alibaba spec).
-    //    Unbounded text column so the prompt is not silently truncated.
-    [MaxLength(32)] public string? Qwen3ModelVariant { get; set; }
-    [MaxLength(64)] public string? Qwen3VoiceId { get; set; }
-    public string? Qwen3VoiceInstructions { get; set; }
-    public double? Qwen3Speed { get; set; }
-    public double? Qwen3Pitch { get; set; }
-    [MaxLength(256)] public string? Qwen3Emotion { get; set; }
-
-    // GPT-SoVITS
-    [MaxLength(256)] public string? GptSoVitsBaseUrl { get; set; }
-    public string? GptSoVitsApiKeyEncrypted { get; set; }
-    [MaxLength(64)] public string? GptSoVitsDefaultVoice { get; set; }
 
     // Audio pipeline
     public long? MaxAudioBytes { get; set; }
