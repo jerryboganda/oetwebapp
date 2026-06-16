@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
+import { RecallTierBadge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchDueFlashcards, fetchRecallsAudio, submitFlashcardReview } from '@/lib/api';
@@ -177,7 +178,10 @@ export default function FlashcardsPage() {
               {!flipped ? (
                 <>
                   <div className="mb-4 text-xs font-medium uppercase text-primary">Word</div>
-                  <div className="mb-2 text-3xl font-bold text-navy">{card.term}</div>
+                  <div className="mb-2 flex items-center justify-center gap-2">
+                    <span className="text-3xl font-bold text-navy">{card.term}</span>
+                    <RecallTierBadge count={card.examFrequencyCount ?? 0} />
+                  </div>
                   {card.ipaPronunciation && <div className="text-sm italic text-muted">{card.ipaPronunciation}</div>}
                   <button
                     onClick={(event) => { event.stopPropagation(); void playAudio(card.termId); }}

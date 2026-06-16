@@ -212,6 +212,57 @@ describe('Admin vocabulary import page', () => {
     });
   });
 
+  it('treats duplicates as benign and advances to the audio step after commit', async () => {
+    // Regression: a recalls import is full of duplicates. The commit must NOT
+    // be flagged as "needs review" — it should report duplicates as merged and
+    // load the batch summary so the ElevenLabs audio block becomes reachable.
+    const user = userEvent.setup();
+    api.adminListRecallSetTags.mockResolvedValue([{ code: 'old', displayName: 'Old recalls' }]);
+    api.previewAdminVocabularyImport.mockResolvedValue({
+      importBatchId: 'recalls-dup',
+      totalRows: 5,
+      validRows: 2,
+      invalidRows: 0,
+      duplicateRows: 3,
+      rows: [],
+      warnings: [],
+    });
+    api.bulkImportAdminVocabulary.mockResolvedValue({
+      importBatchId: 'recalls-dup',
+      imported: 2,
+      skipped: 3,
+      duplicates: 3,
+      failedRows: 0,
+    });
+    api.fetchAdminVocabularyImportBatch.mockResolvedValue({
+      importBatchId: 'recalls-dup',
+      total: 2,
+      draft: 2,
+      active: 0,
+      archived: 0,
+      warnings: [],
+      rows: [
+        { id: 'VOC-1', term: 'dyspnoea', audioMediaAssetId: null, audioUrl: null },
+        { id: 'VOC-2', term: 'oedema', audioMediaAssetId: null, audioUrl: null },
+      ],
+    });
+
+    render(<AdminVocabularyImportPage />);
+
+    await user.upload(screen.getByLabelText(/source csv/i), makeManifestFile());
+    await user.click(screen.getByRole('button', { name: /preview/i }));
+    await user.click(await screen.findByRole('button', { name: /dry run/i }));
+    await user.click(await screen.findByRole('button', { name: /import 2 rows/i }));
+
+    // Success — duplicates surfaced as merged, never as an error needing review.
+    expect(await screen.findByText(/3 duplicates merged into frequency/i)).toBeInTheDocument();
+    expect(screen.queryByText(/needs review/i)).not.toBeInTheDocument();
+    // The committed batch is loaded, which is what renders the audio block.
+    await waitFor(() => {
+      expect(api.fetchAdminVocabularyImportBatch).toHaveBeenCalledWith('recalls-dup');
+    });
+  });
+
   it('renders ElevenLabs queued progress and backfills missing recall audio', async () => {
     const user = userEvent.setup();
     api.fetchAdminVocabularyImportBatch.mockResolvedValue({

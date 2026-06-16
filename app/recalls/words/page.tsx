@@ -538,10 +538,11 @@ export default function RecallsWordsPage() {
                             <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
                           )}
                         </button>
-                        {/* Repeat tag: N = distinct recall-set / exam periods this
-                            word recurs in. The word appears once and is counted,
-                            rather than appearing again and again. */}
-                        <RecallTierBadge count={term.recallSetCodes?.length ?? 0} />
+                        {/* Repeat tag: N = how many times this word appeared
+                            across recall exams (ExamFrequencyCount). The word is
+                            shown once and counted, rather than repeating in the
+                            list — and its audio is reused, not regenerated. */}
+                        <RecallTierBadge count={term.examFrequencyCount ?? 0} />
                         <button
                           type="button"
                           onClick={() => handleToggleFavTerm(term)}

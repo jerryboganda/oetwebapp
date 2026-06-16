@@ -137,15 +137,16 @@ export function CategoryBadge({ category, size }: { category: string; size?: 'sm
 }
 
 /**
- * Recall repeat tag — "Nx" where N is the number of distinct recall-set / exam
- * periods a term has appeared in. A term that recurs across periods is shown once
- * and counted, rather than appearing again and again. Tiered styling escalates
- * the visual weight with the count so high-frequency words stand out at a glance:
+ * Recall repeat tag — "Nx" where N is how many times a term has appeared across
+ * recall exams (its ExamFrequencyCount). A recurring word is shown once and
+ * counted, rather than appearing again and again — and its audio is reused
+ * rather than regenerated. Tiered styling escalates the visual weight with the
+ * count so high-frequency words stand out at a glance:
  *  - 2x  → calm sky pill
  *  - 3x  → elevated violet pill with a ring
  *  - 4x+ → top-tier amber→rose gradient with a sparkle and ring/shadow
  *
- * Renders nothing for counts below 2 (a single-period term is not "repeated").
+ * Renders nothing for counts below 2 (a word seen once is not "repeated").
  */
 export function RecallTierBadge({ count, className }: { count: number; className?: string }) {
   if (!count || count < 2) return null;
@@ -159,7 +160,7 @@ export function RecallTierBadge({ count, className }: { count: number; className
 
   return (
     <span
-      title={`Appears in ${count} recall periods`}
+      title={`Appeared ${count} times across recall exams`}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold',
         tierClasses[tier],

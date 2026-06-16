@@ -1068,6 +1068,71 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminVocabularyImport_InCsvDuplicates_AccumulateExamFrequencyCountIdempotently()
+    {
+        // The same recall term repeated 3× in one CSV must surface as a single
+        // term whose ExamFrequencyCount == 3 (drives the learner "×N" tag).
+        var term = $"freq-recall-{Guid.NewGuid():N}";
+        var batchId = $"recalls-freq-{Guid.NewGuid():N}"[..32];
+        var csv = VocabularyImportCsvHeader
+            + $"{term},\"Def 1\",\"Example one.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n"
+            + $"{term},\"Def 2\",\"Example two.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=2\"\n"
+            + $"{term},\"Def 3\",\"Example three.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=3\"\n";
+
+        using (var previewContent = CsvContent(csv, "recalls-freq.csv"))
+        {
+            var preview = await _client.PostAsync($"/v1/admin/vocabulary/import/preview?recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            // One unique term, two in-CSV duplicates — duplicates never block.
+            Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Equal(2, previewJson.RootElement.GetProperty("duplicateRows").GetInt32());
+        }
+
+        using (var dryRunContent = CsvContent(csv, "recalls-freq.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+            using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+            Assert.Equal(1, dryRunJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(2, dryRunJson.RootElement.GetProperty("skipped").GetInt32());
+            Assert.Equal(0, dryRunJson.RootElement.GetProperty("failedRows").GetInt32());
+        }
+
+        using (var importContent = CsvContent(csv, "recalls-freq.csv"))
+        {
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+            using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
+            Assert.Equal(1, importJson.RootElement.GetProperty("imported").GetInt32());
+            Assert.Equal(2, importJson.RootElement.GetProperty("skipped").GetInt32());
+        }
+
+        async Task<int> ReadFrequencyAsync()
+        {
+            var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+            list.EnsureSuccessStatusCode();
+            using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+            var item = listJson.RootElement.GetProperty("items").EnumerateArray()
+                .Single(x => x.GetProperty("term").GetString() == term);
+            return item.GetProperty("examFrequencyCount").GetInt32();
+        }
+
+        Assert.Equal(3, await ReadFrequencyAsync());
+
+        // Re-committing the same batch id is rejected by the commit ledger, so
+        // the frequency stays at 3 — the count is idempotent on retry.
+        using (var replayContent = CsvContent(csv, "recalls-freq.csv"))
+        {
+            var replay = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", replayContent);
+            Assert.False(replay.IsSuccessStatusCode);
+        }
+
+        Assert.Equal(3, await ReadFrequencyAsync());
+    }
+
+    [Fact]
     public async Task AdminVocabularyImport_PreviewAndDryRun_BlockSameFileDuplicatesAndOverLimitFields()
     {
         var duplicateTerm = $"duplicate-recall-{Guid.NewGuid():N}";

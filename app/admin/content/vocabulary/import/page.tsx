@@ -216,16 +216,22 @@ export default function AdminVocabularyImportPage() {
     try {
       const res = await bulkImportAdminVocabulary(file, false, importBatchId.trim(), recallSetCode);
       const r = res as ImportResponse;
-      if (r.skipped > 0 || r.failedRows > 0 || r.imported !== dryRun.imported) {
+      // Duplicates are the EXPECTED state of a recalls import (the same word
+      // recurs across exams) — they are merged into the term frequency, not a
+      // failure. Only a genuine problem (failed rows, or fewer terms imported
+      // than the clean dry run promised) warrants halting before audio.
+      if (r.failedRows > 0 || r.imported !== dryRun.imported) {
         setToast({
           variant: 'error',
           message: `Import needs review: imported ${r.imported}, skipped ${r.skipped}, failed ${r.failedRows}.`,
         });
         return;
       }
+      const mergedDuplicates = r.duplicates ?? r.skipped;
       setToast({
         variant: 'success',
-        message: `Imported batch ${r.importBatchId}: ${r.imported} row${r.imported === 1 ? '' : 's'}.`,
+        message: `Imported batch ${r.importBatchId}: ${r.imported} row${r.imported === 1 ? '' : 's'}`
+          + (mergedDuplicates > 0 ? ` · ${mergedDuplicates} duplicate${mergedDuplicates === 1 ? '' : 's'} merged into frequency.` : '.'),
       });
       setCommittedBatchId(r.importBatchId);
       setFile(null);

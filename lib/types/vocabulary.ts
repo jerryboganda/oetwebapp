@@ -107,6 +107,11 @@ export interface VocabularyFlashcard {
   audioUrl: string | null;
   synonyms: string[];
   mastery: string;
+  /**
+   * How many times this term appeared across recall exams. Drives the "×N"
+   * repeat tag; absent/≤1 means the word is not flagged as repeated.
+   */
+  examFrequencyCount?: number;
 }
 
 export interface VocabularyStats {

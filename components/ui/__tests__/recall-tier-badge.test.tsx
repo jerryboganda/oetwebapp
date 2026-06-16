@@ -14,7 +14,7 @@ describe('RecallTierBadge', () => {
     const badge = screen.getByText('2x');
     expect(badge).toBeInTheDocument();
     expect(badge.className).toContain('bg-sky-100');
-    expect(badge).toHaveAttribute('title', 'Appears in 2 recall periods');
+    expect(badge).toHaveAttribute('title', 'Appeared 2 times across recall exams');
   });
 
   it('renders an elevated 3x tier with a ring', () => {

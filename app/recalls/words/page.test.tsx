@@ -42,7 +42,7 @@ vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   CategoryBadge: ({ category }: { category: string }) => <span>{category}</span>,
   RecallTierBadge: ({ count }: { count: number }) =>
-    count >= 2 ? <span title={`Appears in ${count} recall periods`}>{count}x</span> : null,
+    count >= 2 ? <span title={`Appeared ${count} times across recall exams`}>{count}x</span> : null,
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -143,20 +143,20 @@ describe('Recalls words page audio playback', () => {
     expect(mockPlayTransientAudio).not.toHaveBeenCalled();
   });
 
-  it('renders the repeat tag when a term spans multiple recall periods', async () => {
-    const repeatedTerm = { ...catalogTerm, recallSetCodes: ['old', '2023-2025', '2026'] };
+  it('renders the repeat tag when a term appeared multiple times across exams', async () => {
+    const repeatedTerm = { ...catalogTerm, examFrequencyCount: 3 };
     mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [repeatedTerm] });
     render(<RecallsWordsPage />);
 
-    const badge = await screen.findByTitle('Appears in 3 recall periods');
+    const badge = await screen.findByTitle('Appeared 3 times across recall exams');
     expect(badge).toBeInTheDocument();
     expect(badge).toHaveTextContent('3x');
   });
 
-  it('hides the repeat tag when a term belongs to a single recall period', async () => {
+  it('hides the repeat tag when a term appeared only once', async () => {
     render(<RecallsWordsPage />);
 
     await screen.findByText('dyspnoea');
-    expect(screen.queryByTitle(/recall periods/)).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/across recall exams/)).not.toBeInTheDocument();
   });
 });

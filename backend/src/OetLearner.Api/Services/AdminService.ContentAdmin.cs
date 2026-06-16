@@ -203,6 +203,7 @@ public partial class AdminService
                 v.AmericanSpelling,
                 v.Status,
                 v.IsFreePreview,
+                v.ExamFrequencyCount,
                 hasAudio = v.AudioMediaAssetId != null || !string.IsNullOrWhiteSpace(v.AudioUrl),
             })
         };
@@ -239,6 +240,7 @@ public partial class AdminService
             v.SourceProvenance,
             v.Status,
             v.IsFreePreview,
+            v.ExamFrequencyCount,
             v.CreatedAt,
             v.UpdatedAt
         };
@@ -961,6 +963,13 @@ public partial class AdminService
         // Maps dedupe-key → line number of FIRST occurrence so subsequent
         // duplicates can cite where the original lives in the file.
         var firstSeenLine = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Counts every valid occurrence of each dedupe-key in this CSV so the
+        // term's ExamFrequencyCount reflects true exam repetition (the "×N"
+        // tag). In-CSV repeats feed this count instead of being discarded.
+        var occurrencesByKey = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Pre-existing DB terms whose frequency is merged on commit, keyed by
+        // dedupe-key so the full per-batch occurrence count is applied once.
+        var existingDbByKey = new Dictionary<string, VocabularyTerm>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var r in rows)
         {
@@ -973,9 +982,15 @@ public partial class AdminService
             }
 
             var duplicateKey = PreviewDuplicateKey(r);
+            // Every valid row is one exam appearance of this term — including
+            // in-CSV repeats — so the "×N" frequency tag stays accurate.
+            occurrencesByKey[duplicateKey] = occurrencesByKey.GetValueOrDefault(duplicateKey) + 1;
             if (firstSeenLine.TryGetValue(duplicateKey, out var firstLine))
             {
-                // In-CSV duplicate. Silently dedupe — first occurrence wins.
+                // In-CSV duplicate. Silently dedupe the ROW — the first
+                // occurrence owns the term — but its appearance is already
+                // folded into occurrencesByKey above, so the repeat count is
+                // preserved rather than discarded.
                 // Counted under `duplicates` for API-shape parity with the
                 // preview surface, but tracked separately so the commit gate
                 // doesn't block on a class of skip the operator can't fix.
@@ -990,13 +1005,11 @@ public partial class AdminService
             var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
             if (existing is not null && string.IsNullOrWhiteSpace(r.ExistingId))
             {
-                // Increment frequency count on commit only (not dry-run) to
-                // avoid double-counting since both passes process the same CSV.
-                if (!dryRun)
-                {
-                    existing.ExamFrequencyCount++;
-                    existing.UpdatedAt = DateTimeOffset.UtcNow;
-                }
+                // Defer the frequency merge to the commit section so the FULL
+                // per-batch occurrence count is applied exactly once and never
+                // on a dry run. The commit ledger keeps it idempotent: a
+                // re-committed batch id throws before any count is persisted.
+                existingDbByKey[duplicateKey] = existing;
                 duplicates++;
                 continue;
             }
@@ -1049,8 +1062,21 @@ public partial class AdminService
                 }
             }
             var id = $"VOC-{Guid.NewGuid():N}"[..12];
-            db.VocabularyTerms.Add(CreateVocabularyTermFromCsvRow(r, id, batchId, normalisedRecallSetCode));
+            var term = CreateVocabularyTermFromCsvRow(r, id, batchId, normalisedRecallSetCode);
+            // Seed the frequency with how many times this term appeared in the
+            // CSV (≥1) so the "×N" exam-repetition tag is correct from import.
+            term.ExamFrequencyCount = occurrencesByKey.GetValueOrDefault(PreviewDuplicateKey(r), 1);
+            db.VocabularyTerms.Add(term);
             importedTermIds.Add(id);
+        }
+
+        // Merge per-batch occurrence counts into pre-existing DB terms. Applied
+        // here — after the already-committed guard above — so the increment
+        // lands exactly once per committed batch (idempotent on retry).
+        foreach (var (key, existing) in existingDbByKey)
+        {
+            existing.ExamFrequencyCount += occurrencesByKey.GetValueOrDefault(key, 1);
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
         if (!dryRun)

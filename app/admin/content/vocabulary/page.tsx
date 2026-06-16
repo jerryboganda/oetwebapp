@@ -8,6 +8,7 @@ import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layo
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { Badge } from '@/components/admin/ui/badge';
+import { RecallTierBadge } from '@/components/ui/badge';
 import { Input } from '@/components/admin/ui/input';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Skeleton } from '@/components/admin/ui/skeleton';
@@ -43,6 +44,7 @@ type VocabRow = {
   status: 'draft' | 'active' | 'archived';
   hasAudio?: boolean;
   isFreePreview?: boolean;
+  examFrequencyCount?: number;
 };
 
 type ListResponse = {
@@ -326,7 +328,10 @@ export default function AdminVocabularyPage() {
       header: 'Term',
       render: (row) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-admin-fg-strong">{row.term}</span>
+          <span className="flex items-center gap-1.5 font-semibold text-admin-fg-strong">
+            {row.term}
+            <RecallTierBadge count={row.examFrequencyCount ?? 0} />
+          </span>
           <span className="text-xs text-admin-fg-muted line-clamp-1">{row.definition}</span>
         </div>
       ),
