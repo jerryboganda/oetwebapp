@@ -1220,7 +1220,10 @@ public static class AdminRuntimeSettingsEndpoints
             {
                 try
                 {
-                    var parsed = JsonSerializer.Deserialize<List<WalletTopUpTierOption>>(trimmed);
+                    // Use the same web (camelCase, case-insensitive) options the GET serializes
+                    // with — otherwise the round-tripped {"amount":..,"credits":..} binds to all
+                    // zeros under default case-sensitive PascalCase and falsely fails validation.
+                    var parsed = JsonSerializer.Deserialize<List<WalletTopUpTierOption>>(trimmed, JsonSupport.Options);
                     if (parsed is null || parsed.Count == 0 || parsed.Any(t => t.Amount <= 0 || t.Credits < 0 || t.Bonus < 0))
                         throw new RuntimeSettingsValidationException("billingCore.walletTopUpTiersJson must be a JSON array of {Amount>0,Credits>=0,Bonus>=0} tiers.");
                 }
