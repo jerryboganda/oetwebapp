@@ -294,6 +294,41 @@ public sealed class VocabularyAudioWorkerTests
         Assert.Equal(2, batch.TotalItems);
     }
 
+    [Fact]
+    public async Task RecallRegeneration_SameIdentity_UsesStableKey_NoChurn()
+    {
+        // Regression for the production regeneration-loop / orphan-accumulation bug:
+        // regenerating the same recall term with the same voice+model must resolve
+        // to the SAME storage key even though ElevenLabs returns different bytes,
+        // so it overwrites in place instead of spawning a new object each time.
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs", varyingBytes: true);
+        fixture.Db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "VOC-IDEMP", Term = "sepsis", ExamTypeCode = "oet",
+            Category = "recall", Status = "active", RecallSetCodesJson = "[\"2026\"]",
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var job = new VocabularyAudioJob(
+            TermId: "VOC-IDEMP", Text: "sepsis", Voice: "voice-abc", Locale: "en-GB",
+            BatchId: "batch-1", ModelVariant: "eleven_multilingual_v2", ProviderName: "elevenlabs");
+
+        await fixture.Worker.ProcessOneAsync(job, CancellationToken.None);
+        var firstUrl = (await fixture.Db.VocabularyTerms.AsNoTracking().FirstAsync(t => t.Id == "VOC-IDEMP")).AudioUrl;
+
+        // Force a real re-synthesis (different bytes) with the SAME identity.
+        await fixture.Worker.ProcessOneAsync(job with { ForceRegenerate = true }, CancellationToken.None);
+        var secondUrl = (await fixture.Db.VocabularyTerms.AsNoTracking().FirstAsync(t => t.Id == "VOC-IDEMP")).AudioUrl;
+
+        // Stable, deterministic key across regenerations — the core of the fix.
+        Assert.Equal(firstUrl, secondUrl);
+
+        // And exactly one audio object on disk for this term (no orphan pile-up).
+        var dir = Path.Combine(fixture.StorageRoot, "storage", "recalls", "audio");
+        var files = Directory.Exists(dir) ? Directory.GetFiles(dir) : Array.Empty<string>();
+        Assert.Single(files.Where(f => Path.GetFileName(f).Contains("voc-idemp", StringComparison.Ordinal)));
+    }
+
     // ─────────────────────────────────────────────────────────────────────
 
     private sealed class Fixture : IAsyncDisposable
@@ -305,7 +340,7 @@ public sealed class VocabularyAudioWorkerTests
         public required string StorageRoot { get; init; }
         public required IServiceProvider Root { get; init; }
 
-        public static async Task<Fixture> CreateAsync(string ttsProvider)
+        public static async Task<Fixture> CreateAsync(string ttsProvider, bool varyingBytes = false)
         {
             var storageRoot = Path.Combine(Path.GetTempPath(), $"vocab-audio-{Guid.NewGuid():N}");
             Directory.CreateDirectory(storageRoot);
@@ -333,7 +368,14 @@ public sealed class VocabularyAudioWorkerTests
             // ElevenLabs is the only TTS provider. Register the test double for
             // any non-"off" setting (the selector resolves "auto"/"elevenlabs"
             // to it); "off" registers nothing so the selector returns null.
-            if (!string.Equals(ttsProvider, "off", StringComparison.OrdinalIgnoreCase))
+            if (varyingBytes)
+            {
+                // Singleton so its call-counter persists across the worker's per-job
+                // scopes — each synthesis returns DIFFERENT bytes, simulating
+                // ElevenLabs' non-determinism.
+                services.AddSingleton<IConversationTtsProvider, VaryingElevenLabsTtsProvider>();
+            }
+            else if (!string.Equals(ttsProvider, "off", StringComparison.OrdinalIgnoreCase))
             {
                 services.AddScoped<IConversationTtsProvider, TestElevenLabsTtsProvider>();
             }
@@ -406,5 +448,21 @@ public sealed class VocabularyAudioWorkerTests
                 500,
                 Name,
                 "test elevenlabs"));
+    }
+
+    private sealed class VaryingElevenLabsTtsProvider : IConversationTtsProvider
+    {
+        private int _counter;
+        public string Name => "elevenlabs";
+        public bool IsConfigured => true;
+
+        public Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
+        {
+            var n = Interlocked.Increment(ref _counter);
+            // Different bytes per call → different sha. Under the old byte-sha key
+            // scheme this produced a brand-new storage object every regeneration.
+            var bytes = new byte[] { 0x49, 0x44, 0x33, (byte)n, (byte)(n * 7), (byte)(n * 13) };
+            return Task.FromResult(new ConversationTtsResult(bytes, "audio/mpeg", 500, Name, "varying"));
+        }
     }
 }

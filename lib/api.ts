@@ -7750,7 +7750,9 @@ export type AdminVocabularyAudioProgress = {
 };
 
 export async function fetchAdminVocabularyAudioProgress(): Promise<AdminVocabularyAudioProgress> {
-  return apiRequest('/v1/admin/vocabulary/audio/progress') as Promise<AdminVocabularyAudioProgress>;
+  // no-store: the progress endpoint must never be served from cache, otherwise
+  // the admin panel can pin to a stale "N pending" snapshot forever.
+  return apiRequest('/v1/admin/vocabulary/audio/progress', { cache: 'no-store' }) as Promise<AdminVocabularyAudioProgress>;
 }
 
 export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: string; professionId?: string }) {

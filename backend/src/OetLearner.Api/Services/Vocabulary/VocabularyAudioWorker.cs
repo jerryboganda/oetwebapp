@@ -225,11 +225,26 @@ public sealed class VocabularyAudioWorker(
                   : mime.Contains("ogg", StringComparison.OrdinalIgnoreCase) ? "ogg"
                   : "mp3";
         var recallCode = isRecallAudioJob ? FirstRecallSetCode(term.RecallSetCodesJson) : null;
-        var key = isRecallAudioJob && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase)
-            ? $"recalls/audio/{Slug(recallCode ?? "recall")}-{Slug(job.TermId)}-{sha[..16]}.{ext}"
-            : ContentAddressed.PublishedKey("vocabulary/audio", sha, ext);
+        string key;
+        if (isRecallAudioJob && string.Equals(provider.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase))
+        {
+            // Deterministic per (recallCode, term, voice, model). ElevenLabs TTS
+            // is non-deterministic, so keying on the audio byte-sha spawned a NEW
+            // object on every regeneration — accumulating orphans and making
+            // storage.Exists() flap, which drove an endless re-generation loop.
+            // Keying on the logical identity means a regen with the same
+            // voice/model OVERWRITES the same object (idempotent, zero orphans).
+            var identity = AudioIdentityHash(recallCode, job.TermId, job.Voice, job.ModelVariant);
+            key = $"recalls/audio/{Slug(recallCode ?? "recall")}-{Slug(job.TermId)}-{identity}.{ext}";
+        }
+        else
+        {
+            key = ContentAddressed.PublishedKey("vocabulary/audio", sha, ext);
+        }
 
-        if (!storage.Exists(key))
+        // ForceRegenerate must refresh the bytes even when the stable-identity key
+        // already exists; otherwise write only when absent.
+        if (job.ForceRegenerate || !storage.Exists(key))
         {
             await using var ms = new MemoryStream(audio);
             await storage.WriteAsync(key, ms, ct).ConfigureAwait(false);
@@ -654,6 +669,19 @@ public sealed class VocabularyAudioWorker(
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stable 16-hex-char fingerprint of a recall term's audio identity
+    /// (recall set + term + voice + model). Independent of the synthesised
+    /// bytes, so regenerating the same identity resolves to the same storage
+    /// key — the cure for the orphan-accumulation / regeneration-loop bug.
+    /// </summary>
+    private static string AudioIdentityHash(string? recallCode, string termId, string? voice, string? model)
+    {
+        var canonical = $"{recallCode}|{termId}|{voice}|{model}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        return Convert.ToHexString(hash).ToLowerInvariant()[..16];
     }
 
     private static string Slug(string s)

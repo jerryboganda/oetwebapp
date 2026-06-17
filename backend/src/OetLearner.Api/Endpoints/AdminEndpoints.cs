@@ -1169,8 +1169,14 @@ public static class AdminEndpoints
             .RequireRateLimiting("PerUserWrite")
             .WithAdminWrite("AdminContentWrite");
 
-        admin.MapGet("/vocabulary/audio/progress", async (AdminService service, CancellationToken ct)
-            => Results.Ok(await service.GetVocabularyAudioProgressAsync(ct)))
+        admin.MapGet("/vocabulary/audio/progress", async (HttpContext http, AdminService service, CancellationToken ct) =>
+            {
+                // Never cache progress — a stale 304/cached body freezes the admin
+                // panel at an old "N pending" value even after generation finishes.
+                http.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+                http.Response.Headers.Pragma = "no-cache";
+                return Results.Ok(await service.GetVocabularyAudioProgressAsync(ct));
+            })
             .WithAdminRead("AdminContentRead");
 
         admin.MapPost("/vocabulary/audio/resume", async (AdminService service, CancellationToken ct)

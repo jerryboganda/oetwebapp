@@ -750,10 +750,33 @@ public partial class AdminService
     public async Task<object> GetVocabularyAudioProgressAsync(CancellationToken ct)
     {
         var total = await db.VocabularyTerms.CountAsync(ct);
-        var withAudio = await db.VocabularyTerms.CountAsync(t => t.AudioMediaAssetId != null || (t.AudioUrl != null && t.AudioUrl != ""), ct);
-        var pending = total - withAudio;
 
-        return new { total, withAudio, pending, percentComplete = total > 0 ? Math.Round((double)withAudio / total * 100, 1) : 100.0 };
+        // "Done" means the term has a Ready audio asset that can actually be
+        // served — not merely that AudioMediaAssetId is non-null. Counting a
+        // dangling/not-ready asset as complete is what let the bar read 100%
+        // while audio was unplayable (and, inversely, freeze below 100%).
+        var ready = await db.VocabularyTerms.CountAsync(t =>
+            t.AudioMediaAssetId != null
+            && db.MediaAssets.Any(m => m.Id == t.AudioMediaAssetId && m.Status == MediaAssetStatus.Ready), ct);
+
+        // Terms that claim audio (asset id or url set) but whose asset is missing
+        // or not Ready — surfaced so the operator can distinguish "never generated"
+        // from "generated but broken".
+        var broken = await db.VocabularyTerms.CountAsync(t =>
+            (t.AudioMediaAssetId != null || (t.AudioUrl != null && t.AudioUrl != ""))
+            && !db.MediaAssets.Any(m => m.Id == t.AudioMediaAssetId && m.Status == MediaAssetStatus.Ready), ct);
+
+        var withAudio = ready;
+        var pending = total - ready;
+
+        return new
+        {
+            total,
+            withAudio,
+            pending,
+            broken,
+            percentComplete = total > 0 ? Math.Round((double)ready / total * 100, 1) : 100.0,
+        };
     }
 
     /// <summary>

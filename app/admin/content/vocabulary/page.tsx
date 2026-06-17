@@ -83,6 +83,9 @@ export default function AdminVocabularyPage() {
   const [freePreviewTotal, setFreePreviewTotal] = useState(0);
   const [audioProgress, setAudioProgress] = useState<AdminVocabularyAudioProgress | null>(null);
   const [audioStalled, setAudioStalled] = useState(false);
+  // When the progress poll itself fails we must NOT keep showing the last
+  // (stale) snapshot as if it were live — surface the failure instead.
+  const [audioError, setAudioError] = useState(false);
   const audioPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPendingRef = useRef<number | null>(null);
   const stalledCountRef = useRef(0);
@@ -93,6 +96,7 @@ export default function AdminVocabularyPage() {
     try {
       const progress = await fetchAdminVocabularyAudioProgress();
       setAudioProgress(progress);
+      setAudioError(false);
       // Stop polling when all done
       if (progress.pending === 0 && audioPollingRef.current) {
         clearInterval(audioPollingRef.current);
@@ -111,7 +115,11 @@ export default function AdminVocabularyPage() {
         }
         lastPendingRef.current = progress.pending;
       }
-    } catch { /* silent */ }
+    } catch {
+      // Do NOT freeze on the last snapshot — flag that live updates failed so the
+      // operator knows the displayed numbers may be stale and can retry.
+      setAudioError(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -311,6 +319,7 @@ export default function AdminVocabularyPage() {
       const count = (result as { enqueued?: number }).enqueued ?? 0;
       setToast({ variant: 'success', message: `Resumed: queued ${count} terms for audio generation.` });
       setAudioStalled(false);
+      setAudioError(false);
       stalledCountRef.current = 0;
       lastPendingRef.current = null;
       // Restart polling
@@ -515,22 +524,32 @@ export default function AdminVocabularyPage() {
                   Audio Generation Progress
                 </h3>
                 <div className="flex items-center gap-2">
-                  {audioProgress.pending > 0 && audioStalled && (
+                  {audioError && (
+                    <Badge variant="danger" size="sm">
+                      Live updates failed
+                    </Badge>
+                  )}
+                  {!audioError && audioProgress.pending > 0 && audioStalled && (
                     <Badge variant="danger" size="sm">
                       Stalled
                     </Badge>
                   )}
-                  {audioProgress.pending > 0 && !audioStalled && (
+                  {!audioError && audioProgress.pending > 0 && !audioStalled && (
                     <Badge variant="warning" size="sm">
                       {audioProgress.pending} pending
                     </Badge>
                   )}
-                  {audioProgress.pending === 0 && (
+                  {!audioError && audioProgress.pending === 0 && (
                     <Badge variant="success" size="sm">
                       All complete
                     </Badge>
                   )}
-                  {audioProgress.pending > 0 && (
+                  {audioError && (
+                    <Button variant="secondary" size="sm" onClick={() => { void pollAudioProgress(); }}>
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" />Retry
+                    </Button>
+                  )}
+                  {!audioError && audioProgress.pending > 0 && (
                     <Button variant="primary" size="sm" onClick={handleRegenerateAudio}>
                       <RefreshCw className="mr-1 h-3.5 w-3.5" />Resume generation
                     </Button>
@@ -556,12 +575,17 @@ export default function AdminVocabularyPage() {
                     }}
                   />
                 </div>
-                {audioProgress.pending > 0 && audioStalled && (
+                {audioError && (
+                  <p className="text-xs text-[var(--admin-danger)]">
+                    Could not refresh progress — the numbers above may be stale. Click &quot;Retry&quot; to fetch the live status.
+                  </p>
+                )}
+                {!audioError && audioProgress.pending > 0 && audioStalled && (
                   <p className="text-xs text-[var(--admin-danger)]">
                     Generation stalled. {audioProgress.pending} terms still need audio. Click &quot;Resume generation&quot; to continue.
                   </p>
                 )}
-                {audioProgress.pending > 0 && !audioStalled && (
+                {!audioError && audioProgress.pending > 0 && !audioStalled && (
                   <p className="text-xs text-admin-fg-muted animate-pulse">
                     Audio generation in progress. ElevenLabs TTS is processing {audioProgress.pending} remaining terms...
                   </p>
