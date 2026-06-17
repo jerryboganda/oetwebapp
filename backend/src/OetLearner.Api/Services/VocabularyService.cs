@@ -867,7 +867,8 @@ public class VocabularyService(
             RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray(),
             ExamFrequencyCount: t.ExamFrequencyCount,
             IsFreePreview: t.IsFreePreview,
-            IsLocked: false);
+            IsLocked: false,
+            RecallSetOccurrences: ParseRecallSetOccurrences(t.RecallSetOccurrencesJson));
     }
 
     private static bool IsInternalAudioReference(string? audioUrl)
@@ -925,7 +926,8 @@ public class VocabularyService(
         AudioUrl: null,
         Synonyms: ParseStringArray(term.SynonymsJson).ToArray(),
         Mastery: lv.Mastery,
-        ExamFrequencyCount: term.ExamFrequencyCount);
+        ExamFrequencyCount: term.ExamFrequencyCount,
+        RecallSetOccurrences: ParseRecallSetOccurrences(term.RecallSetOccurrencesJson));
 
     private static List<string> ParseStringArray(string? json)
     {
@@ -937,6 +939,24 @@ public class VocabularyService(
         catch
         {
             return new();
+        }
+    }
+
+    /// <summary>
+    /// Parses the per-set occurrence map (set code → count) for the ×N badge
+    /// breakdown. Returns null for an empty/malformed map so the DTO omits it.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int>? ParseRecallSetOccurrences(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
+        try
+        {
+            var map = JsonSerializer.Deserialize<Dictionary<string, int>>(json!);
+            return map is { Count: > 0 } ? map : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 }

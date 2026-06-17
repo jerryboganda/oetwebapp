@@ -148,7 +148,23 @@ export function CategoryBadge({ category, size }: { category: string; size?: 'sm
  *
  * Renders nothing for counts below 2 (a word seen once is not "repeated").
  */
-export function RecallTierBadge({ count, className }: { count: number; className?: string }) {
+export function RecallTierBadge({
+  count,
+  className,
+  occurrences,
+  setLabels,
+}: {
+  count: number;
+  className?: string;
+  /**
+   * Optional per-set occurrence breakdown behind `count`, e.g.
+   * `{ old: 2, '2023-2025': 3, '2026': 12 }`. When provided, the tooltip
+   * shows where the word recurred; the displayed number stays the total.
+   */
+  occurrences?: Record<string, number> | null;
+  /** Optional set-code → human label map for the tooltip (falls back to code). */
+  setLabels?: Record<string, string>;
+}) {
   if (!count || count < 2) return null;
 
   const tier = count >= 4 ? 'top' : count === 3 ? 'mid' : 'base';
@@ -158,9 +174,20 @@ export function RecallTierBadge({ count, className }: { count: number; className
     top: 'bg-gradient-to-r from-amber-200 to-rose-200 text-rose-800 ring-1 ring-rose-300/70 shadow-sm dark:from-amber-900/40 dark:to-rose-900/40 dark:text-rose-200 dark:ring-rose-700/50',
   };
 
+  const breakdown = occurrences
+    ? Object.entries(occurrences)
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([code, n]) => `${setLabels?.[code] ?? code} ×${n}`)
+        .join(' · ')
+    : '';
+  const title = breakdown
+    ? `Appeared ${count} times across recall exams — ${breakdown}`
+    : `Appeared ${count} times across recall exams`;
+
   return (
     <span
-      title={`Appeared ${count} times across recall exams`}
+      title={title}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold',
         tierClasses[tier],

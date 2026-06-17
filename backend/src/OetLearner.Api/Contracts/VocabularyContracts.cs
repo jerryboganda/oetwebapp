@@ -48,7 +48,14 @@ public sealed record VocabularyTermResponse(
     /// (definition, example, audio, etc.) are redacted server-side and the UI
     /// must blur the card and prompt the learner to subscribe.
     /// </summary>
-    bool IsLocked = false
+    bool IsLocked = false,
+    /// <summary>
+    /// Per-recall-set occurrence breakdown behind <see cref="ExamFrequencyCount"/>:
+    /// set code → times the term appears in that set, e.g. {"old":2,"2026":3}.
+    /// The sum equals ExamFrequencyCount. Null when redacted or not yet rebuilt.
+    /// Powers the ×N badge breakdown tooltip.
+    /// </summary>
+    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null
 );
 
 /// <summary>One row in the canonical recall-set registry response.</summary>
@@ -119,7 +126,12 @@ public sealed record VocabularyFlashcardDto(
     string? AudioUrl,
     string[] Synonyms,
     string Mastery,
-    int ExamFrequencyCount
+    int ExamFrequencyCount,
+    /// <summary>
+    /// Per-recall-set occurrence breakdown behind <see cref="ExamFrequencyCount"/>
+    /// (set code → count). Sum equals ExamFrequencyCount. Null until rebuilt.
+    /// </summary>
+    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null
 );
 
 public sealed record FlashcardReviewResponse(

@@ -37,4 +37,29 @@ describe('RecallTierBadge', () => {
     const badge = screen.getByText('7x');
     expect(badge.className).toContain('bg-gradient-to-r');
   });
+
+  it('adds a per-set breakdown to the tooltip when occurrences are provided', () => {
+    render(<RecallTierBadge count={7} occurrences={{ old: 2, '2023-2025': 3, '2026': 2 }} />);
+    const badge = screen.getByText('7x');
+    // Sorted by count desc, then code asc (digits before letters).
+    expect(badge).toHaveAttribute(
+      'title',
+      'Appeared 7 times across recall exams — 2023-2025 ×3 · 2026 ×2 · old ×2',
+    );
+  });
+
+  it('maps set codes to labels in the tooltip when provided', () => {
+    render(
+      <RecallTierBadge
+        count={5}
+        occurrences={{ '2026': 3, old: 2 }}
+        setLabels={{ '2026': 'Recalls 2026', old: 'Legacy' }}
+      />,
+    );
+    const badge = screen.getByText('5x');
+    expect(badge).toHaveAttribute(
+      'title',
+      'Appeared 5 times across recall exams — Recalls 2026 ×3 · Legacy ×2',
+    );
+  });
 });

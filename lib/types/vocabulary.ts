@@ -32,6 +32,12 @@ export interface VocabularyTerm {
    */
   examFrequencyCount?: number;
   /**
+   * Per-recall-set occurrence breakdown behind `examFrequencyCount`
+   * (set code → count, e.g. `{ old: 2, '2026': 3 }`). Sum equals
+   * `examFrequencyCount`. Powers the ×N badge breakdown tooltip.
+   */
+  recallSetOccurrences?: Record<string, number> | null;
+  /**
    * Admin-curated flag marking this term as part of the free preview a
    * non-subscribed learner may access in the Recall Vocabulary Bank.
    */
@@ -112,6 +118,12 @@ export interface VocabularyFlashcard {
    * repeat tag; absent/≤1 means the word is not flagged as repeated.
    */
   examFrequencyCount?: number;
+  /**
+   * Per-recall-set occurrence breakdown behind `examFrequencyCount`
+   * (set code → count). Sum equals `examFrequencyCount`. Powers the ×N
+   * badge breakdown tooltip.
+   */
+  recallSetOccurrences?: Record<string, number> | null;
 }
 
 export interface VocabularyStats {

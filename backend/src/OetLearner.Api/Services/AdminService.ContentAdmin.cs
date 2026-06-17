@@ -235,6 +235,7 @@ public partial class AdminService
             v.CollocationsJson,
             v.RelatedTermsJson,
             v.RecallSetCodesJson,
+            v.RecallSetOccurrencesJson,
             v.CommonMistakesJson,
             v.SimilarSoundingJson,
             v.SourceProvenance,
@@ -1225,36 +1226,40 @@ public partial class AdminService
                     t => t.Id == r.ExistingId.Trim() && t.Status != "archived", ct);
                 if (existingById is not null)
                 {
-                    UpdateVocabularyTermFromCsvRow(existingById, r, batchId, normalisedRecallSetCode);
+                    UpdateVocabularyTermFromCsvRow(existingById, r, batchId, normalisedRecallSetCode,
+                        occurrencesByKey.GetValueOrDefault(PreviewDuplicateKey(r), 1));
                     importedTermIds.Add(existingById.Id);
                     continue;
                 }
             }
             var id = $"VOC-{Guid.NewGuid():N}"[..12];
             var term = CreateVocabularyTermFromCsvRow(r, id, batchId, normalisedRecallSetCode);
-            // Seed the frequency with how many times this term appeared in the
-            // CSV (≥1) so the "×N" exam-repetition tag is correct from import.
-            term.ExamFrequencyCount = occurrencesByKey.GetValueOrDefault(PreviewDuplicateKey(r), 1);
+            // Record this set's occurrence count as the source of truth; the
+            // helper derives ExamFrequencyCount (= sum) and RecallSetCodesJson.
+            ApplyRecallSetOccurrence(term, normalisedRecallSetCode,
+                occurrencesByKey.GetValueOrDefault(PreviewDuplicateKey(r), 1));
             db.VocabularyTerms.Add(term);
             importedTermIds.Add(id);
         }
 
-        // Tag pre-existing DB terms with this import's recall set AND merge the
-        // per-batch occurrence count. Applied here — after the already-committed
-        // guard above — so it lands exactly once per committed batch (idempotent
-        // on retry). The ×N frequency only grows when the word NEWLY joins this
-        // set: a fresh exam-session membership is a real appearance, whereas a
-        // redundant re-upload of a set the word already carries must not inflate
-        // the badge. Re-tagged terms are added to importedTermIds so they are
-        // audited and TTS-backfilled (the backfill self-filters to missing audio).
+        // Record this import's recall-set occurrence count on pre-existing DB
+        // terms. Applied here — after the already-committed guard above — so it
+        // lands exactly once per committed batch (idempotent on retry). The map
+        // REPLACES this set's count (one canonical CSV per set), so re-uploading
+        // an identical set CSV is a no-op and never inflates ×N, while a word
+        // joining a NEW set grows the derived total by that set's count. A term
+        // is audited / TTS-backfilled only when its set membership or count
+        // actually changed (the backfill self-filters to missing audio).
         var existingRetagged = 0;
         foreach (var (key, existing) in existingDbByKey)
         {
-            var newlyTagged = AddRecallSetCode(existing, normalisedRecallSetCode);
-            if (newlyTagged)
+            var before = ParseRecallSetOccurrences(existing.RecallSetOccurrencesJson);
+            var wasInSet = before.ContainsKey(normalisedRecallSetCode);
+            var newCount = occurrencesByKey.GetValueOrDefault(key, 1);
+            ApplyRecallSetOccurrence(existing, normalisedRecallSetCode, newCount);
+            if (!wasInSet || before.GetValueOrDefault(normalisedRecallSetCode) != newCount)
             {
-                existing.ExamFrequencyCount += occurrencesByKey.GetValueOrDefault(key, 1);
-                existingRetagged++;
+                if (!wasInSet) existingRetagged++;
                 importedTermIds.Add(existing.Id);
             }
             existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -1765,7 +1770,7 @@ public partial class AdminService
     }
 
     private static void UpdateVocabularyTermFromCsvRow(
-        VocabularyTerm existing, CsvVocabRow row, string importBatchId, string recallSetCode)
+        VocabularyTerm existing, CsvVocabRow row, string importBatchId, string recallSetCode, int occurrences)
     {
         existing.Term = row.Term!.Trim();
         if (!string.IsNullOrWhiteSpace(row.Definition))
@@ -1799,8 +1804,9 @@ public partial class AdminService
             existing.CollocationsJson = JsonSupport.Serialize(SplitList(row.CollocationsRaw!));
         if (!string.IsNullOrWhiteSpace(row.RelatedTermsRaw))
             existing.RelatedTermsJson = JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!));
-        // Preserve recall set codes — add the new code if not already present
-        AddRecallSetCode(existing, recallSetCode);
+        // Record this set's occurrence count (source of truth); the helper
+        // derives ExamFrequencyCount (= sum across sets) and RecallSetCodesJson.
+        ApplyRecallSetOccurrence(existing, recallSetCode, occurrences);
         existing.SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId);
         existing.UpdatedAt = DateTimeOffset.UtcNow;
     }
@@ -1821,6 +1827,44 @@ public partial class AdminService
         codes.Add(recallSetCode);
         term.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(codes);
         return true;
+    }
+
+    /// <summary>
+    /// Parses the per-set occurrence map (set code → count). Case-insensitive
+    /// keys; never throws — returns an empty map on malformed/empty JSON.
+    /// </summary>
+    private static Dictionary<string, int> ParseRecallSetOccurrences(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}")
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(json);
+            return map is null
+                ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, int>(map, StringComparer.OrdinalIgnoreCase);
+        }
+        catch { return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase); }
+    }
+
+    /// <summary>
+    /// SOURCE-OF-TRUTH mutation for the recall ×N badge. REPLACES this set's
+    /// occurrence count (one canonical CSV per set → re-importing corrects the
+    /// count without inflating), then re-derives the two cached fields:
+    /// <see cref="VocabularyTerm.ExamFrequencyCount"/> = sum of the map's values,
+    /// and <see cref="VocabularyTerm.RecallSetCodesJson"/> = sorted map keys.
+    /// </summary>
+    private static void ApplyRecallSetOccurrence(VocabularyTerm term, string setCode, int occurrences)
+    {
+        if (occurrences < 1) occurrences = 1;
+        var map = ParseRecallSetOccurrences(term.RecallSetOccurrencesJson);
+        map[setCode] = occurrences;
+        var clean = map.Where(kv => kv.Value > 0)
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+        var keys = clean.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
+        term.RecallSetOccurrencesJson = System.Text.Json.JsonSerializer.Serialize(clean);
+        term.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(keys);
+        term.ExamFrequencyCount = clean.Values.Sum();
     }
 
     /// <summary>

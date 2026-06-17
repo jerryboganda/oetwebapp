@@ -180,7 +180,7 @@ export default function FlashcardsPage() {
                   <div className="mb-4 text-xs font-medium uppercase text-primary">Word</div>
                   <div className="mb-2 flex items-center justify-center gap-2">
                     <span className="text-3xl font-bold text-navy">{card.term}</span>
-                    <RecallTierBadge count={card.examFrequencyCount ?? 0} />
+                    <RecallTierBadge count={card.examFrequencyCount ?? 0} occurrences={card.recallSetOccurrences} />
                   </div>
                   {card.ipaPronunciation && <div className="text-sm italic text-muted">{card.ipaPronunciation}</div>}
                   <button

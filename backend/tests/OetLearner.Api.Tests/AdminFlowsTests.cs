@@ -1191,9 +1191,10 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     {
         // The 2026-recalls bug: a word already in the bank (under "2023-2025")
         // re-imported under "2026" must JOIN the 2026 set — otherwise the 2026
-        // recall list stays empty. The ×N frequency grows once for the new set
-        // membership, but a redundant re-upload of a set the word already has
-        // must NOT inflate it.
+        // recall list stays empty. ×N is DERIVED as the sum of the per-set
+        // occurrence map; joining a new set grows the sum, and re-importing a set
+        // REPLACES that set's count (an identical re-upload is a no-op, never
+        // inflating). The map is the source of truth; codes + ×N are its caches.
         var term = $"recall-multiyear-{Guid.NewGuid():N}";
         var row = $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
         var csv = VocabularyImportCsvHeader + row;
@@ -1228,12 +1229,17 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             return detailJson.RootElement.Clone();
         }
 
-        // The admin items projection exposes the raw JSON string, not an array.
+        // The admin items projection exposes the raw JSON strings, not parsed.
         static string[] Codes(JsonElement item)
         {
             var json = item.GetProperty("recallSetCodesJson").GetString() ?? "[]";
             return (System.Text.Json.JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>())
                 .OrderBy(c => c).ToArray();
+        }
+        static Dictionary<string, int> Occ(JsonElement item)
+        {
+            var json = item.GetProperty("recallSetOccurrencesJson").GetString() ?? "{}";
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(json) ?? new();
         }
 
         // First import under the 2023-2025 set: creates the term.
@@ -1241,6 +1247,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         var afterFirst = await ReadItemAsync();
         Assert.Equal(new[] { "2023-2025" }, Codes(afterFirst));
         Assert.Equal(1, afterFirst.GetProperty("examFrequencyCount").GetInt32());
+        Assert.Equal(new Dictionary<string, int> { ["2023-2025"] = 1 }, Occ(afterFirst));
 
         // Preview under 2026 must surface the productive outcome: 0 brand-new,
         // 1 existing word that WILL be added to the 2026 set.
@@ -1259,13 +1266,95 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         var afterSecond = await ReadItemAsync();
         Assert.Equal(new[] { "2023-2025", "2026" }, Codes(afterSecond));
         Assert.Equal(2, afterSecond.GetProperty("examFrequencyCount").GetInt32());
+        Assert.Equal(new Dictionary<string, int> { ["2023-2025"] = 1, ["2026"] = 1 }, Occ(afterSecond));
 
-        // Re-upload the SAME content under 2026 again (new batch): the word is
-        // already in the set, so codes are unchanged AND ×N must not inflate.
+        // Re-upload the SAME content under 2026 again (new batch): REPLACE keeps
+        // the 2026 count at 1, so codes, the map, and ×N are all unchanged.
         await CommitUnderSetAsync("2026");
         var afterThird = await ReadItemAsync();
         Assert.Equal(new[] { "2023-2025", "2026" }, Codes(afterThird));
         Assert.Equal(2, afterThird.GetProperty("examFrequencyCount").GetInt32());
+        Assert.Equal(new Dictionary<string, int> { ["2023-2025"] = 1, ["2026"] = 1 }, Occ(afterThird));
+    }
+
+    /// <summary>Reads a term's per-set occurrence map from the admin detail endpoint.</summary>
+    private async Task<(Dictionary<string, int> map, int freq)> ReadRecallOccurrencesAsync(string term)
+    {
+        var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+        list.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        var id = listJson.RootElement.GetProperty("items").EnumerateArray()
+            .Single(x => x.GetProperty("term").GetString() == term).GetProperty("id").GetString()!;
+        var detail = await _client.GetAsync($"/v1/admin/vocabulary/items/{id}");
+        detail.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
+        var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(
+            detailJson.RootElement.GetProperty("recallSetOccurrencesJson").GetString() ?? "{}") ?? new();
+        return (map, detailJson.RootElement.GetProperty("examFrequencyCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_ReimportSameSetWithHigherCount_CorrectsSetCountWithoutDoubleCounting()
+    {
+        // Re-importing the SAME set with a corrected (higher) occurrence count must
+        // REPLACE that set's count — not add to it. Under the old "+=" accumulator
+        // a word seen ×1 then ×3 in the same set would wrongly read ×4.
+        var term = $"recall-recount-{Guid.NewGuid():N}";
+        var oneRow = VocabularyImportCsvHeader
+            + $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
+        var threeRows = VocabularyImportCsvHeader
+            + $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n"
+            + $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=2\"\n"
+            + $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=3\"\n";
+
+        async Task CommitAsync(string csv)
+        {
+            var batchId = $"recall-rc-{Guid.NewGuid():N}"[..32];
+            using (var dry = CsvContent(csv, "recount.csv"))
+                (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=2026&importBatchId={Uri.EscapeDataString(batchId)}", dry)).EnsureSuccessStatusCode();
+            using var commit = CsvContent(csv, "recount.csv");
+            (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=2026&importBatchId={Uri.EscapeDataString(batchId)}", commit)).EnsureSuccessStatusCode();
+        }
+
+        await CommitAsync(oneRow);
+        var (map1, freq1) = await ReadRecallOccurrencesAsync(term);
+        Assert.Equal(new Dictionary<string, int> { ["2026"] = 1 }, map1);
+        Assert.Equal(1, freq1);
+
+        await CommitAsync(threeRows);
+        var (map3, freq3) = await ReadRecallOccurrencesAsync(term);
+        Assert.Equal(new Dictionary<string, int> { ["2026"] = 3 }, map3);   // REPLACE, not 1+3
+        Assert.Equal(3, freq3);
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_MultiSetMap_SumEqualsFrequency()
+    {
+        // A word imported into three sets with different in-CSV counts: the map is
+        // the source of truth and ExamFrequencyCount is exactly the sum.
+        var term = $"recall-multimap-{Guid.NewGuid():N}";
+        string Csv(int copies) => VocabularyImportCsvHeader + string.Concat(
+            Enumerable.Range(1, copies).Select(i =>
+                $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row={i}\"\n"));
+
+        async Task CommitAsync(string setCode, int copies)
+        {
+            var batchId = $"recall-mm-{Guid.NewGuid():N}"[..32];
+            var csv = Csv(copies);
+            using (var dry = CsvContent(csv, "multimap.csv"))
+                (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode={setCode}&importBatchId={Uri.EscapeDataString(batchId)}", dry)).EnsureSuccessStatusCode();
+            using var commit = CsvContent(csv, "multimap.csv");
+            (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode={setCode}&importBatchId={Uri.EscapeDataString(batchId)}", commit)).EnsureSuccessStatusCode();
+        }
+
+        await CommitAsync("old", 2);
+        await CommitAsync("2023-2025", 3);
+        await CommitAsync("2026", 1);
+
+        var (map, freq) = await ReadRecallOccurrencesAsync(term);
+        Assert.Equal(new Dictionary<string, int> { ["old"] = 2, ["2023-2025"] = 3, ["2026"] = 1 }, map);
+        Assert.Equal(6, freq);
+        Assert.Equal(map.Values.Sum(), freq);
     }
 
     [Fact]

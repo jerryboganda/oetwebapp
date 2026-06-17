@@ -105,9 +105,19 @@ public class VocabularyTerm
     public string RecallSetCodesJson { get; set; } = "[]";
 
     /// <summary>
-    /// How many times this term has appeared across CSV imports. Starts at 1
-    /// on first insert; incremented each time the same (Term, ExamTypeCode,
-    /// ProfessionId) key is encountered in a subsequent import.
+    /// Per-recall-set occurrence map — SOURCE OF TRUTH for the ×N badge. JSON
+    /// object: canonical set code → times the term appears in THAT set's CSV,
+    /// e.g. {"old":2,"2023-2025":3,"2026":12}. Invariants re-derived on every
+    /// import: <see cref="ExamFrequencyCount"/> == sum(values); keys ==
+    /// <see cref="RecallSetCodesJson"/>. Empty "{}" until a set is (re-)imported.
+    /// </summary>
+    public string RecallSetOccurrencesJson { get; set; } = "{}";
+
+    /// <summary>
+    /// How many times this term has appeared across recall exams — the learner
+    /// "×N" badge. DERIVED CACHE of <see cref="RecallSetOccurrencesJson"/>:
+    /// equals the sum of that map's per-set counts. Recomputed on every import;
+    /// rebuildable by re-importing each set's CSV.
     /// </summary>
     public int ExamFrequencyCount { get; set; } = 1;
 

@@ -23280,6 +23280,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("RecallSetOccurrencesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("RelatedTermsJson")
                         .IsRequired()
                         .HasColumnType("text");

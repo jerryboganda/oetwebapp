@@ -216,7 +216,7 @@ export default function VocabularyTermDetailPage() {
               >
                 <Volume2 className="h-4 w-4" /> Play audio
               </button>
-              <RecallTierBadge count={term.examFrequencyCount ?? 0} />
+              <RecallTierBadge count={term.examFrequencyCount ?? 0} occurrences={term.recallSetOccurrences} />
             </div>
             <p className="mt-4 text-base text-navy">{term.definition}</p>
             {term.contextNotes && (

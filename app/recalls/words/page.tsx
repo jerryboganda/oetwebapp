@@ -542,7 +542,7 @@ export default function RecallsWordsPage() {
                             across recall exams (ExamFrequencyCount). The word is
                             shown once and counted, rather than repeating in the
                             list — and its audio is reused, not regenerated. */}
-                        <RecallTierBadge count={term.examFrequencyCount ?? 0} />
+                        <RecallTierBadge count={term.examFrequencyCount ?? 0} occurrences={term.recallSetOccurrences} />
                         <button
                           type="button"
                           onClick={() => handleToggleFavTerm(term)}
