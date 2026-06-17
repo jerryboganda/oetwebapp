@@ -1053,7 +1053,10 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             Assert.Equal(0, conflictJson.RootElement.GetProperty("validRows").GetInt32());
             Assert.Equal(0, conflictJson.RootElement.GetProperty("invalidRows").GetInt32());
             Assert.Equal(1, conflictJson.RootElement.GetProperty("duplicateRows").GetInt32());
-            Assert.Contains("duplicate-in-db", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+            // The word is already in the 'old' set, so the preview reports it as
+            // an unchanged existing-in-set row (no longer a generic db duplicate).
+            Assert.Equal(1, conflictJson.RootElement.GetProperty("alreadyInSetRows").GetInt32());
+            Assert.Contains("already in the 'old' set", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
         }
 
         using (var conflictDryRunContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
@@ -1143,11 +1146,11 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         var row = $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
         var csv = VocabularyImportCsvHeader + row;
 
-        async Task CommitBatchAsync(string batchId, int expectedImported, int expectedSkipped)
+        async Task CommitBatchAsync(string batchId, int expectedImported, int expectedSkipped, string recallSetCode = "old")
         {
             using (var dryRunContent = CsvContent(csv, "recalls-db.csv"))
             {
-                var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+                var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode={recallSetCode}&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
                 dryRun.EnsureSuccessStatusCode();
                 using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
                 Assert.Equal(expectedImported, dryRunJson.RootElement.GetProperty("imported").GetInt32());
@@ -1156,7 +1159,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             using var importContent = CsvContent(csv, "recalls-db.csv");
             // The key assertion: the commit succeeds even when every row is a
             // pre-existing DB duplicate.
-            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode={recallSetCode}&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
             import.EnsureSuccessStatusCode();
             using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
             Assert.Equal(expectedImported, importJson.RootElement.GetProperty("imported").GetInt32());
@@ -1172,14 +1175,97 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             return item.GetProperty("examFrequencyCount").GetInt32();
         }
 
-        // First import creates the term (frequency 1).
-        await CommitBatchAsync($"recalls-db1-{Guid.NewGuid():N}"[..32], expectedImported: 1, expectedSkipped: 0);
+        // First import creates the term under the 'old' set (frequency 1).
+        await CommitBatchAsync($"recalls-db1-{Guid.NewGuid():N}"[..32], expectedImported: 1, expectedSkipped: 0, recallSetCode: "old");
         Assert.Equal(1, await ReadFrequencyAsync());
 
-        // Second import — same word, now a DB duplicate — commits cleanly and
-        // merges the frequency to 2 instead of being rejected.
-        await CommitBatchAsync($"recalls-db2-{Guid.NewGuid():N}"[..32], expectedImported: 0, expectedSkipped: 1);
+        // Second import — same word, now a DB duplicate, under a DIFFERENT set
+        // (2026) — commits cleanly (does not block) and merges the frequency to
+        // 2 as the word joins a new exam collection.
+        await CommitBatchAsync($"recalls-db2-{Guid.NewGuid():N}"[..32], expectedImported: 0, expectedSkipped: 1, recallSetCode: "2026");
         Assert.Equal(2, await ReadFrequencyAsync());
+    }
+
+    [Fact]
+    public async Task AdminVocabularyImport_ExistingWord_ReimportedUnderNewSet_JoinsThatSetWithoutInflatingFrequency()
+    {
+        // The 2026-recalls bug: a word already in the bank (under "2023-2025")
+        // re-imported under "2026" must JOIN the 2026 set — otherwise the 2026
+        // recall list stays empty. The ×N frequency grows once for the new set
+        // membership, but a redundant re-upload of a set the word already has
+        // must NOT inflate it.
+        var term = $"recall-multiyear-{Guid.NewGuid():N}";
+        var row = $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
+        var csv = VocabularyImportCsvHeader + row;
+
+        async Task CommitUnderSetAsync(string recallSetCode)
+        {
+            var batchId = $"recall-my-{Guid.NewGuid():N}"[..32];
+            using (var dryRunContent = CsvContent(csv, "recalls-multiyear.csv"))
+            {
+                var dryRun = await _client.PostAsync(
+                    $"/v1/admin/vocabulary/import?dryRun=true&recallSetCode={recallSetCode}&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+                dryRun.EnsureSuccessStatusCode();
+            }
+            using var importContent = CsvContent(csv, "recalls-multiyear.csv");
+            var import = await _client.PostAsync(
+                $"/v1/admin/vocabulary/import?dryRun=false&recallSetCode={recallSetCode}&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+        }
+
+        // The list endpoint is a light projection (no recall codes); the detail
+        // endpoint carries both recallSetCodesJson and examFrequencyCount.
+        async Task<JsonElement> ReadItemAsync()
+        {
+            var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+            list.EnsureSuccessStatusCode();
+            using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+            var id = listJson.RootElement.GetProperty("items").EnumerateArray()
+                .Single(x => x.GetProperty("term").GetString() == term).GetProperty("id").GetString()!;
+            var detail = await _client.GetAsync($"/v1/admin/vocabulary/items/{id}");
+            detail.EnsureSuccessStatusCode();
+            using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
+            return detailJson.RootElement.Clone();
+        }
+
+        // The admin items projection exposes the raw JSON string, not an array.
+        static string[] Codes(JsonElement item)
+        {
+            var json = item.GetProperty("recallSetCodesJson").GetString() ?? "[]";
+            return (System.Text.Json.JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>())
+                .OrderBy(c => c).ToArray();
+        }
+
+        // First import under the 2023-2025 set: creates the term.
+        await CommitUnderSetAsync("2023-2025");
+        var afterFirst = await ReadItemAsync();
+        Assert.Equal(new[] { "2023-2025" }, Codes(afterFirst));
+        Assert.Equal(1, afterFirst.GetProperty("examFrequencyCount").GetInt32());
+
+        // Preview under 2026 must surface the productive outcome: 0 brand-new,
+        // 1 existing word that WILL be added to the 2026 set.
+        using (var previewContent = CsvContent(csv, "recalls-multiyear.csv"))
+        {
+            var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=2026", previewContent);
+            preview.EnsureSuccessStatusCode();
+            using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("existingToTagRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("alreadyInSetRows").GetInt32());
+        }
+
+        // Commit under 2026: the word JOINS the 2026 set and ×N ticks to 2.
+        await CommitUnderSetAsync("2026");
+        var afterSecond = await ReadItemAsync();
+        Assert.Equal(new[] { "2023-2025", "2026" }, Codes(afterSecond));
+        Assert.Equal(2, afterSecond.GetProperty("examFrequencyCount").GetInt32());
+
+        // Re-upload the SAME content under 2026 again (new batch): the word is
+        // already in the set, so codes are unchanged AND ×N must not inflate.
+        await CommitUnderSetAsync("2026");
+        var afterThird = await ReadItemAsync();
+        Assert.Equal(new[] { "2023-2025", "2026" }, Codes(afterThird));
+        Assert.Equal(2, afterThird.GetProperty("examFrequencyCount").GetInt32());
     }
 
     [Fact]

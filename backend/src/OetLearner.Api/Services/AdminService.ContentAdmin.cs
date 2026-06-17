@@ -981,7 +981,7 @@ public partial class AdminService
         // admin can filter/maintain them later. Validate that the chosen
         // code corresponds to a known (active) row in RecallSetTags or one of
         // the canonical static codes (in case the DB hasn't been seeded yet).
-        await EnsureRecallSetCodeOrThrowAsync(recallSetCode, ct);
+        var normalisedRecallSetCode = await EnsureRecallSetCodeOrThrowAsync(recallSetCode, ct);
         var batchId = NormalizeImportBatchId(importBatchId);
         var rows = await ParseCsvAsync(file, ct);
         var validation = await BuildVocabularyImportValidationContextAsync(ct);
@@ -991,6 +991,11 @@ public partial class AdminService
         // duplicates can cite where the original lives in the file.
         var firstSeenLine = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var valid = 0; var invalid = 0; var dups = 0; var existingConflicts = 0;
+        // Split DB-duplicates into the productive case (existing word that will
+        // JOIN this recall set on commit) and the truly-redundant case (already
+        // in this set) so the preview can speak honestly instead of flashing a
+        // scary all-duplicates count.
+        var existingToTag = 0; var alreadyInSet = 0;
 
         foreach (var r in rows)
         {
@@ -1035,8 +1040,19 @@ public partial class AdminService
                 {
                     existingConflicts++;
                     dups++;
-                    err = "duplicate-in-db: existing term will have frequency incremented on commit.";
-                    // DB duplicates are not invalid — they get frequency-merged.
+                    // Will this existing word JOIN the chosen set, or is it
+                    // already in it? The first is the productive outcome.
+                    if (RecallSetCodesContains(existing.RecallSetCodesJson, normalisedRecallSetCode))
+                    {
+                        alreadyInSet++;
+                        err = $"already in the '{normalisedRecallSetCode}' set — no change on commit.";
+                    }
+                    else
+                    {
+                        existingToTag++;
+                        err = $"existing word — will be added to the '{normalisedRecallSetCode}' set on commit.";
+                    }
+                    // DB duplicates are not invalid — they get set-tagged/merged.
                     preview.Add(new AdminVocabularyImportPreviewRow(
                         LineNumber: r.LineNumber,
                         Valid: false,
@@ -1067,9 +1083,19 @@ public partial class AdminService
                 Error: err));
         }
 
-        if (valid == 0 && rows.Count > 0) warnings.Add("No rows passed validation.");
-        if (dups > 0) warnings.Add($"{dups} duplicate or conflict row(s) detected.");
-        if (existingConflicts > 0) warnings.Add($"{existingConflicts} row(s) already exist in the bank — their exam-frequency will be incremented on commit (no review needed).");
+        // Honest summary: a recalls re-import is SUPPOSED to be mostly
+        // already-known words. Lead with the productive outcome so "VALID 0"
+        // doesn't read as a failed import.
+        if (existingToTag > 0)
+            warnings.Add($"{existingToTag} existing word(s) will be added to the '{normalisedRecallSetCode}' set on commit.");
+        if (valid > 0)
+            warnings.Add($"{valid} brand-new word(s) will be created and tagged '{normalisedRecallSetCode}'.");
+        if (alreadyInSet > 0)
+            warnings.Add($"{alreadyInSet} word(s) are already in the '{normalisedRecallSetCode}' set — no change.");
+        if (valid == 0 && existingToTag == 0 && rows.Count > 0 && invalid == 0)
+            warnings.Add($"Nothing to do: every word is already in the '{normalisedRecallSetCode}' set.");
+        if (invalid > 0)
+            warnings.Add($"{invalid} row(s) failed validation and will be skipped.");
 
         return new AdminVocabularyImportPreviewResponse(
             ImportBatchId: batchId,
@@ -1077,6 +1103,8 @@ public partial class AdminService
             ValidRows: valid,
             InvalidRows: invalid,
             DuplicateRows: dups,
+            ExistingToTagRows: existingToTag,
+            AlreadyInSetRows: alreadyInSet,
             Rows: preview,
             Warnings: warnings);
     }
@@ -1211,12 +1239,24 @@ public partial class AdminService
             importedTermIds.Add(id);
         }
 
-        // Merge per-batch occurrence counts into pre-existing DB terms. Applied
-        // here — after the already-committed guard above — so the increment
-        // lands exactly once per committed batch (idempotent on retry).
+        // Tag pre-existing DB terms with this import's recall set AND merge the
+        // per-batch occurrence count. Applied here — after the already-committed
+        // guard above — so it lands exactly once per committed batch (idempotent
+        // on retry). The ×N frequency only grows when the word NEWLY joins this
+        // set: a fresh exam-session membership is a real appearance, whereas a
+        // redundant re-upload of a set the word already carries must not inflate
+        // the badge. Re-tagged terms are added to importedTermIds so they are
+        // audited and TTS-backfilled (the backfill self-filters to missing audio).
+        var existingRetagged = 0;
         foreach (var (key, existing) in existingDbByKey)
         {
-            existing.ExamFrequencyCount += occurrencesByKey.GetValueOrDefault(key, 1);
+            var newlyTagged = AddRecallSetCode(existing, normalisedRecallSetCode);
+            if (newlyTagged)
+            {
+                existing.ExamFrequencyCount += occurrencesByKey.GetValueOrDefault(key, 1);
+                existingRetagged++;
+                importedTermIds.Add(existing.Id);
+            }
             existing.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
@@ -1225,7 +1265,7 @@ public partial class AdminService
             await CreateVocabularyImportCommitLedgerAsync(batchId, fileSha256, importedTermIds, ct);
             await db.SaveChangesAsync(ct);
             await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
-                $"Batch {batchId}: imported {imported} vocabulary items, skipped {skipped} (dup={duplicates} [in-csv={inCsvDuplicates}, db-merged={dbDuplicates}], failed={failed}).", ct);
+                $"Batch {batchId}: imported {imported} vocabulary items, {existingRetagged} existing word(s) added to set '{normalisedRecallSetCode}', skipped {skipped} (dup={duplicates} [in-csv={inCsvDuplicates}, db-merged={dbDuplicates}], failed={failed}).", ct);
             await CommitIfOwnedAsync(tx, ct);
 
             // Phase 3 — kick off background TTS generation for the freshly
@@ -1760,15 +1800,41 @@ public partial class AdminService
         if (!string.IsNullOrWhiteSpace(row.RelatedTermsRaw))
             existing.RelatedTermsJson = JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!));
         // Preserve recall set codes — add the new code if not already present
-        var existingCodes = new List<string>();
-        try { existingCodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(existing.RecallSetCodesJson ?? "[]") ?? new(); } catch { }
-        if (!existingCodes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase))
-        {
-            existingCodes.Add(recallSetCode);
-            existing.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(existingCodes);
-        }
+        AddRecallSetCode(existing, recallSetCode);
         existing.SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId);
         existing.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Adds <paramref name="recallSetCode"/> to the term's multi-tag
+    /// <see cref="VocabularyTerm.RecallSetCodesJson"/> array if not already
+    /// present. Returns true only when the code was NEWLY added — callers use
+    /// this to decide whether the appearance is a fresh exam-session membership
+    /// (bump ×N) or a redundant re-tag (leave ×N untouched).
+    /// </summary>
+    private static bool AddRecallSetCode(VocabularyTerm term, string recallSetCode)
+    {
+        var codes = new List<string>();
+        try { codes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(term.RecallSetCodesJson ?? "[]") ?? new(); } catch { }
+        if (codes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase))
+            return false;
+        codes.Add(recallSetCode);
+        term.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(codes);
+        return true;
+    }
+
+    /// <summary>
+    /// True when the term's multi-tag recall-set array already contains
+    /// <paramref name="recallSetCode"/> (case-insensitive).
+    /// </summary>
+    private static bool RecallSetCodesContains(string? recallSetCodesJson, string recallSetCode)
+    {
+        try
+        {
+            var codes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(recallSetCodesJson ?? "[]") ?? new();
+            return codes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     private static string TryExtractRecallSetCodeFromStored(string? json)

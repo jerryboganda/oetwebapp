@@ -324,6 +324,12 @@ public sealed record AdminVocabularyImportPreviewResponse(
     int ValidRows,
     int InvalidRows,
     int DuplicateRows,
+    // Existing-in-bank words NOT yet in the chosen recall set — they WILL be
+    // added to it on commit (the productive outcome for a recalls re-import).
+    int ExistingToTagRows,
+    // Existing-in-bank words already carrying the chosen recall set — genuinely
+    // redundant; commit leaves them unchanged.
+    int AlreadyInSetRows,
     IReadOnlyList<AdminVocabularyImportPreviewRow> Rows,
     IReadOnlyList<string> Warnings
 );

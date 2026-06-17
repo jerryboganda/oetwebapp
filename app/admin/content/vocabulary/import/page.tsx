@@ -39,6 +39,11 @@ type PreviewResponse = {
   validRows: number;
   invalidRows: number;
   duplicateRows: number;
+  // Existing-in-bank words that WILL be added to the chosen recall set on
+  // commit — the productive outcome of a recalls re-import.
+  existingToTagRows: number;
+  // Existing-in-bank words already carrying the chosen set — no change.
+  alreadyInSetRows: number;
   rows: PreviewRow[];
   warnings: string[];
 };
@@ -227,11 +232,11 @@ export default function AdminVocabularyImportPage() {
         });
         return;
       }
-      const mergedDuplicates = r.duplicates ?? r.skipped;
+      const addedToSet = preview?.existingToTagRows ?? 0;
       setToast({
         variant: 'success',
-        message: `Imported batch ${r.importBatchId}: ${r.imported} row${r.imported === 1 ? '' : 's'}`
-          + (mergedDuplicates > 0 ? ` · ${mergedDuplicates} duplicate${mergedDuplicates === 1 ? '' : 's'} merged into frequency.` : '.'),
+        message: `Imported batch ${r.importBatchId}: ${r.imported} new word${r.imported === 1 ? '' : 's'}`
+          + (addedToSet > 0 ? ` · ${addedToSet} existing word${addedToSet === 1 ? '' : 's'} added to the ${recallSetCode} set.` : '.'),
       });
       setCommittedBatchId(r.importBatchId);
       setFile(null);
@@ -248,7 +253,11 @@ export default function AdminVocabularyImportPage() {
   }
 
   async function handleDryRun() {
-    if (!file || !preview || preview.validRows === 0 || preview.invalidRows > 0) return;
+    // Productive work = brand-new words OR existing words that will join the
+    // chosen recall set. A recalls re-import is legitimately all-existing-words
+    // (validRows === 0), so gating on validRows alone wrongly blocked it.
+    const hasWork = !!preview && (preview.validRows > 0 || preview.existingToTagRows > 0);
+    if (!file || !preview || !hasWork || preview.invalidRows > 0) return;
     setDryRunning(true);
     setDryRun(null);
     try {
@@ -499,14 +508,18 @@ export default function AdminVocabularyImportPage() {
               <Button variant="secondary" size="sm" disabled={!file || loading} onClick={handlePreview}>
                 <FileSpreadsheet className="mr-1.5 h-4 w-4" /> {loading ? 'Checking…' : 'Preview'}
               </Button>
-              {preview && preview.validRows > 0 && preview.invalidRows === 0 && (
+              {preview && (preview.validRows > 0 || preview.existingToTagRows > 0) && preview.invalidRows === 0 && (
                 <Button variant="secondary" size="sm" disabled={dryRunning} onClick={handleDryRun}>
                   {dryRunning ? 'Running…' : 'Dry run'}
                 </Button>
               )}
               {preview && dryRun && dryRun.imported === preview.validRows && dryRun.failedRows === 0 && (
                 <Button variant="primary" size="sm" disabled={importing} onClick={handleImport}>
-                  {importing ? 'Importing…' : `Import ${preview.validRows} row${preview.validRows === 1 ? '' : 's'}`}
+                  {importing
+                    ? 'Importing…'
+                    : preview.existingToTagRows > 0
+                      ? `Commit · ${preview.validRows} new, ${preview.existingToTagRows} added to ${recallSetCode}`
+                      : `Import ${preview.validRows} row${preview.validRows === 1 ? '' : 's'}`}
                 </Button>
               )}
             </div>
@@ -725,13 +738,18 @@ export default function AdminVocabularyImportPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <AdminRouteSummaryCard label="Total rows" value={preview.totalRows} icon={<FileText className="h-5 w-5" />} />
-                  <AdminRouteSummaryCard label="Valid" value={preview.validRows} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
+                  <AdminRouteSummaryCard label="New words" value={preview.validRows} icon={<CheckCircle2 className="h-5 w-5" />} tone={preview.validRows > 0 ? 'success' : 'default'} />
+                  <AdminRouteSummaryCard label={`Added to ${recallSetCode || 'set'}`} value={preview.existingToTagRows} icon={<Tag className="h-5 w-5" />} tone={preview.existingToTagRows > 0 ? 'success' : 'default'} />
                   <AdminRouteSummaryCard label="Invalid" value={preview.invalidRows} icon={<AlertTriangle className="h-5 w-5" />} tone={preview.invalidRows > 0 ? 'danger' : 'default'} />
-                  <AdminRouteSummaryCard label="Duplicates" value={preview.duplicateRows} icon={<Copy className="h-5 w-5" />} tone={preview.duplicateRows > 0 ? 'warning' : 'default'} />
                 </div>
+                {preview.alreadyInSetRows > 0 && (
+                  <p className="text-xs text-muted">
+                    {preview.alreadyInSetRows} word(s) are already in the “{recallSetCode}” set — they’ll be left unchanged.
+                  </p>
+                )}
 
                 {preview.warnings.length > 0 && (
-                  <InlineAlert variant="warning">
+                  <InlineAlert variant={preview.invalidRows > 0 ? 'warning' : 'success'}>
                     <ul className="list-inside list-disc space-y-1 text-sm">
                       {preview.warnings.map((w, i) => (<li key={i}>{w}</li>))}
                     </ul>
@@ -760,23 +778,40 @@ export default function AdminVocabularyImportPage() {
                     </thead>
                     <tbody className="divide-y divide-admin-border">
                       {preview.rows.slice(0, 100).map(r => {
-                        const isDuplicateInCsv = !r.valid && !!r.error && r.error.startsWith('duplicate-in-csv');
+                        const err = r.error ?? '';
+                        // Classify the non-valid rows. Only genuine validation
+                        // failures are errors (red); existing-word rows that will
+                        // join the set are a GOOD outcome (green), and in-csv/
+                        // already-in-set rows are benign (neutral).
+                        const kind = r.valid ? 'new'
+                          : err.includes('will be added to') ? 'tag'
+                          : err.startsWith('duplicate-in-csv') ? 'dupCsv'
+                          : err.startsWith('already in the') ? 'inSet'
+                          : 'error';
+                        const rowBg = kind === 'error' ? 'bg-danger/10'
+                          : kind === 'tag' ? 'bg-success/10'
+                          : kind === 'dupCsv' || kind === 'inSet' ? 'bg-warning/5'
+                          : '';
                         return (
-                        <tr key={r.lineNumber} className={!r.valid ? (isDuplicateInCsv ? 'bg-warning/10' : 'bg-danger/10') : ''}>
+                        <tr key={r.lineNumber} className={rowBg}>
                           <td className="px-3 py-1.5 text-xs text-muted">{r.lineNumber}</td>
                           <td className="px-3 py-1.5">
-                            {r.valid
-                              ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />OK</Badge>
-                              : isDuplicateInCsv
-                                ? <Badge variant="warning" title={r.error ?? undefined}><Copy className="mr-1 h-3 w-3" />Duplicate</Badge>
-                                : <Badge variant="danger"><AlertTriangle className="mr-1 h-3 w-3" />Error</Badge>
+                            {kind === 'new'
+                              ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />New</Badge>
+                              : kind === 'tag'
+                                ? <Badge variant="success" title={err}><Tag className="mr-1 h-3 w-3" />Will tag</Badge>
+                                : kind === 'dupCsv'
+                                  ? <Badge variant="warning" title={err}><Copy className="mr-1 h-3 w-3" />In file</Badge>
+                                  : kind === 'inSet'
+                                    ? <Badge variant="warning" title={err}><Copy className="mr-1 h-3 w-3" />In set</Badge>
+                                    : <Badge variant="danger"><AlertTriangle className="mr-1 h-3 w-3" />Error</Badge>
                             }
                           </td>
                           <td className="px-3 py-1.5 font-medium">{r.term ?? '-'}</td>
                           <td className="px-3 py-1.5 text-xs text-muted line-clamp-1 max-w-xs">{r.definition ?? '-'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.americanSpelling ?? '-'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.category ?? '-'}</td>
-                          <td className={`px-3 py-1.5 text-xs ${isDuplicateInCsv ? 'text-warning' : 'text-danger'}`}>{r.error ?? ''}</td>
+                          <td className={`px-3 py-1.5 text-xs ${kind === 'error' ? 'text-danger' : kind === 'tag' ? 'text-success' : 'text-muted'}`}>{err}</td>
                         </tr>
                         );
                       })}
