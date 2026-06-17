@@ -314,11 +314,18 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         // carries a transcript excerpt). The TranscriptEvidenceText column is
         // already on ListeningQuestion; this gate ensures authors populate it
         // before publish (needed for jump-to-evidence playback and tutor review).
-        var missingTranscriptEvidence = rows.Count(row => string.IsNullOrWhiteSpace(row.TranscriptEvidenceText));
+        // PDF-backed B/C items (authored via the answer-sheet builder, stem
+        // "See PDF") deliberately carry no retyped transcript excerpt — the
+        // question + evidence live on the uploaded question paper, matching the
+        // Reading module's lightweight answer-key model. Exempt them from L06.1
+        // so the PDF-backed authoring workflow can publish.
+        var missingTranscriptEvidence = rows.Count(row =>
+            !IsPdfBackedItem(row.Stem)
+            && string.IsNullOrWhiteSpace(row.TranscriptEvidenceText));
         if (missingTranscriptEvidence > 0)
         {
             warnings.Add(new("listening_transcript_evidence_missing", "error",
-                $"Listening rule L06.1 — every item must carry a verbatim transcript excerpt that supports the correct answer; {missingTranscriptEvidence} item(s) have no TranscriptEvidenceText."));
+                $"Listening rule L06.1 — every audio-authored item must carry a verbatim transcript excerpt that supports the correct answer; {missingTranscriptEvidence} item(s) have no TranscriptEvidenceText."));
         }
 
         if (a1 is not 0 and not 12 || a2 is not 0 and not 12)
@@ -936,6 +943,14 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
         return ResolveJsonCorrectOptionIndex(options, correctAnswer) >= 0;
     }
+
+    /// <summary>
+    /// A PDF-backed answer-sheet item (Part B/C authored via the builder) stores
+    /// the sentinel stem "See PDF" — the real question text + evidence live on
+    /// the uploaded question paper, mirroring the Reading module.
+    /// </summary>
+    private static bool IsPdfBackedItem(string? stem) =>
+        string.Equals(stem?.Trim(), "See PDF", StringComparison.OrdinalIgnoreCase);
 
     private static bool HasValidMcqShape(
         ListeningQuestionType questionType,

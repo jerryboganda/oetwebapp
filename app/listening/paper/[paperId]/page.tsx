@@ -26,9 +26,14 @@ import { useTimer } from '@/hooks/useTimer';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
+import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
+import { QuestionPaperPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
 import {
   advanceListeningSection,
+  createListeningPaperAnnotation,
+  deleteListeningPaperAnnotation,
+  getListeningPaperAnnotations,
   getListeningSession,
   saveListeningAnswer,
   startListeningAttempt,
@@ -38,6 +43,7 @@ import {
   type ListeningSessionMode,
   type ListeningSessionQuestionDto,
 } from '@/lib/listening-api';
+import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from '@/lib/reading-authoring-api';
 import {
   buildListeningExamSubSections,
   LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
@@ -53,6 +59,35 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 function normalizeExamMode(raw: string | null): ListeningSessionMode {
   const value = (raw ?? '').trim().toLowerCase();
   return value === 'paper' ? 'paper' : 'exam';
+}
+
+/**
+ * Resolve the learner-facing question-paper PDF URL for a sub-section. Mirrors
+ * the Reading PDF resolution (and the backend's `questionPaperUrlByPart` keys):
+ * try the exact section code (e.g. "B1"), then fall back to the parent part
+ * ("B"). Part B/C are PDF-backed; Part A is note-completion (no PDF).
+ */
+function resolveQuestionPaperUrl(
+  session: ListeningSessionDto,
+  sectionCode: string,
+): string | null {
+  const map = session.paper.questionPaperUrlByPart;
+  if (!map) return null;
+  const code = sectionCode.trim().toUpperCase();
+  const parent = code.length > 1 ? code.slice(0, 1) : code;
+  return map[code] ?? map[parent] ?? null;
+}
+
+/**
+ * Extract the media asset id from a `/v1/media/{id}/content` URL. Used as the
+ * stable annotation key for the question paper (the learner never sees the
+ * ContentPaperAsset row id; the backend validates this against the paper's
+ * QuestionPaper asset `MediaAssetId`).
+ */
+function mediaAssetIdFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/v1\/media\/([^/?#]+)\/content/);
+  return match ? match[1] : null;
 }
 
 export default function ListeningPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
@@ -86,6 +121,8 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const [saveState, setSaveState] = useState<SaveState>('idle');
   // One-way cursor. Only ever increments (Next or timer auto-advance).
   const [currentIndex, setCurrentIndex] = useState(0);
+  // Per-paper question-paper annotations (Part B/C highlight/strikethrough).
+  const [annotations, setAnnotations] = useState<ReadingPaperAnnotationDto[]>([]);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
@@ -104,6 +141,32 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   useEffect(() => () => {
     Object.values(saveTimers.current).forEach(clearTimeout);
   }, []);
+
+  // Load the learner's question-paper annotations once per paper (independent
+  // of the attempt; they carry across attempts like the Reading module).
+  useEffect(() => {
+    if (!paperId) return;
+    let cancelled = false;
+    getListeningPaperAnnotations(paperId)
+      .then((rows) => { if (!cancelled) setAnnotations(rows); })
+      .catch(() => { if (!cancelled) setAnnotations([]); });
+    return () => { cancelled = true; };
+  }, [paperId]);
+
+  const handleCreateAnnotation = useCallback(async (a: {
+    contentPaperAssetId: string;
+    pageNumber: number;
+    kind: ReadingPaperAnnotationKind;
+    geometryJson: unknown;
+  }) => {
+    const created = await createListeningPaperAnnotation(paperId, a);
+    setAnnotations((prev) => [...prev, created]);
+  }, [paperId]);
+
+  const handleDeleteAnnotation = useCallback(async (annotationId: string) => {
+    await deleteListeningPaperAnnotation(paperId, annotationId);
+    setAnnotations((prev) => prev.filter((x) => x.id !== annotationId));
+  }, [paperId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -357,7 +420,12 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
                 // the new sub-section (one-way: the prior section is gone).
                 key={`${attempt.attemptId}:${activeSubSection.index}`}
                 attemptId={attempt.attemptId}
+                paperId={paperId}
                 subSection={activeSubSection}
+                questionPaperUrl={resolveQuestionPaperUrl(session, activeSubSection.partCode)}
+                annotations={annotations}
+                onCreateAnnotation={handleCreateAnnotation}
+                onDeleteAnnotation={handleDeleteAnnotation}
                 answers={answers}
                 onePlayOnly={onePlayOnly}
                 isLastSection={isLastSection}
@@ -516,7 +584,12 @@ function SectionProgress({
 
 function ActiveSubSectionPanel({
   attemptId,
+  paperId,
   subSection,
+  questionPaperUrl,
+  annotations,
+  onCreateAnnotation,
+  onDeleteAnnotation,
   answers,
   onePlayOnly,
   isLastSection,
@@ -525,7 +598,17 @@ function ActiveSubSectionPanel({
   onAdvance,
 }: {
   attemptId: string;
+  paperId: string;
   subSection: ListeningExamSubSection;
+  questionPaperUrl: string | null;
+  annotations: ReadingPaperAnnotationDto[];
+  onCreateAnnotation: (a: {
+    contentPaperAssetId: string;
+    pageNumber: number;
+    kind: ReadingPaperAnnotationKind;
+    geometryJson: unknown;
+  }) => Promise<void>;
+  onDeleteAnnotation: (annotationId: string) => Promise<void>;
   answers: Record<string, string>;
   onePlayOnly: boolean;
   isLastSection: boolean;
@@ -563,15 +646,53 @@ function ActiveSubSectionPanel({
     onAdvance();
   };
 
+  // Part A is note-completion (inline gaps); Part B/C are PDF-backed answer
+  // sheets. This mirrors the Reading paper player: the question paper PDF is the
+  // authoritative surface for B/C, while Part A renders the structured notes
+  // with inline gap inputs positioned in the running text (real OET layout).
+  const isPartA = subSection.partCode.startsWith('A');
+  const notesBody = subSection.extract?.notesBody?.trim() || '';
+  const showNotes = isPartA && notesBody.length > 0;
+  // Annotations key off the media asset id (parsed from the PDF URL); the viewer
+  // matches annotations to the asset by this id, so it must be stable + match
+  // what the create callback sends. Fall back to a synthetic id (display only,
+  // annotations disabled) if the URL is not the expected /v1/media shape.
+  const mediaAssetId = mediaAssetIdFromUrl(questionPaperUrl);
+  const assetId = mediaAssetId ?? `qp-${subSection.partCode}`;
+  const pdfAssets: ReadingPdfAsset[] = questionPaperUrl
+    ? [{ id: assetId, part: subSection.partCode, title: subSection.title, downloadPath: questionPaperUrl }]
+    : [];
+  const showPdf = !isPartA && pdfAssets.length > 0;
+  const canAnnotate = showPdf && mediaAssetId !== null;
+
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-      <section className="space-y-4">
+    <div
+      className={cn(
+        'grid grid-cols-1 gap-4',
+        showPdf
+          ? 'xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]'
+          : 'xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]',
+      )}
+    >
+      <section className="space-y-4 xl:sticky xl:top-4 xl:self-start">
         <SubSectionTimer label={subSection.label} remaining={remaining} />
         <SubSectionAudio
           attemptId={attemptId}
           subSection={subSection}
           onePlayOnly={onePlayOnly}
         />
+        {showPdf ? (
+          <QuestionPaperPdfViewer
+            paperId={paperId}
+            partCode={subSection.partCode}
+            assets={pdfAssets}
+            annotations={annotations}
+            readOnly={!canAnnotate}
+            onCreateAnnotation={onCreateAnnotation}
+            onDeleteAnnotation={onDeleteAnnotation}
+            documentNoun="Listening paper"
+          />
+        ) : null}
       </section>
 
       <section className="rounded-[20px] border border-border bg-surface p-5 shadow-sm" aria-label={`Questions for ${subSection.label}`}>
@@ -582,6 +703,18 @@ function ActiveSubSectionPanel({
 
         {subSection.questions.length === 0 ? (
           <p className="text-sm text-muted">This sub-section has no questions — listen, then continue.</p>
+        ) : showNotes ? (
+          <PartANotesDocument
+            partLabel={subSection.label}
+            notesBody={notesBody}
+            questions={subSection.questions.map((q) => ({ id: q.id, number: q.number }))}
+            answers={answers}
+            onAnswerChange={(id, value) => {
+              const q = subSection.questions.find((item) => item.id === id);
+              if (q) onAnswerChange(q, value);
+            }}
+            highlightingEnabled={false}
+          />
         ) : (
           <div className="space-y-6">
             {subSection.questions.map((question) => (

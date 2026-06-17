@@ -34,7 +34,24 @@ export interface ReadingPdfViewerProps {
   onClearAsset?: (assetId: string) => Promise<void>;
   onClearPaper?: () => Promise<void>;
   className?: string;
+  /**
+   * Noun used in the "no document attached" empty state. Defaults to
+   * "Reading paper"; the Listening module passes "Listening paper" so the
+   * shared viewer reads correctly in both contexts.
+   */
+  documentNoun?: string;
 }
+
+/**
+ * Shared question-paper PDF viewer. Originally Reading-only; now also used by
+ * the Listening module (admin answer-sheet authoring + learner exam surface) so
+ * both subtests render the uploaded question paper identically. The annotation
+ * store (`ReadingPaperAnnotation`) is keyed by user + paper + content-paper
+ * asset and is module-agnostic, so the same create/delete callbacks work for
+ * Listening papers. Prefer this alias in new (non-Reading) call sites.
+ */
+export type QuestionPaperPdfAsset = ReadingPdfAsset;
+export type QuestionPaperPdfViewerProps = ReadingPdfViewerProps;
 
 interface PdfPage {
   pageNumber: number;
@@ -57,6 +74,7 @@ export function ReadingPdfViewer({
   onClearAsset,
   onClearPaper,
   className,
+  documentNoun = 'Reading paper',
 }: ReadingPdfViewerProps) {
   const asset = useMemo(() => {
     const exact = assets.find((candidate) => candidate.part === partCode);
@@ -270,7 +288,7 @@ export function ReadingPdfViewer({
   if (!asset) {
     return (
       <section className={cn('rounded-[20px] border border-border bg-surface p-6 text-center text-sm text-muted shadow-sm', className)}>
-        No {documentLabel} {partCode} document is attached to this Reading paper.
+        No {documentLabel} {partCode} document is attached to this {documentNoun}.
       </section>
     );
   }
@@ -376,6 +394,13 @@ export function ReadingPdfViewer({
     </section>
   );
 }
+
+/**
+ * Module-agnostic alias for {@link ReadingPdfViewer}. Use this name in
+ * Listening (and any future subtest) so the shared component reads naturally at
+ * the call site. Behaviour is identical.
+ */
+export const QuestionPaperPdfViewer = ReadingPdfViewer;
 
 function ToolbarButton({ label, icon: Icon, onClick, active, disabled }: {
   label: string;

@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from './reading-authoring-api';
 
 export interface ListeningHomePaperDto {
   id: string;
@@ -370,6 +371,32 @@ export interface ListeningReviewDto {
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return apiClient.request<T>(path, init);
 }
+
+// ── Question-paper PDF annotations (Part B/C) ────────────────────────────
+//
+// Per-learner highlight / strikethrough / freehand marks on the Listening
+// question paper, mirroring the Reading client (lib/reading-authoring-api.ts)
+// and reusing its DTO types so the shared <QuestionPaperPdfViewer> works
+// unchanged. Keyed server-side by the question paper's media asset id.
+
+export const getListeningPaperAnnotations = (paperId: string) =>
+  api<ReadingPaperAnnotationDto[]>(`/v1/listening-papers/papers/${paperId}/annotations`);
+
+export const createListeningPaperAnnotation = (
+  paperId: string,
+  body: {
+    contentPaperAssetId: string;
+    pageNumber: number;
+    kind: ReadingPaperAnnotationKind;
+    geometryJson: unknown;
+  },
+) => api<ReadingPaperAnnotationDto>(`/v1/listening-papers/papers/${paperId}/annotations`, {
+  method: 'POST',
+  body: JSON.stringify(body),
+});
+
+export const deleteListeningPaperAnnotation = (paperId: string, annotationId: string) =>
+  api<void>(`/v1/listening-papers/papers/${paperId}/annotations/${annotationId}`, { method: 'DELETE' });
 
 export const getListeningHome = () =>
   api<ListeningHomeDto>('/v1/listening/home');

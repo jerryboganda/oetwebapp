@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import {
   ArrowLeft,
   ArrowRight,
+  FileText,
   FormInput,
   Headphones,
   ListChecks,
@@ -22,6 +23,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { QuestionPaperPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
+import { getContentPaper } from '@/lib/content-upload-api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   getListeningStructure,
@@ -29,17 +32,25 @@ import {
   contentTypeToWire,
   wireToContentType,
   LISTENING_CONTENT_TYPE_LABELS,
-  LISTENING_SUB_SECTION_CODES,
   LISTENING_SUB_SECTION_QUESTION_TARGETS,
   type ListeningAuthoredQuestion,
   type ListeningContentType,
   type ListeningSubSectionCode,
 } from '@/lib/listening-authoring-api';
+import { ListeningAnswerSheetBuilder, type ListeningBuilderPart } from './ListeningAnswerSheetBuilder';
 
 type LoadState = 'loading' | 'ready' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string };
+type PartTab = 'A' | 'B' | 'C';
 
 const ALLOWED_TYPES: ListeningContentType[] = ['MultipleChoice3', 'FillInBlank', 'ShortAnswer'];
+
+/** Sub-sections per part tab. Part A is notes-based (A1/A2); B/C are MCQ. */
+const SECTIONS_BY_PART: Record<PartTab, ListeningSubSectionCode[]> = {
+  A: ['A1', 'A2'],
+  B: ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'],
+  C: ['C1', 'C2'],
+};
 
 /**
  * Canonical numbering ranges per sub-section (matches the printed OET paper
@@ -57,11 +68,6 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/**
- * The listening API client stashes the backend problem payload on `err.detail`
- * but only sets `HTTP <status>` as the message. Prefer the backend's own prose
- * (e.g. the provenance-required hint) when present so admins see a real reason.
- */
 function errorMessage(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'detail' in err) {
     const detail = (err as { detail?: unknown }).detail;
@@ -75,6 +81,13 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
+}
+
+function partOf(subSection: string): PartTab {
+  const code = normalizeCode(subSection);
+  if (code.startsWith('B')) return 'B';
+  if (code.startsWith('C')) return 'C';
+  return 'A';
 }
 
 interface QuestionFormState {
@@ -134,9 +147,6 @@ function formToQuestion(
   const type = contentTypeToWire(form.contentType);
   const isMcq = type === 'multiple_choice_3';
   return {
-    // Preserve as much of the previous shape as possible so per-question
-    // metadata authored elsewhere (transcript evidence, distractor analysis)
-    // is not dropped when editing through this simpler form.
     ...(previous ?? {}),
     id: form.id ?? `lq-${form.number}`,
     number: form.number,
@@ -159,8 +169,10 @@ export default function AdminListeningQuestionsPage() {
 
   const [state, setState] = useState<LoadState>('loading');
   const [questions, setQuestions] = useState<ListeningAuthoredQuestion[]>([]);
+  const [assets, setAssets] = useState<ReadingPdfAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [activeCode, setActiveCode] = useState<ListeningSubSectionCode>('A1');
+  const [activePart, setActivePart] = useState<PartTab>('A');
+  const [activeSection, setActiveSection] = useState<ListeningSubSectionCode>('A1');
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const [editing, setEditing] = useState(false);
@@ -180,6 +192,22 @@ export default function AdminListeningQuestionsPage() {
       setError(errorMessage(e, 'Failed to load listening structure.'));
       setState('error');
     }
+    // Question-paper PDFs power the left-hand viewer. A failure here must not
+    // break authoring, so it's fetched separately and swallowed.
+    try {
+      const paper = await getContentPaper(paperId);
+      const qp = (paper.assets ?? [])
+        .filter((a) => a.role === 'QuestionPaper')
+        .map((a) => ({
+          id: a.id,
+          part: a.part,
+          title: a.title ?? 'Question paper',
+          downloadPath: `/v1/media/${a.mediaAssetId}/content`,
+        }));
+      setAssets(qp);
+    } catch {
+      setAssets([]);
+    }
   }, [paperId]);
 
   useEffect(() => {
@@ -187,24 +215,31 @@ export default function AdminListeningQuestionsPage() {
     void load();
   }, [isAuthenticated, role, load]);
 
-  const countsByCode = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const code of LISTENING_SUB_SECTION_CODES) counts[code] = 0;
-    for (const q of questions) {
-      const code = normalizeCode(q.partCode);
-      if (code in counts) counts[code] += 1;
+  // Keep the active section consistent with the active part.
+  useEffect(() => {
+    if (partOf(activeSection) !== activePart) {
+      setActiveSection(SECTIONS_BY_PART[activePart][0]);
+      setEditing(false);
+      setForm(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePart]);
+
+  const countsByPart = useMemo(() => {
+    const counts: Record<PartTab, number> = { A: 0, B: 0, C: 0 };
+    for (const q of questions) counts[partOf(q.partCode)] += 1;
     return counts;
   }, [questions]);
 
   const activeQuestions = useMemo(
     () => questions
-      .filter((q) => normalizeCode(q.partCode) === activeCode)
+      .filter((q) => normalizeCode(q.partCode) === activeSection)
       .sort((a, b) => a.number - b.number),
-    [questions, activeCode],
+    [questions, activeSection],
   );
 
   const totalAuthored = questions.length;
+  const pdfSlotKey = activePart === 'A' ? 'A' : activeSection;
 
   // ── Numbering ──────────────────────────────────────────────────────────
 
@@ -214,7 +249,6 @@ export default function AdminListeningQuestionsPage() {
     for (let n = lo; n <= hi; n++) {
       if (!used.has(n)) return n;
     }
-    // Range full — append after the global max so the number stays unique.
     const max = questions.reduce((m, q) => Math.max(m, q.number), 0);
     return max + 1;
   }
@@ -222,12 +256,13 @@ export default function AdminListeningQuestionsPage() {
   // ── Editor handlers ──────────────────────────────────────────────────────
 
   function startAdd() {
-    setForm(emptyForm(nextNumberFor(activeCode)));
+    setForm(emptyForm(nextNumberFor(activeSection)));
     setVariantDraft('');
     setEditing(true);
   }
 
   function startEdit(q: ListeningAuthoredQuestion) {
+    setActiveSection(normalizeCode(q.partCode) as ListeningSubSectionCode);
     setForm(questionToForm(q));
     setVariantDraft('');
     setEditing(true);
@@ -259,7 +294,6 @@ export default function AdminListeningQuestionsPage() {
     const options = [...form.options];
     const prevText = options[index];
     options[index] = value;
-    // Keep the correct-answer pointer aligned with the option text after rename.
     const correctAnswer = form.correctAnswer === prevText ? value : form.correctAnswer;
     setForm({ ...form, options, correctAnswer });
   }
@@ -324,7 +358,7 @@ export default function AdminListeningQuestionsPage() {
       return;
     }
     const previous = form.id ? questions.find((q) => q.id === form.id) ?? null : null;
-    const built = formToQuestion(form, activeCode, previous);
+    const built = formToQuestion(form, activeSection, previous);
     const next = form.id
       ? questions.map((q) => (q.id === form.id ? built : q))
       : [...questions, built];
@@ -332,7 +366,7 @@ export default function AdminListeningQuestionsPage() {
   }
 
   async function handleDelete(q: ListeningAuthoredQuestion) {
-    if (!window.confirm(`Delete question ${q.number} from ${activeCode}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete question ${q.number} from ${activeSection}? This cannot be undone.`)) return;
     const next = questions.filter((item) => item.id !== q.id);
     await persist(next, 'Question deleted.');
   }
@@ -361,7 +395,7 @@ export default function AdminListeningQuestionsPage() {
     <AdminTableLayout
       eyebrow="Listening authoring"
       title="Listening Questions"
-      description="Author questions per sub-section. Every sub-section (A1, A2, B1–B6, C1, C2) supports Multiple choice (3), Fill in the blank, and Short answer."
+      description="Author per part. Part A uses note-completion gaps; Part B and Part C are PDF-backed answer sheets — record only the correct option for each item."
       breadcrumbs={breadcrumbs}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -369,6 +403,12 @@ export default function AdminListeningQuestionsPage() {
             <Link href="/admin/content/listening">
               <ArrowLeft className="h-4 w-4 mr-1.5" />
               Back to papers
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/admin/content/listening/${paperId}/pdfs`}>
+              <FileText className="h-4 w-4 mr-1.5" />
+              Question papers
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
@@ -414,20 +454,17 @@ export default function AdminListeningQuestionsPage() {
 
         {state === 'ready' && (
           <div className="space-y-4">
-            {/* Sub-section selector */}
-            <div role="tablist" aria-label="Listening sub-sections" className="flex flex-wrap gap-1.5">
-              {LISTENING_SUB_SECTION_CODES.map((code) => {
-                const isActive = code === activeCode;
-                const count = countsByCode[code] ?? 0;
-                const target = LISTENING_SUB_SECTION_QUESTION_TARGETS[code];
-                const complete = count >= target;
+            {/* Part tabs A / B / C */}
+            <div role="tablist" aria-label="Listening parts" className="flex flex-wrap gap-1.5">
+              {(['A', 'B', 'C'] as PartTab[]).map((part) => {
+                const isActive = part === activePart;
                 return (
                   <button
-                    key={code}
+                    key={part}
                     type="button"
                     role="tab"
                     aria-selected={isActive}
-                    onClick={() => { setActiveCode(code); cancelEdit(); }}
+                    onClick={() => setActivePart(part)}
                     className={
                       'inline-flex items-center gap-1.5 rounded-admin border px-3 py-1.5 text-sm font-semibold transition-colors ' +
                       (isActive
@@ -435,38 +472,82 @@ export default function AdminListeningQuestionsPage() {
                         : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:text-admin-fg-strong')
                     }
                   >
-                    {code}
-                    <span
-                      className={
-                        'rounded-full px-1.5 text-xs tabular-nums ' +
-                        (isActive
-                          ? 'bg-[var(--admin-primary-fg)]/20'
-                          : complete
-                            ? 'text-[var(--admin-success)]'
-                            : 'opacity-70')
-                      }
-                    >
-                      {count}/{target}
-                    </span>
+                    Part {part}
+                    <span className="rounded-full px-1.5 text-xs tabular-nums opacity-70">{countsByPart[part]}</span>
                   </button>
                 );
               })}
             </div>
 
+            {/* Section sub-tabs */}
+            <div className="flex flex-wrap gap-1.5">
+              {SECTIONS_BY_PART[activePart].map((code) => {
+                const isActive = code === activeSection;
+                const count = questions.filter((q) => normalizeCode(q.partCode) === code).length;
+                const target = LISTENING_SUB_SECTION_QUESTION_TARGETS[code];
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => { setActiveSection(code); cancelEdit(); }}
+                    className={
+                      'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ' +
+                      (isActive
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:text-admin-fg-strong')
+                    }
+                  >
+                    {code}
+                    <span className="opacity-70">{count}/{target}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {activePart === 'A' ? (
+              <PartANotice paperId={paperId} />
+            ) : null}
+
+            {/* B/C: two-column PDF + answer sheet. A: single-column editor. */}
+            {activePart !== 'A' ? (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
+                <div className="xl:sticky xl:top-4 xl:self-start">
+                  <QuestionPaperPdfViewer
+                    paperId={paperId}
+                    partCode={pdfSlotKey}
+                    assets={assets}
+                    annotations={[]}
+                    readOnly
+                    documentNoun="Listening paper"
+                  />
+                </div>
+                <ListeningAnswerSheetBuilder
+                  paperId={paperId}
+                  partCode={activePart as ListeningBuilderPart}
+                  activeSection={activeSection}
+                  allQuestions={questions}
+                  onSaved={(next) => { setQuestions(next); }}
+                  onNotify={(variant, message) => setToast({ variant, message })}
+                  onEditDetails={startEdit}
+                />
+              </div>
+            ) : null}
+
+            {/* Question list for the active sub-section. */}
             <Card>
               <CardHeader>
                 <div className="min-w-0">
-                  <CardTitle className="text-sm">Sub-section {activeCode}</CardTitle>
+                  <CardTitle className="text-sm">Sub-section {activeSection}</CardTitle>
                   <CardDescription>
                     {activeQuestions.length} question{activeQuestions.length === 1 ? '' : 's'} authored
-                    {' · target '}{LISTENING_SUB_SECTION_QUESTION_TARGETS[activeCode]}
+                    {' · target '}{LISTENING_SUB_SECTION_QUESTION_TARGETS[activeSection]}
                   </CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {activeQuestions.length === 0 ? (
                   <div className="rounded-admin border border-dashed border-admin-border bg-admin-bg-subtle px-4 py-6 text-center">
-                    <p className="text-sm text-admin-fg-muted">No questions yet for {activeCode}.</p>
+                    <p className="text-sm text-admin-fg-muted">No questions yet for {activeSection}.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -504,9 +585,9 @@ export default function AdminListeningQuestionsPage() {
                   </div>
                 )}
 
-                {!editing && (
+                {!editing && activePart === 'A' && (
                   <Button variant="primary" size="sm" onClick={startAdd} startIcon={<Plus className="h-4 w-4" />}>
-                    Add question to {activeCode}
+                    Add question to {activeSection}
                   </Button>
                 )}
               </CardContent>
@@ -517,9 +598,9 @@ export default function AdminListeningQuestionsPage() {
                 <CardHeader>
                   <div className="min-w-0">
                     <CardTitle className="text-sm">
-                      {form.id ? `Edit question ${form.number}` : `New question ${form.number}`} · {activeCode}
+                      {form.id ? `Edit question ${form.number}` : `New question ${form.number}`} · {activeSection}
                     </CardTitle>
-                    <CardDescription>Choose a content type and fill in the answer details.</CardDescription>
+                    <CardDescription>Advanced editor — choose a content type and fill in the answer details.</CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -550,6 +631,19 @@ export default function AdminListeningQuestionsPage() {
         </div>
       )}
     </AdminTableLayout>
+  );
+}
+
+/** Part A is authored as note-completion gaps on a dedicated editor. */
+function PartANotice({ paperId }: { paperId: string }) {
+  return (
+    <InlineAlert variant="info">
+      Part A is note-completion. Author the notes layout and inline gap answers on the{' '}
+      <Link href={`/admin/content/listening/${paperId}/part-a`} className="font-semibold underline">
+        Part A notes editor
+      </Link>
+      . Per-gap answer keys below are kept in sync with the notes gaps.
+    </InlineAlert>
   );
 }
 
