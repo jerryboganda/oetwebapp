@@ -779,6 +779,110 @@ public partial class AdminService
         };
     }
 
+    // ── Selection-scoped audio generation / regeneration ─────────────────
+
+    /// <summary>
+    /// Enqueue ElevenLabs audio synthesis for a specific set of vocabulary items.
+    /// Backs both the admin "Auto-generate missing audios" bulk action
+    /// (<c>ForceRegenerate=false</c> → only absent/broken audio is generated;
+    /// terms with a Ready asset are skipped) and the per-row "Regenerate audio"
+    /// button (<c>ForceRegenerate=true</c> → every found term is re-synthesised,
+    /// overwriting existing audio). With <c>DryRun=true</c> nothing is enqueued —
+    /// the counts are returned so the operator can preview cost before committing.
+    /// </summary>
+    public async Task<AdminVocabularyAudioGenerateResponse> GenerateVocabularyAudioForItemsAsync(
+        string adminId, string adminName, AdminVocabularyAudioGenerateRequest request, CancellationToken ct)
+    {
+        var requestedIds = (request.ItemIds ?? [])
+            .Select(id => id?.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var totalRequested = requestedIds.Count;
+        var batchId = $"audio-gen-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+
+        if (totalRequested == 0)
+            throw ApiException.Validation("VOCABULARY_AUDIO_GENERATE_EMPTY", "Select at least one vocabulary item.");
+        if (totalRequested > 2000)
+            throw ApiException.Validation("VOCABULARY_AUDIO_GENERATE_LIMIT", "Audio generation is limited to 2000 items at a time.");
+
+        // Non-archived terms among the requested ids. Anything absent here (deleted
+        // or archived) is reported as "not found".
+        var terms = await db.VocabularyTerms.AsNoTracking()
+            .Where(t => requestedIds.Contains(t.Id) && t.Status != "archived")
+            .ToListAsync(ct);
+
+        // Ready = has an audio asset that can actually be served. Mirrors the worker's
+        // missing-audio detection and the progress endpoint above, so "skipped" lines
+        // up with the green speaker icon the operator sees in the list.
+        var readyAssetIds = terms
+            .Where(t => !string.IsNullOrWhiteSpace(t.AudioMediaAssetId))
+            .Select(t => t.AudioMediaAssetId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var readyAssets = readyAssetIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await db.MediaAssets.AsNoTracking()
+                .Where(m => readyAssetIds.Contains(m.Id) && m.Status == MediaAssetStatus.Ready)
+                .Select(m => m.Id)
+                .ToListAsync(ct))
+                .ToHashSet(StringComparer.Ordinal);
+
+        bool HasReadyAudio(VocabularyTerm t) =>
+            !string.IsNullOrWhiteSpace(t.AudioMediaAssetId) && readyAssets.Contains(t.AudioMediaAssetId!);
+
+        var notFound = totalRequested - terms.Count;
+        var toEnqueue = new List<VocabularyTerm>();
+        var skipped = 0;
+        foreach (var t in terms)
+        {
+            if (string.IsNullOrWhiteSpace(t.Term)) { skipped++; continue; }     // nothing to synthesise
+            if (!request.ForceRegenerate && HasReadyAudio(t)) { skipped++; continue; }
+            toEnqueue.Add(t);
+        }
+
+        if (request.DryRun)
+            return new AdminVocabularyAudioGenerateResponse(totalRequested, toEnqueue.Count, skipped, notFound, true, batchId);
+
+        if (vocabularyAudioQueue is null)
+            throw ApiException.Validation("audio_queue_not_configured", "Audio generation queue is not configured.");
+
+        // Recall terms must go through ElevenLabs and require an API key (mirrors backfill).
+        if (toEnqueue.Any(IsRecallVocabularyTerm))
+        {
+            var options = conversationOptionsProvider is null ? null : await conversationOptionsProvider.GetAsync(ct);
+            if (options is null || string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+                throw ApiException.Validation(
+                    "elevenlabs_api_key_required",
+                    "Save an ElevenLabs API key in Admin Settings before generating recall audio.");
+        }
+
+        foreach (var t in toEnqueue)
+        {
+            var isRecall = IsRecallVocabularyTerm(t);
+            await vocabularyAudioQueue.EnqueueAsync(
+                new OetLearner.Api.Services.Vocabulary.VocabularyAudioJob(
+                    TermId: t.Id,
+                    Text: t.Term,
+                    Voice: null,
+                    Locale: "en-GB",
+                    BatchId: batchId,
+                    ProviderName: isRecall ? "elevenlabs" : null,
+                    ForceRegenerate: request.ForceRegenerate),
+                ct);
+        }
+
+        if (toEnqueue.Count > 0)
+            await LogAuditAsync(adminId, adminName,
+                request.ForceRegenerate ? "Regenerate Audio" : "Generate Missing Audio",
+                "VocabularyTerm", "bulk",
+                $"Batch {batchId}: enqueued {toEnqueue.Count} audio job(s) (force={request.ForceRegenerate}, skipped={skipped}, notFound={notFound}).",
+                ct);
+
+        return new AdminVocabularyAudioGenerateResponse(totalRequested, toEnqueue.Count, skipped, notFound, false, batchId);
+    }
+
     /// <summary>
     /// Resume audio generation for ALL terms without audio — regardless of
     /// recall set membership. Use when the background worker stalled (e.g.

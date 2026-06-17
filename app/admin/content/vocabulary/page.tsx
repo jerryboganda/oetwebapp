@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, CheckCircle2, Archive, FileText, RefreshCw, Star, StarOff } from 'lucide-react';
+import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, AudioLines, CheckCircle2, Archive, FileText, RefreshCw, Star, StarOff } from 'lucide-react';
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
@@ -27,6 +27,7 @@ import {
   bulkDraftAdminVocabularyItems,
   fetchAdminVocabularyAudioProgress,
   resumeAdminVocabularyAudio,
+  generateAdminVocabularyAudio,
   fetchAdminVocabularyCategories,
   fetchAdminVocabularyRecallSets,
   setAdminVocabularyFreePreview,
@@ -80,6 +81,12 @@ export default function AdminVocabularyPage() {
   const [bulkArchiving, setBulkArchiving] = useState(false);
   const [bulkDrafting, setBulkDrafting] = useState(false);
   const [bulkPreviewing, setBulkPreviewing] = useState(false);
+  const [bulkGeneratingAudio, setBulkGeneratingAudio] = useState(false);
+  // Dry-run preview of the "Auto-generate missing audios" action — drives the
+  // confirm modal so the operator sees the cost (how many will generate / skip)
+  // before any ElevenLabs credits are spent.
+  const [audioPreview, setAudioPreview] = useState<{ ids: string[]; enqueued: number; skipped: number; notFound: number } | null>(null);
+  const [regeneratingAudioId, setRegeneratingAudioId] = useState<string | null>(null);
   const [freePreviewTotal, setFreePreviewTotal] = useState(0);
   const [audioProgress, setAudioProgress] = useState<AdminVocabularyAudioProgress | null>(null);
   const [audioStalled, setAudioStalled] = useState(false);
@@ -331,6 +338,79 @@ export default function AdminVocabularyPage() {
     }
   }
 
+  // Resume/restart the progress poll after enqueuing new jobs. The poll stops
+  // itself when pending hits 0, so newly-queued work needs an explicit kick.
+  const kickAudioPolling = useCallback(() => {
+    setAudioStalled(false);
+    setAudioError(false);
+    stalledCountRef.current = 0;
+    lastPendingRef.current = null;
+    void pollAudioProgress();
+    if (!audioPollingRef.current) {
+      audioPollingRef.current = setInterval(pollAudioProgress, 4000);
+    }
+  }, [pollAudioProgress]);
+
+  // Step 1 of the bulk action: dry-run to count what would generate vs. skip,
+  // then open the confirm modal. Nothing is enqueued here.
+  async function handleBulkGenerateMissingAudio() {
+    const ids = Array.from(selectedKeys);
+    if (ids.length === 0) return;
+    setBulkGeneratingAudio(true);
+    try {
+      const preview = await generateAdminVocabularyAudio(ids, { dryRun: true });
+      if (preview.enqueued === 0) {
+        setToast({
+          variant: 'success',
+          message: `All ${preview.skipped} selected ${preview.skipped === 1 ? 'term already has' : 'terms already have'} audio — nothing to generate.`,
+        });
+        return;
+      }
+      setAudioPreview({ ids, enqueued: preview.enqueued, skipped: preview.skipped, notFound: preview.notFound });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to check audio status for the selected terms.' });
+    } finally {
+      setBulkGeneratingAudio(false);
+    }
+  }
+
+  // Step 2: confirmed — enqueue audio for the missing/broken terms only.
+  async function confirmGenerateMissingAudio() {
+    if (!audioPreview) return;
+    setBulkGeneratingAudio(true);
+    try {
+      const result = await generateAdminVocabularyAudio(audioPreview.ids, { forceRegenerate: false });
+      const skipMsg = result.skipped > 0 ? ` ${result.skipped} already had audio (skipped).` : '';
+      const missMsg = result.notFound > 0 ? ` ${result.notFound} not eligible.` : '';
+      setToast({
+        variant: 'success',
+        message: `Queued ${result.enqueued} ${result.enqueued === 1 ? 'term' : 'terms'} for audio generation.${skipMsg}${missMsg}`,
+      });
+      setAudioPreview(null);
+      setSelectedKeys(new Set());
+      kickAudioPolling();
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to queue audio generation.' });
+    } finally {
+      setBulkGeneratingAudio(false);
+    }
+  }
+
+  // Per-row: force-regenerate a single term's audio, overwriting whatever exists.
+  async function handleRegenerateAudioSingle(id: string, term: string) {
+    if (!confirm(`Regenerate audio for "${term}"? This overwrites the existing audio.`)) return;
+    setRegeneratingAudioId(id);
+    try {
+      await generateAdminVocabularyAudio([id], { forceRegenerate: true });
+      setToast({ variant: 'success', message: `Queued audio regeneration for "${term}".` });
+      kickAudioPolling();
+    } catch {
+      setToast({ variant: 'error', message: `Failed to regenerate audio for "${term}".` });
+    } finally {
+      setRegeneratingAudioId(null);
+    }
+  }
+
   const columns = useMemo<Column<VocabRow>[]>(() => [
     {
       key: 'term',
@@ -394,6 +474,15 @@ export default function AdminVocabularyPage() {
       header: '',
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => void handleRegenerateAudioSingle(row.id, row.term)}
+            disabled={regeneratingAudioId === row.id}
+            aria-label={`Regenerate audio for ${row.term}`}
+            title="Regenerate audio (overwrites existing)"
+          >
+            <RefreshCw className={`h-4 w-4 text-admin-fg-muted hover:text-[var(--admin-primary)] ${regeneratingAudioId === row.id ? 'animate-spin opacity-60' : ''}`} />
+          </button>
           <Link href={`/admin/content/vocabulary/${row.id}`} aria-label={`Edit ${row.term}`}>
             <Edit3 className="h-4 w-4 text-admin-fg-muted hover:text-[var(--admin-primary)]" />
           </Link>
@@ -403,7 +492,7 @@ export default function AdminVocabularyPage() {
         </div>
       ),
     },
-  ], []);
+  ], [regeneratingAudioId]);
 
   const selectedRows = useMemo(
     () => rows.filter(row => selectedKeys.has(row.id)),
@@ -487,6 +576,19 @@ export default function AdminVocabularyPage() {
         loading={bulkArchiving}
         onConfirm={handleBulkArchive}
         onClose={() => setConfirmBulkArchive(false)}
+      />
+      <BulkActionConfirmModal
+        open={!!audioPreview}
+        title="Auto-generate missing audios"
+        description={audioPreview
+          ? `Generate audio for ${audioPreview.enqueued} ${audioPreview.enqueued === 1 ? 'term' : 'terms'} using ElevenLabs.`
+            + ` ${audioPreview.skipped} already ${audioPreview.skipped === 1 ? 'has' : 'have'} audio (skipped).`
+            + (audioPreview.notFound > 0 ? ` ${audioPreview.notFound} not eligible.` : '')
+          : ''}
+        confirmLabel="Generate audio"
+        loading={bulkGeneratingAudio}
+        onConfirm={confirmGenerateMissingAudio}
+        onClose={() => setAudioPreview(null)}
       />
       <AdminCatalogLayout
         eyebrow="CMS"
@@ -682,6 +784,15 @@ export default function AdminVocabularyPage() {
                     disabled: selectedRows.length === 0,
                     loading: bulkDrafting,
                     onClick: handleBulkDraft,
+                  },
+                  {
+                    key: 'generate-audio',
+                    label: 'Auto-generate missing audios',
+                    icon: <AudioLines className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'secondary',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkGeneratingAudio,
+                    onClick: () => void handleBulkGenerateMissingAudio(),
                   },
                   {
                     key: 'free-preview-on',

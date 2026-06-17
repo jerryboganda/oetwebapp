@@ -380,6 +380,28 @@ public sealed record AdminVocabularyBulkDeleteResponse(
     IReadOnlyList<string> Errors
 );
 
+/// <summary>
+/// Enqueue ElevenLabs audio synthesis for a set of vocabulary items.
+/// When <see cref="ForceRegenerate"/> is false, items that already have Ready audio are
+/// skipped (only absent/broken audio is generated). When true, every found item is
+/// re-synthesised, overwriting existing audio. Set <see cref="DryRun"/> to report the
+/// counts without enqueuing anything (cost preview).
+/// </summary>
+public sealed record AdminVocabularyAudioGenerateRequest(
+    IReadOnlyList<string> ItemIds,
+    bool ForceRegenerate = false,
+    bool DryRun = false
+);
+
+public sealed record AdminVocabularyAudioGenerateResponse(
+    int TotalRequested,
+    int Enqueued,
+    int Skipped,
+    int NotFound,
+    bool DryRun,
+    string BatchId
+);
+
 public sealed record AdminVocabularyImportReconciliationFieldMismatch(
     string Field,
     string? Expected,

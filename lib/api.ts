@@ -7755,6 +7755,52 @@ export async function fetchAdminVocabularyAudioProgress(): Promise<AdminVocabula
   return apiRequest('/v1/admin/vocabulary/audio/progress', { cache: 'no-store' }) as Promise<AdminVocabularyAudioProgress>;
 }
 
+export type AdminVocabularyAudioGenerateResponse = {
+  totalRequested: number;
+  enqueued: number;
+  skipped: number;
+  notFound: number;
+  dryRun: boolean;
+  batchId: string;
+};
+
+/**
+ * Enqueue ElevenLabs audio synthesis for a set of vocabulary terms.
+ * - `forceRegenerate=false` (default): only terms missing/broken audio are queued;
+ *   terms that already have working audio are skipped. Used by the bulk
+ *   "Auto-generate missing audios" action.
+ * - `forceRegenerate=true`: re-synthesise every term, overwriting existing audio.
+ *   Used by the per-row "Regenerate audio" button.
+ * - `dryRun=true`: return the counts without enqueuing anything (cost preview).
+ *
+ * The id list is chunked (≤1000) to stay under the server's per-call cap; the
+ * per-chunk counts are summed. `batchId` from the first chunk is returned.
+ */
+export async function generateAdminVocabularyAudio(
+  itemIds: string[],
+  opts?: { forceRegenerate?: boolean; dryRun?: boolean },
+): Promise<AdminVocabularyAudioGenerateResponse> {
+  const forceRegenerate = opts?.forceRegenerate ?? false;
+  const dryRun = opts?.dryRun ?? false;
+  const CHUNK = 1000;
+  const agg: AdminVocabularyAudioGenerateResponse = {
+    totalRequested: 0, enqueued: 0, skipped: 0, notFound: 0, dryRun, batchId: '',
+  };
+  for (let i = 0; i < itemIds.length; i += CHUNK) {
+    const chunk = itemIds.slice(i, i + CHUNK);
+    const res = (await apiRequest('/v1/admin/vocabulary/items/audio/generate', {
+      method: 'POST',
+      body: JSON.stringify({ itemIds: chunk, forceRegenerate, dryRun }),
+    })) as AdminVocabularyAudioGenerateResponse;
+    agg.totalRequested += res.totalRequested;
+    agg.enqueued += res.enqueued;
+    agg.skipped += res.skipped;
+    agg.notFound += res.notFound;
+    if (!agg.batchId) agg.batchId = res.batchId;
+  }
+  return agg;
+}
+
 export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: string; professionId?: string }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);

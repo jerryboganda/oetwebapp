@@ -1169,6 +1169,15 @@ public static class AdminEndpoints
             .RequireRateLimiting("PerUserWrite")
             .WithAdminWrite("AdminContentWrite");
 
+        // Selection-scoped audio generation. ForceRegenerate=false → only
+        // absent/broken audio is generated (terms with Ready audio are skipped);
+        // true → re-synthesise every found term (per-row "Regenerate audio").
+        // DryRun=true returns the counts without enqueuing (cost preview).
+        admin.MapPost("/vocabulary/items/audio/generate", async (HttpContext http, AdminVocabularyAudioGenerateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GenerateVocabularyAudioForItemsAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
+
         admin.MapGet("/vocabulary/audio/progress", async (HttpContext http, AdminService service, CancellationToken ct) =>
             {
                 // Never cache progress — a stale 304/cached body freezes the admin
