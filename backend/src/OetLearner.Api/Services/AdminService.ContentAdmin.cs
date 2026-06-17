@@ -933,7 +933,7 @@ public partial class AdminService
 
         if (valid == 0 && rows.Count > 0) warnings.Add("No rows passed validation.");
         if (dups > 0) warnings.Add($"{dups} duplicate or conflict row(s) detected.");
-        if (existingConflicts > 0) warnings.Add($"{existingConflicts} row(s) already exist in the database and require conflict review before update.");
+        if (existingConflicts > 0) warnings.Add($"{existingConflicts} row(s) already exist in the bank — their exam-frequency will be incremented on commit (no review needed).");
 
         return new AdminVocabularyImportPreviewResponse(
             ImportBatchId: batchId,
@@ -1019,10 +1019,15 @@ public partial class AdminService
         }
 
         skipped = duplicates + failed;
-        // Blocking skips exclude in-CSV duplicates — those are silently
-        // deduped per the relaxed import contract (Term-only / header-less
-        // CSVs may legitimately include the same recall term twice).
-        var blockingSkips = failed + (duplicates - inCsvDuplicates);
+        // Only genuinely invalid rows block the commit. BOTH duplicate classes
+        // are benign and auto-handled: in-CSV repeats are deduped (first
+        // occurrence owns the term) and pre-existing DB terms have their
+        // exam-frequency merged. A recalls CSV legitimately repeats words
+        // within the file AND re-imports words already in the bank — that is
+        // exactly how the "×N" frequency accumulates across imports — so
+        // neither duplicate class may block the dry-run/commit gate.
+        var dbDuplicates = duplicates - inCsvDuplicates;
+        var blockingSkips = failed;
         if (dryRun)
         {
             if (blockingSkips == 0)
@@ -1084,7 +1089,7 @@ public partial class AdminService
             await CreateVocabularyImportCommitLedgerAsync(batchId, fileSha256, importedTermIds, ct);
             await db.SaveChangesAsync(ct);
             await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
-                $"Batch {batchId}: imported {imported} vocabulary items, skipped {skipped} (dup={duplicates}, failed={failed}).", ct);
+                $"Batch {batchId}: imported {imported} vocabulary items, skipped {skipped} (dup={duplicates} [in-csv={inCsvDuplicates}, db-merged={dbDuplicates}], failed={failed}).", ct);
             await CommitIfOwnedAsync(tx, ct);
 
             // Phase 3 — kick off background TTS generation for the freshly

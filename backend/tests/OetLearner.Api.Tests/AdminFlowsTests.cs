@@ -1133,6 +1133,56 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminVocabularyImport_ExistingDbTerm_DoesNotBlockCommitAndMergesFrequency()
+    {
+        // A recalls CSV re-imports a word already in the bank. The DB duplicate
+        // must NOT block the commit (previously it failed with
+        // "clean dry run required"); instead the existing term's exam-frequency
+        // increments — this is how "×N" accumulates across separate imports.
+        var term = $"freq-db-{Guid.NewGuid():N}";
+        var row = $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
+        var csv = VocabularyImportCsvHeader + row;
+
+        async Task CommitBatchAsync(string batchId, int expectedImported, int expectedSkipped)
+        {
+            using (var dryRunContent = CsvContent(csv, "recalls-db.csv"))
+            {
+                var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+                dryRun.EnsureSuccessStatusCode();
+                using var dryRunJson = JsonDocument.Parse(await dryRun.Content.ReadAsStringAsync());
+                Assert.Equal(expectedImported, dryRunJson.RootElement.GetProperty("imported").GetInt32());
+                Assert.Equal(expectedSkipped, dryRunJson.RootElement.GetProperty("skipped").GetInt32());
+            }
+            using var importContent = CsvContent(csv, "recalls-db.csv");
+            // The key assertion: the commit succeeds even when every row is a
+            // pre-existing DB duplicate.
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+            using var importJson = JsonDocument.Parse(await import.Content.ReadAsStringAsync());
+            Assert.Equal(expectedImported, importJson.RootElement.GetProperty("imported").GetInt32());
+        }
+
+        async Task<int> ReadFrequencyAsync()
+        {
+            var list = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+            list.EnsureSuccessStatusCode();
+            using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+            var item = listJson.RootElement.GetProperty("items").EnumerateArray()
+                .Single(x => x.GetProperty("term").GetString() == term);
+            return item.GetProperty("examFrequencyCount").GetInt32();
+        }
+
+        // First import creates the term (frequency 1).
+        await CommitBatchAsync($"recalls-db1-{Guid.NewGuid():N}"[..32], expectedImported: 1, expectedSkipped: 0);
+        Assert.Equal(1, await ReadFrequencyAsync());
+
+        // Second import — same word, now a DB duplicate — commits cleanly and
+        // merges the frequency to 2 instead of being rejected.
+        await CommitBatchAsync($"recalls-db2-{Guid.NewGuid():N}"[..32], expectedImported: 0, expectedSkipped: 1);
+        Assert.Equal(2, await ReadFrequencyAsync());
+    }
+
+    [Fact]
     public async Task AdminVocabularyImport_PreviewAndDryRun_BlockSameFileDuplicatesAndOverLimitFields()
     {
         var duplicateTerm = $"duplicate-recall-{Guid.NewGuid():N}";
