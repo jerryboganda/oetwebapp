@@ -64,6 +64,14 @@ public record AdminAudioRegenerateBatchResult(
     string? VoiceId,
     string? ProviderName = null);
 
+/// <summary>Result of the orphaned-audio storage cleanup sweep.</summary>
+public record AdminAudioOrphanCleanupResult(
+    int OrphansFound,
+    int Deleted,
+    long BytesReclaimed,
+    bool DryRun,
+    IReadOnlyList<string> Sample);
+
 public record AdminAudioBatchDto(
     string BatchId,
     string AudioType,

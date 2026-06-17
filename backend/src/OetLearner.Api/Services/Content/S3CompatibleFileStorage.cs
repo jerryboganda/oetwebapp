@@ -136,6 +136,21 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
         }
     }
 
+    public IEnumerable<string> ListKeys(string prefix)
+    {
+        ValidateKey(prefix);
+        var req = new ListObjectsV2Request { BucketName = Bucket, Prefix = prefix };
+        do
+        {
+#pragma warning disable CA2012
+            var page = _client.ListObjectsV2Async(req).GetAwaiter().GetResult();
+#pragma warning restore CA2012
+            foreach (var obj in page.S3Objects)
+                yield return obj.Key;
+            req.ContinuationToken = page.NextContinuationToken;
+        } while (req.ContinuationToken != null);
+    }
+
     public long Length(string key)
     {
         ValidateKey(key);

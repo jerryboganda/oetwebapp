@@ -998,6 +998,20 @@ builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue,
     OetLearner.Api.Services.Vocabulary.VocabularyAudioQueue>();
+// Leader lock — only one replica runs the bulk audio operations (startup resume +
+// reconciliation sweep). Postgres advisory lock in prod; always-leader otherwise.
+builder.Services.AddSingleton<OetLearner.Api.Services.Vocabulary.IAudioWorkerLeaderLock>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    var cs = OetLearner.Api.Data.DatabaseConfiguration.ResolveConnectionString(cfg, env.IsDevelopment());
+    var isPostgres = !cs.StartsWith("InMemory:", StringComparison.OrdinalIgnoreCase)
+        && cs.Contains("Host=", StringComparison.OrdinalIgnoreCase);
+    return isPostgres
+        ? new OetLearner.Api.Services.Vocabulary.PostgresAudioWorkerLeaderLock(
+            cs, sp.GetRequiredService<ILogger<OetLearner.Api.Services.Vocabulary.PostgresAudioWorkerLeaderLock>>())
+        : new OetLearner.Api.Services.Vocabulary.AlwaysLeaderLock();
+});
 builder.Services.AddHostedService<OetLearner.Api.Services.Vocabulary.VocabularyAudioWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService,
     OetLearner.Api.Services.VoiceDesign.VoiceDesignRegenerationService>();

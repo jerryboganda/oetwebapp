@@ -329,6 +329,81 @@ public sealed class VocabularyAudioWorkerTests
         Assert.Single(files.Where(f => Path.GetFileName(f).Contains("voc-idemp", StringComparison.Ordinal)));
     }
 
+    [Fact]
+    public async Task ReconciliationSweep_EnqueuesOnlyTermsMissingReadyAudio()
+    {
+        // The self-healing sweep must enqueue terms with no audio (or a non-Ready
+        // asset) and skip terms that already have Ready audio and archived terms —
+        // so it converges instead of churning the whole corpus.
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs");
+        fixture.Db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "MA-ready", OriginalFilename = "r.mp3", MimeType = "audio/mpeg", Format = "mp3",
+            SizeBytes = 3, StoragePath = "recalls/audio/ready.mp3", Status = MediaAssetStatus.Ready,
+            Sha256 = "sha", MediaKind = "audio", UploadedBy = "test",
+            UploadedAt = DateTimeOffset.UtcNow, ProcessedAt = DateTimeOffset.UtcNow,
+        });
+        fixture.Db.VocabularyTerms.AddRange(
+            new VocabularyTerm // missing audio → should enqueue
+            {
+                Id = "VOC-MISS", Term = "pyrexia", ExamTypeCode = "oet",
+                Category = "recall", Status = "active", RecallSetCodesJson = "[\"2026\"]",
+            },
+            new VocabularyTerm // has Ready asset → should skip
+            {
+                Id = "VOC-DONE", Term = "oedema", ExamTypeCode = "oet",
+                Category = "recall", Status = "active", RecallSetCodesJson = "[\"2026\"]",
+                AudioMediaAssetId = "MA-ready", AudioUrl = "recalls/audio/ready.mp3",
+            },
+            new VocabularyTerm // archived → should skip even though no audio
+            {
+                Id = "VOC-ARCH", Term = "obsolete", ExamTypeCode = "oet",
+                Category = "recall", Status = "archived", RecallSetCodesJson = "[\"2026\"]",
+            });
+        await fixture.Db.SaveChangesAsync();
+
+        var enqueued = await fixture.Worker.EnqueueMissingAudioAsync(CancellationToken.None);
+
+        Assert.Equal(1, enqueued);
+        Assert.Equal(1, fixture.Queue.PendingCount);
+    }
+
+    [Fact]
+    public async Task CleanupOrphanedAudio_RemovesUnreferenced_KeepsReferenced()
+    {
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs");
+        var storage = fixture.Scope.ServiceProvider.GetRequiredService<IFileStorage>();
+
+        const string keptKey = "recalls/audio/kept.mp3";
+        const string orphanKey = "recalls/audio/orphan.mp3";
+        await using (var s1 = new MemoryStream(new byte[] { 1, 2, 3 }))
+            await storage.WriteAsync(keptKey, s1, CancellationToken.None);
+        await using (var s2 = new MemoryStream(new byte[] { 4, 5, 6, 7 }))
+            await storage.WriteAsync(orphanKey, s2, CancellationToken.None);
+
+        fixture.Db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "MA-kept", OriginalFilename = "k.mp3", MimeType = "audio/mpeg", Format = "mp3",
+            SizeBytes = 3, StoragePath = keptKey, Status = MediaAssetStatus.Ready, Sha256 = "s",
+            MediaKind = "audio", UploadedBy = "t",
+            UploadedAt = DateTimeOffset.UtcNow, ProcessedAt = DateTimeOffset.UtcNow,
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        // Dry run reports the orphan but deletes nothing.
+        var dry = await fixture.Regen.CleanupOrphanedAudioAsync(dryRun: true, CancellationToken.None);
+        Assert.Equal(1, dry.OrphansFound);
+        Assert.Equal(0, dry.Deleted);
+        Assert.True(storage.Exists(orphanKey));
+
+        // Real run deletes only the unreferenced file.
+        var real = await fixture.Regen.CleanupOrphanedAudioAsync(dryRun: false, CancellationToken.None);
+        Assert.Equal(1, real.OrphansFound);
+        Assert.Equal(1, real.Deleted);
+        Assert.False(storage.Exists(orphanKey));
+        Assert.True(storage.Exists(keptKey));
+    }
+
     // ─────────────────────────────────────────────────────────────────────
 
     private sealed class Fixture : IAsyncDisposable
@@ -382,6 +457,7 @@ public sealed class VocabularyAudioWorkerTests
             services.AddScoped<IConversationTtsProviderSelector, ConversationTtsProviderSelector>();
 
             services.AddSingleton<IVocabularyAudioQueue, VocabularyAudioQueue>();
+            services.AddSingleton<IAudioWorkerLeaderLock, AlwaysLeaderLock>();
             services.AddSingleton<VocabularyAudioWorker>();
             services.AddScoped<IVoiceDesignRegenerationService, VoiceDesignRegenerationService>();
 

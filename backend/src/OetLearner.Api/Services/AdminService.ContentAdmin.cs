@@ -815,7 +815,16 @@ public partial class AdminService
         const string requestedBy = "vocabulary-resume-button";
         var enqueued = 0;
 
-        if (hasRecallPending)
+        // Don't spawn a second running batch when one is already in flight —
+        // repeated clicks used to pile up "running" batches that each re-enqueued
+        // the whole corpus on restart. The existing batch + reconciliation sweep
+        // will finish the work.
+        var recallBatchRunning = await db.AudioRegenerationBatches
+            .AnyAsync(b => b.AudioType == "recalls" && b.Status == "running", ct);
+        var vocabBatchRunning = await db.AudioRegenerationBatches
+            .AnyAsync(b => b.AudioType == "vocabulary" && b.Status == "running", ct);
+
+        if (hasRecallPending && !recallBatchRunning)
         {
             var result = await voiceDesignRegeneration.EnqueueBulkRegenerationAsync(
                 new AdminAudioRegenerateRequest(
@@ -835,7 +844,7 @@ public partial class AdminService
             enqueued += result.TotalItems;
         }
 
-        if (hasVocabPending)
+        if (hasVocabPending && !vocabBatchRunning)
         {
             var result = await voiceDesignRegeneration.EnqueueBulkRegenerationAsync(
                 new AdminAudioRegenerateRequest(

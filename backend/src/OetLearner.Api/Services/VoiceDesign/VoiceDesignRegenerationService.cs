@@ -295,6 +295,62 @@ public sealed class VoiceDesignRegenerationService(
         return await GetBatchProgressAsync(batch.Id, ct);
     }
 
+    public async Task<AdminAudioOrphanCleanupResult> CleanupOrphanedAudioAsync(bool dryRun, CancellationToken ct)
+    {
+        // Audio prefixes written by the vocab/recall pipeline.
+        var prefixes = new[] { "recalls/audio", "vocabulary/audio" };
+
+        // Every storage path still referenced by a MediaAsset row — anything not
+        // in this set under the audio prefixes is an orphan safe to delete.
+        var referenced = new HashSet<string>(
+            await db.MediaAssets
+                .Select(m => m.StoragePath)
+                .Where(p => p != null)
+                .ToListAsync(ct)
+                .ConfigureAwait(false),
+            StringComparer.Ordinal);
+
+        var orphans = new List<string>();
+        foreach (var prefix in prefixes)
+        {
+            foreach (var key in storage.ListKeys(prefix))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!referenced.Contains(key))
+                    orphans.Add(key);
+            }
+        }
+
+        var deleted = 0;
+        long bytes = 0;
+        if (!dryRun)
+        {
+            foreach (var key in orphans)
+            {
+                try
+                {
+                    var size = storage.Length(key);
+                    if (storage.Delete(key)) { deleted++; bytes += Math.Max(0, size); }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Orphan-audio cleanup: failed to delete {Key}", key);
+                }
+            }
+        }
+
+        logger.LogInformation(
+            "Orphan-audio cleanup: {Found} orphan(s), {Deleted} deleted, {Bytes} bytes (dryRun={DryRun})",
+            orphans.Count, deleted, bytes, dryRun);
+
+        return new AdminAudioOrphanCleanupResult(
+            OrphansFound: orphans.Count,
+            Deleted: deleted,
+            BytesReclaimed: bytes,
+            DryRun: dryRun,
+            Sample: orphans.Take(50).ToList());
+    }
+
     private IQueryable<VocabularyTerm> RecallTermsForGeneration()
         => db.VocabularyTerms.Where(t =>
             t.Status != "archived"

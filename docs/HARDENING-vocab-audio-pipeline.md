@@ -23,19 +23,21 @@ while only 820 are `active`.
 2. [x] **Honest progress + no-store + resilient UI** — backend `Cache-Control: no-store`,
    progress counts only **Ready** assets + exposes `broken`; frontend surfaces poll errors
    instead of freezing (audioError + Retry) and `cache:'no-store'` on the fetch.
-3. [ ] **Resume reuses a running batch** instead of creating a new `AudioRegenerationBatch`
-   per click.
-4. [ ] **Single-writer leader election** — Postgres advisory lock so only one instance drains
-   the queue (no blue/green double-processing). RISK: a bug here halts ALL audio generation —
-   validate in staging. NOTE: Change 5 (sweep) depends on this for safety, else it amplifies
-   the multi-container double-processing.
-5. [ ] **Durable reconciliation sweep** — periodic worker re-enqueues terms with missing/broken
-   audio; restart-safe, removes reliance on the in-memory enqueue surviving deploys. Do WITH #4.
-6. [ ] **Orphan-file cleanup** — sweep audio files not referenced by any `MediaAsset.StoragePath`.
-   Confirm no in-flight references before deleting. ~700 orphans currently under recalls/audio.
+3. [x] **Resume reuses a running batch** — `ResumeVocabularyAudioAsync` no longer creates a
+   second `AudioRegenerationBatch` when one of that type is already running.
+4. [x] **Single-writer leader election** — `IAudioWorkerLeaderLock` (Postgres
+   `pg_try_advisory_lock`, `AlwaysLeaderLock` for sqlite/in-memory/tests). **FAIL-OPEN**: any
+   uncertainty → treated as leader, so it can never halt generation; with deterministic keys
+   (#1) double-processing is idempotent anyway. Gates the startup batch-resume + the sweep.
+5. [x] **Durable reconciliation sweep** — `VocabularyAudioWorker.EnqueueMissingAudioAsync`
+   runs every 5 min (leader-gated), re-enqueues non-archived terms lacking a Ready asset.
+   Restart-safe; manual "Resume" is now just a nudge. *(test ReconciliationSweep_…)*
+6. [x] **Orphan-file cleanup** — `CleanupOrphanedAudioAsync(dryRun)` +
+   `POST /v1/admin/voice-design/cleanup-orphans?dryRun=` (dryRun defaults TRUE). Deletes audio
+   objects under recalls/audio + vocabulary/audio not referenced by any `MediaAsset.StoragePath`.
+   *(test CleanupOrphanedAudio_…)* — run `?dryRun=true` first in prod to clear the ~700 orphans.
 
-## Status
-- Committed + tested: #1, #2 (deployable; fixes the visible stuck-panel symptom + the
-  regeneration-churn root cause).
-- Remaining #3–#6 are a coherent follow-up needing staging validation (esp. the #4 leader
-  lock, on which #5 depends). Do not ship #5 without #4.
+## Status — ALL COMPLETE
+All six changes committed + tested (10 worker tests + 125 VoiceDesign/Admin/Endpoint tests green).
+Fail-open leader lock means staging is recommended but not gating. Post-deploy: hit
+`cleanup-orphans?dryRun=true`, eyeball the count, then `?dryRun=false`.

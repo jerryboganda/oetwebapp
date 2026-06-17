@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Tts;
 
 namespace OetLearner.Api.Services.Vocabulary;
@@ -25,6 +26,7 @@ namespace OetLearner.Api.Services.Vocabulary;
 public sealed class VocabularyAudioWorker(
     IVocabularyAudioQueue queue,
     IServiceScopeFactory scopeFactory,
+    IAudioWorkerLeaderLock leaderLock,
     ILogger<VocabularyAudioWorker> logger) : BackgroundService
 {
     private const int MaxConcurrency = 1;
@@ -32,6 +34,12 @@ public sealed class VocabularyAudioWorker(
     private const int MaxTextBytes = 4 * 1024;
     private const int InterJobDelayMs = 1100;
     private const int MaxAudioUrlChars = 256;
+
+    // Reconciliation sweep — restart-safe self-healing. Runs ONLY on the leader
+    // so the full-corpus scan happens on one replica, not every blue/green one.
+    private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan InitialSweepDelay = TimeSpan.FromSeconds(30);
+    private const int SweepEnqueueCap = 500;
 
     private readonly SemaphoreSlim _slots = new(MaxConcurrency, MaxConcurrency);
     // Global cooldown — when the upstream provider returns HTTP 429 we delay
@@ -41,9 +49,15 @@ public sealed class VocabularyAudioWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Self-healing reconciliation sweep runs alongside the drain loop; it is
+        // leader-gated internally so only one replica scans the whole corpus.
+        var sweep = Task.Run(() => ReconciliationLoopAsync(stoppingToken), stoppingToken);
         try
         {
-            await ResumeRunningRecallBatchesAsync(stoppingToken).ConfigureAwait(false);
+            // Re-enqueuing running batches is a bulk operation — only the leader
+            // should do it, otherwise every replica re-enqueues the same terms.
+            if (await leaderLock.IsLeaderAsync(stoppingToken).ConfigureAwait(false))
+                await ResumeRunningRecallBatchesAsync(stoppingToken).ConfigureAwait(false);
 
             await foreach (var job in queue.ReadAllAsync(stoppingToken).ConfigureAwait(false))
             {
@@ -69,6 +83,92 @@ public sealed class VocabularyAudioWorker(
         {
             // graceful shutdown
         }
+        finally
+        {
+            try { await sweep.ConfigureAwait(false); } catch { /* sweep already cancelled */ }
+        }
+    }
+
+    /// <summary>
+    /// Periodically re-discovers terms that lack serveable (Ready) audio and
+    /// enqueues them — so audio self-heals after a deploy wiped the in-memory
+    /// queue, with no manual "Resume" click required. Leader-gated.
+    /// </summary>
+    private async Task ReconciliationLoopAsync(CancellationToken ct)
+    {
+        try { await Task.Delay(InitialSweepDelay, ct).ConfigureAwait(false); }
+        catch (OperationCanceledException) { return; }
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                if (await leaderLock.IsLeaderAsync(ct).ConfigureAwait(false))
+                    await EnqueueMissingAudioAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Vocab audio reconciliation sweep cycle failed");
+            }
+
+            try { await Task.Delay(SweepInterval, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { break; }
+        }
+    }
+
+    /// <summary>
+    /// Enqueue up to <see cref="SweepEnqueueCap"/> non-archived terms whose audio
+    /// asset is missing or not Ready. Public so tests can drive one sweep pass
+    /// without the timing loop. Returns the number of jobs enqueued.
+    /// </summary>
+    public async Task<int> EnqueueMissingAudioAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<LearnerDbContext>();
+        var optionsProvider = sp.GetRequiredService<IConversationOptionsProvider>();
+
+        var options = await optionsProvider.GetAsync(ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+        {
+            // No key configured — nothing the sweep can do; stay quiet.
+            return 0;
+        }
+        var voice = options.ElevenLabsDefaultVoiceId;
+        var model = options.ElevenLabsModel;
+
+        var candidates = await db.VocabularyTerms.AsNoTracking()
+            .Where(t => t.Status != "archived")
+            .Where(t => t.AudioMediaAssetId == null
+                || !db.MediaAssets.Any(m => m.Id == t.AudioMediaAssetId && m.Status == MediaAssetStatus.Ready))
+            .OrderBy(t => t.Id)
+            .Take(SweepEnqueueCap)
+            .Select(t => new { t.Id, t.Term })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var enqueued = 0;
+        foreach (var term in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(term.Term)) continue;
+            // BatchId empty: not tied to an AudioRegenerationBatch (no progress
+            // bookkeeping). ElevenLabs is the only provider; recall terms require
+            // it and non-recall terms accept it.
+            await queue.EnqueueAsync(new VocabularyAudioJob(
+                TermId: term.Id,
+                Text: term.Term,
+                Voice: voice,
+                Locale: "en-GB",
+                BatchId: string.Empty,
+                ModelVariant: model,
+                ProviderName: "elevenlabs"), ct).ConfigureAwait(false);
+            enqueued++;
+        }
+
+        if (enqueued > 0)
+            logger.LogInformation("Vocab audio reconciliation sweep enqueued {Count} terms missing audio", enqueued);
+        return enqueued;
     }
 
     /// <summary>

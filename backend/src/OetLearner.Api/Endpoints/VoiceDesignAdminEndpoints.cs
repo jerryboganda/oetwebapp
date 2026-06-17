@@ -287,6 +287,17 @@ public static class VoiceDesignAdminEndpoints
             return batch is null ? Results.NotFound() : Results.Ok(batch);
         }).WithAdminWrite("AdminAiConfig");
 
+        // Maintenance: delete audio storage objects no MediaAsset references.
+        // dryRun defaults to TRUE so a misfired call never deletes anything.
+        group.MapPost("/cleanup-orphans", async (
+            bool? dryRun,
+            IVoiceDesignRegenerationService regenService,
+            CancellationToken ct) =>
+        {
+            var result = await regenService.CleanupOrphanedAudioAsync(dryRun ?? true, ct);
+            return Results.Ok(result);
+        }).WithAdminWrite("AdminAiConfig");
+
         return app;
     }
 

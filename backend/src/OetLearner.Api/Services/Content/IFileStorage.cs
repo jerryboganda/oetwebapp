@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Linq;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 
@@ -25,6 +26,15 @@ public interface IFileStorage
     Task<Stream> OpenWriteAsync(string key, CancellationToken ct);
 
     bool Exists(string key);
+
+    /// <summary>
+    /// Enumerate storage keys under the given prefix (recursive), in POSIX-key
+    /// form. Used by maintenance sweeps (e.g. orphaned-audio cleanup). Default
+    /// is empty so the many test doubles need not implement it; the real
+    /// LocalFileStorage / S3 providers override.
+    /// </summary>
+    IEnumerable<string> ListKeys(string prefix) => Enumerable.Empty<string>();
+
     bool Delete(string key);
     long Length(string key);
     void Move(string sourceKey, string destKey, bool overwrite);
@@ -81,6 +91,18 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
     }
 
     public bool Exists(string key) => File.Exists(ResolvePath(key));
+
+    public IEnumerable<string> ListKeys(string prefix)
+    {
+        var dir = ResolvePath(prefix);
+        if (!Directory.Exists(dir)) return [];
+        var rootPath = Path.GetFullPath(
+            Path.IsPathRooted(_options.LocalRootPath)
+                ? _options.LocalRootPath
+                : Path.Combine(environment.ContentRootPath, _options.LocalRootPath));
+        return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(rootPath, f).Replace('\\', '/'));
+    }
 
     public bool Delete(string key)
     {
