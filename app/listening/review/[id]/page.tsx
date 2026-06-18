@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileLock2, GraduationCap, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -31,6 +31,25 @@ function formatMilliseconds(value: number | null | undefined) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${minutes}:${remainder.toString().padStart(2, '0')}`;
+}
+
+const LISTENING_REVIEW_AUDIO_SECTIONS = ['A1', 'A2', 'B', 'C1', 'C2'] as const;
+
+const LISTENING_REVIEW_SECTION_LABEL: Record<string, string> = {
+  A1: 'Part A · 1',
+  A2: 'Part A · 2',
+  B: 'Part B',
+  C1: 'Part C · 1',
+  C2: 'Part C · 2',
+};
+
+/**
+ * Collapse an extract/question part code (A1, A2, B1..B6, C1, C2) to the
+ * learner audio section. Part B's six sub-parts all share one "B" file.
+ */
+function reviewSectionForPartCode(partCode: string | null | undefined): string {
+  const code = (partCode ?? '').trim().toUpperCase();
+  return code.startsWith('B') ? 'B' : code;
 }
 
 /**
@@ -84,6 +103,12 @@ export default function ListeningReviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tutorFeedback, setTutorFeedback] = useState<ListeningExpertBundle['existingFeedback'] | null>(null);
+  // Per-section audio (A1, A2, one Part B, C1, C2). The evidence player loads the
+  // section's own file from `paper.audioUrlByPart`; legacy papers (empty map)
+  // keep the single combined `paper.audioUrl`.
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
+  const pendingSeekRef = useRef<{ startMs: number; endMs: number | null } | null>(null);
 
   useEffect(() => {
     if (!attemptId) return;
@@ -104,15 +129,88 @@ export default function ListeningReviewPage() {
     if (evidenceTimerRef.current) clearTimeout(evidenceTimerRef.current);
   }, []);
 
-  const playEvidence = (startMs: number | null | undefined, endMs: number | null | undefined) => {
-    const audio = audioRef.current;
-    if (!audio || startMs == null) return;
+  const audioByPart = review?.paper.audioUrlByPart ?? {};
+  const audioSections = LISTENING_REVIEW_AUDIO_SECTIONS.filter((section) => audioByPart[section]);
+  const usingPerSectionAudio = audioSections.length > 0;
+
+  // Per-section start offset (the min authored extract-window start) used to map
+  // the authored evidence/segment times — historically offsets into the combined
+  // paper audio — onto the section's own file. Missing windows → 0, which is also
+  // correct for freshly authored per-section papers whose times are already
+  // section-relative.
+  const sectionStartMs = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const extract of review?.paper.extracts ?? []) {
+      if (extract.audioStartMs == null) continue;
+      const section = reviewSectionForPartCode(extract.partCode);
+      map[section] = map[section] == null
+        ? extract.audioStartMs
+        : Math.min(map[section], extract.audioStartMs);
+    }
+    return map;
+  }, [review]);
+
+  // Seed the evidence player when the review loads: first section for per-section
+  // papers, else the legacy combined file.
+  useEffect(() => {
+    if (!review) return;
+    const byPart = review.paper.audioUrlByPart ?? {};
+    const sections = LISTENING_REVIEW_AUDIO_SECTIONS.filter((section) => byPart[section]);
+    if (sections.length > 0) {
+      setActiveSection(sections[0]);
+      setActiveAudioUrl(byPart[sections[0]] ?? null);
+    } else {
+      setActiveSection(null);
+      setActiveAudioUrl(review.paper.audioUrl ?? null);
+    }
+  }, [review]);
+
+  const seekAndPlay = (audio: HTMLAudioElement, startMs: number, endMs: number | null) => {
     if (evidenceTimerRef.current) clearTimeout(evidenceTimerRef.current);
     audio.currentTime = Math.max(0, startMs / 1000);
     void audio.play();
     if (endMs != null && endMs > startMs) {
       evidenceTimerRef.current = setTimeout(() => audio.pause(), endMs - startMs);
     }
+  };
+
+  // Switch the evidence player to a section's file (manual section tab).
+  const loadSection = (section: string) => {
+    pendingSeekRef.current = null;
+    setActiveSection(section);
+    setActiveAudioUrl(audioByPart[section] ?? null);
+  };
+
+  const playEvidence = (
+    startMs: number | null | undefined,
+    endMs: number | null | undefined,
+    partCode?: string | null,
+  ) => {
+    const audio = audioRef.current;
+    if (!audio || startMs == null) return;
+
+    if (!usingPerSectionAudio) {
+      // Legacy single combined-audio paper: seek the one file directly.
+      seekAndPlay(audio, startMs, endMs ?? null);
+      return;
+    }
+
+    const mapped = partCode ? reviewSectionForPartCode(partCode) : null;
+    const section = mapped && audioByPart[mapped]
+      ? mapped
+      : activeSection ?? audioSections[0];
+    const base = sectionStartMs[section] ?? 0;
+    const relStart = Math.max(0, startMs - base);
+    const relEnd = endMs != null ? Math.max(relStart, endMs - base) : null;
+
+    if (section !== activeSection) {
+      // Switch to the section's file first, then seek once it has loaded.
+      pendingSeekRef.current = { startMs: relStart, endMs: relEnd };
+      setActiveSection(section);
+      setActiveAudioUrl(audioByPart[section] ?? null);
+      return;
+    }
+    seekAndPlay(audio, relStart, relEnd);
   };
 
   return (
@@ -160,15 +258,51 @@ export default function ListeningReviewPage() {
               </div>
             </section>
 
-            {review.paper.audioUrl ? (
+            {usingPerSectionAudio || review.paper.audioUrl ? (
               <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Evidence Player"
                   title="Replay the proof window, not the whole paper"
-                  description="Use authored evidence times to jump directly to the audio span that supports each answer."
+                  description={usingPerSectionAudio
+                    ? 'Each section has its own audio (Part B is one shared clip). Pick a section, or use the evidence buttons below to jump straight to the supporting span.'
+                    : 'Use authored evidence times to jump directly to the audio span that supports each answer.'}
                   className="mb-4"
                 />
-                <audio ref={audioRef} src={review.paper.audioUrl} controls className="w-full" />
+                {usingPerSectionAudio ? (
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {audioSections.map((section) => (
+                      <button
+                        key={section}
+                        type="button"
+                        onClick={() => loadSection(section)}
+                        aria-pressed={section === activeSection}
+                        className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                          section === activeSection
+                            ? 'bg-primary text-white'
+                            : 'bg-background-light text-navy hover:bg-surface'
+                        }`}
+                      >
+                        {LISTENING_REVIEW_SECTION_LABEL[section] ?? section}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <audio
+                  ref={audioRef}
+                  key={activeAudioUrl ?? 'no-audio'}
+                  src={activeAudioUrl ?? undefined}
+                  controls
+                  className="w-full"
+                  onLoadedMetadata={() => {
+                    const audio = audioRef.current;
+                    if (!audio) return;
+                    const pending = pendingSeekRef.current;
+                    if (pending) {
+                      pendingSeekRef.current = null;
+                      seekAndPlay(audio, pending.startMs, pending.endMs);
+                    }
+                  }}
+                />
               </section>
             ) : null}
 
@@ -185,7 +319,18 @@ export default function ListeningReviewPage() {
                     <div key={`${extract.partCode}-${extract.displayOrder}`} className="rounded-2xl border border-border bg-background-light p-4 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-bold text-navy">{extract.partCode} · {extract.title}</p>
-                        <p className="text-xs font-black uppercase tracking-widest text-muted">{extract.kind}</p>
+                        <div className="flex items-center gap-2">
+                          {usingPerSectionAudio && audioByPart[reviewSectionForPartCode(extract.partCode)] ? (
+                            <button
+                              type="button"
+                              onClick={() => playEvidence(extract.audioStartMs ?? 0, extract.audioEndMs, extract.partCode)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-2 py-1 text-xs font-semibold text-info transition hover:bg-info/20"
+                            >
+                              <Volume2 className="h-3.5 w-3.5" /> Play
+                            </button>
+                          ) : null}
+                          <p className="text-xs font-black uppercase tracking-widest text-muted">{extract.kind}</p>
+                        </div>
                       </div>
                       <p className="mt-2 text-muted">{extract.accentCode ?? 'Accent not specified'}</p>
                       {extract.speakers.length > 0 ? (
@@ -215,7 +360,7 @@ export default function ListeningReviewPage() {
                     <button
                       key={`${segment.startMs}-${segment.endMs}-${index}`}
                       type="button"
-                      onClick={() => playEvidence(segment.startMs, segment.endMs)}
+                      onClick={() => playEvidence(segment.startMs, segment.endMs, segment.partCode)}
                       className="block w-full rounded-xl border border-border bg-background-light p-3 text-left text-sm transition hover:border-border-hover hover:bg-surface"
                     >
                       <span className="text-xs font-black uppercase tracking-widest text-muted">
@@ -277,7 +422,7 @@ export default function ListeningReviewPage() {
                     {question.transcriptEvidenceStartMs != null ? (
                       <button
                         type="button"
-                        onClick={() => playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs)}
+                        onClick={() => playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs, question.partCode)}
                         className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-3 py-2 font-semibold text-info transition hover:bg-info/20"
                       >
                         <Volume2 className="h-4 w-4" /> Evidence {formatMilliseconds(question.transcriptEvidenceStartMs)}
