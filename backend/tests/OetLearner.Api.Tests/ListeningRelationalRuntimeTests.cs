@@ -234,6 +234,121 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task GetSessionAsync_ExposesPerSectionAudioUrls_AndDropsPartAMode()
+    {
+        var (db, svc) = Build();
+        var now = DateTimeOffset.UtcNow;
+
+        var user = new LearnerUser
+        {
+            Id = "learner-audio",
+            AuthAccountId = "auth-audio",
+            DisplayName = "Audio Learner",
+            Email = "audio@example.test",
+            Role = ApplicationUserRoles.Learner,
+            CreatedAt = now,
+            LastActiveAt = now,
+            AccountStatus = "active",
+        };
+
+        MediaAsset Media(string id) => new()
+        {
+            Id = id,
+            OriginalFilename = $"{id}.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 2048,
+            StoragePath = $"content/{id}.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = now,
+        };
+        var mediaA1 = Media("media-a1");
+        var mediaA2 = Media("media-a2");
+        var mediaB = Media("media-b");
+
+        ContentPaperAsset Audio(string id, string part, MediaAsset media, int order) => new()
+        {
+            Id = id,
+            PaperId = "paper-audio",
+            Role = PaperAssetRole.Audio,
+            Part = part,
+            MediaAssetId = media.Id,
+            MediaAsset = media,
+            DisplayOrder = order,
+            IsPrimary = true,
+        };
+
+        var paper = new ContentPaper
+        {
+            Id = "paper-audio",
+            SubtestCode = "listening",
+            Title = "Per-section Audio Paper",
+            Slug = "per-section-audio-paper",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            AppliesToAllProfessions = true,
+            EstimatedDurationMinutes = 45,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+            // A leftover Part A "single audio" flag must be ignored and never surfaced.
+            ExtractedTextJson = "{\"partAAudioMode\":\"single\"}",
+            Assets =
+            [
+                Audio("asset-a1", "A1", mediaA1, 1),
+                Audio("asset-a2", "A2", mediaA2, 2),
+                Audio("asset-b", "B", mediaB, 3),
+            ],
+        };
+        var part = new ListeningPart
+        {
+            Id = "pa-a1",
+            PaperId = paper.Id,
+            PartCode = ListeningPartCode.A1,
+            MaxRawScore = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var question = new OetLearner.Api.Domain.ListeningQuestion
+        {
+            Id = "qa-1",
+            PaperId = paper.Id,
+            ListeningPartId = part.Id,
+            QuestionNumber = 1,
+            DisplayOrder = 1,
+            Points = 1,
+            QuestionType = ListeningQuestionType.ShortAnswer,
+            Stem = "Dose: ____",
+            CorrectAnswerJson = "\"five\"",
+            AcceptedSynonymsJson = "[]",
+            CaseSensitive = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        db.Users.Add(user);
+        db.MediaAssets.AddRange(mediaA1, mediaA2, mediaB);
+        db.ContentPapers.Add(paper);
+        db.ListeningParts.Add(part);
+        db.ListeningQuestions.Add(question);
+        db.ListeningPolicies.Add(new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 });
+        await db.SaveChangesAsync();
+
+        var session = await svc.GetSessionAsync(user.Id, paper.Id, "practice", attemptId: null, default);
+        var json = JsonSerializer.Serialize(session);
+
+        Assert.Contains("audioUrlByPart", json);
+        // Each section resolves to its own uploaded media URL; Part B has ONE shared
+        // file keyed under "B" (media-b only appears via audioUrlByPart["B"]).
+        Assert.Contains("/v1/media/media-a1/content", json);
+        Assert.Contains("/v1/media/media-a2/content", json);
+        Assert.Contains("/v1/media/media-b/content", json);
+        // The removed Part A "single audio" mode must not surface in the payload.
+        Assert.DoesNotContain("partAAudioMode", json);
+    }
+
+    [Fact]
     public async Task Review_HidesHumanOverrideAuditReasonFromLearnerPayload()
     {
         var (db, svc) = Build();

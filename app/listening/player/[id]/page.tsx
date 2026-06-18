@@ -294,6 +294,10 @@ function PlayerContent() {
   // C8c — tracks which extracts have been listened-to-completion so the
   // section panel can render a checkmark next to each.
   const [completedExtractIds, setCompletedExtractIds] = useState<Set<string>>(() => new Set());
+  // Per-section audio: sections whose own audio file has played to its natural
+  // end. Drives the exam-mode "finish before advancing" gate when each section
+  // plays its own file (cue windows don't apply — the whole file IS the section).
+  const [endedSections, setEndedSections] = useState<Set<string>>(() => new Set());
   // R08 — durable highlight + strikethrough (rule-out) annotations for Part B/C
   // questions. Debounced-autosaved to the attempt via useListeningAnnotations so
   // marks survive refresh, resume, and section navigation. The §17.11 attempt-
@@ -842,8 +846,21 @@ function PlayerContent() {
     const code = String(currentSection).toUpperCase();
     return map[code] ?? map[code.charAt(0)] ?? null;
   })();
+  // Per-section audio: each section plays its OWN uploaded file (Part B plays one
+  // shared file across B1..B6). Resolved by section code (A1, A2, B, C1, C2).
+  // Falls back to the legacy combined paper audio (+ cue windows) for papers that
+  // predate the per-section model and have no per-section uploads.
+  const perSectionAudioUrl = currentSection
+    ? session?.paper.audioUrlByPart?.[String(currentSection).toUpperCase()] ?? null
+    : null;
+  const usingPerSectionAudio = perSectionAudioUrl != null;
+  const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
+  const currentSectionAudioEnded = currentSection ? endedSections.has(currentSection) : false;
   const activeExtract = visibleExtracts[0] ?? null;
-  const currentExtractWindows = currentExtracts.filter((extract) => (
+  // Per-section files have their own timeline, so the authored cue windows
+  // (offsets into the old combined file) don't apply — the whole file is the
+  // section. Drop them so we never seek to a stale offset or force-pause mid-file.
+  const currentExtractWindows = usingPerSectionAudio ? [] : currentExtracts.filter((extract) => (
     extract.audioStartMs != null
     && extract.audioEndMs != null
     && extract.audioEndMs > extract.audioStartMs
@@ -865,8 +882,12 @@ function PlayerContent() {
   const paperAudioEndMs = allExtractWindows.length > 0
     ? Math.max(...allExtractWindows.map((extract) => extract.audioEndMs!))
     : null;
-  const activeAudioStartMs = allPartsReviewEnabled ? paperAudioStartMs : currentSectionAudioStartMs;
-  const activeAudioEndMs = allPartsReviewEnabled ? paperAudioEndMs : currentSectionAudioEndMs;
+  const activeAudioStartMs = usingPerSectionAudio
+    ? null
+    : (allPartsReviewEnabled ? paperAudioStartMs : currentSectionAudioStartMs);
+  const activeAudioEndMs = usingPerSectionAudio
+    ? null
+    : (allPartsReviewEnabled ? paperAudioEndMs : currentSectionAudioEndMs);
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
   const currentSectionPreviewSeconds = currentSection ? LISTENING_PREVIEW_SECONDS[currentSection] : 0;
@@ -875,9 +896,15 @@ function PlayerContent() {
     if (extract.audioEndMs == null) return true;
     return completedExtractIds.has(`${extract.partCode}-${extract.displayOrder}`);
   });
+  // Exam-mode gate on opening the review window: per-section audio waits for the
+  // section's own file to end; the legacy combined-file model waits for all cue
+  // windows to be crossed (or has no window to gate on).
+  const audioGateSatisfied = usingPerSectionAudio
+    ? currentSectionAudioEnded
+    : (allCurrentExtractsCompleted || currentSectionAudioEndMs == null);
   const canOpenReviewWindow = Boolean(
     currentSection
-    && (allPartsReviewEnabled || session?.modePolicy.canScrub !== false || allCurrentExtractsCompleted || currentSectionAudioEndMs == null),
+    && (allPartsReviewEnabled || session?.modePolicy.canScrub !== false || audioGateSatisfied),
   );
   const strictServerNavigationActive = strictReadinessRequired && Boolean(attempt?.attemptId ?? attemptIdFromRoute);
 
@@ -1245,9 +1272,9 @@ function PlayerContent() {
     <AppShell pageTitle={session.paper.title} distractionFree>
       {shouldMountAudio ? (
         <audio
-          key={audioRetryKey}
+          key={usingPerSectionAudio ? `${audioRetryKey}-${currentSection ?? ''}` : audioRetryKey}
           ref={audioRef}
-          src={session.paper.audioUrl ?? undefined}
+          src={currentSectionAudioUrl ?? undefined}
           controlsList="nodownload nofullscreen noremoteplayback"
           onTimeUpdate={() => {
             const audio = audioRef.current;
@@ -1387,6 +1414,16 @@ function PlayerContent() {
           onEnded={() => {
             if (session?.modePolicy.onePlayOnly) hasReachedEndRef.current = true;
             setIsPlaying(false);
+            // Per-section audio: the section's own file finishing IS the
+            // listen-complete signal that opens the review window in exam mode.
+            if (usingPerSectionAudio && currentSection) {
+              setEndedSections((prev) => {
+                if (prev.has(currentSection)) return prev;
+                const next = new Set(prev);
+                next.add(currentSection);
+                return next;
+              });
+            }
             // §17.11 — close the audio run and arm the next section's start.
             logAttemptEvent('audio_ended', currentSection ? { section: currentSection } : undefined);
             audioStartedLoggedRef.current = false;

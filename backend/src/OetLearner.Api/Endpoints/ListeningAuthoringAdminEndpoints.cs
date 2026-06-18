@@ -30,9 +30,6 @@ public static class ListeningAuthoringAdminEndpoints
     /// <summary>WS5: import body — a spec §19 manifest plus the replace toggle.</summary>
     public sealed record ImportManifestBody(bool ReplaceExisting, ListeningStructureManifest Manifest);
 
-    /// <summary>Part A audio mode toggle body: "single" | "per_subsection".</summary>
-    public sealed record SetPartAAudioModeBody(string? Mode);
-
     /// <summary>Optional reason when rejecting an AI extraction draft.</summary>
     public sealed record RejectExtractionBody(string? Reason);
 
@@ -214,58 +211,6 @@ public static class ListeningAuthoringAdminEndpoints
             await db.Entry(paper).ReloadAsync(ct);
             SetETag(http, paper);
             return Results.Ok(new { extracts = doc });
-        });
-
-        // ─── Part A audio mode (single | per_subsection) ───────────────────
-        //
-        // GET   /v1/admin/papers/{id}/listening/part-a-audio-mode — read mode.
-        // PATCH /v1/admin/papers/{id}/listening/part-a-audio-mode — set mode.
-        // Stored on ContentPaper.ExtractedTextJson; same AdminContentWrite auth +
-        // publish-gate + If-Match as the extract routes. "single" makes one
-        // Part-"A" audio play across both consultations; "per_subsection" keeps
-        // independent A1/A2 audio.
-        group.MapGet("/part-a-audio-mode", async (
-            string paperId,
-            IListeningAuthoringService svc,
-            CancellationToken ct) =>
-        {
-            try
-            {
-                var mode = await svc.GetPartAAudioModeAsync(paperId, ct);
-                return Results.Ok(new { mode });
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
-        });
-
-        group.MapPatch("/part-a-audio-mode", async (
-            string paperId,
-            SetPartAAudioModeBody body,
-            IListeningAuthoringService svc,
-            LearnerDbContext db,
-            HttpContext http,
-            CancellationToken ct) =>
-        {
-            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
-            if (paper is null) return Results.NotFound();
-            var forbidden = EnforcePublishGate(paper, http);
-            if (forbidden is not null) return forbidden;
-            var conflict = CheckIfMatch(http, paper);
-            if (conflict is not null) return conflict;
-            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            try
-            {
-                var mode = await svc.SetPartAAudioModeAsync(paperId, body?.Mode ?? string.Empty, adminId, ct);
-                await db.Entry(paper).ReloadAsync(ct);
-                SetETag(http, paper);
-                return Results.Ok(new { mode });
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
         });
 
         // ─── Part A AI-assisted data entry (Mistral OCR + Claude) ──────────

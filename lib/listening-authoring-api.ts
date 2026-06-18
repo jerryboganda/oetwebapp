@@ -339,28 +339,9 @@ export async function setListeningSubSectionTimer(
   return replaceListeningExtracts(paperId, next);
 }
 
-// ── Part A audio mode (single | per_subsection) ────────────────────────
-//
-// Mirrors GET/PATCH /v1/admin/papers/{paperId}/listening/part-a-audio-mode.
-// "single" makes one uploaded Part-"A" (or A1) audio play across both
-// consultations; "per_subsection" keeps independent A1/A2 audio. Stored on
-// ContentPaper.ExtractedTextJson; resolved by ListeningLearnerService and
-// surfaced to the learner session as `partAAudioMode`.
-
-export type ListeningPartAAudioMode = 'single' | 'per_subsection';
-
-export interface ListeningPartAAudioModeResult {
-  mode: ListeningPartAAudioMode;
-}
-
-export const getPartAAudioMode = (paperId: string) =>
-  api<ListeningPartAAudioModeResult>(`/v1/admin/papers/${paperId}/listening/part-a-audio-mode`);
-
-export const setPartAAudioMode = (paperId: string, mode: ListeningPartAAudioMode) =>
-  api<ListeningPartAAudioModeResult>(`/v1/admin/papers/${paperId}/listening/part-a-audio-mode`, {
-    method: 'PATCH',
-    body: JSON.stringify({ mode }),
-  });
+// Part A is always per-subsection (A1 and A2 each have their own audio). The
+// former "single audio" Part A mode and its GET/PATCH part-a-audio-mode
+// endpoint were removed in favour of the per-section audio model.
 
 // ── Part A AI-assisted data entry (Mistral OCR + Claude) ────────────────
 //

@@ -1612,22 +1612,6 @@ public sealed class ListeningLearnerService(
                 g => $"/v1/media/{g.OrderBy(a => a.DisplayOrder).First().MediaAsset!.Id}/content",
                 StringComparer.Ordinal);
 
-        // Single Part A audio mode: when the paper is configured for one audio
-        // across both consultations, point A1 and A2 at the single file so the
-        // existing per-section resolver returns it for both. Prefer an explicit
-        // Part-"A" upload, else fall back to the A1 file (admins can just upload
-        // to the A1 slot without needing a separate "A" asset).
-        var partAAudioMode = ReadPartAAudioMode(paper.ExtractedTextJson);
-        if (partAAudioMode == PartAAudioModeSingle)
-        {
-            var partAAudio = audioByPart.GetValueOrDefault("A") ?? audioByPart.GetValueOrDefault("A1");
-            if (partAAudio is not null)
-            {
-                audioByPart["A1"] = partAAudio;
-                audioByPart["A2"] = partAAudio;
-            }
-        }
-
         var relationalQuestions = await db.ListeningQuestions.AsNoTracking()
             .Include(q => q.Part)
             .Include(q => q.Options)
@@ -1693,6 +1677,23 @@ public sealed class ListeningLearnerService(
             extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"), audioByPart);
         }
 
+        // Per-section audio URLs keyed by the five learner-facing sections the
+        // exam player navigates (A1, A2, B, C1, C2 — see LISTENING_SECTION_SEQUENCE).
+        // Part B collapses its six question sub-parts to a single section, so it
+        // plays one uploaded "B" file (a legacy "B1" upload is accepted as a
+        // fallback); every other section plays its own file. Uploaded asset wins,
+        // else the representative extract's resolved URL (TTS fallback), else absent.
+        var audioUrlBySection = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var section in LearnerAudioSections)
+        {
+            var uploaded = section == "B"
+                ? audioByPart.GetValueOrDefault("B") ?? audioByPart.GetValueOrDefault("B1")
+                : audioByPart.GetValueOrDefault(section);
+            var url = uploaded
+                ?? extracts.FirstOrDefault(e => SectionForPartCode(e.PartCode) == section)?.AudioUrl;
+            if (!string.IsNullOrWhiteSpace(url)) audioUrlBySection[section] = url;
+        }
+
         return new ListeningSource(
             Id: paper.Id,
             SourceKind: "content_paper",
@@ -1715,7 +1716,7 @@ public sealed class ListeningLearnerService(
             Extracts: extracts,
             UsesRelationalStructure: usesRelationalStructure,
             QuestionPaperUrlByPart: questionPaperByPart,
-            PartAAudioMode: partAAudioMode);
+            AudioUrlByPart: audioUrlBySection);
     }
 
     private static ListeningSource BuildLegacySource(ContentItem item)
@@ -2013,32 +2014,6 @@ public sealed class ListeningLearnerService(
     /// (served at <c>/v1/media/{id}/content</c>) → the extract's TTS WAV
     /// (<c>/v1/listening/audio/{sha}.wav</c>, served by
     /// <c>ListeningAudioEndpoints</c>) → null (frontend shows "no audio").</summary>
-    // Part A audio model values stored under ContentPaper.ExtractedTextJson["partAAudioMode"].
-    internal const string PartAAudioModeSingle = "single";
-    internal const string PartAAudioModePerSubsection = "per_subsection";
-
-    /// <summary>
-    /// Read the Part A audio mode from a paper's free-form ExtractedTextJson.
-    /// Returns "single" only when explicitly configured; defaults to
-    /// "per_subsection" (legacy behaviour) for absent / malformed / unknown
-    /// values so existing papers are unaffected.
-    /// </summary>
-    internal static string ReadPartAAudioMode(string? extractedTextJson)
-    {
-        if (string.IsNullOrWhiteSpace(extractedTextJson)) return PartAAudioModePerSubsection;
-        try
-        {
-            var root = JsonSupport.Deserialize<Dictionary<string, object?>>(
-                extractedTextJson, new Dictionary<string, object?>());
-            var raw = root.GetValueOrDefault("partAAudioMode")?.ToString()?.Trim().ToLowerInvariant();
-            return raw == PartAAudioModeSingle ? PartAAudioModeSingle : PartAAudioModePerSubsection;
-        }
-        catch (JsonException)
-        {
-            return PartAAudioModePerSubsection;
-        }
-    }
-
     private static string? ResolveSubSectionAudioUrl(
         IReadOnlyDictionary<string, string> audioByPart,
         string? partCodeString,
@@ -2053,6 +2028,20 @@ public sealed class ListeningLearnerService(
         return string.IsNullOrWhiteSpace(audioContentSha)
             ? null
             : $"/v1/listening/audio/{audioContentSha}.wav";
+    }
+
+    // Learner-facing Listening sections the exam player navigates, in order.
+    // Mirrors the frontend LISTENING_SECTION_SEQUENCE — Part B's six question
+    // sub-parts collapse to a single "B" section that plays one shared audio.
+    private static readonly string[] LearnerAudioSections = ["A1", "A2", "B", "C1", "C2"];
+
+    // Map an extract part code (A1, A2, B1..B6, legacy "B", C1, C2) to the
+    // learner-facing section the exam player navigates. Every Part B sub-part
+    // collapses to one "B" section.
+    private static string SectionForPartCode(string? partCode)
+    {
+        var code = (partCode ?? string.Empty).Trim().ToUpperInvariant();
+        return code.StartsWith('B') ? "B" : code;
     }
 
     private static IReadOnlyList<ListeningSpeakerDto> ReadSpeakersJson(string? json)
@@ -2528,11 +2517,13 @@ public sealed class ListeningLearnerService(
         audioUrl = source.AudioUrl,
         questionPaperUrl = source.QuestionPaperUrl,
         questionPaperUrlByPart = source.QuestionPaperUrlByPart ?? new Dictionary<string, string>(),
-        partAAudioMode = source.PartAAudioMode,
-        audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl),
-        audioUnavailableReason = string.IsNullOrWhiteSpace(source.AudioUrl)
-            ? "Audio is not available for this Listening paper yet."
-            : null,
+        audioUrlByPart = source.AudioUrlByPart ?? new Dictionary<string, string>(),
+        audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl)
+            || (source.AudioUrlByPart?.Count ?? 0) > 0,
+        audioUnavailableReason = !string.IsNullOrWhiteSpace(source.AudioUrl)
+            || (source.AudioUrlByPart?.Count ?? 0) > 0
+            ? null
+            : "Audio is not available for this Listening paper yet.",
         source.AssetReadiness,
         transcriptPolicy = "per_item_post_attempt",
         // Phase 5 tail: paper-level extract metadata (accent + speakers +
@@ -3335,11 +3326,12 @@ public sealed class ListeningLearnerService(
         // per-part QuestionPaper assets are attached. The player resolves the
         // current section to a URL (exact section code → parent part fallback).
         IReadOnlyDictionary<string, string>? QuestionPaperUrlByPart = null,
-        // Part A audio model: "per_subsection" (default — A1 and A2 each have
-        // their own uploaded audio) or "single" (one Part-"A" file plays across
-        // both consultations). Surfaced so the player can render one shared
-        // play/pause transport in single mode. See ReadPartAAudioMode.
-        string PartAAudioMode = "per_subsection");
+        // Per-section audio URLs keyed by the five learner sections (A1, A2, B,
+        // C1, C2). Part B plays one shared file across its sub-parts; every other
+        // section plays its own. The exam player loads audioUrlByPart[section]
+        // (falling back to the legacy combined AudioUrl). Empty when no per-section
+        // audio is attached and the paper relies on the combined AudioUrl.
+        IReadOnlyDictionary<string, string>? AudioUrlByPart = null);
 
     private sealed record ListeningExtractMetaDto(
         string PartCode,                     // A1 | A2 | B1..B6 | C1 | C2

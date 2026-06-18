@@ -164,11 +164,11 @@ export interface ListeningExtractMetadataDto {
   audioStartMs: number | null;
   audioEndMs: number | null;
   /**
-   * Per-sub-section audio URL the player loads for this section. The backend
-   * resolves it uploaded-asset-first (an authenticated `/v1/media/{id}/content`
-   * URL) with a TTS fallback (an anonymous `/v1/listening/audio/{sha}.wav`
-   * URL); null when neither exists. The exam player blob-fetches `/v1/media`
-   * URLs (Bearer auth) and uses a plain `<audio src>` for the TTS WAV.
+   * Per-sub-section audio URL resolved by the backend (uploaded-asset-first via
+   * `/v1/media/{id}/content`, then a TTS `/v1/listening/audio/{sha}.wav`
+   * fallback; null when neither exists). NOTE: the exam player now loads its
+   * playback source from `paper.audioUrlByPart[section]`; this per-extract field
+   * is retained for tooling/diagnostics and is not the player's audio source.
    */
   audioUrl?: string | null;
   /** Per-sub-section countdown (seconds). Null → the player applies a default. */
@@ -198,10 +198,12 @@ export interface ListeningSessionDto {
      * player resolves the current section to a URL (exact code → parent part
      * fallback). Empty object when no per-part QuestionPaper assets exist. */
     questionPaperUrlByPart?: Record<string, string>;
-    /** Part A audio model: "single" (one audio plays across both consultations
-     * — A1 and A2 resolve to the same file) or "per_subsection" (independent
-     * A1/A2 audio). Defaults to "per_subsection" when absent. */
-    partAAudioMode?: 'single' | 'per_subsection';
+    /** Per-section audio URLs keyed by the five learner sections (A1 | A2 | B |
+     * C1 | C2). Part B plays one shared file across its sub-parts; every other
+     * section plays its own. The player loads `audioUrlByPart[currentSection]`,
+     * falling back to the combined `audioUrl`. Empty when a paper relies on the
+     * legacy combined audio. */
+    audioUrlByPart?: Record<string, string>;
     audioAvailable: boolean;
     audioUnavailableReason: string | null;
     assetReadiness: {

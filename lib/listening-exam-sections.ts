@@ -1,36 +1,37 @@
 /**
  * Listening EXAM player section model.
  *
- * Distinct from `lib/listening-sections.ts` (owned by the legacy
- * `app/listening/player/[id]` diagnostic/mock player, which rolls Part B up
- * into a single "B" section). The restructured exam player at
- * `app/listening/paper/[paperId]` treats every Part B extract as its own
- * navigable sub-section, giving ten forward-only sub-sections in order:
+ * Used by the restructured one-way exam player at
+ * `app/listening/paper/[paperId]` (mocks + paper-mode attempts). Like the
+ * legacy diagnostic player (`lib/listening-sections.ts`), it rolls Part B's six
+ * questions into a SINGLE "B" section that plays one shared audio straight
+ * through, giving five forward-only sub-sections in order:
  *
- *   A1 → A2 → B1 → B2 → B3 → B4 → B5 → B6 → C1 → C2
+ *   A1 → A2 → B → C1 → C2
  *
- * Each sub-section carries its own audio file, its own countdown timer, and
- * its own questions. The ordered sequence is DERIVED from the session DTO
- * (`paper.extracts` + `questions`, both keyed by `partCode`) rather than being
- * hard-coded, so a paper that only authors a subset of sub-sections still
- * plays the ones it has, in canonical order.
+ * Each sub-section carries its own audio file, its own countdown timer, and its
+ * own questions. The ordered sequence is DERIVED from the session DTO
+ * (`paper.extracts` + `questions`, both keyed by `partCode`, plus the
+ * per-section `paper.audioUrlByPart` map) rather than being hard-coded, so a
+ * paper that only authors a subset of sub-sections still plays the ones it has,
+ * in canonical order. This matches the server-side strict FSM, which already
+ * models Part B as one state (b_intro → b_audio, no B1..B6).
  */
 
 import type {
   ListeningExtractMetadataDto,
-  ListeningExtractPartCode,
   ListeningSessionDto,
   ListeningSessionQuestionDto,
 } from '@/lib/listening-api';
 
-/** The ten exam sub-section part codes, in forward-only play order. */
+/** The five exam sub-section part codes, in forward-only play order. */
 export type ListeningExamPartCode =
   | 'A1' | 'A2'
-  | 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6'
+  | 'B'
   | 'C1' | 'C2';
 
 export const LISTENING_EXAM_PART_SEQUENCE: readonly ListeningExamPartCode[] = [
-  'A1', 'A2', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'C1', 'C2',
+  'A1', 'A2', 'B', 'C1', 'C2',
 ] as const;
 
 /** Default per-sub-section countdown (seconds) when the paper authors none. */
@@ -45,12 +46,7 @@ export function listeningExamPartOrder(partCode: string): number {
 const PART_LABEL: Record<ListeningExamPartCode, string> = {
   A1: 'Part A — Extract 1',
   A2: 'Part A — Extract 2',
-  B1: 'Part B — Extract 1',
-  B2: 'Part B — Extract 2',
-  B3: 'Part B — Extract 3',
-  B4: 'Part B — Extract 4',
-  B5: 'Part B — Extract 5',
-  B6: 'Part B — Extract 6',
+  B: 'Part B',
   C1: 'Part C — Extract 1',
   C2: 'Part C — Extract 2',
 };
@@ -76,21 +72,21 @@ export interface ListeningExamSubSection {
 }
 
 /**
- * Normalise a raw extract/question part code onto one of the ten exam sub-section
- * codes. The backend already emits A1/A2/B1..B6/C1/C2, but legacy/JSON papers
- * may still surface a bare "A", "B", or "C" — floor those to the first
- * sub-section of their part so a not-yet-split paper still appears.
+ * Normalise a raw extract/question part code onto one of the five exam
+ * sub-section codes. The backend emits A1/A2/B1..B6/C1/C2 (plus legacy bare
+ * "A"/"B"/"C"); every Part B code (B, B1..B6) collapses to the single "B"
+ * section, and bare "A"/"C" floor to the first sub-section of their part.
  */
 export function normalizeExamPartCode(
   raw: string | null | undefined,
 ): ListeningExamPartCode | null {
   if (!raw) return null;
   const code = raw.trim().toUpperCase();
+  if (code.startsWith('B')) return 'B';
   if ((LISTENING_EXAM_PART_SEQUENCE as readonly string[]).includes(code)) {
     return code as ListeningExamPartCode;
   }
   if (code === 'A') return 'A1';
-  if (code === 'B') return 'B1';
   if (code === 'C') return 'C1';
   return null;
 }
@@ -107,8 +103,11 @@ export function listeningAudioRequiresAuth(audioUrl: string | null | undefined):
  * A sub-section is INCLUDED when it has at least one question OR an authored
  * extract (so an audio-only intro extract still shows, and a question group
  * with no extract metadata still plays). Sub-sections are returned in the
- * canonical A1→…→C2 order regardless of the DTO's array order, and their
+ * canonical A1→A2→B→C1→C2 order regardless of the DTO's array order, and their
  * `index` is the contiguous one-way cursor the advance-section endpoint expects.
+ *
+ * Audio is resolved per section from `paper.audioUrlByPart` (Part B → the one
+ * shared "B" file), falling back to the representative extract's `audioUrl`.
  */
 export function buildListeningExamSubSections(
   session: Pick<ListeningSessionDto, 'paper' | 'questions'>,
@@ -117,7 +116,9 @@ export function buildListeningExamSubSections(
   for (const extract of session.paper.extracts ?? []) {
     const code = normalizeExamPartCode(extract.partCode);
     if (!code) continue;
-    // First-wins within a part code (extracts are pre-ordered by displayOrder).
+    // First-wins within a part code (extracts are pre-ordered by displayOrder),
+    // so Part B's representative extract is B1 — its authored timer drives the
+    // single "B" section's countdown.
     if (!extractByPart.has(code)) extractByPart.set(code, extract);
   }
 
@@ -133,13 +134,17 @@ export function buildListeningExamSubSections(
     bucket.sort((a, b) => a.number - b.number);
   }
 
+  const audioByPart = session.paper.audioUrlByPart ?? {};
+
   const sections: ListeningExamSubSection[] = [];
   for (const partCode of LISTENING_EXAM_PART_SEQUENCE) {
     const extract = extractByPart.get(partCode) ?? null;
     const questions = questionsByPart.get(partCode) ?? [];
     if (!extract && questions.length === 0) continue;
 
-    const audioUrl = extract?.audioUrl ?? null;
+    // Per-section audio map wins (Part B → the single shared "B" file); fall
+    // back to the representative extract's resolved URL for older sessions.
+    const audioUrl = audioByPart[partCode] ?? extract?.audioUrl ?? null;
     const authoredLimit = extract?.timeLimitSeconds ?? null;
     sections.push({
       index: sections.length,

@@ -38,6 +38,7 @@ function extract(partCode: Extract['partCode'], overrides: Partial<Extract> = {}
 function session(
   extracts: Extract[],
   questions: ListeningSessionQuestionDto[],
+  audioUrlByPart?: Record<string, string>,
 ): Pick<ListeningSessionDto, 'paper' | 'questions'> {
   return {
     paper: {
@@ -50,6 +51,7 @@ function session(
       scenarioType: 'oet_listening',
       audioUrl: null,
       questionPaperUrl: null,
+      audioUrlByPart,
       audioAvailable: true,
       audioUnavailableReason: null,
       assetReadiness: { audio: true, questionPaper: false, answerKey: true, audioScript: false },
@@ -61,9 +63,9 @@ function session(
 }
 
 describe('listening-exam-sections', () => {
-  it('orders the ten exam sub-sections A1 → A2 → B1..B6 → C1 → C2', () => {
+  it('orders the five exam sub-sections A1 → A2 → B → C1 → C2', () => {
     expect(LISTENING_EXAM_PART_SEQUENCE).toEqual([
-      'A1', 'A2', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'C1', 'C2',
+      'A1', 'A2', 'B', 'C1', 'C2',
     ]);
   });
 
@@ -74,9 +76,38 @@ describe('listening-exam-sections', () => {
       [question('B3', 27), question('A1', 1), question('C2', 40), question('A2', 13)],
     );
     const sections = buildListeningExamSubSections(s);
-    expect(sections.map((x) => x.partCode)).toEqual(['A1', 'A2', 'B3', 'C2']);
+    // Part B's sub-parts collapse to a single "B" section.
+    expect(sections.map((x) => x.partCode)).toEqual(['A1', 'A2', 'B', 'C2']);
     // Index is the contiguous one-way cursor (0..n), not the canonical rank.
     expect(sections.map((x) => x.index)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('collapses Part B B1..B6 into one "B" section with all its questions merged', () => {
+    const s = session(
+      [extract('B1', { timeLimitSeconds: 300 }), extract('B2'), extract('B3'), extract('B6')],
+      [mcq('B3', 9), mcq('B1', 7), mcq('B6', 12), mcq('B2', 8)],
+      { B: '/v1/media/partB/content' },
+    );
+    const sections = buildListeningExamSubSections(s);
+    expect(sections).toHaveLength(1);
+    const [b] = sections;
+    expect(b.partCode).toBe('B');
+    // All six-question-style Part B items land in the one section, sorted.
+    expect(b.questions.map((q) => q.number)).toEqual([7, 8, 9, 12]);
+    // One shared Part B audio (from audioUrlByPart), one timer (from B1).
+    expect(b.audioUrl).toBe('/v1/media/partB/content');
+    expect(b.audioRequiresAuth).toBe(true);
+    expect(b.timeLimitSeconds).toBe(300);
+  });
+
+  it('prefers the per-section audioUrlByPart map over the extract audioUrl', () => {
+    const s = session(
+      [extract('A1', { audioUrl: '/v1/listening/audio/old.wav' })],
+      [question('A1', 1)],
+      { A1: '/v1/media/a1upload/content' },
+    );
+    const [a1] = buildListeningExamSubSections(s);
+    expect(a1.audioUrl).toBe('/v1/media/a1upload/content');
   });
 
   it('includes a sub-section that has questions but no extract metadata', () => {
@@ -125,19 +156,20 @@ describe('listening-exam-sections', () => {
     expect(a2.audioRequiresAuth).toBe(false);
   });
 
-  it('floors legacy bare part codes onto the first sub-section of their part', () => {
+  it('collapses every Part B code to "B" and floors bare A/C onto their first sub-section', () => {
     expect(normalizeExamPartCode('A')).toBe('A1');
-    expect(normalizeExamPartCode('B')).toBe('B1');
+    expect(normalizeExamPartCode('B')).toBe('B');
     expect(normalizeExamPartCode('C')).toBe('C1');
-    expect(normalizeExamPartCode('b3')).toBe('B3');
+    expect(normalizeExamPartCode('b3')).toBe('B');
+    expect(normalizeExamPartCode('B6')).toBe('B');
     expect(normalizeExamPartCode('  C2 ')).toBe('C2');
     expect(normalizeExamPartCode('D')).toBeNull();
     expect(normalizeExamPartCode(null)).toBeNull();
   });
 
   it('exposes a stable canonical ordering rank', () => {
-    expect(listeningExamPartOrder('A1')).toBeLessThan(listeningExamPartOrder('B1'));
-    expect(listeningExamPartOrder('B6')).toBeLessThan(listeningExamPartOrder('C1'));
+    expect(listeningExamPartOrder('A1')).toBeLessThan(listeningExamPartOrder('B'));
+    expect(listeningExamPartOrder('B')).toBeLessThan(listeningExamPartOrder('C1'));
     expect(listeningExamPartOrder('ZZ')).toBe(Number.MAX_SAFE_INTEGER);
   });
 
