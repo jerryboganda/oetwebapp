@@ -107,10 +107,8 @@ BEGIN
 END $$;
 
 DELETE FROM "BillingMetricDailies";
+DELETE FROM "SubscriptionItems";
 DELETE FROM "BillingNotificationDispatchLogs" WHERE "UserId"::text IN (SELECT id FROM _learner_ids);
-DELETE FROM "PaymentWebhookEvents" WHERE "PaymentTransactionId" IN (
-  SELECT "GatewayTransactionId" FROM "PaymentTransactions" WHERE "LearnerUserId"::text IN (SELECT id FROM _learner_ids)
-);
 DELETE FROM "Users" WHERE "Id"::text IN (SELECT id FROM _learner_ids);
 
 UPDATE "BillingPlans" p
