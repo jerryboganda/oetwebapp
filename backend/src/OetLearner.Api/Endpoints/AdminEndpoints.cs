@@ -453,6 +453,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ReplaceBillingContentAsync(http.AdminId(), http.AdminName(), request, ct)))
             .WithAdminWrite("AdminBillingCatalogWrite");
 
+        admin.MapDelete("/billing/content/{key}", async (string key, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteBillingContentAsync(http.AdminId(), http.AdminName(), key, ct)))
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
         admin.MapGet("/billing/coupons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingCouponsAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");

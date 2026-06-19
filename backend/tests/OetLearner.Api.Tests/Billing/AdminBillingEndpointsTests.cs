@@ -332,6 +332,67 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
         response.EnsureSuccessStatusCode();
     }
 
+    // ─────────────────────── Billing page copy ───────────────────────
+
+    [Fact]
+    public async Task BillingContentDelete_RemovesStoredOverrideRow()
+    {
+        const string key = "billing.page.title";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.BillingContentStrings.Add(new BillingContentString
+            {
+                Key = key,
+                Section = "Page & hero",
+                Value = "Custom billing title",
+                UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                UpdatedByAdminId = "seed-admin",
+                UpdatedByAdminName = "Seed Admin",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingCatalogWrite);
+        var response = await client.DeleteAsync($"/v1/admin/billing/content/{key}");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(key, body.GetProperty("key").GetString());
+        Assert.True(body.GetProperty("deleted").GetBoolean());
+
+        await using var verifyScope = _factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await verifyDb.BillingContentStrings.AsNoTracking().AnyAsync(x => x.Key == key));
+    }
+
+    [Fact]
+    public async Task BillingContentDelete_RejectsInvalidKey()
+    {
+        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingCatalogWrite);
+
+        var response = await client.DeleteAsync("/v1/admin/billing/content/billing.page.%20title");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("billing_content_invalid_key", body);
+    }
+
+    [Fact]
+    public async Task BillingContentDelete_ReturnsDeletedFalseWhenOverrideIsMissing()
+    {
+        const string key = "billing.page.missing";
+        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingCatalogWrite);
+
+        var response = await client.DeleteAsync($"/v1/admin/billing/content/{key}");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(key, body.GetProperty("key").GetString());
+        Assert.False(body.GetProperty("deleted").GetBoolean());
+    }
+
     // ─────────────────────── Stripe Tax ───────────────────────
 
     [Fact]

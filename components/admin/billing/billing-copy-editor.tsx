@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RotateCcw, Save } from 'lucide-react';
+import { RotateCcw, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchAdminBillingContent, replaceAdminBillingContent } from '@/lib/api';
+import { BillingConfirmDialog } from './confirm-dialog';
+import { deleteAdminBillingContentEntry, fetchAdminBillingContent, replaceAdminBillingContent } from '@/lib/api';
 import {
   BILLING_COPY_FIELDS,
   BILLING_COPY_SECTIONS,
@@ -24,7 +25,10 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BillingCopyField | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
   const initFromOverrides = useCallback((overrides: Record<string, string>) => {
     const next: Record<string, string> = {};
@@ -118,6 +122,32 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
     }
   }, [canWrite, desiredFor, initFromOverrides, stored]);
 
+  const handleDeleteOverride = useCallback(async () => {
+    if (!canWrite) {
+      setFeedback({ tone: 'error', message: 'You have read-only billing access.' });
+      return;
+    }
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setFeedback(null);
+    try {
+      await deleteAdminBillingContentEntry(deleteTarget.key);
+      setStored((prev) => {
+        const next = { ...prev };
+        delete next[deleteTarget.key];
+        return next;
+      });
+      setValues((prev) => ({ ...prev, [deleteTarget.key]: deleteTarget.default }));
+      setFeedback({ tone: 'success', message: `Deleted override for "${deleteTarget.label}". Built-in default copy is active again.` });
+      setDeleteTarget(null);
+      setDeleteConfirmInput('');
+    } catch (error) {
+      setFeedback({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to delete billing copy override.' });
+    } finally {
+      setDeleting(false);
+    }
+  }, [canWrite, deleteTarget]);
+
   if (status === 'loading') {
     return <p className="text-sm text-muted" data-testid="billing-copy-loading">Loading copy…</p>;
   }
@@ -178,20 +208,38 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
                     disabled={!canWrite}
                   />
                 );
+                const hasStoredOverride = Object.prototype.hasOwnProperty.call(stored, field.key);
                 return (
                   <div key={field.key} className={field.multiline ? 'md:col-span-2' : undefined}>
                     {control}
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <span className="font-mono text-[10px] text-muted/70">{field.key}</span>
-                      {isOverridden ? (
-                        <button
-                          type="button"
-                          onClick={() => resetField(field)}
-                          disabled={!canWrite}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
-                        >
-                          <RotateCcw className="h-3 w-3" /> Reset to default
-                        </button>
+                      {isOverridden || hasStoredOverride ? (
+                        <div className="flex items-center gap-3">
+                          {isOverridden ? (
+                            <button
+                              type="button"
+                              onClick={() => resetField(field)}
+                              disabled={!canWrite}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
+                            >
+                              <RotateCcw className="h-3 w-3" /> Reset to default
+                            </button>
+                          ) : null}
+                          {hasStoredOverride ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteTarget(field);
+                                setDeleteConfirmInput('');
+                              }}
+                              disabled={!canWrite}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-danger transition-colors hover:text-danger/80 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3 w-3" /> Delete override
+                            </button>
+                          ) : null}
+                        </div>
                       ) : (
                         <span className="text-[10px] text-muted/60">default</span>
                       )}
@@ -203,6 +251,27 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
           </Card>
         );
       })}
+
+      <BillingConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete this copy override?"
+        description={
+          deleteTarget
+            ? `Permanently removes the stored override for "${deleteTarget.label}" (${deleteTarget.key}). The learner page will immediately fall back to the built-in default copy. This cannot be undone.`
+            : ''
+        }
+        confirmPhrase={deleteTarget?.key ?? ''}
+        confirmInput={deleteConfirmInput}
+        onConfirmInputChange={setDeleteConfirmInput}
+        confirmLabel="Delete override"
+        variant="danger"
+        loading={deleting}
+        onConfirm={() => { void handleDeleteOverride(); }}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteConfirmInput('');
+        }}
+      />
     </div>
   );
 }

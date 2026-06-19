@@ -5844,6 +5844,10 @@ export async function replaceAdminBillingContent(
   });
 }
 
+export async function deleteAdminBillingContentEntry(key: string): Promise<{ key: string; deleted: boolean }> {
+  return apiRequest(`/v1/admin/billing/content/${encodeURIComponent(key)}`, { method: 'DELETE' });
+}
+
 /** Public learner-page copy overrides as a flat { key: value } map. */
 export async function fetchBillingContent(): Promise<Record<string, string>> {
   return apiRequest('/v1/billing/content') as Promise<Record<string, string>>;

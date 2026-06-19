@@ -389,13 +389,13 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                       </td>
                       <td className="px-3 py-3 text-right">
                         <Button
-                          variant="ghost"
+                          variant="destructive"
                           size="sm"
-                          aria-label={`Remove tier ${row.amount}`}
+                          aria-label={`Delete wallet tier ${row.amount}`}
                           disabled={!canWrite}
                           onClick={() => requestRemoveRow(row.key)}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" /> Delete
                         </Button>
                       </td>
                     </tr>
@@ -424,8 +424,8 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
       <BillingConfirmDialog
         open={pendingRemoveKey !== null}
         title="Delete wallet tier?"
-        description="This wallet top-up tier will be removed from the next save. Existing wallet top-ups already linked to this tier will remain unaffected (the tier ID stays referenced server-side), but no new top-ups can be created at this amount."
-        confirmLabel="Remove tier"
+        description="This wallet top-up tier will be removed from this draft and physically deleted from the database when you save the tier set. Existing wallet transactions remain intact, but this tier will no longer be available for new top-ups."
+        confirmLabel="Delete tier"
         variant="danger"
         onConfirm={confirmRemoveRow}
         onCancel={cancelRemoveRow}

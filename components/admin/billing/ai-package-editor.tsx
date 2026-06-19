@@ -8,8 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
+import { BillingConfirmDialog } from './confirm-dialog';
 import {
   createAdminBillingAddOn,
+  deleteAdminBillingAddOn,
   updateAdminBillingAddOn,
   fetchAdminBillingAddOns,
 } from '@/lib/api';
@@ -176,6 +178,9 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminAddOnRow | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -280,6 +285,39 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
     }
   }, [canWrite, form, load]);
 
+  const requestDelete = useCallback((row: AdminAddOnRow) => {
+    setDeleteTarget(row);
+    setDeleteConfirmInput('');
+    setFeedback(null);
+  }, []);
+
+  const handleDelete = useCallback(async () => {
+    if (!canWrite) {
+      setFeedback({ tone: 'error', message: 'You have read-only billing access.' });
+      return;
+    }
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setFeedback(null);
+    try {
+      await deleteAdminBillingAddOn(deleteTarget.id);
+      setDeleteTarget(null);
+      setDeleteConfirmInput('');
+      setFeedback({ tone: 'success', message: `AI package "${deleteTarget.name}" hard-deleted.` });
+      await load();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete AI package.';
+      setFeedback({
+        tone: 'error',
+        message: /in[_ ]use|archive|subscription|quote/i.test(message)
+          ? `${message} Use Edit to archive instead (Status = Archived).`
+          : message,
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }, [canWrite, deleteTarget, load]);
+
   return (
     <div className="space-y-4" data-testid="ai-package-editor">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -349,7 +387,18 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
                         </Badge>
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <Button variant="secondary" size="sm" onClick={() => openEdit(row)}>Edit</Button>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="secondary" size="sm" onClick={() => openEdit(row)}>Edit</Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => requestDelete(row)}
+                            disabled={!canWrite}
+                            aria-label={`Hard delete AI package ${row.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -434,6 +483,27 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
           </div>
         </div>
       </Modal>
+
+      <BillingConfirmDialog
+        open={deleteTarget !== null}
+        title="Hard-delete this AI package?"
+        description={
+          deleteTarget
+            ? `Permanently removes "${deleteTarget.name}" (${deleteTarget.code}): the AI package add-on row, all its version history, and the linked content package. This cannot be undone. If the package has any historical subscription items or quotes, the server will refuse and ask you to archive instead.`
+            : ''
+        }
+        confirmPhrase={deleteTarget?.code ?? ''}
+        confirmInput={deleteConfirmInput}
+        onConfirmInputChange={setDeleteConfirmInput}
+        confirmLabel="Permanently delete"
+        variant="danger"
+        loading={deleting}
+        onConfirm={() => { void handleDelete(); }}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteConfirmInput('');
+        }}
+      />
     </div>
   );
 }

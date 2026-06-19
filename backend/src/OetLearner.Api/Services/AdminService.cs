@@ -4534,6 +4534,29 @@ public partial class AdminService(
         return await GetBillingContentAsync(ct);
     }
 
+    public async Task<object> DeleteBillingContentAsync(string adminId, string adminName, string key, CancellationToken ct)
+    {
+        var normalizedKey = (key ?? string.Empty).Trim();
+        if (!IsValidBillingContentKey(normalizedKey))
+        {
+            throw ApiException.Validation("billing_content_invalid_key", $"Invalid billing content key: '{normalizedKey}'.");
+        }
+
+        var row = await db.BillingContentStrings.FirstOrDefaultAsync(x => x.Key == normalizedKey, ct);
+        if (row is null)
+        {
+            return new { key = normalizedKey, deleted = false };
+        }
+
+        db.BillingContentStrings.Remove(row);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Deleted", "BillingContent", normalizedKey,
+            $"Deleted billing copy override: {normalizedKey}", ct);
+
+        return new { key = normalizedKey, deleted = true };
+    }
+
     public async Task<object> CreateBillingAddOnAsync(string adminId, string adminName, AdminBillingAddOnCreateRequest request, CancellationToken ct)
     {
         var validated = await ValidateBillingAddOnCatalogAsync(ToBillingAddOnCatalogInput(request), existingAddOnId: null, BillingAddOnStatus.Active, ct);
