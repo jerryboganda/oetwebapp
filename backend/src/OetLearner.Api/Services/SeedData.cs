@@ -43,11 +43,10 @@ public static partial class SeedData
             hasChanges = true;
         }
 
-        if (await HasSeededBillingCatalogGapAsync(db, cancellationToken))
-        {
-            SeedBillingPlans(db);
-            hasChanges = true;
-        }
+        // Demo billing catalog (Basic/Premium/Intensive plans, demo add-ons & coupons) is
+        // intentionally NOT auto-seeded: it kept re-appearing in production after admins
+        // deleted it. The real catalog is managed in the admin UI / Oet2026CatalogSeeder.
+        // (Disabled: HasSeededBillingCatalogGapAsync(db) -> SeedBillingPlans(db).)
 
         if (!await db.ExamTypes.AnyAsync(cancellationToken))
         {
