@@ -538,6 +538,14 @@ export default function Dashboard() {
                   </div>
                 </section>
               ) : null}
+
+              {/* OET 2026 — conditional dashboard add-on widget. Hides itself when
+                  all three eligibility flags on the active enrolment are false. */}
+              <DashboardAddonsWidget
+                writingAddonsEnabled={entitlement?.writingAddonsEnabled ?? false}
+                speakingAddonsEnabled={entitlement?.speakingAddonsEnabled ?? false}
+                tutorBookDiscountEnabled={entitlement?.tutorBookDiscountEnabled ?? false}
+              />
             </div>
 
             <div className="space-y-5 lg:col-span-4">
@@ -605,14 +613,6 @@ export default function Dashboard() {
               <AiUsageWidget />
 
               <PronunciationDashboardTile />
-
-              {/* OET 2026 — conditional dashboard add-on widget. Hides itself when
-                  all three eligibility flags on the active enrolment are false. */}
-              <DashboardAddonsWidget
-                writingAddonsEnabled={entitlement?.writingAddonsEnabled ?? false}
-                speakingAddonsEnabled={entitlement?.speakingAddonsEnabled ?? false}
-                tutorBookDiscountEnabled={entitlement?.tutorBookDiscountEnabled ?? false}
-              />
 
               {/* OET 2026 — Extend Access CTA. Shows only when an eligible
                   subscription is lapsing/lapsed; opens the addon-extend-90
