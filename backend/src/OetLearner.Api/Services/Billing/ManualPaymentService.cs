@@ -85,13 +85,12 @@ public sealed class ManualPaymentService : IManualPaymentService
         }
         if (string.IsNullOrWhiteSpace(request.CandidateFullName)
             || string.IsNullOrWhiteSpace(request.CandidateEmail)
-            || string.IsNullOrWhiteSpace(request.CandidateWhatsApp)
             || string.IsNullOrWhiteSpace(request.CourseName)
             || request.AmountAmount <= 0
             || string.IsNullOrWhiteSpace(request.Method)
             || string.IsNullOrWhiteSpace(request.Reference))
         {
-            throw new InvalidOperationException("Full name, email, WhatsApp number, course name, amount, payment method, transaction reference, and proof are required.");
+            throw new InvalidOperationException("Full name, email, course name, amount, payment method, transaction reference, and proof are required.");
         }
 
         // Reject unknown payment methods. The set of accepted methods is the active
@@ -143,7 +142,7 @@ public sealed class ManualPaymentService : IManualPaymentService
             ProofHashHex = hashHex,
             CandidateFullName = request.CandidateFullName.Trim(),
             CandidateEmail = request.CandidateEmail.Trim(),
-            CandidateWhatsApp = request.CandidateWhatsApp.Trim(),
+            CandidateWhatsApp = (request.CandidateWhatsApp ?? string.Empty).Trim(),
             CourseName = request.CourseName.Trim(),
             CourseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim(),
             PaymentCategory = NormalizePaymentCategory(request.PaymentCategory),
