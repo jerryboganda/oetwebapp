@@ -142,7 +142,7 @@ public sealed class ManualPaymentService : IManualPaymentService
             ProofHashHex = hashHex,
             CandidateFullName = request.CandidateFullName.Trim(),
             CandidateEmail = request.CandidateEmail.Trim(),
-            CandidateWhatsApp = request.CandidateWhatsApp.Trim(),
+            CandidateWhatsApp = (request.CandidateWhatsApp ?? string.Empty).Trim(),
             CourseName = request.CourseName.Trim(),
             CourseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim(),
             PaymentCategory = NormalizePaymentCategory(request.PaymentCategory),
