@@ -212,3 +212,9 @@ src-tauri/*.log
 src-tauri/cdp-*.mjs
 src-tauri/cdp-realtime-result.json
 src-tauri/*-result.json
+
+# --- added 2026-06-20: keep prod working-tree debris out of git ---
+.pnpm-store/
+/_*.sh
+/_*.sql
+*.bak-*
