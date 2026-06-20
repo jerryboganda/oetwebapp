@@ -80,6 +80,7 @@ function CheckoutReviewContent() {
   const [methods, setMethods] = useState<PaymentMethodOption[]>([]);
   const [selectedGateway, setSelectedGateway] = useState<string>(initialGateway);
   const [payRegion, setPayRegion] = useState<PayRegion>('global');
+  const regionTouchedRef = useRef(false);
   const quoteStartedRef = useRef(false);
   const quoteRefreshingRef = useRef(false);
 
@@ -193,7 +194,7 @@ function CheckoutReviewContent() {
     Promise.resolve()
       .then(() => detectBillingRegion())
       .then((d) => {
-        if (!cancelled && d?.region === 'EGYPT') setPayRegion('egypt');
+        if (!cancelled && !regionTouchedRef.current && d?.region === 'EGYPT') setPayRegion('egypt');
       })
       .catch(() => {});
     return () => {
@@ -381,7 +382,10 @@ function CheckoutReviewContent() {
           </Button>
           <CheckoutPayRegion
             value={payRegion}
-            onChange={setPayRegion}
+            onChange={(r) => {
+              regionTouchedRef.current = true;
+              setPayRegion(r);
+            }}
             egyptHref={egyptHref}
             disabled={!quote}
           >
