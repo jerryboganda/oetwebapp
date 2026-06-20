@@ -425,6 +425,11 @@ public class RuntimeSettingsRow
     // is just the WebPush:Enabled master toggle.
     public bool? WebPushEnabled { get; set; }
 
+    // Catalog storefront presentation document (admin CMS). JSON holding the
+    // storefront config + per-plan/per-add-on overlay keyed by product code.
+    // Null = client uses built-in defaults (zero behaviour change until set).
+    public string? CatalogPresentationJson { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

@@ -214,5 +214,8 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthTokenAuthenticato
 
 -- Web push enablement (Wave 4)
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WebPushEnabled"" boolean;
+
+-- Catalog storefront presentation (admin CMS) -- sync with migration 20260708000000
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CatalogPresentationJson"" text;
 ";
 }

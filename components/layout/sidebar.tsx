@@ -33,6 +33,7 @@ import {
   MessageSquare,
   AlertTriangle,
   FolderOpen,
+  Sparkles,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -65,6 +66,7 @@ export const mainNavItems: NavItem[] = [
   { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
   { href: '/readiness', label: 'Readiness', icon: <Target className="w-5 h-5" />, matchPrefix: '/readiness' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
+  { href: '/subscriptions', label: 'Subscriptions & Packages', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/subscriptions' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
   { href: '/submissions', label: 'History', icon: <History className="w-5 h-5" />, matchPrefix: '/submissions' },
   { href: '/escalations', label: 'Escalations', icon: <AlertTriangle className="w-5 h-5" />, matchPrefix: '/escalations' },
@@ -85,6 +87,7 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
+  { href: '/subscriptions', label: 'Subscriptions & Packages', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/subscriptions' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
 ];
 

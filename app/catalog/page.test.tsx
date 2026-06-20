@@ -5,6 +5,7 @@ import { fetchPublicCatalog } from '@/lib/api';
 
 vi.mock('@/lib/api', () => ({
   fetchPublicCatalog: vi.fn(),
+  fetchMyEntitlementSnapshot: vi.fn(),
 }));
 
 const mockFetchPublicCatalog = vi.mocked(fetchPublicCatalog);
@@ -14,7 +15,7 @@ describe('CatalogPage', () => {
     mockFetchPublicCatalog.mockReset();
   });
 
-  it('renders the OET 2026 portfolio matrix without encoded copy artifacts', async () => {
+  it('renders the redesigned storefront with package and add-on pricing', async () => {
     mockFetchPublicCatalog.mockResolvedValue({
       currency: 'GBP',
       plans: [
@@ -63,7 +64,7 @@ describe('CatalogPage', () => {
     await waitFor(() => expect(mockFetchPublicCatalog).toHaveBeenCalledTimes(1));
     expect((await screen.findAllByText('Full Condensed Recorded OET Course - Medicine')).length).toBeGreaterThan(0);
     expect(screen.getByText('OET with Dr. Ahmed Hesham · 2026 Portfolio')).toBeInTheDocument();
-    expect(screen.getAllByText('TB £32').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tutor Book £32').length).toBeGreaterThan(0);
     expect(screen.getAllByText('£100').length).toBeGreaterThan(0);
     expect(screen.getAllByText('£32').length).toBeGreaterThan(0);
     expect(container.textContent).toContain('£45');

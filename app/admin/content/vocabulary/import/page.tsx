@@ -236,6 +236,7 @@ export default function AdminVocabularyImportPage() {
       setToast({
         variant: 'success',
         message: `Imported batch ${r.importBatchId}: ${r.imported} new word${r.imported === 1 ? '' : 's'}`
+          + (r.duplicates > 0 ? ` · ${r.duplicates} duplicates merged into frequency` : '')
           + (addedToSet > 0 ? ` · ${addedToSet} existing word${addedToSet === 1 ? '' : 's'} added to the ${recallSetCode} set.` : '.'),
       });
       setCommittedBatchId(r.importBatchId);

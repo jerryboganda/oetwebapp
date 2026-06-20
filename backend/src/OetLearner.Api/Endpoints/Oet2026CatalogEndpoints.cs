@@ -46,6 +46,8 @@ public static class Oet2026CatalogEndpoints
         admin.MapGet("/portfolio/export", AdminPortfolioExport).RequireAuthorization("AdminBillingRead");
         // Re-seed catalog button (Wave 3.4).
         admin.MapPost("/catalog/seed-oet-2026", AdminReseedOet2026Catalog).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapGet("/catalog/presentation", AdminGetCatalogPresentation).RequireAuthorization("AdminBillingRead");
+        admin.MapPut("/catalog/presentation", AdminUpdateCatalogPresentation).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }
@@ -122,7 +124,8 @@ public static class Oet2026CatalogEndpoints
     private sealed record PublicCatalogResponse(
         IReadOnlyList<PublicPlanRow> Plans,
         IReadOnlyList<PublicAddOnRow> AddOns,
-        string Currency);
+        string Currency,
+        object? Presentation = null);
 
     private sealed record PublicPlanRow(
         string Code,
@@ -220,7 +223,8 @@ public static class Oet2026CatalogEndpoints
             a.IsStackable,
             a.DisplayOrder)).ToList();
 
-        return TypedResults.Ok(new PublicCatalogResponse(planRows, addOnRows, "GBP"));
+        var presentation = await LoadCatalogPresentation(db, ct);
+        return TypedResults.Ok(new PublicCatalogResponse(planRows, addOnRows, "GBP", presentation));
     }
 
     // ── Add-on quote ─────────────────────────────────────────────────────
@@ -508,4 +512,82 @@ public static class Oet2026CatalogEndpoints
             return Array.Empty<string>();
         }
     }
+
+    // ── Catalog storefront presentation (admin CMS) ───────────────────────
+
+    private static async Task<object?> LoadCatalogPresentation(LearnerDbContext db, CancellationToken ct)
+    {
+        var json = await db.RuntimeSettings.AsNoTracking()
+            .Where(r => r.Id == "default")
+            .Select(r => r.CatalogPresentationJson)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private sealed record CatalogPresentationResponse(
+        IReadOnlyList<string> PlanCodes,
+        IReadOnlyList<string> AddOnCodes,
+        object? Presentation);
+
+    private sealed record UpdateCatalogPresentationRequest(JsonElement? Presentation);
+
+    private static async Task<Ok<CatalogPresentationResponse>> AdminGetCatalogPresentation(
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var planCodes = await db.BillingPlans.AsNoTracking()
+            .Where(p => p.Status == BillingPlanStatus.Active && p.IsVisible && !p.IsDraft)
+            .OrderBy(p => p.DisplayOrder).ThenBy(p => p.Code)
+            .Select(p => p.Code)
+            .ToListAsync(ct);
+
+        var addOnCodes = await db.BillingAddOns.AsNoTracking()
+            .Where(a => a.Status == BillingAddOnStatus.Active
+                && a.RequiresEligibleParent
+                && (a.EligibilityFlag == "writing_addons"
+                    || a.EligibilityFlag == "speaking_addons"
+                    || a.EligibilityFlag == "tutor_book_discount"))
+            .OrderBy(a => a.DisplayOrder).ThenBy(a => a.Code)
+            .Select(a => a.Code)
+            .ToListAsync(ct);
+
+        var presentation = await LoadCatalogPresentation(db, ct);
+        return TypedResults.Ok(new CatalogPresentationResponse(planCodes, addOnCodes, presentation));
+    }
+
+    private static async Task<Ok> AdminUpdateCatalogPresentation(
+        UpdateCatalogPresentationRequest request,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var row = await db.RuntimeSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
+        if (row is null)
+        {
+            row = new RuntimeSettingsRow { Id = "default" };
+            db.RuntimeSettings.Add(row);
+        }
+
+        if (request.Presentation is null || request.Presentation.Value.ValueKind == JsonValueKind.Null)
+        {
+            row.CatalogPresentationJson = null;
+        }
+        else
+        {
+            row.CatalogPresentationJson = request.Presentation.Value.GetRawText();
+        }
+
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return TypedResults.Ok();
+    }
+
 }
