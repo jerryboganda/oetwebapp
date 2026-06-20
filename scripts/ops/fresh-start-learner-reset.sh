@@ -45,7 +45,7 @@ if [[ "$EXECUTE" == "true" ]]; then
 BEGIN;
 
 CREATE TEMP TABLE _learner_ids ON COMMIT DROP AS
-SELECT "Id"::text AS id, "Email"::text AS email
+SELECT "Id"::text AS id, "AuthAccountId"::text AS auth_id, "Email"::text AS email
 FROM "Users"
 WHERE lower("Role"::text) = 'learner';
 
@@ -111,6 +111,53 @@ DELETE FROM "SubscriptionItems";
 DELETE FROM "BillingNotificationDispatchLogs" WHERE "UserId"::text IN (SELECT id FROM _learner_ids);
 DELETE FROM "Users" WHERE "Id"::text IN (SELECT id FROM _learner_ids);
 
+-- Remove the learner LOGIN identities ("ApplicationUserAccounts") and their
+-- auth-keyed dependents. The dynamic loop above keys on "Users"."Id"; the login
+-- account is keyed by "AuthAccountId", so without this step the accounts are left
+-- orphaned: the learner cannot sign in ("account suspended") and the email stays
+-- "already registered", blocking re-invite/registration. FK children are discovered
+-- live from pg_constraint (robust to schema changes); "ExpertUsers"/"Users" are
+-- excluded so only learner auth rows are affected.
+DO $$
+DECLARE
+  pass integer;
+  skipped integer;
+  deleted_rows integer;
+  total_deleted integer := 0;
+  r record;
+BEGIN
+  FOR pass IN 1..12 LOOP
+    skipped := 0;
+    FOR r IN
+      SELECT con.conrelid::regclass::text AS tbl, att.attname AS col
+      FROM pg_constraint con
+      JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
+      WHERE con.contype = 'f'
+        AND con.confrelid = '"ApplicationUserAccounts"'::regclass
+        AND con.conrelid <> '"ExpertUsers"'::regclass
+        AND con.conrelid <> '"Users"'::regclass
+    LOOP
+      BEGIN
+        EXECUTE format(
+          'DELETE FROM %s WHERE %I::text IN (SELECT auth_id FROM _learner_ids)',
+          r.tbl, r.col
+        );
+        GET DIAGNOSTICS deleted_rows = ROW_COUNT;
+        total_deleted := total_deleted + deleted_rows;
+        IF deleted_rows > 0 THEN
+          RAISE NOTICE 'auth-pass %, deleted % from % via %', pass, deleted_rows, r.tbl, r.col;
+        END IF;
+      EXCEPTION WHEN foreign_key_violation THEN
+        skipped := skipped + 1;
+      END;
+    END LOOP;
+    EXIT WHEN skipped = 0;
+  END LOOP;
+  RAISE NOTICE 'total learner auth-owned rows deleted: %', total_deleted;
+END $$;
+
+DELETE FROM "ApplicationUserAccounts" WHERE "Id"::text IN (SELECT auth_id FROM _learner_ids);
+
 UPDATE "BillingPlans" p
 SET "ActiveSubscribers" = COALESCE(s.real_count, 0), "UpdatedAt" = now()
 FROM (
@@ -124,6 +171,7 @@ WHERE p."Id" = s."Id";
 COMMIT;
 
 SELECT 'learners_remaining' AS metric, count(1)::text AS value FROM "Users" WHERE lower("Role"::text)='learner'
+UNION ALL SELECT 'learner_login_accounts_remaining', count(1)::text FROM "ApplicationUserAccounts" WHERE lower("Role"::text)='learner'
 UNION ALL SELECT 'subscriptions_remaining', count(1)::text FROM "Subscriptions"
 UNION ALL SELECT 'subscription_items_remaining', count(1)::text FROM "SubscriptionItems"
 UNION ALL SELECT 'billing_quotes_remaining', count(1)::text FROM "BillingQuotes"
@@ -138,13 +186,14 @@ else
   docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$PG_CONTAINER" \
     psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
 CREATE TEMP TABLE _learner_ids AS
-SELECT "Id"::text AS id, "Email"::text AS email
+SELECT "Id"::text AS id, "AuthAccountId"::text AS auth_id, "Email"::text AS email
 FROM "Users"
 WHERE lower("Role"::text) = 'learner';
 
-SELECT 'learner' AS kind, id, email FROM _learner_ids ORDER BY email;
+SELECT 'learner' AS kind, id, auth_id, email FROM _learner_ids ORDER BY email;
 
 SELECT 'learners' AS metric, count(1)::text AS value FROM _learner_ids
+UNION ALL SELECT 'learner_login_accounts', count(1)::text FROM "ApplicationUserAccounts" WHERE lower("Role"::text)='learner'
 UNION ALL SELECT 'subscriptions_total', count(1)::text FROM "Subscriptions"
 UNION ALL SELECT 'basic_monthly_real_subscriptions', count(1)::text FROM "Subscriptions" WHERE "PlanId" = (SELECT "Id" FROM "BillingPlans" WHERE "Code"='basic-monthly')
 UNION ALL SELECT 'billing_quotes_total', count(1)::text FROM "BillingQuotes"
