@@ -150,7 +150,7 @@ const aiPackageRow = {
 async function confirmDestructiveAction(phrase: string) {
   expect(screen.getByTestId('billing-confirm-action')).toBeDisabled();
   await userEvent.type(screen.getByTestId('billing-confirm-input'), phrase);
-  expect(screen.getByTestId('billing-confirm-action')).toBeEnabled();
+  await waitFor(() => expect(screen.getByTestId('billing-confirm-action')).toBeEnabled());
   await userEvent.click(screen.getByTestId('billing-confirm-action'));
 }
 
