@@ -262,8 +262,18 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         response.EnsureSuccessStatusCode();
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(json.RootElement.TryGetProperty("examTypes", out _));
-        Assert.True(json.RootElement.TryGetProperty("professions", out _));
+        Assert.True(json.RootElement.TryGetProperty("examTypes", out var examTypes));
+        Assert.True(json.RootElement.TryGetProperty("professions", out var professions));
+        Assert.True(json.RootElement.TryGetProperty("targetCountryOptions", out var targetCountryOptions));
+        Assert.Contains(examTypes.EnumerateArray(), item => item.GetProperty("id").GetString() == "oet");
+        Assert.Contains(examTypes.EnumerateArray(), item => item.GetProperty("id").GetString() == "ielts");
+        Assert.Contains(professions.EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "nursing"
+            && item.GetProperty("examTypeIds").EnumerateArray().Any(examType => examType.GetString() == "oet"));
+        Assert.Contains(professions.EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "academic-english"
+            && item.GetProperty("examTypeIds").EnumerateArray().Any(examType => examType.GetString() == "ielts"));
+        Assert.Contains(targetCountryOptions.EnumerateArray(), item => item.GetString() == "United Kingdom");
         Assert.False(json.RootElement.TryGetProperty("sessions", out _));
         Assert.False(json.RootElement.TryGetProperty("billingPlans", out _));
     }

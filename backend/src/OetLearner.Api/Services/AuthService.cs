@@ -249,7 +249,8 @@ public sealed class AuthService(
                 item.Description)).ToList(),
             ExternalAuthProviders.All
                 .Where(provider => externalAuthOptions.Value.GetProvider(provider).Enabled)
-                .ToArray());
+                .ToArray(),
+            TargetCountryOptions.All);
     }
 
     public async Task<AuthSessionResponse> SignInAsync(PasswordSignInRequest request, CancellationToken cancellationToken = default)

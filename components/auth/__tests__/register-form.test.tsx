@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
 import { RegisterEnrollmentStep } from '@/components/auth/register/register-enrollment-step';
 import { RegisterStepProgress } from '@/components/auth/register/register-step-progress';
@@ -7,6 +8,7 @@ vi.mock('@/lib/auth-client', () => ({
   fetchSignupCatalog: vi.fn().mockResolvedValue({
     examTypes: [
       { id: 'oet', label: 'OET', code: 'OET', description: 'Occupational English Test' },
+      { id: 'ielts', label: 'IELTS', code: 'IELTS', description: 'IELTS preparation' },
     ],
     professions: [
       {
@@ -16,7 +18,15 @@ vi.mock('@/lib/auth-client', () => ({
         examTypeIds: ['oet'],
         description: 'Nursing pathway',
       },
+      {
+        id: 'academic-english',
+        label: 'Academic / General English',
+        countryTargets: [],
+        examTypeIds: ['ielts'],
+        description: 'IELTS pathway',
+      },
     ],
+    targetCountryOptions: ['Canada', 'Qatar'],
   }),
   buildExternalAuthStartHref: vi.fn((_provider: string) => '#'),
   registerLearner: vi.fn(),
@@ -84,5 +94,23 @@ describe('RegisterForm', () => {
     ]);
     expect(screen.queryByRole('combobox', { name: /^session$/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/published billing plans/i)).not.toBeInTheDocument();
+  });
+
+  it('uses backend-served target countries when the profession has no country restriction', async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<RegisterForm />);
+
+    await user.type(await screen.findByLabelText(/first name/i), 'Aisha');
+    await user.type(screen.getByLabelText(/last name/i), 'Khan');
+    await user.type(screen.getByLabelText(/email address/i), 'aisha-countries@example.test');
+    await user.type(screen.getByLabelText(/mobile number/i), '3001234567');
+    await user.click(screen.getByRole('button', { name: /next step/i }));
+
+    const targetCountry = await screen.findByRole('combobox', { name: /target country/i });
+    expect(within(targetCountry).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Select target country',
+      'Canada',
+      'Qatar',
+    ]);
   });
 });

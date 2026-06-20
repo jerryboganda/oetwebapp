@@ -6,6 +6,7 @@ import {
   examTypes as fallbackExamTypes,
   professions as fallbackProfessions,
 } from '@/lib/auth/enrollment';
+import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import type {
   ExternalAuthProvider,
   SignupCatalog,
@@ -13,35 +14,21 @@ import type {
   SignupProfession,
 } from '@/lib/types/auth';
 
-const OET_EXAM_ID = 'oet';
-
-function isOetExam(item: SignupExamType) {
-  return item.id.toLowerCase() === OET_EXAM_ID || item.code.toLowerCase() === OET_EXAM_ID;
-}
-
 function sanitizePublicSignupCatalog(catalog: SignupCatalog): {
   examTypes: SignupExamType[];
   professions: SignupProfession[];
   externalAuthProviders: ExternalAuthProvider[];
+  targetCountryOptions: string[];
 } {
-  const serverAllowsNonOetBeta = catalog.nonOetBetaEnabled === true;
-  const serverExamTypes = Array.isArray(catalog.examTypes) ? catalog.examTypes : fallbackExamTypes;
-  const publicExamTypes = serverAllowsNonOetBeta ? serverExamTypes : serverExamTypes.filter(isOetExam);
-  const allowedExamIds = new Set(publicExamTypes.map((item) => item.id));
-  const serverProfessions = Array.isArray(catalog.professions) ? catalog.professions : fallbackProfessions;
-  const publicProfessions = serverAllowsNonOetBeta
-    ? serverProfessions
-    : serverProfessions
-        .map((item) => ({
-          ...item,
-          examTypeIds: item.examTypeIds.filter((id) => allowedExamIds.has(id)),
-        }))
-        .filter((item) => item.examTypeIds.length > 0);
+  const serverExamTypes = Array.isArray(catalog.examTypes) ? catalog.examTypes : [];
+  const serverProfessions = Array.isArray(catalog.professions) ? catalog.professions : [];
+  const serverTargetCountryOptions = Array.isArray(catalog.targetCountryOptions) ? catalog.targetCountryOptions : [];
 
   return {
-    examTypes: publicExamTypes.length > 0 ? publicExamTypes : fallbackExamTypes,
-    professions: publicProfessions.length > 0 ? publicProfessions : fallbackProfessions,
+    examTypes: serverExamTypes.length > 0 ? serverExamTypes : fallbackExamTypes,
+    professions: serverProfessions.length > 0 ? serverProfessions : fallbackProfessions,
     externalAuthProviders: Array.isArray(catalog.externalAuthProviders) ? catalog.externalAuthProviders : [],
+    targetCountryOptions: serverTargetCountryOptions.length > 0 ? serverTargetCountryOptions : TARGET_COUNTRY_OPTIONS,
   };
 }
 
@@ -49,6 +36,7 @@ export function useSignupCatalog() {
   const [examTypes, setExamTypes] = useState<SignupExamType[]>(fallbackExamTypes);
   const [professions, setProfessions] = useState<SignupProfession[]>(fallbackProfessions);
   const [externalAuthProviders, setExternalAuthProviders] = useState<ExternalAuthProvider[]>([]);
+  const [targetCountryOptions, setTargetCountryOptions] = useState<readonly string[]>(TARGET_COUNTRY_OPTIONS);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +53,7 @@ export function useSignupCatalog() {
         setExamTypes(publicCatalog.examTypes);
         setProfessions(publicCatalog.professions);
         setExternalAuthProviders(publicCatalog.externalAuthProviders);
+        setTargetCountryOptions(publicCatalog.targetCountryOptions);
       } catch {
         if (cancelled) {
           return;
@@ -73,6 +62,7 @@ export function useSignupCatalog() {
         setExamTypes(fallbackExamTypes);
         setProfessions(fallbackProfessions);
         setExternalAuthProviders([]);
+        setTargetCountryOptions(TARGET_COUNTRY_OPTIONS);
       }
     };
 
@@ -87,5 +77,6 @@ export function useSignupCatalog() {
     examTypes,
     externalAuthProviders,
     professions,
+    targetCountryOptions,
   };
 }

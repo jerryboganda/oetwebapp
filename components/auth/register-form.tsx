@@ -28,7 +28,6 @@ import { RegisterSecurityStep } from '@/components/auth/register/register-securi
 import { RegisterStepProgress } from '@/components/auth/register/register-step-progress';
 import { countryOptions } from '@/components/auth/country-code-select';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
-import { TARGET_COUNTRY_OPTIONS } from '@/components/auth/register/target-countries';
 import { readErrorMessage } from '@/lib/read-error-message';
 
 export function RegisterForm() {
@@ -42,7 +41,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { examTypes, professions } = useSignupCatalog();
+  const { examTypes, professions, targetCountryOptions } = useSignupCatalog();
   const nextPath = searchParams?.get('next') ?? null;
   const registrationToken = searchParams?.get('registrationToken') ?? null;
   const externalEmail = searchParams?.get('email') ?? '';
@@ -99,8 +98,8 @@ export function RegisterForm() {
   );
 
   const availableCountries = useMemo<readonly string[]>(
-    () => selectedProfession?.countryTargets?.length ? selectedProfession.countryTargets : TARGET_COUNTRY_OPTIONS,
-    [selectedProfession],
+    () => selectedProfession?.countryTargets?.length ? selectedProfession.countryTargets : targetCountryOptions,
+    [selectedProfession, targetCountryOptions],
   );
 
   useEffect(() => {

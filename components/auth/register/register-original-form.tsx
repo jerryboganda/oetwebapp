@@ -28,7 +28,6 @@ import {
   type SignupPayloadFormValues,
 } from '@/lib/auth/schemas';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
-import { TARGET_COUNTRY_OPTIONS } from './target-countries';
 import { readErrorMessage } from '@/lib/read-error-message';
 
 const stepMeta = [
@@ -51,7 +50,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { examTypes, externalAuthProviders, professions } = useSignupCatalog();
+  const { examTypes, externalAuthProviders, professions, targetCountryOptions } = useSignupCatalog();
   const nextPath = searchParams?.get('next') ?? null;
   const registrationToken = searchParams?.get('registrationToken') ?? null;
   const externalEmail = searchParams?.get('email') ?? '';
@@ -113,8 +112,8 @@ export function RegisterForm() {
   );
 
   const availableCountries = useMemo<readonly string[]>(
-    () => selectedProfession?.countryTargets?.length ? selectedProfession.countryTargets : TARGET_COUNTRY_OPTIONS,
-    [selectedProfession],
+    () => selectedProfession?.countryTargets?.length ? selectedProfession.countryTargets : targetCountryOptions,
+    [selectedProfession, targetCountryOptions],
   );
 
   useEffect(() => {
