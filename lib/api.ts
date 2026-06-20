@@ -5859,6 +5859,25 @@ export async function fetchPublicCatalog(): Promise<import('./types/admin').Publ
   return apiRequest('/v1/catalog/pricing');
 }
 
+export interface AdminCatalogPresentationResponse {
+  planCodes: string[];
+  addOnCodes: string[];
+  presentation: import('./catalog-presentation').CatalogPresentation | null;
+}
+
+export async function fetchAdminCatalogPresentation(): Promise<AdminCatalogPresentationResponse> {
+  return apiRequest('/v1/admin/billing/catalog/presentation');
+}
+
+export async function saveAdminCatalogPresentation(
+  presentation: import('./catalog-presentation').CatalogPresentation | null,
+): Promise<void> {
+  await apiRequest('/v1/admin/billing/catalog/presentation', {
+    method: 'PUT',
+    body: JSON.stringify({ presentation }),
+  });
+}
+
 export async function quoteAddonEligibility(addOnCode: string): Promise<import('./types/admin').AddonQuoteResponse> {
   return apiRequest('/v1/billing/quote/addon', {
     method: 'POST',

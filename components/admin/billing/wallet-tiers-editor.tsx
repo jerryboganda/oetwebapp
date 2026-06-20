@@ -391,7 +391,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
                         <Button
                           variant="destructive"
                           size="sm"
-                          aria-label={`Delete wallet tier ${row.amount}`}
+                          aria-label={`Remove tier ${row.amount}`}
                           disabled={!canWrite}
                           onClick={() => requestRemoveRow(row.key)}
                         >
