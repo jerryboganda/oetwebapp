@@ -9,6 +9,8 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
+import { CheckoutPayRegion, type PayRegion } from '@/components/checkout/checkout-pay-region';
+import { detectBillingRegion } from '@/lib/api/billing-region';
 import { useAuth } from '@/contexts/auth-context';
 import {
   createBillingCheckoutSession,
@@ -77,6 +79,7 @@ function CheckoutReviewContent() {
   // the learner's current selection.
   const [methods, setMethods] = useState<PaymentMethodOption[]>([]);
   const [selectedGateway, setSelectedGateway] = useState<string>(initialGateway);
+  const [payRegion, setPayRegion] = useState<PayRegion>('global');
   const quoteStartedRef = useRef(false);
   const quoteRefreshingRef = useRef(false);
 
@@ -105,6 +108,12 @@ function CheckoutReviewContent() {
     const qs = params.toString();
     return `/billing/manual-payment${qs ? `?${qs}` : ''}`;
   }, [quote]);
+
+  // Same target as the manual-payment link, focused on the Egypt section.
+  const egyptHref = useMemo(
+    () => `${manualPaymentHref}${manualPaymentHref.includes('?') ? '&' : '?'}region=egypt`,
+    [manualPaymentHref],
+  );
 
   const loadQuote = useCallback(async (couponOverride = couponCode) => {
     if (!priceId) {
@@ -172,6 +181,21 @@ function CheckoutReviewContent() {
           ? current
           : options[0]!.name);
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Default the payment region from the learner's detected billing region so
+  // Egyptian learners see the local methods first. Falls back to global.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => detectBillingRegion())
+      .then((d) => {
+        if (!cancelled && d?.region === 'EGYPT') setPayRegion('egypt');
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -355,64 +379,62 @@ function CheckoutReviewContent() {
           >
             Apply coupon
           </Button>
-          {methods.length > 1 ? (
-            <fieldset className="mt-5">
-              <legend className="text-sm font-medium">Payment method</legend>
-              <div className="mt-2 space-y-2">
-                {methods.map((method) => (
-                  <label
-                    key={method.name}
-                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${
-                      selectedGateway === method.name
-                        ? 'border-primary ring-1 ring-primary'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value={method.name}
-                      checked={selectedGateway === method.name}
-                      onChange={() => setSelectedGateway(method.name)}
-                      className="accent-primary"
-                    />
-                    <MethodIcon iconName={method.iconName} />
-                    <span className="font-medium">{method.label}</span>
-                  </label>
-                ))}
+          <CheckoutPayRegion
+            value={payRegion}
+            onChange={setPayRegion}
+            egyptHref={egyptHref}
+            disabled={!quote}
+          >
+            {methods.length > 1 ? (
+              <fieldset className="mt-5">
+                <legend className="text-sm font-medium">Payment method</legend>
+                <div className="mt-2 space-y-2">
+                  {methods.map((method) => (
+                    <label
+                      key={method.name}
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${
+                        selectedGateway === method.name
+                          ? 'border-primary ring-1 ring-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={method.name}
+                        checked={selectedGateway === method.name}
+                        onChange={() => setSelectedGateway(method.name)}
+                        className="accent-primary"
+                      />
+                      <MethodIcon iconName={method.iconName} />
+                      <span className="font-medium">{method.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ) : null}
+
+            {selectedMode === 'embedded' && !paypalUnavailable ? (
+              <div className="mt-3">
+                <PayPalExpandedCheckout
+                  createOrder={createPaypalOrder}
+                  onCaptured={handlePaypalCaptured}
+                  onError={(msg) => setError(msg)}
+                  onUnavailable={() => setPaypalUnavailable(true)}
+                  amountLabel={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : ''}
+                  disabled={!quote}
+                />
+                <p className="mt-3 text-xs leading-5 text-muted">Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.</p>
               </div>
-            </fieldset>
-          ) : null}
-
-          {selectedMode === 'embedded' && !paypalUnavailable ? (
-            <div className="mt-3">
-              <PayPalExpandedCheckout
-                createOrder={createPaypalOrder}
-                onCaptured={handlePaypalCaptured}
-                onError={(msg) => setError(msg)}
-                onUnavailable={() => setPaypalUnavailable(true)}
-                amountLabel={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : ''}
-                disabled={!quote}
-              />
-              <p className="mt-3 text-xs leading-5 text-muted">Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.</p>
-            </div>
-          ) : (
-            <>
-              <Button className="mt-3" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
-                <CreditCard className="h-4 w-4" /> Continue to secure payment
-              </Button>
-              <p className="mt-3 text-xs leading-5 text-muted">Payment opens in the hosted portal. Your account unlocks after webhook confirmation.</p>
-            </>
-          )}
-
-          <div className="mt-4 border-t border-border pt-4">
-            <Link href={manualPaymentHref} className="text-sm font-medium text-primary hover:underline">
-              Other ways to pay (bank transfer, InstaPay, Vodafone Cash, PayPal)
-            </Link>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Pay manually and upload your proof — our team activates access after verifying it.
-            </p>
-          </div>
+            ) : (
+              <>
+                <Button className="mt-3" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
+                  <CreditCard className="h-4 w-4" /> Continue to secure payment
+                </Button>
+                <p className="mt-3 text-xs leading-5 text-muted">Payment opens in the hosted portal. Your account unlocks after webhook confirmation.</p>
+              </>
+            )}
+          </CheckoutPayRegion>
         </aside>
       </section>
     </main>

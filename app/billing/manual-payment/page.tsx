@@ -123,6 +123,7 @@ function statusVariant(status: string) {
 function ManualPaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const focusEgypt = (searchParams.get('region') ?? '').toLowerCase() === 'egypt';
 
   const [candidateFullName, setCandidateFullName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
@@ -224,6 +225,13 @@ function ManualPaymentContent() {
       created.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [paymentMethods]);
+
+  // When arriving from checkout with ?region=egypt, focus the Egypt section.
+  useEffect(() => {
+    if (!focusEgypt) return;
+    const el = document.getElementById('pay-inside-egypt');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focusEgypt]);
 
   // Load purchasable plans for the course dropdown, then apply any pre-fill from
   // the checkout link (?quoteId=&course=&amount=&currency=).
@@ -378,14 +386,19 @@ function ManualPaymentContent() {
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-4">
-          <PaymentCategory
-            title="Payment Inside Egypt"
-            category="inside_egypt"
-            methods={paymentMethods}
-            qrSrcFor={qrSrcFor}
-            availableGateways={availableGateways}
-            onPayWithPayPal={handlePayWithPayPal}
-          />
+          <div
+            id="pay-inside-egypt"
+            className={focusEgypt ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-background-light' : undefined}
+          >
+            <PaymentCategory
+              title="Payment Inside Egypt"
+              category="inside_egypt"
+              methods={paymentMethods}
+              qrSrcFor={qrSrcFor}
+              availableGateways={availableGateways}
+              onPayWithPayPal={handlePayWithPayPal}
+            />
+          </div>
           <PaymentCategory
             title="International / Worldwide Payment"
             category="international"

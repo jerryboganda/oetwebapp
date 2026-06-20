@@ -54,7 +54,9 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
   const flags = plan ? addOnEnabledFlags(plan) : [];
   const stats = plan ? bundledStats(plan) : [];
   const hasDiscount = plan?.originalPrice != null && plan.originalPrice > plan.price;
-  const buyHref = plan ? `/marketplace/packages/${encodeURIComponent(plan.code)}` : '#';
+  const buyHref = plan
+    ? `/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`
+    : '#';
 
   return (
     <Drawer open={plan != null} onClose={onClose} title={plan?.name ?? 'Package details'}>

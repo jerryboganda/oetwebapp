@@ -20,6 +20,10 @@ vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({ isAuthenticated: true, loading: false }),
 }));
 
+vi.mock('@/lib/api/billing-region', () => ({
+  detectBillingRegion: vi.fn().mockResolvedValue({ region: 'ROW', country: 'GB', currency: 'GBP', source: 'default' }),
+}));
+
 import CheckoutReviewPage from './page';
 import { renderWithRouter } from '@/tests/test-utils';
 
@@ -94,5 +98,20 @@ describe('Checkout review page', () => {
     expect(await screen.findByText(/could not open the secure payment window/i)).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalledWith(expect.stringContaining('/billing/payment-return'));
     expect(screen.getByRole('button', { name: /continue to secure payment/i })).toBeEnabled();
+  });
+
+  it('lets the learner choose between paying inside Egypt and paying globally', async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    // Global is the default region, so the Stripe payment button is shown.
+    expect(await screen.findByRole('button', { name: /continue to secure payment/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pay globally/i })).toBeInTheDocument();
+
+    // Choosing Egypt reveals the manual-payment CTA, focused on the Egypt section.
+    await user.click(screen.getByRole('button', { name: /pay inside egypt/i }));
+    const cta = await screen.findByRole('link', { name: /continue to egyptian payment/i });
+    expect(cta.getAttribute('href')).toContain('/billing/manual-payment');
+    expect(cta.getAttribute('href')).toContain('region=egypt');
   });
 });
