@@ -1,26 +1,29 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState, type ElementType } from 'react';
+import { Suspense, useCallback, useEffect, useState, type ElementType } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CreditCard, Info, Landmark, Mail, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
+import { CreditCard, Info, Landmark, Mail, MessageCircle, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/form-controls';
-import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Input } from '@/components/ui/form-controls';
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/auth-context';
+import { ProofDropzone } from '@/components/billing/proof-dropzone';
+import { buildManualPaymentWhatsAppLink } from '@/lib/billing/whatsapp';
 import {
   fetchAvailablePaymentGateways,
   fetchPaymentMethodQrBlob,
-  fetchPublicPlans,
   listOwnManualPayments,
   listPublicPaymentMethods,
   submitManualPayment,
   type ManualPaymentDto,
   type ManualPaymentSubmitRequest,
   type PaymentMethodConfigDto,
-  type PublicBillingPlan,
 } from '@/lib/api';
 
 const SUPPORT_EMAIL = 'support@oetwithdrhesham.co.uk';
@@ -90,12 +93,6 @@ const FALLBACK_PAYMENT_METHODS: PaymentMethodConfigDto[] = [
   },
 ];
 
-const OTHER_PLAN_OPTION = '__other';
-
-function defaultCurrencyForCategory(category: string): string {
-  return category === 'inside_egypt' ? 'EGP' : 'GBP';
-}
-
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -123,21 +120,24 @@ function statusVariant(status: string) {
 function ManualPaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const focusEgypt = (searchParams.get('region') ?? '').toLowerCase() === 'egypt';
+  const { user } = useAuth();
 
-  const [candidateFullName, setCandidateFullName] = useState('');
-  const [candidateEmail, setCandidateEmail] = useState('');
-  const [candidateWhatsApp, setCandidateWhatsApp] = useState('');
-  const [plans, setPlans] = useState<PublicBillingPlan[] | null>(null);
-  const [selectedPlanCode, setSelectedPlanCode] = useState('');
-  const [courseName, setCourseName] = useState('');
-  const [courseId, setCourseId] = useState<string | null>(null);
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('EGP');
-  const [method, setMethod] = useState<string>('instapay_qr_link');
+  // Order context comes from the checkout deep-link (?quoteId=&course=&amount=&currency=).
+  const quoteId = searchParams.get('quoteId');
+  const courseParam = searchParams.get('course');
+  const amountParam = searchParams.get('amount');
+  const currencyParam = searchParams.get('currency');
+  const hasOrderContext = Boolean(quoteId || amountParam);
+
+  const registeredEmail = user?.email ?? '';
+  const fullName = user?.displayName?.trim() || registeredEmail;
+  const courseName = (courseParam ?? '').trim() || 'OET package';
+  const orderAmount = Number(amountParam ?? '0');
+  const currency = (currencyParam ?? 'EGP').toUpperCase();
+
   const [reference, setReference] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
-  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfigDto[]>([]);
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
@@ -146,19 +146,8 @@ function ManualPaymentContent() {
   const [history, setHistory] = useState<ManualPaymentDto[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
-
-  const selectedMethod = paymentMethods.find((item) => item.key === method) ?? paymentMethods[0] ?? FALLBACK_PAYMENT_METHODS[0];
-
-  const methodOptions = useMemo(
-    () => paymentMethods.map((m) => ({ value: m.key, label: m.label })),
-    [paymentMethods],
-  );
-
-  const planOptions = useMemo(() => {
-    const items = (plans ?? []).map((plan) => ({ value: plan.code, label: plan.label }));
-    return [{ value: '', label: 'Select your course / plan…' }, ...items, { value: OTHER_PLAN_OPTION, label: 'Other / not listed' }];
-  }, [plans]);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [whatsAppUrl, setWhatsAppUrl] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -172,8 +161,7 @@ function ManualPaymentContent() {
     void load();
   }, [load]);
 
-  // Load admin-configurable payment methods (fall back to the bundled list so the
-  // page is never blank), plus the available hosted gateways for the PayPal CTA.
+  // Admin-configurable methods (fall back to the bundled list) + hosted gateways.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -184,17 +172,13 @@ function ManualPaymentContent() {
       } catch {
         methods = FALLBACK_PAYMENT_METHODS;
       }
-      if (cancelled) return;
-      setPaymentMethods(methods);
-      setMethod((current) => (methods.some((m) => m.key === current) ? current : methods[0]?.key ?? current));
+      if (!cancelled) setPaymentMethods(methods);
     })();
     void fetchAvailablePaymentGateways()
       .then((res) => {
         if (!cancelled) setAvailableGateways(res.gateways ?? []);
       })
-      .catch(() => {
-        /* hosted gateways are optional; manual instructions remain */
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -226,88 +210,6 @@ function ManualPaymentContent() {
     };
   }, [paymentMethods]);
 
-  // When arriving from checkout with ?region=egypt, focus the Egypt section.
-  useEffect(() => {
-    if (!focusEgypt) return;
-    const el = document.getElementById('pay-inside-egypt');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [focusEgypt]);
-
-  // Load purchasable plans for the course dropdown, then apply any pre-fill from
-  // the checkout link (?quoteId=&course=&amount=&currency=).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      let loaded: PublicBillingPlan[] = [];
-      try {
-        const res = await fetchPublicPlans();
-        loaded = res.items ?? [];
-      } catch {
-        loaded = [];
-      }
-      if (cancelled) return;
-      setPlans(loaded);
-
-      const qpQuote = searchParams.get('quoteId');
-      const qpCourse = searchParams.get('course');
-      const qpAmount = searchParams.get('amount');
-      const qpCurrency = searchParams.get('currency');
-
-      if (qpQuote) setQuoteId(qpQuote);
-      if (qpAmount && Number.isFinite(Number(qpAmount))) setAmount(qpAmount);
-      if (qpCurrency) setCurrency(qpCurrency.toUpperCase());
-
-      if (qpCourse) {
-        const match = loaded.find(
-          (p) => p.code === qpCourse || p.label.toLowerCase() === qpCourse.toLowerCase(),
-        );
-        if (match) {
-          setSelectedPlanCode(match.code);
-          setCourseId(match.code);
-          setCourseName(match.label);
-          if (!qpAmount) setAmount(String(match.price.amount));
-          if (!qpCurrency) setCurrency(match.price.currency.toUpperCase());
-        } else {
-          setSelectedPlanCode(OTHER_PLAN_OPTION);
-          setCourseName(qpCourse);
-          setCourseId(null);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // searchParams is stable for the life of the page render; run once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handlePlanChange(nextCode: string) {
-    setSelectedPlanCode(nextCode);
-    if (nextCode === OTHER_PLAN_OPTION || nextCode === '') {
-      setCourseId(null);
-      if (nextCode === '') setCourseName('');
-      return;
-    }
-    const plan = (plans ?? []).find((p) => p.code === nextCode);
-    if (plan) {
-      setCourseId(plan.code);
-      setCourseName(plan.label);
-      setAmount(String(plan.price.amount));
-      setCurrency(plan.price.currency.toUpperCase());
-    }
-  }
-
-  function handleMethodChange(nextMethod: string) {
-    setMethod(nextMethod);
-    const next = paymentMethods.find((m) => m.key === nextMethod);
-    if (next) setCurrency(defaultCurrencyForCategory(next.category));
-  }
-
-  function applyReferenceRule() {
-    const composed = [candidateFullName.trim(), courseName.trim()].filter(Boolean).join(' - ');
-    if (composed) setReference(composed);
-  }
-
   function qrSrcFor(m: PaymentMethodConfigDto): string | null {
     if (!m.showQr) return null;
     if (m.hasQrImage) return qrUrls[m.key] ?? null;
@@ -324,47 +226,54 @@ function ManualPaymentContent() {
 
   async function handleSubmit() {
     setError(null);
-    if (!candidateFullName.trim() || !candidateEmail.trim() || !candidateWhatsApp.trim() || !courseName.trim()) {
-      setError('Full name, email, WhatsApp number, and selected course are required.');
+    if (!registeredEmail) {
+      setError('We could not read your account email. Please refresh and try again.');
       return;
     }
     if (!reference.trim()) {
-      setError('Transaction reference is required.');
+      setError('Please enter your transaction ID.');
       return;
     }
     if (!proofFile) {
-      setError('Please attach a payment proof file.');
+      setProofError('Please attach your payment screenshot.');
       return;
     }
-    const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setError('Enter the paid amount.');
+    if (!(orderAmount > 0)) {
+      setError('We could not read the order amount. Please restart from Subscriptions & Packages.');
       return;
     }
 
     setSubmitting(true);
     try {
       const proofBase64 = await readFileAsBase64(proofFile);
+      const method = paymentMethods.find((m) => m.category === 'inside_egypt')?.key ?? 'instapay_qr_link';
       const payload: ManualPaymentSubmitRequest = {
         quoteId: quoteId ?? null,
-        amountAmount: numericAmount,
-        currency: currency.toUpperCase(),
+        amountAmount: orderAmount,
+        currency,
         method,
-        reference,
+        reference: reference.trim(),
         proofUrl: '',
-        candidateFullName,
-        candidateEmail,
-        candidateWhatsApp,
+        candidateFullName: fullName,
+        candidateEmail: registeredEmail,
+        candidateWhatsApp: '',
         courseName,
-        courseId: courseId ?? courseName,
-        paymentCategory: selectedMethod.category,
+        courseId: null,
+        paymentCategory: 'inside_egypt',
         proofBase64,
       };
       await submitManualPayment(payload);
-      setToast({ variant: 'success', message: 'Payment proof submitted for admin review.' });
-      setAmount('');
-      setReference('');
-      setProofFile(null);
+      const url = buildManualPaymentWhatsAppLink({
+        name: fullName,
+        email: registeredEmail,
+        course: courseName,
+        amount: orderAmount,
+        currency,
+        reference: reference.trim(),
+      });
+      setWhatsAppUrl(url);
+      setSuccessOpen(true);
+      try { window.open(url, '_blank', 'noopener'); } catch { /* popup blocked — use the button */ }
       await load();
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Submission failed.');
@@ -378,30 +287,15 @@ function ManualPaymentContent() {
       <LearnerPageHero
         icon={<Receipt className="h-6 w-6" />}
         eyebrow="OET with Dr. Ahmed Hesham"
-        title="Payment options"
-        description="Choose one of the approved payment routes below, then submit your proof of payment. For manual methods, access is activated after our team verifies your payment."
+        title="Pay inside Egypt"
+        description="Pay with one of the Egyptian methods below, then upload your screenshot. Access is activated after our team verifies your payment."
       />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-4">
-          <div
-            id="pay-inside-egypt"
-            className={focusEgypt ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-background-light' : undefined}
-          >
-            <PaymentCategory
-              title="Payment Inside Egypt"
-              category="inside_egypt"
-              methods={paymentMethods}
-              qrSrcFor={qrSrcFor}
-              availableGateways={availableGateways}
-              onPayWithPayPal={handlePayWithPayPal}
-            />
-          </div>
           <PaymentCategory
-            title="International / Worldwide Payment"
-            category="international"
+            title="Payment Inside Egypt"
+            category="inside_egypt"
             methods={paymentMethods}
             qrSrcFor={qrSrcFor}
             availableGateways={availableGateways}
@@ -409,85 +303,61 @@ function ManualPaymentContent() {
           />
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-navy">Submit payment proof</h2>
-          <p className="mt-1 text-sm text-muted">Access is activated only after admin approval.</p>
-          {error && <InlineAlert variant="error" className="mt-4">{error}</InlineAlert>}
+        {hasOrderContext ? (
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-navy">Submit payment proof</h2>
+            <p className="mt-1 text-sm text-muted">
+              {courseName}{orderAmount > 0 ? ` · ${orderAmount} ${currency}` : ''} · activated after admin approval.
+            </p>
+            {error && <InlineAlert variant="error" className="mt-4">{error}</InlineAlert>}
 
-          <div className="mt-4 grid gap-4">
-            <Input label="Full name" value={candidateFullName} onChange={(e) => setCandidateFullName(e.target.value)} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="Email" type="email" value={candidateEmail} onChange={(e) => setCandidateEmail(e.target.value)} />
-              <Input label="WhatsApp number" value={candidateWhatsApp} onChange={(e) => setCandidateWhatsApp(e.target.value)} />
-            </div>
-            <Select
-              label="Selected course / plan"
-              value={selectedPlanCode}
-              options={planOptions}
-              onChange={(e) => handlePlanChange(e.target.value)}
-            />
-            {selectedPlanCode === OTHER_PLAN_OPTION ? (
+            <div className="mt-4 grid gap-4">
+              <Input label="Your registered email" type="email" value={registeredEmail} readOnly />
               <Input
-                label="Course name"
-                value={courseName}
-                onChange={(e) => setCourseName(e.target.value)}
-                placeholder="Type the course or package name"
+                label="Transaction ID"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="The reference / ID from your transfer"
               />
-            ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="Paid amount" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <Input label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
-            </div>
-            <Select label="Payment method" value={method} options={methodOptions} onChange={(e) => handleMethodChange(e.target.value)} />
-            <div>
-              <Input label="Transaction reference" value={reference} onChange={(e) => setReference(e.target.value)} />
-              {selectedMethod.referenceRule ? (
-                <button
-                  type="button"
-                  onClick={applyReferenceRule}
-                  className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
-                >
-                  Payment reference must be your full name + course name — use “{candidateFullName.trim() || 'Full name'} - {courseName.trim() || 'Course name'}”
-                </button>
-              ) : null}
+              <div>
+                <span className="mb-1 block text-sm font-semibold tracking-tight text-navy">Payment screenshot</span>
+                <ProofDropzone
+                  value={proofFile}
+                  onChange={(file) => { setProofFile(file); setProofError(null); }}
+                  error={proofError}
+                />
+              </div>
             </div>
 
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Proof file</span>
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm"
-              />
-            </label>
+            <div className="mt-5 flex justify-end">
+              <Button onClick={handleSubmit} disabled={submitting}>
+                <Upload className="mr-2 h-4 w-4" />
+                {submitting ? 'Submitting...' : 'Submit'}
+              </Button>
+            </div>
 
-            <InlineAlert variant="info">
-              <span className="flex items-start gap-2">
-                <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  <strong>Required proof:</strong> a screenshot of the successful transaction, plus your full name,
-                  course name, WhatsApp number, and email.
-                </span>
-              </span>
-            </InlineAlert>
+            <p className="mt-4 flex items-center gap-2 text-xs text-muted">
+              <Mail className="h-3.5 w-3.5" />
+              Need help? Contact{' '}
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium text-primary hover:underline">
+                {SUPPORT_EMAIL}
+              </a>
+            </p>
           </div>
-
-          <div className="mt-5 flex justify-end">
-            <Button onClick={handleSubmit} disabled={submitting}>
-              <Upload className="mr-2 h-4 w-4" />
-              {submitting ? 'Submitting...' : 'Submit for review'}
-            </Button>
+        ) : (
+          <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+            <h2 className="text-base font-semibold text-navy">Pick a package first</h2>
+            <p className="mt-2 text-sm text-muted">
+              Choose a plan from Subscriptions &amp; Packages, then select &ldquo;Pay inside Egypt&rdquo; at checkout to submit your proof here.
+            </p>
+            <Link
+              href="/subscriptions"
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
+            >
+              Browse Subscriptions &amp; Packages
+            </Link>
           </div>
-
-          <p className="mt-4 flex items-center gap-2 text-xs text-muted">
-            <Mail className="h-3.5 w-3.5" />
-            Need help? Contact{' '}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium text-primary hover:underline">
-              {SUPPORT_EMAIL}
-            </a>
-          </p>
-        </div>
+        )}
       </section>
 
       <section className="mt-6 space-y-3">
@@ -511,6 +381,28 @@ function ManualPaymentContent() {
           </div>
         )}
       </section>
+
+      <Modal open={successOpen} onClose={() => setSuccessOpen(false)} title="Payment submitted">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Thanks! Your payment proof was submitted and our team will verify it and activate your access shortly.
+          </p>
+          <p className="text-sm text-muted">
+            Tap below to send us a confirmation on WhatsApp — please attach the same screenshot in the chat before sending.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setSuccessOpen(false)}>Done</Button>
+            <a
+              href={whatsAppUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#25D366] px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-95"
+            >
+              <MessageCircle className="h-4 w-4" /> Notify us on WhatsApp
+            </a>
+          </div>
+        </div>
+      </Modal>
     </LearnerDashboardShell>
   );
 }
