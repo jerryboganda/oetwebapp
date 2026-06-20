@@ -28,7 +28,7 @@ function sanitizePublicSignupCatalog(catalog: SignupCatalog): {
     examTypes: serverExamTypes.length > 0 ? serverExamTypes : fallbackExamTypes,
     professions: serverProfessions.length > 0 ? serverProfessions : fallbackProfessions,
     externalAuthProviders: Array.isArray(catalog.externalAuthProviders) ? catalog.externalAuthProviders : [],
-    targetCountryOptions: serverTargetCountryOptions.length > 0 ? serverTargetCountryOptions : TARGET_COUNTRY_OPTIONS,
+    targetCountryOptions: serverTargetCountryOptions.length > 0 ? serverTargetCountryOptions : [...TARGET_COUNTRY_OPTIONS],
   };
 }
 
