@@ -65,6 +65,8 @@ export function CheckoutPayRegion({ value, onChange, egyptHref, disabled, childr
           <Link
             href={disabled ? '#' : egyptHref}
             aria-disabled={disabled}
+            tabIndex={disabled ? -1 : undefined}
+            onClick={(e) => { if (disabled) e.preventDefault(); }}
             className={cn(
               'mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary/90',
               disabled && 'pointer-events-none opacity-50',
@@ -88,6 +90,7 @@ function RegionCard({ active, onClick, icon, title, subtitle }: {
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         'flex items-start gap-3 rounded-lg border px-3 py-3 text-left transition',
         active ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-primary/50',
