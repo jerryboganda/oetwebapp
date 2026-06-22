@@ -72,28 +72,42 @@ const ROLE_OPTIONS: { value: PaperAssetRole; label: string; accept: string }[] =
 ];
 
 /**
- * Strict Part options for LISTENING PDF assets (Question Paper / Answer Key /
- * Audio Script / …). The operator must pick the exact section so the learner
- * player resolves the right per-part PDF. Values map 1:1 to ContentPaperAsset.Part
- * (uppercased; resolved by `questionPaperByPart` in ListeningLearnerService).
- * Audio is a single Part A file ("A") — handled separately, no sub-section.
+ * Part options for LISTENING Question-Paper PDFs. One slot per section: Part A
+ * is its two consultations (A1, A2), Part B is a SINGLE booklet (the six MCQs
+ * Q25–Q30 all reference it — no per-question PDFs), Part C is its two
+ * presentations (C1, C2). Values map 1:1 to ContentPaperAsset.Part (uppercased;
+ * resolved by `questionPaperByPart` in ListeningLearnerService). The part is
+ * optional — nothing is compulsory. Audio is a single Part A file ("A"),
+ * handled in the Audio tab.
  */
 const LISTENING_PART_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Select part…' },
-  { value: 'A', label: 'Part A — whole' },
+  { value: '', label: 'No part / unassigned' },
   { value: 'A1', label: 'Part A — Extract 1 (A1)' },
   { value: 'A2', label: 'Part A — Extract 2 (A2)' },
-  { value: 'B', label: 'Part B — whole' },
-  { value: 'B1', label: 'Part B — Q25 (B1)' },
-  { value: 'B2', label: 'Part B — Q26 (B2)' },
-  { value: 'B3', label: 'Part B — Q27 (B3)' },
-  { value: 'B4', label: 'Part B — Q28 (B4)' },
-  { value: 'B5', label: 'Part B — Q29 (B5)' },
-  { value: 'B6', label: 'Part B — Q30 (B6)' },
-  { value: 'C', label: 'Part C — whole' },
+  { value: 'B', label: 'Part B — question booklet (Q25–30)' },
   { value: 'C1', label: 'Part C — C1 (Q31–36)' },
   { value: 'C2', label: 'Part C — C2 (Q37–42)' },
 ];
+
+/** Content-type tabs for the Listening Assets card. Each tab is one asset role. */
+const LISTENING_ASSET_TABS: { id: PaperAssetRole; label: string }[] = [
+  { id: 'Audio', label: 'Audio' },
+  { id: 'QuestionPaper', label: 'Question Papers' },
+  { id: 'AudioScript', label: 'Audio Script' },
+  { id: 'AnswerKey', label: 'Answer Key' },
+  { id: 'Supplementary', label: 'Supplementary' },
+];
+
+/** Roles that have their own Listening tab; everything else lands in Supplementary. */
+const LISTENING_PRIMARY_TAB_ROLES: PaperAssetRole[] = ['Audio', 'QuestionPaper', 'AudioScript', 'AnswerKey'];
+
+/** Assets belonging to a given content-type tab (Supplementary = any other role). */
+function listeningAssetsForTab(assets: ContentPaperAssetDto[], tabId: PaperAssetRole): ContentPaperAssetDto[] {
+  if (tabId === 'Supplementary') {
+    return assets.filter((a) => !LISTENING_PRIMARY_TAB_ROLES.includes(a.role));
+  }
+  return assets.filter((a) => a.role === tabId);
+}
 
 const WRITING_LETTER_TYPE_OPTIONS = [
   { value: '', label: 'Select letter type' },
@@ -133,6 +147,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
       const p = await getContentPaper(paperId);
       setPaper(p);
       if (p.subtestCode === 'writing') setUploadRole('CaseNotes');
+      else if (p.subtestCode === 'listening') setUploadRole('Audio');
       const req = await getRequiredRoles(p.subtestCode);
       setRequiredRoles(req.required);
       setStatus('success');
@@ -172,14 +187,10 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
 
   const uploadFile = async (file: File) => {
     if (!canWriteContent) return;
-    // Listening: PDF assets MUST declare their part (A/A1/A2/B…/C1/C2); audio is
-    // a single Part A file (its per-section split is set on the Audio page).
+    // Listening audio is always the single Part A file (its per-section split is
+    // set on the Audio page). Every other Listening asset's part is OPTIONAL —
+    // nothing is compulsory, so we never block the upload on a missing part.
     const isListening = paper?.subtestCode === 'listening';
-    const isListeningPdf = isListening && uploadRole !== 'Audio';
-    if (isListeningPdf && !uploadPart) {
-      setToast({ variant: 'error', message: 'Choose a Part (e.g. A1, C2) before uploading a Listening PDF.' });
-      return;
-    }
     const effectivePart = isListening && uploadRole === 'Audio' ? 'A' : (uploadPart || null);
     setUploadProgress(0);
     try {
@@ -324,7 +335,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                   onChange={(e) => setPaper({ ...paper, tagsCsv: e.target.value })}
                   placeholder="dermatology,acne"
                   disabled={!canWriteContent} />
-                <Input label="Source provenance (required to publish)"
+                <Input label={paper.subtestCode === 'listening' ? 'Source provenance (optional)' : 'Source provenance (required to publish)'}
                   value={paper.sourceProvenance ?? ''}
                   onChange={(e) => setPaper({ ...paper, sourceProvenance: e.target.value })}
                   placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
@@ -345,61 +356,57 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             <Card>
               <CardHeader><CardTitle>Assets</CardTitle></CardHeader>
               <CardContent>
-              {canWriteContent ? (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 items-end">
-                  <Select
-                    label="Role"
-                    value={uploadRole}
-                    onChange={(e) => setUploadRole(e.target.value as PaperAssetRole)}
-                    options={ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }))}
-                  />
-                  {paper.subtestCode === 'listening' ? (
-                    uploadRole === 'Audio' ? (
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Part</label>
-                        <div className="rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-xs text-admin-text-muted">
-                          Part A (single audio). Split per section on the{' '}
-                          <Link href={`/admin/content/listening/${paper.id}/audio`} className="underline">Audio page</Link>.
-                        </div>
-                      </div>
-                    ) : (
+              {paper.subtestCode === 'listening' ? (
+                <ListeningAssetTabs
+                  assets={paper.assets ?? []}
+                  paperId={paper.id}
+                  activeRole={uploadRole}
+                  onActiveRoleChange={(r) => { setUploadRole(r); setUploadPart(''); }}
+                  uploadPart={uploadPart}
+                  onUploadPartChange={setUploadPart}
+                  canWrite={canWriteContent}
+                  uploadProgress={uploadProgress}
+                  fileInputRef={fileInputRef}
+                  onPickFile={(f) => void uploadFile(f)}
+                  onRemove={removeAsset}
+                />
+              ) : (
+                <>
+                  {canWriteContent ? (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 items-end">
                       <Select
-                        label="Part (required)"
-                        value={uploadPart}
-                        onChange={(e) => setUploadPart(e.target.value)}
-                        options={LISTENING_PART_OPTIONS}
+                        label="Role"
+                        value={uploadRole}
+                        onChange={(e) => setUploadRole(e.target.value as PaperAssetRole)}
+                        options={ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }))}
                       />
-                    )
-                  ) : (
-                    <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
-                  )}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">File</label>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept={ROLE_OPTIONS.find((r) => r.value === uploadRole)?.accept ?? ''}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) void uploadFile(f);
-                      }}
-                      disabled={uploadProgress !== null || (paper.subtestCode === 'listening' && uploadRole !== 'Audio' && !uploadPart)}
-                      className="block w-full text-sm"
-                    />
-                    {paper.subtestCode === 'listening' && uploadRole !== 'Audio' && !uploadPart && (
-                      <p className="mt-1 text-xs text-amber-600">Choose a Part above to enable upload.</p>
-                    )}
-                    {uploadProgress !== null && (
-                      <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Uploading… {Math.round(uploadProgress * 100)}%
+                      <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-1">File</label>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept={ROLE_OPTIONS.find((r) => r.value === uploadRole)?.accept ?? ''}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void uploadFile(f);
+                          }}
+                          disabled={uploadProgress !== null}
+                          className="block w-full text-sm"
+                        />
+                        {uploadProgress !== null && (
+                          <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Uploading… {Math.round(uploadProgress * 100)}%
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
+                    </div>
+                  ) : null}
 
-              <AssetList assets={paper.assets ?? []} onRemove={removeAsset} canRemove={canWriteContent} />
+                  <AssetList assets={paper.assets ?? []} onRemove={removeAsset} canRemove={canWriteContent} />
+                </>
+              )}
               </CardContent>
             </Card>
 
@@ -484,6 +491,120 @@ function AssetList({ assets, onRemove, canRemove }: { assets: ContentPaperAssetD
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Listening Assets, organised into one tab per content type (Audio, Question
+ * Papers, Audio Script, Answer Key, Supplementary). The active tab IS the upload
+ * role, so each tab shows a role-scoped upload control + the filtered list for
+ * that role. Nothing is compulsory — every slot can stay empty and the paper
+ * still publishes.
+ */
+function ListeningAssetTabs({
+  assets,
+  paperId,
+  activeRole,
+  onActiveRoleChange,
+  uploadPart,
+  onUploadPartChange,
+  canWrite,
+  uploadProgress,
+  fileInputRef,
+  onPickFile,
+  onRemove,
+}: {
+  assets: ContentPaperAssetDto[];
+  paperId: string;
+  activeRole: PaperAssetRole;
+  onActiveRoleChange: (role: PaperAssetRole) => void;
+  uploadPart: string;
+  onUploadPartChange: (part: string) => void;
+  canWrite: boolean;
+  uploadProgress: number | null;
+  fileInputRef: { current: HTMLInputElement | null };
+  onPickFile: (file: File) => void;
+  onRemove: (id: string) => void;
+}) {
+  const accept = ROLE_OPTIONS.find((r) => r.value === activeRole)?.accept ?? '';
+  const isAudio = activeRole === 'Audio';
+  const isQuestionPaper = activeRole === 'QuestionPaper';
+  const tabAssets = listeningAssetsForTab(assets, activeRole);
+
+  return (
+    <div className="space-y-4">
+      <div role="tablist" aria-label="Asset content types" className="flex flex-wrap gap-1 border-b border-admin-border">
+        {LISTENING_ASSET_TABS.map((tab) => {
+          const count = listeningAssetsForTab(assets, tab.id).length;
+          const active = tab.id === activeRole;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onActiveRoleChange(tab.id)}
+              className={`-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? 'border-[var(--admin-primary)] text-[var(--admin-primary)]'
+                  : 'border-transparent text-admin-fg-muted hover:text-admin-fg-strong'
+              }`}
+            >
+              {tab.label}
+              <span className="rounded-full bg-admin-bg-subtle px-1.5 py-0.5 text-xs text-admin-fg-muted">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {canWrite ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          {isAudio ? (
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium mb-1">Part</label>
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-xs text-admin-text-muted">
+                Part A (single audio). Split per section on the{' '}
+                <Link href={`/admin/content/listening/${paperId}/audio`} className="underline">Audio page</Link>.
+              </div>
+            </div>
+          ) : isQuestionPaper ? (
+            <Select
+              label="Part (optional)"
+              value={uploadPart}
+              onChange={(e) => onUploadPartChange(e.target.value)}
+              options={LISTENING_PART_OPTIONS}
+            />
+          ) : null}
+
+          <div className={isQuestionPaper ? 'md:col-span-2' : 'md:col-span-3'}>
+            <label className="block text-sm font-medium mb-1">File</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={accept}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onPickFile(f);
+              }}
+              disabled={uploadProgress !== null}
+              className="block w-full text-sm"
+            />
+            {uploadProgress !== null && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Uploading… {Math.round(uploadProgress * 100)}%
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {tabAssets.length === 0 ? (
+        <p className="text-sm text-muted">No files in this tab yet.</p>
+      ) : (
+        <AssetList assets={tabAssets} onRemove={onRemove} canRemove={canWrite} />
+      )}
+    </div>
   );
 }
 

@@ -4,7 +4,6 @@ import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'rea
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
@@ -29,38 +28,26 @@ import {
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
-import {
-  validateListeningStructure,
-  type ListeningValidationReport,
-} from '@/lib/listening-authoring-api';
 
-// Required learner-facing question-paper parts. Mirrors the Reading module's
-// Part A/B/C PDF slots; for Listening these print the on-screen question booklet
-// shown next to the audio for each part.
-type PartCode = 'A' | 'B' | 'C';
-// Optional per-section overrides. When present a section PDF takes precedence
-// over the shared Part PDF for that sub-section tab (A has two consultations,
-// B has six short extracts, C has two presentations).
-type SectionSlotCode = 'A1' | 'A2' | 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
-type SlotCode = PartCode | SectionSlotCode;
+// Learner-facing question-paper PDF slots, one per section. Part A is its two
+// consultations (A1, A2); Part B is a SINGLE question booklet (the six MCQs
+// Q25–Q30 all reference it); Part C is its two presentations (C1, C2). The codes
+// map 1:1 to ContentPaperAsset.Part and to the learner resolver keys in
+// `questionPaperUrlByPart`. Every slot is OPTIONAL — a paper may publish with any
+// of them empty and the learner surface shows an empty-state message.
+type SlotCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
 type ToastState = { message: string; variant: 'success' | 'error' };
 
-const REQUIRED_PARTS: readonly PartCode[] = ['A', 'B', 'C'];
-const A_SECTION_SLOTS: readonly SectionSlotCode[] = ['A1', 'A2'];
-const B_SECTION_SLOTS: readonly SectionSlotCode[] = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'];
-const C_SECTION_SLOTS: readonly SectionSlotCode[] = ['C1', 'C2'];
-const ALL_SECTION_SLOTS: readonly SectionSlotCode[] = [
-  ...A_SECTION_SLOTS,
-  ...B_SECTION_SLOTS,
-  ...C_SECTION_SLOTS,
+const QUESTION_PAPER_SLOTS: { code: SlotCode; title: string; description: string }[] = [
+  { code: 'A1', title: 'Part A — Extract 1 (A1)', description: 'Consultation 1 question paper' },
+  { code: 'A2', title: 'Part A — Extract 2 (A2)', description: 'Consultation 2 question paper' },
+  { code: 'B', title: 'Part B — question booklet', description: 'One PDF for all six MCQs (Q25–Q30)' },
+  { code: 'C1', title: 'Part C — C1 (Q31–36)', description: 'Presentation 1 question paper' },
+  { code: 'C2', title: 'Part C — C2 (Q37–42)', description: 'Presentation 2 question paper' },
 ];
 
 const PDF_ACCEPT =
   'application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp';
-
-function isPartCode(value: string | null | undefined): value is PartCode {
-  return value === 'A' || value === 'B' || value === 'C';
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -78,18 +65,11 @@ function primaryFor(
   return matches.find((a) => a.isPrimary) ?? null;
 }
 
-/** Per-part publish-blocker message from the validation report, if any. */
-function requiredIssueForPart(report: ListeningValidationReport | null, partCode: PartCode): string | null {
-  const issue = report?.issues.find((c) => c.code === `part_${partCode.toLowerCase()}_pdf_required`);
-  return issue?.message ?? null;
-}
-
 export default function ListeningPdfAssetsPage() {
   const params = useParams<{ paperId: string }>();
   const paperId = params?.paperId ?? '';
 
   const [paper, setPaper] = useState<ContentPaperDto | null>(null);
-  const [validation, setValidation] = useState<ListeningValidationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Upload state is keyed by `${role}:${part}` so only the active card spins.
@@ -103,12 +83,8 @@ export default function ListeningPdfAssetsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [paperData, report] = await Promise.all([
-        getContentPaper(paperId),
-        validateListeningStructure(paperId).catch(() => null),
-      ]);
+      const paperData = await getContentPaper(paperId);
       setPaper(paperData);
-      setValidation(report);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load listening PDF assets');
     } finally {
@@ -121,10 +97,7 @@ export default function ListeningPdfAssetsPage() {
   }, [load]);
 
   const assets = useMemo(() => paper?.assets ?? [], [paper?.assets]);
-
-  const readyParts = REQUIRED_PARTS.filter((p) => primaryFor(assets, 'QuestionPaper', p));
-  const errorCount = validation?.issues.filter((i) => i.severity === 'error').length ?? 0;
-  const warningCount = validation?.issues.filter((i) => i.severity === 'warning').length ?? 0;
+  const filledSlots = QUESTION_PAPER_SLOTS.filter((s) => primaryFor(assets, 'QuestionPaper', s.code)).length;
 
   const slotKey = (role: PaperAssetRole, part: string | null) => `${role}:${part ?? ''}`;
 
@@ -141,10 +114,10 @@ export default function ListeningPdfAssetsPage() {
       setUploadProgress(0);
       try {
         const result = await uploadFileChunked(file, role, (pct) => setUploadProgress(pct));
-        // Stable display order: part slots first (in canonical order), then null-part roles last.
-        const order = part
-          ? [...REQUIRED_PARTS, ...ALL_SECTION_SLOTS].indexOf(part as SlotCode) + 1
-          : 99;
+        // Stable display order: question-paper section slots first (canonical
+        // A1/A2/B/C1/C2 order), then null-part reference roles last.
+        const slotIndex = part ? QUESTION_PAPER_SLOTS.findIndex((s) => s.code === part) : -1;
+        const order = slotIndex >= 0 ? slotIndex + 1 : 99;
         await attachPaperAsset(paperId, {
           role,
           mediaAssetId: result.mediaAssetId,
@@ -207,7 +180,7 @@ export default function ListeningPdfAssetsPage() {
   return (
     <AdminSettingsLayout
       title="Listening PDFs"
-      description="Attach the learner question-paper PDFs (per part, with optional per-section overrides) plus the audio script and answer key — the same per-part pattern as the Reading module."
+      description="Attach the learner question-paper PDFs per section — Part A as its two consultations (A1, A2), Part B as a single booklet, Part C as its two presentations (C1, C2). Every slot is optional: publish with any empty and the learner sees an empty-state message."
       eyebrow="Listening authoring"
       breadcrumbs={breadcrumbs}
     >
@@ -216,12 +189,12 @@ export default function ListeningPdfAssetsPage() {
 
         <SettingsSection
           title="Question paper slots"
-          description="Each Listening paper needs one primary QuestionPaper PDF (or image) for Part A, Part B, and Part C before it can publish — the learner sees the relevant part next to the audio."
+          description="The learner sees the relevant section's PDF next to the audio. Part B's single booklet backs all six MCQs (Q25–Q30). All slots are optional."
         >
           {loading ? (
             <div className="grid gap-4 lg:grid-cols-3">
-              {REQUIRED_PARTS.map((p) => (
-                <Card key={p}>
+              {QUESTION_PAPER_SLOTS.map((s) => (
+                <Card key={s.code}>
                   <CardContent className="space-y-3 py-6">
                     <Skeleton variant="text" className="h-5 w-1/3" />
                     <Skeleton variant="card" />
@@ -232,22 +205,19 @@ export default function ListeningPdfAssetsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <StatusTile label="PDF slots ready" value={`${readyParts.length}/3`} tone={readyParts.length === 3 ? 'success' : 'warning'} />
-                <StatusTile label="Publish blockers" value={String(errorCount)} tone={errorCount > 0 ? 'danger' : 'success'} />
-                <StatusTile label="Warnings" value={String(warningCount)} tone={warningCount > 0 ? 'warning' : 'success'} />
-              </div>
+              <p className="text-sm text-admin-fg-muted">
+                {filledSlots} of {QUESTION_PAPER_SLOTS.length} question-paper PDFs uploaded — all optional.
+              </p>
 
               <div className="grid gap-4 lg:grid-cols-3">
-                {REQUIRED_PARTS.map((partCode) => (
+                {QUESTION_PAPER_SLOTS.map((slot) => (
                   <PdfSlotCard
-                    key={partCode}
-                    title={`Part ${partCode}`}
-                    description="Primary QuestionPaper PDF or image"
+                    key={slot.code}
+                    title={slot.title}
+                    description={slot.description}
                     role="QuestionPaper"
-                    part={partCode}
+                    part={slot.code}
                     assets={assets}
-                    requiredIssue={requiredIssueForPart(validation, partCode)}
                     uploadingSlot={uploadingSlot}
                     uploadProgress={uploadProgress}
                     removingAssetId={removingAssetId}
@@ -262,21 +232,8 @@ export default function ListeningPdfAssetsPage() {
 
         {!loading && (
           <SettingsSection
-            title="Per-section PDFs (optional)"
-            description="Part A (A1, A2 consultations), Part B (B1–B6 extracts) and Part C (C1, C2 presentations) can each have their own PDF or image. When present these override the shared Part PDF for that section tab. Leave slots empty to use the shared Part PDF."
-          >
-            <div className="space-y-4">
-              <SectionGroup label="Part A sections" slots={A_SECTION_SLOTS} columns="sm:grid-cols-2" {...{ assets, uploadingSlot, uploadProgress, removingAssetId, onUpload: handleUpload, onRemove: handleRemove }} />
-              <SectionGroup label="Part B sections" slots={B_SECTION_SLOTS} columns="sm:grid-cols-2 lg:grid-cols-3" {...{ assets, uploadingSlot, uploadProgress, removingAssetId, onUpload: handleUpload, onRemove: handleRemove }} />
-              <SectionGroup label="Part C sections" slots={C_SECTION_SLOTS} columns="sm:grid-cols-2" {...{ assets, uploadingSlot, uploadProgress, removingAssetId, onUpload: handleUpload, onRemove: handleRemove }} />
-            </div>
-          </SettingsSection>
-        )}
-
-        {!loading && (
-          <SettingsSection
-            title="Reference PDFs"
-            description="The full audio transcript and the official answer key. Both are required to publish a Listening paper."
+            title="Reference PDFs (optional)"
+            description="The full audio transcript and the official answer key, for markers and reference. Both are optional."
           >
             <div className="grid gap-4 lg:grid-cols-2">
               <PdfSlotCard
@@ -285,7 +242,6 @@ export default function ListeningPdfAssetsPage() {
                 role="AudioScript"
                 part={null}
                 assets={assets}
-                requiredIssue={null}
                 uploadingSlot={uploadingSlot}
                 uploadProgress={uploadProgress}
                 removingAssetId={removingAssetId}
@@ -298,7 +254,6 @@ export default function ListeningPdfAssetsPage() {
                 role="AnswerKey"
                 part={null}
                 assets={assets}
-                requiredIssue={null}
                 uploadingSlot={uploadingSlot}
                 uploadProgress={uploadProgress}
                 removingAssetId={removingAssetId}
@@ -324,71 +279,12 @@ export default function ListeningPdfAssetsPage() {
   );
 }
 
-function SectionGroup({
-  label,
-  slots,
-  columns,
-  assets,
-  uploadingSlot,
-  uploadProgress,
-  removingAssetId,
-  onUpload,
-  onRemove,
-}: {
-  label: string;
-  slots: readonly SectionSlotCode[];
-  columns: string;
-  assets: ContentPaperAssetDto[];
-  uploadingSlot: string | null;
-  uploadProgress: number | null;
-  removingAssetId: string | null;
-  onUpload: (role: PaperAssetRole, part: string | null, file: File) => Promise<void>;
-  onRemove: (assetId: string) => Promise<void>;
-}) {
-  return (
-    <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">{label}</p>
-      <div className={`grid gap-3 ${columns}`}>
-        {slots.map((slotCode) => (
-          <PdfSlotCard
-            key={slotCode}
-            title={slotCode}
-            description="Optional section override"
-            role="QuestionPaper"
-            part={slotCode}
-            assets={assets}
-            requiredIssue={null}
-            uploadingSlot={uploadingSlot}
-            uploadProgress={uploadProgress}
-            removingAssetId={removingAssetId}
-            onUpload={onUpload}
-            onRemove={onRemove}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatusTile({ label, value, tone }: { label: string; value: string; tone: 'success' | 'warning' | 'danger' }) {
-  return (
-    <div className="rounded-admin-lg border border-admin-border bg-admin-bg-surface px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">{label}</p>
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <p className="text-2xl font-semibold text-admin-fg-strong">{value}</p>
-        <Badge variant={tone}>{tone === 'success' ? 'Ready' : tone === 'warning' ? 'Check' : 'Blocked'}</Badge>
-      </div>
-    </div>
-  );
-}
-
 function PdfSlotCard({
   title,
   description,
   role,
   part,
   assets,
-  requiredIssue,
   uploadingSlot,
   uploadProgress,
   removingAssetId,
@@ -400,7 +296,6 @@ function PdfSlotCard({
   role: PaperAssetRole;
   part: string | null;
   assets: ContentPaperAssetDto[];
-  requiredIssue: string | null;
   uploadingSlot: string | null;
   uploadProgress: number | null;
   removingAssetId: string | null;
@@ -435,7 +330,7 @@ function PdfSlotCard({
           {primaryAsset ? (
             <Badge variant="success" startIcon={<CheckCircle2 className="h-3.5 w-3.5" />}>Ready</Badge>
           ) : (
-            <Badge variant="warning" startIcon={<AlertTriangle className="h-3.5 w-3.5" />}>Missing</Badge>
+            <Badge variant="muted">Optional</Badge>
           )}
         </CardAction>
       </CardHeader>
@@ -444,7 +339,7 @@ function PdfSlotCard({
           <AssetSummary asset={primaryAsset} label="Primary PDF" removing={removingAssetId === primaryAsset.id} onRemove={onRemove} />
         ) : (
           <div className="rounded-admin-lg border border-dashed border-admin-border bg-admin-bg-subtle px-4 py-5 text-sm text-admin-fg-muted">
-            {requiredIssue ?? `${title} has no primary PDF yet.`}
+            Optional — no PDF uploaded yet.
           </div>
         )}
 

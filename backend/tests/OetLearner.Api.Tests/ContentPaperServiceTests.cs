@@ -279,12 +279,35 @@ public class ContentPaperServiceTests
     public async Task Publish_fails_when_required_roles_missing()
     {
         var (db, svc) = Build();
+        // Reading still enforces its required asset roles (QuestionPaper) at
+        // publish. Listening is now exempt — see
+        // Publish_listening_succeeds_with_no_assets_or_provenance.
         var p = await svc.CreateAsync(new ContentPaperCreate(
-            "listening", "L1", null, null, true, null, 40, null, null, 0, null,
+            "reading", "R1", null, null, true, null, 40, null, null, 0, null,
             DefaultSourceProvenance), "admin-1", default);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.PublishAsync(p.Id, "admin-1", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_listening_succeeds_with_no_assets_or_provenance()
+    {
+        // Owner decision: Listening publishes with NO content constraints — no
+        // required asset roles and no source-provenance gate. Any paper can go
+        // live as-is; the learner surface shows empty-state messages and the
+        // advisory ListeningStructureService report still surfaces gaps to
+        // authors without blocking.
+        var (db, svc) = Build();
+        var p = await svc.CreateAsync(new ContentPaperCreate(
+            "listening", "L1", null, null, true, null, 40, null, null, 0, null,
+            SourceProvenance: null), "admin-1", default);
+
+        await svc.PublishAsync(p.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
         await db.DisposeAsync();
     }
 

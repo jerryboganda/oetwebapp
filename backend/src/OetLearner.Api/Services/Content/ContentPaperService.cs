@@ -783,12 +783,23 @@ public sealed class ContentPaperService(
             .FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
-        if (string.IsNullOrWhiteSpace(paper.SourceProvenance))
+        // Listening publishes with NO content constraints (owner decision): any
+        // paper can go live as-is and the learner surface renders friendly
+        // empty-state messages for missing parts. The source-provenance and
+        // required-asset-role gates are skipped for Listening only; other subtests
+        // keep them. The advisory ListeningStructureService report still surfaces
+        // what's incomplete to authors without blocking the publish.
+        var isListening = string.Equals(paper.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase);
+
+        if (!isListening && string.IsNullOrWhiteSpace(paper.SourceProvenance))
         {
             throw new InvalidOperationException("SourceProvenance is required before publishing.");
         }
 
-        EnforceRequiredAssetRoles(paper);
+        if (!isListening)
+        {
+            EnforceRequiredAssetRoles(paper);
+        }
 
         // Decision 2 — publishing is NEVER blocked on rule-conformance grounds.
         // Structural problems (e.g. a 4-option Part B, a non-canonical shape)

@@ -36,6 +36,12 @@ public class ContentPaperBulkActionTests
             "listening", title, null, null, true, null, 40, null, null, 0, null, Prov),
             "admin-1", default);
 
+    private static async Task<ContentPaper> SeedDraftReadingAsync(
+        LearnerDbContext db, ContentPaperService svc, string title)
+        => await svc.CreateAsync(new ContentPaperCreate(
+            "reading", title, null, null, true, null, 40, null, null, 0, null, Prov),
+            "admin-1", default);
+
     private static async Task<string> AddMediaAsync(LearnerDbContext db, string id)
     {
         db.MediaAssets.Add(new MediaAsset
@@ -127,9 +133,11 @@ public class ContentPaperBulkActionTests
     public async Task Bulk_publish_records_status_gate_failure_in_errors()
     {
         var (db, svc) = BuildInMemory();
-        // Listening drafts with no required assets — publish gate fails for each.
-        var p1 = await SeedDraftListeningAsync(db, svc, "L1");
-        var p2 = await SeedDraftListeningAsync(db, svc, "L2");
+        // Reading drafts with no required QuestionPaper asset — publish gate
+        // fails for each. (Listening is now exempt from required-asset gating,
+        // so it no longer exercises this path.)
+        var p1 = await SeedDraftReadingAsync(db, svc, "R1");
+        var p2 = await SeedDraftReadingAsync(db, svc, "R2");
 
         var result = await svc.BulkAsync("publish", [p1.Id, p2.Id], "admin-9", null, default);
 

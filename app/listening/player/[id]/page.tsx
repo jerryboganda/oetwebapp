@@ -846,6 +846,14 @@ function PlayerContent() {
     const code = String(currentSection).toUpperCase();
     return map[code] ?? map[code.charAt(0)] ?? null;
   })();
+  // A Part A consultation authored as a note-completion document is its own
+  // answer surface, so a missing question-paper PDF there is expected — we don't
+  // show an empty-state for those. Every other section shows a friendly
+  // "no question paper yet" message when its PDF slot is empty (content is
+  // never compulsory, so a published paper may legitimately omit it).
+  const currentSectionHasNotes =
+    (currentSection === 'A1' || currentSection === 'A2')
+    && extracts.some((e) => e.partCode === currentSection && (e.notesBody?.trim().length ?? 0) > 0);
   // Per-section audio: each section plays its OWN uploaded file (Part B plays one
   // shared file across B1..B6). Resolved by section code (A1, A2, B, C1, C2).
   // Falls back to the legacy combined paper audio (+ cue windows) for papers that
@@ -1660,7 +1668,14 @@ function PlayerContent() {
                           url={currentQuestionPaperUrl}
                           partLabel={currentSection}
                         />
-                      ) : null}
+                      ) : currentSectionHasNotes ? null : (
+                        <div
+                          data-testid="listening-question-paper-empty"
+                          className="rounded-2xl border border-dashed border-border bg-surface px-4 py-5 text-center text-sm text-muted"
+                        >
+                          No question paper has been added for this part yet.
+                        </div>
+                      )}
 
                       <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
                         {visibleQuestionSections.map(({ section, questions }) => (
