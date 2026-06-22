@@ -424,17 +424,14 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                         <Link href={`/admin/content/listening/${paper.id}/part-a`}>Part A notes (exam format)</Link>
                       </Button>
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={`/admin/content/listening/${paper.id}/pdfs`}>PDFs (per part)</Link>
-                      </Button>
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/admin/content/listening/${paper.id}/audio`}>Audio</Link>
+                        <Link href={`/admin/content/listening/${paper.id}/audio`}>Audio &amp; timers</Link>
                       </Button>
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/admin/content/listening/${paper.id}/extractions`}>AI extraction</Link>
                       </Button>
                     </div>
                     <p className="mt-2 text-xs text-admin-text-muted">
-                      Author the Part A note-completion in the exact exam format, upload per-part PDFs/audio with strict sections, or auto-fill from the question-paper + answer-key PDFs with AI.
+                      Things the Assets tabs above can&rsquo;t do: author the Part A note-completion in the exact exam format, set per-section audio &amp; timers, or auto-fill the Part A notes from the question-paper + answer-key PDFs with AI. (Per-part question-paper PDFs live in the Assets tabs above.)
                     </p>
                   </CardContent>
                 </Card>
