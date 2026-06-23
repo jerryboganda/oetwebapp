@@ -138,6 +138,20 @@ function RenderNode({
     );
   }
 
+  if (node.kind === 'subheading') {
+    return (
+      <h4 className="mt-3 mb-0.5 text-[0.95em] font-bold tracking-tight text-navy first:mt-0">
+        <RenderSegments
+          segments={node.segments}
+          questions={questions}
+          answers={answers}
+          onAnswerChange={onAnswerChange}
+          locked={locked}
+        />
+      </h4>
+    );
+  }
+
   if (node.kind === 'bullet') {
     const indent = node.level === 2 ? 'ml-6' : 'ml-0';
     return (

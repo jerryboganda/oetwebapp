@@ -809,6 +809,15 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.IOcrService, OetLearner.Ap
 // and the Listening Part A Claude call. Scopes internally per record.
 builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IDirectAiCallRecorder, OetLearner.Api.Services.Ai.DirectAiCallRecorder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAExtractionService, OetLearner.Api.Services.Listening.ListeningPartAExtractionService>();
+// Listening Part A AI marking (Claude Sonnet 4.6) — additive, non-blocking per-gap
+// verdicts on top of the deterministic grade. The hosted poller is opt-in via
+// `Listening:PartAAiScoring:Enabled` so it never runs in tests/CI and only marks
+// when an anthropic provider + key are configured.
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAAiScoringService, OetLearner.Api.Services.Listening.ListeningPartAAiScoringService>();
+if (builder.Configuration.GetValue<bool>("Listening:PartAAiScoring:Enabled"))
+{
+    builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningPartAAiScoringWorker>();
+}
 // Listening TTS synthesis. The DI seam picks between provider implementations
 // based on appsettings `Listening:TtsProvider`. Supported values:
 //   "stub"        — emits silence, in-process, no creds (default in dev/CI).

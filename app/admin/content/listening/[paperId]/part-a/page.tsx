@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, FileText, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, FileText, Plus, Save, Sparkles, X } from 'lucide-react';
 import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
@@ -17,11 +17,23 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   getListeningExtracts,
   getListeningStructure,
+  importListeningPartAFromUpload,
   patchListeningExtract,
   patchListeningQuestion,
   type ListeningAuthoredExtract,
   type ListeningAuthoredQuestion,
 } from '@/lib/listening-authoring-api';
+
+/**
+ * An AI-import payload for one sub-part (A1/A2), applied into the section's
+ * editor + answer-key rows for the operator to review then Save. `token`
+ * increments per import so a re-import re-applies even if content is identical.
+ */
+interface SectionImport {
+  token: number;
+  notesBody: string;
+  answers: Array<{ number: number; correctAnswer: string | null; acceptedAnswers: string[] }>;
+}
 
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -69,6 +81,8 @@ interface SubPartSectionProps {
   questions: ListeningAuthoredQuestion[];
   disabled: boolean;
   onSaveSuccess: (code: 'A1' | 'A2') => void;
+  /** AI-import payload to apply into this section (review-then-Save). */
+  imported?: SectionImport;
 }
 
 function SubPartSection({
@@ -78,6 +92,7 @@ function SubPartSection({
   questions,
   disabled,
   onSaveSuccess,
+  imported,
 }: SubPartSectionProps) {
   const [notesBody, setNotesBody] = useState(extract?.notesBody ?? '');
   const [initialNotesBody, setInitialNotesBody] = useState(extract?.notesBody ?? '');
@@ -92,6 +107,24 @@ function SubPartSection({
     setInitialNotesBody(extract?.notesBody ?? '');
     setRows(initRows(questions));
   }, [extract, questions]);
+
+  // Apply an AI-import payload (one-click OCR). Pre-fills the editor + answer
+  // rows but deliberately does NOT touch the `initial*` snapshots, so the change
+  // shows as "unsaved" and the operator must review and click Save. Keyed on the
+  // import token so a fresh import re-applies even with identical content.
+  const lastImportToken = useRef(0);
+  useEffect(() => {
+    if (!imported || imported.token === 0 || imported.token === lastImportToken.current) return;
+    lastImportToken.current = imported.token;
+    setNotesBody(imported.notesBody);
+    setRows((prev) =>
+      prev.map((r) => {
+        const a = imported.answers.find((x) => x.number === r.questionNumber);
+        return a ? { ...r, correctAnswer: a.correctAnswer ?? '', acceptedAnswers: a.acceptedAnswers ?? [] } : r;
+      }),
+    );
+    setSaveState((prev) => (prev === 'saved' ? 'idle' : prev));
+  }, [imported]);
 
   // Reset save status to 'idle' whenever the user makes a change so the status
   // text correctly shows unsaved changes instead of staying 'saved' forever.
@@ -399,6 +432,42 @@ export default function AdminListeningPartAPage() {
   const [questions, setQuestions] = useState<ListeningAuthoredQuestion[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // One-click AI import (OCR) state.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const importTokenRef = useRef(0);
+  const [importing, setImporting] = useState(false);
+  const [importByCode, setImportByCode] = useState<{ A1?: SectionImport; A2?: SectionImport }>({});
+  const [importToast, setImportToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+
+  const onImportFileChosen = useCallback(
+    async (file: File | undefined) => {
+      if (!file || !paperId) return;
+      setImporting(true);
+      setImportToast(null);
+      try {
+        const detail = await importListeningPartAFromUpload(paperId, file);
+        const token = importTokenRef.current + 1;
+        importTokenRef.current = token;
+        const a1 = detail.extracts.find((e) => e.partCode === 'A1') ?? detail.extracts[0];
+        const a2 = detail.extracts.find((e) => e.partCode === 'A2') ?? detail.extracts[1];
+        const toImport = (e: typeof a1): SectionImport | undefined =>
+          e ? { token, notesBody: e.notesBody ?? '', answers: e.answers } : undefined;
+        setImportByCode({ A1: toImport(a1), A2: toImport(a2) });
+        setImportToast({
+          variant: detail.isStub ? 'error' : 'success',
+          message: detail.isStub
+            ? `Imported with issues to review: ${detail.stubReason ?? detail.summary}`
+            : `AI import ready — review both consultations and Save. ${detail.summary}`,
+        });
+      } catch (e) {
+        setImportToast({ variant: 'error', message: e instanceof Error ? e.message : 'AI import failed.' });
+      } finally {
+        setImporting(false);
+      }
+    },
+    [paperId],
+  );
+
   const load = useCallback(async () => {
     if (!paperId) return;
     setLoadState('loading');
@@ -477,12 +546,36 @@ export default function AdminListeningPartAPage() {
       description={`Paper ${paperId ?? ''}. Author the note-completion body for consultations A1 and A2, then fill in the answer key.`}
       breadcrumbs={breadcrumbs}
       actions={
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/admin/content/listening/${paperId}/structure`}>
-            <ArrowLeft className="h-4 w-4 mr-1.5" />
-            Back to structure
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = ''; // allow re-importing the same file
+              void onImportFileChosen(file);
+            }}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            loading={importing}
+            loadingText="Importing…"
+            disabled={importing}
+          >
+            <Sparkles className="h-4 w-4 mr-1.5" />
+            AI import (OCR)
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/admin/content/listening/${paperId}/structure`}>
+              <ArrowLeft className="h-4 w-4 mr-1.5" />
+              Back to structure
+            </Link>
+          </Button>
+        </div>
       }
     >
       {loadState === 'loading' && <Skeleton className="h-96 rounded-admin" />}
@@ -490,6 +583,10 @@ export default function AdminListeningPartAPage() {
 
       {loadState === 'ready' && (
         <div className="space-y-8">
+          <p className="text-xs text-admin-fg-muted">
+            Tip: click <strong>AI import (OCR)</strong> above to upload the official Part A question paper — the AI fills both
+            consultations in the same structure with fill-in-the-blank gaps. Review, edit anything, then Save each part.
+          </p>
           <SubPartSection
             paperId={paperId ?? ''}
             code="A1"
@@ -497,6 +594,7 @@ export default function AdminListeningPartAPage() {
             questions={a1Questions}
             disabled={false}
             onSaveSuccess={() => {}}
+            imported={importByCode.A1}
           />
           <SubPartSection
             paperId={paperId ?? ''}
@@ -505,8 +603,17 @@ export default function AdminListeningPartAPage() {
             questions={a2Questions}
             disabled={false}
             onSaveSuccess={() => {}}
+            imported={importByCode.A2}
           />
         </div>
+      )}
+
+      {importToast && (
+        <Toast
+          variant={importToast.variant}
+          message={importToast.message}
+          onClose={() => setImportToast(null)}
+        />
       )}
     </AdminSettingsLayout>
   );

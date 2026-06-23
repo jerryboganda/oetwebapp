@@ -79,6 +79,16 @@ public interface IListeningPartAExtractionService
     /// attempts already exist, and (400) if either PDF is missing.</summary>
     Task<ListeningExtractionRunResult> ExtractAsync(string paperId, string adminId, CancellationToken ct);
 
+    /// <summary>Run the OCR + Claude pipeline against an AD-HOC uploaded
+    /// question-paper (and optional answer-key) file — for the one-click
+    /// "AI import" button on the Part A authoring page. Stages a Pending draft
+    /// (auditable / re-approvable) and returns its projected detail so the
+    /// editor can be pre-filled for human review. Fast-fails (409) if learner
+    /// attempts already exist.</summary>
+    Task<ListeningExtractionDraftDetail> ExtractFromUploadAsync(
+        string paperId, byte[] questionBytes, string questionMime,
+        byte[]? answerBytes, string? answerMime, string adminId, CancellationToken ct);
+
     Task<IReadOnlyList<ListeningExtractionDraftSummary>> ListPendingAsync(string paperId, CancellationToken ct);
 
     /// <summary>Project a draft's stored manifest into a review shape (per-extract
@@ -213,6 +223,14 @@ public sealed class ListeningPartAExtractionService(
             .FirstOrDefaultAsync(d => d.Id == draftId && d.PaperId == paperId, ct)
             ?? throw ApiException.NotFound("listening_extract_draft_not_found", "Extraction draft not found.");
 
+        return BuildDraftDetail(draft);
+    }
+
+    /// <summary>Project a stored draft's manifest into the review shape (per-extract
+    /// notesBody + answers) used by both the draft-detail GET and the one-click
+    /// upload import. Shared so the two paths stay byte-identical.</summary>
+    private static ListeningExtractionDraftDetail BuildDraftDetail(ListeningExtractionDraft draft)
+    {
         ListeningStructureManifest? manifest;
         try
         {
@@ -237,6 +255,80 @@ public sealed class ListeningPartAExtractionService(
 
         return new ListeningExtractionDraftDetail(
             draft.Id, draft.Status.ToString().ToLowerInvariant(), draft.Summary, draft.IsStub, draft.StubReason, extracts);
+    }
+
+    // ── Import from ad-hoc upload (one-click "AI import" button) ────────────────
+
+    public async Task<ListeningExtractionDraftDetail> ExtractFromUploadAsync(
+        string paperId, byte[] questionBytes, string questionMime,
+        byte[]? answerBytes, string? answerMime, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+
+        // Same guard as ExtractAsync: never silently replace a structure that
+        // learners have already attempted.
+        if (await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct))
+        {
+            throw ApiException.Conflict(
+                "listening_manifest_attempts_exist",
+                "Learner attempts already exist for this paper, so its structure can't be replaced. Create a new revision instead.");
+        }
+
+        if (questionBytes is null || questionBytes.Length == 0)
+            throw ApiException.Validation("listening_extract_missing_question_paper",
+                "Upload the Part A question-paper PDF or image to import.");
+
+        var questionMarkdown = await ocr.OcrToMarkdownAsync(
+            questionBytes, questionMime, AiFeatureCodes.OcrListeningPartA, adminId, ct);
+        // Answer key is optional for ad-hoc import: without it the operator fills
+        // the answer key by hand (the validator flags the missing answers).
+        var answerMarkdown = answerBytes is { Length: > 0 }
+            ? await ocr.OcrToMarkdownAsync(answerBytes, answerMime ?? questionMime, AiFeatureCodes.OcrListeningPartA, adminId, ct)
+            : "(No separate answer key supplied. Leave correctAnswer empty where the answer is unknown.)";
+
+        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, adminId, ct);
+
+        ListeningStructureManifest? manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<ListeningStructureManifest>(manifestJson, CamelJson);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Claude returned non-deserialisable manifest for uploaded import on paper {PaperId}", paperId);
+            throw ApiException.Validation("listening_extract_bad_manifest",
+                "The AI returned a manifest that could not be parsed. Try again.");
+        }
+        if (manifest is null)
+            throw ApiException.Validation("listening_extract_bad_manifest", "The AI returned an empty manifest.");
+
+        var (warnings, gapsA1, gapsA2, ansA1, ansA2) = ValidateManifest(manifest);
+        var isStub = warnings.Count > 0;
+        var summary = isStub
+            ? $"AI import with {warnings.Count} issue(s) to review — A1 {gapsA1} gaps / {ansA1} answers, A2 {gapsA2} gaps / {ansA2} answers."
+            : $"AI import OK — A1 {gapsA1} gaps / {ansA1} answers, A2 {gapsA2} gaps / {ansA2} answers.";
+
+        // Stage a Pending draft so the import is auditable and can still be
+        // approved later through the normal flow, even though the operator's
+        // primary path is "review in the editor, then Save".
+        var draft = new ListeningExtractionDraft
+        {
+            Id = $"lxd_{Guid.NewGuid():N}",
+            PaperId = paperId,
+            Status = ListeningExtractionDraftStatus.Pending,
+            ProposedAt = DateTimeOffset.UtcNow,
+            ProposedByUserId = adminId,
+            IsStub = isStub,
+            StubReason = isStub ? Truncate(string.Join("; ", warnings), 512) : null,
+            Summary = Truncate(summary, 2048),
+            ProposedQuestionsJson = JsonSerializer.Serialize(manifest, CamelJson),
+            RawAiResponseJson = Truncate(manifestJson, 65536),
+        };
+        db.ListeningExtractionDrafts.Add(draft);
+        await db.SaveChangesAsync(ct);
+
+        return BuildDraftDetail(draft);
     }
 
     // ── Approve ──────────────────────────────────────────────────────────────

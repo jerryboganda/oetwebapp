@@ -568,6 +568,30 @@ public class ListeningAnswer
 
     public DateTimeOffset AnsweredAt { get; set; }
 
+    // ── Part A AI scoring (Claude Sonnet 4.6) ───────────────────────────────────
+    // ADDITIVE + ADVISORY: the deterministic grade (IsCorrect / PointsEarned)
+    // remains the score of record. These columns hold a separate AI judgement of
+    // a Part A fill-in-the-blank answer (lenient on paraphrase / word-form), shown
+    // to the learner review + tutor flow. Populated asynchronously after submit by
+    // ListeningPartAAiScoringService; null until scored or for MCQ items.
+
+    /// <summary>AI verdict for a Part A gap: "correct" | "acceptable" |
+    /// "incorrect". Null until scored / not applicable.</summary>
+    [MaxLength(16)]
+    public string? AiVerdict { get; set; }
+
+    /// <summary>One-line AI rationale for the verdict (shown to tutor + learner).</summary>
+    [MaxLength(1024)]
+    public string? AiRationale { get; set; }
+
+    /// <summary>When the AI verdict was written. Also the idempotency guard — the
+    /// scorer only processes answers where this is null.</summary>
+    public DateTimeOffset? AiScoredAt { get; set; }
+
+    /// <summary>Model id that produced the verdict (e.g. claude-sonnet-4-6).</summary>
+    [MaxLength(64)]
+    public string? AiModel { get; set; }
+
     public ListeningAttempt? Attempt { get; set; }
     public ListeningQuestion? Question { get; set; }
 }

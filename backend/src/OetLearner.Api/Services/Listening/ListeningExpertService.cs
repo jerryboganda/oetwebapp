@@ -31,7 +31,10 @@ public sealed record ListeningExpertAttemptSummary(
 public sealed record ListeningExpertReviewBundle(
     ListeningExpertAttemptMeta Attempt,
     IReadOnlyList<ListeningExpertAnswerItem> Answers,
-    ListeningExpertFeedbackDto? ExistingFeedback);
+    ListeningExpertFeedbackDto? ExistingFeedback,
+    // Part A note bodies (A1/A2) so the tutor can review the candidate's gap
+    // answers in the exact note layout. Empty when the paper has no Part A notes.
+    IReadOnlyList<ListeningExpertPartANote>? PartANotes = null);
 
 public sealed record ListeningExpertAttemptMeta(
     string AttemptId,
@@ -60,7 +63,17 @@ public sealed record ListeningExpertAnswerItem(
     // All three are null for items where the data was not authored / not applicable.
     string? SelectedDistractorCategory,
     string? SpeakerAttitude,
-    IReadOnlyList<ListeningExpertOptionAnalysisItem>? OptionAnalysis);
+    IReadOnlyList<ListeningExpertOptionAnalysisItem>? OptionAnalysis,
+    // Part A AI marking (Claude Sonnet 4.6) — advisory only. The tutor remains the
+    // human authority; these surface the AI's per-gap judgement alongside the
+    // deterministic IsCorrect. Null for MCQ items or not-yet-scored answers.
+    string? AiVerdict = null,
+    string? AiRationale = null);
+
+/// <summary>Part A consultation note (`notesBody` in the `____` grammar) for one
+/// sub-part, so the dedicated tutor view can render the candidate's answers in
+/// context using the same renderer the learner sees.</summary>
+public sealed record ListeningExpertPartANote(string PartCode, string NotesBody);
 
 /// <summary>
 /// Per-option distractor breakdown for an MCQ (Part B / Part C) item. Mirrors
@@ -345,8 +358,24 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
                 ? null
                 : SpeakerAttitudeString(x.Question.SpeakerAttitude.Value),
             OptionAnalysis: BuildOptionAnalysis(
-                optionsByQuestion.GetValueOrDefault(x.Question.Id))
+                optionsByQuestion.GetValueOrDefault(x.Question.Id)),
+            AiVerdict: x.Answer.AiVerdict,
+            AiRationale: x.Answer.AiRationale
         )).ToList();
+
+        // Part A consultation notes (A1/A2) so the tutor can review gap answers in
+        // the exact note layout. Joined via part → extract; only Part A carries a
+        // notesBody. Ordered A1 then A2.
+        var partANotes = (await db.ListeningExtracts.AsNoTracking()
+                .Join(db.ListeningParts.AsNoTracking(),
+                    e => e.ListeningPartId, p => p.Id, (e, p) => new { e, p })
+                .Where(x => x.p.PaperId == attempt.PaperId
+                    && x.e.NotesBodyMarkdown != null && x.e.NotesBodyMarkdown != "")
+                .Select(x => new { x.e.DisplayOrder, x.e.NotesBodyMarkdown })
+                .OrderBy(x => x.DisplayOrder)
+                .ToListAsync(ct))
+            .Select((x, i) => new ListeningExpertPartANote(i == 0 ? "A1" : "A2", x.NotesBodyMarkdown!))
+            .ToList();
 
         // Existing feedback (latest by SubmittedAt)
         var existing = await db.ListeningExpertFeedbacks

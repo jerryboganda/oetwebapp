@@ -50,6 +50,30 @@ describe('parseNotesDocument', () => {
     }
   });
 
+  it('parses a level-2 sub-heading (### )', () => {
+    const nodes = parseNotesDocument('### Development of new symptoms');
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].kind).toBe('subheading');
+    if (nodes[0].kind === 'subheading') {
+      expect(nodes[0].segments).toEqual([{ kind: 'text', text: 'Development of new symptoms' }]);
+    }
+  });
+
+  it('does not treat "### " as a level-2 (##) heading', () => {
+    const nodes = parseNotesDocument('### Sub');
+    expect(nodes[0].kind).toBe('subheading');
+  });
+
+  it('parses a sub-heading containing a gap with a correct ordinal', () => {
+    const nodes = parseNotesDocument('## Top\n### Sub with ____');
+    const sub = nodes.find((n) => n.kind === 'subheading');
+    expect(sub).toBeDefined();
+    if (sub && sub.kind === 'subheading') {
+      const gap = sub.segments.find((s) => s.kind === 'gap');
+      expect(gap).toEqual({ kind: 'gap', gapIndex: 0 });
+    }
+  });
+
   it('parses a level-1 bullet', () => {
     const nodes = parseNotesDocument('- foo');
     expect(nodes).toHaveLength(1);

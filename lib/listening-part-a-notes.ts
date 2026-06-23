@@ -27,6 +27,38 @@ import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 export const PART_A_GAP_MARKER = '____';
 
 /**
+ * Canonical OET Listening Part A note-completion skeleton, inserted by the
+ * "Scaffold" toolbar button. It demonstrates every construct the grammar
+ * understands — the boilerplate intro line, the "thirty seconds" reading-time
+ * line, the `Patient:` label line, two `## ` section headings, level-1 bullets,
+ * a level-2 sub-bullet, a mid-sentence gap, and a gap with trailing text — so a
+ * data-entry author starts from the right shape and only replaces the
+ * placeholders. The `[...]` placeholders are literal text (the notes grammar
+ * only treats a run of 4+ underscores as a gap), so they render as obvious
+ * "replace me" prompts and never become answer blanks.
+ *
+ * Lives in this pure module (rather than the React builder) so both the legacy
+ * textarea builder and the TipTap editor can import it without a circular
+ * dependency.
+ */
+export const PART_A_SCAFFOLD = [
+  'You hear a [professional, e.g. primary-care doctor] talking to a patient called [patient name]. For questions 1–12, complete the notes with a word or short phrase that you hear.',
+  '',
+  'You now have thirty seconds to look at the notes.',
+  '',
+  'Patient: [patient name]',
+  '',
+  '## [Section heading]',
+  '- [note detail] ____',
+  '- [note detail], ____ and [trailing detail]',
+  '  - [sub-detail] ____',
+  '',
+  '## [Section heading]',
+  '- [note detail] ____',
+  '',
+].join('\n');
+
+/**
  * Shared regex that recognises the notes-document gap notation: a run of 4+
  * underscores. Used by BOTH `parseNotesDocument` (segment splitting) and
  * `countGaps` so the two functions always agree on what constitutes a gap.
@@ -46,6 +78,7 @@ export type NotesSegment = { kind: 'text'; text: string } | { kind: 'gap'; gapIn
 
 export type NotesNode =
   | { kind: 'heading'; segments: NotesSegment[] }
+  | { kind: 'subheading'; segments: NotesSegment[] }
   | { kind: 'bullet'; level: 1 | 2; segments: NotesSegment[] }
   | { kind: 'context'; segments: NotesSegment[] }
   | { kind: 'divider' };
@@ -78,6 +111,7 @@ function splitLineIntoSegments(
  * Parse a notes body into ordered `NotesNode[]`.
  *
  * Line rules (evaluated in order):
+ *   - `### ` prefix → sub-heading
  *   - `## ` prefix → heading
  *   - `  - ` or `\t- ` prefix → bullet level 2 (sub-bullet, capped at level 2)
  *   - `- ` prefix → bullet level 1
@@ -106,6 +140,14 @@ export function parseNotesDocument(body: string | null | undefined): NotesNode[]
     // Divider: exactly `---` (trimmed).
     if (line.trim() === '---') {
       nodes.push({ kind: 'divider' });
+      continue;
+    }
+
+    // Sub-heading: `### ` prefix. Checked before `## ` (they don't collide —
+    // `'### '.startsWith('## ')` is false — but ordering keeps intent obvious).
+    if (line.startsWith('### ')) {
+      const text = line.slice(4);
+      nodes.push({ kind: 'subheading', segments: splitLineIntoSegments(text, gapCounter) });
       continue;
     }
 

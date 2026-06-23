@@ -245,6 +245,67 @@ public static class ListeningAuthoringAdminEndpoints
             }
         });
 
+        // POST .../listening/part-a/import — one-click "AI import": OCR an
+        // AD-HOC uploaded question-paper (+ optional answer-key) file and return
+        // the projected draft detail so the editor can be pre-filled for review.
+        // Uses HttpRequest.ReadFormAsync (not IFormFile binding) so no
+        // antiforgery token is required for this admin-authenticated upload.
+        group.MapPost("/part-a/import", async (
+            string paperId,
+            HttpRequest request,
+            IListeningPartAExtractionService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.Json(
+                    new { error = "Expected multipart/form-data with a question-paper file.", errorCode = "listening_import_bad_content_type" },
+                    statusCode: 415);
+
+            var form = await request.ReadFormAsync(ct);
+            var questionFile = form.Files.GetFile("questionPaper") ?? form.Files.GetFile("file");
+            var answerFile = form.Files.GetFile("answerKey");
+            if (questionFile is null || questionFile.Length == 0)
+                return Results.Json(
+                    new { error = "Upload a question-paper PDF or image (field 'questionPaper').", errorCode = "listening_import_missing_file" },
+                    statusCode: 400);
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                byte[] qBytes;
+                await using (var qs = questionFile.OpenReadStream())
+                using (var ms = new MemoryStream())
+                {
+                    await qs.CopyToAsync(ms, ct);
+                    qBytes = ms.ToArray();
+                }
+
+                byte[]? aBytes = null;
+                string? aMime = null;
+                if (answerFile is { Length: > 0 })
+                {
+                    await using var as_ = answerFile.OpenReadStream();
+                    using var ms2 = new MemoryStream();
+                    await as_.CopyToAsync(ms2, ct);
+                    aBytes = ms2.ToArray();
+                    aMime = answerFile.ContentType;
+                }
+
+                var detail = await svc.ExtractFromUploadAsync(
+                    paperId, qBytes, questionFile.ContentType, aBytes, aMime, adminId, ct);
+                return Results.Ok(detail);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+            }
+        });
+
         group.MapGet("/extractions", async (
             string paperId,
             IListeningPartAExtractionService svc,

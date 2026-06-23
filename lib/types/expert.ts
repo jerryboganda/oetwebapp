@@ -642,6 +642,15 @@ export interface ListeningExpertAnswerItem {
   selectedDistractorCategory?: string | null; // the category of the distractor the learner chose (MCQ misses only)
   speakerAttitude?: string | null; // Part C only: concerned | optimistic | doubtful | critical | neutral | other
   optionAnalysis?: ListeningExpertOptionAnalysisItem[] | null;
+  // Part A AI marking (Claude Sonnet 4.6) — advisory. 'correct'|'acceptable'|'incorrect'.
+  aiVerdict?: string | null;
+  aiRationale?: string | null;
+}
+
+/** Part A consultation note (A1/A2) so the tutor can review gaps in context. */
+export interface ListeningExpertPartANote {
+  partCode: string;
+  notesBody: string;
 }
 
 export interface ListeningExpertBundle {
@@ -654,6 +663,7 @@ export interface ListeningExpertBundle {
   scaledScore: number;
   maxRawScore: number;
   answers: ListeningExpertAnswerItem[];
+  partANotes?: ListeningExpertPartANote[] | null;
   existingFeedback?: {
     overallFeedbackMarkdown: string;
     perQuestionFeedbackJson?: string;

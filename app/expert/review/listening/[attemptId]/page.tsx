@@ -14,6 +14,7 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/form-controls';
+import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
 import { isApiError } from '@/lib/api';
 import {
   getListeningExpertBundle,
@@ -279,6 +280,50 @@ function MetadataCard({
 
 // ── Question card ──────────────────────────────────────────────────────────
 
+/**
+ * Dedicated Part A tutor view: renders each consultation note (A1/A2) with the
+ * candidate's typed answers shown inline in the exact note layout — the same
+ * renderer the learner sees, read-only. Gives Dr Ahmed Hesham the gaps "in
+ * context" rather than as a flat list. AI verdicts (if any) stay on the per-gap
+ * cards as advisory chips; the tutor's marks/feedback are the human authority.
+ */
+function PartANotesReview({
+  notes,
+  answers,
+}: {
+  notes: NonNullable<ListeningExpertBundle['partANotes']>;
+  answers: ListeningExpertAnswerItem[];
+}) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-bold uppercase tracking-widest text-muted">
+        Part A — candidate answers in context
+      </h3>
+      {notes.map((note) => {
+        const partAnswers = answers
+          .filter((a) => a.partCode === note.partCode)
+          .sort((x, y) => x.questionNumber - y.questionNumber);
+        const questions = partAnswers.map((a) => ({ id: String(a.questionNumber), number: a.questionNumber }));
+        const filled: Record<string, string> = {};
+        for (const a of partAnswers) filled[String(a.questionNumber)] = a.userAnswer ?? '';
+        return (
+          <div key={note.partCode} className="rounded-xl border border-border bg-surface p-4">
+            <p className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">{note.partCode}</p>
+            <PartANotesDocument
+              partLabel={`Part ${note.partCode}`}
+              notesBody={note.notesBody}
+              questions={questions}
+              answers={filled}
+              onAnswerChange={() => {}}
+              locked
+            />
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function QuestionCard({
   item,
   selected,
@@ -351,6 +396,29 @@ function QuestionCard({
                 <Badge variant="violet" className="text-[10px] capitalize">
                   Attitude: {humaniseTag(item.speakerAttitude)}
                 </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Part A AI marking (Claude Sonnet 4.6) — advisory; the tutor decides. */}
+          {item.aiVerdict && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Badge
+                variant={
+                  item.aiVerdict === 'correct'
+                    ? 'success'
+                    : item.aiVerdict === 'acceptable'
+                      ? 'warning'
+                      : 'danger'
+                }
+                className="text-[10px] capitalize"
+              >
+                AI: {item.aiVerdict}
+              </Badge>
+              {item.aiRationale && (
+                <span className="text-[11px] text-muted line-clamp-1" title={item.aiRationale}>
+                  {item.aiRationale}
+                </span>
               )}
             </div>
           )}
@@ -663,6 +731,9 @@ export default function ListeningReviewWorkspacePage() {
 
         {/* Center — question list */}
         <main className="space-y-6">
+          {bundle.partANotes && bundle.partANotes.length > 0 && (
+            <PartANotesReview notes={bundle.partANotes} answers={bundle.answers} />
+          )}
           {partsInOrder.map((part) => {
             const items = grouped.get(part) ?? [];
             return (

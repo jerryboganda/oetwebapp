@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useId, useRef, useState, type ClipboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ClipboardEvent } from 'react';
 import { Eye, Heading, LayoutTemplate, List, ListTree, Minus, SquareSplitHorizontal } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
@@ -20,38 +20,19 @@ import { PartARenderer } from '@/components/domain/listening/PartARenderer';
  * a stem still render — we just never author new ones.
  */
 
-// Import the canonical gap marker, paste sanitizer, and gap detector from the
-// grammar lib. Re-exported so existing imports from this path keep working.
-import { countGaps, detectPastedGaps, PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
-export { PART_A_GAP_MARKER, sanitizePastedStem };
-
-/**
- * Canonical OET Listening Part A note-completion skeleton, inserted by the
- * "Scaffold" toolbar button. It demonstrates every construct the grammar
- * understands — the boilerplate intro line, the "thirty seconds" reading-time
- * line, the `Patient:` label line, two `## ` section headings, level-1 bullets,
- * a level-2 sub-bullet, a mid-sentence gap, and a gap with trailing text — so a
- * data-entry author starts from the right shape and only replaces the
- * placeholders. The `[...]` placeholders are literal text (the notes grammar
- * only treats a run of 4+ underscores as a gap), so they render as obvious
- * "replace me" prompts and never become answer blanks.
- */
-export const PART_A_SCAFFOLD = [
-  'You hear a [professional, e.g. primary-care doctor] talking to a patient called [patient name]. For questions 1–12, complete the notes with a word or short phrase that you hear.',
-  '',
-  'You now have thirty seconds to look at the notes.',
-  '',
-  'Patient: [patient name]',
-  '',
-  '## [Section heading]',
-  '- [note detail] ____',
-  '- [note detail], ____ and [trailing detail]',
-  '  - [sub-detail] ____',
-  '',
-  '## [Section heading]',
-  '- [note detail] ____',
-  '',
-].join('\n');
+// Import the canonical gap marker, scaffold, paste sanitizer, and gap detector
+// from the grammar lib. Re-exported so existing imports from this path keep
+// working (PART_A_SCAFFOLD moved to the pure lib to avoid a circular import with
+// the TipTap editor, which also needs it).
+import {
+  countGaps,
+  detectPastedGaps,
+  PART_A_GAP_MARKER,
+  PART_A_SCAFFOLD,
+  sanitizePastedStem,
+} from '@/lib/listening-part-a-notes';
+import { PartANotesEditor } from '@/components/domain/listening/admin/PartANotesEditor';
+export { PART_A_GAP_MARKER, PART_A_SCAFFOLD, sanitizePastedStem };
 
 export interface PartANotesBuilderProps {
   value: string;
@@ -90,6 +71,19 @@ export function PartANotesBuilder({
   // Live-preview answer state, keyed so multiple gaps each get an independent
   // field. Author-only — never persisted; resets are harmless.
   const [previewAnswers, setPreviewAnswers] = useState<Record<number, string>>({});
+
+  // Progressive enhancement: render the rich TipTap WYSIWYG (`PartANotesEditor`)
+  // in a real browser, but keep the plain-textarea + toolbar fallback for SSR
+  // and for jsdom unit tests (ProseMirror's contenteditable cannot be exercised
+  // meaningfully under jsdom). Both surfaces share the same `value`/`onChange`
+  // canonical-grammar contract, so the round-trip is identical either way.
+  const [mounted, setMounted] = useState(false);
+  // Client-mount detection: deliberately a one-shot setState in an effect (the
+  // only way to distinguish SSR/first-paint from the hydrated client). Cheap —
+  // runs exactly once and never re-fires.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setMounted(true), []);
+  const enhanced = mounted && process.env.NODE_ENV !== 'test';
 
   /**
    * Insert content at the caret (or replace the selection). Inline insertions
@@ -221,6 +215,17 @@ export function PartANotesBuilder({
         </span>
       </div>
 
+      {enhanced ? (
+        <PartANotesEditor
+          id={editorId}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          gapCount={gapCount}
+          ariaDescribedBy={`${editorId}-hint`}
+        />
+      ) : (
+        <>
       {/* Toolbar */}
       <div
         role="toolbar"
@@ -317,6 +322,8 @@ export function PartANotesBuilder({
         Each <code className="font-mono">____</code> becomes one answer blank in the exam. Headings, bullets and section
         breaks are layout-only.
       </p>
+        </>
+      )}
 
       {/* Live preview — renders the real learner component, read-only. */}
       <div className="mt-3">

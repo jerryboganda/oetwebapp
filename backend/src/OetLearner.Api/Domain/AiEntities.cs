@@ -350,6 +350,8 @@ public static class AiFeatureCodes
     public const string OcrWritingHandwriting = "ocr.writing.handwriting";
     /// <summary>Anthropic Claude manifest-structuring call in Listening Part A.</summary>
     public const string ListeningPartAExtract = "listening.parta.extract";
+    /// <summary>Anthropic Claude per-gap AI marking of a Listening Part A attempt.</summary>
+    public const string ListeningPartAScore = "listening.parta.score";
     /// <summary>Whisper speech-to-text for a Speaking attempt transcription.</summary>
     public const string SttSpeakingTranscribe = "stt.speaking.transcribe";
     /// <summary>Whisper speech-to-text for Pronunciation ASR scoring.</summary>

@@ -397,6 +397,27 @@ export interface ListeningExtractionDraftDetail {
 export const runListeningExtraction = (paperId: string) =>
   api<ListeningExtractionRunResult>(`/v1/admin/papers/${paperId}/listening/extract`, { method: 'POST' });
 
+/**
+ * One-click "AI import": upload an ad-hoc Part A question-paper file (and an
+ * optional answer-key file). The server OCRs + structures it with Claude and
+ * returns the projected draft detail (per-extract notesBody + answers) so the
+ * editor can be pre-filled for the operator to review and Save. Multipart upload
+ * via `apiClient.postForm` (no JSON content-type).
+ */
+export const importListeningPartAFromUpload = (
+  paperId: string,
+  questionPaper: File,
+  answerKey?: File | null,
+): Promise<ListeningExtractionDraftDetail> => {
+  const form = new FormData();
+  form.append('questionPaper', questionPaper);
+  if (answerKey) form.append('answerKey', answerKey);
+  return apiClient.postForm<ListeningExtractionDraftDetail>(
+    `/v1/admin/papers/${paperId}/listening/part-a/import`,
+    form,
+  );
+};
+
 export const listListeningExtractions = (paperId: string) =>
   api<{ drafts: ListeningExtractionDraftSummary[] }>(`/v1/admin/papers/${paperId}/listening/extractions`);
 

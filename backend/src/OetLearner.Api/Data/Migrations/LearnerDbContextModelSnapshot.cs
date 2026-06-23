@@ -10523,6 +10523,21 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("AiModel")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AiRationale")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset?>("AiScoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AiVerdict")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset>("AnsweredAt")
                         .HasColumnType("timestamp with time zone");
 
