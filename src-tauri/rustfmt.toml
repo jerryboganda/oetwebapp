@@ -1,0 +1,4 @@
+# Formatting config for the OET Prep desktop shell (Tauri 2, Rust).
+# Stable rustfmt only — keeps `cargo fmt --check` green in CI.
+edition = "2021"
+max_width = 100

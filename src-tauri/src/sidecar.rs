@@ -30,7 +30,10 @@ impl Default for RuntimeState {
         Self {
             active_backend_url: Mutex::new(None),
             renderer_url: Mutex::new(None),
-            children: Mutex::new(SidecarHandles { backend: None, renderer: None }),
+            children: Mutex::new(SidecarHandles {
+                backend: None,
+                renderer: None,
+            }),
             shutting_down: Mutex::new(false),
         }
     }
@@ -87,7 +90,11 @@ pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRunt
         }
     }
     // Env wins, mirroring selectConfiguredDesktopApiBaseUrl precedence.
-    for var in ["PUBLIC_API_BASE_URL", "API_PROXY_TARGET_URL", "NEXT_PUBLIC_API_BASE_URL"] {
+    for var in [
+        "PUBLIC_API_BASE_URL",
+        "API_PROXY_TARGET_URL",
+        "NEXT_PUBLIC_API_BASE_URL",
+    ] {
         if let Ok(v) = std::env::var(var) {
             let v = v.trim().trim_end_matches('/').to_string();
             if v.starts_with("http://") || v.starts_with("https://") {
@@ -108,18 +115,44 @@ fn backend_env(paths: &Paths, runtime_url: &str, is_packaged: bool) -> HashMap<S
 
     // Mirror of getBundledBackendEnv (electron/main.cjs:528).
     let mut env = HashMap::new();
-    env.insert("ASPNETCORE_ENVIRONMENT".into(), if is_packaged { "Production" } else { "Development" }.into());
+    env.insert(
+        "ASPNETCORE_ENVIRONMENT".into(),
+        if is_packaged {
+            "Production"
+        } else {
+            "Development"
+        }
+        .into(),
+    );
     env.insert("ASPNETCORE_URLS".into(), runtime_url.into());
-    env.insert("ConnectionStrings__DefaultConnection".into(), format!("Data Source={}", db_path.display()));
-    env.insert("Auth__UseDevelopmentAuth".into(), if is_packaged { "false" } else { "true" }.into());
+    env.insert(
+        "ConnectionStrings__DefaultConnection".into(),
+        format!("Data Source={}", db_path.display()),
+    );
+    env.insert(
+        "Auth__UseDevelopmentAuth".into(),
+        if is_packaged { "false" } else { "true" }.into(),
+    );
     env.insert("Bootstrap__AutoMigrate".into(), "true".into());
-    env.insert("Bootstrap__SeedDemoData".into(), if is_packaged { "false" } else { "true" }.into());
+    env.insert(
+        "Bootstrap__SeedDemoData".into(),
+        if is_packaged { "false" } else { "true" }.into(),
+    );
     env.insert("Platform__PublicApiBaseUrl".into(), runtime_url.into());
-    env.insert("Platform__PublicWebBaseUrl".into(), "http://localhost:3000".into());
-    env.insert("Billing__CheckoutBaseUrl".into(), "http://localhost:3000/billing/checkout".into());
+    env.insert(
+        "Platform__PublicWebBaseUrl".into(),
+        "http://localhost:3000".into(),
+    );
+    env.insert(
+        "Billing__CheckoutBaseUrl".into(),
+        "http://localhost:3000/billing/checkout".into(),
+    );
     env.insert("Proxy__TrustForwardHeaders".into(), "false".into());
     env.insert("Proxy__EnforceHttps".into(), "false".into());
-    env.insert("Storage__LocalRootPath".into(), storage_root.display().to_string());
+    env.insert(
+        "Storage__LocalRootPath".into(),
+        storage_root.display().to_string(),
+    );
     env
 }
 
@@ -136,13 +169,23 @@ fn renderer_env(runtime_url: &str, port: u16, backend_url: &str) -> HashMap<Stri
 }
 
 pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child), String> {
-    let exe_name = if cfg!(windows) { "OetLearner.Api.exe" } else { "OetLearner.Api" };
+    let exe_name = if cfg!(windows) {
+        "OetLearner.Api.exe"
+    } else {
+        "OetLearner.Api"
+    };
     let exe = paths.backend_root.join(exe_name);
     if !exe.exists() {
-        return Err(format!("Bundled backend executable missing: {}", exe.display()));
+        return Err(format!(
+            "Bundled backend executable missing: {}",
+            exe.display()
+        ));
     }
 
-    let start_port: u16 = std::env::var("OET_BACKEND_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(5198);
+    let start_port: u16 = std::env::var("OET_BACKEND_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5198);
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
@@ -151,7 +194,9 @@ pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child)
         .envs(backend_env(paths, &runtime_url, is_packaged))
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let child = cmd.spawn().map_err(|e| format!("failed to spawn backend: {e}"))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn backend: {e}"))?;
 
     // NOTE: /health/ready 503s forever on fresh SQLite (pre-existing bug —
     // Program.cs pending-migrations check vs EnsureCreatedAsync bootstrap).
@@ -163,10 +208,16 @@ pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child)
 pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child), String> {
     let server_js = paths.standalone_root.join("server.js");
     if !server_js.exists() {
-        return Err(format!("Standalone renderer missing: {}", server_js.display()));
+        return Err(format!(
+            "Standalone renderer missing: {}",
+            server_js.display()
+        ));
     }
 
-    let start_port: u16 = std::env::var("OET_RENDERER_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(3000);
+    let start_port: u16 = std::env::var("OET_RENDERER_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3000);
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
@@ -176,7 +227,9 @@ pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child
         .envs(renderer_env(&runtime_url, port, backend_url))
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let child = cmd.spawn().map_err(|e| format!("failed to spawn node renderer: {e}"))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn node renderer: {e}"))?;
 
     wait_for_health_attempts(&format!("{runtime_url}/api/health"), 120)?;
     Ok((runtime_url, child))
@@ -184,7 +237,12 @@ pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child
 
 /// Boots both sidecars (or only the renderer when a remote API target is
 /// configured) and records handles + URLs in state.
-pub fn start_all(paths: &Paths, state: &RuntimeState, runtime_config: &DesktopRuntimeConfig, is_packaged: bool) -> Result<String, String> {
+pub fn start_all(
+    paths: &Paths,
+    state: &RuntimeState,
+    runtime_config: &DesktopRuntimeConfig,
+    is_packaged: bool,
+) -> Result<String, String> {
     let (backend_url, backend_child) = match &runtime_config.public_api_base_url {
         Some(remote) if !remote.contains("127.0.0.1") && !remote.contains("localhost") => {
             (remote.clone(), None)
@@ -233,8 +291,13 @@ pub fn migrate_from_electron(user_data: &Path) {
     if marker.exists() {
         return;
     }
-    let Some(appdata) = std::env::var_os("APPDATA") else { return };
-    let electron_root = PathBuf::from(appdata).join("OET Prep").join("prod").join("user-data");
+    let Some(appdata) = std::env::var_os("APPDATA") else {
+        return;
+    };
+    let electron_root = PathBuf::from(appdata)
+        .join("OET Prep")
+        .join("prod")
+        .join("user-data");
     if !electron_root.exists() {
         let _ = std::fs::create_dir_all(user_data);
         let _ = std::fs::write(&marker, "no-electron-data");

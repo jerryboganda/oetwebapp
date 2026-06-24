@@ -21,7 +21,13 @@ fn sanitize_component(value: &str, max_len: usize) -> Result<String, String> {
     }
     let cleaned: String = value
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     Ok(cleaned.chars().take(max_len).collect())
 }
@@ -161,8 +167,11 @@ pub fn offline_cache_store(app: AppHandle, key: String, data: Value) -> Result<V
         .map_err(|e| e.to_string())?
         .as_millis() as u64;
     let payload = json!({ "cachedAt": now_ms, "data": data });
-    std::fs::write(dir.join(format!("{key}.json")), serde_json::to_string(&payload).unwrap())
-        .map_err(|e| e.to_string())?;
+    std::fs::write(
+        dir.join(format!("{key}.json")),
+        serde_json::to_string(&payload).unwrap(),
+    )
+    .map_err(|e| e.to_string())?;
     Ok(json!({ "success": true, "key": key }))
 }
 
@@ -190,7 +199,9 @@ pub fn offline_cache_delete(app: AppHandle, key: String) -> Result<Value, String
 pub fn offline_cache_list(app: AppHandle) -> Result<Vec<Value>, String> {
     let dir = offline_cache_dir(&app);
     let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Ok(out) };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Ok(out);
+    };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if let Some(key) = name.strip_suffix(".json") {
@@ -227,12 +238,22 @@ pub fn offline_cache_clear(app: AppHandle) -> Result<Value, String> {
 // ── notifications ───────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn show_notification(app: AppHandle, title: String, body: String, route: Option<String>) -> Value {
+pub fn show_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    route: Option<String>,
+) -> Value {
     // Click-to-route parity is best-effort: notification click activation is
     // not uniformly delivered by OS notification centers; the in-app
     // notification center remains the primary surface (same as Electron).
     let _ = route;
-    let result = app.notification().builder().title(&title).body(&body).show();
+    let result = app
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show();
     json!({ "ok": result.is_ok() })
 }
 
@@ -293,10 +314,17 @@ pub fn speaking_audio_start(
 ) -> Result<Value, String> {
     std::fs::create_dir_all(speaking_audio_dir()).map_err(|e| e.to_string())?;
     let session_id = sanitize_component(&session_id, 64)?;
-    let mime = mime_type.filter(|m| !m.is_empty()).unwrap_or_else(|| "audio/webm".into());
+    let mime = mime_type
+        .filter(|m| !m.is_empty())
+        .unwrap_or_else(|| "audio/webm".into());
     state.0.lock().unwrap().insert(
         session_id.clone(),
-        SpeakingSession { mime_type: mime.clone(), started_at: now_ms(), finalized: false, file_path: None },
+        SpeakingSession {
+            mime_type: mime.clone(),
+            started_at: now_ms(),
+            finalized: false,
+            file_path: None,
+        },
     );
     Ok(json!({ "ok": true, "sessionId": session_id, "mimeType": mime, "mode": "renderer-capture" }))
 }

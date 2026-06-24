@@ -22,12 +22,12 @@ fn resolve_paths(app: &AppHandle) -> Paths {
     let user_data = app.path().app_data_dir().expect("app_data_dir unavailable");
     if tauri::is_dev() {
         // Dev: artifacts come from the repo (scripts/tauri-dev.cjs sets OET_REPO_ROOT).
-        let repo = PathBuf::from(
-            std::env::var("OET_REPO_ROOT").unwrap_or_else(|_| {
-                // src-tauri/ lives at the repo root.
-                env!("CARGO_MANIFEST_DIR").trim_end_matches("src-tauri").to_string()
-            }),
-        );
+        let repo = PathBuf::from(std::env::var("OET_REPO_ROOT").unwrap_or_else(|_| {
+            // src-tauri/ lives at the repo root.
+            env!("CARGO_MANIFEST_DIR")
+                .trim_end_matches("src-tauri")
+                .to_string()
+        }));
         Paths {
             standalone_root: repo.join(".next").join("standalone"),
             backend_root: repo.join("desktop-backend-runtime"),
@@ -39,7 +39,11 @@ fn resolve_paths(app: &AppHandle) -> Paths {
         Paths {
             standalone_root: resources.join("standalone"),
             backend_root: resources.join("backend-runtime"),
-            node_binary: if cfg!(windows) { resources.join("node.exe") } else { resources.join("node") },
+            node_binary: if cfg!(windows) {
+                resources.join("node.exe")
+            } else {
+                resources.join("node")
+            },
             user_data,
         }
     }
@@ -52,7 +56,7 @@ fn install_job_object() {
     if let Ok(job) = win32job::Job::create() {
         if let Ok(mut info) = job.query_extended_limit_info() {
             info.limit_kill_on_job_close();
-            if job.set_extended_limit_info(&mut info).is_ok() && job.assign_current_process().is_ok() {
+            if job.set_extended_limit_info(&info).is_ok() && job.assign_current_process().is_ok() {
                 std::mem::forget(job);
             }
         }
@@ -69,7 +73,7 @@ fn emit_window_state(app: &AppHandle) {
     // onWindowStateChange listeners.
     if let Some(win) = app.get_webview_window("main") {
         if let Ok(detail) = serde_json::to_string(&snapshot) {
-            let _ = win.eval(&format!(
+            let _ = win.eval(format!(
                 "window.dispatchEvent(new CustomEvent('desktop:window-state-changed', {{ detail: {detail} }}))"
             ));
         }
@@ -90,7 +94,9 @@ fn navigate_to_route(app: &AppHandle, route: &str) {
 
 /// oet-prep://pair?code=X → /pair?code=X on the renderer origin.
 fn handle_deep_link_url(app: &AppHandle, url: &str) {
-    let Some(rest) = url.strip_prefix("oet-prep://") else { return };
+    let Some(rest) = url.strip_prefix("oet-prep://") else {
+        return;
+    };
     let route = format!("/{}", rest.trim_start_matches('/'));
     navigate_to_route(app, &route);
 }
@@ -99,10 +105,16 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let dashboard = MenuItemBuilder::with_id("dashboard", "Dashboard").build(app)?;
     let study_plan = MenuItemBuilder::with_id("study-plan", "Study Plan").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit OET Prep").build(app)?;
-    let menu = MenuBuilder::new(app).items(&[&dashboard, &study_plan, &quit]).build()?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&dashboard, &study_plan, &quit])
+        .build()?;
 
     TrayIconBuilder::with_id("main-tray")
-        .icon(app.default_window_icon().expect("bundled icon missing").clone())
+        .icon(
+            app.default_window_icon()
+                .expect("bundled icon missing")
+                .clone(),
+        )
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -176,7 +188,7 @@ pub fn run() {
                 .title("OET Prep")
                 .inner_size(1440.0, 980.0)
                 .min_inner_size(1200.0, 800.0)
-                .initialization_script(&bridge_script())
+                .initialization_script(bridge_script())
                 .build()?;
             let _ = window.show();
 
@@ -292,7 +304,7 @@ pub fn run() {
                         eprintln!("[oet-desktop] startup failed: {error}");
                         if let Some(win) = handle.get_webview_window("main") {
                             let safe = serde_json::to_string(&error).unwrap_or_default();
-                            let _ = win.eval(&format!(
+                            let _ = win.eval(format!(
                                 "document.body.innerHTML = '<pre style=\"padding:2rem;white-space:pre-wrap\">Startup failed: ' + {safe} + '</pre>'"
                             ));
                         }
