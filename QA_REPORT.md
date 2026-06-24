@@ -1,8 +1,9 @@
 # QA_REPORT.md — OET Prep Learner Mobile Production-Readiness
 
 **Engagement:** Pre-release QA / production-readiness for the Capacitor mobile app, before shipping to internal testers.
-**Branch:** `qa/production-readiness` · **Started:** 2026-06-25 · **Status:** in progress (Phase 2)
+**Branch:** `qa/production-readiness-mobile` (worktree `D:/Projects/oet-qa-mobile`) · **Started:** 2026-06-25 · **Status:** in progress (Phase 3)
 **Decisions:** Platforms = Android (delivered) + iOS (verify-only, no Apple account). Branch off `main`. Tester build URL = dedicated staging (URL pending). Push ships dormant.
+**Concurrency note:** A separate **desktop** readiness agent was found committing to the shared `qa/production-readiness` branch/worktree. To avoid mutual clobbering (shared tree + `package.json`), mobile work was isolated onto `qa/production-readiness-mobile` in its own worktree (per owner decision). My 2 earlier commits also remain on the shared branch (harmless).
 
 > Evidence rule: every "done" below is backed by pasted real command output, file sizes, or screenshots. Claims without evidence are marked **TODO/unverified**.
 
@@ -75,8 +76,29 @@ Requires the Android SDK toolchain + `cap sync android`; run alongside the Andro
 - Secrets: none committed (`git ls-files` → only `*.example`). `.gitignore` covers keystores/`keystore.properties`/`google-services.json`/`.env*`. ✅
 - Unexpected: `src-tauri/src/lib.rs` showed clippy auto-fixes during the session (IDE/rust-analyzer, not this engagement) — left untouched, never staged.
 
-## Phase 3 — Security hardening
-_Pending._
+## Phase 3 — Security hardening (in progress)
+
+### Fixed
+- **R3 — iOS `armv7`→`arm64`** (`ios/App/App/Info.plist` `UIRequiredDeviceCapabilities`). `armv7` is 32-bit, unsupported since iOS 11; `arm64` is correct for all supported devices. Safe, store-correctness improvement.
+
+### Verified secure (no change needed)
+- **CSP:** Per-request **nonce-based** CSP in `middleware.ts` (not a static `index.html` CSP — `capacitor-web/index.html` is a redirect stub). `object-src 'none'`, `base-uri/form-action 'self'`, `upgrade-insecure-requests` in prod; `'unsafe-inline'` only in `style-src` (Tailwind, accepted, BUGLOG R9). The operating-rules "tighten index.html CSP" item is N/A here — CSP is enforced server-side and is strong.
+- **WebView navigation / `server.url`:** no `allowNavigation` configured ⇒ Capacitor locks WebView navigation to the `server.url` host (secure default); external links go via `@capacitor/browser`. `capacitor-config.ts` **throws** on non-HTTPS release URLs ⇒ a release build cannot ship cleartext.
+- **iOS ATS:** no `NSAppTransportSecurity` key ⇒ ATS defaults apply (HTTPS-only, no arbitrary loads). ✅
+- **WebView debugging:** `MainActivity` is clean; `capacitor.config.ts` does not set `webContentsDebuggingEnabled`; Capacitor `BridgeActivity` enables web-contents debugging only for debuggable builds ⇒ **off in release**. ✅
+- **Android release hardening:** `minifyEnabled` + `shrinkResources` + ProGuard on `release`; `allowBackup=false`; signing via git-ignored `keystore.properties`. ✅
+- **iOS `PrivacyInfo.xcprivacy`:** present & well-formed (email/deviceID/audio; `NSPrivacyTracking=false`; `UserDefaults` reason `CA92.1`). ✅
+
+### Least-privilege — PASS (all justified)
+- `RECORD_AUDIO` / `NSMicrophoneUsageDescription`: Speaking + mic-check (`getUserMedia`, voice recorder).
+- `CAMERA` / `NSCameraUsageDescription`: WebView `getUserMedia` video + Zoom meeting SDK (speaking rooms / conversation). Used → keep.
+- `USE_BIOMETRIC` + `USE_FINGERPRINT`: biometric unlock; `USE_FINGERPRINT` (pre-API-28) justified by `minSdk 22`.
+- `POST_NOTIFICATIONS`: push (ships dormant but code present). `READ_MEDIA_AUDIO`/`VIBRATE`/`INTERNET`: audio playback / haptics / network. No over-privilege; nothing to trim.
+
+### Open (tracked)
+- **Deep-link verification files are placeholders** (BUGLOG #4): `assetlinks.json` SHA-256 + AASA TEAM ID. Android App Links auto-verify needs the keystore fingerprint served by the **staging** domain (Phase 8); iOS Universal Links blocked on Apple TEAM ID. Custom `oet-prep://` scheme works regardless.
+- **iOS deployment target = 13** (older than the modern 14+ baseline) — not changed (pod-compat risk); recommend bumping when iOS ships.
+- **Android 15 edge-to-edge** (`targetSdk 35`): safe-area handled via CSS `env(safe-area-inset-*)`; verify on-device in Phase 5.
 
 ## Phase 4 — Automated tests
 _Pending._
