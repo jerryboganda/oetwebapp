@@ -1,7 +1,7 @@
 # QA_REPORT.md — OET Prep Learner Mobile Production-Readiness
 
 **Engagement:** Pre-release QA / production-readiness for the Capacitor mobile app, before shipping to internal testers.
-**Branch:** `qa/production-readiness-mobile` (worktree `D:/Projects/oet-qa-mobile`) · **Started:** 2026-06-25 · **Status:** in progress (Phase 3)
+**Branch:** `qa/production-readiness-mobile` (worktree `D:/Projects/oet-qa-mobile`) · **Started:** 2026-06-25 · **Status:** Phases 2–8 complete; Phase 9 signed build running in CI (run 28131781720); PR #56
 **Decisions:** Platforms = Android (delivered) + iOS (verify-only, no Apple account). Branch off `main`. Tester build URL = dedicated staging (URL pending). Push ships dormant.
 **Concurrency note:** A separate **desktop** readiness agent was found committing to the shared `qa/production-readiness` branch/worktree. To avoid mutual clobbering (shared tree + `package.json`), mobile work was isolated onto `qa/production-readiness-mobile` in its own worktree (per owner decision). My 2 earlier commits also remain on the shared branch (harmless).
 
@@ -156,11 +156,24 @@ CI runs on push/PR to the GitHub remote; will be exercised when the branch is pu
 - **iOS signing:** blocked — no Apple Developer account. No IPA / TestFlight this round. The `mobile-release.yml` iOS path (cert/profile/archive/export) is ready for when `APPLE_TEAM_ID` + cert/profile secrets exist (~$99/yr).
 - **Distribution channel:** direct **signed APK** sideload (default; see `TESTER_SETUP.md`). Optional **Firebase App Distribution** (free, both platforms) available if you want a managed invite-based channel — not set up unless requested.
 
-## Phase 9 — Build & deliver (in progress)
-_Local signed-build mechanics validated; output pasted on completion. Build env note: Gradle must run via the **native PowerShell** path — the Bash subprocess can't create Java NIO's AF_UNIX self-pipe (`Unable to establish loopback connection`)._
-
 ## Phase 9 — Build & deliver
-_Pending._
+
+**Build path = CI** (local Gradle blocked by env: Gradle forks a daemon and Java NIO can't open its `AF_UNIX` loopback pipe — reproduced under both Bash and native PowerShell; not a project defect). Verified locally up to Gradle: keystore + signing config + `cap sync android` + `next build`.
+
+Autonomous delivery actions taken:
+- **Pushed** `qa/production-readiness-mobile`; **PR #56** opened → https://github.com/jerryboganda/oetwebapp/pull/56 (triggers `mobile-ci` = Android **debug** build on clean runners).
+- **Set 4 GitHub signing secrets** (`ANDROID_KEYSTORE_BASE64/PASSWORD`, `ANDROID_KEY_ALIAS/PASSWORD`) via `gh`.
+- **Dispatched `mobile-release.yml`** (`platform=android`, `version=1.0.0`, `version_code=1`, `app_url=production`) → run **28131781720**. Produces signed `app-release.aab` + `app-release.apk` (90-day artifacts).
+- **Stripped the embedded PAT** from the git remote; pushes now use `gh` keyring auth. _Owner still must revoke the old token (BUGLOG #5)._
+
+_Build conclusions + artifact sizes/links: filled on run completion._
 
 ## Phase 10 — Go / No-Go
-_Pending._
+
+**Recommendation (preliminary): GO for Android internal testing**, conditional on (a) the signed CI build completing green, and (b) the owner **revoking the exposed PAT**.
+
+Rationale:
+- Static/security/build-config quality bar met: `tsc`/lint/Vitest(2075)/`next build` green; least-privilege verified; CSP/ATS/Privacy-Manifest sound; release minified + WebView debug off; no secrets in tracked history.
+- All Critical/High **actionable-by-me** issues resolved (tsc gate, hono, arm64, assetlinks). The one open **Critical** (embedded PAT) is an **owner action** (rotate) — flagged prominently.
+- Residual risks documented: remote-URL app needs network (no offline); Maestro/device QA pending real devices; iOS blocked on Apple account; production-pointing build → billing caution for testers.
+- **No-Go would apply** only if the CI signed build fails or device smoke surfaces a Critical regression.

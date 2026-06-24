@@ -1,16 +1,18 @@
 # TESTER_SETUP.md — Installing & Testing OET Prep Learner
 
-> **Status:** skeleton — finalized in Phase 8–9 with real download links, version, and known issues.
+> **Status:** v1.0.0 internal-tester build. Download link is the CI artifact below.
 
 ## What you're testing
-The **OET Prep Learner** mobile app. It loads the OET Prep web experience inside a native app shell and adds mobile features (microphone recording for Speaking, biometric login, notifications, deep links). This build points at: **`<STAGING/TEST URL — TBD>`**.
+The **OET Prep Learner** mobile app. It loads the OET Prep web experience inside a native app shell and adds mobile features (microphone recording for Speaking, biometric login, notifications, deep links). This build points at **production: `https://app.oetwithdrhesham.co.uk`**.
+
+> ⚠️ **Billing caution — this build hits the LIVE site.** Any subscription/checkout actions are **real** (Stripe is live). For testing, **do not complete real purchases** unless intended; stick to browsing plans. Report billing UI issues without finishing payment. (A dedicated staging URL can be swapped in later via the `mobile-release.yml` `app_url` input.)
 
 ## System requirements
 - **Android:** **5.1 (Lollipop) or newer** (minSdk 22). A current device (Android 12–15) is recommended. ~60–100 MB free storage. A network connection is required (the app loads the live site).
 - **iOS:** _not available this round_ — see "iOS status" below.
 
 ## Android — install the APK (direct sideload)
-1. Download the APK: **`<LINK — TBD (CI artifact or shared file)>`**.
+1. Download the APK — **`app-release.apk`** from the CI build artifact `android-release-apk-1.0.0` on the release run: https://github.com/jerryboganda/oetwebapp/actions/runs/28131781720 (or the file shared with you directly).
 2. On your phone, open the downloaded file. Android will warn that it's from an unknown source.
 3. Allow installation: **Settings → Apps → Special access → Install unknown apps → [your browser/file manager] → Allow from this source** (wording varies by device/Android version).
 4. Tap the APK again → **Install** → **Open**.
