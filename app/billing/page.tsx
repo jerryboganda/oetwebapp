@@ -724,12 +724,14 @@ export default function BillingPage() {
                     {formatOptionalDate(data.nextRenewal)}
                   </dd>
                 </div>
-                <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
-                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.tutorReviews')}</dt>
-                  <dd className="mt-1.5 text-sm font-semibold text-navy">
-                    {supportedReviewSubtests.length > 0 ? supportedReviewSubtests.join(' + ') : copy('billing.overview.tutorReviewsNotIncluded')}
-                  </dd>
-                </div>
+                {supportedReviewSubtests.length > 0 ? (
+                  <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
+                    <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.tutorReviews')}</dt>
+                    <dd className="mt-1.5 text-sm font-semibold text-navy">
+                      {supportedReviewSubtests.join(' + ')}
+                    </dd>
+                  </div>
+                ) : null}
                 <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
                   <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.invoiceAccess')}</dt>
                   <dd className="mt-1.5 text-sm font-semibold text-navy">
@@ -960,17 +962,15 @@ export default function BillingPage() {
                     </div>
 
                     <ul className="mt-4 space-y-2 text-sm text-navy">
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
-                        <span>
-                          {copy('billing.plans.tutorReviewsFor')}{' '}
-                          <strong>
-                            {plan.includedSubtests && plan.includedSubtests.length > 0
-                              ? plan.includedSubtests.join(' & ')
-                              : copy('billing.plans.noSubtests')}
-                          </strong>
-                        </span>
-                      </li>
+                      {plan.includedSubtests && plan.includedSubtests.length > 0 ? (
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                          <span>
+                            {copy('billing.plans.tutorReviewsFor')}{' '}
+                            <strong>{plan.includedSubtests.join(' & ')}</strong>
+                          </span>
+                        </li>
+                      ) : null}
                       {plan.trialDays > 0 ? (
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
