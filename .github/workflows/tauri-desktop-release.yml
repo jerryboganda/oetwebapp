@@ -86,6 +86,11 @@ jobs:
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 90
     steps:
+      # Repo has content files with paths > Windows MAX_PATH (260); enable long
+      # paths before checkout so the Windows runner can write them.
+      - name: Enable Git long paths
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4

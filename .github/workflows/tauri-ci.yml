@@ -43,6 +43,11 @@ jobs:
       run:
         working-directory: src-tauri
     steps:
+      # Repo has content files with paths > Windows MAX_PATH (260); enable long
+      # paths before checkout so the Windows runner can write them.
+      - name: Enable Git long paths
+        working-directory: ${{ github.workspace }}
+        run: git config --system core.longpaths true
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
