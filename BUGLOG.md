@@ -25,8 +25,10 @@ Every issue found during QA is logged here with reproduction steps and severity.
 
 | 8 | Release build flake — `next/font` can't fetch Google Fonts in CI | Low | CI / Next.js build | n/a | Mitigated (retry) | Run 28132524973: `next/font: Failed to fetch Manrope/Montserrat from Google Fonts` during `pnpm run build`. Transient (other runs built fine); `next/font/google` fetches at build time. | Retried → green (run 28132736756). Hardening option: self-host fonts via `next/font/local` to remove the build-time network dependency. |
 
+| 9 | iOS deployment target 13.0 < Capacitor 7 plugins require 14.0 | Medium | CI / iOS build (pod install) | n/a | Fixed | mobile-ci iOS Build Check failed at `cap sync ios`/`pod install`: `CapacitorVoiceRecorder … required a higher minimum deployment target` (podspec `ios.deployment_target = '14.0'`; 17 plugin pods need 14). Podfile + pbxproj were 13.0. Third "never green since Cap-7 upgrade" break (iOS side). | Bumped iOS deployment target 13.0→14.0 in `ios/App/Podfile` + `project.pbxproj` (4×). iOS 14 still covers iPhone 6s+. |
+
 ---
 
 ## Triage summary
-- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 3 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 2 (1 fixed, 1 mitigated) — final.
+- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 3 (fixed) · Medium: 3 (#9 iOS deploy target fixed; #4 deep-link Android-fixed/iOS-blocked; #1 deferred non-mobile flake) · Low: 2 (1 fixed, 1 mitigated) — final.
 - **Signed Android build is green & signature-verified (run 28132736756).** No open mobile-flow-blocking bugs. The sole open item is the owner-action PAT revocation.
