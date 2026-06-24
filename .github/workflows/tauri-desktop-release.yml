@@ -143,6 +143,27 @@ jobs:
           fi
           echo "Updater signing key detected."
 
+      - name: Import Windows code-signing certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
+            Write-Host "No WINDOWS_CERTIFICATE secret set - skipping Authenticode import."
+            Write-Host "NOTE: tauri.dist.conf.json sets a certificateThumbprint, so the Windows build"
+            Write-Host "will FAIL to sign without the cert. Set the secret, or remove the thumbprint for an unsigned build."
+            exit 0
+          }
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          $pfx = Join-Path $env:RUNNER_TEMP 'oet-codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, $bytes)
+          $pw = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw | Out-Null
+          Remove-Item $pfx -Force
+          Write-Host "Imported code-signing certificate into CurrentUser\My."
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -190,3 +211,72 @@ jobs:
           path: dist/tauri-desktop/
           if-no-files-found: error
           retention-days: 90
+
+  # On a tag push, gather both platforms' artifacts, build the Tauri updater
+  # latest.json from the Windows .sig, and publish a GitHub Release with the
+  # installers attached. (Hosting latest.json + the .exe/.sig on the prod feed
+  # at /desktop/updates/ remains a manual VPS step — see docs/qa/TESTER_SETUP.md.)
+  publish:
+    name: Publish GitHub Release + updater feed
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          tag="${{ github.ref_name }}"; v="${tag#v}"; v="${v%-tauri-desktop}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble updater latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe=$(find artifacts -name '*-setup.exe' | head -1)
+          sig=$(find artifacts -name '*-setup.exe.sig' | head -1)
+          if [ -z "$exe" ] || [ -z "$sig" ]; then
+            echo "Missing Windows installer (.exe) or signature (.sig) in artifacts." >&2
+            exit 1
+          fi
+          url_name=$(basename "$exe" | sed 's/ /%20/g')
+          {
+            echo '{'
+            echo "  \"version\": \"${{ steps.version.outputs.version }}\","
+            echo "  \"notes\": \"OET Prep desktop ${{ steps.version.outputs.version }}\","
+            echo "  \"pub_date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo '  "platforms": {'
+            echo '    "windows-x86_64": {'
+            echo "      \"signature\": \"$(cat "$sig")\","
+            echo "      \"url\": \"https://app.oetwithdrhesham.co.uk/desktop/updates/${url_name}\""
+            echo '    }'
+            echo '  }'
+            echo '}'
+          } > latest.json
+          echo "Generated latest.json:"; cat latest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: OET Prep Desktop ${{ steps.version.outputs.version }}
+          files: |
+            artifacts/**/*-setup.exe
+            artifacts/**/*-setup.exe.sig
+            artifacts/**/*.dmg
+            latest.json
+          body: |
+            Internal-testing build of the OET Prep desktop shell (Tauri 2).
+
+            Install + certificate-trust steps: `docs/qa/TESTER_SETUP.md`.
+
+            **Auto-update:** copy `latest.json`, the `*-setup.exe`, and its `.sig`
+            to the prod feed at `/desktop/updates/` (see TESTER_SETUP §7).

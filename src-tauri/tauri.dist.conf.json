@@ -5,6 +5,11 @@
       "../.next/standalone": "standalone",
       "../desktop-backend-runtime": "backend-runtime",
       "binaries/node.exe": "node.exe"
+    },
+    "windows": {
+      "certificateThumbprint": "9E1D24DAB316C568A107E7EFD058786541B9DAA8",
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com"
     }
   }
 }

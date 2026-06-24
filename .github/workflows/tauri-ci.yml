@@ -1,0 +1,78 @@
+name: Tauri Desktop CI
+
+# PR + push gate for the Tauri 2 desktop shell (src-tauri/) and its bridge contract.
+# Closes the gap left by tauri-desktop-release.yml (which only builds on tags): this
+# runs the Rust toolchain gates that were previously ungated — fmt, clippy (-D warnings),
+# cargo test — plus a compile smoke and the desktopBridge conformance test.
+#
+# Runs on windows-latest because the shell has cfg(windows)-only code (Job Object,
+# WebView2) that only compiles/tests on Windows — the production target platform.
+# Repo-wide tsc/lint are already gated by qa-smoke.yml and are intentionally not duplicated here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src-tauri/**'
+      - 'inject/**'
+      - 'types/desktop.d.ts'
+      - '.github/workflows/tauri-ci.yml'
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'inject/**'
+      - 'types/desktop.d.ts'
+      - '.github/workflows/tauri-ci.yml'
+
+concurrency:
+  group: tauri-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  rust:
+    name: Rust gate (fmt + clippy + test + build) — windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: cargo fmt --check
+        run: cargo fmt --check
+      - name: cargo clippy -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: cargo test
+        run: cargo test --all-features
+      - name: cargo build (compile smoke)
+        run: cargo build
+
+  conformance:
+    name: desktopBridge contract conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Bridge conformance (types/desktop.d.ts parity)
+        run: pnpm vitest run src-tauri/__tests__/desktop-bridge-conformance.test.ts
