@@ -218,3 +218,19 @@ src-tauri/*-result.json
 /_*.sh
 /_*.sql
 *.bak-*
+
+# --- Code-signing / updater key material — NEVER commit (QA prod-readiness) ---
+# Authenticode certs, PKCS#12 bundles, PEM/DER keys, strong-name keys, and the
+# Tauri minisign updater private key. Public certs (.cer) shared with testers are
+# distributed out-of-band, not via the repo.
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+*.snk
+# Tauri signer output / local key store
+.tauri/
+src-tauri/*.key
+src-tauri/*.pub
