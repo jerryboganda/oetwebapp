@@ -15,6 +15,7 @@ import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocu
 import { countGaps } from '@/lib/listening-part-a-notes';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
+  ensureListeningPartASlots,
   getListeningExtracts,
   getListeningStructure,
   importListeningPartAFromUpload,
@@ -81,6 +82,8 @@ interface SubPartSectionProps {
   questions: ListeningAuthoredQuestion[];
   disabled: boolean;
   onSaveSuccess: (code: 'A1' | 'A2') => void;
+  /** Re-fetch paper data (e.g. after creating answer-key slots). */
+  onReload: () => void | Promise<void>;
   /** AI-import payload to apply into this section (review-then-Save). */
   imported?: SectionImport;
 }
@@ -92,6 +95,7 @@ function SubPartSection({
   questions,
   disabled,
   onSaveSuccess,
+  onReload,
   imported,
 }: SubPartSectionProps) {
   const [notesBody, setNotesBody] = useState(extract?.notesBody ?? '');
@@ -100,6 +104,7 @@ function SubPartSection({
   const [variantDrafts, setVariantDrafts] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [creatingSlots, setCreatingSlots] = useState(false);
 
   // Sync when parent reloads data
   useEffect(() => {
@@ -226,6 +231,22 @@ function SubPartSection({
     }
   }, [paperId, code, notesBody, notesBodyChanged, changedRows, onSaveSuccess]);
 
+  // Create the answer-key question slots (Q1..12 / Q13..24) to match the
+  // authored gap count, then reload so the answer boxes appear. Used when a note
+  // was authored (or AI-imported) but no answer-key questions exist yet.
+  const onCreateSlots = useCallback(async () => {
+    setCreatingSlots(true);
+    try {
+      await ensureListeningPartASlots(paperId, code, Math.min(Math.max(gapCount, 1), 12));
+      setToast({ variant: 'success', message: `Answer-key slots ready for Part ${code}.` });
+      await onReload();
+    } catch (e) {
+      setToast({ variant: 'error', message: e instanceof Error ? e.message : `Could not create answer slots for Part ${code}.` });
+    } finally {
+      setCreatingSlots(false);
+    }
+  }, [paperId, code, gapCount, onReload]);
+
   const previewQuestions = questions.map((q) => ({ id: q.id, number: q.number }));
   const partLabel = `Part ${code}`;
   const sectionId = `part-${code.toLowerCase()}`;
@@ -276,6 +297,31 @@ function SubPartSection({
               <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted mb-3">
                 Answer key
               </p>
+
+              {/* No question slots yet (or fewer than gaps): offer to create them
+                  so the per-gap answer boxes appear. */}
+              {gapCount > 0 && questionCount < gapCount && (
+                <div className="mb-4 rounded-admin border border-dashed border-admin-border bg-admin-bg-subtle p-4">
+                  <p className="text-sm text-admin-fg-muted mb-3">
+                    {questionCount === 0
+                      ? `This note has ${gapCount} gap${gapCount !== 1 ? 's' : ''} but no answer-key slots yet.`
+                      : `${gapCount} gaps but only ${questionCount} answer slot${questionCount !== 1 ? 's' : ''}.`}{' '}
+                    Create the answer boxes to fill in each gap’s correct answer.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={onCreateSlots}
+                    loading={creatingSlots}
+                    loadingText="Creating…"
+                    disabled={disabled || creatingSlots}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Create {Math.min(gapCount, 12)} answer slot{Math.min(gapCount, 12) !== 1 ? 's' : ''}
+                  </Button>
+                </div>
+              )}
+
               <div className="space-y-4">
                 {rows.map((row, gapIndex) => (
                   <AnswerKeyRow
@@ -446,10 +492,22 @@ export default function AdminListeningPartAPage() {
       setImportToast(null);
       try {
         const detail = await importListeningPartAFromUpload(paperId, file);
-        const token = importTokenRef.current + 1;
-        importTokenRef.current = token;
         const a1 = detail.extracts.find((e) => e.partCode === 'A1') ?? detail.extracts[0];
         const a2 = detail.extracts.find((e) => e.partCode === 'A2') ?? detail.extracts[1];
+
+        // Ensure answer-key slots exist for each consultation so the AI-suggested
+        // answers have rows to populate, then refresh the structure before applying.
+        if (a1 && a1.gapCount > 0) await ensureListeningPartASlots(paperId, 'A1', Math.min(a1.gapCount, 12));
+        if (a2 && a2.gapCount > 0) await ensureListeningPartASlots(paperId, 'A2', Math.min(a2.gapCount, 12));
+        try {
+          const fresh = await getListeningStructure(paperId);
+          setQuestions(fresh.questions);
+        } catch {
+          /* non-fatal: the operator can still Save; rows refresh on next load */
+        }
+
+        const token = importTokenRef.current + 1;
+        importTokenRef.current = token;
         const toImport = (e: typeof a1): SectionImport | undefined =>
           e ? { token, notesBody: e.notesBody ?? '', answers: e.answers } : undefined;
         setImportByCode({ A1: toImport(a1), A2: toImport(a2) });
@@ -594,6 +652,7 @@ export default function AdminListeningPartAPage() {
             questions={a1Questions}
             disabled={false}
             onSaveSuccess={() => {}}
+            onReload={load}
             imported={importByCode.A1}
           />
           <SubPartSection
@@ -603,6 +662,7 @@ export default function AdminListeningPartAPage() {
             questions={a2Questions}
             disabled={false}
             onSaveSuccess={() => {}}
+            onReload={load}
             imported={importByCode.A2}
           />
         </div>

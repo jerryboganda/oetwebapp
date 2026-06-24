@@ -195,6 +195,17 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const getListeningStructure = (paperId: string) =>
   api<ListeningAuthoredQuestionList>(`/v1/admin/papers/${paperId}/listening/structure`);
 
+/**
+ * Create Part A answer-key question slots (A1 → Q1..12, A2 → Q13..24) to match
+ * the authored gap count, so the answer-key column populates. Idempotent — only
+ * creates the missing slots; never touches Part B/C or existing answers.
+ */
+export const ensureListeningPartASlots = (paperId: string, code: 'A1' | 'A2', count: number) =>
+  api<ListeningAuthoredQuestionList>(`/v1/admin/papers/${paperId}/listening/part-a/ensure-slots`, {
+    method: 'POST',
+    body: JSON.stringify({ code, count }),
+  });
+
 export const replaceListeningStructure = (
   paperId: string,
   questions: ListeningAuthoredQuestion[],

@@ -33,6 +33,9 @@ public static class ListeningAuthoringAdminEndpoints
     /// <summary>Optional reason when rejecting an AI extraction draft.</summary>
     public sealed record RejectExtractionBody(string? Reason);
 
+    /// <summary>Body for creating Part A answer-key slots to match the authored gaps.</summary>
+    public sealed record EnsurePartASlotsBody(string Code, int Count);
+
     public sealed record TranscriptSegmentDto(int StartMs, int EndMs, string SpeakerId, string Text);
     public sealed record ReplaceTranscriptBody(IReadOnlyList<TranscriptSegmentDto> Segments);
 
@@ -303,6 +306,36 @@ public static class ListeningAuthoringAdminEndpoints
             catch (InvalidOperationException ex)
             {
                 return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+            }
+        });
+
+        // POST .../listening/part-a/ensure-slots — create answer-key question
+        // slots (A1 → Q1..12, A2 → Q13..24) matching the authored gap count, so
+        // the answer-key column populates for manual authoring. Publish-gated.
+        group.MapPost("/part-a/ensure-slots", async (
+            string paperId,
+            EnsurePartASlotsBody body,
+            IListeningAuthoringService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var structure = await svc.EnsurePartASlotsAsync(paperId, body.Code, body.Count, adminId, ct);
+                await db.Entry(paper).ReloadAsync(ct);
+                SetETag(http, paper);
+                return Results.Ok(structure);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
             }
         });
 

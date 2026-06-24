@@ -97,6 +97,21 @@ public interface IListeningAuthoringService
         CancellationToken ct);
 
     /// <summary>
+    /// Ensure a Part A sub-part (A1 | A2) has answer-key question slots matching
+    /// its authored gap count, so the answer-key column populates. Creates the
+    /// missing short-answer questions with canonical OET numbering (A1 → 1..12,
+    /// A2 → 13..24) and empty answers for the operator to fill; never touches
+    /// Part B/C or existing answers. No-op when the slots already exist. Rejects
+    /// when learner attempts exist. Returns the re-read structure.
+    /// </summary>
+    Task<ListeningAuthoredQuestionList> EnsurePartASlotsAsync(
+        string paperId,
+        string subCode,
+        int count,
+        string adminId,
+        CancellationToken ct);
+
+    /// <summary>
     /// WS5: export the current authored structure (questions + extract metadata)
     /// as a spec §19 manifest suitable for round-tripping back through
     /// <see cref="ImportManifestAsync"/>.
@@ -429,6 +444,80 @@ public sealed class ListeningAuthoringService(
             if (tx is not null) await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    public async Task<ListeningAuthoredQuestionList> EnsurePartASlotsAsync(
+        string paperId,
+        string subCode,
+        int count,
+        string adminId,
+        CancellationToken ct)
+    {
+        var code = (subCode ?? string.Empty).Trim().ToUpperInvariant();
+        if (code != "A1" && code != "A2")
+            throw ApiException.Validation("listening_parta_bad_subcode", "subCode must be A1 or A2.");
+        // Each Part A consultation is exactly 12 gaps in OET; cap defensively so
+        // A2 numbering never spills past Q24 into Part B's range.
+        if (count < 1 || count > 12)
+            throw ApiException.Validation("listening_parta_bad_count", "count must be between 1 and 12.");
+
+        // Structure can't change once learners have attempted the paper.
+        if (await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct))
+        {
+            throw ApiException.Conflict(
+                "listening_manifest_attempts_exist",
+                "Learner attempts already exist for this paper, so its structure can't be changed.");
+        }
+
+        var current = await GetStructureAsync(paperId, ct);
+        var questions = current.Questions.ToList();
+        var baseNumber = code == "A1" ? 1 : 13;
+
+        var existingForSub = questions
+            .Where(q => NormalizePartCode(q.PartCode) == code)
+            .Select(q => q.Number)
+            .ToHashSet();
+        var allNumbers = questions.Select(q => q.Number).ToHashSet();
+
+        var added = false;
+        for (var i = 0; i < count; i++)
+        {
+            var number = baseNumber + i;
+            // Skip if this sub-part already has the slot, or the number is taken
+            // by any other question (the (PaperId, Number) unique index).
+            if (existingForSub.Contains(number) || allNumbers.Contains(number)) continue;
+            questions.Add(new ListeningAuthoredQuestion(
+                Id: $"lq_{Guid.NewGuid():N}",
+                Number: number,
+                PartCode: code,
+                Type: "short_answer",
+                Stem: string.Empty,
+                Options: Array.Empty<string>(),
+                CorrectAnswer: string.Empty,
+                AcceptedAnswers: Array.Empty<string>(),
+                Explanation: null,
+                SkillTag: null,
+                TranscriptExcerpt: null,
+                DistractorExplanation: null,
+                Points: 1));
+            allNumbers.Add(number);
+            added = true;
+        }
+
+        if (!added) return current;
+
+        // ReplaceStructureAsync enforces SourceProvenance (H6). Manual authoring
+        // may not have set it yet — stamp a default so slot creation isn't blocked.
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+        if (string.IsNullOrWhiteSpace(paper.SourceProvenance))
+        {
+            paper.SourceProvenance = "Manual Part A authoring";
+            paper.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+
+        return await ReplaceStructureAsync(paperId, questions, adminId, ct);
     }
 
     // ── WS5: spec §19 manifest import / export ───────────────────────────
