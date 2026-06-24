@@ -155,7 +155,12 @@ public sealed record ListeningExtractPatch(
     int? AudioEndMs = null,
     int? TimeLimitSeconds = null,
     [property: JsonPropertyName("notesBody")]
-    string? NotesBodyMarkdown = null);
+    string? NotesBodyMarkdown = null,
+    // Phase 6: Part A authoring method ("wysiwyg" | "pdf_overlay") + the
+    // normalized PDF-overlay blank placements (JSON). Patched together with the
+    // method when the operator authors via the PDF-overlay editor.
+    string? AuthoringMethod = null,
+    string? PartAOverlayBlanksJson = null);
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
 /// correct answer + accepted synonyms, so it MUST NOT be returned by any
@@ -208,7 +213,11 @@ public sealed record ListeningAuthoredExtract(
     // consultation extract (intro line, ## headings, - bullets, ____ gap markers).
     // Forced null for Part B/C. The wire/JSON key is camelCase `notesBody`.
     [property: JsonPropertyName("notesBody")]
-    string? NotesBodyMarkdown = null);
+    string? NotesBodyMarkdown = null,
+    // Phase 6: Part A authoring method ("wysiwyg" default | "pdf_overlay") and,
+    // for pdf_overlay, the normalized blank placements over the question-paper PDF.
+    string? AuthoringMethod = null,
+    string? PartAOverlayBlanksJson = null);
 
 public sealed record ListeningAuthoredSpeaker(
     string Id,
@@ -1091,7 +1100,9 @@ public sealed class ListeningAuthoringService(
             AudioStartMs: ReadInt("audioStartMs"),
             AudioEndMs: ReadInt("audioEndMs"),
             TimeLimitSeconds: ReadInt("timeLimitSeconds"),
-            NotesBodyMarkdown: Read("notesBody"));
+            NotesBodyMarkdown: Read("notesBody"),
+            AuthoringMethod: Read("authoringMethod"),
+            PartAOverlayBlanksJson: Read("partAOverlayBlanksJson"));
     }
 
     private static ListeningAuthoredExtract NormalizeExtractForStorage(ListeningAuthoredExtract e)
@@ -1126,6 +1137,14 @@ public sealed class ListeningAuthoringService(
             ? e.NotesBodyMarkdown
             : null;
 
+        // Phase 6: authoring method + overlay placements are Part A only.
+        var authoringMethod = IsPartANotesCode(partCode) && !string.IsNullOrWhiteSpace(e.AuthoringMethod)
+            ? e.AuthoringMethod.Trim().ToLowerInvariant()
+            : null;
+        var overlayBlanks = IsPartANotesCode(partCode) && !string.IsNullOrWhiteSpace(e.PartAOverlayBlanksJson)
+            ? e.PartAOverlayBlanksJson
+            : null;
+
         return new ListeningAuthoredExtract(
             PartCode: partCode,
             DisplayOrder: displayOrder,
@@ -1136,7 +1155,9 @@ public sealed class ListeningAuthoringService(
             AudioStartMs: audioStart,
             AudioEndMs: audioEnd,
             TimeLimitSeconds: timeLimitSeconds,
-            NotesBodyMarkdown: notesBody);
+            NotesBodyMarkdown: notesBody,
+            AuthoringMethod: authoringMethod,
+            PartAOverlayBlanksJson: overlayBlanks);
     }
 
     /// <summary>True for the two Part A consultation sub-sections (A1/A2) — the
@@ -1651,6 +1672,8 @@ public sealed class ListeningAuthoringService(
             AudioEndMs = p.AudioEndMs ?? existing.AudioEndMs,
             TimeLimitSeconds = p.TimeLimitSeconds ?? existing.TimeLimitSeconds,
             NotesBodyMarkdown = p.NotesBodyMarkdown ?? existing.NotesBodyMarkdown,
+            AuthoringMethod = p.AuthoringMethod ?? existing.AuthoringMethod,
+            PartAOverlayBlanksJson = p.PartAOverlayBlanksJson ?? existing.PartAOverlayBlanksJson,
         };
 
     private static void ApplyPatchToRelational(
