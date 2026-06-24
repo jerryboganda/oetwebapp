@@ -262,5 +262,49 @@ Cold-start time, idle memory, and final installer size are measured against the 
   commands, the Nginx `latest.json` feed-hosting snippet, and the Azure Trusted Signing upgrade path.
 - **Handoff (cannot be done from here):** set the 4 GitHub secrets, and host the feed files on the VPS.
 
-## Phase 5, 9–10
-_(pending — filled as each completes.)_
+## Phase 5 — Manual / exploratory QA (Windows)
+_Executed against the signed installer from Phase 9._ Matrix M1–M12 in [TEST_PLAN.md](TEST_PLAN.md) §4.
+**Results: PENDING BUILD** — to be filled (boot, port fallback, orphan reaping, resize/DPI, tray,
+single-instance, deep-link incl. `/pair` 404 = BUG-002, error states, secrets round-trip,
+install→uninstall→reinstall).
+
+## Phase 9 — Build & deliver installers
+_Full signed build via `node scripts/tauri-dist.cjs build` (dotnet publish → next build → stage node →
+signed `tauri build`) with `TAURI_SIGNING_PRIVATE_KEY` set and the Authenticode cert in the store._
+
+- **Installer:** `src-tauri/target/release/bundle/nsis/` — `<PENDING: filename + size>`
+- **Updater artifacts:** `<PENDING: *-setup.exe.sig present>`
+- **Authenticode signature:** `<PENDING: signtool verify / Get-AuthenticodeSignature → publisher
+  "OET Prep Internal Testing">`
+- **Perf/size baselines (Phase 6):** `<PENDING: installer size, cold-start, idle RSS>`
+- **Clean-state verify:** `<PENDING: install → launch → core flow → uninstall>`
+
+## Phase 10 — Go / No-Go (provisional — finalized after the Phase 9 smoke)
+
+### What's done (evidence above)
+| Phase | Result |
+|---|---|
+| 2 Static analysis | fmt clean · clippy `-D warnings` 0 · `cargo audit` 0 vulns · release build OK · no secrets · gitignore hardened |
+| 3 Security | splash CSP set; live app nonce-CSP verified; loopback-only IPC ACL (documented); prod updater key + HTTPS feed |
+| 4 Tests | 17 Rust unit tests pass; bridge conformance 5/5; desktop E2E = manual smoke (Phase 9) |
+| 6 Prod-readiness | sidecar logging + panic hook; metadata/icons/version verified; WebView2 install-mode documented |
+| 7 CI/CD | `tauri-ci.yml` PR gate + extended release (sign + GitHub Release + `latest.json`) |
+| 8 Signing | self-signed Authenticode wired; prod minisign key; `TESTER_SETUP.md` |
+
+### Bugs
+Critical/High **fixed or addressed**: BUG-001 (fixed), BUG-003 (fixed), BUG-005 (fixed), BUG-004
+(config fixed; feed-hosting + CI secret = handoff). Deferred/accepted: BUG-002 (`/pair` 404, frontend),
+BUG-006 (loopback IPC ACL, accepted), **BUG-007 (high-sev `SQLitePCLRaw` in bundled backend — fix
+owned by a separate backend session)**.
+
+### Outstanding before "GO" for internal testing
+1. **Phase 9 smoke must pass** (signed installer installs/launches/uninstalls; signature shows publisher).
+2. **Maintainer handoffs:** set the 4 GitHub secrets; host the updater feed on the VPS; **land the
+   BUG-007 SQLite bump** before distributing (it ships in the bundle).
+3. macOS remains **build-only / unvalidated** (mic gate needs real Mac hardware).
+
+### Provisional recommendation
+**GO for Windows x64 internal testing once (1) the Phase 9 smoke passes and (2) the BUG-007 SQLite
+bump lands.** All desktop-shell Critical/High items are resolved; remaining blockers are the bundled
+backend dependency and operational handoffs (secrets + feed), not desktop-shell defects. _Final verdict
+recorded after the Phase 9 smoke below._
