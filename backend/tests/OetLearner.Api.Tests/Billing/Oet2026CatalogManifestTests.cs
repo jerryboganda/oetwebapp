@@ -13,6 +13,8 @@ public sealed class Oet2026CatalogManifestTests
         "full-nursing-assessment",
         "full-nursing-premium",
         "full-pharmacy",
+        "full-physiotherapy",
+        "full-allied-health",
         "basic-english",
         "crash-course",
         "crash-3letters",

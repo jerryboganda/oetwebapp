@@ -186,6 +186,8 @@ export const DEFAULT_CATALOG_STOREFRONT: CatalogStorefrontConfig = {
     medicine: 'Medicine',
     nursing: 'Nursing',
     pharmacy: 'Pharmacy',
+    physiotherapy: 'Physiotherapy',
+    allied_health: 'Allied health professions',
   },
   legend: [
     { key: 'W', label: 'Writing add-ons', description: 'Writing letter assessment add-ons are offered on this product.' },
