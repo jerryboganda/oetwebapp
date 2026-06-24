@@ -20,6 +20,11 @@ on:
         description: 'Version code / build number (integer)'
         required: true
         type: string
+      app_url:
+        description: 'URL the WebView loads — use the STAGING/test URL for tester builds, production for store releases'
+        required: false
+        type: string
+        default: 'https://app.oetwithdrhesham.co.uk'
 
 concurrency:
   group: mobile-release
@@ -90,7 +95,7 @@ jobs:
       - name: Build Next.js
         run: pnpm run build
         env:
-          CAPACITOR_APP_URL: https://app.oetwithdrhesham.co.uk
+          CAPACITOR_APP_URL: ${{ inputs.app_url }}
 
       - name: Capacitor sync
         run: pnpm exec cap sync android
@@ -175,7 +180,7 @@ jobs:
       - name: Build Next.js
         run: pnpm run build
         env:
-          CAPACITOR_APP_URL: https://app.oetwithdrhesham.co.uk
+          CAPACITOR_APP_URL: ${{ inputs.app_url }}
 
       - name: Capacitor sync
         run: pnpm exec cap sync ios

