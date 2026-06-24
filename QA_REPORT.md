@@ -39,8 +39,41 @@ Full JS impl (`lib/mobile/push-notifications.ts`, `components/mobile/mobile-runt
 
 ---
 
-## Phase 2 — Static analysis & hygiene
-_Pending — outputs pasted here._
+## Phase 2 — Static analysis & hygiene (in progress)
+
+Run in worktree `D:/Projects/oet-qa-prod-readiness` @ `main` tip (`c9bba0aa3`), pnpm 10.33.0, after `pnpm install --frozen-lockfile` (exit 0).
+
+### `tsc --noEmit` — 1 error found → FIXED → clean
+- **Before:** `app/billing/page.test.tsx(77,7): error TS2578: Unused '@ts-expect-error' directive.` `TSC_EXIT=2`.
+- **Significance:** `next.config.ts` sets `typescript.ignoreBuildErrors:true` (R2), so `next build` would not catch this — but `qa-smoke.yml` runs `tsc`, meaning **main's CI type-check gate was red**.
+- **Fix:** removed the now-unused `// @ts-expect-error test shim` (the `URL.revokeObjectURL = vi.fn()` assignment type-checks cleanly under TS 5.9; TS2578 guarantees no error is masked). Behavior unchanged.
+- **After:** `TSC_EXIT=0` ✅.
+
+### `pnpm run lint` (ESLint) — PASS
+- `✖ 386 problems (0 errors, 386 warnings)` · `LINT_EXIT=0` ✅.
+- All 386 are React-Compiler advisories (`react-hooks/set-state-in-effect`, purity, etc.) **intentionally downgraded to warnings** in `eslint.config.mjs`. Tech-debt, not a blocker; mass-refactor out of scope for a QA pass.
+
+### `pnpm test` (Vitest) — 2075 tests pass deterministically
+- Full suite: `Test Files 1 failed | 302 passed (303)` · `Tests 2 failed | 2073 passed (2075)`.
+- Both failures in **one** file, `app/admin/content/reading/[paperId]/questions/ReadingAnswerSheetBuilder.test.tsx` (admin Reading authoring — **not a mobile flow**): (1) 15s test timeout, (2) `expected 8 calls, got 16`.
+- **Isolation re-run: `Test Files 1 passed (1) · Tests 8 passed (8)` (exit 0), `tests 13.72s`** — right against the 15s global timeout. ⇒ **flaky under full-suite parallel load** (timeout tip-over + cross-file state bleed doubling), not a product bug. Pre-existing on `main`; unrelated to this engagement. Logged as BUGLOG #1 (Medium, test-infra). Could flake the `qa-smoke` unit gate → revisit in Phase 7.
+
+### `pnpm audit` — 23 advisories; only 1 prod chain, none ship in the app
+- All deps: `23 (4 low, 13 moderate, 6 high)`. Prod-only (`--prod`): `11 (10 moderate, 1 high)`.
+- **Every prod advisory is the single chain `@google/genai → @modelcontextprotocol/sdk → hono <4.12.25`** (server-side AWS-Lambda body-limit / Lambda@Edge header issues — never instantiated by this app's MCP-client usage).
+- The 6 highs are dev/build/test toolchain: `form-data` & `undici` ← `electron-builder`→node-gyp (desktop build), `undici` ← `jsdom` (test env), `hono` ← MCP sequential-thinking **devDep**. **None ship in the mobile app** (remote-URL app bundles negligible JS). SCA already automated via `sbom-sca.yml`.
+- **Action taken:** added `pnpm.overrides` `"hono@<4.12.25": ">=4.12.25"`. Surgical lockfile diff (19 lines). **Result: prod audit 11→6, high 1→0.** Remaining 6 are *moderate*, server-side, different chain (`@sentry/nextjs→@sentry/node→@opentelemetry/core`) — non-shipping in the remote-URL app; recommend a `@sentry/nextjs` bump at leisure (tracked via `sbom-sca.yml`). `tsc` re-validated clean post-override.
+- Pre-existing peer-dep warnings (react-redux / @zoom/meetingsdk want React 18; next-intl wants Next <16) are benign and unrelated to the override.
+
+### `pnpm run build` (`next build`, standalone) — PASS
+- `BUILD_EXIT=0` ✅. Compiles the full route tree (overwhelmingly `ƒ` dynamic / server-rendered-on-demand, consistent with auth-gated standalone mode). Note: for the **remote-URL mobile app** the `next build` output is **not** bundled into the APK (`cap sync` copies `webDir: capacitor-web`, the redirect stub) — the build matters for the **web/staging deploy** the WebView loads, and as a CI health gate.
+
+### Android `./gradlew lint` — DEFERRED to Phase 9
+Requires the Android SDK toolchain + `cap sync android`; run alongside the Android build to avoid a duplicate toolchain spin-up. `mobile-ci.yml` already does an Android debug build on PR.
+
+### Hygiene re-confirm
+- Secrets: none committed (`git ls-files` → only `*.example`). `.gitignore` covers keystores/`keystore.properties`/`google-services.json`/`.env*`. ✅
+- Unexpected: `src-tauri/src/lib.rs` showed clippy auto-fixes during the session (IDE/rust-analyzer, not this engagement) — left untouched, never staged.
 
 ## Phase 3 — Security hardening
 _Pending._
