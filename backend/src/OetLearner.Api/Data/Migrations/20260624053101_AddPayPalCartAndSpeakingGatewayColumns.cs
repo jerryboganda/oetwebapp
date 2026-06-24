@@ -10,12 +10,11 @@ namespace OetLearner.Api.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "CatalogPresentationJson",
-                table: "RuntimeSettings",
-                type: "text",
-                nullable: true);
-
+            // NOTE: RuntimeSettings.CatalogPresentationJson is added by
+            // 20260708000000_AddCatalogPresentationRuntimeSetting (idempotent
+            // ADD COLUMN IF NOT EXISTS). It was duplicated here by mistake and
+            // crashed prod startup ("column already exists"); removed so this
+            // migration only adds the new PayPal/speaking gateway columns.
             migrationBuilder.AddColumn<string>(
                 name: "PaymentGateway",
                 table: "PrivateSpeakingBookings",
@@ -58,10 +57,6 @@ namespace OetLearner.Api.Data.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_CheckoutSessions_GatewayOrderId",
                 table: "CheckoutSessions");
-
-            migrationBuilder.DropColumn(
-                name: "CatalogPresentationJson",
-                table: "RuntimeSettings");
 
             migrationBuilder.DropColumn(
                 name: "PaymentGateway",
