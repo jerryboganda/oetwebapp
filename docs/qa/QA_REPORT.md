@@ -210,5 +210,34 @@ Both sidecars previously ran with `Stdio::null()`, discarding all output. Now:
 Remaining Phase 6 items (perf/size baselines, metadata/icons, `webviewInstallMode`, README/CHANGELOG)
 are completed alongside the Phase 9 build.
 
-## Phase 5, 7–10
+## Phase 7 — CI/CD (complete; first green run pending push)
+
+- **New `.github/workflows/tauri-ci.yml`** (PR + push on `src-tauri/**`, `inject/**`,
+  `types/desktop.d.ts`): a `rust` job on **windows-latest** running `cargo fmt --check`, `cargo clippy
+  --all-targets --all-features -- -D warnings`, `cargo test --all-features`, and a `cargo build`
+  compile smoke (with `swatinem/rust-cache`); a `conformance` job running the bridge vitest. This
+  closes the gap where the Rust toolchain was entirely ungated. Repo-wide `tsc`/`lint` remain in
+  `qa-smoke.yml` (not duplicated).
+- **Extended `.github/workflows/tauri-desktop-release.yml`:** added a Windows cert-import step (decodes
+  `WINDOWS_CERTIFICATE` → `CurrentUser\My` so the dist-config thumbprint resolves) and a `publish` job
+  (`contents: write`, tag-push only) that downloads both platforms' artifacts, generates the updater
+  `latest.json` from the `.sig`, and creates a **GitHub Release** with the `.exe`/`.sig`/`.dmg`
+  attached. Both workflows validated with a YAML parser.
+
+## Phase 8 — Signing & updater key (complete; feed hosting = handoff)
+
+- **Windows Authenticode (self-signed):** generated cert "OET Prep Internal Testing" (thumbprint
+  `9E1D24DAB316C568A107E7EFD058786541B9DAA8`), exported `.cer` (public, for testers) + `.pfx` (private,
+  base64 for CI) to `~/.oet-signing/` (gitignored, never committed). Wired into
+  `tauri.dist.conf.json` (`bundle.windows.certificateThumbprint` + `digestAlgorithm: sha256` +
+  `timestampUrl`). `signtool` confirmed present (Windows SDK 10.0.26100). Local dist builds sign
+  automatically (cert in store); CI imports the cert from the secret.
+- **Updater minisign key:** production keypair generated in Phase 3 (private key `~/.tauri/
+  oet-updater-prod.key`, gitignored; public key in `tauri.conf.json`).
+- **`TESTER_SETUP.md`** documents: tester cert-trust steps (Trusted Root + Trusted Publishers), the
+  macOS Gatekeeper workaround, known issues, bug-report format, the maintainer `gh secret set`
+  commands, the Nginx `latest.json` feed-hosting snippet, and the Azure Trusted Signing upgrade path.
+- **Handoff (cannot be done from here):** set the 4 GitHub secrets, and host the feed files on the VPS.
+
+## Phase 5, 9–10
 _(pending — filled as each completes.)_
