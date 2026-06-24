@@ -334,6 +334,10 @@ public sealed class Oet2026CatalogSeeder(
         if (dto.SessionsGranted > 0) grants["speaking_sessions"] = dto.SessionsGranted;
         if (dto.GrantCredits > 0) grants["ai_credits"] = dto.GrantCredits;
         if (dto.MockEntitlements > 0) grants["mockFull"] = dto.MockEntitlements;
+        // Explicit L&R allowances (0 = none included). Omit entirely to keep the
+        // default "unlimited" behaviour readers infer from an absent/null key.
+        if (dto.ListeningTests.HasValue) grants["listening_tests"] = dto.ListeningTests.Value;
+        if (dto.ReadingTests.HasValue) grants["reading_tests"] = dto.ReadingTests.Value;
         if (dto.PriorityQueue) grants["priority_queue"] = true;
         if (dto.AddonKind == "tutor_book") grants["tutor_book"] = true;
         return JsonSerializer.Serialize(grants);
@@ -533,6 +537,10 @@ public sealed class Oet2026CatalogSeeder(
         public int ExtensionDays { get; set; }
         public int GrantCredits { get; set; }
         public int MockEntitlements { get; set; }
+        /// <summary>Listening practice tests included. Null/omitted = unlimited; 0 = none.</summary>
+        public int? ListeningTests { get; set; }
+        /// <summary>Reading practice tests included. Null/omitted = unlimited; 0 = none.</summary>
+        public int? ReadingTests { get; set; }
         public bool PriorityQueue { get; set; }
         public bool IsStackable { get; set; } = true;
         public int DurationDays { get; set; } = 180;

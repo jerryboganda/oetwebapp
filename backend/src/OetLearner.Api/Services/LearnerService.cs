@@ -3781,7 +3781,9 @@ public partial class LearnerService(
             case "full":
                 features.Add($"{credits} flexible grading credits (Writing or Speaking)");
                 if (mocks > 0) features.Add($"{mocks} full mock exam{(mocks == 1 ? string.Empty : "s")} included");
-                features.Add("Unlimited Listening & Reading practice");
+                // Only advertise unlimited L&R when the package actually grants it (both allowances null = unlimited).
+                if (listeningTests is null && readingTests is null)
+                    features.Add("Unlimited Listening & Reading practice");
                 features.Add("AI feedback reports");
                 if (priorityQueue) features.Add("Priority grading queue");
                 features.Add(validity);

@@ -1,3 +1,4 @@
+export { AiPackagesStorefront } from './ai-packages-storefront';
 export { BackToBillingLink } from './back-to-billing-link';
 export {
   FREEZE_BLOCKED_MESSAGE,

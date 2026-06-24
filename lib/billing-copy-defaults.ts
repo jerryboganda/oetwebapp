@@ -136,7 +136,7 @@ export const BILLING_COPY_FIELDS: BillingCopyField[] = [
   { key: 'billing.ai.unavailable', section: 'AI packages', label: 'AI unavailable text', default: 'AI packages are not available right now. Please check back shortly.', multiline: true },
   { key: 'billing.ai.toggle.full', section: 'AI packages', label: 'Full Packages toggle', default: 'Full Packages' },
   { key: 'billing.ai.toggle.separate', section: 'AI packages', label: 'Separate Packages toggle', default: 'Separate Packages' },
-  { key: 'billing.ai.fullIntro', section: 'AI packages', label: 'Full packages intro', default: 'All-in-one packages combine AI grading credits with unlimited Listening & Reading practice.', multiline: true },
+  { key: 'billing.ai.fullIntro', section: 'AI packages', label: 'Full packages intro', default: 'All-in-one packages bundle AI grading credits. OET Mastery also includes unlimited Listening & Reading practice.', multiline: true },
   { key: 'billing.ai.separateIntro', section: 'AI packages', label: 'Separate packages intro', default: 'Targeted packages focus on a single subtest. Listening & Reading are deterministic and always free to grade.', multiline: true },
   { key: 'billing.ai.fullEmpty', section: 'AI packages', label: 'No full packages text', default: 'No full packages are available yet.' },
   { key: 'billing.ai.priority', section: 'AI packages', label: 'Priority badge', default: 'Priority' },
