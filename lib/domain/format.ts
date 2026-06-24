@@ -31,6 +31,81 @@ export function minutesToLabel(minutes: number): string {
   return `${minutes} mins`;
 }
 
+/**
+ * Human label for a billing interval / cadence. Maps the raw backend tokens
+ * ("one_time", "month", "year", ...) to consumer-facing copy. Unknown values
+ * fall back to title-case so nothing renders as a raw snake_case token.
+ */
+export function formatBillingInterval(interval: string | null | undefined): string {
+  const key = String(interval ?? '').trim().toLowerCase();
+  switch (key) {
+    case '':
+      return '';
+    case 'one_time':
+    case 'onetime':
+    case 'one-time':
+      return 'One-time';
+    case 'day':
+    case 'daily':
+      return 'Daily';
+    case 'week':
+    case 'weekly':
+      return 'Weekly';
+    case 'month':
+    case 'monthly':
+      return 'Monthly';
+    case 'quarter':
+    case 'quarterly':
+      return 'Quarterly';
+    case 'year':
+    case 'annual':
+    case 'annually':
+    case 'yearly':
+      return 'Yearly';
+    default:
+      return titleCase(key);
+  }
+}
+
+/**
+ * Friendly label for a subscription status token coming off the billing summary
+ * ("active", "freeze_requested", "frozen", "past_due", ...). Unknown values
+ * fall back to title-case so the billing page never shows a raw token (and the
+ * old literal "Unknown" can no longer leak through).
+ */
+export function formatSubscriptionStatus(status: string | null | undefined): string {
+  const key = String(status ?? '').trim().toLowerCase();
+  switch (key) {
+    case '':
+      return '—';
+    case 'active':
+      return 'Active';
+    case 'trial':
+      return 'Trial';
+    case 'pending':
+      return 'Pending';
+    case 'past_due':
+    case 'pastdue':
+      return 'Past due';
+    case 'suspended':
+      return 'Suspended';
+    case 'cancelled':
+    case 'canceled':
+      return 'Cancelled';
+    case 'expired':
+      return 'Expired';
+    case 'paused':
+      return 'Paused';
+    case 'freeze_requested':
+    case 'freezerequested':
+      return 'Freeze requested';
+    case 'frozen':
+      return 'Frozen';
+    default:
+      return titleCase(key);
+  }
+}
+
 /** Rewrite "3-4" / "3 - 4" as "3 to 4" for score-range display copy. */
 export function scoreRangeDisplay(value: string | null | undefined): string {
   return (value ?? '').replace(/\s*-\s*/g, ' to ');

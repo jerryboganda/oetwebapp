@@ -26,9 +26,11 @@ import {
   fetchBillingContent,
 } from '@/lib/api';
 import { makeBillingCopy } from '@/lib/billing-copy-defaults';
+import { formatBillingInterval, formatSubscriptionStatus } from '@/lib/domain/format';
 import type { BillingData } from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import { isFreezeEffective, maskProviderId } from '@/components/domain/billing';
+import { FreezeRequestModal } from '@/components/billing/FreezeRequestModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -96,6 +98,7 @@ export default function BillingPage() {
 
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
+  const [freezeModalOpen, setFreezeModalOpen] = useState(false);
 
   // Double-submit guard for the invoice download handler.
   const submittingRef = useRef(false);
@@ -106,6 +109,19 @@ export default function BillingPage() {
   );
   const isFrozen = isFreezeEffective(freezeState);
   const isPastDue = data?.status?.toLowerCase() === 'pastdue' || data?.status?.toLowerCase() === 'past_due';
+  const freezeEligible = freezeState
+    ? Boolean(
+        freezeState.policy?.isEnabled &&
+          freezeState.policy?.selfServiceEnabled &&
+          !freezeState.currentFreeze &&
+          freezeState.entitlement?.used !== true &&
+          freezeState.eligibility?.eligible !== false &&
+          freezeState.eligibility?.canRequest !== false,
+      )
+    : false;
+  const freezeDisabledReason = freezeState?.entitlement?.used
+    ? 'You’ve already used your one freeze for this subscription. Buying a new course renews it.'
+    : 'A freeze isn’t available for your account right now.';
 
   const loadBilling = useCallback(() => {
     setLoading(true);
@@ -158,7 +174,7 @@ export default function BillingPage() {
       const objectUrl = await downloadInvoice(invoiceId);
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
-      anchor.download = `${invoiceId}.txt`;
+      anchor.download = `${invoiceId}.pdf`;
       anchor.click();
       URL.revokeObjectURL(objectUrl);
       setSuccess('Invoice download started.');
@@ -215,7 +231,7 @@ export default function BillingPage() {
           description={copy('billing.hero.description')}
           highlights={[
             { icon: ShieldCheck, label: copy('billing.hero.highlight.currentPlan'), value: data.currentPlan },
-            { icon: CheckCircle2, label: 'Status', value: data.status },
+            { icon: CheckCircle2, label: 'Status', value: formatSubscriptionStatus(data.status) },
             { icon: Calendar, label: 'Subscription ends', value: formatOptionalDate(data.nextRenewal) },
             { icon: Receipt, label: copy('billing.overview.invoiceAccess'), value: invoiceDownloadsAvailable ? copy('billing.overview.invoiceAccessAvailable') : copy('billing.overview.invoiceAccessUnavailable') },
           ]}
@@ -259,7 +275,7 @@ export default function BillingPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.currentSubscription')}</p>
                   <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy">{data.currentPlan}</h2>
                   <p className="mt-1 text-sm text-muted">
-                    {data.price} / {data.interval}
+                    {data.price} / {formatBillingInterval(data.interval)}
                   </p>
                   {data.planDescription ? (
                     <p className="mt-3 max-w-md text-sm leading-6 text-muted">{data.planDescription}</p>
@@ -267,7 +283,7 @@ export default function BillingPage() {
                 </div>
                 <span className="inline-flex items-center gap-2 text-sm font-extrabold text-success">
                   <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
-                  {data.status}
+                  {formatSubscriptionStatus(data.status)}
                 </span>
               </div>
 
@@ -344,7 +360,20 @@ export default function BillingPage() {
                 </div>
               )}
 
-              <div className="mt-auto pt-4">
+              <div className="mt-auto space-y-2 pt-4">
+                {!isFrozen ? (
+                  <Button
+                    fullWidth
+                    onClick={() => setFreezeModalOpen(true)}
+                    disabled={!freezeEligible}
+                    title={!freezeEligible ? freezeDisabledReason : undefined}
+                  >
+                    <Snowflake className="h-4 w-4" /> Freeze my subscription
+                  </Button>
+                ) : null}
+                {!isFrozen && !freezeEligible ? (
+                  <p className="text-center text-[11px] leading-4 text-muted">{freezeDisabledReason}</p>
+                ) : null}
                 <Button variant="outline" fullWidth onClick={() => router.push('/freeze')}>
                   View freeze details &amp; history
                 </Button>
@@ -466,6 +495,22 @@ export default function BillingPage() {
           ) : null}
         </TabPanel>
       </div>
+
+      <FreezeRequestModal
+        open={freezeModalOpen}
+        onClose={() => setFreezeModalOpen(false)}
+        freezeState={freezeState}
+        onCompleted={async () => {
+          setSuccess('Your subscription freeze has been submitted.');
+          try {
+            const refreshed = await fetchFreezeStatus();
+            setFreezeState(refreshed as LearnerFreezeStatus);
+            setFreezeLoadFailed(false);
+          } catch {
+            /* status refresh is best-effort; the page reloads it on next visit */
+          }
+        }}
+      />
     </LearnerDashboardShell>
   );
 }

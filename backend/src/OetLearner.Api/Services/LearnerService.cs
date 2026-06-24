@@ -75,7 +75,8 @@ public partial class LearnerService(
     PrivateSpeakingService? privateSpeakingService = null,
     IFulfillmentService? fulfillmentService = null,
     IAddonEligibilityService? addonEligibilityService = null,
-    IAiPackageCreditService? aiPackageCreditService = null)
+    IAiPackageCreditService? aiPackageCreditService = null,
+    IInvoicePdfService? invoicePdfService = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -4669,6 +4670,8 @@ public partial class LearnerService(
     public async Task<object> GetBillingSummaryAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
+        await EnsureSubscriptionInvoiceAsync(userId, cancellationToken);
+        var hasInvoices = await db.Invoices.AnyAsync(x => x.UserId == userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
         var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
@@ -4724,7 +4727,7 @@ public partial class LearnerService(
                 supportedReviewSubtests = currentPlan is null
                     ? new List<string> { "writing", "speaking" }
                     : JsonSupport.Deserialize<List<string>>(currentPlan.IncludedSubtestsJson, new List<string> { "writing", "speaking" }),
-                invoiceDownloadsAvailable = true
+                invoiceDownloadsAvailable = hasInvoices
             },
             plan = currentPlan is null
                 ? null
@@ -4928,6 +4931,7 @@ public partial class LearnerService(
     public async Task<object> GetInvoicesAsync(string userId, string? cursor, int? limit, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureSubscriptionInvoiceAsync(userId, cancellationToken);
         var pageSize = CursorPagination.NormalizeLimit(limit);
         var invoices = (await db.Invoices
             .Where(x => x.UserId == userId)
@@ -4975,21 +4979,148 @@ public partial class LearnerService(
 
     public async Task<GeneratedDownloadFile> GetInvoiceDownloadAsync(string userId, string invoiceId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        var user = await EnsureUserAsync(userId, cancellationToken);
         var invoice = await db.Invoices.FirstOrDefaultAsync(x => x.UserId == userId && x.Id == invoiceId, cancellationToken)
             ?? throw ApiException.NotFound("invoice_not_found", "Invoice not found.");
 
-        var content = string.Join(Environment.NewLine, new[]
+        var pdf = (invoicePdfService ?? new InvoicePdfService()).Generate(new InvoicePdfModel(
+            InvoiceId: invoice.Id,
+            Number: invoice.Number,
+            IssuedAt: invoice.IssuedAt,
+            Amount: invoice.Amount,
+            Currency: invoice.Currency,
+            Status: invoice.Status,
+            Description: invoice.Description,
+            BillToName: user.DisplayName,
+            BillToEmail: user.Email));
+
+        return new GeneratedDownloadFile(new MemoryStream(pdf.Bytes), "application/pdf", pdf.Filename);
+    }
+
+    /// <summary>
+    /// Guarantees the learner's current paid subscription has a downloadable invoice.
+    /// Invoices are normally created only inside payment-webhook fulfillment
+    /// (<see cref="ApplyCheckoutCompletionAsync"/>); subscriptions created another way
+    /// (admin grant, complimentary, or a purchase that never ran fulfillment) would
+    /// otherwise have none. Idempotent and safe to call on every billing read:
+    ///   • no-op for free plans (PriceAmount &lt;= 0),
+    ///   • no-op when an invoice already covers the current purchase (matched by plan
+    ///     version or by amount) so it never duplicates a real checkout invoice,
+    ///   • deterministic per-purchase id so concurrent reads converge on one row.
+    /// </summary>
+    private async Task<bool> EnsureSubscriptionInvoiceAsync(string userId, CancellationToken cancellationToken)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (subscription is null || subscription.PriceAmount <= 0)
         {
-            "OET Prep Invoice",
-            $"Invoice ID: {invoice.Id}",
-            $"Issued At: {invoice.IssuedAt:yyyy-MM-dd HH:mm:ss zzz}",
-            $"Status: {invoice.Status}",
-            $"Amount: {invoice.Amount:0.00} {invoice.Currency}",
-            $"Description: {invoice.Description}"
+            return false;
+        }
+
+        var alreadyCovered = await db.Invoices.AnyAsync(
+            x => x.UserId == userId
+                 && (x.Amount == subscription.PriceAmount
+                     || (subscription.PlanVersionId != null && x.PlanVersionId == subscription.PlanVersionId)),
+            cancellationToken);
+        if (alreadyCovered)
+        {
+            return false;
+        }
+
+        // Compact, deterministic id keyed to this exact purchase (subscription + plan +
+        // start instant). A later course purchase changes StartedAt and yields a new
+        // invoice; repeat reads of the same purchase converge on this id.
+        var compositeKey = $"{subscription.Id}|{subscription.PlanId}|{subscription.StartedAt.UtcTicks}";
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(compositeKey)))[..24]
+            .ToLowerInvariant();
+        var invoiceId = $"inv-sub-{hash}";
+
+        if (await db.Invoices.AnyAsync(x => x.Id == invoiceId, cancellationToken))
+        {
+            return false;
+        }
+
+        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
+        var issuedAt = subscription.StartedAt != default
+            ? subscription.StartedAt
+            : (subscription.ChangedAt != default ? subscription.ChangedAt : DateTimeOffset.UtcNow);
+        var planName = currentPlan?.Name ?? subscription.PlanId;
+        var description = string.IsNullOrWhiteSpace(subscription.Interval)
+            ? planName
+            : $"{planName} ({subscription.Interval})";
+
+        db.Invoices.Add(new Invoice
+        {
+            Id = invoiceId,
+            UserId = userId,
+            Number = await AllocateInvoiceNumberAsync(userId, invoiceId, cancellationToken),
+            IssuedAt = issuedAt,
+            Amount = subscription.PriceAmount,
+            Currency = subscription.Currency,
+            Status = "Paid",
+            Description = description,
+            PlanVersionId = subscription.PlanVersionId
         });
-        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
-        return new GeneratedDownloadFile(new MemoryStream(bytes), "text/plain", $"{invoice.Id}.txt");
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent billing read created the same deterministic invoice first.
+            // The invoice now exists either way — drop our pending insert and move on.
+            db.ChangeTracker.Clear();
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Admin one-shot: ensures every learner on a paid subscription has a downloadable
+    /// invoice. Idempotent — reuses <see cref="EnsureSubscriptionInvoiceAsync"/>, so it
+    /// only creates the invoices that are genuinely missing. Returns how many users were
+    /// scanned and how many invoices were created.
+    /// </summary>
+    public async Task<object> BackfillSubscriptionInvoicesAsync(CancellationToken cancellationToken)
+    {
+        var userIds = await db.Subscriptions
+            .AsNoTracking()
+            .Where(x => x.PriceAmount > 0)
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var created = 0;
+        foreach (var userId in userIds)
+        {
+            if (await EnsureSubscriptionInvoiceAsync(userId, cancellationToken))
+            {
+                created++;
+            }
+        }
+
+        return new { scanned = userIds.Count, created };
+    }
+
+    /// <summary>
+    /// Renews the learner's one-time self-service freeze entitlement when they buy a
+    /// new subscription/plan. The freeze rule is "once per subscription purchase": a
+    /// fresh course purchase should grant a fresh freeze. We reuse the existing
+    /// <see cref="AccountFreezeEntitlement.ResetAt"/> semantics — eligibility treats a
+    /// reset entitlement as available, and the next freeze re-consumes it
+    /// (clearing ResetAt). No-op if the entitlement was never consumed.
+    /// </summary>
+    private async Task ResetFreezeEntitlementForNewPurchaseAsync(string userId, CancellationToken cancellationToken)
+    {
+        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (entitlement is null || entitlement.ConsumedAt is null || entitlement.ResetAt is not null)
+        {
+            return;
+        }
+
+        entitlement.ResetAt = DateTimeOffset.UtcNow;
+        entitlement.ResetReason = "new_subscription_purchase";
     }
 
     public object GetReviewOptions() => new
@@ -8934,7 +9065,12 @@ public partial class LearnerService(
         SubscriptionStatus.Suspended => "suspended",
         SubscriptionStatus.Cancelled => "cancelled",
         SubscriptionStatus.Expired => "expired",
-        _ => "unknown"
+        SubscriptionStatus.Paused => "paused",
+        SubscriptionStatus.FreezeRequested => "freeze_requested",
+        SubscriptionStatus.Frozen => "frozen",
+        // Never surface a literal "unknown" — fall back to the enum name so a future
+        // status renders sensibly instead of looking broken on the billing page.
+        _ => status.ToString().ToLowerInvariant()
     };
 
     private static string ToUploadState(UploadState status) => status switch
@@ -10287,6 +10423,10 @@ public partial class LearnerService(
                         SubscriptionBundleInitializer.ApplyPlanEntitlements(subscription, livePlanForBundle, now);
                     }
                 }
+
+                // Freeze rule is "once per subscription purchase" — buying a new plan
+                // renews the learner's one-time self-service freeze entitlement.
+                await ResetFreezeEntitlementForNewPurchaseAsync(transaction.LearnerUserId, ct);
             }
         }
 

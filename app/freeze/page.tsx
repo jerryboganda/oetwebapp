@@ -10,6 +10,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { cancelFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
+import { describeFreezeReasonCodes } from '@/lib/freeze-copy';
 import type { LearnerFreezeStatus, FreezePolicy, FreezeEligibility } from '@/lib/types/freeze';
 
 const DEFAULT_POLICY: FreezePolicy = {
@@ -33,35 +34,8 @@ const DEFAULT_POLICY: FreezePolicy = {
   allowSuspended: false,
 };
 
-const FREEZE_REASON_LABELS: Record<string, string> = {
-  policy_disabled: 'Freeze requests are currently disabled by policy.',
-  self_service_disabled: 'Self-service freeze requests are currently disabled.',
-  current_freeze_exists: 'There is already an open freeze request for this account.',
-  self_service_entitlement_used: 'The one-time self-service freeze entitlement has already been used.',
-  reason_required: 'A reason is required before you can submit a freeze request.',
-  duration_invalid: 'The requested duration is outside the allowed policy window.',
-  date_range_invalid: 'The end time must be after the start time.',
-  scheduling_disabled: 'Future-dated freezes are not enabled under the current policy.',
-  subscription_missing: 'No active subscription record was found for this account.',
-  active_paid_excluded: 'Active paid subscriptions are excluded by the current policy.',
-  past_due_excluded: 'Past-due subscriptions are excluded by the current policy.',
-  trial_excluded: 'Trial plans are excluded by the current policy.',
-  cancelled_excluded: 'Cancelled subscriptions are excluded by the current policy.',
-  expired_excluded: 'Expired subscriptions are excluded by the current policy.',
-  suspended_excluded: 'Suspended accounts are excluded by the current policy.',
-  complimentary_excluded: 'Complimentary plans are excluded by the current policy.',
-};
-
 function normalizeFreezeStatus(status?: string | null) {
   return String(status ?? '').toLowerCase();
-}
-
-function describeReasonCodes(reasonCodes?: string[]) {
-  if (!reasonCodes || reasonCodes.length === 0) {
-    return [];
-  }
-
-  return reasonCodes.map((code) => FREEZE_REASON_LABELS[code] ?? code.replace(/_/g, ' '));
 }
 
 function toIsoOrNull(value: string): string | null {
@@ -116,7 +90,7 @@ export default function FreezePage() {
   const canRequest = Boolean(isSelfServiceAvailable && !currentFreeze && eligibility.eligible !== false && eligibility.canRequest !== false);
   const canCancelCurrent = currentStatus === 'pendingapproval' || currentStatus === 'scheduled';
   const canSubmit = canRequest && !loading && !busy;
-  const eligibilityMessages = describeReasonCodes(eligibility.reasonCodes);
+  const eligibilityMessages = describeFreezeReasonCodes(eligibility.reasonCodes);
 
   const highlights = useMemo(
     () => [

@@ -103,6 +103,51 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
     }
 
     [Fact]
+    public async Task PlanPurchase_RenewsConsumedFreezeEntitlement()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var ctx = new FulfillmentContext(suffix);
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+
+            SeedLearnerWithSubscription(db, ctx, now);
+            SeedPlan(db, ctx, bundledWriting: 0, bundledSpeaking: 0, bundledAiCredits: 0,
+                bundledTutorBook: false, bundledBasicEnglish: false, accessDurationDays: 180, now: now);
+            SeedQuote(db, ctx, addOnItems: Array.Empty<BillingQuoteLineItem>(), now: now);
+            SeedSubscriptionPaymentTransaction(db, ctx, now);
+            SeedVerifiedCompletedWebhookEvent(db, ctx, now);
+
+            // The learner has already used their one freeze on a prior subscription.
+            db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
+            {
+                Id = $"FZE-{suffix}",
+                UserId = ctx.UserId,
+                ConsumedAt = now.AddMonths(-2),
+                ResetAt = null,
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        await DriveCompletionAsync(ctx);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var entitlement = await db.AccountFreezeEntitlements.SingleAsync(x => x.UserId == ctx.UserId);
+
+            // Buying a new plan renews the one-time freeze: ResetAt stamped, so a new
+            // freeze becomes available again.
+            Assert.NotNull(entitlement.ResetAt);
+            Assert.Equal("new_subscription_purchase", entitlement.ResetReason);
+        }
+    }
+
+    [Fact]
     public async Task PlanPurchase_PermanentTutorBookSku_UnlocksTutorBook_AndLeavesExpiryNull()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];

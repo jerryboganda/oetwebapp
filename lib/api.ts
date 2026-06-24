@@ -4166,7 +4166,10 @@ export async function fetchBilling(): Promise<BillingData> {
     planDescription: summary.planDescription ?? '',
     price: `$${Number(summary.price.amount).toFixed(2)}`,
     interval: summary.price.interval,
-    status: titleCase(summary.status),
+    // Keep the raw status token ("active" | "frozen" | "past_due" | ...). The UI
+    // formats it for display via formatSubscriptionStatus; keeping it raw also
+    // lets status comparisons (e.g. past_due) match reliably.
+    status: summary.status,
     nextRenewal: summary.nextRenewalAt,
     reviewCredits: summary.wallet.creditBalance,
     activeAddOns,

@@ -353,6 +353,12 @@ public static class AdminEndpoints
             => Results.Ok(await service.CreateBillingPlanAsync(http.AdminId(), http.AdminName(), request, ct)))
             .WithAdminWrite("AdminBillingCatalogWrite");
 
+        // One-shot backfill: synthesize a "Paid" invoice for every paid subscription
+        // that lacks one (e.g. admin-granted or non-checkout purchases). Idempotent.
+        admin.MapPost("/billing/backfill-invoices", async (LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.BackfillSubscriptionInvoicesAsync(ct)))
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
         admin.MapPut("/billing/plans/{planId}", async (string planId, HttpContext http, AdminBillingPlanUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateBillingPlanAsync(http.AdminId(), http.AdminName(), planId, request, ct)))
             .WithAdminWrite("AdminBillingCatalogWrite");

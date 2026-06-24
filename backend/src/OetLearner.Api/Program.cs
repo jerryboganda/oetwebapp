@@ -882,6 +882,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayServic
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<OetLearner.Api.Services.ISpeakingPdfService, OetLearner.Api.Services.SpeakingPdfService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.IInvoicePdfService, OetLearner.Api.Services.InvoicePdfService>();
 // WS9 (SPK-007) — scanned/text PDF import → structured Speaking draft.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingContentImportService,
     OetLearner.Api.Services.Speaking.SpeakingContentImportService>();
