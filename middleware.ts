@@ -48,10 +48,18 @@ function generateNonce(): string {
 function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], isDev: boolean): string {
   const zoomHttpOrigins = ['https://zoom.us', 'https://*.zoom.us', 'https://zoom.com', 'https://*.zoom.com', 'https://source.zoom.us'];
   const zoomWsOrigins = ['wss://zoom.us', 'wss://*.zoom.us', 'wss://zoom.com', 'wss://*.zoom.com'];
+  // PayPal embedded checkout (JS SDK + Smart Buttons + Advanced Card Fields). The SDK
+  // loads its script from www.paypal.com / paypalobjects.com, renders the buttons and
+  // hosted card fields inside *.paypal.com iframes, and calls the *.paypal.com REST /
+  // GraphQL endpoints. Without these, the SDK is blocked by CSP and silently fails to
+  // render ("Loading secure payment…" then a blank box). Covers live + sandbox (both
+  // are *.paypal.com) and Venmo, which the SDK offers alongside PayPal.
+  const paypalHttpOrigins = ['https://*.paypal.com', 'https://*.paypalobjects.com', 'https://*.venmo.com'];
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
     ...zoomHttpOrigins,
+    ...paypalHttpOrigins,
     ...(isDev ? ["'unsafe-eval'"] : []),
   ].join(' ');
 
@@ -62,6 +70,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     ...apiWsOrigins,
     ...zoomHttpOrigins,
     ...zoomWsOrigins,
+    ...paypalHttpOrigins,
     'https://*.googleapis.com',
   ].join(' ');
 
@@ -70,11 +79,11 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')}`,
+    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`,
     `connect-src ${connectSrc}`,
     `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')}`,
     `worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}`,
-    `frame-src 'self' ${zoomHttpOrigins.join(' ')}`,
+    `frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`,
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",
