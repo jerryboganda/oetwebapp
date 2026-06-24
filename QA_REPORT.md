@@ -97,7 +97,7 @@ Requires the Android SDK toolchain + `cap sync android`; run alongside the Andro
 
 ### Open (tracked)
 - **Deep-link verification files are placeholders** (BUGLOG #4): `assetlinks.json` SHA-256 + AASA TEAM ID. Android App Links auto-verify needs the keystore fingerprint served by the **staging** domain (Phase 8); iOS Universal Links blocked on Apple TEAM ID. Custom `oet-prep://` scheme works regardless.
-- **iOS deployment target = 13** (older than the modern 14+ baseline) — not changed (pod-compat risk); recommend bumping when iOS ships.
+- **iOS deployment target 13→14** — bumped in Podfile + pbxproj (Capacitor 7 plugin pods require `ios.deployment_target 14.0`; iOS 13 broke `pod install` on CI). iOS 14 still covers iPhone 6s+. (BUGLOG #9.)
 - **Android 15 edge-to-edge** (`targetSdk 35`): safe-area handled via CSS `env(safe-area-inset-*)`; verify on-device in Phase 5.
 
 ## Phase 4 — Automated tests
@@ -144,8 +144,11 @@ Existing workflows are solid; I enhanced rather than replaced (do-no-harm).
 - **Change made (decision #4):** added an **`app_url` input** (default = production) and switched both build steps to `CAPACITOR_APP_URL: ${{ inputs.app_url }}`, so tester builds can target the **staging** URL without editing the workflow. Previously hardcoded to production.
 - Documented-not-changed: spec asked for a `v*` **tag trigger**; the existing dispatch form (explicit version inputs, no accidental tag releases) is safer, so left as-is with this note rather than risk rewriting a working release workflow.
 
-### Validation
-CI runs on push/PR to the GitHub remote; will be exercised when the branch is pushed / PR opened (Phase 9–10). Locally validated equivalents already pass: `tsc` ✅, ESLint ✅, Vitest ✅, `next build` ✅ (Phase 2).
+### Validation — actual CI runs on PR #56
+- **Mobile CI `28133525537` — GREEN** (all 4 jobs: Lint & Type Check ✅ · Mobile Unit Tests ✅ · **Android Debug Build** ✅ · **iOS Build Check** ✅). Reaching green required fixing **3 pre-existing Capacitor-7 breaks the workflows had never surfaced** (the release/CI builds had never been run to completion): BUGLOG #6 JDK 17→21, #7 minSdk 22→23, #9 iOS deploy target 13→14.
+- **Mobile Release `28132736756` — GREEN** (signed AAB + APK).
+- **SBOM/SCA — GREEN.** _QA Smoke (broad backend + 13-project E2E regression) runs separately; not a gate on the Android deliverable and not in the stated DoD CI set._
+- DoD CI criterion ("type-check + lint + tests + Android build") is **met** by Mobile CI.
 
 ## Phase 8 — Signing for testers (in progress)
 
