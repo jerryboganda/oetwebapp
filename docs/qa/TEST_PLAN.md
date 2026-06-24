@@ -8,7 +8,7 @@ internal-testing release.
 **Out of scope:** .NET backend & billing, the Electron shell, Capacitor mobile, the web production
 deploy, and the broad frontend audit (covered by their own suites/reports).
 
-**Branch:** `qa/production-readiness` (worktree off `main`). **Owner:** QA/release pass.
+**Branch:** `qa/desktop-production-readiness` (worktree off `main`). **Owner:** QA/release pass.
 **Living docs:** this file, [QA_REPORT.md](QA_REPORT.md), [BUGLOG.md](BUGLOG.md),
 [TESTER_SETUP.md](TESTER_SETUP.md); root `CHANGELOG.md` appended.
 

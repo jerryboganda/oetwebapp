@@ -1,11 +1,18 @@
 # OET Prep Desktop (Tauri 2) — Production-Readiness QA Report
 
-**Branch:** `qa/production-readiness` · **Target:** Windows x64 (signed) + macOS dmg (CI, unsigned) ·
-**Status:** IN PROGRESS · **Started:** 2026-06-25
+**Branch:** `qa/desktop-production-readiness` · **Target:** Windows x64 (signed) + macOS dmg (CI,
+unsigned) · **Status:** IN PROGRESS · **Started:** 2026-06-25
 
 This is the living evidence log. Each phase records the **actual** commands run and their output.
 "Done" means it ran and the output is pasted here. Bugs are tracked in [BUGLOG.md](BUGLOG.md); the plan
 is [TEST_PLAN.md](TEST_PLAN.md).
+
+> **Branch-isolation note:** work began on `qa/production-readiness`, but a **concurrent agent** was
+> found committing to that same branch/worktree (root-level QA docs + frontend tsc/hono fixes,
+> interleaved with these commits). To prevent the two efforts from clobbering each other, all
+> desktop-scoped commits were cherry-picked onto a clean **`qa/desktop-production-readiness`** branch
+> off `main` (in a separate worktree), excluding the other agent's commits. This branch is the
+> canonical home of the desktop production-readiness work.
 
 ---
 

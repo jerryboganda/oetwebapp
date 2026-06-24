@@ -6,6 +6,25 @@ changelogs live alongside their modules (e.g. `docs/speaking/changelog.md`).
 
 ## [Unreleased]
 
+### Desktop (Tauri 2) production-readiness
+
+Hardening pass on the `src-tauri/` desktop shell ahead of Windows internal testing.
+
+#### Added
+- Rust unit tests (17) for IPC + sidecar logic; `rustfmt.toml` / `clippy.toml`.
+- `tauri-ci.yml` PR gate (fmt + clippy `-D warnings` + cargo test + build + bridge conformance).
+- Per-session sidecar log capture (`<app_data>/logs/`) + Rust panic hook.
+- Self-signed Authenticode signing wiring + production minisign updater key; GitHub Release +
+  `latest.json` publishing in the release workflow.
+- Living QA docs under `docs/qa/` (TEST_PLAN, QA_REPORT, BUGLOG, TESTER_SETUP).
+
+#### Changed
+- Hardened CSP for the bundled splash; updater endpoint moved to the prod HTTPS feed.
+- Resolved all `cargo clippy -D warnings` findings; canonical `cargo fmt`.
+
+#### Security
+- `.gitignore` now excludes code-signing / updater key material; verified no secrets committed.
+
 ### Speaking module v2
 
 Implementation of `~/.claude/plans/1-oet-speaking-module-sequential-candy.md`.
