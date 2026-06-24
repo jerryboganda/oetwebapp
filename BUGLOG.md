@@ -19,7 +19,9 @@ Every issue found during QA is logged here with reproduction steps and severity.
 
 | 5 | GitHub PAT embedded in git remote URL | **Critical** | Secrets / repo credentials | n/a | Open (owner action) | `git remote -v` → `https://ghp_***(REDACTED)@github.com/jerryboganda/oetwebapp.git`. A live GitHub Personal Access Token sits in `.git/config` and is exposed to anyone with filesystem/log access (and now this session's logs). NOT in tracked history, but high blast radius (push/read per token scopes). | **1) Rotate/revoke the token now** (GitHub → Settings → Developer settings → PATs). **2) Strip it from the remote:** `git remote set-url origin https://github.com/jerryboganda/oetwebapp.git` and rely on `gh` keyring / Git Credential Manager (already `gh`-authed). I can do step 2 on request. |
 
+| 6 | CI/release Android build broken — JDK 17 vs Capacitor 7 requires JDK 21 | High | CI / Android build | n/a | Fixed | Release run 28131781720 failed at `:capacitor-android:compileReleaseJavaWithJavac` → `error: invalid source release: 21`. Both workflows pinned `JAVA_VERSION: '17'`, but Capacitor 7's Android library compiles to Java 21 — so the Android build had never been green since the Cap-7 upgrade (local JDK 17 hits the same wall). | Bumped `JAVA_VERSION` 17→21 in `mobile-ci.yml` + `mobile-release.yml`; re-dispatched the release. |
+
 ---
 
 ## Triage summary
-- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 1 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 1 (fixed) — updated as QA proceeds.
+- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 2 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 1 (fixed) — updated as QA proceeds.
