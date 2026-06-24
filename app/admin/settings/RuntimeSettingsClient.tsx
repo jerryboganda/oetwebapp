@@ -752,8 +752,9 @@ const BILLING_CORE_FIELDS: FieldDef<BillingCoreSettings>[] = [
   { key: 'defaultRegion', label: 'Default Region', type: 'text', hint: 'Fallback region (e.g. UK, GULF, EGYPT, PAKISTAN, ROW) when country is undetected. Default ROW.' },
   { key: 'walletCurrency', label: 'Wallet Currency', type: 'text', hint: 'ISO 4217 currency for wallet top-ups. Default AUD.' },
   { key: 'walletTopUpTiersJson', label: 'Wallet Top-Up Tiers (JSON)', type: 'text', hint: 'JSON array: [{"Amount":10,"Credits":3,"Bonus":0,"Label":"Starter","IsPopular":false}, ...]. Blank uses appsettings defaults.' },
-  { key: 'paypalUseSandbox', label: 'Use PayPal Sandbox', type: 'checkbox', hint: 'When on, PayPal uses the sandbox API (testing only). Default on.' },
-  { key: 'paypalApiBaseUrl', label: 'PayPal API Base URL', type: 'url', hint: 'e.g. https://api-m.paypal.com (prod) or https://api-m.sandbox.paypal.com. Blank uses env default.' },
+  // NOTE: "Use PayPal Sandbox" + "PayPal API Base URL" were moved into the
+  // "Payments: PayPal" section (next to the credentials) so the live/sandbox switch
+  // sits with the keys it applies to. They still persist into billingCore on save.
 ];
 
 const STORAGE_FIELDS: FieldDef<StorageSettings>[] = [
@@ -837,7 +838,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'platform', title: 'Platform', description: 'Public-facing API/Web base URLs (external auth callbacks, CSRF origin validation) and the fallback email domain for synthesized learner emails.' },
   { id: 'messaging', title: 'Messaging (SMS / WhatsApp)', description: 'Billing-notification channels: Twilio SMS and Meta WhatsApp Business Cloud. Auth Token and Access Token are stored encrypted.' },
   { id: 'fx', title: 'FX / Currency', description: 'Currency conversion provider for dynamic pricing. The API key is stored encrypted; empty key falls back to offline seed rates.' },
-  { id: 'billingCore', title: 'Billing Core (non-gateway)', description: 'Core billing knobs: default currency/region, wallet currency + top-up tiers, webhook replay window/attempts, and PayPal sandbox/base URL. Gateway credentials live in the Billing/Stripe/Checkout.com/Paymob/PayTabs sections.' },
+  { id: 'billingCore', title: 'Billing Core (non-gateway)', description: 'Core billing knobs: default currency/region, wallet currency + top-up tiers, and webhook replay window/attempts. Gateway credentials live in the Billing/Stripe/PayPal/Checkout.com/Paymob/PayTabs sections; the PayPal live/sandbox switch is in the Payments: PayPal section.' },
   { id: 'storage', title: 'Storage (S3 / Object Store)', description: 'S3-compatible object storage (AWS S3, DigitalOcean Spaces, Cloudflare R2) and content-upload limits. Access keys are stored encrypted. Filesystem paths stay env-only; provider switch needs a restart.' },
   { id: 'pdfExtraction', title: 'PDF Extraction', description: 'PDF text-extraction provider and Azure Document Intelligence OCR fallback. The Azure key is stored encrypted.' },
   { id: 'pronunciation', title: 'Pronunciation', description: 'Pronunciation ASR provider selection, region/locale, Whisper/Gemini base-urls + models, audio limits, retention, and free-tier gating. API keys live in Admin → AI Providers.' },
@@ -1873,6 +1874,27 @@ export function RuntimeSettingsClient() {
                     />
                   ),
                 )}
+
+              {/* Live/sandbox switch — lives with the PayPal credentials it applies to,
+                  but persists into the billingCore payload object on save. */}
+              {section.id === 'paypal' && (
+                <>
+                  <PlainField
+                    label="Use PayPal Sandbox"
+                    hint="UNCHECK this for live student payments. When ON, PayPal calls the sandbox (testing) API even if the credentials above are LIVE — real payments will 401. The credentials and this toggle MUST match (live keys → unchecked; sandbox keys → checked)."
+                    type="checkbox"
+                    value={draft.billingCore.paypalUseSandbox as boolean | null}
+                    onChange={(next) => updateField('billingCore', 'paypalUseSandbox', Boolean(next) as never)}
+                  />
+                  <PlainField
+                    label="PayPal API Base URL (advanced — leave blank)"
+                    hint="Optional host override. Blank uses the host implied by the toggle above (live → https://api-m.paypal.com). Only set this for a custom/proxy endpoint."
+                    type="url"
+                    value={draft.billingCore.paypalApiBaseUrl as string | null}
+                    onChange={(next) => updateField('billingCore', 'paypalApiBaseUrl', String(next) as never)}
+                  />
+                </>
+              )}
 
               {section.id === 'sentry' &&
                 SENTRY_FIELDS.map((field) =>

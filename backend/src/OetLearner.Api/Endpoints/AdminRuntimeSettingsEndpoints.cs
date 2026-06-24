@@ -1548,9 +1548,7 @@ public static class AdminRuntimeSettingsEndpoints
             "billing" => HasAll(settings.Billing.StripeSecretKey, settings.Billing.StripePublishableKey, settings.Billing.StripeWebhookSecret)
                 ? Ok(sectionId, "Stripe keys and webhook secret are configured. No live charge was created.", testedAt)
                 : Failed(sectionId, "Configure Stripe secret, publishable key, and webhook secret.", testedAt),
-            "paypal" => HasAll(settings.Billing.PayPalClientId, settings.Billing.PayPalClientSecret)
-                ? Ok(sectionId, $"PayPal Client ID and Secret are configured (embedded card fields {(settings.Billing.PayPalAdvancedCardsEnabled ? "enabled" : "disabled")}). Learners will be offered PayPal at checkout. No live order was created.", testedAt)
-                : Failed(sectionId, "Configure PayPal Client ID and Secret (and the Webhook ID) to enable PayPal checkout.", testedAt),
+            "paypal" => await TestPayPalAsync(settings.Billing, httpClientFactory, sectionId, testedAt, ct),
             "sentry" => Uri.TryCreate(settings.Sentry.Dsn, UriKind.Absolute, out var sentryUri)
                         && sentryUri.Scheme == Uri.UriSchemeHttps
                 ? Ok(sectionId, "Sentry DSN format is valid. No event was sent.", testedAt)
@@ -1651,6 +1649,65 @@ public static class AdminRuntimeSettingsEndpoints
     }
 
     // ── Live, non-destructive payment/Soketi probes (no money moves) ───────
+    /// <summary>
+    /// Live PayPal connection probe: requests an OAuth token from the EFFECTIVE host
+    /// (the same host selection PayPalGateway uses), so "green" means the credentials
+    /// actually authenticate against the sandbox/live host they're paired with — not just
+    /// "keys are present". A 401 here is the exact failure learners would hit, and the
+    /// message calls out a sandbox/live mismatch (the most common cause).
+    /// </summary>
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestPayPalAsync(
+        BillingSettings b, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(b.PayPalClientId) || string.IsNullOrWhiteSpace(b.PayPalClientSecret))
+            return Failed(sectionId, "Configure PayPal Client ID and Secret (and the Webhook ID) to enable PayPal checkout.", testedAt);
+
+        // Mirror PayPalGateway.GetPayPalApiBaseUrl: a custom (non-default) base URL wins,
+        // otherwise the sandbox flag selects the host.
+        var host = !string.IsNullOrWhiteSpace(b.PayPalApiBaseUrl)
+                   && !string.Equals(b.PayPalApiBaseUrl, "https://api-m.paypal.com", StringComparison.OrdinalIgnoreCase)
+            ? b.PayPalApiBaseUrl
+            : (b.PayPalUseSandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com");
+        var isSandbox = host.Contains("sandbox", StringComparison.OrdinalIgnoreCase);
+        var hostLabel = isSandbox ? "sandbox" : "LIVE";
+
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            var client = httpClientFactory.CreateClient("RuntimeSettingsTest");
+            using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(EnsureSlash(host)), "v1/oauth2/token"));
+            var basic = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{b.PayPalClientId}:{b.PayPalClientSecret}"));
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", basic);
+            req.Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["grant_type"] = "client_credentials" });
+            using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+
+            if ((int)resp.StatusCode is >= 200 and < 300)
+            {
+                var cards = b.PayPalAdvancedCardsEnabled ? "embedded card fields on" : "buttons only";
+                var webhookWarn = string.IsNullOrWhiteSpace(b.PayPalWebhookId)
+                    ? " ⚠ No Webhook ID set — refunds/disputes won't be recorded until you add it."
+                    : string.Empty;
+                return Ok(sectionId, $"Verified — PayPal authenticated against the {hostLabel} host ({cards}). Learners will be offered PayPal at checkout. No order was created.{webhookWarn}", testedAt);
+            }
+
+            if (resp.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                var fix = isSandbox
+                    ? "These keys were rejected by the SANDBOX host. If they are LIVE keys, turn OFF \"Use PayPal Sandbox\" (the keys and the host must match)."
+                    : "These keys were rejected by the LIVE host. If they are SANDBOX keys, turn ON \"Use PayPal Sandbox\" (the keys and the host must match).";
+                return Failed(sectionId, $"PayPal authentication failed (HTTP {(int)resp.StatusCode}). {fix}", testedAt);
+            }
+
+            return Failed(sectionId, $"PayPal returned HTTP {(int)resp.StatusCode} from the {hostLabel} host.", testedAt);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+        {
+            var msg = AiProviderConnectionTester.RedactSecrets(ex.Message, b.PayPalClientSecret) ?? "PayPal endpoint unreachable.";
+            return Failed(sectionId, msg.Length > 200 ? msg[..200] : msg, testedAt);
+        }
+    }
+
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestCheckoutComAsync(
         CheckoutComSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
     {
