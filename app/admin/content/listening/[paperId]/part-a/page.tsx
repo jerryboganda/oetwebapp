@@ -106,12 +106,19 @@ function SubPartSection({
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [creatingSlots, setCreatingSlots] = useState(false);
 
-  // Sync when parent reloads data
+  // Sync the note body only when the EXTRACT changes. Kept separate from the
+  // answer-row sync below so that refreshing questions/answer-slots (e.g. after
+  // "Create answer slots" or an AI import) never resets the note — that bug
+  // wiped AI-imported and hand-typed notes off the left side.
   useEffect(() => {
     setNotesBody(extract?.notesBody ?? '');
     setInitialNotesBody(extract?.notesBody ?? '');
+  }, [extract]);
+
+  // Sync answer rows when the questions change (independent of the note body).
+  useEffect(() => {
     setRows(initRows(questions));
-  }, [extract, questions]);
+  }, [questions]);
 
   // Apply an AI-import payload (one-click OCR). Pre-fills the editor + answer
   // rows but deliberately does NOT touch the `initial*` snapshots, so the change
@@ -543,6 +550,15 @@ export default function AdminListeningPartAPage() {
     }
   }, [paperId]);
 
+  // Refresh ONLY the questions (answer slots), leaving extracts — and therefore
+  // the in-progress note body — untouched. Used after "Create answer slots" so a
+  // hand-typed-but-unsaved note isn't reset by a full reload.
+  const reloadStructure = useCallback(async () => {
+    if (!paperId) return;
+    const structureResult = await getListeningStructure(paperId);
+    setQuestions(structureResult.questions);
+  }, [paperId]);
+
   useEffect(() => {
     if (!isAuthenticated || role !== 'admin') return;
     void load();
@@ -652,7 +668,7 @@ export default function AdminListeningPartAPage() {
             questions={a1Questions}
             disabled={false}
             onSaveSuccess={() => {}}
-            onReload={load}
+            onReload={reloadStructure}
             imported={importByCode.A1}
           />
           <SubPartSection
@@ -662,7 +678,7 @@ export default function AdminListeningPartAPage() {
             questions={a2Questions}
             disabled={false}
             onSaveSuccess={() => {}}
-            onReload={load}
+            onReload={reloadStructure}
             imported={importByCode.A2}
           />
         </div>
