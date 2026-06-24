@@ -214,8 +214,24 @@ Both sidecars previously ran with `Stdio::null()`, discarding all output. Now:
   `windows_subsystem="windows"` with no console, so panics would otherwise vanish).
 - Covered by `sidecar_log_pipes_creates_log_and_rotates` unit test.
 
-Remaining Phase 6 items (perf/size baselines, metadata/icons, `webviewInstallMode`, README/CHANGELOG)
-are completed alongside the Phase 9 build.
+### Metadata / icons / entitlements (verified)
+- **Version aligned** at `0.1.0` across `tauri.conf.json`, `Cargo.toml`, and `package.json`;
+  productName `OET Prep`, identifier `com.oetprep.desktop`.
+- **Icons** present: `icon.ico`, `32x32.png`, `128x128.png`, `icon.png`.
+- **`entitlements.plist`** (macOS) grants `device.audio-input` (Speaking mic) + hardened-runtime
+  allowances (`allow-jit`, `allow-unsigned-executable-memory`) for the bundled Node/.NET sidecars,
+  with `inherit=false` — correct for a notarizable hardened runtime.
+
+### WebView2 install mode (recommendation)
+`bundle.windows.webviewInstallMode` is unset → default **`downloadBootstrapper`** (fetches WebView2 at
+install time if absent). Acceptable for internal testing (Windows 11 ships WebView2; Win10 1809+ gets
+it on demand). **If testers may be offline or lack WebView2**, switch to
+`{"webviewInstallMode": {"type": "offlineInstaller"}}` (embeds the full runtime, +~127 MB) — a one-line
+config change + rebuild. Left as a documented option rather than forced (avoids bloating the installer
+for the common case). CHANGELOG updated.
+
+### Remaining (post-build, Phase 9)
+Cold-start time, idle memory, and final installer size are measured against the built artifact below.
 
 ## Phase 7 — CI/CD (complete; first green run pending push)
 
