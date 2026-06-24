@@ -181,6 +181,28 @@ pub fn run() {
             let handle = app.handle().clone();
 
             let paths = resolve_paths(&handle);
+
+            // Capture Rust panics to <app_data>/logs/desktop.log. Packaged builds
+            // run with windows_subsystem="windows" (no console), so without this a
+            // panic would vanish silently.
+            {
+                let log_dir = paths.user_data.join("logs");
+                let _ = std::fs::create_dir_all(&log_dir);
+                let panic_log = log_dir.join("desktop.log");
+                let default_hook = std::panic::take_hook();
+                std::panic::set_hook(Box::new(move |info| {
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&panic_log)
+                    {
+                        use std::io::Write;
+                        let _ = writeln!(f, "[oet-desktop panic] {info}");
+                    }
+                    default_hook(info);
+                }));
+            }
+
             sidecar::migrate_from_electron(&paths.user_data);
 
             // Splash from bundled assets; navigated to localhost once ready.

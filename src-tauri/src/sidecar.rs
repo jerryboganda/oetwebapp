@@ -168,6 +168,24 @@ fn renderer_env(runtime_url: &str, port: u16, backend_url: &str) -> HashMap<Stri
     env
 }
 
+/// Per-session log pipes for a sidecar: combined stdout+stderr go to
+/// `<user_data>/logs/<name>.log`, keeping the previous session as `<name>.log.old`
+/// (one-generation rotation so logs stay bounded). Falls back to discarding output
+/// if the file can't be created — logging must never block a sidecar from starting.
+fn sidecar_log_pipes(user_data: &Path, name: &str) -> (Stdio, Stdio) {
+    let dir = user_data.join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join(format!("{name}.log"));
+    let _ = std::fs::rename(&path, dir.join(format!("{name}.log.old")));
+    match std::fs::File::create(&path) {
+        Ok(file) => match file.try_clone() {
+            Ok(err) => (Stdio::from(file), Stdio::from(err)),
+            Err(_) => (Stdio::null(), Stdio::null()),
+        },
+        Err(_) => (Stdio::null(), Stdio::null()),
+    }
+}
+
 pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child), String> {
     let exe_name = if cfg!(windows) {
         "OetLearner.Api.exe"
@@ -189,11 +207,12 @@ pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child)
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
+    let (out, err) = sidecar_log_pipes(&paths.user_data, "backend");
     let mut cmd = Command::new(&exe);
     cmd.current_dir(&paths.backend_root)
         .envs(backend_env(paths, &runtime_url, is_packaged))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(out)
+        .stderr(err);
     let child = cmd
         .spawn()
         .map_err(|e| format!("failed to spawn backend: {e}"))?;
@@ -221,12 +240,13 @@ pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
+    let (out, err) = sidecar_log_pipes(&paths.user_data, "renderer");
     let mut cmd = Command::new(&paths.node_binary);
     cmd.arg(&server_js)
         .current_dir(&paths.standalone_root)
         .envs(renderer_env(&runtime_url, port, backend_url))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(out)
+        .stderr(err);
     let child = cmd
         .spawn()
         .map_err(|e| format!("failed to spawn node renderer: {e}"))?;
@@ -464,6 +484,20 @@ mod tests {
         // Early-return on the marker: no migration dirs created.
         assert!(!tmp.join("storage").exists());
         assert!(!tmp.join("offline-content").exists());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn sidecar_log_pipes_creates_log_and_rotates() {
+        let tmp = unique_tmp("log");
+        {
+            // First session: log file created. Scope drops the handles so the
+            // next call can rename it (Windows can't rename an open file).
+            let _pipes = sidecar_log_pipes(&tmp, "backend");
+            assert!(tmp.join("logs").join("backend.log").exists());
+        }
+        let _pipes2 = sidecar_log_pipes(&tmp, "backend");
+        assert!(tmp.join("logs").join("backend.log.old").exists());
         std::fs::remove_dir_all(&tmp).ok();
     }
 }

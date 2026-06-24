@@ -57,7 +57,12 @@ CLIPPY_EXIT=0   (zero warnings)
 ```
 
 ### Rust release build — `cargo build --release`
-Status: running (LTO + codegen-units=1). Result pending — will record exit + binary path/size.
+```
+Finished `release` profile [optimized] target(s) in 11m 39s   (RELEASE_EXIT=0)
+```
+Produces `src-tauri/target/release/oet-desktop.exe` (15.2 MB shell binary; the full installer adds the
+bundled sidecars). This was a profile-compile check (LTO + codegen-units=1); the shipped installer is
+rebuilt with the Phase 3 config in Phase 9.
 
 ### Supply chain — `cargo audit` (RustSec)
 Installed `cargo-audit`; scanned **553 crate dependencies**:
@@ -150,5 +155,60 @@ Audited the remote-origin capability. Findings:
   key + public URLs). A grep of the **built** `.next/standalone` + binary for baked secrets is deferred
   to Phase 9 (artifacts not yet built in this worktree).
 
-## Phase 4–10
-_(pending — will be filled with evidence as each phase completes.)_
+## Phase 4 — Automated tests (Rust complete; E2E pending build)
+
+### Rust unit tests
+Added behavior-preserving extractions (`validate_external_url`, `decode_base64_chunks`) to make the
+core IPC logic testable without side effects, plus 17 unit tests across `commands.rs` and `sidecar.rs`:
+
+```
+$ cargo test
+running 17 tests
+test commands::tests::sanitize_rejects_empty_and_whitespace ... ok
+test commands::tests::sanitize_neutralizes_path_traversal_and_separators ... ok
+test commands::tests::sanitize_preserves_allowed_chars ... ok
+test commands::tests::sanitize_caps_length ... ok
+test commands::tests::validate_external_url_accepts_http_and_https_and_trims ... ok
+test commands::tests::validate_external_url_rejects_empty_and_other_schemes ... ok
+test commands::tests::decode_base64_chunks_joins_in_order ... ok
+test commands::tests::decode_base64_chunks_empty_is_empty ... ok
+test commands::tests::decode_base64_chunks_rejects_invalid ... ok
+test sidecar::tests::find_available_port_returns_bindable_in_range ... ok
+test sidecar::tests::find_available_port_skips_occupied ... ok
+test sidecar::tests::renderer_env_sets_expected_keys ... ok
+test sidecar::tests::backend_env_toggles_packaged_vs_dev ... ok
+test sidecar::tests::load_runtime_config_reads_file_and_strips_bom ... ok
+test sidecar::tests::load_runtime_config_user_data_overrides_resource ... ok
+test sidecar::tests::migrate_from_electron_is_noop_when_marker_exists ... ok
+test sidecar::tests::sidecar_log_pipes_creates_log_and_rotates ... ok
+test result: ok. 17 passed; 0 failed
+```
+Coverage focuses on the security-relevant pure logic (input sanitization/traversal, URL scheme,
+base64 reassembly) and runtime setup (port selection, env construction, config precedence/BOM,
+migration idempotency, log rotation). The remaining crate surface is Tauri runtime glue requiring a
+live app handle (exercised by E2E + manual QA, not unit-testable).
+
+### Bridge conformance
+`pnpm vitest run src-tauri/__tests__/desktop-bridge-conformance.test.ts` → 5/5 (recorded in Phase 2).
+
+### Desktop E2E
+Harness wired in Phase 7/9 — Playwright spawns the packaged exe and drives the loopback renderer.
+Execution deferred until the signed installer is built (Phase 9), where results are recorded.
+
+## Phase 6 — Production readiness (logging done; perf/metadata in Phase 9)
+
+### Sidecar logging + panic capture (BUG-003)
+Both sidecars previously ran with `Stdio::null()`, discarding all output. Now:
+- `sidecar_log_pipes()` routes each sidecar's combined stdout+stderr to
+  `<app_data>/logs/backend.log` / `renderer.log`, keeping the prior session as `*.log.old`
+  (one-generation rotation — bounded growth). Falls back to `null` if the file can't be created, so
+  **logging never blocks a sidecar from starting** ("do no harm").
+- A panic hook writes Rust panics to `<app_data>/logs/desktop.log` (packaged builds run
+  `windows_subsystem="windows"` with no console, so panics would otherwise vanish).
+- Covered by `sidecar_log_pipes_creates_log_and_rotates` unit test.
+
+Remaining Phase 6 items (perf/size baselines, metadata/icons, `webviewInstallMode`, README/CHANGELOG)
+are completed alongside the Phase 9 build.
+
+## Phase 5, 7–10
+_(pending — filled as each completes.)_
