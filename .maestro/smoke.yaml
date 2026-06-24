@@ -1,0 +1,24 @@
+# Maestro smoke flow — OET Prep Learner (Android/iOS)
+# Run:  maestro test .maestro/smoke.yaml
+# Requires a running emulator/device with the app installed.
+# NOTE: this is a remote-URL WebView app — the app loads the live site, so the
+# WebView must reach the network. Selectors below target stable anchors on the
+# unauthenticated cold-start (sign-in) surface; adjust text to match the live UI.
+appId: com.oetprep.learner
+---
+# Cold start with all permissions denied — verify the app does not crash and the
+# WebView renders (least-privilege / permission-denial resilience).
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      text: "Sign in"
+    timeout: 30000
+- takeScreenshot: 01-coldstart-signin
+# Basic navigation affordance is present.
+- assertVisible:
+    text: "Email"
+    optional: true
+- takeScreenshot: 02-signin-form

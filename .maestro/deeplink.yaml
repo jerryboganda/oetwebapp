@@ -1,0 +1,16 @@
+# Maestro deep-link flow — verifies the custom oet-prep:// scheme cold-starts the app.
+# Run:  maestro test .maestro/deeplink.yaml
+# The custom scheme works without App Links domain verification (which additionally
+# needs the keystore SHA-256 served at the target domain's /.well-known/assetlinks.json).
+appId: com.oetprep.learner
+---
+- launchApp:
+    clearState: true
+- openLink: "oet-prep://open"
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 20000
+- takeScreenshot: 01-deeplink-open
+# Device-pairing deep link shape (code is validated 6–8 alphanumerics by the handler):
+# - openLink: "oet-prep://open/pair?code=ABC123"

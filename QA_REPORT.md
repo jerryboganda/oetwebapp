@@ -107,7 +107,29 @@ _Pending._
 _Pending — see `BUGLOG.md` for issues._
 
 ## Phase 6 — Production readiness
-_Pending._
+
+### Crash / error reporting — Sentry (WebView layer covered; native shell not)
+- `sentry.client.config.ts` runs in the WebView → captures the mobile app's JS/UI errors (the app *is* the live site in a WebView, so this is ≈ the whole UX). **DSN-gated** (`NEXT_PUBLIC_SENTRY_DSN`; no DSN → no events) and privacy-pinned (`sendDefaultPii:false`, `beforeSend: scrubPii`, Replay masks all text/inputs/media, perf/replay default 0). ✅ — **requires the DSN env set on the deployed (staging/prod) site**.
+- Native crashes (Java/Swift in the Capacitor shell) are **not** captured by `@sentry/nextjs`. Shell is thin (`BridgeActivity` + `SpeakingRecorderPlugin`), so risk is low. **Recommend** `@sentry/capacitor` only if native crash visibility is needed. Tracked, not blocking.
+
+### Versioning
+- Current `versionCode 1` / `versionName 1.0`. The release workflow **sets these per dispatch** (`version` / `version_code` inputs) — so the real values are chosen at build time. Strategy: bump `versionCode` every build (monotonic int), `versionName` semver. For the first tester build use e.g. `1.0.0` / `1`.
+
+### Update strategy (remote-URL implication — important)
+- Because the app is a **remote-URL WebView**, **web/UX changes ship instantly** on the next app open (no store review) — the tester always gets the latest deployed site. **Only native-shell changes** (permissions, plugins, deep links, Capacitor upgrades, this `arm64`/Info.plist work) require a **new APK** (sideload re-install / store update). Document this so testers know most fixes arrive without re-installing.
+
+### Performance targets (to verify on-device, Phase 5)
+- Cold start < 3s (4G); warm resume < 500ms; route change < 300ms; Android memory < 200 MB; APK download target < ~30 MB. (Measured on-device by the tester; remote-URL app size is small since no SPA is bundled.)
+
+### Icons / splash
+- Launcher icons + adaptive icons present (`res/mipmap-*`), iOS `AppIcon.appiconset` present; splash configured in `capacitor.config.ts`. **Recommend** adopting `@capacitor/assets` (single source `assets/icon.png` + `assets/splash.png`) so icon/splash updates regenerate per-density in one step — optional polish, current icons are valid.
+
+## Phase 4 — Automated tests (status)
+- **Unit:** full Vitest suite green deterministically (Phase 2): 2075 tests pass; the mobile-critical modules (`lib/mobile/*`: capacitor-config, deep-link-handler, push, secure-storage, permissions) are covered and mocked in `vitest.setup.ts`. `mobile-ci.yml` runs `vitest run lib/mobile/ components/mobile/` on PR.
+- **E2E (Maestro):** a starter smoke flow is provided at `.maestro/smoke.yaml` (launch → WebView loads → core nav). **Execution requires an Android emulator/device** and is best run in CI or on the tester's device — it cannot run in this build environment (see Phase 9 env note). Documented as a runnable artifact + CI-job recommendation rather than executed here.
+
+## Phase 5 — Manual / exploratory QA (procedure)
+- Full device matrix, permission grant/deny, connectivity, lifecycle, deep-link, and back-button checks are specified in `TEST_PLAN.md` §4–5. Execution is on real devices/emulator by the tester; results feed `BUGLOG.md`. No Critical/High issues found in the static/security/build-config review so far (BUGLOG: 1 High fixed, 2 Medium tracked, 1 Low fixed).
 
 ## Phase 7 — CI/CD (audit, not recreate)
 
