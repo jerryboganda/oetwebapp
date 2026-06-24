@@ -91,7 +91,7 @@ export default function LearnerAiUsagePage() {
               {forecast.suggestedTopUpCredits > 0 && (
                 <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
                   <strong>Suggested top-up:</strong> {forecast.suggestedTopUpCredits} credits to cover predicted usage.
-                  <Button variant="primary" size="sm" className="ml-3" onClick={() => location.href = '/billing?tab=credits'}>Top up</Button>
+                  <Button variant="primary" size="sm" className="ml-3" onClick={() => location.href = '/ai-packages'}>Top up</Button>
                 </div>
               )}
             </section>

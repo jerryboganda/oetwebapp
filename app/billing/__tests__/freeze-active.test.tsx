@@ -1,5 +1,4 @@
 import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 const {
   mockFetchBilling,
@@ -182,32 +181,17 @@ describe('Billing page with active freeze', () => {
     });
   });
 
-  it('renders the freeze banner and disables all paid action buttons', async () => {
-    const user = userEvent.setup();
+  it('renders the dedicated subscription-freeze section when frozen', async () => {
     renderWithRouter(<BillingPage />);
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
 
-    // Freeze banner renders
-    expect(
-      screen.getByText(
-        /Your account is frozen, so checkout, plan changes, and top-ups are paused\./i,
-      ),
-    ).toBeInTheDocument();
-
-    // Plans tab — preview/upgrade button disabled
-    await user.click(screen.getByRole('tab', { name: /^plans$/i }));
-    const previewButton = await screen.findByRole('button', { name: /preview upgrade/i });
-    expect(previewButton).toBeDisabled();
-
-    // Credits tab — top-up tier buttons + purchase add-on disabled
-    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
-
-    const topUpStarter = (await screen.findByText('Starter')).closest('button');
-    const topUpStandard = screen.getByText('Standard').closest('button');
-    expect(topUpStarter).toBeDisabled();
-    expect(topUpStandard).toBeDisabled();
-
-    expect(screen.getByRole('button', { name: /purchase credits/i })).toBeDisabled();
+    // The dedicated Subscription Freeze section reflects the active freeze.
+    expect(screen.getByText('Subscription freeze')).toBeInTheDocument();
+    expect(screen.getByText(/while your subscription is frozen/i)).toBeInTheDocument();
+    // endedAt is null → the freeze runs until "Indefinite".
+    expect(screen.getByText('Indefinite')).toBeInTheDocument();
+    // The calm "no active freeze" state must NOT show.
+    expect(screen.queryByText(/no active freeze/i)).not.toBeInTheDocument();
   });
 });

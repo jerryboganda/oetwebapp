@@ -4229,38 +4229,6 @@ export async function fetchBilling(): Promise<BillingData> {
   };
 }
 
-export interface BillingUpgradePlan {
-  planId: string;
-  planCode: string;
-  planName: string;
-  description: string;
-  price: number;
-  currency: string;
-  interval: string;
-  includedCredits: number;
-  trialDays: number;
-  isCurrent: boolean;
-  isUpgrade: boolean;
-  isDowngrade: boolean;
-  entitlements: Record<string, unknown>;
-}
-
-export interface BillingUpgradeData {
-  currentPlan: { planId: string; planName: string; price: number; includedCredits: number } | null;
-  usage: {
-    reviewsUsedThisMonth: number;
-    creditsRemaining: number;
-    subscriptionStarted: string | null;
-    subscriptionEnds: string | null;
-  };
-  plans: BillingUpgradePlan[];
-  recommendation: string;
-}
-
-export async function fetchBillingUpgradePath(): Promise<BillingUpgradeData> {
-  return apiRequest<BillingUpgradeData>('/v1/learner/billing/upgrade-path');
-}
-
 export async function fetchBillingQuote(input: {
   productType: BillingProductType;
   quantity: number;

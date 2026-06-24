@@ -62,7 +62,7 @@ export function useRecallsAudioUpgrade() {
             Not now
           </Button>
           <Button variant="primary" asChild>
-<Link href="/billing/upgrade" className="inline-flex">Upgrade</Link>
+<Link href="/catalog" className="inline-flex">Upgrade</Link>
 </Button>
         </div>
       </div>

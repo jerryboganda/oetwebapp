@@ -13,7 +13,6 @@ vi.mock('@/lib/analytics', () => ({
   analytics: { track: mockTrack },
 }));
 
-import UpgradeError from '../upgrade/error';
 import ReferralError from '../referral/error';
 import ScoreGuaranteeError from '../score-guarantee/error';
 import BillingError from '../error';
@@ -21,7 +20,6 @@ import { renderWithRouter } from '@/tests/test-utils';
 
 describe.each([
   ['billing root', BillingError, "We couldn't load your billing details", 'billing'],
-  ['upgrade', UpgradeError, "We couldn't load plan information", 'billing-upgrade'],
   ['referral', ReferralError, "We couldn't load your referral program", 'billing-referral'],
   ['score-guarantee', ScoreGuaranteeError, "We couldn't load your score guarantee", 'billing-score-guarantee'],
 ] as const)('%s error boundary', (_label, ErrorComp, expectedTitle, expectedPage) => {

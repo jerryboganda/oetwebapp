@@ -339,7 +339,7 @@ export default function BrowseVocabularyPage() {
               Not now
             </Button>
             <Link
-              href="/billing/upgrade"
+              href="/catalog"
               className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
               onClick={() => setShowLockedModal(false)}
             >

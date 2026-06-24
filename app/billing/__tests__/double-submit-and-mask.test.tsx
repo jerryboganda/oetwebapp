@@ -1,5 +1,4 @@
 import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 const {
   mockFetchBilling,
@@ -89,54 +88,6 @@ function defaultBillingData() {
     ],
   };
 }
-
-describe('Billing page double-submit guard (wallet top-up)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetchBilling.mockResolvedValue(defaultBillingData());
-    mockFetchFreezeStatus.mockResolvedValue(null);
-    mockFetchWalletTransactions.mockResolvedValue({ balance: 0, transactions: [] });
-    mockFetchWalletTopUpTiers.mockResolvedValue({
-      currency: 'AUD',
-      tiers: [
-        { amount: 10, credits: 10, bonus: 0, totalCredits: 10, label: 'Starter', isPopular: false },
-      ],
-    });
-  });
-
-  it('only fires the top-up call once even when the tile is double-clicked', async () => {
-    let resolveTopUp: (v: unknown) => void = () => {};
-    mockCreateWalletTopUp.mockImplementation(
-      () => new Promise((resolve) => {
-        resolveTopUp = resolve;
-      }),
-    );
-
-    const user = userEvent.setup();
-    renderWithRouter(<BillingPage />);
-
-    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
-
-    const tile = (await screen.findByText('Starter')).closest('button');
-    expect(tile).not.toBeNull();
-
-    // Two synchronous clicks while the request is in flight.
-    await user.click(tile as HTMLElement);
-    await user.click(tile as HTMLElement);
-
-    expect(mockCreateWalletTopUp).toHaveBeenCalledTimes(1);
-    expect(mockCreateWalletTopUp).toHaveBeenCalledWith(
-      10,
-      'stripe',
-      // The 3rd argument is a freshly-generated idempotency key.
-      expect.stringMatching(/.+/),
-    );
-
-    // Resolve the in-flight request so test cleanup doesn't dangle.
-    resolveTopUp({ checkoutUrl: 'about:blank', totalCredits: 10 });
-  });
-});
 
 describe('Billing page invoice ID masking', () => {
   beforeEach(() => {

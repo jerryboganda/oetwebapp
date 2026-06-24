@@ -32,7 +32,6 @@ const ROUTES = [
   '/billing',
   '/billing/referral',
   '/billing/score-guarantee',
-  '/billing/upgrade',
   '/community',
   '/community/ask-an-expert',
   '/community/groups',

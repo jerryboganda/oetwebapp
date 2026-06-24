@@ -220,7 +220,7 @@ function ManualPaymentContent() {
     if (quoteId) {
       router.push(`/checkout/review?quoteId=${encodeURIComponent(quoteId)}&gateway=paypal`);
     } else {
-      router.push('/billing?tab=plans');
+      router.push('/catalog');
     }
   }
 

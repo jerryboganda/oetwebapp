@@ -106,8 +106,8 @@ function BillingPaymentReturnContent() {
 
 function PaymentReturnShell({ phase, status, error, onCheckAgain }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null; onCheckAgain?: () => void }) {
   const destination = useMemo(() => {
-    if (status?.productType === 'addon_purchase' && status.addOnCodes.some((code) => code.startsWith('pkg_'))) return '/billing?tab=ai-credits';
-    if (status?.productType === 'addon_purchase') return '/billing?tab=credits';
+    if (status?.productType === 'addon_purchase' && status.addOnCodes.some((code) => code.startsWith('pkg_'))) return '/ai-packages';
+    if (status?.productType === 'addon_purchase') return '/billing';
     return '/dashboard?purchase=success';
   }, [status]);
   const retryHref = useMemo(() => {

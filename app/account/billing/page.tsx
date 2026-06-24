@@ -116,9 +116,6 @@ export default function AccountBillingPage() {
                   : 'Not available'}
               </p>
               <p className="text-xs text-muted">Credits and refunds applied here first.</p>
-              <Button asChild variant="outline" className="mt-3" size="sm">
-                <Link href="/billing?tab=credits">Manage credits</Link>
-              </Button>
             </>
           )}
         </div>

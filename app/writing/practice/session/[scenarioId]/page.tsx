@@ -318,7 +318,7 @@ export default function WritingPracticeSessionPage() {
             <Button variant="outline" onClick={() => setNoCreditsOpen(false)}>
               Not now
             </Button>
-            <Button onClick={() => router.push('/billing?tab=ai-credits')}>
+            <Button onClick={() => router.push('/ai-packages')}>
               Buy AI Credits
             </Button>
           </div>

@@ -174,7 +174,7 @@ export default function SpeakingResultSummary() {
           </InlineAlert>
           <div className="flex flex-wrap gap-2">
             {noCredits ? (
-              <Button onClick={() => router.push('/billing?tab=ai-credits')}>Buy AI Credits</Button>
+              <Button onClick={() => router.push('/ai-packages')}>Buy AI Credits</Button>
             ) : null}
             <Button variant="outline" onClick={() => router.push('/speaking')}>
               Back to Speaking

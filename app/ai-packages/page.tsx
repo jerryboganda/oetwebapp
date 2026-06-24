@@ -173,7 +173,7 @@ export default function AiPackagesPage() {
                 Full packages, separate subtest packages, and mock packages are sold as one-time GBP purchases.
               </p>
             </div>
-            <Link className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-dark" href="/billing?tab=ai-credits">
+            <Link className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-dark" href="/billing">
               <CreditCard className="h-4 w-4" />
               Billing dashboard
             </Link>
