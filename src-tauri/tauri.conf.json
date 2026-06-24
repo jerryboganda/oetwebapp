@@ -10,7 +10,7 @@
     "withGlobalTauri": false,
     "windows": [],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },
   "plugins": {
@@ -20,8 +20,8 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVGMTZFQjRFOERCNTQ5MDgKUldRSVNiV05UdXNXN3pnZklzQndLazZ0U3BpdEI3ekFHd0VMbFI4YVlRZENSSWVQc3Mwam9lbnQK",
-      "endpoints": ["http://127.0.0.1:8765/latest.json"]
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVDMjNEMTg4OEM0MkQ2MkYKUldRdjFrS01pTkVqN0xTVVZnMzJHbm5STnk4eUFHaDIwOWNlQUhpdldPQ3h0SG9meWhrWXVJMHIK",
+      "endpoints": ["https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json"]
     }
   },
   "bundle": {

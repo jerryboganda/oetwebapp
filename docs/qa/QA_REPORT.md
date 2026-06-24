@@ -100,5 +100,55 @@ no committed secrets; signing-artifact ignores in place. Release-build result pe
 
 ---
 
-## Phase 3–10
+## Phase 3 — Tauri 2 security hardening (in progress)
+
+### Capabilities / IPC least-privilege (`remote-localhost.json`)
+Audited the remote-origin capability. Findings:
+- The `remote.urls` are **loopback-only** (`http://localhost`, `http://localhost:*`, `http://127.0.0.1`,
+  `http://127.0.0.1:*`) — **no external origins** are granted IPC. The port wildcard is **required**
+  because the renderer's port is chosen dynamically at runtime (`find_available_port`).
+- All 17 `allow-*` grants correspond 1:1 to commands in the `window.desktopBridge` contract
+  (`types/desktop.d.ts`) and are exercised/validated by the conformance test — none are dead grants.
+- Input validation is present on every sensitive command: `sanitize_component` (alphanumeric + `._-`,
+  length-capped) blocks path traversal on cache/secret/speaking keys; `open_external` accepts only
+  `http`/`https`; `get_dropped_file_info` returns metadata only.
+- **Residual risk (documented, accepted):** any content the webview loads from a loopback origin could
+  call these commands. In practice the shell only ever navigates the webview to the trusted Next.js
+  renderer it spawned, so this is low-risk. Logged as BUG-006 (accepted with rationale).
+- `core:default` retained (used by window/tray/menu/webview/path/event); trimming it for marginal gain
+  risks breaking the splash/tray and was avoided ("do no harm").
+
+### CSP (the nuance done right)
+- The **live app** is served from the loopback Next.js origin, which already enforces a strong
+  **per-request nonce-based CSP** via `middleware.ts` (`default-src 'self'`, nonce `script-src`,
+  scoped `connect-src`/`img-src`/`media-src`), set on every response (lines 78–85, 208/213). Phase 0
+  verified all IPC command round-trips succeed under this CSP, so no Tauri-specific CSP additions are
+  needed for the remote origin.
+- `tauri.conf.json` `csp` was `null`, which only left the **bundled static splash** (`splash/index.html`)
+  without a policy. Set a conservative splash CSP:
+  `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';
+  object-src 'none'; base-uri 'self'; frame-ancestors 'none'`. The splash has only an inline `<style>`
+  block and no scripts, so this is non-breaking; the injected bridge runs as a webview
+  initialization script (not subject to page CSP). To be verified live in Phase 5.
+
+### Auto-updater (BUG-004)
+- Generated a **fresh production minisign keypair** (`tauri signer generate`). Private key stored
+  **outside the repo** at `~/.tauri/oet-updater-prod.key` (gitignored pattern in place); it must be
+  added as the `TAURI_SIGNING_PRIVATE_KEY` GitHub secret (Phase 7/8) and **never** committed.
+- Replaced the throwaway test pubkey in `tauri.conf.json` with the production public key
+  (`…EC23D1888C42D62F`), and changed the endpoint from `http://127.0.0.1:8765/latest.json` to
+  **`https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json`** (HTTPS, required for non-loopback
+  updater endpoints). The `OET_UPDATER_URL` env override in `lib.rs` still allows pointing at a local
+  feed for testing.
+- **Remaining (handoff):** host the feed (`latest.json` + signed `.exe` + `.sig`) at that path on the
+  prod server (nginx/route snippet to be delivered in Phase 8), and set the CI signing secret. Until
+  then the updater check fails gracefully (logged, no crash) — strictly better than the localhost
+  placeholder.
+
+### Secrets-in-bundle
+- `withGlobalTauri: false` confirmed. The Rust sources contain no baked tokens (only the public updater
+  key + public URLs). A grep of the **built** `.next/standalone` + binary for baked secrets is deferred
+  to Phase 9 (artifacts not yet built in this worktree).
+
+## Phase 4–10
 _(pending — will be filled with evidence as each phase completes.)_
