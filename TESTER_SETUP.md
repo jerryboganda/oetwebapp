@@ -8,7 +8,7 @@ The **OET Prep Learner** mobile app. It loads the OET Prep web experience inside
 > ⚠️ **Billing caution — this build hits the LIVE site.** Any subscription/checkout actions are **real** (Stripe is live). For testing, **do not complete real purchases** unless intended; stick to browsing plans. Report billing UI issues without finishing payment. (A dedicated staging URL can be swapped in later via the `mobile-release.yml` `app_url` input.)
 
 ## System requirements
-- **Android:** **5.1 (Lollipop) or newer** (minSdk 22). A current device (Android 12–15) is recommended. ~60–100 MB free storage. A network connection is required (the app loads the live site).
+- **Android:** **6.0 (Marshmallow) or newer** (minSdk 23). A current device (Android 12–15) is recommended. ~60–100 MB free storage. A network connection is required (the app loads the live site).
 - **iOS:** _not available this round_ — see "iOS status" below.
 
 ## Android — install the APK (direct sideload)

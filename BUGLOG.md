@@ -21,7 +21,9 @@ Every issue found during QA is logged here with reproduction steps and severity.
 
 | 6 | CI/release Android build broken — JDK 17 vs Capacitor 7 requires JDK 21 | High | CI / Android build | n/a | Fixed | Release run 28131781720 failed at `:capacitor-android:compileReleaseJavaWithJavac` → `error: invalid source release: 21`. Both workflows pinned `JAVA_VERSION: '17'`, but Capacitor 7's Android library compiles to Java 21 — so the Android build had never been green since the Cap-7 upgrade (local JDK 17 hits the same wall). | Bumped `JAVA_VERSION` 17→21 in `mobile-ci.yml` + `mobile-release.yml`; re-dispatched the release. |
 
+| 7 | Android `minSdk 22` < Capacitor 7 filesystem requires 23 | High | CI / Android build (manifest merge) | n/a | Fixed | Release run 28132257139 (JDK 21) failed: `Manifest merger failed: uses-sdk:minSdkVersion 22 cannot be smaller than version 23 declared in library [io.ionic.libs:ionfilesystem-android:1.0.0]` (pulled by `@capacitor/filesystem@7`). Second "never green since Cap-7 upgrade" break. | Bumped `minSdkVersion` 22→23 in `android/variables.gradle` (Android 6.0; drops ~0.2% of devices). |
+
 ---
 
 ## Triage summary
-- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 2 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 1 (fixed) — updated as QA proceeds.
+- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 3 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 1 (fixed) — updated as QA proceeds.
