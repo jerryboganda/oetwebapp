@@ -38,11 +38,16 @@ const adminFont = Montserrat({
 
 const zoomHttpOrigins = ['https://zoom.us', 'https://*.zoom.us', 'https://zoom.com', 'https://*.zoom.com', 'https://source.zoom.us'];
 const zoomWebSocketOrigins = ['wss://zoom.us', 'wss://*.zoom.us', 'wss://zoom.com', 'wss://*.zoom.com'];
+// PayPal embedded checkout SDK + Smart Buttons + card-field iframes. Must match the
+// middleware.ts response-header CSP — the browser enforces the INTERSECTION of this
+// meta CSP and the header, so omitting PayPal here blocks the SDK even though the
+// header allows it (the "script-src ... violates" console error on /checkout/review).
+const paypalHttpOrigins = ['https://*.paypal.com', 'https://*.paypalobjects.com', 'https://*.venmo.com'];
 
 const metaScriptSrc =
   process.env.NODE_ENV === 'production'
-    ? `script-src 'self' 'unsafe-inline' ${zoomHttpOrigins.join(' ')}`
-    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${zoomHttpOrigins.join(' ')}`;
+    ? `script-src 'self' 'unsafe-inline' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`;
 
 function getOrigin(value: string | undefined, fallback: string): string {
   try {
@@ -134,7 +139,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         <meta
           httpEquiv="Content-Security-Policy"
-          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${zoomWebSocketOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')}; worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}; frame-src 'self' ${zoomHttpOrigins.join(' ')}; object-src 'none'; base-uri 'self'; form-action 'self';`}
+          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${zoomWebSocketOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')}; worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}; frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}; object-src 'none'; base-uri 'self'; form-action 'self';`}
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>
