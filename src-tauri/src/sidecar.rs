@@ -327,3 +327,143 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    fn unique_tmp(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("oet-{tag}-test-{}", std::process::id()))
+    }
+
+    #[test]
+    fn find_available_port_returns_bindable_in_range() {
+        let port = find_available_port(39000).expect("a port in range");
+        assert!((39000..39025).contains(&port));
+        // The returned port must actually be bindable.
+        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
+    }
+
+    #[test]
+    fn find_available_port_skips_occupied() {
+        // Hold 39100 (or rely on it being held elsewhere); find must not return it.
+        let _hold = TcpListener::bind(("127.0.0.1", 39100u16));
+        let port = find_available_port(39100).expect("a port in range");
+        assert_ne!(port, 39100);
+    }
+
+    #[test]
+    fn renderer_env_sets_expected_keys() {
+        let env = renderer_env("http://127.0.0.1:3000", 3000, "http://127.0.0.1:5198");
+        assert_eq!(env.get("NODE_ENV").map(String::as_str), Some("production"));
+        assert_eq!(env.get("PORT").map(String::as_str), Some("3000"));
+        assert_eq!(env.get("HOSTNAME").map(String::as_str), Some("127.0.0.1"));
+        assert_eq!(
+            env.get("NEXT_PUBLIC_API_BASE_URL").map(String::as_str),
+            Some("/api/backend")
+        );
+        assert_eq!(
+            env.get("API_PROXY_TARGET_URL").map(String::as_str),
+            Some("http://127.0.0.1:5198")
+        );
+    }
+
+    #[test]
+    fn backend_env_toggles_packaged_vs_dev() {
+        let tmp = unique_tmp("be");
+        let paths = Paths {
+            standalone_root: tmp.join("s"),
+            backend_root: tmp.join("b"),
+            node_binary: tmp.join("node"),
+            user_data: tmp.join("ud"),
+        };
+        let prod = backend_env(&paths, "http://127.0.0.1:5198", true);
+        assert_eq!(
+            prod.get("ASPNETCORE_ENVIRONMENT").map(String::as_str),
+            Some("Production")
+        );
+        assert_eq!(
+            prod.get("Auth__UseDevelopmentAuth").map(String::as_str),
+            Some("false")
+        );
+        assert_eq!(
+            prod.get("Bootstrap__SeedDemoData").map(String::as_str),
+            Some("false")
+        );
+        assert!(prod
+            .get("ConnectionStrings__DefaultConnection")
+            .unwrap()
+            .contains("oet-prep.desktop.db"));
+
+        let dev = backend_env(&paths, "http://127.0.0.1:5198", false);
+        assert_eq!(
+            dev.get("ASPNETCORE_ENVIRONMENT").map(String::as_str),
+            Some("Development")
+        );
+        assert_eq!(
+            dev.get("Bootstrap__SeedDemoData").map(String::as_str),
+            Some("true")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn load_runtime_config_reads_file_and_strips_bom() {
+        // NOTE: assumes PUBLIC_API_BASE_URL / API_PROXY_TARGET_URL /
+        // NEXT_PUBLIC_API_BASE_URL are unset in the test env (they would override).
+        let tmp = unique_tmp("rc-read");
+        let res = tmp.join("res");
+        let ud = tmp.join("ud");
+        std::fs::create_dir_all(&res).unwrap();
+        std::fs::create_dir_all(&ud).unwrap();
+        std::fs::write(
+            res.join("desktop-runtime-config.json"),
+            "\u{feff}{\"publicApiBaseUrl\":\"https://api.example.com\"}",
+        )
+        .unwrap();
+        let cfg = load_runtime_config(&res, &ud);
+        assert_eq!(
+            cfg.public_api_base_url.as_deref(),
+            Some("https://api.example.com")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn load_runtime_config_user_data_overrides_resource() {
+        let tmp = unique_tmp("rc-override");
+        let res = tmp.join("res");
+        let ud = tmp.join("ud");
+        std::fs::create_dir_all(&res).unwrap();
+        std::fs::create_dir_all(&ud).unwrap();
+        std::fs::write(
+            res.join("desktop-runtime-config.json"),
+            "{\"publicApiBaseUrl\":\"https://resource.example.com\"}",
+        )
+        .unwrap();
+        std::fs::write(
+            ud.join("desktop-runtime-config.json"),
+            "{\"publicApiBaseUrl\":\"https://userdata.example.com\"}",
+        )
+        .unwrap();
+        let cfg = load_runtime_config(&res, &ud);
+        assert_eq!(
+            cfg.public_api_base_url.as_deref(),
+            Some("https://userdata.example.com")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn migrate_from_electron_is_noop_when_marker_exists() {
+        let tmp = unique_tmp("mig");
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join(".migrated-from-electron"), "migrated").unwrap();
+        migrate_from_electron(&tmp);
+        // Early-return on the marker: no migration dirs created.
+        assert!(!tmp.join("storage").exists());
+        assert!(!tmp.join("offline-content").exists());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+}

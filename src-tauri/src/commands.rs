@@ -79,8 +79,10 @@ pub fn runtime_info(app: AppHandle, state: State<'_, RuntimeState>) -> Value {
 
 // ── open external ───────────────────────────────────────────────────
 
-#[tauri::command]
-pub fn open_external(_app: AppHandle, url: String) -> Result<bool, String> {
+// Validates an external URL is a non-empty http(s) URL and returns the trimmed
+// value. Extracted so the scheme/empty checks are unit-testable without actually
+// opening a browser.
+fn validate_external_url(url: &str) -> Result<&str, String> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
         return Err("A valid URL is required.".into());
@@ -88,6 +90,12 @@ pub fn open_external(_app: AppHandle, url: String) -> Result<bool, String> {
     if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
         return Err("Only http and https URLs can be opened externally.".into());
     }
+    Ok(trimmed)
+}
+
+#[tauri::command]
+pub fn open_external(_app: AppHandle, url: String) -> Result<bool, String> {
+    let trimmed = validate_external_url(&url)?;
     tauri_plugin_opener::open_url(trimmed, None::<&str>).map_err(|e| e.to_string())?;
     Ok(true)
 }
@@ -306,6 +314,19 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+// Decodes and concatenates the renderer's base64 audio chunks into one buffer.
+// Extracted from speaking_audio_stop so the decode/join is unit-testable.
+fn decode_base64_chunks(chunks: &[String]) -> Result<Vec<u8>, String> {
+    let mut buffer: Vec<u8> = Vec::new();
+    for chunk in chunks {
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(chunk.as_bytes())
+            .map_err(|e| e.to_string())?;
+        buffer.extend_from_slice(&decoded);
+    }
+    Ok(buffer)
+}
+
 #[tauri::command]
 pub fn speaking_audio_start(
     state: State<'_, SpeakingAudioState>,
@@ -344,13 +365,7 @@ pub fn speaking_audio_stop(
     let dir = speaking_audio_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let mut buffer: Vec<u8> = Vec::new();
-    for chunk in chunks_base64 {
-        let decoded = base64::engine::general_purpose::STANDARD
-            .decode(chunk.as_bytes())
-            .map_err(|e| e.to_string())?;
-        buffer.extend_from_slice(&decoded);
-    }
+    let buffer = decode_base64_chunks(&chunks_base64)?;
 
     let file_path = dir.join(format!("{}-{}.bin", session_id, session.started_at));
     std::fs::write(&file_path, &buffer).map_err(|e| e.to_string())?;
@@ -410,4 +425,79 @@ pub fn speaking_audio_discard(
         }
     }
     Ok(json!({ "ok": true, "sessionId": session_id }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_base64_chunks, sanitize_component, validate_external_url};
+
+    #[test]
+    fn sanitize_rejects_empty_and_whitespace() {
+        assert!(sanitize_component("", 64).is_err());
+        assert!(sanitize_component("   ", 64).is_err());
+    }
+
+    #[test]
+    fn sanitize_neutralizes_path_traversal_and_separators() {
+        // `..` survives but every separator becomes `_`, so no traversal escapes.
+        assert_eq!(
+            sanitize_component("../etc/passwd", 64).unwrap(),
+            ".._etc_passwd"
+        );
+        assert_eq!(sanitize_component("a/b\\c", 64).unwrap(), "a_b_c");
+        assert_eq!(sanitize_component("a:b*c?", 64).unwrap(), "a_b_c_");
+    }
+
+    #[test]
+    fn sanitize_preserves_allowed_chars() {
+        assert_eq!(
+            sanitize_component("Key.Name_1-2", 64).unwrap(),
+            "Key.Name_1-2"
+        );
+    }
+
+    #[test]
+    fn sanitize_caps_length() {
+        let long = "a".repeat(500);
+        assert_eq!(sanitize_component(&long, 10).unwrap().len(), 10);
+    }
+
+    #[test]
+    fn validate_external_url_accepts_http_and_https_and_trims() {
+        assert_eq!(
+            validate_external_url("https://example.com").unwrap(),
+            "https://example.com"
+        );
+        assert_eq!(
+            validate_external_url("  http://x.io/y  ").unwrap(),
+            "http://x.io/y"
+        );
+    }
+
+    #[test]
+    fn validate_external_url_rejects_empty_and_other_schemes() {
+        assert!(validate_external_url("").is_err());
+        assert!(validate_external_url("   ").is_err());
+        assert!(validate_external_url("file:///etc/passwd").is_err());
+        assert!(validate_external_url("javascript:alert(1)").is_err());
+        assert!(validate_external_url("ftp://host/x").is_err());
+    }
+
+    #[test]
+    fn decode_base64_chunks_joins_in_order() {
+        // "QUI=" => b"AB", "Q0Q=" => b"CD"
+        let chunks = vec!["QUI=".to_string(), "Q0Q=".to_string()];
+        assert_eq!(decode_base64_chunks(&chunks).unwrap(), b"ABCD");
+    }
+
+    #[test]
+    fn decode_base64_chunks_empty_is_empty() {
+        assert_eq!(decode_base64_chunks(&[]).unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn decode_base64_chunks_rejects_invalid() {
+        let bad = vec!["!!!not-base64!!!".to_string()];
+        assert!(decode_base64_chunks(&bad).is_err());
+    }
 }
