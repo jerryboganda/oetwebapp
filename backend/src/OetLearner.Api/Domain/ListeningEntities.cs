@@ -259,6 +259,28 @@ public class ListeningExtract
     /// in <c>lib/listening-part-a-notes.ts</c>. Plain text column, never LINQ-queried.</summary>
     public string? NotesBodyMarkdown { get; set; }
 
+    /// <summary>
+    /// OET Listening Part A authoring method for this extract:
+    ///   "wysiwyg"     — the note is authored as <see cref="NotesBodyMarkdown"/>
+    ///                   grammar and rendered as inline HTML gaps (default).
+    ///   "pdf_overlay" — the note is the uploaded question-paper PDF and the
+    ///                   blanks are positioned overlays (<see cref="PartAOverlayBlanksJson"/>).
+    /// Null (the default / all existing extracts) is treated as "wysiwyg".
+    /// </summary>
+    [MaxLength(16)]
+    public string? AuthoringMethod { get; set; }
+
+    /// <summary>
+    /// Part A "pdf_overlay" method only — JSON array of normalized blank
+    /// placements over the question-paper PDF:
+    /// <c>[{ "page": 1, "xPct": 0.5, "yPct": 0.32, "wPct": 0.18, "hPct": 0.03,
+    /// "gapOrdinal": 1 }]</c>. Coordinates are page-relative fractions (0..1) so
+    /// rendering is resolution-independent. <c>gapOrdinal</c> (1-based) binds the
+    /// blank to the Nth Part A question by DisplayOrder, mirroring the WYSIWYG
+    /// gap-to-question rule. Null for wysiwyg extracts.
+    /// </summary>
+    public string? PartAOverlayBlanksJson { get; set; }
+
     /// <summary>Listening V2 — comma-separated topic hints surfaced on
     /// admin browse and used by the per-skill analytics breakdown. Example:
     /// <c>"renal,medication-history"</c>. Authoring is optional.</summary>

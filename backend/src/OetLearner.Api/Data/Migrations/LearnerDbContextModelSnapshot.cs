@@ -10847,6 +10847,13 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int?>("AudioStartMs")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AuthoringMethod")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("PartAOverlayBlanksJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
