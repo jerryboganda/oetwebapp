@@ -12,17 +12,20 @@ public sealed class CheckoutService : ICheckoutService
     private readonly IStripeService _stripe;
     private readonly ICartService _cartService;
     private readonly BillingOptions _billingOptions;
+    private readonly PaymentGatewayService _paymentGateways;
 
     public CheckoutService(
         LearnerDbContext db,
         IStripeService stripe,
         ICartService cartService,
-        IOptions<BillingOptions> billingOptions)
+        IOptions<BillingOptions> billingOptions,
+        PaymentGatewayService paymentGateways)
     {
         _db = db;
         _stripe = stripe;
         _cartService = cartService;
         _billingOptions = billingOptions.Value;
+        _paymentGateways = paymentGateways;
     }
 
     public async Task<CheckoutSessionDto> CreateCheckoutSessionAsync(
@@ -132,6 +135,76 @@ public sealed class CheckoutService : ICheckoutService
             checkoutSession.Status,
             checkoutSession.TotalAmount,
             checkoutSession.Currency);
+    }
+
+    public async Task<PayPalCartOrderDto> CreatePayPalCartOrderAsync(
+        string userId, string email, string cartId, CancellationToken ct = default)
+    {
+        var idempotencyKey = $"checkout_paypal_{userId}_{cartId}";
+
+        // Reuse an existing pending PayPal order for this cart so a repeated create
+        // (double-click / retry) does not open a second PayPal order.
+        var existing = await _db.CheckoutSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey, ct);
+        if (existing is not null && existing.Status == "pending" && !string.IsNullOrEmpty(existing.GatewayOrderId))
+        {
+            return new PayPalCartOrderDto(existing.GatewayOrderId!, existing.Id, existing.TotalAmount, existing.Currency);
+        }
+
+        var cart = await _cartService.GetCartByIdAsync(cartId, userId, ct)
+            ?? throw ApiException.NotFound("cart_not_found", "Cart not found.");
+
+        if (cart.Items.Count == 0)
+            throw ApiException.Validation("cart_empty", "Cart is empty.");
+
+        // PayPal one-time capture cannot open a Stripe subscription, so a cart with any
+        // recurring line must use card (Stripe). Surface a clean validation the picker
+        // falls back on rather than letting the order creation fail downstream.
+        if (cart.Items.Any(i => i.Interval is not null))
+        {
+            throw ApiException.Validation(
+                "paypal_recurring_unsupported",
+                "PayPal can't be used for subscription items. Please pay by card.");
+        }
+
+        var currency = cart.Currency.ToUpperInvariant();
+        var successUrl = $"{_billingOptions.CheckoutBaseUrl}/checkout/success";
+        var cancelUrl = $"{_billingOptions.CheckoutBaseUrl}/checkout/cancel";
+
+        var intent = await _paymentGateways.GetGateway("paypal").CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            UserId: userId,
+            Amount: cart.Total,
+            Currency: currency,
+            ProductType: "cart",
+            ProductId: cartId,
+            Description: $"OET Prep cart ({cart.Items.Count} item(s))",
+            Metadata: new Dictionary<string, string> { ["cart_id"] = cartId },
+            SuccessUrl: successUrl,
+            CancelUrl: cancelUrl,
+            IdempotencyKey: idempotencyKey), ct);
+
+        var now = DateTimeOffset.UtcNow;
+        var checkoutSession = new CheckoutSession
+        {
+            Id = Guid.NewGuid(),
+            CartId = Guid.TryParse(cartId, out var cid) ? cid : (Guid?)null,
+            UserId = userId,
+            Gateway = "paypal",
+            GatewayOrderId = intent.GatewayTransactionId,
+            IdempotencyKey = idempotencyKey,
+            Status = "pending",
+            TotalAmount = cart.Total,
+            Currency = currency,
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExpiresAt = now.AddHours(3),
+        };
+
+        _db.CheckoutSessions.Add(checkoutSession);
+        await _db.SaveChangesAsync(ct);
+
+        return new PayPalCartOrderDto(intent.GatewayTransactionId, checkoutSession.Id, cart.Total, currency);
     }
 
     public async Task<CheckoutSessionStatusDto?> GetSessionStatusAsync(

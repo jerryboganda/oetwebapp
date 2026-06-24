@@ -16,6 +16,7 @@ import {
   createBillingCheckoutSession,
   fetchAvailablePaymentGateways,
   fetchBillingQuote,
+  safePaymentRedirect,
   type PaymentCaptureResult,
   type PaymentMethodMode,
   type PaymentMethodOption,
@@ -286,10 +287,7 @@ function CheckoutReviewContent() {
 
   const handlePaypalCaptured = useCallback(
     (result: PaymentCaptureResult) => {
-      const target = result.redirectTo && result.redirectTo.startsWith('/')
-        ? result.redirectTo
-        : '/dashboard?purchase=success';
-      router.replace(target);
+      router.replace(safePaymentRedirect(result.redirectTo, '/dashboard?purchase=success'));
     },
     [router],
   );

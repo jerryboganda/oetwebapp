@@ -425,7 +425,9 @@ public static class LearnerEndpoints
                 currency = string.IsNullOrWhiteSpace(options.DefaultCurrency) ? "GBP" : options.DefaultCurrency,
                 intent = "capture",
                 components = "buttons,card-fields",
-                environment = options.PayPal.UseSandbox ? "sandbox" : "live",
+                // Read the EFFECTIVE (admin-overridable) sandbox flag, not the env default,
+                // so this label matches the host the gateway actually calls.
+                environment = settings.PayPalUseSandbox ? "sandbox" : "live",
                 advancedCardsEnabled = enabled && settings.PayPalAdvancedCardsEnabled,
             });
         });

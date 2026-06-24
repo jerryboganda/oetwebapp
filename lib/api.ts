@@ -1444,8 +1444,13 @@ export async function fetchWalletTransactions(limit = 20): Promise<WalletTransac
 }
 
 export interface WalletTopUpResponse {
+  /** PayPal order id (embedded flow) / provider session id. Use as the embedded createOrder result. */
+  sessionId?: string;
+  gateway?: string;
+  /** Present for redirect gateways (Stripe and the hosted fallback); absent for embedded PayPal. */
   checkoutUrl?: string;
   totalCredits?: number;
+  status?: string;
 }
 
 export async function createWalletTopUp(
@@ -1527,6 +1532,24 @@ export interface PaymentCaptureResult {
   captureId: string | null;
   redirectTo: string | null;
   failureReason: string | null;
+}
+
+/**
+ * Resolves a safe in-app destination from a server-supplied `redirectTo`. Only same-origin
+ * absolute paths are honoured: a value must start with a single `/` (not `//`, which is a
+ * protocol-relative off-site URL, and not a `/\` backslash variant). Anything else falls
+ * back to the provided default. Use this for every PayPal capture redirect.
+ */
+export function safePaymentRedirect(redirectTo: string | null | undefined, fallback: string): string {
+  if (
+    typeof redirectTo === 'string' &&
+    redirectTo.startsWith('/') &&
+    !redirectTo.startsWith('//') &&
+    !redirectTo.startsWith('/\\')
+  ) {
+    return redirectTo;
+  }
+  return fallback;
 }
 
 /** Captures an approved PayPal order for the quote/wallet billing flow (onApprove). */
@@ -10699,6 +10722,8 @@ export async function createPrivateSpeakingBooking(payload: {
   idempotencyKey: string;
   /** Speaking module rebuild (2026-06-11): "practice" (default) or "exam". */
   sessionFormat?: string | null;
+  /** "paypal" pays the catalog price via embedded PayPal; omit/"entitlement" uses a credit. */
+  paymentMethod?: 'paypal' | 'entitlement' | null;
 }): Promise<PrivateSpeakingBookingResult> {
   return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
     method: 'POST',
@@ -13901,6 +13926,8 @@ export interface CartLineItem {
   totalAmount: number;
   currency: string;
   productType?: string | null;
+  /** Billing interval ("one_time", "month", "year"...). Recurring items can't be paid via PayPal. */
+  interval?: string | null;
   imageUrl?: string | null;
 }
 
@@ -13978,6 +14005,7 @@ function mapCart(dto: BackendCartDto): Cart {
       totalAmount: it.lineTotal,
       currency: it.currency,
       productType: it.productType,
+      interval: it.interval ?? null,
       imageUrl: null,
     })),
     promoCodes: (dto.appliedPromoCodes ?? []).map((code) => ({ code, discountAmount: 0 })),
@@ -14082,6 +14110,31 @@ export async function createCheckoutSession(payload?: {
   return {
     sessionId: String(response.sessionId ?? response.stripeSessionId ?? response.id ?? ''),
     url: String(response.url ?? ''),
+  };
+}
+
+export interface PayPalCartOrder {
+  orderId: string;
+  checkoutSessionId: string;
+  totalAmount: number;
+  currency: string;
+}
+
+/**
+ * Creates a PayPal (embedded) order for the cart. The returned order id is fed to the
+ * embedded PayPal SDK's createOrder; onApprove captures it via captureBillingCheckout.
+ * Rejects with a 400 ("paypal_recurring_unsupported") for carts containing subscriptions.
+ */
+export async function createCartPaypalOrder(cartId: string): Promise<PayPalCartOrder> {
+  const response = await apiRequest<ApiRecord>('/v1/checkout/sessions/paypal', {
+    method: 'POST',
+    body: JSON.stringify({ cartId }),
+  });
+  return {
+    orderId: String(response.orderId ?? ''),
+    checkoutSessionId: String(response.checkoutSessionId ?? ''),
+    totalAmount: Number(response.totalAmount ?? 0),
+    currency: String(response.currency ?? 'AUD'),
   };
 }
 

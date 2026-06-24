@@ -23,7 +23,10 @@ import {
   downloadPrivateSpeakingCalendarInvite,
   fetchMyEntitlementSnapshot,
   ratePrivateSpeakingSession,
+  safePaymentRedirect,
+  type PaymentCaptureResult,
 } from '@/lib/api';
+import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
 import { safeZoomUrl } from '@/lib/zoom-url';
 import { createSpeakingExamFromBooking } from '@/lib/api/speaking-exams';
 import { analytics } from '@/lib/analytics';
@@ -70,6 +73,16 @@ type Booking = {
 
 const PROFESSION_TRACKS = ['Medicine', 'Nursing', 'Pharmacy', 'Dentistry', 'Other'] as const;
 type ProfessionTrack = (typeof PROFESSION_TRACKS)[number];
+
+/** Formats a slot's minor-unit price as a localized currency string for the PayPal button. */
+function formatSlotPrice(slot: Slot): string {
+  const major = (slot.priceMinorUnits ?? 0) / 100;
+  try {
+    return major.toLocaleString(undefined, { style: 'currency', currency: slot.currency || 'GBP' });
+  } catch {
+    return `${slot.currency || 'GBP'} ${major.toFixed(2)}`;
+  }
+}
 
 // PDF §12 — verbatim cancellation / reschedule policy text.
 const CANCELLATION_POLICY_TEXT =
@@ -205,6 +218,9 @@ export default function PrivateSpeakingPage() {
   // structured two-card exam (tutor plays the patient; tutor marks it).
   const [bookingFormat, setBookingFormat] = useState<'practice' | 'exam'>('practice');
   const [bookingInProgress, setBookingInProgress] = useState(false);
+  // When the learner chooses Pay with PayPal, the created (PendingPayment) order id the
+  // embedded buttons capture against. Cleared on success/cancel.
+  const [paypalOrderId, setPaypalOrderId] = useState<string | null>(null);
   // Policy-confirmation modals (PDF §12). Hold the booking pending confirmation.
   const [cancelConfirm, setCancelConfirm] = useState<Booking | null>(null);
   const [cancelInProgress, setCancelInProgress] = useState(false);
@@ -299,6 +315,55 @@ export default function PrivateSpeakingPage() {
     } finally {
       setBookingInProgress(false);
     }
+  }
+
+  // Pay for the session with embedded PayPal instead of a credit: reserves the slot as a
+  // PendingPayment booking and returns the order id the embedded buttons capture against.
+  async function handleBookWithPaypal() {
+    if (!selectedSlot || bookingInProgress) return;
+    setBookingInProgress(true);
+    setError(null);
+    setPaypalOrderId(null);
+    try {
+      const result = await createPrivateSpeakingBooking({
+        tutorProfileId: selectedSlot.tutorProfileId,
+        sessionStartUtc: selectedSlot.startTimeUtc,
+        durationMinutes: selectedSlot.durationMinutes,
+        learnerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        learnerNotes: bookingNotes || undefined,
+        professionTrack,
+        sessionFormat: bookingFormat,
+        idempotencyKey: crypto.randomUUID(),
+        paymentMethod: 'paypal',
+      });
+      analytics.track('private_speaking_booking_created', { bookingId: result.bookingId });
+      if (!result.checkoutSessionId) {
+        throw new Error('We could not start your PayPal payment. Please try again.');
+      }
+      setPaypalOrderId(result.checkoutSessionId);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not start PayPal payment.');
+    } finally {
+      setBookingInProgress(false);
+    }
+  }
+
+  async function handlePaypalBookingCaptured(result: PaymentCaptureResult) {
+    setPaypalOrderId(null);
+    setSelectedSlot(null);
+    setBookingNotes('');
+    const target = safePaymentRedirect(result.redirectTo, '/private-speaking');
+    if (typeof window !== 'undefined' && target !== '/private-speaking') {
+      window.location.href = target;
+      return;
+    }
+    try {
+      const updated = (await fetchLearnerPrivateSpeakingBookings()) as Booking[];
+      setBookings(updated);
+    } catch {
+      /* non-fatal — the booking is confirmed server-side regardless */
+    }
+    setViewMode('bookings');
   }
 
   async function handleReschedule() {
@@ -788,13 +853,55 @@ export default function PrivateSpeakingPage() {
                 rows={2}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3"
               />
-              <button onClick={rescheduleTarget ? () => setRescheduleConfirmOpen(true) : handleBook} disabled={bookingInProgress || (!rescheduleTarget && (entitlementRemaining ?? 0) <= 0)}
-                className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
-                {bookingInProgress ? 'Processing...' : rescheduleTarget ? 'Confirm Reschedule' : 'Use Session Credit & Book'}
-              </button>
-              <p className="text-xs text-muted/60 text-center mt-2">
-                {rescheduleTarget ? 'Your original booking will close and this slot will replace it.' : 'No checkout is needed when a session credit is available.'}
-              </p>
+              {rescheduleTarget ? (
+                <>
+                  <button onClick={() => setRescheduleConfirmOpen(true)} disabled={bookingInProgress}
+                    className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
+                    {bookingInProgress ? 'Processing...' : 'Confirm Reschedule'}
+                  </button>
+                  <p className="text-xs text-muted/60 text-center mt-2">
+                    Your original booking will close and this slot will replace it.
+                  </p>
+                </>
+              ) : paypalOrderId ? (
+                <div className="rounded-lg border border-border bg-surface p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-medium text-navy">
+                      Pay {selectedSlot ? formatSlotPrice(selectedSlot) : ''} with PayPal
+                    </span>
+                    <button type="button" onClick={() => setPaypalOrderId(null)} className="text-xs text-muted hover:text-navy">
+                      Cancel
+                    </button>
+                  </div>
+                  <PayPalExpandedCheckout
+                    createOrder={() => Promise.resolve(paypalOrderId ?? '')}
+                    onCaptured={handlePaypalBookingCaptured}
+                    onError={(message) => setError(message)}
+                    onUnavailable={() => {
+                      setPaypalOrderId(null);
+                      setError('PayPal is unavailable right now. Please use a session credit or try again.');
+                    }}
+                    amountLabel={selectedSlot ? formatSlotPrice(selectedSlot) : ''}
+                    disabled={bookingInProgress}
+                  />
+                </div>
+              ) : (
+                <>
+                  <button onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0}
+                    className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
+                    {bookingInProgress ? 'Processing...' : 'Use Session Credit & Book'}
+                  </button>
+                  {selectedSlot && selectedSlot.priceMinorUnits > 0 ? (
+                    <button onClick={handleBookWithPaypal} disabled={bookingInProgress}
+                      className="mt-2 w-full px-5 py-2.5 rounded-lg border border-border bg-surface text-navy text-sm font-medium hover:border-emerald-300 disabled:opacity-50 transition-colors">
+                      Pay {formatSlotPrice(selectedSlot)} with PayPal
+                    </button>
+                  ) : null}
+                  <p className="text-xs text-muted/60 text-center mt-2">
+                    Use a session credit, or pay per session with PayPal.
+                  </p>
+                </>
+              )}
             </MotionSection>
           )}
         </>

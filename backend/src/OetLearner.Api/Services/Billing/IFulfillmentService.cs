@@ -24,6 +24,13 @@ public interface IFulfillmentService
     /// <summary>Legacy alias kept for inline webhook callers.</summary>
     Task FulfillCheckoutAsync(string stripeSessionId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Fulfil a PayPal (embedded) cart checkout keyed on the gateway order id. Idempotent
+    /// on the checkout session status + the order id. Used by both the capture endpoint and
+    /// the PAYMENT.CAPTURE.COMPLETED webhook so they converge without double-granting.
+    /// </summary>
+    Task FulfillCartByGatewayOrderAsync(string gatewayOrderId, CancellationToken ct = default);
+
     /// <summary>Legacy alias for the renewal pipeline (subscription-id keyed).</summary>
     Task FulfillSubscriptionRenewalAsync(string stripeSubscriptionId, CancellationToken ct = default);
 

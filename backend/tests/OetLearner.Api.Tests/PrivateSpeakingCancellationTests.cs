@@ -307,6 +307,7 @@ public sealed class PrivateSpeakingCancellationTests
             calendarService: null!,
             entitlementResolver: null!,
             stripeService: stripe,
+            paymentGateways: null!,
             platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance);

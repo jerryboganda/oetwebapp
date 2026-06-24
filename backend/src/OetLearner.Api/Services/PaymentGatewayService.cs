@@ -817,7 +817,12 @@ public sealed class PayPalGateway(
         var normalizedStatus = eventType switch
         {
             "PAYMENT.CAPTURE.COMPLETED" => "completed",
-            "CHECKOUT.ORDER.APPROVED" => "completed",
+            // Approval is NOT payment — an order with intent=CAPTURE is only paid once it
+            // is captured (synchronously by our capture endpoint, confirmed by
+            // PAYMENT.CAPTURE.COMPLETED). Treating APPROVED as "completed" would grant
+            // entitlements/credits for an order whose funds were never taken. Keep it
+            // informational ("pending") so it is recorded but never drives fulfilment.
+            "CHECKOUT.ORDER.APPROVED" => "pending",
             "PAYMENT.CAPTURE.DENIED" => "failed",
             "PAYMENT.CAPTURE.DECLINED" => "failed",
             "CHECKOUT.ORDER.CANCELLED" => "failed",
@@ -944,8 +949,12 @@ public sealed class PayPalGateway(
 
         var billing = (await _runtimeSettings.GetAsync(ct)).Billing;
         return new EffectivePayPalOptions(
-            configured.ApiBaseUrl,
-            configured.UseSandbox,
+            // Host selection (sandbox vs live + custom base URL) MUST come from the
+            // effective runtime settings, not the env/appsettings defaults — otherwise
+            // an admin who configures LIVE credentials and unchecks "Use PayPal Sandbox"
+            // would still hit api-m.sandbox.paypal.com and every call fails 401.
+            billing.PayPalApiBaseUrl,
+            billing.PayPalUseSandbox,
             billing.PayPalClientId,
             billing.PayPalClientSecret,
             billing.PayPalWebhookId,

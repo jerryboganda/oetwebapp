@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
 import { analytics } from '@/lib/analytics';
 import {
   fetchFreezeStatus,
@@ -187,6 +188,10 @@ export default function BillingPage() {
   const [availableGateways, setAvailableGateways] = useState<string[]>(['stripe']);
   const [selectedGateway, setSelectedGateway] = useState<string>('stripe');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+  // Amount (in dollars) the learner chose to top up via the in-page PayPal flow.
+  // Non-null reveals the embedded PayPal buttons for that tier; redirect gateways
+  // (Stripe) never set this and go straight through handleTopUp.
+  const [paypalTopUpAmount, setPaypalTopUpAmount] = useState<number | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
 
   // Double-submit guard shared across all paid-action handlers; complements
@@ -424,6 +429,37 @@ export default function BillingPage() {
       submittingRef.current = false;
     }
   };
+
+  // PayPal renders embedded (in-page capture); every other gateway redirects to a
+  // hosted checkout. When PayPal is selected we reveal the in-page buttons for the
+  // chosen tier instead of opening a redirect.
+  const selectedMethodMode =
+    paymentMethods.find((method) => method.name === selectedGateway)?.mode ??
+    (selectedGateway === 'paypal' ? 'embedded' : 'redirect');
+  const isEmbeddedPaypal = selectedGateway === 'paypal' && selectedMethodMode === 'embedded';
+
+  const createPaypalTopUpOrder = useCallback(async (): Promise<string> => {
+    if (paypalTopUpAmount == null) {
+      throw new Error('Choose a top-up amount first.');
+    }
+    const result = await createWalletTopUp(paypalTopUpAmount, 'paypal', newIdempotencyKey());
+    if (!result.sessionId) {
+      throw new Error('We could not start your PayPal payment. Please try again.');
+    }
+    return result.sessionId;
+  }, [paypalTopUpAmount]);
+
+  const handlePaypalTopUpCaptured = useCallback(() => {
+    const credited = paypalTopUpAmount;
+    setPaypalTopUpAmount(null);
+    setError(null);
+    setSuccess(
+      credited != null
+        ? `Payment complete — your ${formatCurrency(credited, walletCurrency)} top-up has been added to your wallet.`
+        : 'Payment complete — your top-up has been added to your wallet.',
+    );
+    void loadWallet();
+  }, [paypalTopUpAmount, walletCurrency, loadWallet]);
 
   const handleTopUp = async (amount: number) => {
     if (billingMutationsBlocked) {
@@ -1036,7 +1072,10 @@ export default function BillingPage() {
                         <button
                           key={gw}
                           type="button"
-                          onClick={() => setSelectedGateway(gw)}
+                          onClick={() => {
+                            setSelectedGateway(gw);
+                            setPaypalTopUpAmount(null);
+                          }}
                           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] duration-200 ${
                             selectedGateway === gw
                               ? 'bg-emerald-700 text-white shadow-sm'
@@ -1069,12 +1108,15 @@ export default function BillingPage() {
                       disabled={billingMutationsBlocked || busyKey === `topup:${tier.amount}`}
                       aria-busy={busyKey === `topup:${tier.amount}`}
                       aria-disabled={billingMutationsBlocked || undefined}
+                      aria-pressed={isEmbeddedPaypal && paypalTopUpAmount === tier.amount}
                       title={billingMutationsBlocked ? billingBlockedMessage : undefined}
-                      onClick={() => handleTopUp(tier.amount)}
+                      onClick={() => (isEmbeddedPaypal ? setPaypalTopUpAmount(tier.amount) : handleTopUp(tier.amount))}
                       className={`relative rounded-2xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
-                        tier.isPopular
-                          ? 'border-emerald-300 bg-surface shadow-md'
-                          : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'
+                        isEmbeddedPaypal && paypalTopUpAmount === tier.amount
+                          ? 'border-emerald-500 bg-surface shadow-md ring-2 ring-emerald-500/40'
+                          : tier.isPopular
+                            ? 'border-emerald-300 bg-surface shadow-md'
+                            : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'
                       }`}
                     >
                       {tier.isPopular ? (
@@ -1103,6 +1145,35 @@ export default function BillingPage() {
                   ))
                 )}
               </div>
+
+              {isEmbeddedPaypal && paypalTopUpAmount != null ? (
+                <div className="mt-5 rounded-2xl border border-border bg-background-light p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-medium text-navy">
+                      Pay {formatCurrency(paypalTopUpAmount, walletCurrency)} with PayPal
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setPaypalTopUpAmount(null)}
+                      className="text-xs font-medium text-muted hover:text-navy"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <PayPalExpandedCheckout
+                    key={paypalTopUpAmount}
+                    createOrder={createPaypalTopUpOrder}
+                    onCaptured={handlePaypalTopUpCaptured}
+                    onError={(message) => setError(message)}
+                    onUnavailable={() => {
+                      setPaypalTopUpAmount(null);
+                      setError('PayPal is unavailable right now. Please choose another payment method.');
+                    }}
+                    amountLabel={formatCurrency(paypalTopUpAmount, walletCurrency)}
+                    disabled={billingMutationsBlocked}
+                  />
+                </div>
+              ) : null}
 
               <div className="mt-6">
                 <Input

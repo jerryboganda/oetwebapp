@@ -6,19 +6,26 @@ import { ArrowRight, Loader2, Minus, Plus, ShoppingBag, Tag, Trash2 } from 'luci
 
 import {
   applyCartPromoCode,
+  captureBillingCheckout,
+  createCartPaypalOrder,
   createCheckoutSession,
+  fetchAvailablePaymentGateways,
   fetchCart,
   fetchCatalogRecommendations,
   removeCartItem,
   removeCartPromoCode,
+  safePaymentRedirect,
   updateCartItem,
   type Cart,
   type CartLineItem,
   type CatalogRecommendation,
+  type PaymentCaptureResult,
+  type PaymentMethodOption,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
 import { formatMoney } from '@/lib/money';
 import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
 
@@ -43,6 +50,8 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
   const [promoError, setPromoError] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<CatalogRecommendation[]>([]);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [methods, setMethods] = useState<PaymentMethodOption[]>([]);
+  const [selectedGateway, setSelectedGateway] = useState<string>('stripe');
 
   const refresh = useCallback(async () => {
     try {
@@ -63,6 +72,12 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
         setRecommendations(await fetchCatalogRecommendations());
       } catch {
         setRecommendations([]);
+      }
+      try {
+        const gateways = await fetchAvailablePaymentGateways();
+        setMethods(gateways.methods ?? []);
+      } catch {
+        setMethods([]);
       } finally {
         setLoading(false);
       }
@@ -177,6 +192,34 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
       setCheckoutBusy(false);
     }
   }, [cart?.cartId]);
+
+  // PayPal renders embedded (in-page capture) and can't open a subscription, so it is only
+  // offered for one-time carts; recurring carts stay on Stripe (hosted redirect).
+  const hasRecurring = (cart?.items ?? []).some(
+    (item) => item.interval != null && item.interval !== 'one_time',
+  );
+  const paypalAvailable = methods.some((m) => m.name === 'paypal' && m.mode === 'embedded') && !hasRecurring;
+  const isEmbeddedPaypal = paypalAvailable && selectedGateway === 'paypal';
+
+  const createCartOrder = useCallback(async (): Promise<string> => {
+    if (!cart?.cartId) throw new Error('Your cart is empty.');
+    const order = await createCartPaypalOrder(cart.cartId);
+    if (!order.orderId) {
+      throw new Error('We could not start your PayPal payment. Please try again.');
+    }
+    return order.orderId;
+  }, [cart]);
+
+  const onPaypalCaptured = useCallback(
+    (result: PaymentCaptureResult) => {
+      broadcast();
+      const target = safePaymentRedirect(result.redirectTo, '/dashboard?purchase=success');
+      if (typeof window !== 'undefined') {
+        window.location.href = target;
+      }
+    },
+    [broadcast],
+  );
 
   if (loading) {
     return (
@@ -299,25 +342,69 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                   <span>{formatMoney(cart?.totalAmount ?? 0, { currency })}</span>
                 </div>
               </dl>
-              <Button
-                className="mt-5 w-full"
-                disabled={!hasItems || busy || checkoutBusy}
-                onClick={() => void onCheckout()}
-                data-testid="cart-checkout-cta"
-              >
-                {checkoutBusy ? (
-                  <>
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Redirecting...
-                  </>
-                ) : (
-                  <>
-                    Proceed to checkout <ArrowRight className="ml-1 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-              <p className="mt-3 text-center text-[11px] text-muted">
-                Secure checkout - Stripe handles your card details.
-              </p>
+
+              {paypalAvailable ? (
+                <div className="mt-5" role="radiogroup" aria-label="Payment method">
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted">Pay with</p>
+                  <div className="inline-flex w-full rounded-xl border border-border bg-background-light p-1">
+                    {[
+                      { name: 'stripe', label: 'Card' },
+                      { name: 'paypal', label: 'PayPal' },
+                    ].map((option) => (
+                      <button
+                        key={option.name}
+                        type="button"
+                        role="radio"
+                        aria-checked={selectedGateway === option.name}
+                        onClick={() => setSelectedGateway(option.name)}
+                        className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                          selectedGateway === option.name ? 'bg-emerald-700 text-white shadow-sm' : 'text-navy hover:bg-surface'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {isEmbeddedPaypal ? (
+                <div className="mt-4">
+                  <PayPalExpandedCheckout
+                    createOrder={createCartOrder}
+                    onCaptured={onPaypalCaptured}
+                    onError={(message) => setErrorMessage(message)}
+                    onUnavailable={() => setSelectedGateway('stripe')}
+                    amountLabel={formatMoney(cart?.totalAmount ?? 0, { currency })}
+                    disabled={!hasItems || busy}
+                  />
+                  <p className="mt-3 text-center text-[11px] text-muted">
+                    Pay securely without leaving this page.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    className="mt-5 w-full"
+                    disabled={!hasItems || busy || checkoutBusy}
+                    onClick={() => void onCheckout()}
+                    data-testid="cart-checkout-cta"
+                  >
+                    {checkoutBusy ? (
+                      <>
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Redirecting...
+                      </>
+                    ) : (
+                      <>
+                        Proceed to checkout <ArrowRight className="ml-1 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                  <p className="mt-3 text-center text-[11px] text-muted">
+                    Secure checkout - Stripe handles your card details.
+                  </p>
+                </>
+              )}
             </Card>
 
             <Card padding="none" className="p-5">

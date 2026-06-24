@@ -184,6 +184,200 @@ public class PaymentGatewaySecurityTests
     }
 
     [Fact]
+    public async Task PayPalCheckout_RuntimeLiveToggle_CallsLiveHost()
+    {
+        // Regression for the go-live blocker: the env default is sandbox, but the admin
+        // unchecked "Use PayPal Sandbox" (runtime PayPalUseSandbox=false). The gateway MUST
+        // honour the runtime flag and call the LIVE host, or live credentials 401 on sandbox.
+        var billingOptions = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            PayPal = new PayPalBillingOptions { UseSandbox = true },
+        };
+        var handler = new CapturingPayPalHandler();
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: "https://app.example/success",
+            PayPalCancelUrl: "https://app.example/cancel",
+            PayPalUseSandbox: false));
+        var gateway = new PayPalGateway(new HttpClient(handler), Options.Create(billingOptions), runtime);
+
+        await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            UserId: "learner-1",
+            Amount: 10m,
+            Currency: "GBP",
+            ProductType: "review_credits",
+            ProductId: null,
+            Description: "Review credits",
+            Metadata: null), default);
+
+        Assert.NotNull(handler.TokenRequestUri);
+        Assert.StartsWith("https://api-m.paypal.com/", handler.TokenRequestUri);
+        Assert.DoesNotContain("sandbox", handler.TokenRequestUri);
+    }
+
+    [Fact]
+    public async Task PayPalCheckout_RuntimeSandboxToggle_CallsSandboxHost()
+    {
+        var billingOptions = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            PayPal = new PayPalBillingOptions { UseSandbox = false },
+        };
+        var handler = new CapturingPayPalHandler();
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: "https://app.example/success",
+            PayPalCancelUrl: "https://app.example/cancel",
+            PayPalUseSandbox: true));
+        var gateway = new PayPalGateway(new HttpClient(handler), Options.Create(billingOptions), runtime);
+
+        await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            UserId: "learner-1",
+            Amount: 10m,
+            Currency: "GBP",
+            ProductType: "review_credits",
+            ProductId: null,
+            Description: "Review credits",
+            Metadata: null), default);
+
+        Assert.NotNull(handler.TokenRequestUri);
+        Assert.StartsWith("https://api-m.sandbox.paypal.com/", handler.TokenRequestUri);
+    }
+
+    [Fact]
+    public async Task PayPalWebhook_MissingTransmissionHeaders_RejectsWhenConfigured()
+    {
+        var gateway = ConfiguredPayPalWebhookGateway(new StubPayPalWebhookHandler("SUCCESS"));
+
+        var result = await gateway.HandleWebhookAsync(
+            """{"id":"evt-1","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"cap-1"}}""",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            default);
+
+        Assert.False(result.Processed);
+        Assert.Equal("signature_verification_failed", result.EventType);
+    }
+
+    [Fact]
+    public async Task PayPalWebhook_VerificationSuccess_Processes()
+    {
+        var gateway = ConfiguredPayPalWebhookGateway(new StubPayPalWebhookHandler("SUCCESS"));
+
+        var result = await gateway.HandleWebhookAsync(
+            """{"id":"evt-1","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"cap-1"}}""",
+            PayPalTransmissionHeaders(),
+            default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("PAYMENT.CAPTURE.COMPLETED", result.EventType);
+        Assert.Equal("completed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task PayPalWebhook_OrderApproved_IsPendingNotCompleted()
+    {
+        // Approval must not be treated as payment — only capture grants. Guards against
+        // free entitlements when an order is approved but never captured.
+        var gateway = ConfiguredPayPalWebhookGateway(new StubPayPalWebhookHandler("SUCCESS"));
+
+        var result = await gateway.HandleWebhookAsync(
+            """{"id":"evt-2","event_type":"CHECKOUT.ORDER.APPROVED","resource":{"id":"order-1"}}""",
+            PayPalTransmissionHeaders(),
+            default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("CHECKOUT.ORDER.APPROVED", result.EventType);
+        Assert.Equal("pending", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task PayPalWebhook_VerificationFailure_Rejects()
+    {
+        var gateway = ConfiguredPayPalWebhookGateway(new StubPayPalWebhookHandler("FAILURE"));
+
+        var result = await gateway.HandleWebhookAsync(
+            """{"id":"evt-1","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"cap-1"}}""",
+            PayPalTransmissionHeaders(),
+            default);
+
+        Assert.False(result.Processed);
+        Assert.Equal("signature_verification_failed", result.EventType);
+    }
+
+    [Fact]
+    public async Task PayPalCapture_ApiError_Throws()
+    {
+        // A 4xx from PayPal's capture endpoint must surface as a thrown error (the caller
+        // turns it into a clean failure), never a silent "completed".
+        var options = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            PayPal = new PayPalBillingOptions { UseSandbox = true },
+        };
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: null,
+            PayPalCancelUrl: null));
+        IPaymentGateway gateway = new PayPalGateway(new HttpClient(new FailingPayPalCaptureHandler()), Options.Create(options), runtime);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => gateway.CaptureOrderAsync("ORDER-1", "capture-ORDER-1", default));
+    }
+
+    private static PayPalGateway ConfiguredPayPalWebhookGateway(HttpMessageHandler handler)
+    {
+        var options = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            WebhookMaxAgeSeconds = 3600,
+            PayPal = new PayPalBillingOptions { UseSandbox = true },
+        };
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: null,
+            PayPalCancelUrl: null));
+        return new PayPalGateway(new HttpClient(handler), Options.Create(options), runtime);
+    }
+
+    private static Dictionary<string, string> PayPalTransmissionHeaders()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["paypal-transmission-id"] = "tid-1",
+            ["paypal-transmission-time"] = DateTimeOffset.UtcNow.ToString("o"),
+            ["paypal-transmission-sig"] = "sig-1",
+            ["paypal-cert-url"] = "https://api.sandbox.paypal.com/cert",
+            ["paypal-auth-algo"] = "SHA256withRSA",
+        };
+
+    [Fact]
     public async Task StripeCapture_IsNotSupported()
     {
         var options = new BillingOptions { AllowSandboxFallbacks = true, Stripe = new StripeBillingOptions() };
@@ -290,6 +484,45 @@ public class PaymentGatewaySecurityTests
                     ? values.SingleOrDefault()
                     : null;
                 return Task.FromResult(JsonResponse("""{"id":"PAYPAL-REFUND-1","status":"COMPLETED"}"""));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private sealed class StubPayPalWebhookHandler(string verificationStatus) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/v1/oauth2/token", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(JsonResponse("""{"access_token":"token-1"}"""));
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/v1/notifications/verify-webhook-signature", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(JsonResponse($$"""{"verification_status":"{{verificationStatus}}"}"""));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private sealed class FailingPayPalCaptureHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/v1/oauth2/token", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(JsonResponse("""{"access_token":"token-1"}"""));
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/capture", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent("""{"name":"UNPROCESSABLE_ENTITY"}""", System.Text.Encoding.UTF8, "application/json"),
+                });
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));

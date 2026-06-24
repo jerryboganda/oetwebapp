@@ -9506,6 +9506,12 @@ public partial class LearnerService(
                 return MapWebhookRetryResult(webhookEvent);
             }
 
+            if (await ApplyCartCheckoutWebhookIfMatchedAsync(webhookEvent, gatewayTransactionId, privateSpeakingTargetStatus, ct))
+            {
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
             var paymentTransaction = await db.PaymentTransactions
                 .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTransactionId
                     || (x.MetadataJson != null && x.MetadataJson.Contains(gatewayTransactionId)), ct);
@@ -9652,10 +9658,19 @@ public partial class LearnerService(
 
         var speakingBooking = transaction is null
             ? await db.PrivateSpeakingBookings.FirstOrDefaultAsync(
-                b => b.StripeCheckoutSessionId == orderId && b.LearnerUserId == userId, ct)
+                b => (b.StripeCheckoutSessionId == orderId || b.PaymentGatewayOrderId == orderId)
+                    && b.LearnerUserId == userId, ct)
             : null;
 
-        if (transaction is null && speakingBooking is null)
+        // Cart (embedded PayPal) checkout: a paypal-gateway CheckoutSession keyed on the
+        // approved order id. Same owner scope so a guessed order id can't be confirmed
+        // against another learner's cart.
+        var cartSession = (transaction is null && speakingBooking is null)
+            ? await db.CheckoutSessions.FirstOrDefaultAsync(
+                s => s.GatewayOrderId == orderId && s.UserId == userId && s.Gateway == "paypal", ct)
+            : null;
+
+        if (transaction is null && speakingBooking is null && cartSession is null)
         {
             // Unknown order, or it belongs to another learner — same opaque 404 either way
             // so a guessed order id can never be confirmed against someone else's purchase.
@@ -9670,6 +9685,10 @@ public partial class LearnerService(
         if (speakingBooking is not null && speakingBooking.PaymentStatus == PrivateSpeakingPaymentStatus.Succeeded)
         {
             return new PaymentCaptureResult("completed", orderId, speakingBooking.StripePaymentIntentId, "/speaking/private", null);
+        }
+        if (cartSession is not null && string.Equals(cartSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+        {
+            return new PaymentCaptureResult("completed", orderId, null, "/dashboard?purchase=success", null);
         }
 
         // Capture against the gateway OUTSIDE any DB transaction (never hold a db lock across
@@ -9707,6 +9726,12 @@ public partial class LearnerService(
                 await MarkCheckoutFailedAsync(transaction, ct);
                 await db.SaveChangesAsync(ct);
             }
+            else if (cartSession is not null && !string.Equals(cartSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+            {
+                cartSession.Status = "failed";
+                cartSession.UpdatedAt = now;
+                await db.SaveChangesAsync(ct);
+            }
 
             return new PaymentCaptureResult("failed", orderId, capture.CaptureId, null, "payment_not_completed");
         }
@@ -9725,6 +9750,20 @@ public partial class LearnerService(
 
                 await CommitIfOwnedAsync(tx, ct);
                 return new PaymentCaptureResult("completed", orderId, capture.CaptureId, "/speaking/private", null);
+            }
+
+            if (cartSession is not null)
+            {
+                if (fulfillmentService is null)
+                {
+                    throw new InvalidOperationException("Billing fulfillment service is not available.");
+                }
+
+                // Same idempotent grant the PAYMENT.CAPTURE.COMPLETED webhook runs, keyed on
+                // the order id, so capture and the webhook converge without double-granting.
+                await fulfillmentService.FulfillCartByGatewayOrderAsync(orderId, ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return new PaymentCaptureResult("completed", orderId, capture.CaptureId, "/dashboard?purchase=success", null);
             }
 
             transaction!.Status = "completed";
@@ -9778,8 +9817,11 @@ public partial class LearnerService(
         string targetStatus,
         CancellationToken ct)
     {
+        // Match a Stripe checkout session (hosted) or a PayPal order id (embedded) — both
+        // uniquely identify one booking and route through the same ConfirmBookingPaymentAsync.
         var bookingExists = await db.PrivateSpeakingBookings
-            .AnyAsync(booking => booking.StripeCheckoutSessionId == checkoutSessionId, ct);
+            .AnyAsync(booking => booking.StripeCheckoutSessionId == checkoutSessionId
+                || booking.PaymentGatewayOrderId == checkoutSessionId, ct);
         if (!bookingExists)
         {
             return false;
@@ -9909,6 +9951,62 @@ public partial class LearnerService(
             default:
                 webhookEvent.ProcessingStatus = "ignored";
                 webhookEvent.ErrorMessage = "Stripe checkout session payment is not settled yet; waiting for a terminal Stripe event.";
+                break;
+        }
+
+        webhookEvent.ProcessedAt = now;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Webhook backstop for PayPal (embedded) cart checkouts. A PAYMENT.CAPTURE.COMPLETED
+    /// event carries the order id as the transaction id; we map it to the paypal-gateway
+    /// CheckoutSession and run the SAME idempotent fulfilment the capture endpoint runs, so
+    /// the two converge without double-granting. Returns false when no cart session matches
+    /// (so the caller falls through to the PaymentTransaction path).
+    /// </summary>
+    private async Task<bool> ApplyCartCheckoutWebhookIfMatchedAsync(
+        PaymentWebhookEvent webhookEvent,
+        string gatewayOrderId,
+        string targetStatus,
+        CancellationToken ct)
+    {
+        var cartSession = await db.CheckoutSessions
+            .FirstOrDefaultAsync(s => s.GatewayOrderId == gatewayOrderId && s.Gateway == "paypal", ct);
+        if (cartSession is null)
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        switch (targetStatus)
+        {
+            case "completed":
+                if (fulfillmentService is null)
+                {
+                    throw new InvalidOperationException("Billing fulfillment service is not available.");
+                }
+
+                await fulfillmentService.FulfillCartByGatewayOrderAsync(gatewayOrderId, ct);
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                break;
+
+            case "failed":
+                if (!string.Equals(cartSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+                {
+                    cartSession.Status = "failed";
+                    cartSession.UpdatedAt = now;
+                }
+
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                break;
+
+            default:
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = "PayPal cart order is not settled yet; waiting for a capture event.";
                 break;
         }
 

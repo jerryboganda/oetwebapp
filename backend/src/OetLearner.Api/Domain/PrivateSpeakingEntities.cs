@@ -293,6 +293,16 @@ public class PrivateSpeakingBooking
     [MaxLength(256)]
     public string? StripePaymentIntentId { get; set; }
 
+    /// <summary>Which gateway is collecting payment for this (paid) booking: "stripe" or
+    /// "paypal". Null/entitlement bookings are credit-funded and never charged.</summary>
+    [MaxLength(16)]
+    public string? PaymentGateway { get; set; }
+
+    /// <summary>For embedded PayPal bookings, the approved order id the capture/webhook map
+    /// back to this booking (the PayPal analogue of StripeCheckoutSessionId).</summary>
+    [MaxLength(256)]
+    public string? PaymentGatewayOrderId { get; set; }
+
     public PrivateSpeakingPaymentStatus PaymentStatus { get; set; } = PrivateSpeakingPaymentStatus.Pending;
 
     public DateTimeOffset? PaymentConfirmedAt { get; set; }

@@ -91,7 +91,8 @@ public static class PrivateSpeakingEndpoints
                 req.SessionStartUtc, req.DurationMinutes,
                 req.LearnerTimezone, req.LearnerNotes,
                 req.ProfessionTrack,
-                req.IdempotencyKey, req.SessionFormat, ct);
+                req.IdempotencyKey, req.SessionFormat, ct,
+                req.PaymentMethod);
 
             if (!result.Success)
                 return Results.BadRequest(new { error = result.Error });
@@ -1061,7 +1062,9 @@ public record CreatePrivateSpeakingBookingRequest(
     string IdempotencyKey,
     string? ProfessionTrack = null,
     // Speaking module rebuild (2026-06-11): "practice" (default) or "exam".
-    string? SessionFormat = null);
+    string? SessionFormat = null,
+    // "paypal" pays the catalog price via embedded PayPal; null/"entitlement" uses a credit.
+    string? PaymentMethod = null);
 
 public record CancelBookingRequest(string? Reason);
 

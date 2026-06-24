@@ -362,6 +362,14 @@ public sealed class StripeWebhookPrivateSpeakingTests
             return Task.CompletedTask;
         }
 
+        public List<string> CartGatewayOrderIds { get; } = new();
+
+        public Task FulfillCartByGatewayOrderAsync(string gatewayOrderId, CancellationToken ct = default)
+        {
+            CartGatewayOrderIds.Add(gatewayOrderId);
+            return Task.CompletedTask;
+        }
+
         public Task FulfillSubscriptionRenewalAsync(string stripeSubscriptionId, CancellationToken ct = default)
         {
             SubscriptionRenewalIds.Add(stripeSubscriptionId);

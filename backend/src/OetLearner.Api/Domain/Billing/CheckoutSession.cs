@@ -5,6 +5,7 @@ namespace OetLearner.Api.Domain.Billing;
 
 [Index(nameof(IdempotencyKey), IsUnique = true)]
 [Index(nameof(StripeSessionId))]
+[Index(nameof(GatewayOrderId))]
 [Index(nameof(UserId))]
 public class CheckoutSession
 {
@@ -18,6 +19,16 @@ public class CheckoutSession
 
     [MaxLength(256)]
     public string? StripeSessionId { get; set; }
+
+    /// <summary>Which gateway owns this session: "stripe" (hosted redirect) or "paypal"
+    /// (in-page embedded capture). Defaults to stripe for back-compat with existing rows.</summary>
+    [MaxLength(16)]
+    public string Gateway { get; set; } = "stripe";
+
+    /// <summary>For embedded gateways (PayPal), the gateway order id the browser SDK
+    /// approves and the capture/webhook map back to this cart session. Null for Stripe.</summary>
+    [MaxLength(256)]
+    public string? GatewayOrderId { get; set; }
 
     [MaxLength(64)]
     public string IdempotencyKey { get; set; } = default!;

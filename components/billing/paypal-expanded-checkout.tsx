@@ -44,6 +44,21 @@ const GENERIC_START_ERROR = 'We could not start your payment. Please try again o
 const GENERIC_CAPTURE_ERROR = 'Your payment could not be completed. Please try again or choose another method.';
 
 /**
+ * Maps a server-supplied capture `failureReason` code to a learner-facing message.
+ * Unknown codes fall back to the generic copy rather than leaking a raw code.
+ */
+function captureFailureMessage(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'payment_not_completed':
+      return 'PayPal did not complete this payment. Please try again or choose another method.';
+    case 'gateway_unavailable':
+      return 'This payment method is temporarily unavailable. Please choose another method.';
+    default:
+      return GENERIC_CAPTURE_ERROR;
+  }
+}
+
+/**
  * PayPal Expanded (embedded) checkout: PayPal/Venmo/Pay Later smart buttons plus, when the
  * account is eligible, on-page Advanced Card Fields — no redirect. The order is created and
  * captured server-side (`createOrder` / `capture`), which converges with the PayPal webhook
@@ -112,8 +127,9 @@ export function PayPalExpandedCheckout({
       if (result.status === 'completed') {
         onCaptured(result);
       } else {
-        setError(GENERIC_CAPTURE_ERROR);
-        onError?.(GENERIC_CAPTURE_ERROR);
+        const msg = captureFailureMessage(result.failureReason);
+        setError(msg);
+        onError?.(msg);
       }
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : GENERIC_CAPTURE_ERROR;

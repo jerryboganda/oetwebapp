@@ -24,6 +24,7 @@ public sealed class PrivateSpeakingService(
     PrivateSpeakingCalendarService calendarService,
     IEffectiveEntitlementResolver entitlementResolver,
     IStripeService stripeService,
+    PaymentGatewayService paymentGateways,
     PlatformLinkService platformLinks,
     TimeProvider timeProvider,
     ILogger<PrivateSpeakingService> logger)
@@ -467,8 +468,12 @@ public sealed class PrivateSpeakingService(
         DateTimeOffset sessionStartUtc, int durationMinutes,
         string learnerTimezone, string? learnerNotes,
         string? professionTrack,
-        string idempotencyKey, string? sessionFormat, CancellationToken ct)
+        string idempotencyKey, string? sessionFormat, CancellationToken ct,
+        string? paymentMethod = null)
     {
+        // "paypal" → pay the catalog price via embedded PayPal (no credit consumed).
+        // Anything else → consume a speaking-session entitlement (the historic behaviour).
+        var payWithPaypal = string.Equals(paymentMethod?.Trim(), "paypal", StringComparison.OrdinalIgnoreCase);
         var config = await GetConfigAsync(ct);
         if (!config.IsEnabled)
             return BookingCheckoutResult.Fail("Private Speaking Sessions are currently disabled.");
@@ -567,6 +572,92 @@ public sealed class PrivateSpeakingService(
                 return BookingCheckoutResult.Fail("Tutor calendar shows this slot is no longer available. Please select another slot.");
         }
 
+        if (payWithPaypal)
+        {
+            if (priceMinorUnits <= 0)
+            {
+                return BookingCheckoutResult.Fail("This session can't be paid for online right now. Please contact support.");
+            }
+
+            var paidBooking = new PrivateSpeakingBooking
+            {
+                Id = $"psb-{Guid.NewGuid():N}",
+                LearnerUserId = learnerUserId,
+                TutorProfileId = tutorProfileId,
+                Status = PrivateSpeakingBookingStatus.PendingPayment,
+                SessionStartUtc = sessionStartUtc,
+                DurationMinutes = durationMinutes,
+                TutorTimezone = profile.Timezone,
+                LearnerTimezone = learnerTimezone,
+                PriceMinorUnits = priceMinorUnits,
+                Currency = config.Currency,
+                PaymentStatus = PrivateSpeakingPaymentStatus.Pending,
+                PaymentGateway = "paypal",
+                // The reservation holds the slot until the embedded capture (or the
+                // PAYMENT.CAPTURE.COMPLETED webhook) confirms; the existing reservation-expiry
+                // sweep releases it if the learner never pays.
+                ReservationExpiresAt = now.AddMinutes(config.ReservationTimeoutMinutes),
+                IdempotencyKey = scopedIdempotencyKey,
+                LearnerNotes = learnerNotes,
+                ProfessionTrack = NormalizeProfessionTrack(professionTrack),
+                SessionFormat = string.Equals(sessionFormat?.Trim(), "exam", StringComparison.OrdinalIgnoreCase)
+                    ? "exam"
+                    : "practice",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            // Create the PayPal order BEFORE persisting so a gateway failure aborts the whole
+            // serializable transaction and never leaves a dangling slot reservation.
+            PaymentIntentResult intent;
+            try
+            {
+                intent = await paymentGateways.GetGateway("paypal").CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+                    UserId: learnerUserId,
+                    Amount: priceMinorUnits / 100m,
+                    Currency: config.Currency,
+                    ProductType: "private_speaking",
+                    ProductId: paidBooking.Id,
+                    Description: "OET 1:1 Speaking session",
+                    Metadata: new Dictionary<string, string> { ["privateSpeakingBookingId"] = paidBooking.Id },
+                    SuccessUrl: platformLinks.BuildWebUrl("/private-speaking?payment=success"),
+                    CancelUrl: platformLinks.BuildWebUrl("/private-speaking?payment=cancelled"),
+                    IdempotencyKey: $"{scopedIdempotencyKey}-paypal"), ct);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or PaymentGatewayApiException)
+            {
+                return BookingCheckoutResult.Fail("We couldn't start your PayPal payment. Please try again or use a session credit.");
+            }
+
+            paidBooking.PaymentGatewayOrderId = intent.GatewayTransactionId;
+            db.PrivateSpeakingBookings.Add(paidBooking);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                return BookingCheckoutResult.Fail("This time slot was just booked. Please select another slot.");
+            }
+
+            await AuditAsync(paidBooking.Id, learnerUserId, "learner", "booking_pending_payment",
+                $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}, PayPal order: {intent.GatewayTransactionId}, Price minor units: {priceMinorUnits}", ct);
+
+            // No Zoom/calendar/notification jobs yet — those run on payment confirmation
+            // (ConfirmBookingPaymentAsync), exactly as the Stripe pending-payment path does.
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return new BookingCheckoutResult(
+                Success: true,
+                Error: null,
+                BookingId: paidBooking.Id,
+                CheckoutSessionId: intent.GatewayTransactionId,
+                CheckoutUrl: null,
+                EntitlementUsed: false,
+                SpeakingSessionsRemaining: null);
+        }
+
         var subscription = await ResolveEligibleSpeakingSubscriptionAsync(learnerUserId, now, ct);
         if (subscription is null)
             return BookingCheckoutResult.Fail("You need an available private speaking session credit to book this session.");
@@ -636,12 +727,15 @@ public sealed class PrivateSpeakingService(
     public async Task<bool> ConfirmBookingPaymentAsync(
         string stripeCheckoutSessionId, string? paymentIntentId, CancellationToken ct)
     {
+        // The id may be a Stripe checkout session (hosted) or a PayPal order id (embedded),
+        // so match either — both uniquely identify a single booking.
         var booking = await db.PrivateSpeakingBookings
-            .FirstOrDefaultAsync(b => b.StripeCheckoutSessionId == stripeCheckoutSessionId, ct);
+            .FirstOrDefaultAsync(b => b.StripeCheckoutSessionId == stripeCheckoutSessionId
+                || b.PaymentGatewayOrderId == stripeCheckoutSessionId, ct);
 
         if (booking is null)
         {
-            logger.LogWarning("No booking found for Stripe session {SessionId}", stripeCheckoutSessionId);
+            logger.LogWarning("No booking found for payment session {SessionId}", stripeCheckoutSessionId);
             return false;
         }
 

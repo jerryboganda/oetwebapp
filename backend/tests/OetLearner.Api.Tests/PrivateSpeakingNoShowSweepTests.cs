@@ -350,6 +350,7 @@ public sealed class PrivateSpeakingNoShowSweepTests
             calendarService: calendarService,
             entitlementResolver: null!,
             stripeService: new FakeStripeService(),
+            paymentGateways: null!,
             platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance);

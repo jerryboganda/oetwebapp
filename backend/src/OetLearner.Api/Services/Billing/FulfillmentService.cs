@@ -54,6 +54,8 @@ public sealed class FulfillmentService : IFulfillmentService
             return;
         }
 
+        // Idempotent short-circuit BEFORE any Stripe round-trip — a replay of an
+        // already-fulfilled session must be a pure no-op (no extra Stripe API call).
         if (string.Equals(checkoutSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation(
@@ -61,10 +63,6 @@ public sealed class FulfillmentService : IFulfillmentService
                 stripeSessionId);
             return;
         }
-
-        var userId = checkoutSession.UserId;
-        var hasSubscriptionLine = false;
-        var totalCreditsGranted = 0;
 
         // Stripe session retrieve — surfaces the SubscriptionId for sub line items.
         Stripe.Checkout.Session? stripeSession = null;
@@ -78,6 +76,58 @@ public sealed class FulfillmentService : IFulfillmentService
                 "FulfillCheckoutAsync: could not retrieve Stripe session {SessionId} — falling back to local rows only.",
                 stripeSessionId);
         }
+
+        await FulfillResolvedCheckoutAsync(checkoutSession, stripeSessionId, stripeSession?.SubscriptionId, ct);
+    }
+
+    /// <summary>
+    /// Fulfils a PayPal (embedded) cart checkout. The browser SDK approves an order,
+    /// the capture endpoint (or a PAYMENT.CAPTURE.COMPLETED webhook) calls this with the
+    /// gateway order id. Idempotent on the session status + the order id as the grant
+    /// idempotency key, so capture and webhook converge without double-granting. PayPal
+    /// carts are one-time only (recurring carts are rejected up front), so there is no
+    /// Stripe subscription to upsert.
+    /// </summary>
+    public async Task FulfillCartByGatewayOrderAsync(string gatewayOrderId, CancellationToken ct = default)
+    {
+        var checkoutSession = await _db.CheckoutSessions
+            .FirstOrDefaultAsync(s => s.GatewayOrderId == gatewayOrderId, ct);
+
+        if (checkoutSession is null)
+        {
+            _logger.LogWarning(
+                "FulfillCartByGatewayOrderAsync: no CheckoutSession row for GatewayOrderId={OrderId}",
+                gatewayOrderId);
+            return;
+        }
+
+        await FulfillResolvedCheckoutAsync(checkoutSession, gatewayOrderId, stripeSubscriptionId: null, ct);
+    }
+
+    /// <summary>
+    /// Core grant pipeline shared by the Stripe (hosted) and PayPal (embedded) checkout
+    /// paths. <paramref name="sourceId"/> is the gateway identifier used as the ledger
+    /// reference and idempotency suffix; it MUST be the same value the capture and the
+    /// webhook both pass, so replays converge.
+    /// </summary>
+    private async Task FulfillResolvedCheckoutAsync(
+        CheckoutSession checkoutSession,
+        string sourceId,
+        string? stripeSubscriptionId,
+        CancellationToken ct)
+    {
+        if (string.Equals(checkoutSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "FulfillCheckout: session {SessionId} already fulfilled, skipping.",
+                sourceId);
+            return;
+        }
+
+        var userId = checkoutSession.UserId;
+        var hasSubscriptionLine = false;
+        var totalCreditsGranted = 0;
+        var stripeSessionId = sourceId;
 
         if (checkoutSession.CartId.HasValue)
         {
@@ -96,10 +146,9 @@ public sealed class FulfillmentService : IFulfillmentService
                 if (price?.Interval is not null)
                 {
                     hasSubscriptionLine = true;
-                    var stripeSubId = stripeSession?.SubscriptionId;
-                    if (!string.IsNullOrEmpty(stripeSubId))
+                    if (!string.IsNullOrEmpty(stripeSubscriptionId))
                     {
-                        await UpsertCustomerSubscriptionAsync(userId, stripeSubId, price, product.Id, ct);
+                        await UpsertCustomerSubscriptionAsync(userId, stripeSubscriptionId, price, product.Id, ct);
                     }
                     // Subscription line items still grant the bundled credits/entitlements for the first period.
                     totalCreditsGranted += await GrantEntitlementsForProductAsync(
@@ -158,13 +207,13 @@ public sealed class FulfillmentService : IFulfillmentService
             },
             ct);
 
-        if (hasSubscriptionLine && !string.IsNullOrEmpty(stripeSession?.SubscriptionId))
+        if (hasSubscriptionLine && !string.IsNullOrEmpty(stripeSubscriptionId))
         {
-            QueueRenewalReminder(stripeSession.SubscriptionId, userId);
+            QueueRenewalReminder(stripeSubscriptionId, userId);
         }
 
         _logger.LogInformation(
-            "FulfillCheckoutAsync: fulfilled session {SessionId} for user {UserId}.",
+            "FulfillCheckout: fulfilled session {SessionId} for user {UserId}.",
             stripeSessionId, userId);
     }
 

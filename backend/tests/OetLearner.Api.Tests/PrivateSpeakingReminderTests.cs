@@ -205,6 +205,7 @@ public sealed class PrivateSpeakingReminderTests
             calendarService: calendarService,
             entitlementResolver: null!,
             stripeService: null!,
+            paymentGateways: null!,
             platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance);
