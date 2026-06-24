@@ -6,7 +6,7 @@
 The **OET Prep Learner** mobile app. It loads the OET Prep web experience inside a native app shell and adds mobile features (microphone recording for Speaking, biometric login, notifications, deep links). This build points at: **`<STAGING/TEST URL — TBD>`**.
 
 ## System requirements
-- **Android:** version `<min API TBD>` or newer. (~50–60 MB free storage.)
+- **Android:** **5.1 (Lollipop) or newer** (minSdk 22). A current device (Android 12–15) is recommended. ~60–100 MB free storage. A network connection is required (the app loads the live site).
 - **iOS:** _not available this round_ — see "iOS status" below.
 
 ## Android — install the APK (direct sideload)

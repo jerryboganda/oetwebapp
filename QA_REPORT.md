@@ -125,8 +125,17 @@ Existing workflows are solid; I enhanced rather than replaced (do-no-harm).
 ### Validation
 CI runs on push/PR to the GitHub remote; will be exercised when the branch is pushed / PR opened (Phase 9–10). Locally validated equivalents already pass: `tsc` ✅, ESLint ✅, Vitest ✅, `next build` ✅ (Phase 2).
 
-## Phase 8 — Signing
-_Pending._
+## Phase 8 — Signing for testers (in progress)
+
+- **Release keystore generated:** `android/app/release-keystore.jks` (alias `oetprep`, RSA-2048, 10000-day validity). `android/keystore.properties` written. **Both confirmed git-ignored** (`git check-ignore` ✅) — never committed. `app/build.gradle` reads these for `release` signing.
+- **Secrets handoff (outside the repo):** `D:/Projects/oetprep-keystore-secrets.txt` holds the password, alias, and one-line base64. Set these as **GitHub repo secrets** for `mobile-release.yml`: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`oetprep`), `ANDROID_KEY_PASSWORD`.
+- ⚠️ **Owner action — BACK UP THE KEYSTORE.** Losing it means you can never ship a signed update under the same identity. Treat the password as a secret; rotate before any public Play Store release if desired.
+- **Deep links:** `assetlinks.json` now carries the real keystore SHA-256 `41:5F:CB:E8:…:7F:A9` (BUGLOG #4 Android half). Takes effect once the **staging/prod domain serves it**. If you later use **Google Play App Signing**, also add Google's signing SHA-256 from Play Console (Play re-signs the AAB).
+- **iOS signing:** blocked — no Apple Developer account. No IPA / TestFlight this round. The `mobile-release.yml` iOS path (cert/profile/archive/export) is ready for when `APPLE_TEAM_ID` + cert/profile secrets exist (~$99/yr).
+- **Distribution channel:** direct **signed APK** sideload (default; see `TESTER_SETUP.md`). Optional **Firebase App Distribution** (free, both platforms) available if you want a managed invite-based channel — not set up unless requested.
+
+## Phase 9 — Build & deliver (in progress)
+_Local signed-build mechanics validated; output pasted on completion. Build env note: Gradle must run via the **native PowerShell** path — the Bash subprocess can't create Java NIO's AF_UNIX self-pipe (`Unable to establish loopback connection`)._
 
 ## Phase 9 — Build & deliver
 _Pending._
