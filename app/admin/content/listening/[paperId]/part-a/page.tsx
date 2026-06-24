@@ -12,7 +12,9 @@ import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { PartANotesBuilder } from '@/components/domain/listening/admin/PartANotesBuilder';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
+import { PartAPdfOverlayEditor, type PartAOverlayBlank } from '@/components/domain/listening/admin/PartAPdfOverlayEditor';
 import { countGaps } from '@/lib/listening-part-a-notes';
+import { getContentPaper } from '@/lib/content-upload-api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   ensureListeningPartASlots,
@@ -86,6 +88,17 @@ interface SubPartSectionProps {
   onReload: () => void | Promise<void>;
   /** AI-import payload to apply into this section (review-then-Save). */
   imported?: SectionImport;
+  /** Authenticated download path of the Part A question-paper PDF (for overlay method). */
+  pdfDownloadPath?: string | null;
+}
+
+function parseOverlayBlanks(json: string | null | undefined): PartAOverlayBlank[] {
+  if (!json) return [];
+  try {
+    return (JSON.parse(json) as PartAOverlayBlank[]) ?? [];
+  } catch {
+    return [];
+  }
 }
 
 function SubPartSection({
@@ -97,6 +110,7 @@ function SubPartSection({
   onSaveSuccess,
   onReload,
   imported,
+  pdfDownloadPath,
 }: SubPartSectionProps) {
   const [notesBody, setNotesBody] = useState(extract?.notesBody ?? '');
   const [initialNotesBody, setInitialNotesBody] = useState(extract?.notesBody ?? '');
@@ -105,6 +119,13 @@ function SubPartSection({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [creatingSlots, setCreatingSlots] = useState(false);
+  // Phase 6: authoring method ('wysiwyg' | 'pdf_overlay') + overlay blank state.
+  const [method, setMethod] = useState<'wysiwyg' | 'pdf_overlay'>(
+    extract?.authoringMethod === 'pdf_overlay' ? 'pdf_overlay' : 'wysiwyg',
+  );
+  const [initialMethod, setInitialMethod] = useState(method);
+  const [overlayBlanks, setOverlayBlanks] = useState<PartAOverlayBlank[]>(() => parseOverlayBlanks(extract?.partAOverlayBlanksJson));
+  const [initialOverlayJson, setInitialOverlayJson] = useState(extract?.partAOverlayBlanksJson ?? '');
 
   // Sync the note body only when the EXTRACT changes. Kept separate from the
   // answer-row sync below so that refreshing questions/answer-slots (e.g. after
@@ -113,6 +134,11 @@ function SubPartSection({
   useEffect(() => {
     setNotesBody(extract?.notesBody ?? '');
     setInitialNotesBody(extract?.notesBody ?? '');
+    const m = extract?.authoringMethod === 'pdf_overlay' ? 'pdf_overlay' : 'wysiwyg';
+    setMethod(m);
+    setInitialMethod(m);
+    setOverlayBlanks(parseOverlayBlanks(extract?.partAOverlayBlanksJson));
+    setInitialOverlayJson(extract?.partAOverlayBlanksJson ?? '');
   }, [extract]);
 
   // Sync answer rows when the questions change (independent of the note body).
@@ -150,9 +176,12 @@ function SubPartSection({
   const questionCount = questions.length;
   const hasGapMismatch = notesBody.length > 0 && gapCount !== questionCount;
 
+  const overlayJson = JSON.stringify(overlayBlanks);
   const notesBodyChanged = notesBody !== initialNotesBody;
+  const methodChanged = method !== initialMethod;
+  const overlayChanged = method === 'pdf_overlay' && overlayJson !== (initialOverlayJson || '[]') && overlayJson !== initialOverlayJson;
   const changedRows = rows.filter(hasRowChanged);
-  const hasDirtyChanges = notesBodyChanged || changedRows.length > 0;
+  const hasDirtyChanges = notesBodyChanged || methodChanged || overlayChanged || changedRows.length > 0;
 
   const updateRow = useCallback(
     (questionId: string, field: 'correctAnswer', value: string) => {
@@ -205,9 +234,17 @@ function SubPartSection({
   const onSave = useCallback(async () => {
     setSaveState('saving');
     try {
-      // PATCH notesBody if changed
+      // PATCH notesBody if changed (WYSIWYG method).
       if (notesBodyChanged) {
         await patchListeningExtract(paperId, code, { notesBody });
+      }
+
+      // PATCH the authoring method + overlay placements (PDF-overlay method).
+      if (methodChanged || overlayChanged) {
+        await patchListeningExtract(paperId, code, {
+          authoringMethod: method,
+          partAOverlayBlanksJson: method === 'pdf_overlay' ? overlayJson : null,
+        });
       }
 
       // PATCH each changed question row
@@ -220,6 +257,8 @@ function SubPartSection({
 
       // Commit initial snapshots
       setInitialNotesBody(notesBody);
+      setInitialMethod(method);
+      setInitialOverlayJson(overlayJson);
       setRows((prev) =>
         prev.map((r) => ({
           ...r,
@@ -236,7 +275,7 @@ function SubPartSection({
       const msg = e instanceof Error ? e.message : `Could not save Part ${code}.`;
       setToast({ variant: 'error', message: msg });
     }
-  }, [paperId, code, notesBody, notesBodyChanged, changedRows, onSaveSuccess]);
+  }, [paperId, code, notesBody, notesBodyChanged, methodChanged, overlayChanged, method, overlayJson, changedRows, onSaveSuccess]);
 
   // Create the answer-key question slots (Q1..12 / Q13..24) to match the
   // authored gap count, then reload so the answer boxes appear. Used when a note
@@ -265,37 +304,69 @@ function SubPartSection({
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
+          {/* Phase 6: authoring method toggle (WYSIWYG note vs PDF overlay). */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-semibold text-navy">Authoring method:</span>
+            <div className="inline-flex rounded-lg border border-border p-0.5">
+              <button
+                type="button"
+                onClick={() => { markDirty(); setMethod('wysiwyg'); }}
+                className={`rounded-md px-3 py-1 text-xs font-semibold ${method === 'wysiwyg' ? 'bg-[var(--color-primary)] text-white' : 'text-admin-fg-muted'}`}
+              >
+                WYSIWYG note
+              </button>
+              <button
+                type="button"
+                onClick={() => { markDirty(); setMethod('pdf_overlay'); }}
+                className={`rounded-md px-3 py-1 text-xs font-semibold ${method === 'pdf_overlay' ? 'bg-[var(--color-primary)] text-white' : 'text-admin-fg-muted'}`}
+              >
+                PDF overlay
+              </button>
+            </div>
+          </div>
+
           <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-            {/* Left column: note-completion editor + validation */}
+            {/* Left column: note-completion editor (WYSIWYG) OR PDF-overlay editor */}
             <div className="space-y-4">
-              <PartANotesBuilder
-                value={notesBody}
-                onChange={(v) => { markDirty(); setNotesBody(v); }}
-                partLabel={partLabel}
-                disabled={disabled || saveState === 'saving'}
-                renderPreview={(body) => (
-                  <PartANotesDocument
+              {method === 'pdf_overlay' ? (
+                <PartAPdfOverlayEditor
+                  pdfDownloadPath={pdfDownloadPath ?? null}
+                  value={overlayBlanks}
+                  onChange={(b) => { markDirty(); setOverlayBlanks(b); }}
+                  disabled={disabled || saveState === 'saving'}
+                />
+              ) : (
+                <>
+                  <PartANotesBuilder
+                    value={notesBody}
+                    onChange={(v) => { markDirty(); setNotesBody(v); }}
                     partLabel={partLabel}
-                    notesBody={body}
-                    questions={previewQuestions}
-                    answers={{}}
-                    onAnswerChange={() => {}}
-                    locked
+                    disabled={disabled || saveState === 'saving'}
+                    renderPreview={(body) => (
+                      <PartANotesDocument
+                        partLabel={partLabel}
+                        notesBody={body}
+                        questions={previewQuestions}
+                        answers={{}}
+                        onAnswerChange={() => {}}
+                        locked
+                      />
+                    )}
                   />
-                )}
-              />
 
-              {/* Gap-count mismatch banner */}
-              {hasGapMismatch && (
-                <InlineAlert variant="warning">
-                  {gapCount} gap{gapCount !== 1 ? 's' : ''} detected but {questionCount} answer row{questionCount !== 1 ? 's' : ''} — gaps and questions must match before publishing.
-                </InlineAlert>
-              )}
+                  {/* Gap-count mismatch banner */}
+                  {hasGapMismatch && (
+                    <InlineAlert variant="warning">
+                      {gapCount} gap{gapCount !== 1 ? 's' : ''} detected but {questionCount} answer row{questionCount !== 1 ? 's' : ''} — gaps and questions must match before publishing.
+                    </InlineAlert>
+                  )}
 
-              {notesBody.length > 0 && !hasGapMismatch && gapCount > 0 && (
-                <p className="text-xs text-admin-fg-muted">
-                  {gapCount} gap{gapCount !== 1 ? 's' : ''} detected — matches {questionCount} question{questionCount !== 1 ? 's' : ''}.
-                </p>
+                  {notesBody.length > 0 && !hasGapMismatch && gapCount > 0 && (
+                    <p className="text-xs text-admin-fg-muted">
+                      {gapCount} gap{gapCount !== 1 ? 's' : ''} detected — matches {questionCount} question{questionCount !== 1 ? 's' : ''}.
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
@@ -484,6 +555,14 @@ export default function AdminListeningPartAPage() {
   const [extracts, setExtracts] = useState<ListeningAuthoredExtract[]>([]);
   const [questions, setQuestions] = useState<ListeningAuthoredQuestion[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Phase 6: Part A question-paper PDF download paths, keyed by part (A1/A2/A),
+  // for the PDF-overlay authoring method.
+  const [pdfByPart, setPdfByPart] = useState<Record<string, string>>({});
+
+  const pdfPathForCode = useCallback(
+    (code: 'A1' | 'A2') => pdfByPart[code] ?? pdfByPart['A'] ?? null,
+    [pdfByPart],
+  );
 
   // One-click AI import (OCR) state.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -547,6 +626,20 @@ export default function AdminListeningPartAPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load Part A data.');
       setLoadState('error');
+    }
+    // Question-paper PDFs power the PDF-overlay authoring method. Fetched
+    // separately + swallowed so a failure never blocks note/answer authoring.
+    try {
+      const paper = await getContentPaper(paperId);
+      const map: Record<string, string> = {};
+      for (const a of paper.assets ?? []) {
+        if (a.role !== 'QuestionPaper') continue;
+        const key = (a.part ?? 'A').toUpperCase();
+        map[key] = `/v1/media/${a.mediaAssetId}/content`;
+      }
+      setPdfByPart(map);
+    } catch {
+      setPdfByPart({});
     }
   }, [paperId]);
 
@@ -670,6 +763,7 @@ export default function AdminListeningPartAPage() {
             onSaveSuccess={() => {}}
             onReload={reloadStructure}
             imported={importByCode.A1}
+            pdfDownloadPath={pdfPathForCode('A1')}
           />
           <SubPartSection
             paperId={paperId ?? ''}
@@ -680,6 +774,7 @@ export default function AdminListeningPartAPage() {
             onSaveSuccess={() => {}}
             onReload={reloadStructure}
             imported={importByCode.A2}
+            pdfDownloadPath={pdfPathForCode('A2')}
           />
         </div>
       )}

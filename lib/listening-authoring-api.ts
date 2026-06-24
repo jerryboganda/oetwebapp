@@ -153,6 +153,10 @@ export interface ListeningAuthoredExtract {
    * when not yet authored. Round-trips through the manifest import/export.
    */
   notesBody?: string | null;
+  /** Part A authoring method: 'wysiwyg' (default/null) | 'pdf_overlay'. */
+  authoringMethod?: string | null;
+  /** Part A 'pdf_overlay' blank placements (JSON array of normalized boxes). */
+  partAOverlayBlanksJson?: string | null;
 }
 
 export interface ListeningAuthoredExtractList {
@@ -286,6 +290,10 @@ export interface ListeningExtractPatchBody {
   timeLimitSeconds?: number | null;
   /** Part A note-completion body. `null` clears it; absent leaves it unchanged. */
   notesBody?: string | null;
+  /** Part A authoring method: 'wysiwyg' | 'pdf_overlay'. */
+  authoringMethod?: string | null;
+  /** Part A 'pdf_overlay' blank placements (JSON array of normalized boxes). */
+  partAOverlayBlanksJson?: string | null;
 }
 
 export const patchListeningExtract = (

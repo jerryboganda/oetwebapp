@@ -1832,9 +1832,10 @@ public sealed class ListeningLearnerService(
                 var speakers = ParseSpeakers(seg.GetValueOrDefault("speakers"));
                 // Part A note-completion body. Only A1/A2 surface one; ignore any
                 // stray value on a Part B/C JSON extract.
-                var notesBody = partCode.StartsWith("A", StringComparison.OrdinalIgnoreCase)
-                    ? ReadString(seg.GetValueOrDefault("notesBody"))
-                    : null;
+                var isPartA = partCode.StartsWith("A", StringComparison.OrdinalIgnoreCase);
+                var notesBody = isPartA ? ReadString(seg.GetValueOrDefault("notesBody")) : null;
+                var authoringMethod = isPartA ? ReadString(seg.GetValueOrDefault("authoringMethod")) : null;
+                var overlayBlanks = isPartA ? ReadString(seg.GetValueOrDefault("partAOverlayBlanksJson")) : null;
                 // JSON-path papers have no TTS extract sha here, so only uploaded
                 // per-part Audio assets resolve; else null.
                 var audioUrl = audioByPart.GetValueOrDefault(partCode.Trim().ToUpperInvariant());
@@ -1849,7 +1850,9 @@ public sealed class ListeningLearnerService(
                     AudioEndMs: audioEndMs,
                     AudioUrl: audioUrl,
                     TimeLimitSeconds: timeLimitSeconds,
-                    NotesBody: notesBody));
+                    NotesBody: notesBody,
+                    AuthoringMethod: authoringMethod,
+                    PartAOverlayBlanksJson: overlayBlanks));
             }
             return output
                 .OrderBy(e => PartCodeOrder(e.PartCode))
@@ -2007,7 +2010,9 @@ public sealed class ListeningLearnerService(
             AudioEndMs: extract.AudioEndMs,
             AudioUrl: audioUrl,
             TimeLimitSeconds: timeLimitSeconds,
-            NotesBody: extract.NotesBodyMarkdown);
+            NotesBody: extract.NotesBodyMarkdown,
+            AuthoringMethod: extract.AuthoringMethod,
+            PartAOverlayBlanksJson: extract.PartAOverlayBlanksJson);
 
     /// <summary>Resolve the per-sub-section audio URL. Priority: an uploaded
     /// primary <see cref="ContentPaperAsset"/> of role Audio for this part code
@@ -2546,6 +2551,9 @@ public sealed class ListeningLearnerService(
             timeLimitSeconds = e.TimeLimitSeconds,
             // Part A note-completion document; null for Part B/C and unauthored A.
             notesBody = e.NotesBody,
+            // Phase 6: Part A authoring method + PDF-overlay blank placements.
+            authoringMethod = e.AuthoringMethod,
+            partAOverlayBlanksJson = e.PartAOverlayBlanksJson,
         }).ToList()
     };
 
@@ -3350,7 +3358,12 @@ public sealed class ListeningLearnerService(
         int? TimeLimitSeconds = null,
         // Part A note-completion document (camelCase `notesBody` on the wire).
         // Null for Part B/C and for papers without an authored body.
-        string? NotesBody = null);
+        string? NotesBody = null,
+        // Phase 6: Part A authoring method ("wysiwyg" default/null | "pdf_overlay")
+        // and, for pdf_overlay, the normalized blank placements over the
+        // question-paper PDF (the player renders inputs at these coordinates).
+        string? AuthoringMethod = null,
+        string? PartAOverlayBlanksJson = null);
 
     private sealed record ListeningSpeakerDto(
         string Id,

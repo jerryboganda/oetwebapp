@@ -180,6 +180,17 @@ export interface ListeningExtractMetadataDto {
    * render this via `parseNotesDocument` when present.
    */
   notesBody?: string | null;
+  /**
+   * Part A authoring method: 'wysiwyg' (default/null — render `notesBody`) or
+   * 'pdf_overlay' (render the question-paper PDF with inputs positioned per
+   * `partAOverlayBlanksJson`).
+   */
+  authoringMethod?: string | null;
+  /**
+   * Part A 'pdf_overlay' only — JSON array of normalized blank placements
+   * `[{page,xPct,yPct,wPct,hPct,gapOrdinal}]` over the question-paper PDF.
+   */
+  partAOverlayBlanksJson?: string | null;
 }
 
 export interface ListeningSessionDto {

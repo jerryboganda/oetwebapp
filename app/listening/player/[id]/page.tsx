@@ -40,6 +40,8 @@ import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } f
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
+import { PartAPdfOverlayDocument } from '@/components/domain/listening/PartAPdfOverlayDocument';
+import type { PartAOverlayBlank } from '@/components/domain/listening/admin/PartAPdfOverlayEditor';
 import { ListeningPaperSimulation } from '@/components/domain/listening/ListeningPaperSimulation';
 import { ListeningQuestionPaperViewer } from '@/components/domain/listening/ListeningQuestionPaperViewer';
 import { ZoomControls } from '@/components/domain/listening/ZoomControls';
@@ -1689,6 +1691,31 @@ function PlayerContent() {
                               // Part A1 / A2 with an authored notes body → ONE continuous note-completion document.
                               if (section === 'A1' || section === 'A2') {
                                 const extract = extracts.find((e) => e.partCode === section);
+                                // PDF-overlay method (Method C): render the question-paper PDF
+                                // with fill-in inputs positioned at the authored blanks.
+                                if (extract?.authoringMethod === 'pdf_overlay' && extract.partAOverlayBlanksJson) {
+                                  let blanks: PartAOverlayBlank[] = [];
+                                  try {
+                                    blanks = (JSON.parse(extract.partAOverlayBlanksJson) as PartAOverlayBlank[]) ?? [];
+                                  } catch {
+                                    blanks = [];
+                                  }
+                                  const pdfPath =
+                                    session?.paper.questionPaperUrlByPart?.[section]
+                                    ?? session?.paper.questionPaperUrlByPart?.['A']
+                                    ?? session?.paper.questionPaperUrl
+                                    ?? null;
+                                  return (
+                                    <PartAPdfOverlayDocument
+                                      pdfDownloadPath={pdfPath}
+                                      blanks={blanks}
+                                      questions={questions.map((q) => ({ id: q.id, number: q.number }))}
+                                      answers={answers}
+                                      onAnswerChange={handleAnswerChange}
+                                      locked={false}
+                                    />
+                                  );
+                                }
                                 if (extract?.notesBody?.trim()) {
                                   const canEdit = true;
                                   return (
