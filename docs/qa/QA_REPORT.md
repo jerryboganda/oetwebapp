@@ -4,6 +4,13 @@
 unsigned) · **Status:** COMPLETE — signed installer built & verified; **GO** for Windows internal
 testing pending 2 handoffs (BUG-007 backend bump + CI secrets/feed) · **Date:** 2026-06-25
 
+**CI build (GitHub Actions, clean infra):** [run 28135695878](https://github.com/jerryboganda/oetwebapp/actions/runs/28135695878)
+— conformance ✓, **Windows x64 signed build ✓ (21m25s)**, macOS dmg ✗ (arm64 `pnpm` build exit 1 —
+experimental platform, non-blocking). First attempt failed at Windows checkout (`Filename too long`,
+BUG-008) → fixed with `core.longpaths` and the re-run passed. Signed installer published as a
+**prerelease**: https://github.com/jerryboganda/oetwebapp/releases/tag/v0.1.0-tauri-desktop
+(`OET.Prep_0.1.0_x64-setup.exe`, 95 MB + `.sig` + `latest.json` + `SHA256SUMS.txt`).
+
 This is the living evidence log. Each phase records the **actual** commands run and their output.
 "Done" means it ran and the output is pasted here. Bugs are tracked in [BUGLOG.md](BUGLOG.md); the plan
 is [TEST_PLAN.md](TEST_PLAN.md).
