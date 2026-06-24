@@ -23,7 +23,10 @@ Every issue found during QA is logged here with reproduction steps and severity.
 
 | 7 | Android `minSdk 22` < Capacitor 7 filesystem requires 23 | High | CI / Android build (manifest merge) | n/a | Fixed | Release run 28132257139 (JDK 21) failed: `Manifest merger failed: uses-sdk:minSdkVersion 22 cannot be smaller than version 23 declared in library [io.ionic.libs:ionfilesystem-android:1.0.0]` (pulled by `@capacitor/filesystem@7`). Second "never green since Cap-7 upgrade" break. | Bumped `minSdkVersion` 22→23 in `android/variables.gradle` (Android 6.0; drops ~0.2% of devices). |
 
+| 8 | Release build flake — `next/font` can't fetch Google Fonts in CI | Low | CI / Next.js build | n/a | Mitigated (retry) | Run 28132524973: `next/font: Failed to fetch Manrope/Montserrat from Google Fonts` during `pnpm run build`. Transient (other runs built fine); `next/font/google` fetches at build time. | Retried → green (run 28132736756). Hardening option: self-host fonts via `next/font/local` to remove the build-time network dependency. |
+
 ---
 
 ## Triage summary
-- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 3 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 1 (fixed) — updated as QA proceeds.
+- **Critical: 1 (open — embedded PAT, owner must rotate)** · High: 3 (fixed) · Medium: 2 (1 deferred non-mobile, 1 deep-link Android-fixed/iOS-blocked) · Low: 2 (1 fixed, 1 mitigated) — final.
+- **Signed Android build is green & signature-verified (run 28132736756).** No open mobile-flow-blocking bugs. The sole open item is the owner-action PAT revocation.

@@ -12,7 +12,7 @@ The **OET Prep Learner** mobile app. It loads the OET Prep web experience inside
 - **iOS:** _not available this round_ — see "iOS status" below.
 
 ## Android — install the APK (direct sideload)
-1. Download the APK — **`app-release.apk`** from the CI build artifact `android-release-apk-1.0.0` on the release run: https://github.com/jerryboganda/oetwebapp/actions/runs/28131781720 (or the file shared with you directly).
+1. Download the APK — **`app-release.apk`** (2.8 MB, signed) from the CI build artifact `android-release-apk-1.0.0` on the green release run: https://github.com/jerryboganda/oetwebapp/actions/runs/28132736756 (or the file shared with you directly; a local copy is at `D:/Projects/oet-qa-artifacts/`).
 2. On your phone, open the downloaded file. Android will warn that it's from an unknown source.
 3. Allow installation: **Settings → Apps → Special access → Install unknown apps → [your browser/file manager] → Allow from this source** (wording varies by device/Android version).
 4. Tap the APK again → **Install** → **Open**.
