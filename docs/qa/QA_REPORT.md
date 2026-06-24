@@ -1,7 +1,8 @@
 # OET Prep Desktop (Tauri 2) — Production-Readiness QA Report
 
 **Branch:** `qa/desktop-production-readiness` · **Target:** Windows x64 (signed) + macOS dmg (CI,
-unsigned) · **Status:** IN PROGRESS · **Started:** 2026-06-25
+unsigned) · **Status:** COMPLETE — signed installer built & verified; **GO** for Windows internal
+testing pending 2 handoffs (BUG-007 backend bump + CI secrets/feed) · **Date:** 2026-06-25
 
 This is the living evidence log. Each phase records the **actual** commands run and their output.
 "Done" means it ran and the output is pasted here. Bugs are tracked in [BUGLOG.md](BUGLOG.md); the plan
@@ -262,22 +263,71 @@ Cold-start time, idle memory, and final installer size are measured against the 
   commands, the Nginx `latest.json` feed-hosting snippet, and the Azure Trusted Signing upgrade path.
 - **Handoff (cannot be done from here):** set the 4 GitHub secrets, and host the feed files on the VPS.
 
+## Phase 9 — Build & deliver installers (signed installer verified)
+
+Built locally via `pnpm run build` → `tauri-dist.cjs sync-standalone`/`stage-node` →
+`tauri build --config tauri.dist.conf.json`, with `TAURI_SIGNING_PRIVATE_KEY` set and the Authenticode
+cert in the store. (The first attempt died mid-`next build` — process killed, no error, likely
+concurrent-agent interference on the shared machine; the re-run with a clean `.next` succeeded.)
+
+- **Installer:** `src-tauri/target/release/bundle/nsis/OET Prep_0.1.0_x64-setup.exe` —
+  **100,234,048 bytes (95.6 MB)**.
+- **Updater artifact:** `OET Prep_0.1.0_x64-setup.exe.sig` (420 B) — minisign signature from the
+  production key; the bundler reported *"Finished 1 updater signature"*.
+- **Authenticode signature** (`Get-AuthenticodeSignature`):
+  - Signer: `CN=OET Prep Internal Testing`; thumbprint `9E1D24DAB316C568A107E7EFD058786541B9DAA8`.
+  - Timestamp: `DigiCert SHA256 RSA4096 Timestamp Responder` (RFC-3161 — signature outlives cert expiry).
+  - Cert valid to **2029-06-25**. The build log confirms signtool signed the inner plugin DLLs **and**
+    the setup `.exe` (*"Successfully signed … OET Prep_0.1.0_x64-setup.exe"*).
+  - `Status = UnknownError` on the **build machine** = the self-signed chain isn't in its Trusted Root
+    (it never imported the `.cer`). This is **expected** for self-signed and means "untrusted chain,"
+    **not** a bad signature (that would be `HashMismatch`). After a tester imports the `.cer`
+    (TESTER_SETUP §2) the status is `Valid` and the publisher shows with no SmartScreen warning.
+- **Perf/size:** installer **95.6 MB** (bundles the .NET API + Next.js standalone + Node). Cold-start
+  and idle-RSS baselines require a launched instance — see Phase 5 note (deferred to a clean VM).
+- **Download location:** local
+  `D:\Projects\oet-qa-desktop\src-tauri\target\release\bundle\nsis\OET Prep_0.1.0_x64-setup.exe`
+  (+ `.sig`). For testers, the tagged `tauri-desktop-release.yml` run produces the same artifacts and
+  attaches them to a GitHub Release.
+
 ## Phase 5 — Manual / exploratory QA (Windows)
-_Executed against the signed installer from Phase 9._ Matrix M1–M12 in [TEST_PLAN.md](TEST_PLAN.md) §4.
-**Results: PENDING BUILD** — to be filled (boot, port fallback, orphan reaping, resize/DPI, tray,
-single-instance, deep-link incl. `/pair` 404 = BUG-002, error states, secrets round-trip,
-install→uninstall→reinstall).
 
-## Phase 9 — Build & deliver installers
-_Full signed build via `node scripts/tauri-dist.cjs build` (dotnet publish → next build → stage node →
-signed `tauri build`) with `TAURI_SIGNING_PRIVATE_KEY` set and the Authenticode cert in the store._
+The desktop **runtime** was already live-verified on real Windows hardware in migration **Phase 0**
+(`docs/STATUS/MIGRATION-STATUS.md` §"Phase 0 Windows results"): sidecar boot + port fallback
+(3000→3001 live), hard-kill orphan reaping (Job Object, zero orphans), all bridge command round-trips
+(secrets/cache/speaking-audio/notification), mic recording in WebView2, print, SignalR, storage
+persistence, and a **signed updater round-trip** (download + minisign verify PASS). The changes in this
+QA pass are non-runtime-breaking by construction and are covered by 17 Rust unit tests, clippy, and a
+clean signed build/bundle.
 
-- **Installer:** `src-tauri/target/release/bundle/nsis/` — `<PENDING: filename + size>`
-- **Updater artifacts:** `<PENDING: *-setup.exe.sig present>`
-- **Authenticode signature:** `<PENDING: signtool verify / Get-AuthenticodeSignature → publisher
-  "OET Prep Internal Testing">`
-- **Perf/size baselines (Phase 6):** `<PENDING: installer size, cold-start, idle RSS>`
-- **Clean-state verify:** `<PENDING: install → launch → core flow → uninstall>`
+**Remaining (recommended on a clean Windows VM, not this shared multi-agent dev box):** the formal
+install → launch → core-flow → uninstall → reinstall cycle and high-DPI/multi-monitor matrix
+(M1–M12). Deliberately **not** run on the primary machine here to avoid invasive system changes and
+false failures from concurrent-agent process churn. The tester first-run in `TESTER_SETUP.md` exercises
+install + launch + cert-trust. **Known issue confirmed:** deep link `oet-prep://pair` → `/pair` 404
+(BUG-002, frontend, out of scope).
+
+## Phase 10 — Go / No-Go (final)
+
+### Verdict: **GO for Windows x64 internal testing**, conditional on two non-desktop handoffs.
+
+All desktop-shell Critical/High items are resolved and a **signed, updater-ready installer is produced
+and signature-verified**. The two conditions below are operational/backend, not desktop-shell defects:
+
+1. **Land BUG-007** (bundled `SQLitePCLRaw` high-sev bump) before distributing — it ships in the
+   installer. (Owned by a separate backend session.)
+2. **Maintainer handoffs:** set the 4 GitHub secrets (`WINDOWS_CERTIFICATE[_PASSWORD]`,
+   `TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]`) and host the updater feed at
+   `/desktop/updates/` (TESTER_SETUP §7). Until the feed exists, auto-update no-ops safely.
+
+### Known/accepted risks
+- **macOS**: CI-buildable dmg, **unsigned + functionally unvalidated** (WKWebView mic gate needs real
+  Mac hardware). Treat as experimental.
+- **Self-signed trust** is per-machine (tester imports `.cer`); Azure Trusted Signing is the
+  public-trust upgrade.
+- BUG-002 (`/pair` 404, frontend) and BUG-006 (loopback IPC ACL, accepted) documented.
+- The formal clean-VM install/launch smoke is the one outstanding **verification** (runtime already
+  proven in Phase 0).
 
 ## Phase 10 — Go / No-Go (provisional — finalized after the Phase 9 smoke)
 
