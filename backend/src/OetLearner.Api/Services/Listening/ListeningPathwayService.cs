@@ -143,13 +143,13 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
         }
         else if (submittedAttemptCount == 1 && bestScaled is null)
         {
-            stage = "diagnostic";
+            stage = "foundation";
             nextAction = new ListeningPathwayAction(
-                Kind: "start_diagnostic",
-                Label: "Finish your Listening diagnostic",
+                Kind: "start_practice",
+                Label: "Start your Listening practice",
                 DrillId: null,
                 PaperId: anchorPaperId,
-                Route: "/diagnostic/listening");
+                Route: "/listening");
         }
         else if (bestScaled is int bs && bs < 300)
         {

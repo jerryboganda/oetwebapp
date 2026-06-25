@@ -1539,57 +1539,6 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
             ResolutionNote: resolutionNote);
     }
 
-    public async Task<object> GetDiagnosticStudyPathAsync(string userId, CancellationToken ct)
-    {
-        await EnsureUserAsync(userId, ct);
-        var diagnosticAttemptIds = db.MockAttempts.AsNoTracking()
-            .Where(x => x.UserId == userId && x.MockType == MockTypes.Diagnostic)
-            .Select(x => x.Id);
-        var report = await db.MockReports.AsNoTracking()
-            .Where(x => diagnosticAttemptIds.Contains(x.MockAttemptId) && x.State == AsyncState.Completed)
-            .OrderByDescending(x => x.GeneratedAt)
-            .FirstOrDefaultAsync(ct);
-        var payload = report is null
-            ? new Dictionary<string, object?>()
-            : JsonSupport.Deserialize<Dictionary<string, object?>>(report.PayloadJson, new Dictionary<string, object?>());
-        var weakness = ReadWeakestCriterion(payload);
-        var items = await db.StudyPlanItems.AsNoTracking()
-            .Join(db.StudyPlans.AsNoTracking().Where(x => x.UserId == userId),
-                item => item.StudyPlanId,
-                plan => plan.Id,
-                (item, plan) => item)
-            .Where(x => x.ContentId != null && x.ContentId.StartsWith("mock-remediation:"))
-            .OrderBy(x => x.DueDate)
-            .Take(7)
-            .ToListAsync(ct);
-
-        return new
-        {
-            diagnosticCompleted = report is not null,
-            reportId = report?.Id,
-            weakness,
-            generatedAt = report?.GeneratedAt,
-            items = items.Select(x => new
-            {
-                id = x.Id,
-                title = x.Title,
-                subtest = x.SubtestCode,
-                dueDate = x.DueDate,
-                durationMinutes = x.DurationMinutes,
-                rationale = x.Rationale,
-                route = RouteForSubtest(x.SubtestCode)
-            }).ToArray(),
-            fallback = report is null
-                ? new
-                {
-                    title = "Start a diagnostic mock first",
-                    route = "/mocks/setup?type=diagnostic",
-                    description = "Diagnostic access is plan-configurable. Start from the mock setup page when your plan includes it."
-                }
-                : null
-        };
-    }
-
     public async Task<object> ListBundlesAsync(string? status, string? mockType, string? subtest, CancellationToken ct)
     {
         var query = db.MockBundles.AsNoTracking()

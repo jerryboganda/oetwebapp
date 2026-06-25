@@ -164,13 +164,13 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
         }
         else if (examAttempts.Count < 1)
         {
-            stage = "diagnostic";
+            stage = "foundation";
             nextAction = new ReadingPathwayAction(
-                Kind: "start_diagnostic",
-                Label: "Finish your Reading diagnostic",
+                Kind: "start_practice",
+                Label: "Start your Reading practice",
                 DrillCode: null,
                 PaperId: anchorPaperId,
-                Route: "/diagnostic/reading");
+                Route: "/reading");
         }
         else if (openCount >= 5 || (bestScaled is int bs && bs < 300))
         {

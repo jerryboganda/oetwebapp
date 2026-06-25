@@ -150,9 +150,7 @@ public sealed class WritingTutorQueueAlertCron(
     }
 }
 
-/// <summary>Daily 04:30 UTC: delete WritingDraftsV2 rows older than 30 days
-/// and abandoned (un-submitted, expired) WritingDiagnosticSessions. Submitted
-/// diagnostic sessions are retained for audit.</summary>
+/// <summary>Daily 04:30 UTC: delete WritingDraftsV2 rows older than 30 days.</summary>
 public sealed class WritingDraftCleanupCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
@@ -174,18 +172,6 @@ public sealed class WritingDraftCleanupCron(
             db.WritingDraftsV2.RemoveRange(stale);
             await db.SaveChangesAsync(ct);
             Logger.LogInformation("WritingDraftCleanupCron deleted {Count} drafts older than 30 days.", stale.Count);
-        }
-
-        // Abandoned diagnostic sessions: ExpiresAt past + never submitted.
-        // Submitted ones stay around for audit/forensics.
-        var abandonedSessions = await db.WritingDiagnosticSessions
-            .Where(s => s.ExpiresAt < now && s.SubmissionId == null)
-            .ToListAsync(ct);
-        if (abandonedSessions.Count > 0)
-        {
-            db.WritingDiagnosticSessions.RemoveRange(abandonedSessions);
-            await db.SaveChangesAsync(ct);
-            Logger.LogInformation("WritingDraftCleanupCron deleted {Count} abandoned diagnostic sessions.", abandonedSessions.Count);
         }
     }
 }

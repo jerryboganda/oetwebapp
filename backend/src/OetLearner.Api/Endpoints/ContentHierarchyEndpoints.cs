@@ -226,28 +226,6 @@ public static class ContentHierarchyEndpoints
             => Results.Ok(await accessService.BrowseProgramsWithAccessAsync(
                 UserId(http), type, language, page ?? 1, pageSize ?? 20, ct)));
 
-        // ── Phase 6: Mock / Diagnostic / Readiness ──
-
-        admin.MapPost("/mock/assemble", async (MockAssembleRequest req, MockDiagnosticService service, CancellationToken ct)
-            => Results.Ok(await service.AssembleMockExamAsync(req.ProfessionId, req.Language ?? "en", ct)))
-            .WithAdminWrite("AdminContentWrite");
-
-        admin.MapPost("/diagnostic/generate", async (DiagnosticGenerateRequest req, MockDiagnosticService service, CancellationToken ct)
-            => Results.Ok(await service.GenerateDiagnosticAsync(req.ProfessionId, ct)))
-            .WithAdminWrite("AdminContentWrite");
-
-        admin.MapPatch("/content/{contentId}/eligibility", async (string contentId, EligibilityPatchRequest req,
-            MockDiagnosticService service, CancellationToken ct)
-            => await service.UpdateEligibilityAsync(contentId, req.IsMockEligible, req.IsDiagnosticEligible, ct)
-                ? Results.Ok() : Results.NotFound())
-            .WithAdminWrite("AdminContentWrite");
-
-        // readiness is already mapped in LearnerEndpoints — removed duplicate
-
-        learner.MapGet("/content/by-skill", async (MockDiagnosticService service, CancellationToken ct,
-            string? skillTag, string subtest, int? page, int? pageSize)
-            => Results.Ok(await service.GetContentBySkillTagAsync(subtest, skillTag, page ?? 1, pageSize ?? 20, ct)));
-
         // ── Phase 7: Admin Bulk Import & Inventory ──
 
         admin.MapPost("/content/bulk-import", async (HttpContext http, BulkImportRequest request,
@@ -343,8 +321,6 @@ public static class ContentHierarchyEndpoints
 public record ImportBatchCreateRequest(string Title);
 public record DesignateCanonicalRequest(string CanonicalItemId);
 public record ContentValidateRequest(string SubtestCode, string DetailJson, string? ModelAnswerJson);
-public record MockAssembleRequest(string? ProfessionId, string? Language);
-public record DiagnosticGenerateRequest(string? ProfessionId);
 public record EligibilityPatchRequest(bool? IsMockEligible, bool? IsDiagnosticEligible);
 public record CompleteProcessingRequest(string? ThumbnailPath, string? CaptionPath, string? TranscriptPath);
 public record BulkImportRequest(string? BatchTitle, List<ContentImportRow> Rows);

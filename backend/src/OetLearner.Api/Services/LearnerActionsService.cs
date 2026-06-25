@@ -28,7 +28,7 @@ public class LearnerActionsService(LearnerDbContext db)
             .FirstOrDefaultAsync(ct);
 
         if (lastAttempt is null)
-            actions.Add(new LearnerNextActionResponse("diagnostic", "Complete Diagnostic", "Take your baseline assessment to get started", "/diagnostic", 1, null, "assessment"));
+            actions.Add(new LearnerNextActionResponse("practice", "Start Practicing", "Begin your first practice session to get started", "/writing", 1, null, "practice"));
         else if (lastAttempt.CreatedAt < now.AddDays(-3))
             actions.Add(new LearnerNextActionResponse("practice", "Keep Practicing", "It's been a few days since your last session", "/writing", 2, null, "practice"));
 

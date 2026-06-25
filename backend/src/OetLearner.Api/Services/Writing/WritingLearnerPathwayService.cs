@@ -59,7 +59,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
         profile.MinutesPerDay = Math.Clamp(request.MinutesPerDay, 15, 180);
         profile.TargetCountry = NormalizeWritingTargetCountry(request.TargetCountry);
         profile.LetterTypeFocusJson = JsonSerializer.Serialize(focus, JsonOptions);
-        profile.CurrentStage = "diagnostic";
+        profile.CurrentStage = "foundation";
         profile.UpdatedAt = now;
 
         var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
@@ -282,22 +282,13 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
         {
             items.Add(NewPlanItem(userId, date, 1, "onboarding", "W1", null, 15,
                 "Set up your Writing pathway",
-                "Choose your profession, target band, schedule, and letter-type focus before the diagnostic.",
+                "Choose your profession, target band, schedule, and letter-type focus to get started.",
                 "/writing/profile-setup", null, state.Stage, now));
             db.WritingDailyPlanItems.AddRange(items);
             return items;
         }
 
         var practiceTask = await PickPracticeTaskAsync(profile, ct);
-        if (state.Stage == "diagnostic")
-        {
-            items.Add(NewPlanItem(userId, date, 1, "diagnostic", "W1", "purpose", 45,
-                "Take the Writing diagnostic",
-                "Write one full letter under the existing exam-mode player. This creates your baseline and unlocks targeted practice.",
-                $"/writing/player/{practiceTask?.Id ?? "diagnostic"}?pathwayStage=diagnostic",
-                practiceTask?.Id, state.Stage, now));
-        }
-        else
         {
             var weakness = await GetTopWeaknessAsync(userId, ct) ?? new WeaknessSignal("W6", "genre", "Style register");
             items.Add(NewPlanItem(userId, date, 1, "sentence_drill", weakness.SkillCode, weakness.Criterion, 10,
@@ -371,10 +362,10 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
             .OrderByDescending(x => x.e.GeneratedAt ?? x.e.CreatedAt)
             .Select(x => new EvaluationSignal(x.e.Id, x.e.ScoreRange, x.e.GradeRange, x.e.GeneratedAt ?? x.e.CreatedAt, x.a.Context, x.a.Mode))
             .FirstOrDefaultAsync(ct);
-        if (diagnosticEvaluation is null) return new PathwayState("diagnostic", 0, null, null, false);
+        if (diagnosticEvaluation is null) return new PathwayState("foundation", 0, null, null, false);
 
         var scores = evaluations.Select(e => TryParseScaledScore(e.ScoreRange)).Where(s => s.HasValue).Select(s => s!.Value).ToList();
-        if (scores.Count == 0) return new PathwayState("diagnostic", 0, null, null, false);
+        if (scores.Count == 0) return new PathwayState("foundation", 0, null, null, false);
 
         var avg = scores.Count == 0 ? 0 : (int)Math.Round(scores.Average());
         var recentPassCount = scores.Take(3).Count(s => OetScoring.GradeWriting(s, profile.TargetCountry).Passed == true);
