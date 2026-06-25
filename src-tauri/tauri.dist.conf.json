@@ -3,8 +3,7 @@
   "bundle": {
     "resources": {
       "../.next/standalone": "standalone",
-      "../desktop-backend-runtime": "backend-runtime",
-      "binaries/node.exe": "node.exe"
+      "../desktop-backend-runtime": "backend-runtime"
     },
     "windows": {
       "certificateThumbprint": "9E1D24DAB316C568A107E7EFD058786541B9DAA8",

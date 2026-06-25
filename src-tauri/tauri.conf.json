@@ -21,7 +21,7 @@
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVDMjNEMTg4OEM0MkQ2MkYKUldRdjFrS01pTkVqN0xTVVZnMzJHbm5STnk4eUFHaDIwOWNlQUhpdldPQ3h0SG9meWhrWXVJMHIK",
-      "endpoints": ["https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json"]
+      "endpoints": ["https://github.com/jerryboganda/oetwebapp/releases/latest/download/latest.json"]
     }
   },
   "bundle": {

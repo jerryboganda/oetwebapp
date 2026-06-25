@@ -224,7 +224,10 @@ jobs:
   publish:
     name: Publish GitHub Release + updater feed
     needs: build
-    if: github.event_name == 'push'
+    # Run on tag push even if a build leg failed (e.g. macOS), as long as the
+    # run wasn't cancelled. The Windows installer is required (the latest.json
+    # step fails if its artifact is missing); the macOS dmg is best-effort.
+    if: github.event_name == 'push' && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -252,7 +255,8 @@ jobs:
             echo "Missing Windows installer (.exe) or signature (.sig) in artifacts." >&2
             exit 1
           fi
-          url_name=$(basename "$exe" | sed 's/ /%20/g')
+          # GitHub release assets replace spaces with dots in the asset name.
+          asset_name=$(basename "$exe" | tr ' ' '.')
           {
             echo '{'
             echo "  \"version\": \"${{ steps.version.outputs.version }}\","
@@ -261,7 +265,7 @@ jobs:
             echo '  "platforms": {'
             echo '    "windows-x86_64": {'
             echo "      \"signature\": \"$(cat "$sig")\","
-            echo "      \"url\": \"https://app.oetwithdrhesham.co.uk/desktop/updates/${url_name}\""
+            echo "      \"url\": \"https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${asset_name}\""
             echo '    }'
             echo '  }'
             echo '}'

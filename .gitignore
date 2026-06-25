@@ -208,6 +208,7 @@ __pycache__/
 # Tauri desktop shell
 src-tauri/target/
 src-tauri/binaries/
+src-tauri/tauri.build.conf.json
 src-tauri/*.log
 src-tauri/cdp-*.mjs
 src-tauri/cdp-realtime-result.json

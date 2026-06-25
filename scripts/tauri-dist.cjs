@@ -75,7 +75,22 @@ function buildAll() {
   });
   syncStandalone();
   stageNode();
-  run('pnpm', ['dlx', '@tauri-apps/cli@^2', 'build', '--config', path.join(srcTauri, 'tauri.dist.conf.json')]);
+  // The dist config can't hardcode the node binary name — Windows ships
+  // `node.exe`, macOS/Linux ship `node`. Merge the platform-correct node
+  // resource into the dist config and build from the merged result. (Hardcoding
+  // `binaries/node.exe` previously failed the macOS bundle: "resource path
+  // `binaries/node.exe` doesn't exist".)
+  const distConf = JSON.parse(fs.readFileSync(path.join(srcTauri, 'tauri.dist.conf.json'), 'utf8'));
+  distConf.bundle = distConf.bundle || {};
+  distConf.bundle.resources = distConf.bundle.resources || {};
+  if (process.platform === 'win32') {
+    distConf.bundle.resources['binaries/node.exe'] = 'node.exe';
+  } else {
+    distConf.bundle.resources['binaries/node'] = 'node';
+  }
+  const buildConf = path.join(srcTauri, 'tauri.build.conf.json');
+  fs.writeFileSync(buildConf, JSON.stringify(distConf, null, 2));
+  run('pnpm', ['dlx', '@tauri-apps/cli@^2', 'build', '--config', buildConf]);
 }
 
 const command = process.argv[2] || 'build';
