@@ -22,6 +22,7 @@ import {
   Timer,
   TrendingUp,
   Trophy,
+  Wallet,
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardLink, CardTitle, ProgressBar } from '@/components/ui';
 import { InlineAlert } from '@/components/ui/alert';
@@ -142,42 +143,56 @@ function DashboardSubscriptionStrip({
     ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}`
     : null;
   const facts = [
-    !isLoading && !hasError ? calculateDaysLeft(expiryDate) : null,
-    priceLabel,
+    !isLoading && !hasError ? { icon: Timer, label: calculateDaysLeft(expiryDate) } : null,
+    priceLabel ? { icon: Wallet, label: priceLabel } : null,
     entitlement?.writingAssessmentsRemaining && entitlement.writingAssessmentsRemaining > 0
-      ? `${entitlement.writingAssessmentsRemaining} writing`
+      ? { icon: FilePenLine, label: `${entitlement.writingAssessmentsRemaining} writing` }
       : null,
     entitlement?.speakingSessionsRemaining && entitlement.speakingSessionsRemaining > 0
-      ? `${entitlement.speakingSessionsRemaining} speaking`
+      ? { icon: Mic, label: `${entitlement.speakingSessionsRemaining} speaking` }
       : null,
     entitlement?.aiCreditsRemaining && entitlement.aiCreditsRemaining > 0
-      ? `${entitlement.aiCreditsRemaining} AI credits`
+      ? { icon: Sparkles, label: `${entitlement.aiCreditsRemaining} AI credits` }
       : null,
-    entitlement?.tutorBookUnlocked ? 'Tutor Book' : null,
-  ].filter(Boolean) as string[];
+    entitlement?.tutorBookUnlocked ? { icon: BookOpen, label: 'Tutor Book' } : null,
+  ].filter(Boolean) as { icon: typeof Timer; label: string }[];
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
-        <CreditCard className="h-3.5 w-3.5 shrink-0 text-muted" />
-        <span className="font-bold text-navy">
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <CreditCard className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-navy">
           {isLoading ? 'Loading subscription…' : hasError ? 'Subscription details unavailable' : planName}
         </span>
         {!isLoading && !hasError ? (
-          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
             {statusLabel}
           </span>
         ) : null}
-        {facts.map((fact) => (
-          <span key={fact} className="flex items-center gap-1.5 text-muted">
-            <span aria-hidden className="text-border">·</span>
-            <span className="font-medium text-navy">{fact}</span>
-          </span>
-        ))}
       </div>
-      <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
-        <Link href="/catalog">See all catalog <ArrowRight className="h-3.5 w-3.5" /></Link>
-      </Button>
+
+      {facts.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {facts.map(({ icon: Icon, label }) => (
+            <span
+              key={label}
+              className="inline-flex items-center gap-1 rounded-lg bg-background-light px-2 py-1 text-[11px] font-semibold text-navy ring-1 ring-border/70"
+            >
+              <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+              {label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <Link
+        href="/catalog"
+        className="-mx-2 inline-flex items-center gap-1 self-start rounded-lg px-2 py-1 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/10"
+      >
+        See all catalog <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
     </div>
   );
 }
