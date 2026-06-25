@@ -180,13 +180,10 @@ jobs:
           # Runtime config baked into the Next.js build (mirrors desktop-release.yml).
           NEXT_PUBLIC_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL || 'https://api.oetwithdrhesham.co.uk' }}
           APP_URL: ${{ vars.DESKTOP_APP_URL || 'https://app.oetwithdrhesham.co.uk' }}
-          # macOS signing/notarisation — no-ops when unset.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # macOS is built UNSIGNED (no Apple Developer ID, per the QA decision).
+          # Do NOT pass empty APPLE_* env — tauri treats an empty APPLE_CERTIFICATE
+          # as "import this cert" and fails ("security import ... not valid").
+          # To enable macOS signing later, add the APPLE_* secrets and map them here.
         run: node scripts/tauri-dist.cjs build
 
       - name: Generate checksums
