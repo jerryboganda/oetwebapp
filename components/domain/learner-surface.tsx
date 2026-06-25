@@ -220,7 +220,7 @@ export function LearnerPageHero({
           ) : null}
             <div className="min-w-0">
               {eyebrow ? <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted sm:mb-1.5 sm:text-[11px]">{eyebrow}</p> : null}
-              <h1 className="text-lg font-bold tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
+              <h1 className="text-lg font-bold leading-tight tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
               <p className="mt-1 max-w-3xl text-[13px] leading-5 text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
             </div>
           </div>
