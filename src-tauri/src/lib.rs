@@ -35,7 +35,8 @@ fn resolve_paths(app: &AppHandle) -> Paths {
             user_data,
         }
     } else {
-        let resources = app.path().resource_dir().expect("resource_dir unavailable");
+        let resources =
+            strip_verbatim(&app.path().resource_dir().expect("resource_dir unavailable"));
         Paths {
             standalone_root: resources.join("standalone"),
             backend_root: resources.join("backend-runtime"),
@@ -46,6 +47,21 @@ fn resolve_paths(app: &AppHandle) -> Paths {
             },
             user_data,
         }
+    }
+}
+
+// Windows `resource_dir()` returns a `\\?\` verbatim (extended-length) path. The
+// bundled Node mis-resolves a `\\?\` cwd/argument — its main entry resolves to
+// "C:" and the renderer never starts (BUG-011a). Normalise resource paths to
+// plain form before deriving the sidecar/binary paths.
+fn strip_verbatim(p: &std::path::Path) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p.to_path_buf()
     }
 }
 
