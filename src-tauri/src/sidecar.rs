@@ -90,6 +90,9 @@ pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRunt
                 if cfg.public_api_base_url.is_some() {
                     merged.public_api_base_url = cfg.public_api_base_url;
                 }
+                if cfg.public_web_base_url.is_some() {
+                    merged.public_web_base_url = cfg.public_web_base_url;
+                }
             }
         }
     }
