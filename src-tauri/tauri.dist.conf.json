@@ -3,7 +3,8 @@
   "bundle": {
     "resources": {
       "../.next/standalone": "standalone",
-      "../desktop-backend-runtime": "backend-runtime"
+      "../desktop-backend-runtime": "backend-runtime",
+      "desktop-runtime-config.json": "desktop-runtime-config.json"
     },
     "windows": {
       "certificateThumbprint": "9E1D24DAB316C568A107E7EFD058786541B9DAA8",
