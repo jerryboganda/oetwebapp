@@ -452,9 +452,9 @@ export default function Dashboard() {
                   title="Today&apos;s Study Plan"
                   description={`${completedToday} of ${todayTasks.length} scheduled tasks completed.`}
                   action={(
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} />
-                      <Button variant="ghost" size="sm" onClick={() => router.push('/study-plan')}>
+                      <Button variant="ghost" size="sm" className="ml-auto" onClick={() => router.push('/study-plan')}>
                         View Full Plan <ArrowRight className="ml-1 h-4 w-4" />
                       </Button>
                     </div>
