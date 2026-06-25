@@ -174,14 +174,14 @@ function DashboardSubscriptionStrip({
       </div>
 
       {facts.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {facts.map(({ icon: Icon, label }) => (
             <span
               key={label}
-              className="inline-flex items-center gap-1 rounded-lg bg-background-light px-2 py-1 text-[11px] font-semibold text-navy ring-1 ring-border/70"
+              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-[11px] font-semibold text-navy ring-1 ring-border/70"
             >
-              <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
-              {label}
+              <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="truncate">{label}</span>
             </span>
           ))}
         </div>
