@@ -33,13 +33,12 @@ import { MotionCollapse, MotionPresence, MotionSection } from '@/components/ui/m
 import {
   createMockBooking,
   createMockSession,
-  fetchMockDiagnosticEntitlement,
   fetchMockEntitlementsSummary,
   fetchMockOptions,
 } from '@/lib/api';
 import type { MockEntitlementSummary } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import type { MockBundleOption, MockConfig, MockDeliveryMode, MockDiagnosticEntitlement, MockOptions, MockStrictness, MockTypeToken } from '@/lib/mock-data';
+import type { MockBundleOption, MockConfig, MockDeliveryMode, MockOptions, MockStrictness, MockTypeToken } from '@/lib/mock-data';
 import {
   MOCK_EXAM_FLOW_STAGES,
   getMockModePolicy,
@@ -52,10 +51,10 @@ type MockType = MockTypeToken;
 type MockSubType = 'reading' | 'listening' | 'writing' | 'speaking';
 
 const MOCK_TYPE_TOKENS: ReadonlySet<MockTypeToken> = new Set<MockTypeToken>([
-  'full', 'lrw', 'sub', 'part', 'diagnostic', 'final_readiness', 'remedial',
+  'full', 'lrw', 'sub', 'part', 'final_readiness', 'remedial',
 ]);
 const FULL_SHAPE_TOKENS: ReadonlySet<MockTypeToken> = new Set<MockTypeToken>([
-  'full', 'lrw', 'diagnostic', 'final_readiness',
+  'full', 'lrw', 'final_readiness',
 ]);
 const SUB_SHAPE_TOKENS: ReadonlySet<MockTypeToken> = new Set<MockTypeToken>([
   'sub', 'part', 'remedial',
@@ -176,7 +175,6 @@ export default function MockSetup() {
   const [strictTimer, setStrictTimer] = useState(true);
   const [reviewSelection, setReviewSelection] = useState<ReviewSelection>('none');
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null);
-  const [diagnosticEntitlement, setDiagnosticEntitlement] = useState<MockDiagnosticEntitlement | null>(null);
   const [entitlementSummary, setEntitlementSummary] = useState<MockEntitlementSummary | null>(null);
   const [entitlementSummaryLoading, setEntitlementSummaryLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -186,14 +184,10 @@ export default function MockSetup() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetchMockOptions(),
-      fetchMockDiagnosticEntitlement().catch(() => null),
-    ])
-      .then(([result, entitlement]) => {
+    fetchMockOptions()
+      .then((result) => {
         if (cancelled) return;
         setOptions(result);
-        setDiagnosticEntitlement(entitlement);
         const queryBundleId = searchParams?.get('bundleId');
         const querySubtest = searchParams?.get('subtest') ?? null;
         const queryType = searchParams?.get('type') ?? null;
@@ -312,7 +306,6 @@ export default function MockSetup() {
   );
   const teacherMarkedSectionCount = selectedBundle?.sections.filter((section) => isTeacherMarkedSubtest(section.subtest)).length ?? 0;
   const selectedBundleIncludesSpeaking = selectedBundle?.sections.some((section) => section.subtest === 'speaking') ?? false;
-  const diagnosticBlocked = mockType === 'diagnostic' && diagnosticEntitlement?.allowed === false;
 
   const handleModeChange = (newMode: 'practice' | 'exam') => {
     if (mockType === 'final_readiness' && newMode === 'practice') return;
@@ -344,7 +337,7 @@ export default function MockSetup() {
   };
 
   const handleStart = async () => {
-    if (!selectedBundle || insufficientCredits || diagnosticBlocked || entitlementBlocked) return;
+    if (!selectedBundle || insufficientCredits || entitlementBlocked) return;
     setStarting(true);
     setStartError(null);
     try {
@@ -524,12 +517,12 @@ export default function MockSetup() {
                     { id: 'lrw', label: 'LRW Mock', desc: 'Listening + Reading + Writing in one sitting (Speaking scheduled separately).' },
                     { id: 'sub', label: 'Single Sub-test', desc: 'One published section for targeted evidence.' },
                     { id: 'part', label: 'Part Mock', desc: 'A single part within a sub-test (e.g. Reading Part A).' },
-                    { id: 'diagnostic', label: 'Diagnostic Mock', desc: 'Establish your baseline and unlock a personalised study path.' },
                     { id: 'final_readiness', label: 'Final Readiness Mock', desc: 'Strict full mock taken before booking the real exam.' },
                     { id: 'remedial', label: 'Remedial Mock', desc: 'Targeted mock generated from your weak-area analysis.' },
                   ];
                   const fromApi = (options?.mockTypes ?? []).map((m) => ({ id: m.id, label: m.label, desc: m.description }));
-                  const list = fromApi.length > 0 ? fromApi : FALLBACK;
+                  // Diagnostic mock removed — filter it out even if the API still advertises it.
+                  const list = (fromApi.length > 0 ? fromApi : FALLBACK).filter((t) => t.id !== 'diagnostic');
                   return list.map(({ id, label, desc }) => {
                     const Icon = ICONS[id] ?? FileText;
                     const isSelected = mockType === id;
@@ -586,13 +579,6 @@ export default function MockSetup() {
                   });
                 })()}
               </div>
-              {diagnosticBlocked ? (
-                <div className="mt-4">
-                  <InlineAlert variant="warning">
-                    {diagnosticEntitlement?.message ?? 'Your billing plan does not currently allow another diagnostic mock.'}
-                  </InlineAlert>
-                </div>
-              ) : null}
               {entitlementBlocked ? (
                 <div className="mt-4">
                   <InlineAlert variant="warning">
@@ -954,7 +940,7 @@ export default function MockSetup() {
                 </Button>
               </div>
               <p className="mt-3 text-xs leading-5 text-muted">
-                Diagnostic access remains billing-configurable. Speaking bookings hide interlocutor cards from learners and expose them only to tutors.
+                Speaking bookings hide interlocutor cards from learners and expose them only to tutors.
               </p>
             </section>
 
@@ -963,7 +949,7 @@ export default function MockSetup() {
             <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
               <Button
                 onClick={handleStart}
-                disabled={starting || !selectedBundle || insufficientCredits || diagnosticBlocked || entitlementBlocked}
+                disabled={starting || !selectedBundle || insufficientCredits || entitlementBlocked}
                 size="lg"
                 className="w-full gap-2 py-5 text-base font-black"
               >

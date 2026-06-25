@@ -142,49 +142,4 @@ describe('Mock setup page', () => {
     expect(mockPush).toHaveBeenCalledWith('/mocks/player/mock-sess-1');
   });
 
-  it('blocks diagnostic start when the billing entitlement is exhausted', async () => {
-    mockFetchMockDiagnosticEntitlement.mockResolvedValueOnce({
-      allowed: false,
-      entitlement: 'one_per_lifetime',
-      reason: 'diagnostic_already_used',
-      message: 'You have already used your one-time diagnostic mock.',
-    });
-    mockFetchMockOptions.mockResolvedValueOnce({
-      mockTypes: [
-        { id: 'diagnostic', label: 'Diagnostic Mock', description: 'Baseline study path.' },
-      ],
-      subTypes: [],
-      modes: [
-        { id: 'exam', label: 'Exam Mode' },
-        { id: 'practice', label: 'Practice Mode' },
-      ],
-      professions: [{ id: 'medicine', label: 'Medicine' }],
-      reviewSelections: [],
-      wallet: { availableCredits: 2 },
-      availableBundles: [
-        {
-          id: 'bundle-diagnostic',
-          bundleId: 'bundle-diagnostic',
-          title: 'Diagnostic Bundle',
-          mockType: 'diagnostic',
-          subtest: null,
-          professionId: null,
-          appliesToAllProfessions: true,
-          estimatedDurationMinutes: 60,
-          sections: [
-            { id: 'diag-reading', subtest: 'reading', title: 'Reading', timeLimitMinutes: 60, reviewEligible: false, contentPaperId: 'rt-003' },
-          ],
-        },
-      ],
-    });
-
-    renderWithRouter(<MockSetup />, {
-      router: { push: mockPush },
-      searchParams: new URLSearchParams('type=diagnostic'),
-    });
-
-    expect(await screen.findByText('You have already used your one-time diagnostic mock.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /start mock test/i })).toBeDisabled();
-    expect(mockCreateMockSession).not.toHaveBeenCalled();
-  });
 });
