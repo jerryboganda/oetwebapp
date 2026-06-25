@@ -157,25 +157,25 @@ function DashboardSubscriptionStrip({
   ].filter(Boolean) as string[];
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
-        <CreditCard className="h-4 w-4 shrink-0 text-muted" />
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
+        <CreditCard className="h-3.5 w-3.5 shrink-0 text-muted" />
         <span className="font-bold text-navy">
           {isLoading ? 'Loading subscription…' : hasError ? 'Subscription details unavailable' : planName}
         </span>
         {!isLoading && !hasError ? (
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
             {statusLabel}
           </span>
         ) : null}
         {facts.map((fact) => (
-          <span key={fact} className="flex items-center gap-2 text-muted">
+          <span key={fact} className="flex items-center gap-1.5 text-muted">
             <span aria-hidden className="text-border">·</span>
             <span className="font-medium text-navy">{fact}</span>
           </span>
         ))}
       </div>
-      <Button asChild variant="outline" size="sm" className="shrink-0">
+      <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
         <Link href="/catalog">See all catalog <ArrowRight className="h-3.5 w-3.5" /></Link>
       </Button>
     </div>

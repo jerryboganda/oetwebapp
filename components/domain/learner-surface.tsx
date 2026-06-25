@@ -193,40 +193,40 @@ export function LearnerPageHero({
     return (
       <div
         key={`${item.label}-${item.value}`}
-        className="inline-flex min-w-0 flex-1 basis-[120px] items-center gap-2 rounded-xl border border-border bg-background-light px-2.5 py-1.5 sm:basis-[140px] sm:rounded-2xl sm:px-3 sm:py-2"
+        className="inline-flex min-w-0 flex-1 basis-[108px] items-center gap-1.5 rounded-xl border border-border bg-background-light px-2 py-1.5 sm:basis-[140px] sm:gap-2 sm:rounded-2xl sm:px-3 sm:py-2"
       >
         {HighlightIcon ? (
-          <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8 sm:rounded-xl', palette.icon)}>
-            <HighlightIcon className="h-[14px] w-[14px] sm:h-4 sm:w-4" />
+          <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md sm:h-8 sm:w-8 sm:rounded-xl', palette.icon)}>
+            <HighlightIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
         ) : null}
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted sm:text-[11px] sm:tracking-[0.16em]">{item.label}</p>
-          <p className="text-[13px] font-semibold text-navy break-words sm:text-sm">{item.value}</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted sm:text-[11px] sm:tracking-[0.16em]">{item.label}</p>
+          <p className="text-xs font-semibold text-navy break-words sm:text-sm">{item.value}</p>
         </div>
       </div>
     );
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-surface px-3.5 py-3.5 shadow-sm sm:px-6 sm:py-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-2xl border border-border bg-surface px-3 py-3 shadow-sm sm:px-6 sm:py-6">
+      <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-3 sm:gap-4">
+          <div className="flex items-start gap-2.5 sm:gap-4">
           {Icon ? (
-              <div className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl', palette.icon)}>
-                {renderIcon(Icon, 'h-[18px] w-[18px] sm:h-6 sm:w-6')}
+              <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 sm:rounded-2xl', palette.icon)}>
+                {renderIcon(Icon, 'h-4 w-4 sm:h-6 sm:w-6')}
             </div>
           ) : null}
             <div className="min-w-0">
-              {eyebrow ? <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted sm:mb-1.5 sm:text-[11px]">{eyebrow}</p> : null}
-              <h1 className="text-lg font-bold leading-tight tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
-              <p className="mt-1 max-w-3xl text-[13px] leading-5 text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
+              {eyebrow ? <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted sm:mb-1.5 sm:text-[11px] sm:tracking-[0.18em]">{eyebrow}</p> : null}
+              <h1 className="text-[17px] font-bold leading-tight tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
             </div>
           </div>
 
           {highlights.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2 sm:mt-4 sm:gap-2.5">
+            <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2.5">
               {highlights.map(renderHighlight)}
             </div>
           ) : null}
