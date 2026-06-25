@@ -67,7 +67,5 @@ jobs:
             echo "No migration changes generated."
             exit 0
           fi
-          git commit -m "chore(diagnostic): generate RemoveDiagnostic EF migration (drop WritingDiagnosticSessions)
-
-Auto-generated on CI via dotnet ef. Stage-remap SQL is added by hand next."
+          git commit -m "chore(diagnostic): generate RemoveDiagnostic EF migration (drop WritingDiagnosticSessions) [skip qa]"
           git push origin HEAD:${{ github.ref_name }}
