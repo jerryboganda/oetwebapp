@@ -1,3 +1,4 @@
 {
-  "publicApiBaseUrl": "https://api.oetwithdrhesham.co.uk"
+  "publicApiBaseUrl": "https://api.oetwithdrhesham.co.uk",
+  "publicWebBaseUrl": "https://app.oetwithdrhesham.co.uk"
 }

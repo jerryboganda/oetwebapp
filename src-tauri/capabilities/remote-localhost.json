@@ -1,12 +1,13 @@
 {
   "identifier": "remote-localhost",
-  "description": "Grant IPC to the Next.js standalone renderer served on loopback. Remote origins enforce the command ACL strictly, so every desktopBridge app command is allowed explicitly.",
+  "description": "Grant IPC to the renderer: the loopback Next.js standalone (offline) or the live web app over HTTPS (online thin-client). Remote origins enforce the command ACL strictly, so every desktopBridge app command is allowed explicitly.",
   "remote": {
     "urls": [
       "http://localhost",
       "http://localhost:*",
       "http://127.0.0.1",
-      "http://127.0.0.1:*"
+      "http://127.0.0.1:*",
+      "https://app.oetwithdrhesham.co.uk"
     ]
   },
   "windows": ["main"],

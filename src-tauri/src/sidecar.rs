@@ -43,6 +43,10 @@ impl Default for RuntimeState {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopRuntimeConfig {
     pub public_api_base_url: Option<String>,
+    /// When set together with a remote API, the shell loads this live web app
+    /// directly instead of bundling+running a local Next.js renderer (online
+    /// thin-client mode — avoids the pnpm-standalone bundling problem).
+    pub public_web_base_url: Option<String>,
 }
 
 pub struct Paths {
@@ -279,24 +283,34 @@ pub fn start_all(
     runtime_config: &DesktopRuntimeConfig,
     is_packaged: bool,
 ) -> Result<String, String> {
-    let (backend_url, backend_child) = match &runtime_config.public_api_base_url {
-        Some(remote) if !remote.contains("127.0.0.1") && !remote.contains("localhost") => {
-            (remote.clone(), None)
-        }
+    let online = matches!(
+        &runtime_config.public_api_base_url,
+        Some(remote) if !remote.contains("127.0.0.1") && !remote.contains("localhost")
+    );
+
+    let (backend_url, backend_child) = if online {
+        (runtime_config.public_api_base_url.clone().unwrap(), None)
+    } else {
+        let (url, child) = start_backend(paths, is_packaged)?;
+        (url, Some(child))
+    };
+
+    // Online thin-client: load the live web app directly and skip the bundled
+    // Next.js renderer. Otherwise (offline) spawn the local renderer sidecar.
+    let (renderer_url, renderer_child) = match (online, &runtime_config.public_web_base_url) {
+        (true, Some(web)) => (web.trim_end_matches('/').to_string(), None),
         _ => {
-            let (url, child) = start_backend(paths, is_packaged)?;
+            let (url, child) = start_renderer(paths, &backend_url)?;
             (url, Some(child))
         }
     };
-
-    let (renderer_url, renderer_child) = start_renderer(paths, &backend_url)?;
 
     *state.active_backend_url.lock().unwrap() = Some(backend_url);
     *state.renderer_url.lock().unwrap() = Some(renderer_url.clone());
     {
         let mut children = state.children.lock().unwrap();
         children.backend = backend_child;
-        children.renderer = Some(renderer_child);
+        children.renderer = renderer_child;
     }
     Ok(renderer_url)
 }
