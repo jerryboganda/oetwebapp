@@ -240,9 +240,25 @@ pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
+    // BUG-011a: passing the absolute, space-filled server.js path as an argument
+    // is mis-handled when spawning the bundled node (Node resolved its main entry
+    // to "C:"). The program path with spaces is fine (Command::new handles it,
+    // as the backend sidecar proves); only the arg was the problem. Run server.js
+    // RELATIVE to the standalone working directory, which is already the cwd.
+    let _ = std::fs::write(
+        paths.user_data.join("logs").join("renderer-launch.log"),
+        format!(
+            "node={:?}\nserver_js_abs={:?}\nexists={}\ncwd={:?}\nport={}\n",
+            paths.node_binary,
+            server_js,
+            server_js.exists(),
+            paths.standalone_root,
+            port
+        ),
+    );
     let (out, err) = sidecar_log_pipes(&paths.user_data, "renderer");
     let mut cmd = Command::new(&paths.node_binary);
-    cmd.arg(&server_js)
+    cmd.arg("server.js")
         .current_dir(&paths.standalone_root)
         .envs(renderer_env(&runtime_url, port, backend_url))
         .stdout(out)

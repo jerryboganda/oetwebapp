@@ -189,15 +189,17 @@ jobs:
       - name: Generate checksums
         shell: bash
         run: |
-          shopt -s nullglob globstar
-          files=(src-tauri/target/release/bundle/**/*.exe src-tauri/target/release/bundle/**/*.dmg src-tauri/target/release/bundle/**/*.sig)
-          if [ ${#files[@]} -eq 0 ]; then
+          set -e
+          # Use `find` (not bash `globstar`) — macOS runners ship bash 3.2 where
+          # `shopt -s globstar` is unavailable.
+          mkdir -p dist/tauri-desktop
+          found=0
+          while IFS= read -r f; do
+            cp "$f" dist/tauri-desktop/ && found=1
+          done < <(find src-tauri/target/release/bundle -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.sig' \))
+          if [ "$found" -eq 0 ]; then
             echo "No bundle artifacts found for checksum generation." >&2; exit 1
           fi
-          mkdir -p dist/tauri-desktop
-          for f in "${files[@]}"; do
-            cp "$f" dist/tauri-desktop/
-          done
           cd dist/tauri-desktop
           if command -v sha256sum >/dev/null; then
             sha256sum * > SHA256SUMS.txt

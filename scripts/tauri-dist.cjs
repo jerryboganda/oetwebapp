@@ -46,6 +46,17 @@ function syncStandalone() {
   fs.cpSync(path.join(repoRoot, '.next', 'static'), path.join(standalone, '.next', 'static'), { recursive: true });
   fs.cpSync(path.join(repoRoot, 'public'), path.join(standalone, 'public'), { recursive: true });
   console.log('[tauri-dist] standalone runtime synced');
+
+  // BUG-011b: pnpm leaves symlinks/junctions in standalone/node_modules
+  // (next, react, react-dom, @next -> ../node_modules/.pnpm/...). Tauri's
+  // resource copy does not preserve them, so the bundled renderer fails with
+  // "Cannot find module 'next'". Produce a DEREFERENCED copy (real files) that
+  // the bundle points at. The source tree is left untouched (no deletes near
+  // the pnpm store), so this is safe to re-run.
+  const distStandalone = path.join(repoRoot, '.next', 'standalone-dist');
+  fs.rmSync(distStandalone, { recursive: true, force: true });
+  fs.cpSync(standalone, distStandalone, { recursive: true, dereference: true });
+  console.log('[tauri-dist] dereferenced standalone -> .next/standalone-dist');
 }
 
 function stageNode() {
