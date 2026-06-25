@@ -9,8 +9,8 @@ namespace OetLearner.Api.Services.Reading;
 // ═════════════════════════════════════════════════════════════════════════════
 // Reading Learner Pathway Service — WS2
 //
-// Implements the 5-stage learning pathway:
-//   diagnostic ? foundation ? practice ? mastery
+// Implements the learning pathway:
+//   foundation → practice → mastery
 //
 // NAMING: This is IReadingLearnerPathwayService (NOT IReadingPathwayService
 // which already exists in ReadingPathwayService.cs for the snapshot pathway).
@@ -21,30 +21,15 @@ namespace OetLearner.Api.Services.Reading;
 // session creation time so SkillScoringService can read it without a join.
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Interface for the NEW 5-stage pathway system (NOT the existing IReadingPathwayService)
+// Interface for the pathway system (NOT the existing IReadingPathwayService)
 public interface IReadingLearnerPathwayService
 {
-    Task<StartDiagnosticResult> StartDiagnosticAsync(string userId, CancellationToken ct);
-    Task<DiagnosticSubmitResult> SubmitDiagnosticAsync(string userId, Guid sessionId, Dictionary<string, string> answers, CancellationToken ct);
     Task<LearnerReadingPathway> GeneratePathwayAsync(string userId, CancellationToken ct);
     Task<PathwayStatusDto> GetCurrentStageAsync(string userId, CancellationToken ct);
     Task AdvanceStageAsync(string userId, string newStage, CancellationToken ct);
 }
 
 // ── Request / Result DTOs ────────────────────────────────────────────────────
-
-
-public sealed record StartDiagnosticResult(
-    Guid SessionId,
-    List<string> QuestionIds,   // string IDs matching ReadingQuestion.Id
-    int TimeLimitMinutes);
-
-public sealed record DiagnosticSubmitResult(
-    int Score,
-    int TotalQuestions,
-    Dictionary<string, decimal> SkillScores,  // S1..S8 -> score 0-10
-    string EstimatedOetBand,
-    int? EstimatedScaledScore);
 
 public sealed record PathwayStatusDto(
     string CurrentStage,
@@ -67,212 +52,6 @@ public sealed class ReadingLearnerPathwayService(
     LearnerDbContext db,
     ISkillScoringService skillScoring) : IReadingLearnerPathwayService
 {
-
-    /// <summary>
-    /// Select 22 diagnostic questions (10 Part A, 4 Part B, 8 Part C) and
-    /// create a ReadingPracticeSession row.  The session's MetadataJson carries
-    /// a {attemptRowId → skillTag} map that SkillScoringService consumes during
-    /// grading (needed because ReadingQuestion.Id is string but
-    /// ReadingQuestionAttempt.ReadingQuestionId is Guid — EF can't join them).
-    ///
-    /// At diagnostic-start we don't yet have attempt rows, so we store the
-    /// question skill tags in a pre-computed map keyed by question string ID:
-    /// {"questionSkillMap": {"<questionStringId>": "S3", ...}}.
-    /// SubmitDiagnosticAsync then mints attempt rows and stores the final
-    /// per-attemptId map.
-    /// </summary>
-    public async Task<StartDiagnosticResult> StartDiagnosticAsync(string userId, CancellationToken ct)
-    {
-        // Select published questions per part; fall back to any published if counts short.
-        var partAIds = await db.ReadingQuestions
-            .AsNoTracking()
-            .Where(q => q.Part != null
-                && q.Part.PartCode == ReadingPartCode.A
-                && q.ReviewState == ReadingReviewState.Published)
-            .OrderBy(_ => EF.Functions.Random())
-            .Take(10)
-            .Select(q => new { q.Id, q.SkillTag })
-            .ToListAsync(ct);
-
-        var partBIds = await db.ReadingQuestions
-            .AsNoTracking()
-            .Where(q => q.Part != null
-                && q.Part.PartCode == ReadingPartCode.B
-                && q.ReviewState == ReadingReviewState.Published)
-            .OrderBy(_ => EF.Functions.Random())
-            .Take(4)
-            .Select(q => new { q.Id, q.SkillTag })
-            .ToListAsync(ct);
-
-        var partCIds = await db.ReadingQuestions
-            .AsNoTracking()
-            .Where(q => q.Part != null
-                && q.Part.PartCode == ReadingPartCode.C
-                && q.ReviewState == ReadingReviewState.Published)
-            .OrderBy(_ => EF.Functions.Random())
-            .Take(8)
-            .Select(q => new { q.Id, q.SkillTag })
-            .ToListAsync(ct);
-
-        var selected = partAIds.Concat(partBIds).Concat(partCIds).ToList();
-        var selectedIds = selected.Select(q => q.Id).ToHashSet();
-
-        // Fallback: top up to 22 from any published questions not already selected
-        if (selected.Count < 22)
-        {
-            var fallback = await db.ReadingQuestions
-                .AsNoTracking()
-                .Where(q => q.ReviewState == ReadingReviewState.Published
-                    && !selectedIds.Contains(q.Id))
-                .OrderBy(_ => EF.Functions.Random())
-                .Take(22 - selected.Count)
-                .Select(q => new { q.Id, q.SkillTag })
-                .ToListAsync(ct);
-            selected.AddRange(fallback);
-        }
-
-        var allIds = selected.Select(q => q.Id).ToList();
-
-        // Build question → skill map for SkillScoringService (stored in MetadataJson)
-        var questionSkillMap = selected.ToDictionary(
-            q => q.Id,
-            q => q.SkillTag ?? "S1");
-
-        var metadata = JsonSerializer.Serialize(new { questionSkillMap });
-
-        var session = new ReadingPracticeSession
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            SessionType = "diagnostic",
-            QuestionIdsJson = JsonSerializer.Serialize(allIds),
-            TotalQuestions = allIds.Count,
-            StartedAt = DateTimeOffset.UtcNow,
-            MetadataJson = metadata
-        };
-        db.ReadingPracticeSessions.Add(session);
-        await db.SaveChangesAsync(ct);
-
-        return new StartDiagnosticResult(session.Id, allIds, 25);
-    }
-
-    /// <summary>
-    /// Grade the diagnostic, record attempt rows, update skill scores, generate
-    /// the pathway, and advance stage to "foundation".
-    /// </summary>
-    public async Task<DiagnosticSubmitResult> SubmitDiagnosticAsync(
-        string userId, Guid sessionId, Dictionary<string, string> answers, CancellationToken ct)
-    {
-        var session = await db.ReadingPracticeSessions
-            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId && s.SessionType == "diagnostic", ct)
-            ?? throw new InvalidOperationException("Session not found");
-
-        if (session.CompletedAt is not null)
-            throw new InvalidOperationException("Diagnostic already submitted");
-
-        var questionIds = JsonSerializer.Deserialize<List<string>>(session.QuestionIdsJson) ?? [];
-
-        // Load actual question data for grading
-        var questions = await db.ReadingQuestions
-            .AsNoTracking()
-            .Where(q => questionIds.Contains(q.Id))
-            .ToListAsync(ct);
-
-        // Re-read questionSkillMap from MetadataJson
-        var questionSkillMap = new Dictionary<string, string>();
-        if (!string.IsNullOrEmpty(session.MetadataJson) && session.MetadataJson != "{}")
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(session.MetadataJson);
-                if (doc.RootElement.TryGetProperty("questionSkillMap", out var mapEl)
-                    && mapEl.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var prop in mapEl.EnumerateObject())
-                        questionSkillMap[prop.Name] = prop.Value.GetString() ?? "S1";
-                }
-            }
-            catch (JsonException) { /* fall back to S1 */ }
-        }
-
-        var attempts = new List<ReadingQuestionAttempt>();
-        // Build per-attempt skill map for SkillScoringService
-        var attemptSkillMap = new Dictionary<string, string>();
-        int correct = 0;
-
-        foreach (var q in questions)
-        {
-            answers.TryGetValue(q.Id, out var selected);
-            bool isUnknown = selected == "__unknown__";
-            bool isCorrect = false;
-
-            if (!isUnknown && selected is not null)
-            {
-                isCorrect = CheckAnswer(q, selected);
-                if (isCorrect) correct++;
-            }
-
-            var attempt = new ReadingQuestionAttempt
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                // ReadingQuestionId is Guid on the entity; we can only store a
-                // generated sentinel here since the source question id is string.
-                // A real migration-level fix would change ReadingQuestion.Id to Guid,
-                // but for now we track correlation through the session MetadataJson.
-                ReadingQuestionId = Guid.NewGuid(),
-                PracticeSessionId = sessionId,
-                SelectedOption = selected,
-                IsCorrect = isCorrect,
-                IsUnknown = isUnknown,
-                AttemptedAt = DateTimeOffset.UtcNow,
-                // wrong + not unknown → spaced-repetition review queue
-                InReviewQueue = !isCorrect && !isUnknown,
-                NextReviewAt = (!isCorrect && !isUnknown)
-                    ? DateTimeOffset.UtcNow.AddDays(1)
-                    : null
-            };
-            attempts.Add(attempt);
-
-            // Map the new attempt's Guid to its skill code so SkillScoringService
-            // can group correctly via the MetadataJson skillTagMap.
-            var skillCode = questionSkillMap.TryGetValue(q.Id, out var tag) ? tag : "S1";
-            attemptSkillMap[attempt.Id.ToString()] = skillCode;
-        }
-
-        db.ReadingQuestionAttempts.AddRange(attempts);
-
-        // Update session metadata with the per-attempt skill map (replaces question map)
-        var updatedMetadata = JsonSerializer.Serialize(new { skillTagMap = attemptSkillMap });
-        session.MetadataJson = updatedMetadata;
-        session.CompletedAt = DateTimeOffset.UtcNow;
-        session.Score = correct;
-        session.TotalQuestions = questions.Count;
-        session.DurationSeconds = (int)(DateTimeOffset.UtcNow - session.StartedAt).TotalSeconds;
-
-        await db.SaveChangesAsync(ct);
-
-        // Update skill score baseline from this session
-        await skillScoring.RecalculateDiagnosticBaselineAsync(userId, sessionId, ct);
-
-        // Generate the multi-week pathway
-        await GeneratePathwayAsync(userId, ct);
-
-        // Advance to foundation stage
-        await AdvanceStageAsync(userId, "foundation", ct);
-
-        var skillScores = await skillScoring.GetCurrentScoresAsync(userId, ct);
-
-        int totalQ = questions.Count;
-        int estimatedScaled = EstimateScaledScore(correct, totalQ);
-
-        return new DiagnosticSubmitResult(
-            Score: correct,
-            TotalQuestions: totalQ,
-            SkillScores: skillScores,
-            EstimatedOetBand: ScaledToOetBand(estimatedScaled),
-            EstimatedScaledScore: estimatedScaled);
-    }
 
     /// <summary>
     /// Generate (or regenerate) the multi-week study pathway based on current
@@ -387,7 +166,7 @@ public sealed class ReadingLearnerPathwayService(
             .FirstOrDefaultAsync(p => p.UserId == userId, ct);
 
         if (profile is null)
-            return new PathwayStatusDto("diagnostic", null, null, null, null);
+            return new PathwayStatusDto("foundation", null, null, null, null);
 
         int? weeksRemaining = profile.ExamDate.HasValue
             ? (int?)Math.Max(0, (int)Math.Ceiling(
@@ -413,195 +192,6 @@ public sealed class ReadingLearnerPathwayService(
         await db.SaveChangesAsync(ct);
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Grade a single answer against ReadingQuestion.CorrectAnswerJson.
-    ///
-    /// MCQ types (MultipleChoice3 / MultipleChoice4): CorrectAnswerJson is a
-    /// JSON string "A", "B", "C", or "D".  Compare case-insensitively.
-    ///
-    /// ShortAnswer / SentenceCompletion / MatchingTextReference: try
-    /// AcceptedSynonymsJson first, then fall back to CorrectAnswerJson literal.
-    /// CaseSensitive flag is honoured.
-    /// </summary>
-    private static bool CheckAnswer(ReadingQuestion q, string selected)
-    {
-        if (string.IsNullOrWhiteSpace(selected)) return false;
-
-        // Deserialise the correct answer (stored as a JSON string or array)
-        string? correctAnswer = null;
-        try
-        {
-            using var doc = JsonDocument.Parse(q.CorrectAnswerJson);
-            correctAnswer = doc.RootElement.ValueKind == JsonValueKind.String
-                ? doc.RootElement.GetString()
-                : q.CorrectAnswerJson; // fallback: use raw value
-        }
-        catch (JsonException)
-        {
-            correctAnswer = q.CorrectAnswerJson;
-        }
-
-        if (correctAnswer is null) return false;
-
-        StringComparison comparison = q.CaseSensitive
-            ? StringComparison.Ordinal
-            : StringComparison.OrdinalIgnoreCase;
-
-        // MCQ: direct key comparison
-        if (q.QuestionType is ReadingQuestionType.MultipleChoice3
-            or ReadingQuestionType.MultipleChoice4
-            or ReadingQuestionType.MultipleChoiceFlexible)
-        {
-            return string.Equals(correctAnswer.Trim(), selected.Trim(), comparison);
-        }
-
-        if (q.QuestionType == ReadingQuestionType.ShortAnswerLabeled)
-        {
-            if (TryParseStringMap(q.CorrectAnswerJson, out var correctAnswers)
-                && TryParseStringMap(selected, out var selectedAnswers))
-            {
-                if (correctAnswers.Count != selectedAnswers.Count)
-                    return false;
-
-                ParseLabeledSynonyms(q.AcceptedSynonymsJson, out var globalSynonyms, out var labeledSynonyms);
-
-                foreach (var (label, correctValue) in correctAnswers)
-                {
-                    if (!selectedAnswers.TryGetValue(label, out var selectedValue))
-                        return false;
-
-                    var candidates = new List<string> { correctValue };
-                    if (labeledSynonyms.TryGetValue(label, out var labelSyns))
-                        candidates.AddRange(labelSyns);
-                    else if (globalSynonyms is not null)
-                        candidates.AddRange(globalSynonyms);
-
-                    if (!candidates.Any(candidate =>
-                            string.Equals(candidate.Trim(), selectedValue.Trim(), comparison)))
-                        return false;
-                }
-
-                return true;
-            }
-        }
-
-        // Short answer / sentence completion / fill-in-blank: check AcceptedSynonymsJson first
-        if (!string.IsNullOrEmpty(q.AcceptedSynonymsJson))
-        {
-            try
-            {
-                var synonyms = JsonSerializer.Deserialize<List<string>>(q.AcceptedSynonymsJson);
-                if (synonyms is not null
-                    && synonyms.Any(s => string.Equals(s.Trim(), selected.Trim(), comparison)))
-                {
-                    return true;
-                }
-            }
-            catch (JsonException) { /* fall through to literal check */ }
-        }
-
-        // Fallback: exact match against the canonical correct answer
-        return string.Equals(correctAnswer.Trim(), selected.Trim(), comparison);
-    }
-
-    private static bool TryParseStringMap(string? json, out Dictionary<string, string> values)
-    {
-        values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(json)) return false;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
-
-            foreach (var prop in doc.RootElement.EnumerateObject())
-            {
-                if (prop.Value.ValueKind != JsonValueKind.String)
-                    return false;
-
-                var key = prop.Name.Trim();
-                if (key.Length == 0)
-                    return false;
-
-                values[key] = prop.Value.GetString() ?? string.Empty;
-            }
-
-            return values.Count > 0;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static void ParseLabeledSynonyms(
-        string? json,
-        out string[]? globalSynonyms,
-        out Dictionary<string, string[]> labeledSynonyms)
-    {
-        globalSynonyms = null;
-        labeledSynonyms = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-
-        if (string.IsNullOrWhiteSpace(json)) return;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-            {
-                var global = new List<string>();
-                foreach (var item in doc.RootElement.EnumerateArray())
-                {
-                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
-                        global.Add(s);
-                }
-
-                if (global.Count > 0)
-                    globalSynonyms = global.ToArray();
-                return;
-            }
-
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-                return;
-
-            foreach (var prop in doc.RootElement.EnumerateObject())
-            {
-                if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.Array)
-                    continue;
-
-                var list = new List<string>();
-                foreach (var item in prop.Value.EnumerateArray())
-                {
-                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
-                        list.Add(s);
-                }
-
-                if (list.Count > 0)
-                    labeledSynonyms[prop.Name.Trim()] = list.ToArray();
-            }
-        }
-        catch (JsonException)
-        {
-            // Ignore malformed synonyms and fall back to literal matching.
-        }
-    }
-
-    /// <summary>
-    /// Project a diagnostic subset to the canonical 42-item Reading scale,
-    /// then use OetScoring so the 30/42 == 350 invariant stays centralized.
-    /// </summary>
-    private static int EstimateScaledScore(int rawCorrect, int totalQuestions)
-    {
-        if (totalQuestions <= 0) return 0;
-        var projectedRaw = (int)Math.Round(
-            (decimal)rawCorrect / totalQuestions * OetScoring.ListeningReadingRawMax,
-            MidpointRounding.AwayFromZero);
-        return OetScoring.OetRawToScaled(projectedRaw);
-    }
-
-    private static string ScaledToOetBand(int scaled) => OetScoring.OetGradeLetterFromScaled(scaled);
 }
 
 

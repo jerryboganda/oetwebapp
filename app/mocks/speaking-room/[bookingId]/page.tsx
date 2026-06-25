@@ -36,7 +36,6 @@ import {
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
-import { MicCheckPanel } from '@/components/domain/mic-check-panel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -114,7 +113,6 @@ export default function SpeakingLiveRoomPage() {
 
   const [phase, setPhase] = useState<Phase>('pre');
   const [consent, setConsent] = useState(false);
-  const [micPassed, setMicPassed] = useState(false);
 
   const [chunkCount, setChunkCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -270,10 +268,6 @@ export default function SpeakingLiveRoomPage() {
       setError('You must accept the recording consent to enter the live room.');
       return;
     }
-    if (!micPassed) {
-      setError('Please complete the microphone check before starting.');
-      return;
-    }
     try {
       const updated = await transitionMockBookingLiveRoom(
         booking.bookingId ?? booking.id,
@@ -285,7 +279,7 @@ export default function SpeakingLiveRoomPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start the live room.');
     }
-  }, [booking, bookingId, consent, micPassed, enterPhase]);
+  }, [booking, bookingId, consent, enterPhase]);
 
   const handleSubmit = useCallback(async () => {
     if (!booking) return;
@@ -379,8 +373,6 @@ export default function SpeakingLiveRoomPage() {
                 booking={booking}
                 consent={consent}
                 onConsentChange={setConsent}
-                micPassed={micPassed}
-                onMicComplete={() => setMicPassed(true)}
                 onStart={handleStart}
                 interlocutorHidden={interlocutorHidden}
               />
@@ -510,20 +502,16 @@ function PreRoom({
   booking,
   consent,
   onConsentChange,
-  micPassed,
-  onMicComplete,
   onStart,
   interlocutorHidden,
 }: {
   booking: MockBooking;
   consent: boolean;
   onConsentChange: (v: boolean) => void;
-  micPassed: boolean;
-  onMicComplete: () => void;
   onStart: () => void;
   interlocutorHidden: boolean;
 }) {
-  const canStart = consent && micPassed && Boolean(booking.consentToRecording);
+  const canStart = consent && Boolean(booking.consentToRecording);
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-border bg-surface p-6 shadow-sm">
@@ -557,17 +545,6 @@ function PreRoom({
           </span>
         </label>
       </div>
-
-      {micPassed ? (
-        <div className="rounded-3xl border border-success/30 bg-success/5 p-4 text-sm text-success">
-          <CheckCircle2 className="mr-2 inline h-4 w-4" />
-          Microphone check passed.
-        </div>
-      ) : (
-        <div className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-          <MicCheckPanel onComplete={onMicComplete} />
-        </div>
-      )}
 
       <div className="flex justify-end">
         <Button

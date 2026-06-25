@@ -198,13 +198,13 @@ export default function ListeningPathwayPage() {
             <Sparkles className="mx-auto mb-3 h-8 w-8 text-muted" aria-hidden />
             <p className="font-semibold text-navy">No pathway generated yet</p>
             <p className="mt-1 text-sm text-muted">
-              Complete the listening diagnostic to unlock your personalised 12-week plan.
+              Your personalised 12-week plan is being prepared. Start practising in the meantime.
             </p>
             <Link
-              href="/listening/diagnostic"
+              href="/listening"
               className="mt-4 inline-flex items-center gap-1 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
-              Take the diagnostic
+              Start practising
               <ChevronRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>

@@ -447,30 +447,6 @@ async function api<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
 export const getReadingProfile = () =>
   api<LearnerReadingProfileDto>('/v1/reading-pathway/profile');
 
-// ── Diagnostic ────────────────────────────────────────────────────────────────
-
-export const startDiagnostic = () =>
-  api<DiagnosticStartDto>('/v1/reading-pathway/diagnostic/start', { method: 'POST' });
-
-export const getDiagnosticQuestions = (sessionId: string) =>
-  api<DiagnosticQuestionDto[]>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/questions`);
-
-export const submitDiagnostic = (
-  sessionId: string,
-  answers: Record<string, string>,
-  options?: { timeoutMs?: number },
-) =>
-  api<DiagnosticResultDto>('/v1/reading-pathway/diagnostic/submit', {
-    method: 'POST',
-    body: JSON.stringify({ sessionId, answers }),
-    timeoutMs: options?.timeoutMs ?? 120_000,
-  });
-
-export const getDiagnosticResult = (sessionId: string, options?: { timeoutMs?: number }) =>
-  api<DiagnosticResultDto>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/results`, {
-    timeoutMs: options?.timeoutMs,
-  });
-
 // ── Pathway & Daily Plan ──────────────────────────────────────────────────────
 
 export const getPathway = () =>

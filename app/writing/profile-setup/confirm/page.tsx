@@ -70,7 +70,7 @@ export default function ProfileSetupConfirmPage() {
       });
       await completeWritingOnboarding();
       clearWizardState();
-      router.push('/writing/diagnostic');
+      router.push('/writing');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not save your profile. Please try again.';
       setError(message);
@@ -87,7 +87,7 @@ export default function ProfileSetupConfirmPage() {
           icon={ClipboardCheck}
           accent="amber"
           title="Review and confirm"
-          description="One last check before we generate your pathway and queue your diagnostic."
+          description="One last check before we generate your personalised writing pathway."
           highlights={[]}
         />
 

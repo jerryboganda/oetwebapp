@@ -36,7 +36,7 @@ public class WritingLearnerPathwayServiceTests
             "uk",
             ["routine_referral", "discharge"]), CancellationToken.None);
 
-        Assert.Equal("diagnostic", profile.CurrentStage);
+        Assert.Equal("foundation", profile.CurrentStage);
         Assert.Equal("medicine", profile.Profession);
         Assert.Equal("B+", profile.TargetBand);
         Assert.Equal("GB", profile.TargetCountry);
@@ -46,26 +46,6 @@ public class WritingLearnerPathwayServiceTests
         Assert.Single(await db.LearnerWritingPathways.ToListAsync());
         Assert.Empty(await db.Attempts.ToListAsync());
         Assert.Empty(await db.Evaluations.ToListAsync());
-
-        await db.DisposeAsync();
-    }
-
-    [Fact]
-    public async Task TodayPlan_UsesDiagnosticStageAndPublishedWritingTask()
-    {
-        var (db, service, _) = Build();
-        db.ContentItems.Add(PublishedWritingTask("task-1", "routine_referral"));
-        await db.SaveChangesAsync();
-
-        await service.SaveOnboardingAsync(DefaultUser, DefaultOnboarding(), CancellationToken.None);
-        var plan = await service.GetTodayPlanAsync(DefaultUser, CancellationToken.None);
-
-        var item = Assert.Single(plan.Items);
-        Assert.Equal("diagnostic", item.ItemType);
-        Assert.Equal("task-1", item.ContentId);
-        Assert.Contains("/writing/player", item.ActionHref);
-        Assert.Contains("pathwayStage=diagnostic", item.ActionHref);
-        Assert.Equal(45, plan.TotalMinutes);
 
         await db.DisposeAsync();
     }
@@ -149,7 +129,7 @@ public class WritingLearnerPathwayServiceTests
 
         var profile = await service.GetProfileAsync(DefaultUser, CancellationToken.None);
 
-        Assert.Equal("diagnostic", profile.CurrentStage);
+        Assert.Equal("foundation", profile.CurrentStage);
         Assert.False(profile.DiagnosticCompleted);
         Assert.Null(profile.LastDiagnosticEvaluationId);
 
@@ -167,7 +147,10 @@ public class WritingLearnerPathwayServiceTests
         await service.SaveOnboardingAsync(DefaultUser, DefaultOnboarding(), CancellationToken.None);
         var afterOnboarding = await service.GetTodayPlanAsync(DefaultUser, CancellationToken.None);
 
-        Assert.Equal("diagnostic", Assert.Single(afterOnboarding.Items).ItemType);
+        // After onboarding the stale "onboarding" item is replaced by the
+        // foundation-stage plan (diagnostic stage removed).
+        Assert.NotEmpty(afterOnboarding.Items);
+        Assert.DoesNotContain(afterOnboarding.Items, item => item.ItemType == "onboarding");
         Assert.DoesNotContain(await db.WritingDailyPlanItems.ToListAsync(), item => item.ItemType == "onboarding");
 
         await db.DisposeAsync();
@@ -206,7 +189,7 @@ public class WritingLearnerPathwayServiceTests
 
         var profile = await service.GetProfileAsync(DefaultUser, CancellationToken.None);
 
-        Assert.Equal("diagnostic", profile.CurrentStage);
+        Assert.Equal("foundation", profile.CurrentStage);
         Assert.False(profile.DiagnosticCompleted);
 
         await db.DisposeAsync();

@@ -148,9 +148,9 @@ export default function ProgressDashboard() {
               <LearnerEmptyState
                 icon={Activity}
                 title="No progress evidence yet"
-                description="Complete diagnostic work, practice submissions, or mock tests to unlock charts and review timing insights."
-                primaryAction={{ label: 'Take Diagnostic', href: '/diagnostic' }}
-                secondaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
+                description="Complete practice submissions or mock tests to unlock charts and review timing insights."
+                primaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
+                secondaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
               />
             ) : null}
 

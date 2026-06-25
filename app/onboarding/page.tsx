@@ -30,7 +30,7 @@ const STEPS = [
     icon: BarChart3,
     heading: 'Your personalised learning journey',
     description:
-      'Our platform adapts to your strengths and weaknesses. Start with a quick diagnostic to establish your baseline, then follow your AI-generated study plan to improve where it matters most.',
+      'Our platform adapts to your strengths and weaknesses. Set your goals, then follow your AI-generated study plan to improve where it matters most.',
     details: [
       'AI-powered practice tasks with instant feedback on all 4 sub-tests',
       'Expert human review available for Writing and Speaking',
@@ -43,10 +43,10 @@ const STEPS = [
     icon: Target,
     heading: 'Getting started is easy',
     description:
-      'After onboarding, you\'ll set your goals and take a short diagnostic assessment. This helps us build a study plan tailored to your profession, target score, and available study time.',
+      'After onboarding, you\'ll set your goals. This helps us build a study plan tailored to your profession, target score, and available study time.',
     details: [
       'Set your profession, exam date, and target scores',
-      'Take a ~2 hour diagnostic across all 4 sub-tests (can be done in stages)',
+      'Jump straight into practice across all 4 sub-tests',
       'Receive your personalised study plan within minutes',
     ],
   },

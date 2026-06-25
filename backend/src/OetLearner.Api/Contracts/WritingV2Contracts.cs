@@ -72,34 +72,6 @@ public sealed record WritingBudgetAssessmentResponse(
     IReadOnlyList<string> ConflictsWithOtherModules);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Diagnostic
-// ─────────────────────────────────────────────────────────────────────────────
-
-public sealed record WritingDiagnosticStartRequest(Guid? ScenarioId);
-
-public sealed record WritingDiagnosticSessionResponse(
-    Guid Id,
-    Guid ScenarioId,
-    string Phase,
-    int ReadingSecondsRemaining,
-    int WritingSecondsRemaining,
-    DateTimeOffset StartedAt,
-    DateTimeOffset? ReadingPhaseEndedAt,
-    DateTimeOffset? SubmittedAt,
-    Guid? SubmissionId);
-
-public sealed record WritingDiagnosticSubmitRequest(
-    [property: Required] string LetterContent,
-    [property: Range(0, 5000)] int WordCount,
-    [property: Range(0, 7200)] int TimeSpentSeconds);
-
-public sealed record WritingDiagnosticResultsResponse(
-    Guid SessionId,
-    Guid SubmissionId,
-    WritingGradeResponseV2 Grade,
-    WritingPathwayResponseV2 PathwayPreview);
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Pathway V2 / today
 // ─────────────────────────────────────────────────────────────────────────────
 

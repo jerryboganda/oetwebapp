@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, FileText, Headphones, Loader2, Lock, Play, Timer, Volume2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, Loader2, Lock, Play, Timer, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
@@ -24,13 +24,6 @@ export interface ListeningIntroCardProps {
   isStarting: boolean;
   audioError: string | null;
   startError: string | null;
-  /** WS2 — true when the server blocked this strict attempt for a missing /
-   * expired pathway sound check. Replaces the generic error with a clear
-   * "Run the sound check" recovery CTA. */
-  audioCheckRequired?: boolean;
-  /** Destination for the sound-check CTA — `/listening/audio-check?returnTo=…`
-   * pointing back at this player so a passed check returns the learner here. */
-  audioCheckHref?: string;
   onTechReadinessReady: (result: { audioOk: boolean; durationMs: number }) => void;
   onStart: () => void;
 }
@@ -64,8 +57,6 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
     isStarting,
     audioError,
     startError,
-    audioCheckRequired = false,
-    audioCheckHref = '/listening/audio-check',
     onTechReadinessReady,
     onStart,
   } = props;
@@ -239,33 +230,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
           {audioError}
         </InlineAlert>
       ) : null}
-      {/* WS2 — sound-check gate. When the server blocks a strict exam for a
-          missing / expired sound check, show a clear recovery path instead of
-          a dead-end error. The plain startError alert is suppressed here since
-          this panel already states the reason. */}
-      {audioCheckRequired ? (
-        <div
-          className="mx-auto mb-6 max-w-lg rounded-2xl border border-warning/30 bg-warning/10 p-6 text-left"
-          role="alert"
-          data-testid="listening-audio-check-required"
-        >
-          <div className="flex items-start gap-3">
-            <Headphones className="mt-0.5 h-6 w-6 shrink-0 text-warning" aria-hidden="true" />
-            <div>
-              <h3 className="text-base font-black text-navy">Sound check required</h3>
-              <p className="mt-1 text-sm text-muted">
-                {startError
-                  ?? 'Pass the Listening sound check before starting this exam. It only takes a moment.'}
-              </p>
-            </div>
-          </div>
-          <Button asChild size="lg" className="mt-4 w-full gap-2 sm:w-auto">
-            <Link href={audioCheckHref}>
-              <Headphones className="h-5 w-5" aria-hidden="true" /> Run the sound check
-            </Link>
-          </Button>
-        </div>
-      ) : startError ? (
+      {startError ? (
         <InlineAlert variant="error" className="mx-auto mb-6 max-w-lg text-left">
           {startError}
         </InlineAlert>

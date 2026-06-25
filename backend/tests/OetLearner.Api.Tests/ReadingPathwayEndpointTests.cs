@@ -19,53 +19,6 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
     }
 
     [Fact]
-    public async Task DiagnosticQuestions_ReturnLearnerSafeProjectionOnly()
-    {
-        var userId = NewUserId("diagnostic-safe");
-        var client = await CreateLearnerClientAsync(userId);
-        var questionId = NewQuestionId("safe");
-        var sessionId = Guid.NewGuid();
-        await SeedQuestionAndSessionAsync(userId, sessionId, "diagnostic", questionId);
-
-        var response = await client.GetAsync($"/v1/reading-pathway/diagnostic/sessions/{sessionId}/questions");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
-        using var json = JsonDocument.Parse(body);
-        var question = Assert.Single(json.RootElement.EnumerateArray());
-        Assert.Equal(questionId, question.GetProperty("id").GetString());
-        Assert.Equal("B", question.GetProperty("partCode").GetString());
-        Assert.Equal("MultipleChoice3", question.GetProperty("questionType").GetString());
-        Assert.Equal("Clinical notice", question.GetProperty("textTitle").GetString());
-        Assert.Contains("Review the policy notice", question.GetProperty("textHtml").GetString());
-        Assert.Contains("Check the policy", body);
-
-        Assert.DoesNotContain("correctAnswer", body, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("acceptedSynonyms", body, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("explanationMarkdown", body, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Do not leak this explanation", body, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("SECRET-OPTION", body, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task DiagnosticSessionEndpoints_RejectCrossUserAccess()
-    {
-        var ownerId = NewUserId("owner");
-        var otherUserId = NewUserId("other");
-        var otherClient = await CreateLearnerClientAsync(otherUserId);
-        var sessionId = Guid.NewGuid();
-        await SeedQuestionAndSessionAsync(ownerId, sessionId, "diagnostic", NewQuestionId("owned"));
-
-        var questionsResponse = await otherClient.GetAsync($"/v1/reading-pathway/diagnostic/sessions/{sessionId}/questions");
-        var submitResponse = await otherClient.PostAsJsonAsync(
-            "/v1/reading-pathway/diagnostic/submit",
-            new { sessionId, answers = new Dictionary<string, string>() });
-
-        Assert.Equal(HttpStatusCode.NotFound, questionsResponse.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, submitResponse.StatusCode);
-    }
-
-    [Fact]
     public async Task PracticeAnswerEndpoint_RejectsLockedSessionTypesAndOutOfSessionQuestions()
     {
         var userId = NewUserId("locked-answer");
@@ -92,28 +45,6 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         Assert.Empty(await db.ReadingQuestionAttempts.Where(a => a.UserId == userId).ToListAsync());
-    }
-
-    [Fact]
-    public async Task DiagnosticSubmit_RejectsRepeatedSubmissionWithoutDuplicatingAttempts()
-    {
-        var userId = NewUserId("repeat-submit");
-        var client = await CreateLearnerClientAsync(userId);
-        var questionId = NewQuestionId("repeat");
-        var sessionId = Guid.NewGuid();
-        await SeedQuestionAndSessionAsync(userId, sessionId, "diagnostic", questionId, withReadingProfile: true);
-
-        var payload = new { sessionId, answers = new Dictionary<string, string> { [questionId] = "A" } };
-        var firstResponse = await client.PostAsJsonAsync("/v1/reading-pathway/diagnostic/submit", payload);
-        var secondResponse = await client.PostAsJsonAsync("/v1/reading-pathway/diagnostic/submit", payload);
-
-        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
-        Assert.Contains("diagnostic_already_submitted", await secondResponse.Content.ReadAsStringAsync());
-
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        Assert.Equal(1, await db.ReadingQuestionAttempts.CountAsync(a => a.UserId == userId && a.PracticeSessionId == sessionId));
     }
 
     [Fact]

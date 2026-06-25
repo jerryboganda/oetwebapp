@@ -29,119 +29,6 @@ public static class ReadingPathwayEndpoints
             return Results.Ok(ToProfileResponse(userId, profile));
         });
 
-        group.MapPost("/diagnostic/start", async (
-            HttpContext http,
-            IReadingLearnerPathwayService svc,
-            CancellationToken ct) =>
-        {
-            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? throw new InvalidOperationException("auth required");
-            var result = await svc.StartDiagnosticAsync(userId, ct);
-            return Results.Ok(result);
-        });
-
-        group.MapGet("/diagnostic/sessions/{sessionId}/questions", async (
-            Guid sessionId,
-            HttpContext http,
-            LearnerDbContext db,
-            CancellationToken ct) =>
-        {
-            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? throw new InvalidOperationException("auth required");
-            var session = await db.ReadingPracticeSessions.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId && s.SessionType == "diagnostic", ct);
-            if (session is null) return Results.NotFound();
-
-            var questionIds = JsonSerializer.Deserialize<List<string>>(session.QuestionIdsJson) ?? [];
-            if (questionIds.Count == 0) return Results.Ok(Array.Empty<DiagnosticQuestionResponse>());
-
-            var questionOrder = questionIds
-                .Select((id, index) => new { id, index })
-                .ToDictionary(x => x.id, x => x.index, StringComparer.OrdinalIgnoreCase);
-
-            var questions = await db.ReadingQuestions.AsNoTracking()
-                .Include(q => q.Part)
-                .Include(q => q.Text)
-                .Where(q => questionIds.Contains(q.Id))
-                .ToListAsync(ct);
-
-            var response = questions
-                .OrderBy(q => questionOrder.TryGetValue(q.Id, out var index) ? index : int.MaxValue)
-                .Select(q => new DiagnosticQuestionResponse(
-                    Id: q.Id,
-                    PartCode: q.Part?.PartCode.ToString() ?? "",
-                    QuestionType: q.QuestionType.ToString(),
-                    DisplayOrder: q.DisplayOrder,
-                    Stem: q.Stem,
-                    Options: ReadingLearnerSafeProjection.ProjectOptionsElement(q.OptionsJson),
-                    TextTitle: q.Text?.Title,
-                    TextHtml: q.Text?.BodyHtml,
-                    SkillCode: q.SkillTag))
-                .ToList();
-
-            return Results.Ok(response);
-        });
-
-        group.MapPost("/diagnostic/submit", async (
-            SubmitDiagnosticRequest request,
-            HttpContext http,
-            IReadingLearnerPathwayService svc,
-            LearnerDbContext db,
-            CancellationToken ct) =>
-        {
-            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? throw new InvalidOperationException("auth required");
-            var diagnosticSession = await db.ReadingPracticeSessions.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == request.SessionId && s.UserId == userId && s.SessionType == "diagnostic", ct);
-            if (diagnosticSession is null) return Results.NotFound();
-            if (diagnosticSession.CompletedAt is not null)
-                return Results.BadRequest(new { code = "diagnostic_already_submitted", error = "Diagnostic already submitted.", message = "Diagnostic already submitted." });
-
-            var result = await svc.SubmitDiagnosticAsync(userId, request.SessionId, request.Answers, ct);
-            var session = await db.ReadingPracticeSessions.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == request.SessionId && s.UserId == userId && s.SessionType == "diagnostic", ct);
-            var roadmapWeeks = await GetRoadmapWeeksAsync(userId, db, ct);
-            return Results.Ok(new DiagnosticResultResponse(
-                SessionId: request.SessionId,
-                Score: result.Score,
-                TotalQuestions: result.TotalQuestions,
-                SkillScores: result.SkillScores,
-                EstimatedOetBand: result.EstimatedOetBand,
-                EstimatedScaledScore: result.EstimatedScaledScore ?? 0,
-                DurationSeconds: session?.DurationSeconds,
-                RoadmapWeeks: roadmapWeeks,
-                CompletedAt: session?.CompletedAt));
-        });
-
-        group.MapGet("/diagnostic/sessions/{sessionId}/results", async (
-            Guid sessionId,
-            HttpContext http,
-            ISkillScoringService scoring,
-            LearnerDbContext db,
-            CancellationToken ct) =>
-        {
-            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? throw new InvalidOperationException("auth required");
-            var session = await db.ReadingPracticeSessions.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId && s.SessionType == "diagnostic", ct);
-            if (session is null || session.CompletedAt is null) return Results.NotFound();
-
-            var score = session.Score ?? 0;
-            var total = session.TotalQuestions ?? 0;
-            var scaled = EstimateScaled(score, total);
-            var roadmapWeeks = await GetRoadmapWeeksAsync(userId, db, ct);
-            return Results.Ok(new DiagnosticResultResponse(
-                SessionId: sessionId,
-                Score: score,
-                TotalQuestions: total,
-                SkillScores: await scoring.GetCurrentScoresAsync(userId, ct),
-                EstimatedOetBand: OetScoring.OetGradeLetterFromScaled(scaled),
-                EstimatedScaledScore: scaled,
-                DurationSeconds: session.DurationSeconds,
-                RoadmapWeeks: roadmapWeeks,
-                CompletedAt: session.CompletedAt));
-        });
-
         group.MapGet("/pathway", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -958,7 +845,7 @@ public static class ReadingPathwayEndpoints
         {
             return new ReadingProfileResponse(
                 UserId: userId,
-                CurrentStage: "diagnostic",
+                CurrentStage: "foundation",
                 TargetBand: null,
                 ExamDate: null,
                 HoursPerWeek: null,
@@ -972,7 +859,7 @@ public static class ReadingPathwayEndpoints
                 OnboardingCompletedAt: null,
                 PathwayGeneratedAt: null,
                 WeeksRemaining: null,
-                DiagnosticCompleted: false);
+                DiagnosticCompleted: true);
         }
 
         int? weeksRemaining = profile.ExamDate.HasValue
@@ -995,7 +882,7 @@ public static class ReadingPathwayEndpoints
             OnboardingCompletedAt: profile.OnboardingCompletedAt,
             PathwayGeneratedAt: profile.PathwayGeneratedAt,
             WeeksRemaining: weeksRemaining,
-            DiagnosticCompleted: profile.CurrentStage is not "diagnostic" and not "audio_check");
+            DiagnosticCompleted: true);
     }
 
     private static ReadingPathwayResponse ToPathwayResponse(LearnerReadingProfile? profile, LearnerReadingPathway? pathway)
@@ -1022,7 +909,7 @@ public static class ReadingPathwayEndpoints
                 : Math.Max(0, (int)Math.Ceiling((profile.ExamDate.Value - DateTimeOffset.UtcNow).TotalDays / 7));
 
         return new ReadingPathwayResponse(
-            CurrentStage: profile?.CurrentStage ?? "diagnostic",
+            CurrentStage: profile?.CurrentStage ?? "foundation",
             TotalWeeks: pathway?.TotalWeeks ?? weeks.Count,
             CurrentWeek: currentWeek,
             WeeksRemaining: weeksRemaining,

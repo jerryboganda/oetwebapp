@@ -9,7 +9,6 @@ export { WritingEditor } from './writing-editor';
 export { WritingIssueList, type IssueType } from './writing-issue-list';
 export { RevisionDiffViewer } from './revision-diff-viewer';
 export { SpeakingRoleCard } from './speaking-role-card';
-export { MicCheckPanel } from './mic-check-panel';
 export { TranscriptFlagList, TranscriptFlagLegend, type FlagType } from './transcript-flag-list';
 export { BetterPhraseCard } from './better-phrase-card';
 export { MockReportSummary } from './mock-report-summary';

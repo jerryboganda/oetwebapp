@@ -92,10 +92,9 @@ export default function ListeningPartPracticePage() {
   if (!part) return null;
 
   const meta = PART_DETAILS[part];
-  // The listening diagnostic is optional — any learner can start Part A/B/C
-  // practice directly, in any order. We launch the matching part-scoped pathway
-  // stage as soon as the server exposes a runnable paper for it (actionHref
-  // present and not Locked); no diagnostic completion is required.
+  // Any learner can start Part A/B/C practice directly, in any order. We launch
+  // the matching part-scoped pathway stage as soon as the server exposes a
+  // runnable paper for it (actionHref present and not Locked).
   const launchStage = stages.find(
     (stage) => stage.actionHref && stage.status !== 'Locked' && stageMatchesPart(stage, part),
   );

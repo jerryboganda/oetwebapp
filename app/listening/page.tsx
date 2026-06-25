@@ -98,19 +98,14 @@ export default function ListeningHome() {
     }
   }, [authLoading, isAuthenticated]);
 
-  // Stage-driven routing — push the learner to the appropriate next step.
+  // Redirect unauthenticated visitors to sign-in.
   useEffect(() => {
     if (authLoading || isLoading) return;
     if (!isAuthenticated) {
       router.replace('/sign-in');
       return;
     }
-    if (!profile) return;
-    if (profile.currentStage === 'audio_check') {
-      router.replace('/listening/audio-check');
-      return;
-    }
-  }, [authLoading, isLoading, isAuthenticated, profile, router]);
+  }, [authLoading, isLoading, isAuthenticated, router]);
 
   // Cheap derivation — not memoized because wall-clock time is inherently impure.
   const daysToExam: number | null = (() => {
@@ -133,7 +128,7 @@ export default function ListeningHome() {
         value:
           profile?.currentReadinessScore !== null && profile?.currentReadinessScore !== undefined
             ? `${profile.currentReadinessScore}%`
-            : 'Diagnostic pending',
+            : 'Not yet measured',
       },
       {
         icon: CalendarDays,
@@ -179,13 +174,13 @@ export default function ListeningHome() {
           <div className="rounded-2xl border border-violet-100 bg-violet-50 p-8 text-center shadow-sm">
             <p className="text-lg font-bold text-violet-900">Get started</p>
             <p className="mt-1 text-sm text-violet-700">
-              Start with the audio check, then move straight into your listening diagnostic and tailored plan.
+              Jump straight into your tailored listening pathway and start practising.
             </p>
             <Link
-              href="/listening/audio-check"
+              href="/listening/pathway"
               className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-bold text-white shadow-md transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
-              Start audio check
+              Start practising
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
@@ -212,30 +207,9 @@ export default function ListeningHome() {
     );
   }
 
-  const needsDiagnostic =
-    profile.currentStage === 'diagnostic' || profile.currentStage === 'audio_check';
-
   return (
     <LearnerDashboardShell pageTitle="Listening">
       <main className="space-y-6 sm:space-y-10">
-        {needsDiagnostic && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-700 dark:bg-blue-900/20">
-            <p className="mb-1 text-sm font-semibold text-blue-800 dark:text-blue-200">
-              Start with your listening diagnostic
-            </p>
-            <p className="mb-3 text-xs text-blue-700/70 dark:text-blue-300/70">
-              A short diagnostic calibrates your sub-skills, accents, and recommended plan.
-            </p>
-            <Link
-              href="/listening/diagnostic"
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-            >
-              Take the diagnostic
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </div>
-        )}
-
         <LearnerPageHero
           eyebrow="Module focus"
           icon={Headphones}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, FilePenLine, FileQuestion, Headphones, MessageSquare, Mic, Stethoscope } from 'lucide-react';
+import { BookOpen, FilePenLine, FileQuestion, Headphones, MessageSquare, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const learnerSkillModules = [
@@ -11,7 +11,6 @@ const learnerSkillModules = [
   { href: '/reading', label: 'Reading', shortLabel: 'Reading', icon: BookOpen, description: 'Parts A, B, and C' },
   { href: '/listening', label: 'Listening', shortLabel: 'Listening', icon: Headphones, description: 'Audio, notes, and review' },
   { href: '/mocks', label: 'Mocks', shortLabel: 'Mocks', icon: FileQuestion, description: 'Timed transfer practice' },
-  { href: '/diagnostic', label: 'Diagnostic', shortLabel: 'Diagnostic', icon: Stethoscope, description: 'Baseline and triage' },
   { href: '/conversation', label: 'AI Conversation', shortLabel: 'Conversation', icon: MessageSquare, description: 'Interactive scenarios' },
 ] as const;
 

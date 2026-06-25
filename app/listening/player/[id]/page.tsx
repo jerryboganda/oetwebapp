@@ -60,13 +60,6 @@ import { useListeningAnnotations, type ListeningQuestionAnnotation } from '@/hoo
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
-// WS2 — the strict sound-check gate surfaces two ways: the server `advance`
-// rejects intro→a1_preview with this reason, OR `startListeningAttempt` throws
-// a 400 carrying this error code. Either one routes the learner to the sound
-// check rather than showing a generic error.
-const AUDIO_CHECK_REJECTION_REASON = 'audio-check-required';
-const AUDIO_CHECK_START_CODE = 'listening_audio_check_required';
-
 type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
 
 function formatTime(seconds: number) {
@@ -143,21 +136,6 @@ class StrictAdvanceError extends Error {
     this.name = 'StrictAdvanceError';
     this.reason = result.rejectionReason;
   }
-}
-
-// True when an error from `startTask` / `advanceStrictStart` is the WS2
-// sound-check gate — whether it arrived as a strict-advance rejection
-// (`audio-check-required`) or a `startListeningAttempt` validation 400
-// (`listening_audio_check_required`).
-function isAudioCheckRequiredError(err: unknown): boolean {
-  if (err instanceof StrictAdvanceError && err.reason === AUDIO_CHECK_REJECTION_REASON) {
-    return true;
-  }
-  const detail = (err as { detail?: unknown } | null)?.detail;
-  if (detail && typeof detail === 'object' && 'code' in detail) {
-    return (detail as { code?: unknown }).code === AUDIO_CHECK_START_CODE;
-  }
-  return false;
 }
 
 async function advanceStrictTransition(attemptId: string, toState: ListeningFsmState): Promise<ListeningV2SessionState> {
@@ -275,9 +253,6 @@ function PlayerContent() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [techReadiness, setTechReadiness] = useState<{ audioOk: boolean; durationMs: number } | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  // WS2 — set true when the server blocks this strict attempt for a missing /
-  // expired sound check. Drives the "Run the sound check" CTA on the intro card.
-  const [audioCheckRequired, setAudioCheckRequired] = useState(false);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   // C8f — pre-audio reading window precedes the audio of every section so
   // candidates can read the questions before audio playback starts. Initial
@@ -342,33 +317,6 @@ function PlayerContent() {
     || mode === 'home'
     || session?.modePolicy.mode === 'exam'
     || session?.modePolicy.mode === 'home';
-
-  // WS2 — sound-check destination. After a passed check the learner returns to
-  // this exact player URL (mode + launch params preserved) so they can start
-  // the exam without re-navigating. Only the launch params the player itself
-  // restores are carried; transient attemptId is intentionally dropped since a
-  // gated attempt was never created.
-  const audioCheckHref = useMemo(() => {
-    if (!id) return '/listening/audio-check';
-    const returnParams = new URLSearchParams();
-    if (rawMode) returnParams.set('mode', rawMode);
-    if (focusParam) returnParams.set('focus', focusParam);
-    if (partFocus) returnParams.set('part', partFocus.toUpperCase());
-    if (pathwayStage) returnParams.set('pathwayStage', pathwayStage);
-    if (drillId) returnParams.set('drill', drillId);
-    if (mockAttemptId) returnParams.set('mockAttemptId', mockAttemptId);
-    if (mockSectionId) returnParams.set('mockSectionId', mockSectionId);
-    if (mockMode) returnParams.set('mockMode', mockMode);
-    if (mockStrictness) returnParams.set('strictness', mockStrictness);
-    if (mockDeliveryMode) returnParams.set('deliveryMode', mockDeliveryMode);
-    if (mockStrictTimer) returnParams.set('strictTimer', mockStrictTimer);
-    const query = returnParams.toString();
-    const returnTo = `/listening/player/${encodeURIComponent(id)}${query ? `?${query}` : ''}`;
-    return `/listening/audio-check?returnTo=${encodeURIComponent(returnTo)}`;
-  }, [
-    id, rawMode, focusParam, partFocus, pathwayStage, drillId,
-    mockAttemptId, mockSectionId, mockMode, mockStrictness, mockDeliveryMode, mockStrictTimer,
-  ]);
 
   useEffect(() => {
     if (!id) return;
@@ -618,7 +566,6 @@ function PlayerContent() {
     }
     setIsStarting(true);
     setStartError(null);
-    setAudioCheckRequired(false);
     try {
       const started = await ensureAttempt();
       if (strictReadinessRequired) {
@@ -663,13 +610,6 @@ function PlayerContent() {
     } catch (err) {
       if (isContentLockedError(err)) {
         setContentLockedMessage(readContentLockedMessage(err));
-        return;
-      }
-      if (isAudioCheckRequiredError(err)) {
-        // WS2 — gate hit (start or first advance). Surface the recovery CTA
-        // instead of a dead-end error so the learner can run the sound check.
-        setAudioCheckRequired(true);
-        setStartError(err instanceof Error ? err.message : 'Pass the Listening sound check before starting this exam.');
         return;
       }
       setStartError(err instanceof Error ? err.message : 'Could not start this Listening attempt.');
@@ -1459,8 +1399,6 @@ function PlayerContent() {
             isStarting={isStarting}
             audioError={audioError}
             startError={startError}
-            audioCheckRequired={audioCheckRequired}
-            audioCheckHref={audioCheckHref}
             onTechReadinessReady={(result) => {
               setTechReadiness(result);
               setStartError(null);
