@@ -216,7 +216,7 @@ export function TopNav({
             <motion.nav
               id="mobile-menu"
               aria-label="Mobile menu"
-              className="glass-panel absolute left-3 right-3 top-[calc(4rem+env(safe-area-inset-top))] max-h-[calc(100dvh-5.5rem-env(safe-area-inset-top))] overflow-hidden rounded-[1.75rem] border-border/60 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+              className="glass-panel absolute left-3 right-3 top-[calc(3.25rem+env(safe-area-inset-top))] max-h-[calc(100dvh-3.25rem-var(--bottom-nav-height)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-0.5rem)] overflow-hidden rounded-[1.75rem] border-border/60 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
               {...menuMotionProps}
             >
               <div className="flex max-h-[inherit] flex-col">
@@ -247,7 +247,7 @@ export function TopNav({
                                     href={item.href}
                                     onClick={handleMobileItemClick}
                                     className={cn(
-                                      'pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold',
+                                      'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-semibold',
                                       active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                                     )}
                                     aria-current={active ? 'page' : undefined}
@@ -268,7 +268,7 @@ export function TopNav({
                           <Link
                             href="/settings"
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
+                            className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >
                             <Settings className="h-4 w-4" aria-hidden="true" />
                             Settings
@@ -276,7 +276,7 @@ export function TopNav({
                           <a
                             href={buildSupportMailto(userSummary?.email ?? undefined)}
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
+                            className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >
                             <HelpCircle className="h-4 w-4" aria-hidden="true" />
                             Help & Support
@@ -301,7 +301,7 @@ export function TopNav({
                               href={item.href}
                               onClick={handleMobileItemClick}
                               className={cn(
-                                'pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold',
+                                'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-semibold',
                                 active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                               )}
                               aria-current={active ? 'page' : undefined}
@@ -322,7 +322,7 @@ export function TopNav({
                         onClick={() => {
                           void handleSignOut();
                         }}
-                        className="pressable flex w-full items-center justify-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
+                        className="pressable flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                       >
                         <LogOut className="h-4 w-4" aria-hidden="true" />
                         Sign out
