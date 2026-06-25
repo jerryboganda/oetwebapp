@@ -13,6 +13,16 @@ namespace OetLearner.Api.Data.Migrations
         {
             migrationBuilder.DropTable(
                 name: "WritingDiagnosticSessions");
+
+            // Diagnostic + audio-check stages were removed; remap any learner
+            // profile stranded in those stages to the first real learning stage
+            // so the pathway surfaces render correctly.
+            migrationBuilder.Sql(
+                "UPDATE \"LearnerListeningProfiles\" SET \"CurrentStage\" = 'foundation' WHERE \"CurrentStage\" IN ('diagnostic', 'audio_check');");
+            migrationBuilder.Sql(
+                "UPDATE \"LearnerReadingProfiles\" SET \"CurrentStage\" = 'foundation' WHERE \"CurrentStage\" IN ('diagnostic', 'audio_check');");
+            migrationBuilder.Sql(
+                "UPDATE \"LearnerWritingProfiles\" SET \"CurrentStage\" = 'foundation' WHERE \"CurrentStage\" IN ('diagnostic', 'audio_check');");
         }
 
         /// <inheritdoc />
