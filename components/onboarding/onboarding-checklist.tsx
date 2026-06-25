@@ -75,13 +75,6 @@ export function OnboardingChecklist() {
         cta: 'Start tour',
         onClick: () => void startTour('learner-dashboard', { replay: true }),
       },
-      {
-        id: 'first-practice',
-        label: 'Try a practice or diagnostic',
-        done: Boolean(profile?.diagnosticComplete),
-        cta: 'Start practice',
-        onClick: () => router.push('/diagnostic'),
-      },
     ];
   }, [profile, isCompleted, router, startTour]);
 

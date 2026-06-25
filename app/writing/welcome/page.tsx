@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { PenTool, Compass, ClipboardCheck, BookOpen, Target, Award, ArrowRight, Sparkles } from 'lucide-react';
+import { PenTool, Compass, BookOpen, Target, Award, ArrowRight, Sparkles } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,6 @@ import { getWritingV2Profile } from '@/lib/writing/api';
 
 const STAGES = [
   { code: 'onboarding', labelKey: 'writing.welcome.stages.onboarding', descriptionKey: 'writing.welcome.stages.onboardingDescription', icon: Compass },
-  { code: 'diagnostic', labelKey: 'writing.welcome.stages.diagnostic', descriptionKey: 'writing.welcome.stages.diagnosticDescription', icon: ClipboardCheck },
   { code: 'foundation', labelKey: 'writing.welcome.stages.foundation', descriptionKey: 'writing.welcome.stages.foundationDescription', icon: BookOpen },
   { code: 'practice', labelKey: 'writing.welcome.stages.practice', descriptionKey: 'writing.welcome.stages.practiceDescription', icon: Target },
   { code: 'mastery', labelKey: 'writing.welcome.stages.mastery', descriptionKey: 'writing.welcome.stages.masteryDescription', icon: Award },
@@ -55,7 +54,6 @@ export default function WritingWelcomePage() {
           highlights={[
             { icon: Sparkles, label: t('writing.welcome.highlights.pathway'), value: t('writing.welcome.highlights.pathwayValue') },
             { icon: Award, label: t('writing.welcome.highlights.target'), value: t('writing.welcome.highlights.targetValue') },
-            { icon: ClipboardCheck, label: t('writing.welcome.highlights.diagnostic'), value: t('writing.welcome.highlights.diagnosticValue') },
           ]}
         />
 

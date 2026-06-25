@@ -213,8 +213,8 @@ export default function StudyPlanPage() {
         emptyContent={
           <div className="py-12 text-center space-y-3">
             <p className="text-sm font-bold text-navy">No study plan yet</p>
-            <p className="text-xs text-muted">Complete the diagnostic assessment to generate your personalised study plan.</p>
-            <Button size="sm" onClick={() => router.push('/diagnostic')}>Start Diagnostic</Button>
+            <p className="text-xs text-muted">Set your goals to generate your personalised study plan.</p>
+            <Button size="sm" onClick={() => router.push('/goals')}>Set goals</Button>
           </div>
         }
       >

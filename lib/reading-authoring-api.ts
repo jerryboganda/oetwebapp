@@ -963,18 +963,16 @@ export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading-papers/home
 // Mirrors `ReadingPathwaySnapshot` from
 // `backend/src/OetLearner.Api/Services/Reading/ReadingPathwayService.cs`.
 // Surfaced at GET /v1/reading-papers/me/pathway (auth-required) and joins
-// diagnostic + drilling + mock signals into a single readiness stage.
+// drilling + mock signals into a single readiness stage.
 
 export type ReadingPathwayStage =
   | 'not_started'
-  | 'diagnostic'
   | 'drilling'
   | 'mini_tests'
   | 'mock_ready'
   | 'exam_ready';
 
 export type ReadingPathwayActionKind =
-  | 'start_diagnostic'
   | 'start_drill'
   | 'start_mini_test'
   | 'start_mock'

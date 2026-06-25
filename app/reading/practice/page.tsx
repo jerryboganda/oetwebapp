@@ -242,7 +242,6 @@ export default function ReadingPracticePage() {
           router.push(started.playerRoute);
           return;
         }
-        case 'start_diagnostic':
         case 'start_mock':
         case 'review_results':
         case 'book_exam':

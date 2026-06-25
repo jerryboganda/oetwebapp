@@ -449,9 +449,8 @@ export default function Dashboard() {
                 className="lg:col-span-2"
                 icon={Sparkles}
                 title="No live dashboard priorities yet"
-                description="Complete onboarding, take a diagnostic, or open your study plan to create the evidence that powers next actions."
+                description="Complete onboarding or open your study plan to create the evidence that powers next actions."
                 primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
-                secondaryAction={{ label: 'Take Diagnostic', href: '/diagnostic' }}
               />
             ) : null}
           </div>
@@ -519,7 +518,7 @@ export default function Dashboard() {
                       compact
                       icon={Calendar}
                       title="No live tasks scheduled today"
-                      description="Tasks appear from your server-backed study plan after onboarding, diagnostics, or new practice evidence."
+                      description="Tasks appear from your server-backed study plan after onboarding or new practice evidence."
                       primaryAction={{ label: 'Build Study Plan', href: '/study-plan' }}
                       secondaryAction={{ label: 'Start Practice', href: '/writing' }}
                     />

@@ -274,7 +274,7 @@ export default function GoalSetupPage() {
       if (data.examMode) track('welcome_exam_mode_set', { mode: data.examMode });
       if (data.confidence) track('welcome_confidence_set', { level: data.confidence });
       track('goals_saved', { examFamilyCode: data.examFamilyCode });
-      router.push('/diagnostic');
+      router.push('/');
     } finally {
       setSaving(false);
     }
@@ -288,7 +288,7 @@ export default function GoalSetupPage() {
           icon={Target}
           accent="primary"
           title="Set the signals your study plan should follow"
-          description="Tell the platform your exam, profession, target country, and weekly commitment so diagnostics and study-plan pacing stay relevant."
+          description="Tell the platform your exam, profession, target country, and weekly commitment so your study-plan pacing stays relevant."
           highlights={[
             { icon: Stethoscope, label: 'Profession', value: watch('profession') || 'Required' },
             { icon: CalendarDays, label: 'Exam date', value: watch('examDate') || 'Not scheduled' },
