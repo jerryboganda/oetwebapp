@@ -1,0 +1,73 @@
+name: Generate RemoveDiagnostic migration
+
+# One-shot helper: generates the EF Core "RemoveDiagnostic" migration on a
+# clean GitHub-hosted runner (the local Windows box OOMs under heavy .NET) and
+# commits the generated files back to the branch. The migration drops the
+# diagnostic-only WritingDiagnosticSessions table (auto-diffed from the model,
+# whose WritingDiagnosticSession entity was removed). The learner stage-remap
+# (diagnostic/audio_check -> foundation) is added by hand to the generated
+# Up()/Down() afterwards.
+#
+# Runs automatically when this workflow file is pushed to the feature branch
+# (workflow_dispatch needs the file on the default branch, which it isn't yet).
+# The path filter means the bot's migration commit does NOT re-trigger it, so
+# there is no loop.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/remove-diagnostic
+    paths:
+      - .github/workflows/generate-diagnostic-migration.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-diagnostic-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    name: dotnet ef migrations add RemoveDiagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dotnet-ef tool
+        run: dotnet tool restore
+
+      - name: Restore API project
+        run: dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj
+
+      - name: Add migration
+        run: >
+          dotnet ef migrations add RemoveDiagnostic
+          --project backend/src/OetLearner.Api/OetLearner.Api.csproj
+          --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj
+
+      - name: Commit generated migration
+        run: |
+          if git diff --quiet && git ls-files --others --exclude-standard backend/src/OetLearner.Api/Data/Migrations | grep -q .; then :; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/OetLearner.Api/Data/Migrations
+          if git diff --cached --quiet; then
+            echo "No migration changes generated."
+            exit 0
+          fi
+          git commit -m "chore(diagnostic): generate RemoveDiagnostic EF migration (drop WritingDiagnosticSessions)
+
+Auto-generated on CI via dotnet ef. Stage-remap SQL is added by hand next."
+          git push origin HEAD:${{ github.ref_name }}
