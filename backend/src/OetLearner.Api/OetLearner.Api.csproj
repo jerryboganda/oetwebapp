@@ -27,6 +27,12 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+    <!-- Security (BUG-007): EF Core 10's SQLite provider transitively pulls
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11, which has high-severity advisory
+         NU1903/GHSA-2m69-gcr7-jv3q and has no patched 2.1.x. Force the bundle to
+         3.0.x (patched e_sqlite3). The SQLitePCLRaw.core API is stable across
+         2.1→3.0, so Microsoft.Data.Sqlite 10 keeps working. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     <!-- pgvector (.NET bindings + Npgsql.EntityFrameworkCore integration). Used by
          WritingExemplarEmbeddingService to store and query the 1536-dim
