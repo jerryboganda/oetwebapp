@@ -154,7 +154,7 @@ export function TopNav({
     <>
       <motion.header
         className={cn(
-          'glass-panel sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-4 safe-area-inset-top lg:px-6',
+          'glass-panel sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b border-border/60 px-3 safe-area-inset-top lg:h-12 lg:px-6',
           className,
         )}
         layout={!reducedMotion}
@@ -162,7 +162,7 @@ export function TopNav({
       >
         <div className="flex items-center gap-3">
           <button
-            className="touch-target pressable rounded-2xl p-2 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary lg:hidden"
+            className="touch-target pressable -ml-1 rounded-xl p-1.5 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary lg:hidden"
             onClick={() => {
               void triggerImpactHaptic('LIGHT');
               setMobileMenuOpen((current) => !current);
@@ -188,13 +188,13 @@ export function TopNav({
           </AnimatePresence>
         </div>
 
-        <motion.div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3" layout={!reducedMotion}>
+        <motion.div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2" layout={!reducedMotion}>
           {actions}
           {showStreakBadges && <LearnerStreakBadges />}
           <TourLauncher workspaceRole={workspaceRole} />
           <ThemeToggle />
           <NotificationCenter />
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary ring-1 ring-primary/10">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
             {initials}
           </div>
         </motion.div>

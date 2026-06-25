@@ -329,7 +329,7 @@
   :root {
     --app-viewport-height: 100dvh;
     --app-keyboard-offset: 0px;
-    --bottom-nav-height: 6rem;
+    --bottom-nav-height: 4.75rem;
     color-scheme: light;
   }
 
