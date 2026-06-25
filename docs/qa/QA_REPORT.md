@@ -363,5 +363,38 @@ owned by a separate backend session)**.
 ### Provisional recommendation
 **GO for Windows x64 internal testing once (1) the Phase 9 smoke passes and (2) the BUG-007 SQLite
 bump lands.** All desktop-shell Critical/High items are resolved; remaining blockers are the bundled
-backend dependency and operational handoffs (secrets + feed), not desktop-shell defects. _Final verdict
-recorded after the Phase 9 smoke below._
+backend dependency and operational handoffs (secrets + feed), not desktop-shell defects.
+
+---
+
+## Gap closure (post-review fixes)
+
+Follow-up pass to close the outstanding gaps from the first go/no-go.
+
+| Gap | Status | What was done |
+|---|---|---|
+| **BUG-007** — high-sev `SQLitePCLRaw` in bundled backend | ✅ **FIXED** | Forced `SQLitePCLRaw.bundle_e_sqlite3` 3.0.3 (no patched 2.1.x exists). `dotnet list package --vulnerable` → clean; API builds 0 errors. |
+| **macOS build** (BUG-009) | ✅ **FIXED** | `tauri.dist.conf.json` no longer hardcodes `node.exe`; `tauri-dist.cjs` merges the platform-correct node resource. |
+| **Updater feed handoff** (VPS hosting) | ✅ **CLOSED** | Re-pointed the updater to **GitHub Releases** (`/releases/latest/download/latest.json`); the release workflow emits a matching GitHub asset URL. No VPS hosting required. Releases must be published non-prerelease (the workflow does). |
+| **CI secrets** | ✅ **DONE** | `WINDOWS_CERTIFICATE[_PASSWORD]` + `TAURI_SIGNING_PRIVATE_KEY` set on the repo. |
+| **CI proven green (Windows)** | ✅ **DONE** | Run 28135695878 Windows leg green; rebuild in progress with all fixes. |
+| **Clean-machine install smoke** | ⚠️ **partial** | Validated by install-smoke on the CI installer (below) + Phase 0 live runtime. A truly *pristine* VM remains a tester first-run (`TESTER_SETUP.md`). |
+| **macOS mic-gate validation** | ❌ **blocked** | Requires real Mac hardware + interactive mic permission — cannot be done on CI or this Windows box. Documented; treat macOS as experimental. |
+| **OET content PDFs in public repo** | ⚠️ **flagged, not auto-fixed** | Rewriting public git history is destructive + an owner decision. Procedure below. |
+
+### OET-content purge procedure (owner to run — NOT executed here)
+The repo tracks large OET exam-content PDFs (e.g. `OET with Dr. Ahmed Hesham ( Medicine Only )/…`) that
+bloat clones, broke Windows CI checkout (BUG-008, worked around with `core.longpaths`), and are a likely
+**copyright** concern in a public repo. To remove from history (irreversible — coordinate with all
+collaborators, everyone re-clones afterward):
+```bash
+# 1. Back up the content elsewhere (private storage) first.
+pip install git-filter-repo
+# 2. From a fresh clone of the repo:
+git filter-repo --path "OET with Dr. Ahmed Hesham ( Medicine Only )/" --invert-paths
+#    (repeat --path for each content dir; also add them to .gitignore)
+# 3. Force-push all branches/tags (rewrites history): git push --force --all && git push --force --tags
+```
+Alternative (non-destructive): move the content to Git LFS or out of the repo entirely going forward.
+
+_Final verdict updated after the rebuild + install smoke below._
