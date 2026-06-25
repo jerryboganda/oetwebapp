@@ -429,7 +429,7 @@ export default function MockCenter() {
 
   return (
     <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and tutor reviews.">
-      <div className="space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module Focus"
           icon={Layers}
@@ -609,7 +609,7 @@ export default function MockCenter() {
               </MotionSection>
             ) : (
               <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-                <div className="space-y-10 lg:col-span-2">
+                <div className="space-y-6 sm:space-y-10 lg:col-span-2">
                   {availableProfessions.length > 0 ? (
                     <section aria-label="Profession filter">
                       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Filter mocks by profession">
@@ -778,7 +778,7 @@ export default function MockCenter() {
                   </section>
                 </div>
 
-                <div className="space-y-10">
+                <div className="space-y-6 sm:space-y-10">
                   <section>
                     <LearnerSurfaceSectionHeader
                       eyebrow="Tutor Reviews"

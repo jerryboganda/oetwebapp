@@ -150,7 +150,7 @@ export default function WritingTodayPage() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.today.pageTitle')}>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={t('writing.today.eyebrow')}
           icon={ListChecks}

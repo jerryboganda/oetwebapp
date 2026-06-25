@@ -84,7 +84,7 @@ export default function DiagnosticResultsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Diagnostic Results">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <AsyncStateWrapper
           status={status}
           onRetry={load}

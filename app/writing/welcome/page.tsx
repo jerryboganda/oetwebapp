@@ -45,7 +45,7 @@ export default function WritingWelcomePage() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.welcome.title')}>
-      <div className="space-y-8" aria-busy={checking}>
+      <div className="space-y-5 sm:space-y-8" aria-busy={checking}>
         <LearnerPageHero
           eyebrow={t('writing.welcome.eyebrow')}
           icon={PenTool}

@@ -168,7 +168,7 @@ export default function ListeningHome() {
   if (!isLoading && !profile && !error) {
     return (
       <LearnerDashboardShell pageTitle="Listening">
-        <main className="space-y-8">
+        <main className="space-y-5 sm:space-y-8">
           <LearnerPageHero
             eyebrow="Module focus"
             icon={Headphones}
@@ -217,7 +217,7 @@ export default function ListeningHome() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening">
-      <main className="space-y-10">
+      <main className="space-y-6 sm:space-y-10">
         {needsDiagnostic && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-700 dark:bg-blue-900/20">
             <p className="mb-1 text-sm font-semibold text-blue-800 dark:text-blue-200">

@@ -139,7 +139,7 @@ export default function ListeningPathwayPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening Pathway">
-      <div className="mx-auto max-w-5xl space-y-8">
+      <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-navy">Your listening roadmap</h1>
           <p className="mt-1 text-sm text-muted">

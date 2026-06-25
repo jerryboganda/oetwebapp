@@ -8,11 +8,14 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export type CardPadding = NonNullable<CardProps['padding']>;
 
+// Mobile-dense, desktop-comfortable: tighter padding on phones (higher
+// information density, native-app feel), scaling back up at `sm:` so desktop
+// spacing is unchanged.
 const paddingStyles: Record<CardPadding, string> = {
   none: '',
-  sm: 'p-4',
-  md: 'p-5',
-  lg: 'p-6',
+  sm: 'p-2.5 sm:p-4',
+  md: 'p-3 sm:p-5',
+  lg: 'p-3.5 sm:p-6',
 };
 
 export function cardClassName({

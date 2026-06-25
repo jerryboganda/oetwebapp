@@ -13,7 +13,7 @@ export default function WritingDiagnosticSubmittedPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Writing Diagnostic Submitted">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Diagnostic"
           icon={CheckCircle2}

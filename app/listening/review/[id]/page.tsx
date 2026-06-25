@@ -215,7 +215,7 @@ export default function ListeningReviewPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening Review" subtitle={review?.paper.title ?? 'Transcript-backed evidence for listening mistakes and distractors.'} backHref="/listening">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/listening')}>
           <ArrowLeft className="h-4 w-4" />
           Back to listening

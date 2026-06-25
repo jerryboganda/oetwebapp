@@ -42,7 +42,7 @@ export default function WritingDrillPracticeDetailPage() {
 
   return (
     <LearnerDashboardShell pageTitle={drill?.title ?? 'Writing Drill'}>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button asChild variant="ghost" size="sm"><Link href="/writing/drills"><ArrowLeft className="h-4 w-4" /> Drills</Link></Button>
         <LearnerPageHero
           eyebrow={drill ? drill.targetSubSkill : 'Writing Drill'}

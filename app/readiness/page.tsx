@@ -117,7 +117,7 @@ export default function ReadinessCenter() {
       subtitle={`Target Exam: ${data.targetDate}`}
       backHref="/"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Readiness Focus"
           icon={TrendingUp}

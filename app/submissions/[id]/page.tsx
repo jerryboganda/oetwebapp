@@ -77,7 +77,7 @@ export default function SubmissionEvidencePage() {
 
   return (
     <LearnerDashboardShell pageTitle="Submission Evidence" subtitle="Reopen learner evidence, feedback, and next actions." backHref="/submissions">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/submissions')}>
           <ArrowLeft className="h-4 w-4" />
           Back to history

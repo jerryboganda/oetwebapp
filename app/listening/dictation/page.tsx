@@ -205,7 +205,7 @@ export default function DictationDrillPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Dictation Drills">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         <section className="rounded-2xl border border-violet-200 bg-violet-50 px-8 py-7 dark:border-violet-900/50 dark:bg-violet-950/30">
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
             Phase 4 · Listening pathway

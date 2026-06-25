@@ -130,7 +130,7 @@ function ListeningResultsContent() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
-      <div className="space-y-8 pb-24">
+      <div className="space-y-5 sm:space-y-8 pb-24">
         <MotionSection
           className="rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-10"
         >

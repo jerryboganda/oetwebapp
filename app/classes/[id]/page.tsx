@@ -137,7 +137,7 @@ export default function LiveClassDetailPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero title={detail.title} description={detail.description} icon={Video} />
 
         {error ? (

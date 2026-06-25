@@ -392,7 +392,7 @@ export default function MockSetup() {
 
   return (
     <LearnerDashboardShell pageTitle="Configure Mock" subtitle="Set up your practice environment" backHref="/mocks">
-      <div className="space-y-8 pb-24">
+      <div className="space-y-5 sm:space-y-8 pb-24">
         <LearnerPageHero
           eyebrow="Mock Setup"
           icon={Layers}

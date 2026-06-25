@@ -324,7 +324,7 @@ export default function DiagnosticSpeakingPage() {
 
           {/* Phase: Role Card Preview */}
           {phase === 'role-card' && roleCard && (
-            <div className="space-y-8 max-w-3xl mx-auto">
+            <div className="space-y-5 sm:space-y-8 max-w-3xl mx-auto">
               <div className="text-center pb-2">
                 <h2 className="text-3xl font-black text-navy tracking-tight">Role Card</h2>
                 <p className="text-sm font-medium text-muted mt-2">
@@ -395,7 +395,7 @@ export default function DiagnosticSpeakingPage() {
 
           {/* Phase: Recording */}
           {phase === 'recording' && roleCard && (
-            <div className="space-y-8 max-w-2xl mx-auto">
+            <div className="space-y-5 sm:space-y-8 max-w-2xl mx-auto">
               <div className="text-center space-y-3 pb-4">
                 <div className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-danger/10 border border-danger/20 text-danger text-sm font-black tracking-widest uppercase shadow-sm">
                   <span className="relative flex h-3 w-3">
@@ -448,7 +448,7 @@ export default function DiagnosticSpeakingPage() {
 
           {/* Phase: Review */}
           {phase === 'review' && (
-            <div className="space-y-8 max-w-xl mx-auto pt-6">
+            <div className="space-y-5 sm:space-y-8 max-w-xl mx-auto pt-6">
               <div className="text-center pb-2">
                 <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-success/10 mb-6 ring-1 ring-success/20">
                   <CheckCircle2 className="w-12 h-12 text-success" aria-hidden="true" />
@@ -505,7 +505,7 @@ export default function DiagnosticSpeakingPage() {
 
           {/* Phase: Uploading */}
           {phase === 'uploading' && (
-            <div className="text-center space-y-10 py-16 max-w-sm mx-auto">
+            <div className="text-center space-y-6 sm:space-y-10 py-16 max-w-sm mx-auto">
               <div className="inline-flex items-center justify-center w-28 h-28 rounded-full bg-primary/5 border border-primary/20 relative">
                 <div className="absolute inset-0 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
                 <Upload className="w-10 h-10 text-primary motion-safe:animate-pulse" aria-hidden="true" />
@@ -542,7 +542,7 @@ export default function DiagnosticSpeakingPage() {
 
           {/* Phase: Done */}
           {phase === 'done' && (
-            <div className="text-center space-y-8 py-20">
+            <div className="text-center space-y-5 sm:space-y-8 py-20">
               <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-success/5 shadow-sm shadow-success/15 ring-1 ring-success/20 motion-safe:animate-[zoom-in_0.5s_ease-out]">
                 <CheckCircle2 className="w-16 h-16 text-success" aria-hidden="true" />
               </div>

@@ -31,7 +31,7 @@ export default function WritingCanonPage() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.canon.library.pageTitle')}>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={t('writing.canon.library.eyebrow')}
           icon={BookOpen}

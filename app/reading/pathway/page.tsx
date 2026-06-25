@@ -206,7 +206,7 @@ export default function ReadingPathwayPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Reading Pathway">
-      <div className="mx-auto max-w-2xl space-y-8">
+      <div className="mx-auto max-w-2xl space-y-5 sm:space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Your Reading Pathway</h1>
           <p className="mt-1 text-sm text-muted">

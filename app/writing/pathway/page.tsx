@@ -22,7 +22,7 @@ export default function WritingPathwayPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Writing Pathway">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Pathway"
           icon={Compass}

@@ -1075,7 +1075,7 @@ export default function LearnerSettingsSectionPage() {
       <div className="relative min-h-[calc(100dvh-4rem)]">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
         
-        <div className="space-y-10 relative z-10 px-4 sm:px-0 pb-20">
+        <div className="space-y-6 sm:space-y-10 relative z-10 px-4 sm:px-0 pb-20">
           <Button variant="ghost" className="gap-2 rounded-full hover:bg-navy/5 font-bold mt-4" onClick={() => router.push('/settings')}>
             <ArrowLeft className="h-4 w-4" />
             Back to Settings
@@ -1108,7 +1108,7 @@ export default function LearnerSettingsSectionPage() {
           {!loading && successMessage ? <InlineAlert variant="success" className="shadow-sm">{successMessage}</InlineAlert> : null}
 
           {!loading && section === 'notifications' && config ? (
-            <div className="space-y-8 relative z-20">
+            <div className="space-y-5 sm:space-y-8 relative z-20">
               <SettingsSectionHelperCard
                 accent={config.accent}
                 helperBadge={config.helperBadge}
@@ -1126,7 +1126,7 @@ export default function LearnerSettingsSectionPage() {
           ) : null}
 
           {!loading && section === 'danger-zone' && config ? (
-            <div className="space-y-8 relative z-20">
+            <div className="space-y-5 sm:space-y-8 relative z-20">
               <SettingsSectionHelperCard
                 accent={config.accent}
                 helperBadge={config.helperBadge}
@@ -1142,7 +1142,7 @@ export default function LearnerSettingsSectionPage() {
           ) : null}
 
           {!loading && data && config ? (
-            <div className="space-y-8 relative z-20">
+            <div className="space-y-5 sm:space-y-8 relative z-20">
               <SettingsSectionHelperCard
                 accent={config.accent}
                 helperBadge={config.helperBadge}

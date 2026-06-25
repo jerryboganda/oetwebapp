@@ -167,7 +167,7 @@ export default function Settings() {
     >
       <div className="relative min-h-[calc(100dvh-4rem)]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
-        <div className="space-y-12 pb-16 relative z-10 px-4 sm:px-0">
+        <div className="space-y-7 sm:space-y-12 pb-16 relative z-10 px-4 sm:px-0">
           
           <div className="bg-surface p-6 sm:p-10 rounded-[2rem] border border-border shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-200 overflow-hidden relative">
             <LearnerPageHero
@@ -191,7 +191,7 @@ export default function Settings() {
             </InlineAlert>
           ) : null}
 
-          <div className="space-y-10">
+          <div className="space-y-6 sm:space-y-10">
             {settingsGroups.map((group, groupIndex) => (
               <MotionSection
                 key={group.title}

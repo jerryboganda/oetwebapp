@@ -184,7 +184,7 @@ export default function ReadingHome() {
 
   return (
     <LearnerDashboardShell pageTitle="Reading">
-      <main className="space-y-10">
+      <main className="space-y-6 sm:space-y-10">
         {!profile || profile.currentStage === 'diagnostic' ? (
           <Link
             href="/reading/diagnostic"

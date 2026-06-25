@@ -74,7 +74,7 @@ export default function EscalationDetailPage() {
       subtitle="View the full details of your dispute"
       backHref="/escalations"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/escalations')}>
           <ArrowLeft className="h-4 w-4" />
           Back to escalations

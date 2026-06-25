@@ -198,7 +198,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
   return (
     <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         {loading ? <Skeleton className="h-96" /> : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 

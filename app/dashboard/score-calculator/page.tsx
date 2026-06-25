@@ -79,7 +79,7 @@ export default function ScoreCalculatorPage() {
         description="Compare OET scores with IELTS, PTE, and CEFR equivalents · Check institution requirements"
       />
 
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className="max-w-3xl mx-auto space-y-5 sm:space-y-8">
 
         {/* ── Score Input ────────────────────── */}
         <Card className="p-6">

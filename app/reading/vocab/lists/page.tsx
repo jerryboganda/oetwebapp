@@ -106,7 +106,7 @@ export default function VocabListsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Vocab Lists">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-violet-500">

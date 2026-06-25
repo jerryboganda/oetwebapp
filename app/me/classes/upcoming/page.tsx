@@ -79,7 +79,7 @@ export default function MyUpcomingClassesPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           title="My Upcoming Classes"
           description="Live sessions you have reserved. Class links open 30 minutes before start time."

@@ -298,7 +298,7 @@ export default function MockPlayerPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Run Your Mock" subtitle="Start, resume, and submit your mock from one place." backHref="/mocks">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/mocks')}>
           <ArrowLeft className="h-4 w-4" />
           Back to mock center

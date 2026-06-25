@@ -123,7 +123,7 @@ export default function SpeakingTranscriptPage() {
 
   return (
     <LearnerDashboardShell pageTitle={review.title} subtitle="Review your speaking transcript alongside the original recording.">
-      <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {review.disclaimer ? <InlineAlert variant="info">{review.disclaimer}</InlineAlert> : null}
 

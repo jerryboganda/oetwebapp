@@ -341,7 +341,7 @@ export default function ReadingPracticePage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Reading"
           title="Practice Hub"

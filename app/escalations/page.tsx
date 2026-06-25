@@ -109,7 +109,7 @@ export default function EscalationsPage() {
       subtitle="Submit and track disputes for your graded submissions"
       backHref="/"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Disputes & Escalations"
           icon={AlertTriangle}

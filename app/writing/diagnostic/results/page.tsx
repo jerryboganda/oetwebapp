@@ -19,7 +19,7 @@ export default function WritingDiagnosticResultsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Writing Diagnostic Results">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Diagnostic"
           icon={BarChart3}

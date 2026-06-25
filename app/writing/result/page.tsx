@@ -106,7 +106,7 @@ function WritingResultContent() {
 
   return (
     <LearnerDashboardShell pageTitle="Evaluation Summary">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Assessment Output"
           icon={FileText}

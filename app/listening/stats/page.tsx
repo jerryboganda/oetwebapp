@@ -42,7 +42,7 @@ export default function ListeningStatsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-12 space-y-10">
+    <main className="mx-auto max-w-6xl px-4 py-12 space-y-6 sm:space-y-10">
       <header className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight text-navy">Listening Analytics</h1>
         <p className="text-muted">

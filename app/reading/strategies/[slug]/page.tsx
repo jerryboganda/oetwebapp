@@ -67,7 +67,7 @@ export default function StrategyDetailPage() {
 
   return (
     <LearnerDashboardShell pageTitle={data?.strategy.title ?? 'Strategy'}>
-      <div className="mx-auto max-w-2xl space-y-8">
+      <div className="mx-auto max-w-2xl space-y-5 sm:space-y-8">
         {/* Back link */}
         <Link
           href="/reading/strategies"

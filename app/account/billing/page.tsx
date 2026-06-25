@@ -54,7 +54,7 @@ export default function AccountBillingPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-10">
+    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8 px-4 py-10">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-navy">Billing overview</h1>

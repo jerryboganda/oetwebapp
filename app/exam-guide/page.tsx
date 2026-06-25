@@ -31,7 +31,7 @@ export default function ExamGuidePage() {
       <PageViewBeacon event="exam_guide_viewed" />
       <LearnerPageHero title="OET Exam Guide" description="Everything you need to know about the OET exam format, timing, scoring, and strategies." />
 
-      <MotionSection className="space-y-8 max-w-4xl mx-auto">
+      <MotionSection className="space-y-5 sm:space-y-8 max-w-4xl mx-auto">
         <LearnerSurfaceSectionHeader title="Exam Structure" />
         <div className="space-y-4">
           {EXAM_SECTIONS.map(section => (

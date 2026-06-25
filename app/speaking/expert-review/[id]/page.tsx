@@ -131,7 +131,7 @@ function ExpertReviewRequestContent() {
   return (
     <LearnerDashboardShell pageTitle="Tutor Review Request">
       <main className="flex-1">
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-8">
+        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-5 sm:space-y-8">
 
           {/* AI vs Human Distinction */}
           <InlineAlert variant="info">

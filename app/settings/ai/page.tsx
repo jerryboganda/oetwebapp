@@ -113,7 +113,7 @@ export default function AiSettingsPage() {
       <div className="relative min-h-[calc(100dvh-4rem)] bg-background-light">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
         
-        <main className="mx-auto max-w-4xl px-4 py-8 space-y-10 relative z-10 pb-20">
+        <main className="mx-auto max-w-4xl px-4 py-8 space-y-6 sm:space-y-10 relative z-10 pb-20">
           <Button
             variant="ghost"
             onClick={() => router.push('/settings')}

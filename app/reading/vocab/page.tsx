@@ -79,7 +79,7 @@ export default function VocabHubPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Vocabulary">
-      <main className="space-y-10">
+      <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
         <div className="rounded-2xl border border-violet-200 bg-violet-50 px-8 py-7 dark:border-violet-900/50 dark:bg-violet-950/30">
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">

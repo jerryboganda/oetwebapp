@@ -218,7 +218,7 @@ export default function StudyPlanPage() {
           </div>
         }
       >
-        <div className="space-y-8">
+        <div className="space-y-5 sm:space-y-8">
           <LearnerPageHero
             eyebrow="Action Plan"
             icon={Calendar}

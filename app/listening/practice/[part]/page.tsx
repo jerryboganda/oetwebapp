@@ -117,7 +117,7 @@ export default function ListeningPartPracticePage() {
 
   return (
     <LearnerDashboardShell pageTitle={meta.title}>
-      <main className="space-y-8" data-testid={`listening-part-${part}-dispatcher`}>
+      <main className="space-y-5 sm:space-y-8" data-testid={`listening-part-${part}-dispatcher`}>
         <Link
           href="/listening"
           className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700 hover:underline"

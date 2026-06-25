@@ -1468,7 +1468,7 @@ function PlayerContent() {
             onStart={startTask}
           />
         ) : (
-          <motion.div {...listMotion} className="space-y-8">
+          <motion.div {...listMotion} className="space-y-5 sm:space-y-8">
             <div className="flex items-start gap-2">
               <div className="flex-1">
                 <ListeningAudioTransport

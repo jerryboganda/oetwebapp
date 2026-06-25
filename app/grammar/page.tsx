@@ -117,7 +117,7 @@ export default function GrammarPage() {
   // ── render ───────────────────────────────────────────────────────────
   return (
     <LearnerDashboardShell pageTitle="Grammar">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
 
         {/* ── Hero ── */}
         <LearnerPageHero
@@ -130,7 +130,7 @@ export default function GrammarPage() {
 
         {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-        <MotionSection className="space-y-8">
+        <MotionSection className="space-y-5 sm:space-y-8">
 
           {/* ── Recommendations ── */}
           {!loading && overview && (overview.recommendations?.length ?? 0) > 0 ? (

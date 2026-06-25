@@ -173,7 +173,7 @@ export default function FreezePage() {
 
   return (
     <LearnerDashboardShell pageTitle="Freeze Center" backHref="/">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Account Freeze"
           icon={Shield}

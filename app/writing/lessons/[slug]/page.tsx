@@ -51,7 +51,7 @@ export default function WritingLessonPage() {
 
   return (
     <LearnerDashboardShell pageTitle={lesson?.title ?? t('writing.lessons.detail.pageTitleFallback')}>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button asChild variant="ghost" size="sm"><Link href="/writing/skill-tree"><ArrowLeft className="h-4 w-4" /> {t('writing.lessons.detail.back')}</Link></Button>
 
         <LearnerPageHero

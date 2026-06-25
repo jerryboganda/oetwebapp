@@ -70,7 +70,7 @@ export default function ListeningCurriculumPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening · Skills Catalog"
           title="The 12-stage Listening skills catalog"

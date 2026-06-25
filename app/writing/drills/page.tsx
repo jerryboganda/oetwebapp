@@ -32,7 +32,7 @@ export default function WritingDrillsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Writing Drills">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Practice"
           icon={Dumbbell}

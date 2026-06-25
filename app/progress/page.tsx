@@ -119,7 +119,7 @@ export default function ProgressDashboard() {
       subtitle="Track your performance and activity over time"
       backHref="/"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Evidence Check"
           icon={TrendingUp}

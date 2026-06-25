@@ -144,7 +144,7 @@ export default function SkillTreePage() {
 
   return (
     <LearnerDashboardShell pageTitle="Skill Tree">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Reading Skill Tree</h1>
           <p className="mt-1 text-sm text-muted">

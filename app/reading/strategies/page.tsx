@@ -86,7 +86,7 @@ export default function StrategiesPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Reading Strategies">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Strategy Library</h1>
           <p className="mt-1 text-sm text-muted">

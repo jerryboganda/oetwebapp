@@ -127,7 +127,7 @@ export default function WritingHome() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.hub.pageTitle')}>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={t('writing.hub.eyebrow')}
           icon={PenTool}
