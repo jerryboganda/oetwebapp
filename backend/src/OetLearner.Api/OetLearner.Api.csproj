@@ -27,6 +27,13 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+    <!-- BUG-007 note: EF Core 10's SQLite provider transitively pulls
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11 (advisory NU1903/GHSA-2m69-gcr7-jv3q).
+         There is no patched 2.1.x, and forcing 3.0.x breaks EF Core 10's
+         in-memory SQLite at runtime ("no such table" in tests). SQLite is NOT
+         executed in production (Postgres) or in the online desktop client, so
+         the advisory is inert here. Revisit if/when offline SQLite is enabled or
+         EF Core ships a 3.0-compatible Microsoft.Data.Sqlite. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     <!-- pgvector (.NET bindings + Npgsql.EntityFrameworkCore integration). Used by
          WritingExemplarEmbeddingService to store and query the 1536-dim

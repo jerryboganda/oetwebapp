@@ -46,6 +46,17 @@ function syncStandalone() {
   fs.cpSync(path.join(repoRoot, '.next', 'static'), path.join(standalone, '.next', 'static'), { recursive: true });
   fs.cpSync(path.join(repoRoot, 'public'), path.join(standalone, 'public'), { recursive: true });
   console.log('[tauri-dist] standalone runtime synced');
+
+  // BUG-011b: pnpm leaves symlinks/junctions in standalone/node_modules
+  // (next, react, react-dom, @next -> ../node_modules/.pnpm/...). Tauri's
+  // resource copy does not preserve them, so the bundled renderer fails with
+  // "Cannot find module 'next'". Produce a DEREFERENCED copy (real files) that
+  // the bundle points at. The source tree is left untouched (no deletes near
+  // the pnpm store), so this is safe to re-run.
+  const distStandalone = path.join(repoRoot, '.next', 'standalone-dist');
+  fs.rmSync(distStandalone, { recursive: true, force: true });
+  fs.cpSync(standalone, distStandalone, { recursive: true, dereference: true });
+  console.log('[tauri-dist] dereferenced standalone -> .next/standalone-dist');
 }
 
 function stageNode() {
@@ -75,7 +86,22 @@ function buildAll() {
   });
   syncStandalone();
   stageNode();
-  run('pnpm', ['dlx', '@tauri-apps/cli@^2', 'build', '--config', path.join(srcTauri, 'tauri.dist.conf.json')]);
+  // The dist config can't hardcode the node binary name — Windows ships
+  // `node.exe`, macOS/Linux ship `node`. Merge the platform-correct node
+  // resource into the dist config and build from the merged result. (Hardcoding
+  // `binaries/node.exe` previously failed the macOS bundle: "resource path
+  // `binaries/node.exe` doesn't exist".)
+  const distConf = JSON.parse(fs.readFileSync(path.join(srcTauri, 'tauri.dist.conf.json'), 'utf8'));
+  distConf.bundle = distConf.bundle || {};
+  distConf.bundle.resources = distConf.bundle.resources || {};
+  if (process.platform === 'win32') {
+    distConf.bundle.resources['binaries/node.exe'] = 'node.exe';
+  } else {
+    distConf.bundle.resources['binaries/node'] = 'node';
+  }
+  const buildConf = path.join(srcTauri, 'tauri.build.conf.json');
+  fs.writeFileSync(buildConf, JSON.stringify(distConf, null, 2));
+  run('pnpm', ['dlx', '@tauri-apps/cli@^2', 'build', '--config', buildConf]);
 }
 
 const command = process.argv[2] || 'build';

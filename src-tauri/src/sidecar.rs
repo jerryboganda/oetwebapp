@@ -30,7 +30,10 @@ impl Default for RuntimeState {
         Self {
             active_backend_url: Mutex::new(None),
             renderer_url: Mutex::new(None),
-            children: Mutex::new(SidecarHandles { backend: None, renderer: None }),
+            children: Mutex::new(SidecarHandles {
+                backend: None,
+                renderer: None,
+            }),
             shutting_down: Mutex::new(false),
         }
     }
@@ -40,6 +43,10 @@ impl Default for RuntimeState {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopRuntimeConfig {
     pub public_api_base_url: Option<String>,
+    /// When set together with a remote API, the shell loads this live web app
+    /// directly instead of bundling+running a local Next.js renderer (online
+    /// thin-client mode — avoids the pnpm-standalone bundling problem).
+    pub public_web_base_url: Option<String>,
 }
 
 pub struct Paths {
@@ -83,11 +90,18 @@ pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRunt
                 if cfg.public_api_base_url.is_some() {
                     merged.public_api_base_url = cfg.public_api_base_url;
                 }
+                if cfg.public_web_base_url.is_some() {
+                    merged.public_web_base_url = cfg.public_web_base_url;
+                }
             }
         }
     }
     // Env wins, mirroring selectConfiguredDesktopApiBaseUrl precedence.
-    for var in ["PUBLIC_API_BASE_URL", "API_PROXY_TARGET_URL", "NEXT_PUBLIC_API_BASE_URL"] {
+    for var in [
+        "PUBLIC_API_BASE_URL",
+        "API_PROXY_TARGET_URL",
+        "NEXT_PUBLIC_API_BASE_URL",
+    ] {
         if let Ok(v) = std::env::var(var) {
             let v = v.trim().trim_end_matches('/').to_string();
             if v.starts_with("http://") || v.starts_with("https://") {
@@ -108,18 +122,44 @@ fn backend_env(paths: &Paths, runtime_url: &str, is_packaged: bool) -> HashMap<S
 
     // Mirror of getBundledBackendEnv (electron/main.cjs:528).
     let mut env = HashMap::new();
-    env.insert("ASPNETCORE_ENVIRONMENT".into(), if is_packaged { "Production" } else { "Development" }.into());
+    env.insert(
+        "ASPNETCORE_ENVIRONMENT".into(),
+        if is_packaged {
+            "Production"
+        } else {
+            "Development"
+        }
+        .into(),
+    );
     env.insert("ASPNETCORE_URLS".into(), runtime_url.into());
-    env.insert("ConnectionStrings__DefaultConnection".into(), format!("Data Source={}", db_path.display()));
-    env.insert("Auth__UseDevelopmentAuth".into(), if is_packaged { "false" } else { "true" }.into());
+    env.insert(
+        "ConnectionStrings__DefaultConnection".into(),
+        format!("Data Source={}", db_path.display()),
+    );
+    env.insert(
+        "Auth__UseDevelopmentAuth".into(),
+        if is_packaged { "false" } else { "true" }.into(),
+    );
     env.insert("Bootstrap__AutoMigrate".into(), "true".into());
-    env.insert("Bootstrap__SeedDemoData".into(), if is_packaged { "false" } else { "true" }.into());
+    env.insert(
+        "Bootstrap__SeedDemoData".into(),
+        if is_packaged { "false" } else { "true" }.into(),
+    );
     env.insert("Platform__PublicApiBaseUrl".into(), runtime_url.into());
-    env.insert("Platform__PublicWebBaseUrl".into(), "http://localhost:3000".into());
-    env.insert("Billing__CheckoutBaseUrl".into(), "http://localhost:3000/billing/checkout".into());
+    env.insert(
+        "Platform__PublicWebBaseUrl".into(),
+        "http://localhost:3000".into(),
+    );
+    env.insert(
+        "Billing__CheckoutBaseUrl".into(),
+        "http://localhost:3000/billing/checkout".into(),
+    );
     env.insert("Proxy__TrustForwardHeaders".into(), "false".into());
     env.insert("Proxy__EnforceHttps".into(), "false".into());
-    env.insert("Storage__LocalRootPath".into(), storage_root.display().to_string());
+    env.insert(
+        "Storage__LocalRootPath".into(),
+        storage_root.display().to_string(),
+    );
     env
 }
 
@@ -135,23 +175,54 @@ fn renderer_env(runtime_url: &str, port: u16, backend_url: &str) -> HashMap<Stri
     env
 }
 
+/// Per-session log pipes for a sidecar: combined stdout+stderr go to
+/// `<user_data>/logs/<name>.log`, keeping the previous session as `<name>.log.old`
+/// (one-generation rotation so logs stay bounded). Falls back to discarding output
+/// if the file can't be created — logging must never block a sidecar from starting.
+fn sidecar_log_pipes(user_data: &Path, name: &str) -> (Stdio, Stdio) {
+    let dir = user_data.join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join(format!("{name}.log"));
+    let _ = std::fs::rename(&path, dir.join(format!("{name}.log.old")));
+    match std::fs::File::create(&path) {
+        Ok(file) => match file.try_clone() {
+            Ok(err) => (Stdio::from(file), Stdio::from(err)),
+            Err(_) => (Stdio::null(), Stdio::null()),
+        },
+        Err(_) => (Stdio::null(), Stdio::null()),
+    }
+}
+
 pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child), String> {
-    let exe_name = if cfg!(windows) { "OetLearner.Api.exe" } else { "OetLearner.Api" };
+    let exe_name = if cfg!(windows) {
+        "OetLearner.Api.exe"
+    } else {
+        "OetLearner.Api"
+    };
     let exe = paths.backend_root.join(exe_name);
     if !exe.exists() {
-        return Err(format!("Bundled backend executable missing: {}", exe.display()));
+        return Err(format!(
+            "Bundled backend executable missing: {}",
+            exe.display()
+        ));
     }
 
-    let start_port: u16 = std::env::var("OET_BACKEND_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(5198);
+    let start_port: u16 = std::env::var("OET_BACKEND_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5198);
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
+    let (out, err) = sidecar_log_pipes(&paths.user_data, "backend");
     let mut cmd = Command::new(&exe);
     cmd.current_dir(&paths.backend_root)
         .envs(backend_env(paths, &runtime_url, is_packaged))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let child = cmd.spawn().map_err(|e| format!("failed to spawn backend: {e}"))?;
+        .stdout(out)
+        .stderr(err);
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn backend: {e}"))?;
 
     // NOTE: /health/ready 503s forever on fresh SQLite (pre-existing bug —
     // Program.cs pending-migrations check vs EnsureCreatedAsync bootstrap).
@@ -163,20 +234,45 @@ pub fn start_backend(paths: &Paths, is_packaged: bool) -> Result<(String, Child)
 pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child), String> {
     let server_js = paths.standalone_root.join("server.js");
     if !server_js.exists() {
-        return Err(format!("Standalone renderer missing: {}", server_js.display()));
+        return Err(format!(
+            "Standalone renderer missing: {}",
+            server_js.display()
+        ));
     }
 
-    let start_port: u16 = std::env::var("OET_RENDERER_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(3000);
+    let start_port: u16 = std::env::var("OET_RENDERER_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3000);
     let port = find_available_port(start_port)?;
     let runtime_url = format!("http://127.0.0.1:{port}");
 
+    // BUG-011a: passing the absolute, space-filled server.js path as an argument
+    // is mis-handled when spawning the bundled node (Node resolved its main entry
+    // to "C:"). The program path with spaces is fine (Command::new handles it,
+    // as the backend sidecar proves); only the arg was the problem. Run server.js
+    // RELATIVE to the standalone working directory, which is already the cwd.
+    let _ = std::fs::write(
+        paths.user_data.join("logs").join("renderer-launch.log"),
+        format!(
+            "node={:?}\nserver_js_abs={:?}\nexists={}\ncwd={:?}\nport={}\n",
+            paths.node_binary,
+            server_js,
+            server_js.exists(),
+            paths.standalone_root,
+            port
+        ),
+    );
+    let (out, err) = sidecar_log_pipes(&paths.user_data, "renderer");
     let mut cmd = Command::new(&paths.node_binary);
-    cmd.arg(&server_js)
+    cmd.arg("server.js")
         .current_dir(&paths.standalone_root)
         .envs(renderer_env(&runtime_url, port, backend_url))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let child = cmd.spawn().map_err(|e| format!("failed to spawn node renderer: {e}"))?;
+        .stdout(out)
+        .stderr(err);
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn node renderer: {e}"))?;
 
     wait_for_health_attempts(&format!("{runtime_url}/api/health"), 120)?;
     Ok((runtime_url, child))
@@ -184,25 +280,40 @@ pub fn start_renderer(paths: &Paths, backend_url: &str) -> Result<(String, Child
 
 /// Boots both sidecars (or only the renderer when a remote API target is
 /// configured) and records handles + URLs in state.
-pub fn start_all(paths: &Paths, state: &RuntimeState, runtime_config: &DesktopRuntimeConfig, is_packaged: bool) -> Result<String, String> {
-    let (backend_url, backend_child) = match &runtime_config.public_api_base_url {
-        Some(remote) if !remote.contains("127.0.0.1") && !remote.contains("localhost") => {
-            (remote.clone(), None)
-        }
+pub fn start_all(
+    paths: &Paths,
+    state: &RuntimeState,
+    runtime_config: &DesktopRuntimeConfig,
+    is_packaged: bool,
+) -> Result<String, String> {
+    let online = matches!(
+        &runtime_config.public_api_base_url,
+        Some(remote) if !remote.contains("127.0.0.1") && !remote.contains("localhost")
+    );
+
+    let (backend_url, backend_child) = if online {
+        (runtime_config.public_api_base_url.clone().unwrap(), None)
+    } else {
+        let (url, child) = start_backend(paths, is_packaged)?;
+        (url, Some(child))
+    };
+
+    // Online thin-client: load the live web app directly and skip the bundled
+    // Next.js renderer. Otherwise (offline) spawn the local renderer sidecar.
+    let (renderer_url, renderer_child) = match (online, &runtime_config.public_web_base_url) {
+        (true, Some(web)) => (web.trim_end_matches('/').to_string(), None),
         _ => {
-            let (url, child) = start_backend(paths, is_packaged)?;
+            let (url, child) = start_renderer(paths, &backend_url)?;
             (url, Some(child))
         }
     };
-
-    let (renderer_url, renderer_child) = start_renderer(paths, &backend_url)?;
 
     *state.active_backend_url.lock().unwrap() = Some(backend_url);
     *state.renderer_url.lock().unwrap() = Some(renderer_url.clone());
     {
         let mut children = state.children.lock().unwrap();
         children.backend = backend_child;
-        children.renderer = Some(renderer_child);
+        children.renderer = renderer_child;
     }
     Ok(renderer_url)
 }
@@ -233,8 +344,13 @@ pub fn migrate_from_electron(user_data: &Path) {
     if marker.exists() {
         return;
     }
-    let Some(appdata) = std::env::var_os("APPDATA") else { return };
-    let electron_root = PathBuf::from(appdata).join("OET Prep").join("prod").join("user-data");
+    let Some(appdata) = std::env::var_os("APPDATA") else {
+        return;
+    };
+    let electron_root = PathBuf::from(appdata)
+        .join("OET Prep")
+        .join("prod")
+        .join("user-data");
     if !electron_root.exists() {
         let _ = std::fs::create_dir_all(user_data);
         let _ = std::fs::write(&marker, "no-electron-data");
@@ -263,4 +379,158 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    fn unique_tmp(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("oet-{tag}-test-{}", std::process::id()))
+    }
+
+    #[test]
+    fn find_available_port_returns_bindable_in_range() {
+        let port = find_available_port(39000).expect("a port in range");
+        assert!((39000..39025).contains(&port));
+        // The returned port must actually be bindable.
+        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
+    }
+
+    #[test]
+    fn find_available_port_skips_occupied() {
+        // Hold 39100 (or rely on it being held elsewhere); find must not return it.
+        let _hold = TcpListener::bind(("127.0.0.1", 39100u16));
+        let port = find_available_port(39100).expect("a port in range");
+        assert_ne!(port, 39100);
+    }
+
+    #[test]
+    fn renderer_env_sets_expected_keys() {
+        let env = renderer_env("http://127.0.0.1:3000", 3000, "http://127.0.0.1:5198");
+        assert_eq!(env.get("NODE_ENV").map(String::as_str), Some("production"));
+        assert_eq!(env.get("PORT").map(String::as_str), Some("3000"));
+        assert_eq!(env.get("HOSTNAME").map(String::as_str), Some("127.0.0.1"));
+        assert_eq!(
+            env.get("NEXT_PUBLIC_API_BASE_URL").map(String::as_str),
+            Some("/api/backend")
+        );
+        assert_eq!(
+            env.get("API_PROXY_TARGET_URL").map(String::as_str),
+            Some("http://127.0.0.1:5198")
+        );
+    }
+
+    #[test]
+    fn backend_env_toggles_packaged_vs_dev() {
+        let tmp = unique_tmp("be");
+        let paths = Paths {
+            standalone_root: tmp.join("s"),
+            backend_root: tmp.join("b"),
+            node_binary: tmp.join("node"),
+            user_data: tmp.join("ud"),
+        };
+        let prod = backend_env(&paths, "http://127.0.0.1:5198", true);
+        assert_eq!(
+            prod.get("ASPNETCORE_ENVIRONMENT").map(String::as_str),
+            Some("Production")
+        );
+        assert_eq!(
+            prod.get("Auth__UseDevelopmentAuth").map(String::as_str),
+            Some("false")
+        );
+        assert_eq!(
+            prod.get("Bootstrap__SeedDemoData").map(String::as_str),
+            Some("false")
+        );
+        assert!(prod
+            .get("ConnectionStrings__DefaultConnection")
+            .unwrap()
+            .contains("oet-prep.desktop.db"));
+
+        let dev = backend_env(&paths, "http://127.0.0.1:5198", false);
+        assert_eq!(
+            dev.get("ASPNETCORE_ENVIRONMENT").map(String::as_str),
+            Some("Development")
+        );
+        assert_eq!(
+            dev.get("Bootstrap__SeedDemoData").map(String::as_str),
+            Some("true")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn load_runtime_config_reads_file_and_strips_bom() {
+        // NOTE: assumes PUBLIC_API_BASE_URL / API_PROXY_TARGET_URL /
+        // NEXT_PUBLIC_API_BASE_URL are unset in the test env (they would override).
+        let tmp = unique_tmp("rc-read");
+        let res = tmp.join("res");
+        let ud = tmp.join("ud");
+        std::fs::create_dir_all(&res).unwrap();
+        std::fs::create_dir_all(&ud).unwrap();
+        std::fs::write(
+            res.join("desktop-runtime-config.json"),
+            "\u{feff}{\"publicApiBaseUrl\":\"https://api.example.com\"}",
+        )
+        .unwrap();
+        let cfg = load_runtime_config(&res, &ud);
+        assert_eq!(
+            cfg.public_api_base_url.as_deref(),
+            Some("https://api.example.com")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn load_runtime_config_user_data_overrides_resource() {
+        let tmp = unique_tmp("rc-override");
+        let res = tmp.join("res");
+        let ud = tmp.join("ud");
+        std::fs::create_dir_all(&res).unwrap();
+        std::fs::create_dir_all(&ud).unwrap();
+        std::fs::write(
+            res.join("desktop-runtime-config.json"),
+            "{\"publicApiBaseUrl\":\"https://resource.example.com\"}",
+        )
+        .unwrap();
+        std::fs::write(
+            ud.join("desktop-runtime-config.json"),
+            "{\"publicApiBaseUrl\":\"https://userdata.example.com\"}",
+        )
+        .unwrap();
+        let cfg = load_runtime_config(&res, &ud);
+        assert_eq!(
+            cfg.public_api_base_url.as_deref(),
+            Some("https://userdata.example.com")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn migrate_from_electron_is_noop_when_marker_exists() {
+        let tmp = unique_tmp("mig");
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join(".migrated-from-electron"), "migrated").unwrap();
+        migrate_from_electron(&tmp);
+        // Early-return on the marker: no migration dirs created.
+        assert!(!tmp.join("storage").exists());
+        assert!(!tmp.join("offline-content").exists());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn sidecar_log_pipes_creates_log_and_rotates() {
+        let tmp = unique_tmp("log");
+        {
+            // First session: log file created. Scope drops the handles so the
+            // next call can rename it (Windows can't rename an open file).
+            let _pipes = sidecar_log_pipes(&tmp, "backend");
+            assert!(tmp.join("logs").join("backend.log").exists());
+        }
+        let _pipes2 = sidecar_log_pipes(&tmp, "backend");
+        assert!(tmp.join("logs").join("backend.log.old").exists());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
 }
