@@ -152,7 +152,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
         // otherwise surface as an opaque 500. Treat non-absolute URLs (e.g. when no
         // public app/web base URL is configured) as a configuration problem so the
         // caller maps it to a clean gateway_unavailable response.
-        if (!Uri.TryCreate(successUrl, UriKind.Absolute, out _) || !Uri.TryCreate(cancelUrl, UriKind.Absolute, out _))
+        if (!IsAbsoluteHttpUrl(successUrl) || !IsAbsoluteHttpUrl(cancelUrl))
         {
             if (billingOptionsSnapshot.AllowSandboxFallbacks)
             {
@@ -371,18 +371,44 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
     /// </summary>
     private static string? AbsolutizeReturnUrl(string? url, string? appBaseUrl)
     {
-        if (string.IsNullOrWhiteSpace(url) || Uri.TryCreate(url, UriKind.Absolute, out _))
+        if (string.IsNullOrWhiteSpace(url) || IsAbsoluteHttpUrl(url))
         {
             return url;
         }
 
         if (string.IsNullOrWhiteSpace(appBaseUrl)
-            || !Uri.TryCreate(EnsureTrailingSlash(appBaseUrl), UriKind.Absolute, out var baseUri))
+            || !IsAbsoluteHttpUrl(EnsureTrailingSlash(appBaseUrl), out var baseUri))
         {
             return url;
         }
 
-        return new Uri(baseUri, url.TrimStart('/')).ToString();
+        return new Uri(baseUri!, url.TrimStart('/')).ToString();
+    }
+
+    /// <summary>
+    /// True only for an absolute <c>http</c>/<c>https</c> URL. Plain
+    /// <see cref="Uri.TryCreate(string?, UriKind, out Uri?)"/> with
+    /// <see cref="UriKind.Absolute"/> is NOT sufficient: on Unix a path like
+    /// <c>/billing/return</c> parses as an absolute <c>file://</c> URI (it is a
+    /// valid absolute filesystem path), so a relative return URL would be
+    /// mistaken for an absolute one on Linux while being correctly rejected on
+    /// Windows. Gateways need a real web URL, so require the http(s) scheme.
+    /// </summary>
+    private static bool IsAbsoluteHttpUrl(string? url) => IsAbsoluteHttpUrl(url, out _);
+
+    private static bool IsAbsoluteHttpUrl(string? url, out Uri? uri)
+    {
+        uri = null;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
+        {
+            return false;
+        }
+        if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+        uri = parsed;
+        return true;
     }
 
     private PaymentIntentResult BuildSandboxCheckout(CreatePaymentIntentRequest request)
