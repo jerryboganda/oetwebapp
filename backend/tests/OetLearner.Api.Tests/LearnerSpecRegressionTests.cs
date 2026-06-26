@@ -166,10 +166,14 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         using var plansJson = JsonDocument.Parse(await plansResponse.Content.ReadAsStringAsync());
         Assert.True(plansJson.RootElement.GetProperty("items").GetArrayLength() >= 2);
 
-        var changePreviewResponse = await client.GetAsync("/v1/billing/change-preview?targetPlanId=premium-monthly");
+        // Target a current OET-2026 catalog plan (the legacy "premium-monthly"
+        // code was removed in the catalog rework). The learner's seeded
+        // subscription is on full-condensed-medicine, so this previews a real
+        // change to a different active plan.
+        var changePreviewResponse = await client.GetAsync("/v1/billing/change-preview?targetPlanId=full-nursing");
         changePreviewResponse.EnsureSuccessStatusCode();
         using var changePreviewJson = JsonDocument.Parse(await changePreviewResponse.Content.ReadAsStringAsync());
-        Assert.Equal("premium-monthly", changePreviewJson.RootElement.GetProperty("targetPlanId").GetString());
+        Assert.Equal("full-nursing", changePreviewJson.RootElement.GetProperty("targetPlanId").GetString());
 
         var drillResponse = await client.GetAsync("/v1/listening/drills/listening-drill-distractor_confusion");
         drillResponse.EnsureSuccessStatusCode();

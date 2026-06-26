@@ -494,9 +494,49 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// for paid features; tests need to short-circuit that fail-closed gate
     /// without disabling the production code path.
     /// </summary>
+    /// <summary>
+    /// Seed a permissive default AI quota plan so the AI gateway's quota gate
+    /// (<c>IAiQuotaService.TryReserveAsync</c>) does not fail closed with
+    /// <c>no_plan</c> for AI-graded features (Speaking/Writing grade). The
+    /// production quota plans are seeded by <c>SeedData.SeedAiQuotaPlans</c>,
+    /// which only runs when demo data is enabled — the base test host disables
+    /// it, so without this a SpeakingEvaluation job is marked Failed
+    /// (non-retryable) and never completes. Uses the default plan code
+    /// (<c>free</c>, the fallback when a learner has no explicit assignment)
+    /// with all features allowed (empty CSV) and caps disabled (0). Idempotent.
+    /// </summary>
+    public async Task EnsureAiQuotaPlanAsync(CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync(cancellationToken);
+        if (await db.AiQuotaPlans.AnyAsync(p => p.Code == "free", cancellationToken)) return;
+
+        var now = DateTimeOffset.UtcNow;
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = $"aiqp-test-{Guid.NewGuid():N}",
+            Code = "free",
+            Name = "Test default plan",
+            Description = "Permissive default quota plan for tests (all features, no caps).",
+            Period = AiQuotaPeriod.Monthly,
+            MonthlyTokenCap = 0,
+            DailyTokenCap = 0,
+            RolloverPolicy = AiQuotaRolloverPolicy.Expire,
+            OveragePolicy = AiOveragePolicy.Deny,
+            AllowedFeaturesCsv = string.Empty,
+            IsActive = true,
+            DisplayOrder = 0,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task EnsureAiCreditsAsync(string userId, int tokens = 10_000, CancellationToken cancellationToken = default)
     {
         await EnsureCatalogSeededAsync(cancellationToken);
+        await EnsureAiQuotaPlanAsync(cancellationToken);
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync(cancellationToken);
@@ -661,7 +701,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 Id = Guid.NewGuid().ToString("N"),
                 UserId = userId,
-                PlanId = "basic-monthly",
+                // A real OET-2026 manifest plan code (seeded by EnsureCatalogSeededAsync,
+                // which EnsureLearnerProfileAsync runs first). The legacy "basic-monthly"
+                // code no longer exists in the catalog, so EffectiveEntitlementResolver
+                // resolved it to plan.missing → no eligible subscription → every
+                // premium-gated feature (writing submit, change-preview) failed 402/404.
+                PlanId = "full-condensed-medicine",
                 Status = SubscriptionStatus.Active,
                 NextRenewalAt = now.AddMonths(1),
                 StartedAt = now,
