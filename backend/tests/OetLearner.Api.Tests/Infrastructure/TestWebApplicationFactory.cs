@@ -32,9 +32,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     // ConfigureWebHost) to avoid the long-running BackgroundJobProcessor tick,
     // which also silences the catalog seeder — leaving BillingAddOns empty and
     // every checkout/entitlement test failing with review_pack_unavailable /
-    // 402. Run the seeder once, synchronously, before any test touches the DB so
-    // the catalog is deterministically present. Guarded so it runs exactly once
-    // per factory instance.
+    // 402. The Ensure* fixture helpers (which billing/entitlement tests call to
+    // set up a learner) seed it on demand via EnsureCatalogSeededAsync; tests
+    // that assert on a controlled/empty catalog simply don't call those helpers.
+    // Guarded so it runs at most once per factory instance.
     private readonly SemaphoreSlim _catalogSeedGate = new(1, 1);
     private bool _catalogSeeded;
 
@@ -184,22 +185,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         var host = base.CreateHost(builder);
         RestoreEnvironmentOverrides();
-
-        // Drive the OET-2026 catalog seeder once, synchronously, now that the
-        // host has started and DatabaseBootstrapper.InitializeAsync has created
-        // the schema + reference data. Its IHostedService wrapper was stripped
-        // (see ConfigureWebHost), so without this every checkout/entitlement
-        // test sees an empty BillingAddOns catalog. Guarded so the per-fixture
-        // Ensure* helpers don't re-run it.
-        if (!_catalogSeeded)
-        {
-            using var scope = host.Services.CreateScope();
-            var seeder = scope.ServiceProvider
-                .GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
-            seeder.SeedAsync(CancellationToken.None).GetAwaiter().GetResult();
-            _catalogSeeded = true;
-        }
-
         return host;
     }
 
@@ -490,12 +475,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         try
         {
             if (_catalogSeeded) return;
-            // Touch Services to force host creation; CreateHost seeds the catalog
-            // and flips _catalogSeeded. If the host already exists (rare ordering),
-            // seed directly here.
-            var services = Services;
-            if (_catalogSeeded) return;
-            using var scope = services.CreateScope();
+            using var scope = Services.CreateScope();
             var seeder = scope.ServiceProvider
                 .GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
             await seeder.SeedAsync(cancellationToken);
