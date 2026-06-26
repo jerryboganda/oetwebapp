@@ -73,7 +73,7 @@ export function validateRequestOrigin(request: Request): boolean {
     for (const trustedOrigin of resolveTrustedOrigins()) {
       if (url.origin === trustedOrigin) return true;
     }
-    // Allow Capacitor/Electron origins
+    // Allow Capacitor/native shell origins
     if (url.protocol === 'capacitor:' || url.protocol === 'file:') return true;
     return false;
   } catch {

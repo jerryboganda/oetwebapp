@@ -19,7 +19,6 @@ describe('mobile runtime', () => {
     window.desktopBridge = {
       platform: 'win32',
       versions: {
-        electron: '41.0.0',
         chrome: '133.0.0',
         node: '22.0.0',
       },

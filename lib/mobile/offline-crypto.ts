@@ -3,7 +3,7 @@
  *
  * Encrypts IndexedDB data at rest using AES-GCM with a key derived from
  * the user's session ID and a per-device salt stored in the meta store.
- * This applies to both Electron offline cache (JSON) and Capacitor
+ * This applies to both the desktop offline cache (JSON) and Capacitor
  * IndexedDB storage.
  *
  * Threat model: protects against an attacker who obtains the raw IndexedDB

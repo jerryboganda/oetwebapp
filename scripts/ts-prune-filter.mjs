@@ -93,7 +93,6 @@ const IGNORED_PATH_SUBSTRINGS = [
   'vitest.setup.ts',
   'vitest.config.ts',
   'playwright.config.ts',
-  'playwright.desktop.config.ts',
   'next.config.ts',
   'eslint.config.mjs',
   'postcss.config.mjs',
@@ -102,7 +101,6 @@ const IGNORED_PATH_SUBSTRINGS = [
   '/middleware.ts',
   // Platform shells
   'capacitor-web/',
-  'electron/',
 ];
 
 /**
