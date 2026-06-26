@@ -437,6 +437,51 @@ export const importListeningPartAFromUpload = (
   );
 };
 
+// ── Part B/C AI extraction (OCR) ───────────────────────────────────────────
+
+export interface ListeningPartBCAnswer {
+  number: number;
+  /** Correct option letter: 'A' | 'B' | 'C'. */
+  correctAnswer: string;
+  /** AI-drafted "why correct" rationale (learner-visible on review), or null. */
+  rationale: string | null;
+}
+
+export interface ListeningPartBCImportResult {
+  /** 'B' | 'C'. */
+  part: string;
+  /** True when validation found issues to review (missing/out-of-range answers). */
+  isStub: boolean;
+  stubReason: string | null;
+  summary: string;
+  answers: ListeningPartBCAnswer[];
+}
+
+/**
+ * One-click "AI extraction" for Listening Part B or Part C: upload the part's
+ * question paper (Part C also uploads C2) + the answer-key PDF. The server OCRs
+ * both and returns the projected correct option (A/B/C) + a drafted rationale per
+ * question, for the admin to review then Save via {@link replaceListeningStructure}.
+ * Multipart upload via `apiClient.postForm` (no JSON content-type).
+ */
+export const importListeningPartBCFromUpload = (
+  paperId: string,
+  part: 'B' | 'C',
+  questionPaper: File,
+  questionPaper2: File | null,
+  answerKey: File,
+): Promise<ListeningPartBCImportResult> => {
+  const form = new FormData();
+  form.append('part', part);
+  form.append('questionPaper', questionPaper);
+  if (questionPaper2) form.append('questionPaper2', questionPaper2);
+  form.append('answerKey', answerKey);
+  return apiClient.postForm<ListeningPartBCImportResult>(
+    `/v1/admin/papers/${paperId}/listening/part-bc/import`,
+    form,
+  );
+};
+
 export const listListeningExtractions = (paperId: string) =>
   api<{ drafts: ListeningExtractionDraftSummary[] }>(`/v1/admin/papers/${paperId}/listening/extractions`);
 

@@ -38,6 +38,7 @@ import {
   type ListeningSubSectionCode,
 } from '@/lib/listening-authoring-api';
 import { ListeningAnswerSheetBuilder, type ListeningBuilderPart } from './ListeningAnswerSheetBuilder';
+import { ListeningPartAiExtraction, type ListeningExtractionPart } from './ListeningPartAiExtraction';
 
 type LoadState = 'loading' | 'ready' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string };
@@ -506,6 +507,19 @@ export default function AdminListeningQuestionsPage() {
 
             {activePart === 'A' ? (
               <PartANotice paperId={paperId} />
+            ) : null}
+
+            {/* B/C: one-click AI extraction (OCR) for the whole part — upload the
+                question paper(s) + answer key, the AI fills A/B/C + rationale for
+                Q25–30 (B) / Q31–42 (C), the admin proofreads and saves once. */}
+            {activePart !== 'A' ? (
+              <ListeningPartAiExtraction
+                paperId={paperId}
+                part={activePart as ListeningExtractionPart}
+                allQuestions={questions}
+                onSaved={(next) => { setQuestions(next); }}
+                onNotify={(variant, message) => setToast({ variant, message })}
+              />
             ) : null}
 
             {/* B/C: two-column PDF + answer sheet. A: single-column editor. */}

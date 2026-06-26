@@ -808,6 +808,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.IOcrService, OetLearner.Ap
 // and the Listening Part A Claude call. Scopes internally per record.
 builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IDirectAiCallRecorder, OetLearner.Api.Services.Ai.DirectAiCallRecorder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAExtractionService, OetLearner.Api.Services.Listening.ListeningPartAExtractionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartBCExtractionService, OetLearner.Api.Services.Listening.ListeningPartBCExtractionService>();
 // Listening Part A AI marking (Claude Sonnet 4.6) — additive, non-blocking per-gap
 // verdicts on top of the deterministic grade. The hosted poller is opt-in via
 // `Listening:PartAAiScoring:Enabled` so it never runs in tests/CI and only marks
