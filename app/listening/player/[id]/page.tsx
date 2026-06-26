@@ -49,7 +49,7 @@ import { ListeningIntroCard } from '@/components/domain/listening/player/Listeni
 import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
 import { ListeningSectionStepper } from '@/components/domain/listening/player/ListeningSectionStepper';
 import { ListeningPreviewBanner, ListeningReviewBanner } from '@/components/domain/listening/player/ListeningPhaseBanner';
-import { completeMockSection } from '@/lib/api';
+import { completeMockSection, fetchAuthorizedObjectUrl } from '@/lib/api';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
 import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
 import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
@@ -242,6 +242,11 @@ function PlayerContent() {
   const [audioResumeWarning, setAudioResumeWarning] = useState<string | null>(null);
   const [audioState, setAudioState] = useState<'idle' | 'buffering' | 'ready' | 'error'>('idle');
   const [audioRetryKey, setAudioRetryKey] = useState(0);
+  // The <audio> element loads its source via a plain browser GET, which cannot
+  // carry the bearer token /v1/media/{id}/content requires (mirrors the PDF
+  // viewer's blob-fetch). We resolve the current section's URL to an authorized
+  // blob URL here and feed THAT to the element. Null while resolving / absent.
+  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -1103,6 +1108,53 @@ function PlayerContent() {
     seekAudioTo(startMs / 1000);
   }, [activeAudioStartMs, activeAudioEndMs, phase, seekAudioTo]);
 
+  // Resolve the current section's audio to an authorized blob URL. The media
+  // endpoint is bearer-authenticated and a native <audio src> GET sends no
+  // Authorization header, so a raw /v1/media/{id}/content src 401s and fires
+  // onError ("Audio failed to load"). Absolute (external/TTS) URLs are used
+  // as-is. Re-runs per section, on mount-gate change, and on Retry.
+  useEffect(() => {
+    const url = currentSectionAudioUrl;
+    const mount = (session?.paper.audioAvailable ?? false) && (!strictReadinessRequired || hasStarted);
+    if (!url || !mount) {
+      setResolvedAudioSrc(null);
+      return;
+    }
+    if (/^https?:\/\//i.test(url)) {
+      setResolvedAudioSrc(url);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setResolvedAudioSrc(null);
+    fetchAuthorizedObjectUrl(url)
+      .then((blobUrl) => {
+        if (cancelled) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        objectUrl = blobUrl;
+        setResolvedAudioSrc(blobUrl);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAudioState('error');
+        setAudioError('Audio failed to load. Reload the audio or return to Listening if the media asset is still processing.');
+        logAttemptEvent('audio_error');
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [
+    currentSectionAudioUrl,
+    session?.paper.audioAvailable,
+    strictReadinessRequired,
+    hasStarted,
+    audioRetryKey,
+    logAttemptEvent,
+  ]);
+
   const confirmNextFromAudio = async () => {
     if (!currentSection) return;
     if (!canOpenReviewWindow) return;
@@ -1224,7 +1276,7 @@ function PlayerContent() {
         <audio
           key={usingPerSectionAudio ? `${audioRetryKey}-${currentSection ?? ''}` : audioRetryKey}
           ref={audioRef}
-          src={currentSectionAudioUrl ?? undefined}
+          src={resolvedAudioSrc ?? undefined}
           controlsList="nodownload nofullscreen noremoteplayback"
           onTimeUpdate={() => {
             const audio = audioRef.current;
