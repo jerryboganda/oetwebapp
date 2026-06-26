@@ -309,6 +309,71 @@ public static class ListeningAuthoringAdminEndpoints
             }
         });
 
+        // POST .../listening/part-bc/import — one-click "AI extraction" for Part B
+        // or Part C: OCR the AD-HOC uploaded question paper(s) + answer-key file and
+        // return the projected per-question correct option (A/B/C) + rationale for
+        // the admin to review then Save. Part C uploads two question docs (C1 + C2).
+        // Uses HttpRequest.ReadFormAsync (not IFormFile binding) so no antiforgery
+        // token is required for this admin-authenticated upload.
+        group.MapPost("/part-bc/import", async (
+            string paperId,
+            HttpRequest request,
+            IListeningPartBCExtractionService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.Json(
+                    new { error = "Expected multipart/form-data with question paper + answer-key files.", errorCode = "listening_partbc_bad_content_type" },
+                    statusCode: 415);
+
+            var form = await request.ReadFormAsync(ct);
+            var part = (form["part"].ToString() ?? string.Empty).Trim().ToUpperInvariant();
+            if (part != "B" && part != "C")
+                return Results.Json(
+                    new { error = "Field 'part' must be 'B' or 'C'.", errorCode = "listening_partbc_invalid_part" },
+                    statusCode: 400);
+
+            var questionFile = form.Files.GetFile("questionPaper");
+            var questionFile2 = form.Files.GetFile("questionPaper2"); // optional — Part C2
+            var answerFile = form.Files.GetFile("answerKey");
+            if (questionFile is null || questionFile.Length == 0)
+                return Results.Json(
+                    new { error = "Upload the question-paper PDF or image (field 'questionPaper').", errorCode = "listening_partbc_missing_file" },
+                    statusCode: 400);
+            if (answerFile is null || answerFile.Length == 0)
+                return Results.Json(
+                    new { error = "Upload the answer-key PDF (field 'answerKey').", errorCode = "listening_partbc_missing_answer_key" },
+                    statusCode: 400);
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                async Task<(byte[] Bytes, string Mime)> ReadAsync(IFormFile f)
+                {
+                    await using var s = f.OpenReadStream();
+                    using var ms = new MemoryStream();
+                    await s.CopyToAsync(ms, ct);
+                    return (ms.ToArray(), f.ContentType);
+                }
+
+                var questionDocs = new List<(byte[] Bytes, string Mime)> { await ReadAsync(questionFile) };
+                if (questionFile2 is { Length: > 0 }) questionDocs.Add(await ReadAsync(questionFile2));
+                var (answerBytes, answerMime) = await ReadAsync(answerFile);
+
+                var result = await svc.ExtractFromUploadAsync(paperId, part, questionDocs, answerBytes, answerMime, adminId, ct);
+                return Results.Ok(result);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+            }
+        });
+
         // POST .../listening/part-a/ensure-slots — create answer-key question
         // slots (A1 → Q1..12, A2 → Q13..24) matching the authored gap count, so
         // the answer-key column populates for manual authoring. Publish-gated.

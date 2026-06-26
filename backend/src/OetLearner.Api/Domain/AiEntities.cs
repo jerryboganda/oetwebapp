@@ -352,6 +352,10 @@ public static class AiFeatureCodes
     public const string ListeningPartAExtract = "listening.parta.extract";
     /// <summary>Anthropic Claude per-gap AI marking of a Listening Part A attempt.</summary>
     public const string ListeningPartAScore = "listening.parta.score";
+    /// <summary>Mistral OCR pass for Listening Part B/C extraction.</summary>
+    public const string OcrListeningPartBC = "ocr.listening.partbc";
+    /// <summary>Anthropic Claude answer-key structuring call in Listening Part B/C.</summary>
+    public const string ListeningPartBCExtract = "listening.partbc.extract";
     /// <summary>Whisper speech-to-text for a Speaking attempt transcription.</summary>
     public const string SttSpeakingTranscribe = "stt.speaking.transcribe";
     /// <summary>Whisper speech-to-text for Pronunciation ASR scoring.</summary>
