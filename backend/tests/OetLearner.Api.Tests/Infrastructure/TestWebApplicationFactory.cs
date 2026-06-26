@@ -26,6 +26,18 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
+    // The OET-2026 billing catalog (plans + add-ons, incl. the review-credits
+    // packs) is normally populated by Oet2026CatalogSeeder, which runs as an
+    // IHostedService. The test host strips ALL hosted services (see
+    // ConfigureWebHost) to avoid the long-running BackgroundJobProcessor tick,
+    // which also silences the catalog seeder — leaving BillingAddOns empty and
+    // every checkout/entitlement test failing with review_pack_unavailable /
+    // 402. Run the seeder once, synchronously, before any test touches the DB so
+    // the catalog is deterministically present. Guarded so it runs exactly once
+    // per factory instance.
+    private readonly SemaphoreSlim _catalogSeedGate = new(1, 1);
+    private bool _catalogSeeded;
+
     public TestWebApplicationFactory()
         : this(useFirstPartyAuth: false, seedDemoData: false)
     {
@@ -172,6 +184,22 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         var host = base.CreateHost(builder);
         RestoreEnvironmentOverrides();
+
+        // Drive the OET-2026 catalog seeder once, synchronously, now that the
+        // host has started and DatabaseBootstrapper.InitializeAsync has created
+        // the schema + reference data. Its IHostedService wrapper was stripped
+        // (see ConfigureWebHost), so without this every checkout/entitlement
+        // test sees an empty BillingAddOns catalog. Guarded so the per-fixture
+        // Ensure* helpers don't re-run it.
+        if (!_catalogSeeded)
+        {
+            using var scope = host.Services.CreateScope();
+            var seeder = scope.ServiceProvider
+                .GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
+            seeder.SeedAsync(CancellationToken.None).GetAwaiter().GetResult();
+            _catalogSeeded = true;
+        }
+
         return host;
     }
 
@@ -449,6 +477,37 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
+    /// Populate the OET-2026 billing catalog (plans + add-ons) by driving
+    /// <see cref="OetLearner.Api.Services.Billing.Oet2026CatalogSeeder"/>
+    /// directly. The seeder is registered as a singleton in Program.cs, so it
+    /// resolves even though its IHostedService wrapper is stripped from the test
+    /// host. Idempotent and run-once per factory instance.
+    /// </summary>
+    public async Task EnsureCatalogSeededAsync(CancellationToken cancellationToken = default)
+    {
+        if (_catalogSeeded) return;
+        await _catalogSeedGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_catalogSeeded) return;
+            // Touch Services to force host creation; CreateHost seeds the catalog
+            // and flips _catalogSeeded. If the host already exists (rare ordering),
+            // seed directly here.
+            var services = Services;
+            if (_catalogSeeded) return;
+            using var scope = services.CreateScope();
+            var seeder = scope.ServiceProvider
+                .GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
+            await seeder.SeedAsync(cancellationToken);
+            _catalogSeeded = true;
+        }
+        finally
+        {
+            _catalogSeedGate.Release();
+        }
+    }
+
+    /// <summary>
     /// Grants AI credits to the user so AI-debited features (writing grade,
     /// speaking grade, etc.) do not throw <c>ai_credits_insufficient</c>.
     /// Production credit accounting is enforced by <c>AiGatewayService</c>
@@ -457,6 +516,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// </summary>
     public async Task EnsureAiCreditsAsync(string userId, int tokens = 10_000, CancellationToken cancellationToken = default)
     {
+        await EnsureCatalogSeededAsync(cancellationToken);
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync(cancellationToken);
@@ -486,6 +546,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName)
     {
+        await EnsureCatalogSeededAsync();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
