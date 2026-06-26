@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, FileText, Plus, Save, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, FileText, Plus, Save, Sparkles, Upload, X } from 'lucide-react';
 import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
@@ -14,7 +14,7 @@ import { PartANotesBuilder } from '@/components/domain/listening/admin/PartANote
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
 import { PartAPdfOverlayEditor, type PartAOverlayBlank } from '@/components/domain/listening/admin/PartAPdfOverlayEditor';
 import { countGaps } from '@/lib/listening-part-a-notes';
-import { getContentPaper } from '@/lib/content-upload-api';
+import { attachPaperAsset, getContentPaper, uploadFileChunked } from '@/lib/content-upload-api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   ensureListeningPartASlots,
@@ -90,6 +90,10 @@ interface SubPartSectionProps {
   imported?: SectionImport;
   /** Authenticated download path of the Part A question-paper PDF (for overlay method). */
   pdfDownloadPath?: string | null;
+  /** Run AI extraction (OCR) for THIS consultation: question paper + optional answer key. */
+  onSectionImport: (code: 'A1' | 'A2', questionPaper: File, answerKey?: File | null) => Promise<void>;
+  /** Upload + attach the question-paper PDF for THIS consultation (powers overlay + learner). */
+  onPdfUploaded: (code: 'A1' | 'A2', file: File) => Promise<void>;
 }
 
 function parseOverlayBlanks(json: string | null | undefined): PartAOverlayBlank[] {
@@ -111,6 +115,8 @@ function SubPartSection({
   onReload,
   imported,
   pdfDownloadPath,
+  onSectionImport,
+  onPdfUploaded,
 }: SubPartSectionProps) {
   const [notesBody, setNotesBody] = useState(extract?.notesBody ?? '');
   const [initialNotesBody, setInitialNotesBody] = useState(extract?.notesBody ?? '');
@@ -119,6 +125,14 @@ function SubPartSection({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [creatingSlots, setCreatingSlots] = useState(false);
+  // Dedicated per-consultation authoring controls: question-paper PDF upload +
+  // AI extraction (OCR) with an optional answer-key PDF.
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiQuestionFile, setAiQuestionFile] = useState<File | null>(null);
+  const [aiAnswerFile, setAiAnswerFile] = useState<File | null>(null);
   // Phase 6: authoring method ('wysiwyg' | 'pdf_overlay') + overlay blank state.
   const [method, setMethod] = useState<'wysiwyg' | 'pdf_overlay'>(
     extract?.authoringMethod === 'pdf_overlay' ? 'pdf_overlay' : 'wysiwyg',
@@ -293,6 +307,40 @@ function SubPartSection({
     }
   }, [paperId, code, gapCount, onReload]);
 
+  // Upload the question-paper PDF for THIS consultation, then the parent refreshes
+  // the PDF map so the overlay editor renders it without a PDFs-tab round trip.
+  const onPdfPicked = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+      setPdfBusy(true);
+      try {
+        await onPdfUploaded(code, file);
+      } catch {
+        /* error toast surfaced by the parent */
+      } finally {
+        setPdfBusy(false);
+      }
+    },
+    [code, onPdfUploaded],
+  );
+
+  // Run AI extraction (OCR) for THIS consultation. On success the parent sets this
+  // section's `imported` payload, which the effect above applies for review-then-Save.
+  const onRunExtraction = useCallback(async () => {
+    if (!aiQuestionFile) return;
+    setAiBusy(true);
+    try {
+      await onSectionImport(code, aiQuestionFile, aiAnswerFile);
+      setAiOpen(false);
+      setAiQuestionFile(null);
+      setAiAnswerFile(null);
+    } catch {
+      /* error toast surfaced by the parent; keep the panel + files for retry */
+    } finally {
+      setAiBusy(false);
+    }
+  }, [code, aiQuestionFile, aiAnswerFile, onSectionImport]);
+
   const previewQuestions = questions.map((q) => ({ id: q.id, number: q.number }));
   const partLabel = `Part ${code}`;
   const sectionId = `part-${code.toLowerCase()}`;
@@ -304,6 +352,96 @@ function SubPartSection({
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
+          {/* Dedicated per-consultation controls: upload the question-paper PDF
+              (powers the PDF-overlay editor + the learner surface) and run AI
+              extraction (OCR) for THIS consultation, optionally with an answer
+              key so the AI fills the correct answers too. */}
+          <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept="application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = ''; // allow re-uploading the same file
+                  void onPdfPicked(file);
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => pdfInputRef.current?.click()}
+                loading={pdfBusy}
+                loadingText="Uploading…"
+                disabled={disabled || pdfBusy}
+              >
+                <Upload className="h-4 w-4 mr-1.5" />
+                Upload question-paper PDF
+              </Button>
+              <Button
+                type="button"
+                variant={aiOpen ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setAiOpen((v) => !v)}
+                disabled={disabled}
+              >
+                <Sparkles className="h-4 w-4 mr-1.5" />
+                AI extraction (OCR)
+              </Button>
+            </div>
+            <p className="text-xs text-admin-fg-muted">
+              Upload this consultation’s question paper to power the PDF-overlay editor and the learner surface. Use{' '}
+              <strong>AI extraction (OCR)</strong> to auto-fill {partLabel}’s notes and answer key.
+            </p>
+
+            {aiOpen && (
+              <div className="space-y-3 rounded-admin border border-dashed border-admin-border bg-admin-bg-surface p-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black uppercase tracking-widest text-admin-fg-muted">
+                    Question paper PDF (required)
+                  </label>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp"
+                    onChange={(e) => setAiQuestionFile(e.target.files?.[0] ?? null)}
+                    disabled={disabled || aiBusy}
+                    className="block w-full text-sm text-admin-fg-muted file:mr-3 file:rounded-admin file:border-0 file:bg-admin-bg-subtle file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-admin-fg-strong"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black uppercase tracking-widest text-admin-fg-muted">
+                    Answer key PDF (optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp"
+                    onChange={(e) => setAiAnswerFile(e.target.files?.[0] ?? null)}
+                    disabled={disabled || aiBusy}
+                    className="block w-full text-sm text-admin-fg-muted file:mr-3 file:rounded-admin file:border-0 file:bg-admin-bg-subtle file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-admin-fg-strong"
+                  />
+                  <p className="text-xs text-admin-fg-muted">
+                    Attach the answer key so the AI also fills the correct answers.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={onRunExtraction}
+                  loading={aiBusy}
+                  loadingText="Extracting…"
+                  disabled={disabled || aiBusy || !aiQuestionFile}
+                >
+                  <Sparkles className="h-4 w-4 mr-1.5" />
+                  Run extraction
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Phase 6: authoring method toggle (WYSIWYG note vs PDF overlay). */}
           <div className="flex items-center gap-2 text-sm">
             <span className="font-semibold text-navy">Authoring method:</span>
@@ -564,52 +702,97 @@ export default function AdminListeningPartAPage() {
     [pdfByPart],
   );
 
-  // One-click AI import (OCR) state.
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Per-consultation AI extraction (OCR) state. Each section's import payload is
+  // keyed by code so a run on A1 never disturbs A2 (and vice versa).
   const importTokenRef = useRef(0);
-  const [importing, setImporting] = useState(false);
   const [importByCode, setImportByCode] = useState<{ A1?: SectionImport; A2?: SectionImport }>({});
   const [importToast, setImportToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
-  const onImportFileChosen = useCallback(
-    async (file: File | undefined) => {
-      if (!file || !paperId) return;
-      setImporting(true);
+  // Re-fetch the question-paper PDFs (keyed by part) that power the PDF-overlay
+  // editor. Swallowed so a failure never blocks note/answer authoring. Reused by
+  // the initial load and after an in-section PDF upload.
+  const loadPdfs = useCallback(async () => {
+    if (!paperId) return;
+    try {
+      const paper = await getContentPaper(paperId);
+      const map: Record<string, string> = {};
+      for (const a of paper.assets ?? []) {
+        if (a.role !== 'QuestionPaper') continue;
+        const key = (a.part ?? 'A').toUpperCase();
+        map[key] = `/v1/media/${a.mediaAssetId}/content`;
+      }
+      setPdfByPart(map);
+    } catch {
+      setPdfByPart({});
+    }
+  }, [paperId]);
+
+  // AI extraction (OCR) for ONE consultation: upload a question paper (+ optional
+  // answer key), pick this code's extract, ensure its answer slots exist, then
+  // hand the projected notes/answers to the section via `importByCode` for
+  // review-then-Save. Rethrows so the section keeps the panel + files on error.
+  const onSectionImport = useCallback(
+    async (code: 'A1' | 'A2', questionPaper: File, answerKey?: File | null) => {
+      if (!paperId) return;
       setImportToast(null);
       try {
-        const detail = await importListeningPartAFromUpload(paperId, file);
-        const a1 = detail.extracts.find((e) => e.partCode === 'A1') ?? detail.extracts[0];
-        const a2 = detail.extracts.find((e) => e.partCode === 'A2') ?? detail.extracts[1];
+        const detail = await importListeningPartAFromUpload(paperId, questionPaper, answerKey ?? null);
+        const ex = detail.extracts.find((e) => e.partCode === code) ?? detail.extracts[0];
 
-        // Ensure answer-key slots exist for each consultation so the AI-suggested
-        // answers have rows to populate, then refresh the structure before applying.
-        if (a1 && a1.gapCount > 0) await ensureListeningPartASlots(paperId, 'A1', Math.min(a1.gapCount, 12));
-        if (a2 && a2.gapCount > 0) await ensureListeningPartASlots(paperId, 'A2', Math.min(a2.gapCount, 12));
-        try {
-          const fresh = await getListeningStructure(paperId);
-          setQuestions(fresh.questions);
-        } catch {
-          /* non-fatal: the operator can still Save; rows refresh on next load */
+        if (ex && ex.gapCount > 0) {
+          await ensureListeningPartASlots(paperId, code, Math.min(ex.gapCount, 12));
+          try {
+            const fresh = await getListeningStructure(paperId);
+            setQuestions(fresh.questions);
+          } catch {
+            /* non-fatal: the operator can still Save; rows refresh on next load */
+          }
         }
 
         const token = importTokenRef.current + 1;
         importTokenRef.current = token;
-        const toImport = (e: typeof a1): SectionImport | undefined =>
-          e ? { token, notesBody: e.notesBody ?? '', answers: e.answers } : undefined;
-        setImportByCode({ A1: toImport(a1), A2: toImport(a2) });
+        setImportByCode((prev) => ({
+          ...prev,
+          [code]: ex ? { token, notesBody: ex.notesBody ?? '', answers: ex.answers } : undefined,
+        }));
         setImportToast({
           variant: detail.isStub ? 'error' : 'success',
           message: detail.isStub
             ? `Imported with issues to review: ${detail.stubReason ?? detail.summary}`
-            : `AI import ready — review both consultations and Save. ${detail.summary}`,
+            : `AI extraction ready for Part ${code} — review and Save. ${detail.summary}`,
         });
       } catch (e) {
-        setImportToast({ variant: 'error', message: e instanceof Error ? e.message : 'AI import failed.' });
-      } finally {
-        setImporting(false);
+        setImportToast({ variant: 'error', message: e instanceof Error ? e.message : 'AI extraction failed.' });
+        throw e;
       }
     },
     [paperId],
+  );
+
+  // Upload + attach the question-paper PDF for ONE consultation, then refresh the
+  // PDF map so the section's overlay editor renders it without a PDFs-tab detour.
+  const onSectionPdfUploaded = useCallback(
+    async (code: 'A1' | 'A2', file: File) => {
+      if (!paperId) return;
+      setImportToast(null);
+      try {
+        const result = await uploadFileChunked(file, 'QuestionPaper');
+        await attachPaperAsset(paperId, {
+          role: 'QuestionPaper',
+          mediaAssetId: result.mediaAssetId,
+          part: code,
+          title: file.name,
+          displayOrder: code === 'A1' ? 1 : 2,
+          makePrimary: true,
+        });
+        await loadPdfs();
+        setImportToast({ variant: 'success', message: `Question-paper PDF uploaded for Part ${code}.` });
+      } catch (e) {
+        setImportToast({ variant: 'error', message: e instanceof Error ? e.message : 'PDF upload failed.' });
+        throw e;
+      }
+    },
+    [paperId, loadPdfs],
   );
 
   const load = useCallback(async () => {
@@ -627,21 +810,9 @@ export default function AdminListeningPartAPage() {
       setError(e instanceof Error ? e.message : 'Could not load Part A data.');
       setLoadState('error');
     }
-    // Question-paper PDFs power the PDF-overlay authoring method. Fetched
-    // separately + swallowed so a failure never blocks note/answer authoring.
-    try {
-      const paper = await getContentPaper(paperId);
-      const map: Record<string, string> = {};
-      for (const a of paper.assets ?? []) {
-        if (a.role !== 'QuestionPaper') continue;
-        const key = (a.part ?? 'A').toUpperCase();
-        map[key] = `/v1/media/${a.mediaAssetId}/content`;
-      }
-      setPdfByPart(map);
-    } catch {
-      setPdfByPart({});
-    }
-  }, [paperId]);
+    // Question-paper PDFs power the PDF-overlay authoring method.
+    await loadPdfs();
+  }, [paperId, loadPdfs]);
 
   // Refresh ONLY the questions (answer slots), leaving extracts — and therefore
   // the in-progress note body — untouched. Used after "Create answer slots" so a
@@ -713,36 +884,12 @@ export default function AdminListeningPartAPage() {
       description={`Paper ${paperId ?? ''}. Author the note-completion body for consultations A1 and A2, then fill in the answer key.`}
       breadcrumbs={breadcrumbs}
       actions={
-        <div className="flex items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf,image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = ''; // allow re-importing the same file
-              void onImportFileChosen(file);
-            }}
-          />
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            loading={importing}
-            loadingText="Importing…"
-            disabled={importing}
-          >
-            <Sparkles className="h-4 w-4 mr-1.5" />
-            AI import (OCR)
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/admin/content/listening/${paperId}/structure`}>
-              <ArrowLeft className="h-4 w-4 mr-1.5" />
-              Back to structure
-            </Link>
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={`/admin/content/listening/${paperId}/structure`}>
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
+            Back to structure
+          </Link>
+        </Button>
       }
     >
       {loadState === 'loading' && <Skeleton className="h-96 rounded-admin" />}
@@ -751,8 +898,9 @@ export default function AdminListeningPartAPage() {
       {loadState === 'ready' && (
         <div className="space-y-8">
           <p className="text-xs text-admin-fg-muted">
-            Tip: click <strong>AI import (OCR)</strong> above to upload the official Part A question paper — the AI fills both
-            consultations in the same structure with fill-in-the-blank gaps. Review, edit anything, then Save each part.
+            Tip: each consultation below has its own <strong>Upload question-paper PDF</strong> and{' '}
+            <strong>AI extraction (OCR)</strong> controls — upload that consultation’s paper (optionally with the answer key)
+            and the AI fills its notes and answer key. Review, edit anything, then Save each part.
           </p>
           <SubPartSection
             paperId={paperId ?? ''}
@@ -764,6 +912,8 @@ export default function AdminListeningPartAPage() {
             onReload={reloadStructure}
             imported={importByCode.A1}
             pdfDownloadPath={pdfPathForCode('A1')}
+            onSectionImport={onSectionImport}
+            onPdfUploaded={onSectionPdfUploaded}
           />
           <SubPartSection
             paperId={paperId ?? ''}
@@ -775,6 +925,8 @@ export default function AdminListeningPartAPage() {
             onReload={reloadStructure}
             imported={importByCode.A2}
             pdfDownloadPath={pdfPathForCode('A2')}
+            onSectionImport={onSectionImport}
+            onPdfUploaded={onSectionPdfUploaded}
           />
         </div>
       )}
