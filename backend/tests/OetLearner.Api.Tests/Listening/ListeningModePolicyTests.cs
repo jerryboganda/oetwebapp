@@ -26,13 +26,15 @@ public class ListeningModePolicyTests
     }
 
     [Fact]
-    public void LearningMode_AllowsFullAudioControl()
+    public void LearningMode_LocksAudioButKeepsTranscriptAndFreeNavigation()
     {
         var policy = _resolver.For(ListeningAttemptMode.Learning);
 
-        Assert.True(policy.AudioPauseAllowed);
-        Assert.True(policy.AudioSeekAllowed);
-        Assert.True(policy.ReplayAllowed);
+        // Audio is non-pausable in every mode now (owner directive 2026-06-27):
+        // no pause / seek / replay, even in learning/practice.
+        Assert.False(policy.AudioPauseAllowed);
+        Assert.False(policy.AudioSeekAllowed);
+        Assert.False(policy.ReplayAllowed);
         Assert.True(policy.TranscriptVisibleOnReview);
         Assert.True(policy.FreeNavigation);
         Assert.False(policy.OneWayLocks);

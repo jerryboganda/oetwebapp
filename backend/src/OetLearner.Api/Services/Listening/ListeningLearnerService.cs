@@ -407,9 +407,14 @@ public sealed class ListeningLearnerService(
             modePolicy = new
             {
                 mode = effectiveMode,
-                canPause = !IsExamMode(effectiveMode),
-                canScrub = !IsExamMode(effectiveMode),
-                onePlayOnly = IsExamMode(effectiveMode),
+                // Audio is non-pausable in every mode: once a section's audio
+                // starts it plays start-to-end with no pause, no scrub, no
+                // replay, then auto-advances. (Owner directive 2026-06-27 —
+                // real-exam integrity for all Listening sessions.) Navigation /
+                // notes / chrome hints below stay per-mode.
+                canPause = false,
+                canScrub = false,
+                onePlayOnly = true,
                 autosave = true,
                 transcriptPolicy = "per_item_post_attempt",
                 // Phase 9 tail: presentation hints so the player can render
@@ -1097,7 +1102,8 @@ public sealed class ListeningLearnerService(
                 policy.GracePeriodSeconds,
                 policy.OnExpirySubmitPolicy,
                 mode = normalizedMode,
-                onePlayOnly = IsExamMode(normalizedMode),
+                // Non-pausable / one-play in every mode (see modePolicy above).
+                onePlayOnly = true,
                 presentationStyle = normalizedMode == "home"
                     ? "kiosk_fullscreen"
                     : normalizedMode == "paper" ? "printable_booklet" : normalizedMode,

@@ -7,7 +7,6 @@ import { motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2, StickyNote, Volume2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -196,6 +195,10 @@ function PlayerContent() {
   // exam mode. Subsequent play() calls (e.g. user clicking the OS play key)
   // are immediately re-paused.
   const hasReachedEndRef = useRef<boolean>(false);
+  // Guards the auto-advance fired from the audio `ended` event so it can only
+  // run once per section (reset when the section changes). Audio is
+  // non-pausable in every mode, so `ended` is the sole advance trigger.
+  const autoAdvanceInFlightRef = useRef<boolean>(false);
   // C8f — sentinel that flips true once the preview countdown for the
   // active section has been initialised. Without this, the preview→audio
   // transition effect would fire on the first mount (when the initial
@@ -980,6 +983,7 @@ function PlayerContent() {
     if (phase === 'review') return;
     // Reset per-section forward-only end-of-extract latch + audio-run latch.
     hasReachedEndRef.current = false;
+    autoAdvanceInFlightRef.current = false;
     audioStartedLoggedRef.current = false;
     if (currentSectionPreviewSeconds > 0) {
       previewArmedRef.current = true;
@@ -1028,6 +1032,21 @@ function PlayerContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, reviewSecondsRemaining, hasStarted, currentSection]);
+
+  // Audio is non-pausable, so a section completing is the advance trigger.
+  // Legacy single-file (cue-point) papers never fire the <audio> `ended` event
+  // mid-paper — a section is "done" once all its extracts cross their
+  // audioEndMs. When that happens, jump straight to the next section.
+  // Per-section-audio papers advance via the <audio> onEnded handler instead;
+  // paper all-parts review owns the whole-file timeline and is excluded.
+  useEffect(() => {
+    if (phase !== 'audio' || !hasStarted) return;
+    if (usingPerSectionAudio || allPartsReviewEnabled) return;
+    if (currentSectionAudioEndMs == null) return;
+    if (!allCurrentExtractsCompleted) return;
+    void autoAdvanceAfterAudio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, hasStarted, usingPerSectionAudio, allPartsReviewEnabled, currentSectionAudioEndMs, allCurrentExtractsCompleted]);
 
   // C8f — when the preview countdown hits zero, transition to audio and
   // trigger playback. The cue-point seek effect below handles auto-seeking
@@ -1181,6 +1200,49 @@ function PlayerContent() {
         if (strictServerNavigationActive) return;
       }
       advanceToNextSection();
+    }
+  };
+
+  // Audio is non-pausable in every mode, so a section's audio reaching its end
+  // is the sole advance trigger — there is no manual "Next" / review window.
+  // Fired from the <audio> `onEnded` handler. Idempotent via
+  // `autoAdvanceInFlightRef` (reset when the section changes).
+  const autoAdvanceAfterAudio = async () => {
+    if (!currentSection) return;
+    if (autoAdvanceInFlightRef.current) return;
+    autoAdvanceInFlightRef.current = true;
+    if (isLastSection) {
+      // Terminal: submit and leave the latch set (no section change will reset
+      // it) so a near-simultaneous cue-end + file-`ended` can't double-submit.
+      void handleSubmit();
+      return;
+    }
+    try {
+      const nextSection = sectionsInPaper[currentSectionIndex + 1];
+      if (!nextSection) return;
+      if (strictServerNavigationActive) {
+        // Strict server FSM is linear (a1_audio → a1_review → a2_preview). Hop
+        // through the section's review state (skipped for Part B, which has
+        // none) before the next section's preview so the confirm-token FSM
+        // stays in sync. `applyStrictServerState` (inside the helper) drives
+        // local phase/section, so we must NOT also call advanceToNextSection.
+        const reviewState = listeningStateForPosition(currentSection, 'review');
+        if (reviewState) {
+          const advancedReview = await advanceStrictPhaseIfNeeded(reviewState);
+          if (!advancedReview) return;
+        }
+        const nextState = listeningStateForPosition(nextSection, 'preview');
+        if (nextState) {
+          const advancedPreview = await advanceStrictPhaseIfNeeded(nextState);
+          if (!advancedPreview) return;
+        }
+        return;
+      }
+      // Non-strict (practice / learning): no server FSM — advance locally. The
+      // currentSection effect re-enters the next section's reading window.
+      advanceToNextSection();
+    } finally {
+      autoAdvanceInFlightRef.current = false;
     }
   };
   // ---------------------------------------------------------------------------
@@ -1429,6 +1491,9 @@ function PlayerContent() {
             // §17.11 — close the audio run and arm the next section's start.
             logAttemptEvent('audio_ended', currentSection ? { section: currentSection } : undefined);
             audioStartedLoggedRef.current = false;
+            // Audio is non-pausable, so reaching the end is the advance signal:
+            // jump straight to the next section (or submit on the last).
+            void autoAdvanceAfterAudio();
           }}
           onError={() => {
             setAudioState('error');
@@ -1466,6 +1531,7 @@ function PlayerContent() {
                   progressSeconds={progress}
                   durationSeconds={duration}
                   canScrub={session.modePolicy.canScrub !== false}
+                  canPause={session.modePolicy.canPause !== false}
                   isPreviewPhase={phase === 'preview'}
                   audioState={audioState}
                   saveState={saveState}
@@ -1493,14 +1559,6 @@ function PlayerContent() {
                 </button>
               ) : null}
             </div>
-
-            {/* C8e — practice mode disclosure: replay is allowed in this
-                mode but the real CBLA exam plays once. */}
-            {session.modePolicy.mode === 'practice' && session.modePolicy.onePlayOnly === false ? (
-              <div>
-                <Badge variant="info">Practice mode: replay allowed</Badge>
-              </div>
-            ) : null}
 
             {mockAttemptId ? (
               <InlineAlert variant="info">
@@ -1770,20 +1828,17 @@ function PlayerContent() {
               <p className="text-xs text-muted">
                 {allPartsReviewEnabled
                   ? 'Paper simulation: all parts stay editable for final all-parts review.'
-                  : phase === 'review'
-                  ? 'Edit freely until the countdown ends. This section will lock permanently.'
-                  : isLastSection
-                    ? 'Final section: the 2-minute review window opens when you press Next.'
-                    : `Pressing Next locks ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'} and opens the next one.`}
+                  : 'Audio plays once per section and cannot be paused, scrubbed, or replayed. The next section starts automatically when the audio ends.'}
               </p>
-              {phase === 'audio' ? (
+              {/* Per-section advance is automatic on audio end; the only manual
+                  control left is the paper-simulation all-parts Finish & Submit. */}
+              {phase === 'audio' && allPartsReviewEnabled ? (
                 <Button
                   size="lg"
-                  onClick={() => (allPartsReviewEnabled ? setShowSubmitConfirm(true) : setShowNextConfirm(true))}
-                  disabled={!allPartsReviewEnabled && (!canOpenReviewWindow || isAdvancingPhase)}
+                  onClick={() => setShowSubmitConfirm(true)}
                   className="gap-2"
                 >
-                  {allPartsReviewEnabled ? 'Finish & Submit' : 'Next'} <ChevronRight className="h-5 w-5" />
+                  Finish &amp; Submit <ChevronRight className="h-5 w-5" />
                 </Button>
               ) : null}
             </div>

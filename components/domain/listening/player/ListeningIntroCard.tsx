@@ -103,16 +103,16 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
           <li className="flex items-start gap-2">
             <Lock className="h-5 w-5 shrink-0 text-warning" />
             <span>
-              <strong className="text-navy">Forward-only exam:</strong> once you press Next on a
-              section, it locks permanently and you cannot return to it.
+              <strong className="text-navy">Forward-only:</strong> when a section&apos;s audio ends it
+              locks permanently and the next section opens automatically — you cannot return to it.
             </span>
           </li>
           <li className="flex items-start gap-2">
             <Timer className="h-5 w-5 shrink-0 text-warning" />
             <span>
-              <strong className="text-navy">Review windows:</strong> A1 = 60s, A2 = 60s, C1 = 30s,
-              C2 = 120s. Part B has no review window. Answer boxes remain editable during each
-              window for its own section only.
+              <strong className="text-navy">Reading time:</strong> each section gives you a short
+              reading window before its audio starts, so you can preview the questions and mark
+              answers in advance.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -122,19 +122,13 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
               item per extract.
             </span>
           </li>
-          {isExam ? (
-            <li className="flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
-              <span className="font-bold text-danger">
-                Exam mode plays once and disables pause/scrub controls.
-              </span>
-            </li>
-          ) : (
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-              <span>Practice mode allows pause and scrubbing while you build accuracy.</span>
-            </li>
-          )}
+          <li className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
+            <span className="font-bold text-danger">
+              Audio plays once per section and cannot be paused, scrubbed, or replayed. Each section
+              advances automatically when its audio ends.
+            </span>
+          </li>
           {session.modePolicy.integrityLockRequired ? (
             <li className="flex items-start gap-2">
               <Lock className="h-5 w-5 shrink-0 text-danger" />

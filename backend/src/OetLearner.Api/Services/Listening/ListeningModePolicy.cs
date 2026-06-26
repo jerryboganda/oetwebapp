@@ -112,9 +112,13 @@ internal sealed record LearningModePolicy : IListeningModePolicy
     public bool OneWayLocks => false;
     public bool ConfirmDialogRequired => false;
     public bool UnansweredWarningRequired => false;
-    public bool AudioPauseAllowed => true;
-    public bool AudioSeekAllowed => true;
-    public bool ReplayAllowed => true;
+    // Audio is non-pausable in every mode (owner directive 2026-06-27). Note:
+    // the learner DTO derives canPause/canScrub/onePlayOnly inline in
+    // ListeningLearnerService, not from these flags — kept false here so the
+    // interface contract stays truthful for any future consumer.
+    public bool AudioPauseAllowed => false;
+    public bool AudioSeekAllowed => false;
+    public bool ReplayAllowed => false;
     public bool TranscriptVisibleOnReview => true;
     public bool FreeNavigation => true;
     public bool RequiresTechReadiness => false;

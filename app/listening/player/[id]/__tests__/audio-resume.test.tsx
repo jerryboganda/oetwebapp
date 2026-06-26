@@ -530,8 +530,14 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
   });
 
   it('keeps strict Part B locked until every workplace extract reaches its end cue', async () => {
+    // Audio is non-pausable and advances automatically — Part B must not
+    // advance/submit until ALL workplace extracts have reached their end cue.
+    // Part B is the only (last) section here, so completing it auto-submits.
     mockGetListeningSession.mockResolvedValue(makePartBSession());
     mockV2GetState.mockResolvedValue(makeV2State('b_audio'));
+    mockSubmit.mockResolvedValue({
+      attemptId: 'attempt-1', rawScore: 0, maxRawScore: 1, scaledScore: 0, grade: 'B', evaluationId: 'e1',
+    });
 
     const { container } = render(<ListeningPlayer />);
     await act(async () => {
@@ -545,21 +551,25 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
       return el as HTMLAudioElement;
     });
 
+    // Only the first workplace extract has reached its end cue → not complete.
     (audio as unknown as { __ct?: number }).__ct = 53;
-    act(() => {
+    await act(async () => {
       fireEvent.timeUpdate(audio);
+      await Promise.resolve();
     });
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/what is the speaker mainly concerned about/i)).toBeInTheDocument();
 
-    const nextButton = await screen.findByRole('button', { name: /^next/i });
-    expect(nextButton).toBeDisabled();
-
+    // Both workplace extracts done → Part B auto-advances; as the last section
+    // that means an automatic submit, with no manual Next button.
     (audio as unknown as { __ct?: number }).__ct = 93;
-    act(() => {
+    await act(async () => {
       fireEvent.timeUpdate(audio);
+      await Promise.resolve();
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^next/i })).not.toBeDisabled();
+      expect(mockSubmit).toHaveBeenCalled();
     });
   });
 

@@ -192,9 +192,12 @@ function makeSession(overrides: SessionOverrides = {}) {
     ],
     modePolicy: {
       mode,
-      canPause: mode === 'practice',
-      canScrub: overrides.canScrub ?? (mode === 'practice'),
-      onePlayOnly: overrides.onePlayOnly ?? (mode !== 'practice'),
+      // Audio is non-pausable in every mode now (owner directive 2026-06-27):
+      // the backend DTO hard-codes these regardless of mode. Overrides remain
+      // honored so a test can still assert a hypothetical relaxed policy.
+      canPause: false,
+      canScrub: overrides.canScrub ?? false,
+      onePlayOnly: overrides.onePlayOnly ?? true,
       autosave: true,
       transcriptPolicy: 'per_item_post_attempt',
     },
@@ -741,7 +744,11 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     }
   });
 
-  it('opens strict review through the V2 FSM and keeps the server review window', async () => {
+  it('auto-advances a strict exam through the V2 review hop to the next section when audio ends', async () => {
+    // Audio is non-pausable: reaching the section's cue end auto-advances with
+    // NO manual Next/review button. In a strict exam the player must still hop
+    // through the server review state (confirm-token round trip) before the
+    // next section's preview, so the linear FSM stays in sync.
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {
         if (key === 'attemptId') return 'attempt-1';
@@ -750,10 +757,11 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       },
     });
     mockGetListeningSession.mockResolvedValue(
-      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+      makeTwoSectionSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
     );
     mockV2GetState.mockResolvedValue(makeV2State('a1_audio'));
     mockV2Advance
+      // Hop 1: a1_audio → a1_review (confirm-token round trip).
       .mockResolvedValueOnce(makeAdvanceResult({
         outcome: 'confirm-required',
         state: null,
@@ -762,6 +770,16 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       }))
       .mockResolvedValueOnce(makeAdvanceResult({
         state: { ...makeV2State('a1_review'), windowDurationMs: 75_000, windowRemainingMs: 75_000 },
+      }))
+      // Hop 2: a1_review → a2_preview (confirm-token round trip).
+      .mockResolvedValueOnce(makeAdvanceResult({
+        outcome: 'confirm-required',
+        state: null,
+        confirmToken: 'confirm-next',
+        confirmTokenTtlMs: 30_000,
+      }))
+      .mockResolvedValueOnce(makeAdvanceResult({
+        state: { ...makeV2State('a2_preview'), windowDurationMs: 30_000, windowRemainingMs: 30_000 },
       }));
 
     const { container } = render(<ListeningPlayer />);
@@ -771,18 +789,21 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       if (!element) throw new Error('audio element not yet mounted');
       return element as HTMLAudioElement;
     });
+    // Cross the A1 cue end — no buttons; the player auto-advances.
     (audio as unknown as { __ct?: number }).__ct = 240;
     fireEvent.timeUpdate(audio);
-
-    await waitFor(() => expect(screen.getByRole('button', { name: /^next$/i })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /open review window/i }));
 
     await waitFor(() => {
       expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a1_review', null);
     });
     expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a1_review', 'confirm-review');
-    expect(await screen.findByTestId('listening-review-banner')).toHaveTextContent('01:15');
+    expect(mockV2Advance).toHaveBeenNthCalledWith(3, 'attempt-1', 'a2_preview', null);
+    expect(mockV2Advance).toHaveBeenNthCalledWith(4, 'attempt-1', 'a2_preview', 'confirm-next');
+
+    await waitFor(() => {
+      expect(screen.getByText('A2 resumed blank?')).toBeInTheDocument();
+      expect(screen.getByTestId('listening-preview-banner')).toHaveTextContent('00:30');
+    });
   });
 
   it('locks strict review through the V2 FSM before opening the next section', async () => {
@@ -950,26 +971,53 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     }
   });
 
-  it('keeps Next disabled until the active extract has completed', async () => {
-    mockGetListeningSession.mockResolvedValue(
-      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
-    );
+  it('auto-advances to the next section when the active extract ends — no manual Next button', async () => {
+    // Non-strict practice: audio is non-pausable and there is no manual Next
+    // control. Crossing the section's cue end auto-advances to the next
+    // section's reading window with zero clicks.
+    mockGetListeningSession.mockResolvedValue(makeTwoSectionSession({ mode: 'practice' }));
 
     vi.useFakeTimers();
     try {
-      render(<ListeningPlayer />);
+      const { container } = render(<ListeningPlayer />);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
+      // Run out the A1 reading window so we land in the audio phase.
       for (let i = 0; i <= LISTENING_PREVIEW_SECONDS.A1 + 1; i += 1) {
         await act(async () => {
           await vi.advanceTimersByTimeAsync(1_000);
         });
       }
 
-      expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+      // No manual advance control exists during section audio.
+      expect(screen.queryByRole('button', { name: /^next$/i })).not.toBeInTheDocument();
+      expect(screen.getByText('A1 first blank?')).toBeInTheDocument();
+
+      const audio = container.querySelector('audio') as HTMLAudioElement;
+      // Before the cue end, the player stays on A1.
+      (audio as unknown as { __ct?: number }).__ct = 100;
+      await act(async () => {
+        fireEvent.timeUpdate(audio);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('A1 first blank?')).toBeInTheDocument();
+
+      // Cross the A1 cue end → auto-advance into the A2 reading window.
+      (audio as unknown as { __ct?: number }).__ct = 240;
+      await act(async () => {
+        fireEvent.timeUpdate(audio);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      // Flush the section-change → preview re-entry effects.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(screen.getByText('A2 resumed blank?')).toBeInTheDocument();
+      expect(screen.queryByText('A1 first blank?')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

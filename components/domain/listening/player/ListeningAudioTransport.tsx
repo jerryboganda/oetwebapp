@@ -15,6 +15,9 @@ export interface ListeningAudioTransportProps {
   durationSeconds: number;
   /** When false (exam/home/paper), the scrub slider is hidden. */
   canScrub: boolean;
+  /** When false, audio is non-pausable: the control is disabled while playing
+   *  so it visibly reflects that playback can't be stopped. */
+  canPause: boolean;
   /** Disables the play/pause button while the FSM is in preview phase. */
   isPreviewPhase: boolean;
   audioState: 'idle' | 'buffering' | 'ready' | 'error';
@@ -40,6 +43,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
     progressSeconds,
     durationSeconds,
     canScrub,
+    canPause,
     isPreviewPhase,
     audioState,
     saveState,
@@ -53,6 +57,11 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
   const widthPercent =
     durationSeconds > 0 ? (progressSeconds / durationSeconds) * 100 : 0;
 
+  // Non-pausable audio: once playing, the control is locked so the learner
+  // cannot stop it. It stays interactive before playback (to press Play) and
+  // is also disabled during the pre-audio reading window.
+  const controlDisabled = isPreviewPhase || (!canPause && isPlaying);
+
   return (
     <div
       data-testid="listening-audio-transport"
@@ -60,10 +69,10 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
     >
       <button
         onClick={onTogglePlayPause}
-        disabled={isPreviewPhase}
-        aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
+        disabled={controlDisabled}
+        aria-label={isPlaying ? (canPause ? 'Pause audio' : 'Audio cannot be paused') : 'Play audio'}
         className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
-          isPreviewPhase
+          controlDisabled
             ? 'cursor-not-allowed bg-white/10 text-white/30'
             : 'bg-surface text-navy hover:bg-background-light'
         }`}

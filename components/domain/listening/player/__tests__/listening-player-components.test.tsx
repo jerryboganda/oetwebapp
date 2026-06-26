@@ -76,6 +76,7 @@ describe('ListeningAudioTransport', () => {
     progressSeconds: 30,
     durationSeconds: 240,
     canScrub: true,
+    canPause: true,
     isPreviewPhase: false,
     audioState: 'ready' as const,
     saveState: 'idle' as const,
@@ -107,5 +108,21 @@ describe('ListeningAudioTransport', () => {
   it('omits the scrub slider when canScrub=false', () => {
     render(<ListeningAudioTransport {...baseProps} canScrub={false} />);
     expect(screen.getByTestId('listening-audio-transport').querySelector('input[type="range"]')).toBeNull();
+  });
+
+  it('disables the play/pause control while playing when audio is non-pausable', () => {
+    const onToggle = vi.fn();
+    render(
+      <ListeningAudioTransport {...baseProps} canPause={false} isPlaying onTogglePlayPause={onToggle} />,
+    );
+    const button = screen.getByTestId('listening-audio-transport').querySelectorAll('button')[0] as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-label')).toMatch(/cannot be paused/i);
+  });
+
+  it('keeps the play control enabled before playback even when audio is non-pausable', () => {
+    render(<ListeningAudioTransport {...baseProps} canPause={false} isPlaying={false} />);
+    const button = screen.getByTestId('listening-audio-transport').querySelectorAll('button')[0] as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
   });
 });
