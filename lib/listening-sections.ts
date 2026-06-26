@@ -4,17 +4,15 @@
  * The real OET Listening exam has five forward-only sections:
  *   A1 → A2 → B → C1 → C2
  *
- * Review windows (with editable answer boxes) run AFTER the audio of each
- * section, except Part B:
- *   - A1: 60s review (A1 only)
- *   - A2: 60s review (A2 only)
- *   - B:  no review window (auto-advance once last B question confirmed)
- *   - C1: 30s review (C1 only)
- *   - C2: 120s review (C2 only) — final window of the exam
+ * Audio integrity (owner directive 2026-06-27): in EVERY mode the audio is
+ * non-pausable — once a section's audio starts it plays start-to-end with no
+ * pause / scrub / replay, then the player auto-advances straight to the next
+ * section. There is therefore no post-audio review window (all values 0); the
+ * only per-section time grant is the pre-audio reading window below.
  *
  * Forward-only lock rule:
- *   Once a section's review window ends OR the learner confirms Next,
- *   that section is permanently locked. There is no way to return.
+ *   Once a section's audio ends the player advances and that section is
+ *   permanently locked. There is no way to return.
  *
  * Part B audio authoring rule:
  *   Each of the six Part B extracts is ~40 seconds (NOT 1 minute).
@@ -24,12 +22,16 @@ export type ListeningSectionCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
 
 export const LISTENING_SECTION_SEQUENCE: ListeningSectionCode[] = ['A1', 'A2', 'B', 'C1', 'C2'];
 
+// Post-audio review windows are disabled in every mode — audio plays once and
+// the player auto-advances on `ended`. Kept as a map (all zero) so existing
+// consumers (`currentSectionReviewSeconds`, strict-resume hydration) keep
+// working without branching.
 export const LISTENING_REVIEW_SECONDS: Record<ListeningSectionCode, number> = {
-  A1: 60,
-  A2: 60,
+  A1: 0,
+  A2: 0,
   B: 0,
-  C1: 30,
-  C2: 120,
+  C1: 0,
+  C2: 0,
 };
 
 /**

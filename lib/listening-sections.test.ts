@@ -10,12 +10,12 @@ import {
 type Q = { id: string; partCode: string; number: number };
 
 describe('listening-sections', () => {
-  it('respects canonical review-window durations per OET CBT rules', () => {
-    expect(LISTENING_REVIEW_SECONDS.A1).toBe(60);
-    expect(LISTENING_REVIEW_SECONDS.A2).toBe(60);
+  it('disables post-audio review windows in every section (audio plays once, then auto-advances)', () => {
+    expect(LISTENING_REVIEW_SECONDS.A1).toBe(0);
+    expect(LISTENING_REVIEW_SECONDS.A2).toBe(0);
     expect(LISTENING_REVIEW_SECONDS.B).toBe(0);
-    expect(LISTENING_REVIEW_SECONDS.C1).toBe(30);
-    expect(LISTENING_REVIEW_SECONDS.C2).toBe(120);
+    expect(LISTENING_REVIEW_SECONDS.C1).toBe(0);
+    expect(LISTENING_REVIEW_SECONDS.C2).toBe(0);
   });
 
   it('orders the section sequence A1 → A2 → B → C1 → C2', () => {
