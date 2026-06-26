@@ -237,7 +237,7 @@ export default function NewMockBookingPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Book a Mock" subtitle="Pick a slot for your live Speaking or final-readiness mock" backHref="/mocks/bookings">
-      <div className="space-y-8 pb-24">
+      <div className="space-y-5 sm:space-y-8 pb-24">
         <LearnerPageHero
           eyebrow="Mock Booking"
           icon={CalendarDays}

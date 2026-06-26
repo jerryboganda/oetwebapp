@@ -149,7 +149,7 @@ function WritingExpertReviewContent() {
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-8">
           {/* 1. Turnaround Speed */}
           <section>
             <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Clock className="w-4 h-4" /> 1. Turnaround Speed</h3>

@@ -15,7 +15,6 @@ public static class WritingRouteBuilderExtensions
     {
         // Learner-facing surface
         app.MapWritingOnboardingEndpoints();
-        app.MapWritingDiagnosticEndpoints();
         app.MapWritingPathwayV2Endpoints();
         app.MapWritingSubmissionEndpoints();
         app.MapWritingDraftV2Endpoints();

@@ -105,7 +105,7 @@ export default function GrammarTopicPage() {
   // ── render ────────────────────────────────────────────────────────────
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
 
         {/* Back nav — sits above hero as a lightweight ghost link, matching dashboard back-nav convention. */}
         <BackLink />

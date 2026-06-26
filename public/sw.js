@@ -4,13 +4,20 @@
  * OET Prep — Service Worker (L15 Offline/PWA Support)
  *
  * Strategy:
- *  - CACHE_FIRST for static assets (fonts, icons, CSS, JS chunks)
- *  - STALE_WHILE_REVALIDATE for pages (HTML navigation)
+ *  - CACHE_FIRST for static assets (fonts, icons, CSS, JS chunks — content-hashed, immutable)
+ *  - NETWORK_FIRST for pages (HTML navigation) so a new deploy is seen immediately
+ *    when online; cache is only an offline fallback. (Previously STALE_WHILE_REVALIDATE,
+ *    which always rendered the *previous* build's HTML — and therefore its old chunks —
+ *    leaving users one deploy behind until a second reload.)
  *  - NETWORK_FIRST for API calls (never serve stale data, but fall back to cache)
  *  - Pre-caches the app shell on install
+ *
+ * Bump CACHE_VERSION on any deploy that must invalidate previously-cached assets:
+ * the `activate` handler deletes every cache whose name doesn't match the current
+ * version, so a bump purges all stale `oet-v*` caches on the next SW activation.
  */
 
-const CACHE_VERSION = 'oet-v1';
+const CACHE_VERSION = 'oet-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGES_CACHE = `${CACHE_VERSION}-pages`;
 const API_CACHE = `${CACHE_VERSION}-api`;
@@ -79,7 +86,7 @@ self.addEventListener('fetch', (event) => {
 
   // Navigation requests (HTML pages) → Stale While Revalidate
   if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(staleWhileRevalidate(request, PAGES_CACHE));
+    event.respondWith(networkFirst(request, PAGES_CACHE));
     return;
   }
 });

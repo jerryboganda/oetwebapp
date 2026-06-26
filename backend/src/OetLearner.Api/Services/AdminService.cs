@@ -59,6 +59,14 @@ public partial class AdminService(
         "yearly"
     };
 
+    // Valid values for BillingPlan.DiagnosticMockEntitlement (formerly defined in
+    // MockDiagnosticEntitlementService, inlined here after that service was removed).
+    private static readonly IReadOnlySet<string> DiagnosticMockEntitlementValues =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "unlimited", "one_per_lifetime", "one_per_renewal_period", "paid_per_use", "disabled",
+        };
+
     // ════════════════════════════════════════════
     //  Transaction + Audit helpers
     // ════════════════════════════════════════════
@@ -950,9 +958,9 @@ public partial class AdminService(
         var includedSubtests = ValidateCatalogStringArrayJson(errors, "includedSubtestsJson", request.IncludedSubtestsJson);
         var entitlementsJson = ValidateCatalogObjectJson(errors, "entitlementsJson", request.EntitlementsJson);
         var diagnosticMockEntitlement = string.IsNullOrWhiteSpace(request.DiagnosticMockEntitlement)
-            ? MockDiagnosticEntitlementService.OnePerLifetime
+            ? "one_per_lifetime"
             : request.DiagnosticMockEntitlement.Trim().ToLowerInvariant();
-        if (!MockDiagnosticEntitlementService.AllValues.Contains(diagnosticMockEntitlement))
+        if (!DiagnosticMockEntitlementValues.Contains(diagnosticMockEntitlement))
         {
             AddCatalogError(
                 errors,

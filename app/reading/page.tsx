@@ -184,39 +184,7 @@ export default function ReadingHome() {
 
   return (
     <LearnerDashboardShell pageTitle="Reading">
-      <main className="space-y-10">
-        {!profile || profile.currentStage === 'diagnostic' ? (
-          <Link
-            href="/reading/diagnostic"
-            className="flex items-center justify-between rounded-xl border border-info/30 bg-info/10 px-5 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-info/20 transition-colors dark:border-info/40 dark:bg-info/10 dark:hover:bg-info/15"
-          >
-            <span>
-              {!profile
-                ? 'Start your diagnostic to unlock your personalised Reading plan'
-                : 'Continue with your reading diagnostic'}
-            </span>
-            <span aria-hidden="true">→</span>
-          </Link>
-        ) : null}
-
-        {profile?.currentStage === 'diagnostic' ? (
-          <div className="rounded-xl border border-info/30 bg-info/10 px-5 py-4">
-            <p className="mb-1 text-sm font-semibold text-info">
-              Start with your reading diagnostic
-            </p>
-            <p className="mb-3 text-xs text-muted">
-              A short diagnostic calibrates your starting point.
-            </p>
-            <Link
-              href="/reading/diagnostic"
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              Take the diagnostic
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </div>
-        ) : null}
-
+      <main className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module focus"
           icon={BookOpen}

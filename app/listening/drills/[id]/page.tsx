@@ -37,7 +37,7 @@ function ListeningDrillContent() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening Drill" subtitle="Focused error-type practice for listening accuracy." backHref="/listening">
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/listening')}>
           <ArrowLeft className="h-4 w-4" />
           Back to listening

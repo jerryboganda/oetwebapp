@@ -215,7 +215,7 @@ export default function AiPackagesPage() {
               <div className="mt-6 grid gap-4 lg:grid-cols-3">{packages?.full.map(renderCard)}</div>
             </TabPanel>
             <TabPanel id="separate" activeTab={activeTab}>
-              <div className="mt-6 space-y-8">
+              <div className="mt-6 space-y-5 sm:space-y-8">
                 {SEPARATE_SECTIONS.map((section) => (
                   <section key={section.key}>
                     <h2 className="flex items-center gap-2 text-xl font-semibold text-navy">{section.icon}{section.label}</h2>

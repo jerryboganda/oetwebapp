@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
-  FlaskConical,
   Lock,
   Trophy,
   TrendingUp,
@@ -34,17 +33,8 @@ interface StageConfig {
 
 const STAGES: StageConfig[] = [
   {
-    key: 'diagnostic',
-    number: 1,
-    icon: FlaskConical,
-    name: 'Diagnostic Assessment',
-    description: 'A short adaptive test that maps your current strengths and weak spots across all 8 reading skills.',
-    link: '/reading/diagnostic',
-    ctaLabel: 'Start diagnostic',
-  },
-  {
     key: 'foundation',
-    number: 2,
+    number: 1,
     icon: BookOpen,
     name: 'Sub-Skill Foundation',
     description: '8 targeted lessons covering scanning, skimming, paraphrase recognition, distractor patterns, inference, reference resolution, vocabulary, and time management.',
@@ -53,7 +43,7 @@ const STAGES: StageConfig[] = [
   },
   {
     key: 'practice',
-    number: 3,
+    number: 2,
     icon: TrendingUp,
     name: 'Targeted Practice',
     description: 'Drill your weakest skills with adaptive question sets. Error Bank tracks every miss.',
@@ -62,7 +52,7 @@ const STAGES: StageConfig[] = [
   },
   {
     key: 'mastery',
-    number: 4,
+    number: 3,
     icon: Trophy,
     name: 'Mock Tests & Mastery',
     description: 'Full timed mock exams under real conditions. Aim for 3 consecutive passes before your exam date.',
@@ -73,7 +63,7 @@ const STAGES: StageConfig[] = [
 
 // Derive status from current stage string returned by API
 function stageStatus(stageKey: string, currentStage: string): 'complete' | 'current' | 'locked' {
-  const order = ['diagnostic', 'foundation', 'practice', 'mastery'];
+  const order = ['foundation', 'practice', 'mastery'];
   const stageIdx = order.indexOf(stageKey);
   const currentIdx = order.indexOf(currentStage);
   if (stageIdx < currentIdx) return 'complete';
@@ -206,11 +196,11 @@ export default function ReadingPathwayPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Reading Pathway">
-      <div className="mx-auto max-w-2xl space-y-8">
+      <div className="mx-auto max-w-2xl space-y-5 sm:space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Your Reading Pathway</h1>
           <p className="mt-1 text-sm text-muted">
-            Four stages from diagnostic to exam-day mastery. Work through each stage in order.
+            Three stages from foundation to exam-day mastery. Work through each stage in order.
           </p>
         </div>
 

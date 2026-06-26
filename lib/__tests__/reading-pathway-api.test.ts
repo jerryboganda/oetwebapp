@@ -44,14 +44,6 @@ describe('reading-pathway-api', () => {
     }
   });
 
-  it('loads diagnostic questions from the safe session projection route', async () => {
-    mockFetchWithTimeout.mockResolvedValue(jsonResponse([]));
-
-    await api.getDiagnosticQuestions('session-1');
-
-    expect(lastCall()[0]).toBe('/v1/reading-pathway/diagnostic/sessions/session-1/questions');
-  });
-
   it('maps the daily plan list into the UI plan shape', async () => {
     mockFetchWithTimeout.mockResolvedValue(jsonResponse([
       {
@@ -90,47 +82,6 @@ describe('reading-pathway-api', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('uses a longer timeout for diagnostic submission', async () => {
-    mockFetchWithTimeout.mockResolvedValue(jsonResponse({
-      sessionId: 'session-4',
-      score: 18,
-      totalQuestions: 22,
-      skillScores: { S1: 5 },
-      estimatedOetBand: 'B',
-      estimatedScaledScore: 350,
-      durationSeconds: 1800,
-      roadmapWeeks: 12,
-      completedAt: '2026-06-01T10:00:00Z',
-    }));
-
-    await api.submitDiagnostic('session-4', { q1: 'A' });
-
-    const [url, init, timeoutMs] = lastCall();
-    expect(url).toBe('/v1/reading-pathway/diagnostic/submit');
-    expect(init.method).toBe('POST');
-    expect(timeoutMs).toBe(120_000);
-  });
-
-  it('uses the requested timeout for diagnostic result lookups', async () => {
-    mockFetchWithTimeout.mockResolvedValue(jsonResponse({
-      sessionId: 'session-5',
-      score: 18,
-      totalQuestions: 22,
-      skillScores: { S1: 5 },
-      estimatedOetBand: 'B',
-      estimatedScaledScore: 350,
-      durationSeconds: 1800,
-      roadmapWeeks: 12,
-      completedAt: '2026-06-01T10:00:00Z',
-    }));
-
-    await api.getDiagnosticResult('session-5', { timeoutMs: 5_000 });
-
-    const [url, init, timeoutMs] = lastCall();
-    expect(url).toBe('/v1/reading-pathway/diagnostic/sessions/session-5/results');
-    expect(init.method ?? 'GET').toBe('GET');
-    expect(timeoutMs).toBe(5_000);
-  });
 
   it('loads and normalizes safe practice session questions', async () => {
     mockFetchWithTimeout.mockResolvedValue(jsonResponse({

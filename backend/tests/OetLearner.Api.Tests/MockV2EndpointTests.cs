@@ -162,60 +162,6 @@ public class MockV2EndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal("queued", submittedJson.RootElement.GetProperty("state").GetString());
     }
 
-    [Fact]
-    public async Task DiagnosticEntitlement_UsesBillingPlanConfiguration()
-    {
-        const string userId = "mock-v2-diagnostic-disabled";
-        using var client = await CreateLearnerClientAsync(userId);
-
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-            var now = DateTimeOffset.UtcNow;
-            var planId = $"plan-{Guid.NewGuid():N}";
-            db.BillingPlans.Add(new BillingPlan
-            {
-                Id = planId,
-                Code = planId,
-                Name = "Diagnostic Disabled Plan",
-                Description = "Test plan",
-                Price = 0,
-                Currency = "AUD",
-                Interval = "month",
-                DurationMonths = 1,
-                IsVisible = true,
-                IsRenewable = true,
-                DiagnosticMockEntitlement = MockDiagnosticEntitlementService.Disabled,
-                IncludedSubtestsJson = "[]",
-                EntitlementsJson = "{}",
-                Status = BillingPlanStatus.Active,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-            db.Subscriptions.Add(new Subscription
-            {
-                Id = $"sub-{Guid.NewGuid():N}",
-                UserId = userId,
-                PlanId = planId,
-                Status = SubscriptionStatus.Active,
-                StartedAt = now.AddDays(-1),
-                ChangedAt = now,
-                NextRenewalAt = now.AddMonths(1),
-                PriceAmount = 0,
-                Currency = "AUD",
-                Interval = "monthly",
-            });
-            await db.SaveChangesAsync();
-        }
-
-        var response = await client.GetAsync("/v1/mocks/diagnostic/entitlement");
-        response.EnsureSuccessStatusCode();
-
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.False(json.RootElement.GetProperty("allowed").GetBoolean());
-        Assert.Equal(MockDiagnosticEntitlementService.Disabled, json.RootElement.GetProperty("entitlement").GetString());
-        Assert.Equal("diagnostic_disabled_for_plan", json.RootElement.GetProperty("reason").GetString());
-    }
 
     private async Task<HttpClient> CreateLearnerClientAsync(string userId)
     {

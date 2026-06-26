@@ -245,7 +245,7 @@ function MockReportContent() {
       subtitle={`${report.title} · ${report.date}`}
       backHref="/mocks"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
 
         {/* Readiness delta banner — surfaces the change this mock made
             to the learner's overall readiness and links into the

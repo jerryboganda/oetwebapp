@@ -59,7 +59,7 @@ export default function MockResultsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Mock Results">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         <Link
           href="/reading/mocks"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"

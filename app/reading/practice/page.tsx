@@ -242,7 +242,6 @@ export default function ReadingPracticePage() {
           router.push(started.playerRoute);
           return;
         }
-        case 'start_diagnostic':
         case 'start_mock':
         case 'review_results':
         case 'book_exam':
@@ -341,7 +340,7 @@ export default function ReadingPracticePage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Reading"
           title="Practice Hub"

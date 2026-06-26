@@ -919,7 +919,7 @@ export default function PrivateSpeakingPage() {
               </div>
             </>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-5 sm:space-y-8">
               {/* Upcoming Speaking Sessions (PDF §11) */}
               <section>
                 <LearnerSurfaceSectionHeader title="Upcoming Speaking Sessions" />

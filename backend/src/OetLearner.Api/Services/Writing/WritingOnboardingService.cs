@@ -53,11 +53,6 @@ public interface IWritingOnboardingService
     Task<WritingProfileResponseV2> SaveProfileAsync(string userId, WritingProfileUpdateRequest request, CancellationToken ct);
     Task<WritingBudgetAssessmentResponse> GetBudgetResponseAsync(string userId, CancellationToken ct);
     Task<WritingProfileResponseV2> CompleteOnboardingAsync(string userId, CancellationToken ct);
-    Task<WritingDiagnosticSessionResponse> StartDiagnosticAsync(string userId, Guid? scenarioId, CancellationToken ct);
-    Task<WritingDiagnosticSessionResponse?> GetDiagnosticSessionAsync(string userId, Guid sessionId, CancellationToken ct);
-    Task<WritingDiagnosticSessionResponse?> BeginDiagnosticWritingPhaseAsync(string userId, Guid sessionId, CancellationToken ct);
-    Task<WritingSubmissionResponse?> SubmitDiagnosticAsync(string userId, Guid sessionId, WritingDiagnosticSubmitRequest request, CancellationToken ct);
-    Task<WritingDiagnosticResultsResponse?> GetDiagnosticResultsAsync(string userId, Guid sessionId, CancellationToken ct);
 }
 
 public sealed class WritingOnboardingService(
@@ -70,9 +65,6 @@ public sealed class WritingOnboardingService(
     : IWritingOnboardingService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private const int DiagnosticReadingPhaseSeconds = 5 * 60;
-    private const int DiagnosticWritingPhaseSeconds = 40 * 60;
-    private static readonly TimeSpan DiagnosticSessionLifetime = TimeSpan.FromHours(2);
 
     public async Task<WritingOnboardingState> GetStateAsync(string userId, CancellationToken ct)
     {
@@ -114,7 +106,7 @@ public sealed class WritingOnboardingService(
         if (entity.OnboardingCompletedAt is null && IsProfileComplete(entity))
         {
             entity.OnboardingCompletedAt = now;
-            entity.CurrentStage = "diagnostic";
+            entity.CurrentStage = "foundation";
         }
         entity.UpdatedAt = now;
 
@@ -197,7 +189,7 @@ public sealed class WritingOnboardingService(
         var stage = profile.CurrentStage;
         if (string.IsNullOrWhiteSpace(stage))
         {
-            stage = confirmDone ? (diagnosticDone ? "foundation" : "diagnostic") : "onboarding";
+            stage = confirmDone ? "foundation" : "onboarding";
         }
         return new WritingOnboardingState(userId, stage, true, diagnosticDone,
             professionDone, goalsDone, focusDone, confirmDone, completion);
@@ -315,204 +307,11 @@ public sealed class WritingOnboardingService(
         if (profile.OnboardingCompletedAt is null)
         {
             profile.OnboardingCompletedAt = clock.GetUtcNow();
-            profile.CurrentStage = "diagnostic";
+            profile.CurrentStage = "foundation";
             profile.UpdatedAt = clock.GetUtcNow();
             await db.SaveChangesAsync(ct);
         }
         return await GetProfileAsync(userId, ct);
-    }
-
-    public async Task<WritingDiagnosticSessionResponse> StartDiagnosticAsync(string userId, Guid? scenarioId, CancellationToken ct)
-    {
-        Guid resolvedScenarioId;
-        if (scenarioId.HasValue && scenarioId.Value != Guid.Empty)
-        {
-            var exists = await db.WritingScenarios.AsNoTracking()
-                .AnyAsync(s => s.Id == scenarioId.Value && s.IsDiagnostic, ct);
-            if (!exists)
-            {
-                throw ApiException.NotFound("writing_diagnostic_scenario_not_found", "Diagnostic scenario was not found.");
-            }
-            resolvedScenarioId = scenarioId.Value;
-        }
-        else
-        {
-            var profile = await db.LearnerWritingProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId, ct);
-            var profession = profile?.Profession ?? "medicine";
-            var picked = await db.WritingScenarios.AsNoTracking()
-                .Where(s => s.IsDiagnostic && s.Status == "published" && s.Profession == profession)
-                .OrderBy(s => s.Difficulty)
-                .Select(s => s.Id)
-                .FirstOrDefaultAsync(ct);
-            if (picked == Guid.Empty)
-            {
-                picked = await db.WritingScenarios.AsNoTracking()
-                    .Where(s => s.IsDiagnostic && s.Status == "published")
-                    .OrderBy(s => s.Difficulty)
-                    .Select(s => s.Id)
-                    .FirstOrDefaultAsync(ct);
-            }
-            if (picked == Guid.Empty)
-            {
-                throw ApiException.NotFound("writing_diagnostic_scenario_unavailable", "No diagnostic scenarios are available.");
-            }
-            resolvedScenarioId = picked;
-        }
-
-        var now = clock.GetUtcNow();
-        var session = new WritingDiagnosticSession
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            ScenarioId = resolvedScenarioId,
-            StartedAt = now,
-            ReadingPhaseEndedAt = null,
-            SubmissionId = null,
-            CreatedAt = now,
-            UpdatedAt = now,
-            ExpiresAt = now + DiagnosticSessionLifetime,
-        };
-        db.WritingDiagnosticSessions.Add(session);
-        await db.SaveChangesAsync(ct);
-        // §17.7 — diagnostic attempt lifecycle (best-effort, simulation mode defaults to computer).
-        await SafeEmitAsync(userId, "attempt_started", session.Id, session.ScenarioId, "reading", ct);
-        await SafeEmitAsync(userId, "reading_started", session.Id, session.ScenarioId, "reading", ct);
-        return BuildDiagnosticSessionResponse(session, now);
-    }
-
-    public async Task<WritingDiagnosticSessionResponse?> GetDiagnosticSessionAsync(string userId, Guid sessionId, CancellationToken ct)
-    {
-        var session = await LoadActiveSessionAsync(userId, sessionId, tracked: false, ct);
-        return session is null ? null : BuildDiagnosticSessionResponse(session, clock.GetUtcNow());
-    }
-
-    public async Task<WritingDiagnosticSessionResponse?> BeginDiagnosticWritingPhaseAsync(string userId, Guid sessionId, CancellationToken ct)
-    {
-        var session = await LoadActiveSessionAsync(userId, sessionId, tracked: true, ct);
-        if (session is null) return null;
-        if (session.ReadingPhaseEndedAt is null)
-        {
-            var now = clock.GetUtcNow();
-            session.ReadingPhaseEndedAt = now;
-            session.UpdatedAt = now;
-            await db.SaveChangesAsync(ct);
-            // §17.7 — reading→writing transition (best-effort).
-            await SafeEmitAsync(userId, "reading_ended", session.Id, session.ScenarioId, "writing", ct);
-            await SafeEmitAsync(userId, "writing_started", session.Id, session.ScenarioId, "writing", ct);
-        }
-        return BuildDiagnosticSessionResponse(session, clock.GetUtcNow());
-    }
-
-    public async Task<WritingSubmissionResponse?> SubmitDiagnosticAsync(string userId, Guid sessionId, WritingDiagnosticSubmitRequest request, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var session = await LoadActiveSessionAsync(userId, sessionId, tracked: true, ct);
-        if (session is null) return null;
-
-        var submissionId = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
-            UserId: userId,
-            ScenarioId: session.ScenarioId,
-            Mode: "diagnostic",
-            GradingTier: "express",
-            InputSource: "typed",
-            LetterContent: request.LetterContent,
-            TimeSpentSeconds: request.TimeSpentSeconds,
-            StartedAt: session.StartedAt,
-            IsRevision: false,
-            OriginalSubmissionId: null), ct);
-        try
-        {
-            await pipeline.EvaluateAsync(submissionId, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Writing diagnostic grading failed for submission {SubmissionId}; results endpoint will retry.", submissionId);
-        }
-
-        session.SubmissionId = submissionId;
-        session.UpdatedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(ct);
-
-        // §17.7 — diagnostic submitted/locked lifecycle (best-effort).
-        await SafeEmitAsync(userId, "submit_clicked", session.Id, session.ScenarioId, "submitted", ct, submissionId);
-        await SafeEmitAsync(userId, "attempt_locked", session.Id, session.ScenarioId, "submitted", ct, submissionId);
-
-        var sub = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct);
-        return sub is null ? null : ToSubmissionResponse(sub);
-    }
-
-    public async Task<WritingDiagnosticResultsResponse?> GetDiagnosticResultsAsync(string userId, Guid sessionId, CancellationToken ct)
-    {
-        // Submitted sessions remain queryable past ExpiresAt for audit; only
-        // gate by ownership + presence of a SubmissionId here.
-        var session = await db.WritingDiagnosticSessions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
-        if (session is null) return null;
-        if (session.SubmissionId is null) return null;
-
-        var sub = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == session.SubmissionId, ct);
-        if (sub is null) return null;
-        var grade = await db.WritingGrades.AsNoTracking().FirstOrDefaultAsync(g => g.SubmissionId == session.SubmissionId, ct);
-        if (grade is null) return null;
-        var canon = await db.WritingCanonViolations.AsNoTracking()
-            .Where(v => v.SubmissionId == session.SubmissionId)
-            .ToListAsync(ct);
-        var rules = await db.WritingCanonRules.AsNoTracking()
-            .Where(r => canon.Select(v => v.RuleId).Contains(r.Id))
-            .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
-
-        var pathwayPreview = await pathwayService.GetPathwayAsync(userId, ct);
-        var gradeResponse = WritingV2ResponseMapper.ToGradeResponse(grade, canon, rules);
-        return new WritingDiagnosticResultsResponse(sessionId, sub.Id, gradeResponse, pathwayPreview);
-    }
-
-    /// <summary>
-    /// Load a diagnostic session row scoped to <paramref name="userId"/> for
-    /// multi-tenant isolation. Returns null if the row is missing or expired.
-    /// A row whose <see cref="WritingDiagnosticSession.SubmissionId"/> is set
-    /// counts as active for as long as the cron retains it (submitted rows
-    /// are kept for audit), so the expiry gate only applies when no submission
-    /// has been created yet.
-    /// </summary>
-    private async Task<WritingDiagnosticSession?> LoadActiveSessionAsync(string userId, Guid sessionId, bool tracked, CancellationToken ct)
-    {
-        var query = db.WritingDiagnosticSessions.AsQueryable();
-        if (!tracked) query = query.AsNoTracking();
-        var session = await query.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
-        if (session is null) return null;
-        if (session.SubmissionId is null && session.ExpiresAt <= clock.GetUtcNow()) return null;
-        return session;
-    }
-
-    /// <summary>
-    /// Emit a Writing attempt event for a diagnostic session without ever throwing
-    /// into the caller (spec §17.7 — fire-and-forget-safe). Diagnostic sessions carry
-    /// no simulation-mode column, so mode defaults to "computer".
-    /// </summary>
-    private async Task SafeEmitAsync(string userId, string eventType, Guid sessionId, Guid scenarioId, string status, CancellationToken ct, Guid? submissionId = null)
-    {
-        if (attemptEvents is null) return;
-        try
-        {
-            await attemptEvents.RecordAsync(
-                userId,
-                new[]
-                {
-                    new WritingAttemptEventInput(
-                        eventType,
-                        clock.GetUtcNow(),
-                        "computer",
-                        sessionId.ToString(),
-                        scenarioId,
-                        submissionId,
-                        $"{{\"context\":\"diagnostic\",\"status\":\"{status}\"}}"),
-                },
-                ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to emit Writing attempt event {EventType} for diagnostic session {SessionId}.", eventType, sessionId);
-        }
     }
 
     private WritingProfileResponseV2 BuildProfileResponse(string userId, LearnerWritingProfile? profile, bool diagnosticDone)
@@ -607,28 +406,4 @@ public sealed class WritingOnboardingService(
             GradingTier: s.GradingTier,
             InputSource: s.InputSource);
 
-    private WritingDiagnosticSessionResponse BuildDiagnosticSessionResponse(WritingDiagnosticSession session, DateTimeOffset now)
-    {
-        var phase = session.SubmissionId is not null
-            ? "submitted"
-            : session.ReadingPhaseEndedAt is not null
-                ? "writing"
-                : "reading";
-        var readingRemaining = session.ReadingPhaseEndedAt is not null
-            ? 0
-            : Math.Max(0, DiagnosticReadingPhaseSeconds - (int)(now - session.StartedAt).TotalSeconds);
-        var writingRemaining = session.ReadingPhaseEndedAt is null
-            ? DiagnosticWritingPhaseSeconds
-            : Math.Max(0, DiagnosticWritingPhaseSeconds - (int)(now - session.ReadingPhaseEndedAt.Value).TotalSeconds);
-        return new WritingDiagnosticSessionResponse(
-            Id: session.Id,
-            ScenarioId: session.ScenarioId,
-            Phase: phase,
-            ReadingSecondsRemaining: readingRemaining,
-            WritingSecondsRemaining: writingRemaining,
-            StartedAt: session.StartedAt,
-            ReadingPhaseEndedAt: session.ReadingPhaseEndedAt,
-            SubmittedAt: null,
-            SubmissionId: session.SubmissionId);
-    }
 }

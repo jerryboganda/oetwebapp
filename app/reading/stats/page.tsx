@@ -56,7 +56,7 @@ export default function ReadingStatsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Reading Stats">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         {/* Back link */}
         <Link
           href="/reading"

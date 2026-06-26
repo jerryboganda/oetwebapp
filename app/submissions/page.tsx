@@ -97,7 +97,7 @@ export default function SubmissionHistory() {
       subtitle="Review your past work and follow up on feedback"
       backHref="/"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Evidence History"
           icon={History}

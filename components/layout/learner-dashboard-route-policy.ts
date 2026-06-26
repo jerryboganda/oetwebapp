@@ -4,9 +4,6 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/achievements/page.tsx',
   'app/billing/page.tsx',
   'app/conversation/page.tsx',
-  'app/diagnostic/page.tsx',
-  'app/diagnostic/hub/page.tsx',
-  'app/diagnostic/results/page.tsx',
   'app/goals/page.tsx',
   'app/grammar/page.tsx',
   'app/lessons/page.tsx',
@@ -35,7 +32,6 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/reading/paper/[paperId]/page.tsx',
   'app/reading/paper/[paperId]/results/page.tsx',
   'app/speaking/page.tsx',
-  'app/speaking/check/page.tsx',
   'app/speaking/expert-review/[id]/page.tsx',
   'app/speaking/phrasing/[id]/page.tsx',
   'app/speaking/results/[id]/page.tsx',
@@ -54,9 +50,6 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
 ] as const;
 
 export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
-  'app/diagnostic/listening/page.tsx',
-  'app/diagnostic/reading/page.tsx',
-  'app/diagnostic/speaking/page.tsx',
   'app/mocks/player/[id]/page.tsx',
   'app/reading/player/[id]/page.tsx',
   'app/listening/player/[id]/page.tsx',
@@ -74,7 +67,6 @@ const LEARNER_WORKSPACE_ROUTE_ROOTS = [
   '/achievements',
   '/billing',
   '/conversation',
-  '/diagnostic',
   '/goals',
   '/grammar',
   '/lessons',

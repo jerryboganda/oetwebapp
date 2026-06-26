@@ -326,7 +326,7 @@ export default function StrategiesPage() {
         {loading ? (
           <LoadingState />
         ) : library ? (
-          <div className="space-y-8">
+          <div className="space-y-5 sm:space-y-8">
             <GuideSection
               title="Recommended Next"
               description="Matched to your OET focus areas and high-impact guide order."

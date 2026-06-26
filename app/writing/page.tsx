@@ -7,11 +7,9 @@ import {
   PenTool,
   Award,
   Library,
-  ClipboardCheck,
   BookOpen,
   Star,
   History,
-  Clock,
   ArrowRight,
   type LucideIcon,
 } from 'lucide-react';
@@ -50,15 +48,6 @@ const START_CARDS: WritingLandingCard[] = [
     descriptionKey: 'writing.hub.cards.practice.description',
     ctaKey: 'writing.hub.cards.practice.cta',
     accent: 'text-primary',
-  },
-  {
-    key: 'diagnostic',
-    href: '/writing/diagnostic',
-    icon: ClipboardCheck,
-    titleKey: 'writing.hub.cards.diagnostic.title',
-    descriptionKey: 'writing.hub.cards.diagnostic.description',
-    ctaKey: 'writing.hub.cards.diagnostic.cta',
-    accent: 'text-indigo-600',
   },
 ];
 
@@ -127,7 +116,7 @@ export default function WritingHome() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.hub.pageTitle')}>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={t('writing.hub.eyebrow')}
           icon={PenTool}
@@ -137,7 +126,6 @@ export default function WritingHome() {
           highlights={[
             { icon: Award, label: t('writing.hub.highlights.mocks'), value: t('writing.hub.highlights.mocksValue') },
             { icon: Library, label: t('writing.hub.highlights.practice'), value: t('writing.hub.highlights.practiceValue') },
-            { icon: Clock, label: t('writing.hub.highlights.diagnostic'), value: t('writing.hub.highlights.diagnosticValue') },
           ]}
         />
 

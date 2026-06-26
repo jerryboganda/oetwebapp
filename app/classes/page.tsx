@@ -97,7 +97,7 @@ export default function LiveClassesPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           title="Live classes"
           description="Join expert-led OET classes, reserve seats with wallet credits, and replay recordings after each session."

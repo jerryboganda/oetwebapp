@@ -97,7 +97,7 @@ export default function ModelAnswerExplainer() {
 
   return (
     <LearnerDashboardShell pageTitle="Model Answer Explainer">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Study Guide"
           icon={FileCheck}
@@ -129,7 +129,7 @@ export default function ModelAnswerExplainer() {
           description="Each paragraph is paired with rationale, inclusion logic, and profession-specific language notes."
         />
 
-        <div className="space-y-12">
+        <div className="space-y-7 sm:space-y-12">
           {model.paragraphs.map((paragraph, index) => (
             <MotionItem key={paragraph.id} delayIndex={index} className="flex flex-col lg:flex-row gap-6 lg:gap-8">
 

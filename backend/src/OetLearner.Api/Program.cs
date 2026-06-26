@@ -779,7 +779,6 @@ builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<NativeIapService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.MaterialAccessService>();
-builder.Services.AddScoped<MockDiagnosticEntitlementService>();
 builder.Services.AddScoped<IMockEntitlementService, MockEntitlementService>();
 builder.Services.AddScoped<MockItemAnalysisService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
@@ -904,7 +903,6 @@ builder.Services.AddScoped<ISponsorSeatPackService, SponsorSeatPackService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
 builder.Services.AddScoped<ContentAccessService>();
-builder.Services.AddScoped<MockDiagnosticService>();
 builder.Services.AddScoped<ContentImportService>();
 builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
@@ -1422,13 +1420,6 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningSampleSeeder,
     OetLearner.Api.Services.Listening.ListeningSampleSeeder>();
-
-// Listening diagnostic seeder — Stage 2 of OET_LISTENING_MODULE_PATHWAY.md §6.1.
-// Idempotently materialises the 23-item Phase 1 diagnostic mini-test. Disabled
-// by default — opt in via Seed:ListeningDiagnostic:Enabled=true.
-builder.Services.Configure<OetLearner.Api.Services.Listening.ListeningDiagnosticSeederOptions>(
-    builder.Configuration.GetSection(OetLearner.Api.Services.Listening.ListeningDiagnosticSeederOptions.SectionName));
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningDiagnosticSeeder>();
 
 // Mock sample seeder (Development only). On startup, ingests three fully-
 // assembled draft MockBundle rows from `Project Real Content/` so the admin
@@ -2364,25 +2355,6 @@ using (var seedScope = app.Services.CreateScope())
     {
         seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
             .LogWarning(ex, "Listening starter content seeder failed (non-fatal)");
-    }
-}
-
-// Listening diagnostic seeder — Stage 2 of OET_LISTENING_MODULE_PATHWAY.md §6.1.
-// Idempotently seeds the 23-item Phase 1 diagnostic mini-test (ContentPaper +
-// 4 parts + 9 extracts + 19 questions + 4 accent-test questions). Disabled by
-// default; opt in via `Seed:ListeningDiagnostic:Enabled=true`. Non-fatal.
-using (var seedScope = app.Services.CreateScope())
-{
-    var diagnosticSeeder = seedScope.ServiceProvider
-        .GetRequiredService<OetLearner.Api.Services.Listening.ListeningDiagnosticSeeder>();
-    try
-    {
-        await diagnosticSeeder.SeedAsync(CancellationToken.None);
-    }
-    catch (Exception ex)
-    {
-        seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
-            .LogWarning(ex, "Listening diagnostic seeder failed (non-fatal)");
     }
 }
 

@@ -54,7 +54,7 @@ export default function ListeningAnalyticsPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening · Analytics"
           title="Where your Listening score is leaking"
@@ -85,7 +85,7 @@ export default function ListeningAnalyticsPage() {
         ) : null}
 
         {!loading && data && data.completedAttempts > 0 ? (
-          <div className="space-y-8">
+          <div className="space-y-5 sm:space-y-8">
             <MotionItem>
               <div className="grid gap-2 grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
                 <StatCard

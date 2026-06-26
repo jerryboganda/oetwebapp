@@ -119,7 +119,7 @@ export default function ProgressDashboard() {
       subtitle="Track your performance and activity over time"
       backHref="/"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Evidence Check"
           icon={TrendingUp}
@@ -148,9 +148,9 @@ export default function ProgressDashboard() {
               <LearnerEmptyState
                 icon={Activity}
                 title="No progress evidence yet"
-                description="Complete diagnostic work, practice submissions, or mock tests to unlock charts and review timing insights."
-                primaryAction={{ label: 'Take Diagnostic', href: '/diagnostic' }}
-                secondaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
+                description="Complete practice submissions or mock tests to unlock charts and review timing insights."
+                primaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
+                secondaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
               />
             ) : null}
 

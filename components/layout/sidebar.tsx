@@ -350,7 +350,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
 
   return (
     <motion.nav
-      className={cn('lg:hidden fixed inset-x-3 z-40 glass-panel rounded-[1.5rem] border-border/60 px-1.5 py-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.18)] keyboard-safe-floating-bottom', className)}
+      className={cn('lg:hidden fixed inset-x-2 z-40 glass-panel rounded-[1.25rem] border-border/60 px-1 py-1 shadow-[0_18px_40px_rgba(15,23,42,0.18)] keyboard-safe-floating-bottom', className)}
       aria-label="Mobile navigation"
       layout={!reducedMotion}
       {...bottomNavMotion}
@@ -366,7 +366,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                   void triggerImpactHaptic('LIGHT');
                 }}
                 className={cn(
-                  'pressable relative flex min-h-14 flex-col items-center justify-center gap-1 overflow-hidden rounded-[1rem] px-1 py-1 text-[10px] font-semibold',
+                  'pressable relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-[10px] font-semibold leading-none',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                   active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                 )}
@@ -380,7 +380,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                     transition={getSurfaceTransition('item', reducedMotion)}
                   />
                 )}
-                <div className={cn('relative z-10 rounded-full p-1.5 transition-colors', active ? 'bg-white/15' : 'bg-transparent')}>
+                <div className={cn('relative z-10 rounded-full p-1 transition-colors [&_svg]:h-[18px] [&_svg]:w-[18px]', active ? 'bg-white/15' : 'bg-transparent')}>
                   {item.icon}
                 </div>
                 <span className="relative z-10">{item.label}</span>

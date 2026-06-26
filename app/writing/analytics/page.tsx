@@ -99,7 +99,7 @@ export default function WritingAnalyticsPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Writing Analytics">
-      <main className="space-y-8">
+      <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Analytics"
           icon={TrendingDown}

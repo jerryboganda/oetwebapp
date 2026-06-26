@@ -57,7 +57,7 @@ export default function ListeningTestRulesPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening Test Rules"
           title="How the OET Listening sub-test works"

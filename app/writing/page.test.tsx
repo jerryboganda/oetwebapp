@@ -31,7 +31,6 @@ describe('Writing landing page', () => {
 
     expect(screen.getByRole('link', { name: /writing\.hub\.cards\.mocks\.cta/ })).toHaveAttribute('href', '/writing/mocks');
     expect(screen.getByRole('link', { name: /writing\.hub\.cards\.practice\.cta/ })).toHaveAttribute('href', '/writing/practice/library');
-    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.diagnostic\.cta/ })).toHaveAttribute('href', '/writing/diagnostic');
   });
 
   it('surfaces the supporting writing resources', () => {

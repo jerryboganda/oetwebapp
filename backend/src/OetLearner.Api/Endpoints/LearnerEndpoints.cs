@@ -71,14 +71,6 @@ public static class LearnerEndpoints
         v1.MapPatch("/settings/audio", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "audio", request, ct)));
         v1.MapPatch("/settings/study", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "study", request, ct)));
 
-        var diagnostic = v1.MapGroup("/diagnostic");
-        diagnostic.MapGet("/overview", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticOverviewAsync(http.UserId(), ct)));
-        diagnostic.MapGet("/tasks", async (HttpContext http, [FromQuery] string subtest, LearnerService service, IContentEntitlementService contentEntitlements, CancellationToken ct) => Results.Ok(await service.GetDiagnosticTaskAsync(http.UserId(), subtest, contentEntitlements, ct)));
-        diagnostic.MapPost("/attempts", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateOrResumeDiagnosticAsync(http.UserId(), ct)));
-        diagnostic.MapGet("/attempts/{diagnosticId}", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticAttemptAsync(http.UserId(), diagnosticId, ct)));
-        diagnostic.MapGet("/attempts/{diagnosticId}/hub", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticHubAsync(http.UserId(), diagnosticId, ct)));
-        diagnostic.MapGet("/attempts/{diagnosticId}/results", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticResultsAsync(http.UserId(), diagnosticId, ct)));
-
         v1.MapGet("/learner/dashboard", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDashboardAsync(http.UserId(), ct)));
         v1.MapGet("/study-plan", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetStudyPlanAsync(http.UserId(), ct)));
         v1.MapPost("/study-plan/regenerate", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.RegenerateStudyPlanAsync(http.UserId(), ct)));
@@ -145,8 +137,6 @@ public static class LearnerEndpoints
             var file = await service.GetSpeakingEvaluationAudioAsync(http.UserId(), evaluationId, ct);
             return Results.File(file.Stream, file.ContentType, enableRangeProcessing: true);
         });
-        speaking.MapPost("/device-checks", async (HttpContext http, DeviceCheckRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SaveDeviceCheckAsync(http.UserId(), request, ct)));
-
         // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - speaking mock sets
         // (two role-plays attempted as one mock). The free-tier rolling
         // 7-day cap is enforced server-side by StartSpeakingMockSetAsync.
@@ -281,21 +271,7 @@ public static class LearnerEndpoints
         v1.MapPost("/mocks/reports/{reportId}/remediation-plan/generate", async (HttpContext http, string reportId, RemediationPlanService plan, CancellationToken ct) => Results.Ok(await plan.GenerateFromReportAsync(http.UserId(), reportId, ct)));
         v1.MapPatch("/remediation-tasks/{taskId}/complete", async (HttpContext http, string taskId, RemediationPlanService plan, CancellationToken ct) => Results.Ok(await plan.CompleteTaskAsync(http.UserId(), taskId, ct)));
 
-        // Mocks V2 Wave 7 — Diagnostic-mock entitlement check.
-        v1.MapGet("/mocks/diagnostic/entitlement", async (HttpContext http, MockDiagnosticEntitlementService gate, CancellationToken ct) =>
-        {
-            var decision = await gate.CanStartDiagnosticAsync(http.UserId(), ct);
-            return Results.Ok(new
-            {
-                allowed = decision.Allowed,
-                entitlement = decision.Entitlement,
-                reason = decision.Reason,
-                message = decision.Message,
-            });
-        });
         v1.MapPost("/mocks/leak-report", async (HttpContext http, MockLeakReportRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.ReportMockLeakAsync(http.UserId(), request, ct)));
-        v1.MapGet("/mocks/diagnostic/study-path", async (HttpContext http, MockService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticStudyPathAsync(http.UserId(), ct)));
-
         var reviews = v1.MapGroup("/reviews");
         reviews.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewsAsync(http.UserId(), ct)));
         reviews.MapGet("/eligibility", async (HttpContext http, [FromQuery] string? attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewEligibilityAsync(http.UserId(), attemptId, ct)));
@@ -584,12 +560,6 @@ public static class LearnerEndpoints
 
         v1.MapGet("/learner/next-actions", async (HttpContext http, LearnerService service, CancellationToken ct)
             => Results.Ok(await service.GetNextBestActionsAsync(http.UserId(), ct)))
-            .RequireAuthorization("LearnerOnly");
-
-        // ── E2: Diagnostic Post-Personalization ─────────
-
-        v1.MapGet("/learner/diagnostic-personalization", async (HttpContext http, LearnerService service, CancellationToken ct)
-            => Results.Ok(await service.GetDiagnosticPersonalizationAsync(http.UserId(), ct)))
             .RequireAuthorization("LearnerOnly");
 
         // ── E4: Speaking Fluency Timeline ───────────────

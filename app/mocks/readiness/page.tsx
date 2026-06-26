@@ -99,7 +99,7 @@ export default function MockReadinessPage() {
       subtitle="Trend across recent mocks and the 7-day plan that closes your weakest gaps."
       backHref="/mocks"
     >
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/mocks')}>
           <ArrowLeft className="h-4 w-4" />
           Back to mock center
