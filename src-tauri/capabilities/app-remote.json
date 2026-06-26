@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "app-remote",
+  "description": "IPC granted to the live web app over HTTPS. The remote page is treated as semi-trusted (assume MITM/compromise risk), so it is granted ONLY the non-privileged runtime-info command plus the core baseline needed for IPC. The privileged commands (OS keyring secrets, offline cache, speaking-audio temp files, dropped-file probing, notifications, open-external) are deliberately NOT granted to the remote origin — they stay registered for localhost/dev and future native re-enablement. Re-add the matching allow-* here only if a feature is moved to native desktop capture.",
+  "remote": {
+    "urls": ["https://app.oetwithdrhesham.co.uk"]
+  },
+  "windows": ["main"],
+  "permissions": ["core:default", "allow-runtime-info"]
+}

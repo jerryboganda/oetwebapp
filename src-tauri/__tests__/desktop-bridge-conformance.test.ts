@@ -1,16 +1,16 @@
-// Phase 2 conformance gate: the Tauri-injected window.desktopBridge must have
-// the exact shape the Electron preload exposes (types/desktop.d.ts), so the 7
-// frontend consumers work unchanged under either shell.
+// Conformance gate: the Tauri-injected window.desktopBridge must have the exact
+// shape the renderer expects (types/desktop.d.ts), so the frontend consumers
+// work unchanged.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const BRIDGE_SOURCE = readFileSync(join(__dirname, '..', 'inject', 'desktop-bridge.js'), 'utf8');
 
-// Canonical surface from electron/preload.cjs.
+// Canonical surface of the desktop bridge contract.
 const EXPECTED_SHAPE: Record<string, string[] | null> = {
   platform: null,
-  versions: ['electron', 'chrome', 'node'],
+  versions: ['chrome', 'node'],
   openExternal: null,
   runtime: ['info', 'onWindowStateChange'],
   secureSecrets: ['get', 'set', 'delete', 'status'],
@@ -47,7 +47,7 @@ describe('tauri desktop-bridge conformance', () => {
     delete win.__OET_DESKTOP__;
   });
 
-  it('exposes every namespace and method from the Electron preload', () => {
+  it('exposes every namespace and method of the desktop bridge contract', () => {
     const bridge = win.desktopBridge;
     expect(bridge).toBeDefined();
     for (const [key, members] of Object.entries(EXPECTED_SHAPE)) {

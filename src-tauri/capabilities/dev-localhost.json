@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dev-localhost",
+  "description": "Dev-only: the same minimal IPC surface as app-remote, granted to the local Next.js dev server (http://localhost:3000) that `tauri dev` loads. The navigation guard in lib.rs only permits loopback origins in dev builds, so this never applies in a packaged app even though the capability is compiled in.",
+  "remote": {
+    "urls": [
+      "http://localhost",
+      "http://localhost:*",
+      "http://127.0.0.1",
+      "http://127.0.0.1:*"
+    ]
+  },
+  "windows": ["main"],
+  "permissions": ["core:default", "allow-runtime-info"]
+}

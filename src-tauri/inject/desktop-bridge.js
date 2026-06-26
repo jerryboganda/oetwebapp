@@ -1,7 +1,7 @@
-// window.desktopBridge for the Tauri shell — line-for-line mirror of
-// electron/preload.cjs against the same contract (types/desktop.d.ts).
-// Injected via initialization_script, so it exists before any app JS runs
-// (exactly when the Electron preload runs). Frontend consumers need zero changes.
+// window.desktopBridge for the Tauri shell — implements the same contract
+// (types/desktop.d.ts) the renderer already expects. Injected via
+// initialization_script, so it exists before any app JS runs. Frontend
+// consumers need zero changes.
 (() => {
   'use strict';
   if (window.desktopBridge) return;
@@ -41,8 +41,7 @@
   window.desktopBridge = {
     platform: meta.platform,
     versions: {
-      // Keys preserved for contract parity; flavor/tauri are additive.
-      electron: '',
+      // chrome/node preserved for contract parity; flavor/tauri are additive.
       chrome: chromeVersion,
       node: '',
       tauri: meta.tauri,

@@ -1,21 +1,37 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OET Prep</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #f7f5ef; color: #1c1917; display: grid; place-items: center; height: 100vh; margin: 0; }
-    .card { text-align: center; }
-    .spinner { width: 36px; height: 36px; margin: 0 auto 1rem; border: 3px solid #e7e5e4; border-top-color: #44403c; border-radius: 50%; animation: spin 0.9s linear infinite; }
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f7f5ef; color: #1c1917; display: grid; place-items: center; height: 100vh; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { background: #07111d; color: #e7e5e4; } }
+    .card { text-align: center; max-width: 30rem; padding: 2rem; }
+    .spinner { width: 36px; height: 36px; margin: 0 auto 1.25rem; border: 3px solid rgba(120,113,108,0.3); border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    p { color: #57534e; font-size: 0.9rem; }
+    h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+    p { color: #57534e; font-size: 0.95rem; line-height: 1.5; margin: 0.25rem 0; }
+    @media (prefers-color-scheme: dark) { p { color: #a8a29e; } }
+    button { margin-top: 1.25rem; padding: 0.6rem 1.4rem; font-size: 0.95rem; font-weight: 600; color: #fff; background: #7c3aed; border: none; border-radius: 0.75rem; cursor: pointer; }
+    button:hover { background: #6d28d9; }
+    button:disabled { opacity: 0.6; cursor: default; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="loading">
     <div class="spinner"></div>
     <h1>OET Prep</h1>
-    <p>Starting local services…</p>
+    <p id="status">Connecting…</p>
   </div>
+  <div class="card" id="offline" hidden>
+    <h1>You're offline</h1>
+    <p>OET Prep needs an internet connection. Check your network and try again.</p>
+    <p id="offline-detail"></p>
+    <button id="retry" type="button">Retry</button>
+  </div>
+  <script src="splash.js"></script>
 </body>
 </html>

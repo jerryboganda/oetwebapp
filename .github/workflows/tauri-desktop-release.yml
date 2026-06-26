@@ -1,8 +1,9 @@
 name: Tauri Desktop Release
 
 # Builds the Tauri 2 desktop shell (src-tauri/) for Windows (NSIS) and macOS (dmg).
-# Parallel to desktop-release.yml (Electron), which stays authoritative until the
-# Phase 6 cutover — see docs/tauri-desktop-shell.md.
+# The shell is a remote-only thin client: it bundles no backend, no Next.js
+# renderer, and no Node runtime, so the build is just `tauri build` (Rust core +
+# a tiny bundled splash). See docs/tauri-desktop-shell.md.
 #
 # Triggers:
 #  - Manual: workflow_dispatch with version + allow_unsigned inputs.
@@ -48,8 +49,6 @@ permissions:
 
 env:
   NODE_VERSION: '22'
-  DOTNET_VERSION: '10.0.x'
-  NEXT_TELEMETRY_DISABLED: '1'
 
 jobs:
   conformance:
@@ -100,9 +99,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
@@ -157,8 +153,9 @@ jobs:
         run: |
           if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
             Write-Host "No WINDOWS_CERTIFICATE secret set - skipping Authenticode import."
-            Write-Host "NOTE: tauri.dist.conf.json sets a certificateThumbprint, so the Windows build"
-            Write-Host "will FAIL to sign without the cert. Set the secret, or remove the thumbprint for an unsigned build."
+            Write-Host "NOTE: installer code-signing is disabled by default (no certificateThumbprint"
+            Write-Host "in tauri.conf.json), so the Windows build produces an UNSIGNED NSIS installer."
+            Write-Host "See README 'Desktop signing' to enable Authenticode."
             exit 0
           }
           $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
@@ -172,14 +169,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build + bundle (backend publish, next build, stage node, tauri build)
+      - name: Build + bundle (tauri build — remote-only shell)
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Runtime config baked into the Next.js build (mirrors desktop-release.yml).
-          NEXT_PUBLIC_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL || 'https://api.oetwithdrhesham.co.uk' }}
-          APP_URL: ${{ vars.DESKTOP_APP_URL || 'https://app.oetwithdrhesham.co.uk' }}
+          # The shell loads the remote web app over HTTPS — there is no Next.js or
+          # .NET build here. The remote URLs live in src-tauri/desktop-runtime-config.json.
           # macOS is built UNSIGNED (no Apple Developer ID, per the QA decision).
           # Do NOT pass empty APPLE_* env — tauri treats an empty APPLE_CERTIFICATE
           # as "import this cert" and fails ("security import ... not valid").
