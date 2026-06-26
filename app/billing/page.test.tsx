@@ -74,8 +74,7 @@ describe('Billing page', () => {
     mockFetchBillingContent.mockResolvedValue({});
     // jsdom lacks URL.revokeObjectURL; the download handler calls it.
     if (typeof URL.revokeObjectURL !== 'function') {
-      // @ts-expect-error test shim
-      URL.revokeObjectURL = vi.fn();
+      (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = vi.fn();
     } else {
       vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     }
