@@ -25,7 +25,7 @@ right pair for the scenario:
 | `docker-compose.production.build.yml` | Override — emergency/local source-build when immutable image refs are unavailable. |
 | `docker-compose.staging.yml` | Full staging stack with pg_stat_statements. Use with `--env-file .env.staging`. |
 | `docker-compose.backend.yml` | Backend API + postgres only — for running the .NET API in Docker while developing the frontend locally via `npm run dev`. |
-| `docker-compose.desktop.yml` | Local full-stack with demo accounts for Electron/Playwright E2E. Not production-safe. |
+| `docker-compose.desktop.yml` | Local full-stack with demo accounts for Playwright E2E. Not production-safe. |
 
 Rule of thumb: anything under `production.*.yml` must be launched with
 `--env-file .env.production`; other files read from `.env` or defaults.

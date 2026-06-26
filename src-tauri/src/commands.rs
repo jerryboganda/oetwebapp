@@ -1,6 +1,8 @@
 // Tauri command implementations for the `window.desktopBridge` contract
-// (types/desktop.d.ts). Response shapes mirror electron/main.cjs handlers
-// byte-for-byte so the 7 frontend consumers need zero changes.
+// (types/desktop.d.ts). Response shapes match the contract byte-for-byte so the
+// frontend consumers need zero changes. In the remote-only shell these are
+// granted narrowly (see capabilities/) — only `runtime_info` is exposed to the
+// remote origin; the rest stay registered for localhost/dev and future use.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -12,9 +14,10 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 
-use crate::sidecar::RuntimeState;
+use crate::runtime::RuntimeState;
 
-// Same sanitization as electron/main.cjs sanitizeCacheKey / sanitizeSpeakingSessionId.
+// Sanitizes a cache key / session id: alphanumerics plus `.`, `_`, `-`; every
+// other char (including path separators) becomes `_`, then capped to max_len.
 fn sanitize_component(value: &str, max_len: usize) -> Result<String, String> {
     if value.trim().is_empty() {
         return Err("A valid key is required.".into());
@@ -137,8 +140,8 @@ pub fn secret_delete(namespace: Option<String>, key: String) -> Result<bool, Str
 
 #[tauri::command]
 pub fn secret_status() -> Value {
-    // Shape parity with electron/security/secure-secrets.cjs getStatus().
-    // keyring talks to the native store directly — no vault file exists.
+    // keyring talks to the native store directly — no vault file exists, so
+    // the weak-backend flags are always false and vaultPath is empty.
     let backend = if cfg!(windows) {
         "windows-credential-manager"
     } else if cfg!(target_os = "macos") {
@@ -156,7 +159,7 @@ pub fn secret_status() -> Value {
     })
 }
 
-// ── offline cache (same on-disk format as Electron: userData/offline-content) ──
+// ── offline cache (JSON files under userData/offline-content) ──
 
 fn offline_cache_dir(app: &AppHandle) -> PathBuf {
     user_data_dir(app).join("offline-content")
@@ -254,7 +257,7 @@ pub fn show_notification(
 ) -> Value {
     // Click-to-route parity is best-effort: notification click activation is
     // not uniformly delivered by OS notification centers; the in-app
-    // notification center remains the primary surface (same as Electron).
+    // notification center remains the primary surface.
     let _ = route;
     let result = app
         .notification()

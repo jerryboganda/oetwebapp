@@ -8,7 +8,7 @@
     "style": "xml",
     "parsableStyle": false,
     "compress": true,
-    "headerText": "OET Prep Platform — Next.js 15 (frontend) + ASP.NET Core 10 (backend) + Electron (desktop) + Capacitor (mobile). Authoritative architectural rules: see AGENTS.md, DESIGN.md, docs/SCORING.md, docs/RULEBOOKS.md, docs/AI-USAGE-POLICY.md, docs/CONTENT-UPLOAD-PLAN.md, docs/READING-AUTHORING-POLICY.md, docs/GRAMMAR-MODULE.md, docs/PRONUNCIATION.md, docs/CONVERSATION.md.",
+    "headerText": "OET Prep Platform — Next.js 15 (frontend) + ASP.NET Core 10 (backend) + Tauri (desktop) + Capacitor (mobile). Authoritative architectural rules: see AGENTS.md, DESIGN.md, docs/SCORING.md, docs/RULEBOOKS.md, docs/AI-USAGE-POLICY.md, docs/CONTENT-UPLOAD-PLAN.md, docs/READING-AUTHORING-POLICY.md, docs/GRAMMAR-MODULE.md, docs/PRONUNCIATION.md, docs/CONVERSATION.md.",
     "fileSummary": true,
     "directoryStructure": true,
     "files": true,

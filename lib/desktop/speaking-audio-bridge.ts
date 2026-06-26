@@ -1,7 +1,7 @@
 /**
- * Electron-aware audio bridge. When window.desktopBridge.speakingAudio is
- * present (preload script exposes it via contextBridge), use IPC. Otherwise
- * fall back to the standard Capacitor/web recorder.
+ * Desktop-aware audio bridge. When window.desktopBridge.speakingAudio is
+ * present (the Tauri shell injects it), use IPC. Otherwise fall back to the
+ * standard Capacitor/web recorder.
  */
 import { createAudioRecorder, type AudioRecorder } from '@/lib/native/audio-recorder-bridge';
 
@@ -53,7 +53,7 @@ class ElectronRecorder implements AudioRecorder {
 }
 
 export function createSpeakingAudioRecorder(): AudioRecorder {
-  // The Electron IPC surface is exposed for future native capture, but current
+  // The desktop IPC surface is exposed for future native capture, but current
   // production recording still depends on Chromium MediaRecorder chunks.
   // Falling back here avoids producing zero-byte desktop recordings.
   return createAudioRecorder();

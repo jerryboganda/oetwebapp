@@ -1,67 +1,95 @@
 # Tauri Desktop Shell (`src-tauri/`)
 
-Phase 1–3 implementation of the Electron→Tauri migration (ADR: `~/.claude/plans/as-this-project-have-velvety-hollerith.md`). The Electron pipeline (`electron/`, `electron-builder.config.cjs`, `scripts/desktop-dist.cjs`) stays frozen-but-shippable until Phase 6 cutover.
+The desktop app is a **Tauri 2** shell that is a **remote-only thin client**: it
+loads the live web app (`https://app.oetwithdrhesham.co.uk`) over HTTPS. No
+frontend source, .NET backend, or Node renderer is bundled — the installer ships
+only the compiled Rust core plus a tiny splash/offline screen.
+
+> Migrated from a prior Electron shell. The Electron pipeline has been fully
+> removed; see the repo CHANGELOG / git history for the migration record.
 
 ## Architecture
 
-`oet-desktop.exe` (Rust, ~15 MB debug) orchestrates the same two processes Electron spawns today:
+```
+oet-desktop (Rust core)
+ ├─ WebviewWindow "main"
+ │   ├─ loads bundled splash (src-tauri/splash/) → probes reachability
+ │   └─ navigates to https://app.oetwithdrhesham.co.uk (the live web app)
+ ├─ navigation guard  → HTTPS + trusted origin only; other links → system browser
+ ├─ initialization_script → injects window.desktopBridge (inject/desktop-bridge.js)
+ ├─ tray (Dashboard / Study Plan / Quit) · deep link (oet-prep://) · single-instance
+ └─ updater (tauri-plugin-updater, minisign + GitHub latest.json)
+```
 
-1. **Backend sidecar** — `desktop-backend-runtime/OetLearner.Api.exe`, env map ported from `electron/main.cjs getBundledBackendEnv` (SQLite under the Tauri app-data dir, port scan from 5198, polls `/health` — NOT `/health/ready`, which 503s forever on fresh SQLite; see flagged backend bug).
-2. **Renderer sidecar** — `node .next/standalone/server.js`, env from `getStandaloneServerEnv` (port scan from 3000, polls `/api/health`). SSR/CSP-nonce middleware/CSRF all stay intact.
+- The remote URLs come from `src-tauri/desktop-runtime-config.json` (bundled as a
+  resource), overridable by `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL`.
+- **Offline UX:** if the remote is unreachable at launch, the splash shows a
+  "You're offline — Retry" screen and auto-retries on the OS `online` event.
+- No sidecars, no local SQLite, no bundled Node/.NET → near-instant cold start
+  and a small installer (Rust shell only).
 
-The WebView2/WKWebView window starts on a bundled splash, then navigates to `http://127.0.0.1:{port}`. A Windows **Job Object** (kill-on-close) guarantees no orphaned sidecars even on hard kill — verified, better than Electron today.
+## Bridge
 
-## Bridge (Phase 2)
+`inject/desktop-bridge.js` (registered as `initialization_script`) implements
+`window.desktopBridge` with the exact `types/desktop.d.ts` shape, so the frontend
+consumers work unchanged. Verified by
+`src-tauri/__tests__/desktop-bridge-conformance.test.ts`.
 
-`inject/desktop-bridge.js` (registered as `initialization_script`) implements `window.desktopBridge` with the exact `types/desktop.d.ts` shape — all 7 frontend consumers work unchanged. Verified live on the remote origin AND by `src-tauri/__tests__/desktop-bridge-conformance.test.ts` (5/5).
+- Window-state changes are delivered as DOM `CustomEvent`s (no event-plugin
+  capability needed by the remote page).
+- Speaking-audio blobs cross IPC as base64 and are rehydrated to `ArrayBuffer`s.
+- Secrets use the OS keyring (`keyring` crate: Credential Manager / Keychain).
 
-Implementation notes:
-- App commands are ACL-gated for remote origins: `build.rs` declares them via `AppManifest::commands`, and `capabilities/remote-localhost.json` grants each `allow-*` to `http://localhost:*`/`http://127.0.0.1:*`.
-- Window-state events are delivered as DOM `CustomEvent`s (no event-plugin capability needed).
-- Speaking-audio blobs cross IPC as base64 (`chunksBase64`/`dataBase64`); the bridge rehydrates `ArrayBuffer`s so the outward contract is unchanged.
-- Secrets use the OS keyring (`windows-credential-manager`/Keychain) — **Electron safeStorage vault contents are NOT migrated** (Chromium-specific ciphertext) → users re-login once.
-- Data migration (`sidecar::migrate_from_electron`) copies `storage/` + `offline-content/` from `%APPDATA%\OET Prep\prod\user-data`, **deliberately not the SQLite DB**: the backend bootstraps SQLite via `EnsureCreatedAsync` (no-op on non-empty DBs), so an old-schema Electron DB crashes the new backend (`no such table: RuntimeSettings` — reproduced). Revisit when the backend adopts real EF migrations on SQLite.
+## Security & capabilities (least privilege)
+
+- **Origin lock:** `lib.rs::is_allowed_origin` permits only the bundled splash,
+  the trusted HTTPS origin (and same-origin SPA routes), and — in dev builds —
+  `localhost`. Everything else opens in the system browser.
+- **CSP** for the bundled splash is set in `tauri.conf.json`
+  (`app.security.csp`); `connect-src` allows only the app + API origins for the
+  reachability probe.
+- **DevTools** are disabled in release (the `devtools` Cargo feature is not on).
+- **ACL:** the remote page is semi-trusted. `capabilities/app-remote.json` grants
+  it only `core:default` + `allow-runtime-info`. The privileged commands (keyring
+  secrets, offline cache, speaking-audio temp files, dropped-file probe,
+  notifications, open-external) stay registered (`build.rs` declares them) but are
+  **not** granted to the remote origin. `capabilities/dev-localhost.json` grants
+  the same minimal set to the dev server.
 
 ## Dev & build
 
-```powershell
-# prerequisites (once): pnpm run build && node scripts/tauri-dist.cjs sync-standalone && node scripts/tauri-dist.cjs publish-backend
-node scripts/tauri-dev.cjs          # cargo run with OET_REPO_ROOT set
-node scripts/tauri-dist.cjs build   # full dist: backend publish + next build + stage node + tauri build (NSIS)
+```bash
+# Dev — loads the production URL by default. To target a local web build,
+# run `pnpm dev` and set OET_DESKTOP_WEB_URL=http://localhost:3000 first.
+pnpm run desktop:dev          # = node scripts/tauri-dev.cjs (cargo run)
+
+# Production bundle — just `tauri build` (no backend/next/node staging).
+pnpm run desktop:dist         # = node scripts/tauri-dist.cjs build  → NSIS + dmg
 ```
 
-`tauri.dist.conf.json` holds `bundle.resources` (standalone, backend-runtime, node.exe) so plain `cargo build` doesn't require staged artifacts.
+## Versions (pinned exact, verified June 2026)
 
-## Phase 4 — remaining packaging work
+`tauri 2.11.3` · `tauri-build 2.6.2` · `@tauri-apps/cli 2.11.3` · plugins:
+`single-instance 2.4.2`, `deep-link 2.4.9`, `notification 2.3.3`, `opener 2.5.4`,
+`dialog 2.7.1`, `updater 2.10.1`. The frontend uses the injected raw-JS bridge,
+not `@tauri-apps/api`.
 
-- **Windows signing**: wire Azure Trusted Signing via NSIS `signCommand` in `tauri.dist.conf.json` (reuse the env contract from `scripts/desktop-dist.cjs`).
-- **Updater**: add `tauri-plugin-updater`; generate keys with `pnpm dlx @tauri-apps/cli signer generate`; host `latest.json` + artifacts under a new path next to `ELECTRON_UPDATES_URL`; port `scripts/desktop-update-metadata-verify.cjs` to the minisign manifest.
-- **Cert pinning**: webview TLS is OS-owned — port pin enforcement into the Node proxy (undici Agent, SPKI-SHA256, reuse parsing from `electron/security/certificate-pinning.cjs`) and force all remote traffic through the proxy in Tauri builds.
-- **WebView2 permission handler**: implement `PermissionRequested` on the Rust side so a user's one-time mic denial doesn't permanently brick recording (WebView2 persists denials in the profile `Preferences`; reproduced + wiped during the spike).
-- **macOS**: `entitlements.plist` is in place (mic + sidecar allowances); needs icons (.icns), notarization, and the **WKWebView gate tests on real hardware** (mic recording mp4/aac, cookie persistence, print).
+## Updater
 
-## Phase 5/6 — beta + cutover (operational)
+Configured in `tauri.conf.json` (`plugins.updater`): minisign `pubkey` +
+GitHub-releases `latest.json` endpoint. CI signs updater artifacts with
+`TAURI_SIGNING_PRIVATE_KEY`. Round-trip test without installing:
 
-- Beta dual-ship: separate identifier (e.g. `com.oetprep.desktop.beta`), Sentry tag `flavor: tauri` (bridge exposes `versions.flavor`).
-- Cutover: final Electron "bridge" release downloads the Tauri installer (checksum-verified via `scripts/desktop-checksums.cjs` machinery), migrates userData, self-uninstalls; keep the Electron feed serving that bridge ≥6 months.
+```bash
+OET_UPDATER_TEST=1 <run the built app>
+# logs: "UPDATER-TEST: download+verify finished (signature valid)"
+```
 
-## Verified on Windows (2026-06-12)
+## CI
 
-| Item | Result |
-|---|---|
-| Sidecar boot + health + port fallback | PASS (renderer fell back 3000→3001 live) |
-| Hard-kill orphan reaping (Job Object) | PASS |
-| Bridge shape + all command round-trips from remote origin | PASS (runtime, secrets, cache, speaking-audio, notification, fileInfo) |
-| Conformance vitest | 5/5 |
-| Mic recording in WebView2 (spike, localhost origin) | PASS — 30s real-mic `audio/webm;codecs=opus`, decoded 29.94s/48kHz |
-| Print dialog (`window.print()` → WebView2) | PASS — `edge://print/` preview target opened |
-| Proxy health + SignalR negotiate through sidecar | PASS — `/api/health` 200; AI-assistant hub negotiate 403 (route resolved, auth-gated — transport OK) |
-| Storage persistence (cookie/localStorage/IndexedDB across restart) | PASS |
-| Updater wiring (plugin + check on boot) | PASS — checks feed on startup, parses/errors correctly; full download+install round-trip uses `updater-feed-server.mjs` against a signed release bundle |
-| All of macOS | pending (hardware) |
-
-## Updater round-trip test (spike c)
-
-1. Build a signed release: `TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/oet-updater-test.key) pnpm dlx @tauri-apps/cli@^2 build --config src-tauri/tauri.dist.conf.json` (produces `*-setup.exe` + `*-setup.exe.sig` + `createUpdaterArtifacts`).
-2. Serve the feed: `node src-tauri/updater-feed-server.mjs <bundleDir> 8765` (advertises v0.1.1, signature from the real `.sig`).
-3. Run the app with `OET_UPDATER_URL=http://127.0.0.1:8765/latest.json` → it checks, detects the newer version, downloads, and **verifies the minisign signature** before install. Pubkey is committed in `tauri.conf.json > plugins > updater > pubkey`; production swaps in the real key + an HTTPS endpoint next to `ELECTRON_UPDATES_URL`.
+- `.github/workflows/tauri-ci.yml` — Rust gate (fmt, clippy `-D warnings`, test,
+  build) on Windows + the bridge conformance test.
+- `.github/workflows/tauri-desktop-release.yml` — Windows (NSIS) + macOS (dmg)
+  build matrix, checksums, artifact upload, and (on tag) a GitHub Release with
+  the updater `latest.json`. Installers are unsigned by default — see the README
+  "Desktop signing" section to enable Authenticode / Apple notarization.

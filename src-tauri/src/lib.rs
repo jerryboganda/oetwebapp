@@ -1,91 +1,28 @@
-// OET Prep desktop shell (Tauri 2) — Phase 1-3 of the Electron migration.
-// Architecture: this process orchestrates two sidecars (bundled .NET API +
-// Next.js standalone server) and points the system webview at the localhost
-// renderer. The injected inject/desktop-bridge.js implements the same
-// window.desktopBridge contract the Electron preload exposes.
+// OET Prep desktop shell (Tauri 2) — remote-only thin client.
+//
+// The window loads a tiny bundled splash, which probes reachability and then
+// navigates to the live web app over HTTPS. No frontend source, .NET backend, or
+// Node renderer is bundled. The injected inject/desktop-bridge.js implements the
+// same window.desktopBridge contract the renderer already expects, so the live
+// app runs unchanged. A navigation guard locks the window to the trusted origin
+// and routes any other link to the system browser.
 
 mod commands;
-mod sidecar;
-
-use std::path::PathBuf;
+mod runtime;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 
-use sidecar::{Paths, RuntimeState};
+use runtime::RuntimeState;
 
 const BRIDGE_JS: &str = include_str!("../inject/desktop-bridge.js");
-
-fn resolve_paths(app: &AppHandle) -> Paths {
-    let user_data = app.path().app_data_dir().expect("app_data_dir unavailable");
-    if tauri::is_dev() {
-        // Dev: artifacts come from the repo (scripts/tauri-dev.cjs sets OET_REPO_ROOT).
-        let repo = PathBuf::from(std::env::var("OET_REPO_ROOT").unwrap_or_else(|_| {
-            // src-tauri/ lives at the repo root.
-            env!("CARGO_MANIFEST_DIR")
-                .trim_end_matches("src-tauri")
-                .to_string()
-        }));
-        Paths {
-            standalone_root: repo.join(".next").join("standalone"),
-            backend_root: repo.join("desktop-backend-runtime"),
-            node_binary: PathBuf::from("node"),
-            user_data,
-        }
-    } else {
-        let resources =
-            strip_verbatim(&app.path().resource_dir().expect("resource_dir unavailable"));
-        Paths {
-            standalone_root: resources.join("standalone"),
-            backend_root: resources.join("backend-runtime"),
-            node_binary: if cfg!(windows) {
-                resources.join("node.exe")
-            } else {
-                resources.join("node")
-            },
-            user_data,
-        }
-    }
-}
-
-// Windows `resource_dir()` returns a `\\?\` verbatim (extended-length) path. The
-// bundled Node mis-resolves a `\\?\` cwd/argument — its main entry resolves to
-// "C:" and the renderer never starts (BUG-011a). Normalise resource paths to
-// plain form before deriving the sidecar/binary paths.
-fn strip_verbatim(p: &std::path::Path) -> PathBuf {
-    let s = p.to_string_lossy();
-    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
-        PathBuf::from(format!(r"\\{rest}"))
-    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
-        PathBuf::from(rest)
-    } else {
-        p.to_path_buf()
-    }
-}
-
-// Kill-on-job-close: a hard-killed shell takes both sidecars with it —
-// closes the orphan-process gap Electron has today.
-#[cfg(windows)]
-fn install_job_object() {
-    if let Ok(job) = win32job::Job::create() {
-        if let Ok(mut info) = job.query_extended_limit_info() {
-            info.limit_kill_on_job_close();
-            if job.set_extended_limit_info(&info).is_ok() && job.assign_current_process().is_ok() {
-                std::mem::forget(job);
-            }
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn install_job_object() {}
 
 fn emit_window_state(app: &AppHandle) {
     let snapshot = commands::window_state_snapshot(app);
     // Delivered to the page as a CustomEvent so no event-plugin capability is
-    // needed from the remote localhost origin; the bridge re-dispatches it to
+    // needed from the remote origin; the bridge re-dispatches it to
     // onWindowStateChange listeners.
     if let Some(win) = app.get_webview_window("main") {
         if let Ok(detail) = serde_json::to_string(&snapshot) {
@@ -117,6 +54,40 @@ fn handle_deep_link_url(app: &AppHandle, url: &str) {
     navigate_to_route(app, &route);
 }
 
+/// HTTPS-only origin lock. Allows the bundled splash, the trusted remote origin
+/// (and its sub-paths — same-origin SPA routing), and the local dev server in
+/// dev builds. Everything else is blocked; external http(s) links open in the
+/// system browser instead.
+fn is_allowed_origin(url: &Url, remote_base: &str) -> bool {
+    match url.scheme() {
+        // Bundled splash / Tauri internal asset origin.
+        "tauri" => return true,
+        "http" | "https" => {}
+        _ => return false,
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    // Tauri serves bundled assets from tauri.localhost on some platforms.
+    if host == "tauri.localhost" {
+        return true;
+    }
+    // The trusted remote origin (scheme + host + port must match).
+    if let Ok(remote) = Url::parse(remote_base) {
+        if url.scheme() == remote.scheme()
+            && url.host_str() == remote.host_str()
+            && url.port_or_known_default() == remote.port_or_known_default()
+        {
+            return true;
+        }
+    }
+    // Dev only: the local Next.js dev server.
+    if tauri::is_dev() && (host == "localhost" || host == "127.0.0.1") {
+        return true;
+    }
+    false
+}
+
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let dashboard = MenuItemBuilder::with_id("dashboard", "Dashboard").build(app)?;
     let study_plan = MenuItemBuilder::with_id("study-plan", "Study Plan").build(app)?;
@@ -144,8 +115,6 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn run() {
-    install_job_object();
-
     let app = tauri::Builder::default()
         // single-instance must be the first plugin registered.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -196,13 +165,16 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
-            let paths = resolve_paths(&handle);
+            let user_data = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::env::temp_dir());
 
             // Capture Rust panics to <app_data>/logs/desktop.log. Packaged builds
             // run with windows_subsystem="windows" (no console), so without this a
             // panic would vanish silently.
             {
-                let log_dir = paths.user_data.join("logs");
+                let log_dir = user_data.join("logs");
                 let _ = std::fs::create_dir_all(&log_dir);
                 let panic_log = log_dir.join("desktop.log");
                 let default_hook = std::panic::take_hook();
@@ -219,14 +191,38 @@ pub fn run() {
                 }));
             }
 
-            sidecar::migrate_from_electron(&paths.user_data);
+            // Resolve the remote URLs (bundled config, overridable by env).
+            let resource_dir = app
+                .path()
+                .resource_dir()
+                .unwrap_or_else(|_| std::env::temp_dir());
+            let config = runtime::load_runtime_config(&resource_dir, &user_data);
+            let remote_url = runtime::resolve_web_url(&config);
+            {
+                let state = handle.state::<RuntimeState>();
+                *state.renderer_url.lock().unwrap() = Some(remote_url.clone());
+                *state.active_backend_url.lock().unwrap() = config.public_api_base_url.clone();
+            }
 
-            // Splash from bundled assets; navigated to localhost once ready.
+            // The window starts on the bundled splash (index.html), which probes
+            // the remote and navigates to it (or shows an offline/retry screen).
+            let guard_remote = remote_url.clone();
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("OET Prep")
                 .inner_size(1440.0, 980.0)
                 .min_inner_size(1200.0, 800.0)
-                .initialization_script(bridge_script())
+                .initialization_script(bridge_script(&remote_url))
+                .on_navigation(move |url| {
+                    if is_allowed_origin(url, &guard_remote) {
+                        return true;
+                    }
+                    // External http(s) link → open in the system browser, block
+                    // the in-app navigation (treat the remote page as untrusted).
+                    if matches!(url.scheme(), "http" | "https") {
+                        let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                    }
+                    false
+                })
                 .build()?;
             let _ = window.show();
 
@@ -321,57 +317,24 @@ pub fn run() {
                 });
             }
 
-            let is_packaged = !tauri::is_dev();
-            std::thread::spawn(move || {
-                let state = handle.state::<RuntimeState>();
-                let resource_dir = handle
-                    .path()
-                    .resource_dir()
-                    .unwrap_or_else(|_| std::env::temp_dir());
-                let runtime_config = sidecar::load_runtime_config(&resource_dir, &paths.user_data);
-
-                match sidecar::start_all(&paths, &state, &runtime_config, is_packaged) {
-                    Ok(renderer_url) => {
-                        if let Some(win) = handle.get_webview_window("main") {
-                            if let Ok(url) = renderer_url.parse() {
-                                let _ = win.navigate(url);
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        eprintln!("[oet-desktop] startup failed: {error}");
-                        if let Some(win) = handle.get_webview_window("main") {
-                            let safe = serde_json::to_string(&error).unwrap_or_default();
-                            let _ = win.eval(format!(
-                                "document.body.innerHTML = '<pre style=\"padding:2rem;white-space:pre-wrap\">Startup failed: ' + {safe} + '</pre>'"
-                            ));
-                        }
-                    }
-                }
-            });
-
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building OET Prep desktop");
 
-    app.run(|handle, event| {
-        if let RunEvent::Exit = event {
-            if let Some(state) = handle.try_state::<RuntimeState>() {
-                sidecar::stop_all(&state);
-            }
-        }
-    });
+    app.run(|_handle, _event| {});
 }
 
-fn bridge_script() -> String {
+fn bridge_script(remote_url: &str) -> String {
     let platform = match std::env::consts::OS {
         "windows" => "win32",
         "macos" => "darwin",
         other => other,
     };
+    // serde_json::to_string yields a safely-quoted JS string literal for the URL.
+    let remote_literal = serde_json::to_string(remote_url).unwrap_or_else(|_| "\"\"".into());
     format!(
-        "globalThis.__OET_DESKTOP__ = {{ platform: '{platform}', tauri: '{}' }};\n{}",
+        "globalThis.__OET_DESKTOP__ = {{ platform: '{platform}', tauri: '{}' }};\nglobalThis.__OET_REMOTE__ = {remote_literal};\n{}",
         tauri::VERSION,
         BRIDGE_JS
     )

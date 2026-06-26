@@ -28,7 +28,9 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
-  JAVA_VERSION: '17'
+  # Capacitor 7 Android compiles against Java 21 (source/target release 21);
+  # JDK 17 fails with "invalid source release: 21".
+  JAVA_VERSION: '21'
   JAVA_DISTRIBUTION: 'temurin'
 
 jobs:

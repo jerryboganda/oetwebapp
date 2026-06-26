@@ -29,7 +29,7 @@ function useServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
     if (navigator.webdriver) return;
-    // Don't register in Electron or Capacitor native shells
+    // Don't register in the desktop or Capacitor native shells
     if ((window as unknown as Record<string, unknown>).desktopBridge || (window as unknown as Record<string, unknown>).__CAPACITOR_NATIVE__) return;
 
     navigator.serviceWorker.register('/sw.js').catch(() => {
