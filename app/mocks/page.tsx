@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Award,
   ArrowRight,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
@@ -148,6 +149,25 @@ const SUBTEST_COLOR: Record<SubtestCode, { fg: string; bg: string; label: string
 
 const FULL_MOCK_ORDER: readonly SubtestCode[] = ['listening', 'reading', 'writing', 'speaking'] as const;
 
+const VALID_SUBTESTS: readonly SubtestCode[] = ['listening', 'reading', 'writing', 'speaking'] as const;
+
+/** Per-subtest learner hub for the "practise part-by-part" escape hatch on scoped empty states. */
+const SUBTEST_HUB: Record<SubtestCode, string> = {
+  listening: '/listening',
+  reading: '/reading',
+  writing: '/writing',
+  speaking: '/speaking',
+};
+
+/**
+ * Scope derived from the `?subtest=` / `?type=full` deep-links. Every "Full <Skill> Exam" surface on the
+ * Listening / Reading / Writing hubs funnels here pre-filtered; this is what makes that promise real.
+ */
+type MockScope =
+  | { kind: 'subtest'; subtest: SubtestCode; label: string }
+  | { kind: 'full'; label: string }
+  | null;
+
 function humanMockTypeLabel(mockType: 'full' | 'sub', subtest?: SubtestCode | null): string {
   if (mockType === 'full') return 'Full mock (all four sub-tests)';
   if (subtest) return `${SUBTEST_COLOR[subtest].label} sub-test mock`;
@@ -208,7 +228,21 @@ function SectionProgressDots({ mock }: { mock: FullMockCard }) {
   );
 }
 
-export default function MockCenter() {
+function MockCenterInner() {
+  const searchParams = useSearchParams();
+  const scope: MockScope = useMemo(() => {
+    const subtestParam = searchParams.get('subtest');
+    const typeParam = searchParams.get('type');
+    if (subtestParam && (VALID_SUBTESTS as readonly string[]).includes(subtestParam)) {
+      const st = subtestParam as SubtestCode;
+      return { kind: 'subtest', subtest: st, label: `Full ${SUBTEST_COLOR[st].label} Mock` };
+    }
+    if (typeParam === 'full') {
+      return { kind: 'full', label: 'Full Combined Mock' };
+    }
+    return null;
+  }, [searchParams]);
+
   const [home, setHome] = useState<MockHomePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -280,6 +314,30 @@ export default function MockCenter() {
 
   const filteredFullMocks = useMemo(() => fullMocks.filter(filterBundleByProfession), [fullMocks, filterBundleByProfession]);
   const filteredSubTestMocks = useMemo(() => subTestMocks.filter(filterBundleByProfession), [subTestMocks, filterBundleByProfession]);
+
+  // Apply the deep-link scope on top of the profession filter (composed with AND). A `subtest` scope keeps
+  // the matching sub-test mocks plus full mocks that *include* that sub-test; a `full` scope shows full mocks
+  // only and hides the sub-test section entirely.
+  const scopedSubTestMocks = useMemo(() => {
+    if (!scope) return filteredSubTestMocks;
+    if (scope.kind === 'full') return [];
+    return filteredSubTestMocks.filter((mock) => mock.subtest === scope.subtest);
+  }, [filteredSubTestMocks, scope]);
+
+  const scopedFullMocks = useMemo(() => {
+    if (!scope) return filteredFullMocks;
+    if (scope.kind === 'full') return filteredFullMocks;
+    return filteredFullMocks.filter((mock) =>
+      (mock.includedSubtests ?? FULL_MOCK_ORDER).includes(scope.subtest),
+    );
+  }, [filteredFullMocks, scope]);
+
+  // Does any listening/reading/... sub-test bundle exist at all (ignoring profession)? Used to phrase the
+  // scoped empty state honestly: "none published yet" vs "none for this profession".
+  const scopedSubtestHasAny = useMemo(() => {
+    if (scope?.kind !== 'subtest') return false;
+    return subTestMocks.some((mock) => mock.subtest === scope.subtest);
+  }, [subTestMocks, scope]);
 
   const recommendedReadiness = recommended?.readiness ?? null;
   const recommendedTrend = recommended?.trend ?? null;
@@ -423,7 +481,7 @@ export default function MockCenter() {
     ? undefined
     : [
         { icon: Award, label: 'Review credits', value: `${availableCredits} available` },
-        { icon: Layers, label: 'Mock routes', value: `${filteredFullMocks.length} full mocks` },
+        { icon: Layers, label: 'Mock routes', value: `${scopedFullMocks.length} full mocks` },
         { icon: BarChart3, label: 'Recent reports', value: `${reports.length} available` },
       ];
 
@@ -470,12 +528,18 @@ export default function MockCenter() {
               { href: '/mocks?type=full', label: 'Full Combined Mock', icon: Layers, palette: { fg: 'text-amber-700', bg: 'bg-amber-100', label: 'Combined' }, testid: 'mocks-cat-combined' },
             ] as const).map((category) => {
               const Icon = category.icon;
+              const isActive =
+                (scope?.kind === 'subtest' && category.href === `/mocks?subtest=${scope.subtest}`) ||
+                (scope?.kind === 'full' && category.href === '/mocks?type=full');
               return (
                 <li key={category.href}>
                   <Link
                     href={category.href}
                     data-testid={category.testid}
-                    className="group flex h-full items-start gap-3 rounded-2xl border border-border bg-surface p-4 transition-shadow hover:shadow-md"
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`group flex h-full items-start gap-3 rounded-2xl border bg-surface p-4 transition-shadow hover:shadow-md ${
+                      isActive ? 'border-primary ring-1 ring-primary/40' : 'border-border'
+                    }`}
                   >
                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${category.palette.bg}`}>
                       <Icon className={`h-5 w-5 ${category.palette.fg}`} />
@@ -496,6 +560,25 @@ export default function MockCenter() {
             })}
           </ul>
         </section>
+
+        {scope ? (
+          <div
+            data-testid="mocks-scope-banner"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3"
+          >
+            <p className="text-sm font-semibold text-navy">
+              Showing: <span className="text-primary">{scope.label}</span>
+            </p>
+            <Link
+              href="/mocks"
+              data-testid="mocks-scope-clear"
+              className="pressable inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:border-primary"
+            >
+              <Layers className="h-3.5 w-3.5" aria-hidden />
+              View all mocks
+            </Link>
+          </div>
+        ) : null}
 
         <LearnerSkillSwitcher compact />
 
@@ -647,22 +730,63 @@ export default function MockCenter() {
                     </section>
                   ) : null}
 
+                  {scope?.kind === 'full' ? null : (
                   <section>
                     <LearnerSurfaceSectionHeader
                       eyebrow="Sub-test Mocks"
-                      title="Choose the simulation scope you need"
-                      description="Each entry tells you whether it's a single sub-test or a full mock."
+                      title={
+                        scope?.kind === 'subtest'
+                          ? `Full ${SUBTEST_COLOR[scope.subtest].label} Mocks`
+                          : 'Choose the simulation scope you need'
+                      }
+                      description={
+                        scope?.kind === 'subtest'
+                          ? `Single ${SUBTEST_COLOR[scope.subtest].label.toLowerCase()} sub-test mocks, timed like the real exam.`
+                          : "Each entry tells you whether it's a single sub-test or a full mock."
+                      }
                       className="mb-4"
                     />
-                    {filteredSubTestMocks.length === 0 ? (
-                      <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
-                        {subTestMocks.length === 0
-                          ? 'No published sub-test mock bundles are available yet.'
-                          : 'No sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
-                      </div>
+                    {scopedSubTestMocks.length === 0 ? (
+                      scope?.kind === 'subtest' ? (
+                        <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
+                          {!scopedSubtestHasAny ? (
+                            <>
+                              <p className="font-semibold text-navy">
+                                No {scope.label} bundles are published yet.
+                              </p>
+                              <p className="mt-1">
+                                You can still practise {SUBTEST_COLOR[scope.subtest].label.toLowerCase()}{' '}
+                                part-by-part in the meantime.
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Link
+                                  href={SUBTEST_HUB[scope.subtest]}
+                                  className="pressable inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700"
+                                >
+                                  Practise {SUBTEST_COLOR[scope.subtest].label} part-by-part
+                                </Link>
+                                <Link
+                                  href="/mocks"
+                                  className="pressable inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:border-primary"
+                                >
+                                  View all mocks
+                                </Link>
+                              </div>
+                            </>
+                          ) : (
+                            `No ${SUBTEST_COLOR[scope.subtest].label} sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.`
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
+                          {subTestMocks.length === 0
+                            ? 'No published sub-test mock bundles are available yet.'
+                            : 'No sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
+                        </div>
+                      )
                     ) : (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        {filteredSubTestMocks.map((mock, idx) => {
+                        {scopedSubTestMocks.map((mock, idx) => {
                           const subtest = (mock.subtest ?? 'reading') as SubtestCode;
                           const palette = SUBTEST_COLOR[subtest];
                           const Icon = SUBTEST_ICON[subtest];
@@ -693,24 +817,31 @@ export default function MockCenter() {
                       </div>
                     )}
                   </section>
+                  )}
 
                   <section>
                     <LearnerSurfaceSectionHeader
                       eyebrow="Full Mocks"
-                      title="Keep full-exam progression visible"
+                      title={
+                        scope?.kind === 'subtest'
+                          ? `Full mocks that include ${SUBTEST_COLOR[scope.subtest].label}`
+                          : 'Keep full-exam progression visible'
+                      }
                       description="Progress dots show which sub-tests you've completed on the latest attempt for each bundle."
                       className="mb-4"
                     />
-                    {filteredFullMocks.length === 0 ? (
+                    {scopedFullMocks.length === 0 ? (
                       <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
                         {fullMocks.length === 0
                           ? 'No full mock bundles are published yet. Once an admin publishes a bundle, it will appear here with its real section order.'
-                          : 'No full mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
+                          : scope?.kind === 'subtest'
+                            ? `No full mocks include a ${SUBTEST_COLOR[scope.subtest].label} section yet.`
+                            : 'No full mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
                       </div>
                     ) : (
                       <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
                         <div className="divide-y divide-border">
-                          {filteredFullMocks.map((mock, idx) => {
+                          {scopedFullMocks.map((mock, idx) => {
                             const locked = mock.status === 'locked';
                             return (
                               <MotionItem key={mock.id} delayIndex={idx}>
@@ -859,5 +990,21 @@ export default function MockCenter() {
         )}
       </div>
     </LearnerDashboardShell>
+  );
+}
+
+export default function MockCenter() {
+  // `useSearchParams()` triggers a client-side-rendering bailout, so the reader must sit inside a Suspense
+  // boundary (mirrors the pattern in app/reading/paper/[paperId]/page.tsx).
+  return (
+    <Suspense
+      fallback={
+        <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and tutor reviews.">
+          <LearnerSkeleton variant="dashboard" />
+        </LearnerDashboardShell>
+      }
+    >
+      <MockCenterInner />
+    </Suspense>
   );
 }

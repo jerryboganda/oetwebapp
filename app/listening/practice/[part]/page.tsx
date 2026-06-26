@@ -67,11 +67,17 @@ export default function ListeningPartPracticePage() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Distinct from the action `error` above: a genuine pathway-fetch failure. Kept separate so a network
+  // error surfaces a retryable alert instead of masquerading as the "no paper available yet" empty state.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!part) return;
     analytics.track('content_view', { page: 'listening-part-practice', part });
     let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
     listeningV2Api.myPathway()
       .then((list) => {
         if (!cancelled) {
@@ -81,13 +87,14 @@ export default function ListeningPartPracticePage() {
       })
       .catch(() => {
         if (!cancelled) {
+          setLoadError(`We couldn't load your Part ${part} papers. Please try again.`);
           setLoading(false);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [part]);
+  }, [part, reloadKey]);
 
   if (!part) return null;
 
@@ -137,6 +144,17 @@ export default function ListeningPartPracticePage() {
 
         {loading ? (
           <LearnerSkeleton variant="card-grid" />
+        ) : loadError ? (
+          <div className="space-y-3" data-testid={`listening-part-${part}-load-error`}>
+            <InlineAlert variant="error">{loadError}</InlineAlert>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+            >
+              Retry
+            </button>
+          </div>
         ) : !launchStage ? (
           <InlineAlert variant="info">
             No Part {part} listening paper is available yet. Please check back soon.

@@ -144,4 +144,23 @@ test.describe('OET sample-test alignment — learner workspace', () => {
     await expect(page).toHaveURL(/\/mocks(?:\?|$)/);
     expect(page.url()).toContain('subtest=listening');
   });
+
+  test('mocks page honours the subtest deep-link with a scoped banner and clear control', async ({ page }) => {
+    // Regression: the `?subtest=` deep-link from each module's "Full Exam" surface was previously
+    // ignored, dumping learners on the full unfiltered mock center. The page must now scope the view.
+    await page.goto('/mocks?subtest=listening');
+
+    const banner = page.getByTestId('mocks-scope-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(/Full Listening Mock/i);
+
+    // The matching category card is marked active.
+    await expect(page.getByTestId('mocks-cat-listening')).toHaveAttribute('aria-current', 'true');
+
+    // The escape hatch clears the scope back to the full center.
+    await page.getByTestId('mocks-scope-clear').click();
+    await expect(page).toHaveURL(/\/mocks(?:$|\?)/);
+    expect(page.url()).not.toContain('subtest=');
+    await expect(page.getByTestId('mocks-scope-banner')).toHaveCount(0);
+  });
 });
