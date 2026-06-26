@@ -1,0 +1,11 @@
+/* design-sync: deterministic Tailwind v4 entry that compiles the product's real
+   globals.css (tokens, @theme, custom variants, plugin layers) into a single
+   static stylesheet for the Claude Design bundle. Explicit @source globs make
+   the scan reproducible regardless of cwd and include the authored preview
+   cards under .design-sync/previews. */
+@import "../../app/globals.css";
+
+@source "../../components";
+@source "../../app";
+@source "../../lib";
+@source "../previews";
