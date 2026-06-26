@@ -4,7 +4,6 @@ import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowRight,
   CalendarDays,
   Headphones,
   PlayCircle,
@@ -160,35 +159,6 @@ export default function ListeningHome() {
     );
   }
 
-  if (!isLoading && !profile && !error) {
-    return (
-      <LearnerDashboardShell pageTitle="Listening">
-        <main className="space-y-5 sm:space-y-8">
-          <LearnerPageHero
-            eyebrow="Module focus"
-            icon={Headphones}
-            accent="purple"
-            title="Welcome to the OET Listening module"
-            description="Set up your personalised pathway in under five minutes."
-          />
-          <div className="rounded-2xl border border-violet-100 bg-violet-50 p-8 text-center shadow-sm">
-            <p className="text-lg font-bold text-violet-900">Get started</p>
-            <p className="mt-1 text-sm text-violet-700">
-              Jump straight into your tailored listening pathway and start practising.
-            </p>
-            <Link
-              href="/listening/pathway"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-bold text-white shadow-md transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              Start practising
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </div>
-        </main>
-      </LearnerDashboardShell>
-    );
-  }
-
   if (error) {
     return (
       <LearnerDashboardShell pageTitle="Listening">
@@ -199,7 +169,7 @@ export default function ListeningHome() {
     );
   }
 
-  if (isLoading || !profile) {
+  if (isLoading) {
     return (
       <LearnerDashboardShell pageTitle="Listening">
         <LearnerSkeleton variant="dashboard" />
