@@ -28,7 +28,8 @@ export function readContentLockedMessage(err: unknown, fallback = 'This paper re
 /**
  * Shared inline upsell card shown when a learner hits HTTP 402 from the
  * subscription gate. Renders the backend message verbatim (it is the
- * authoritative explanation) and a CTA to /billing.
+ * authoritative explanation) and a CTA to the Subscriptions & Packages page
+ * (/subscriptions) where learners actually purchase access.
  */
 export function ContentLockedNotice({
   message,
@@ -56,7 +57,7 @@ export function ContentLockedNotice({
       <h3 className="text-base font-semibold">Subscription required</h3>
       <p className="text-amber-900/90">{message}</p>
       <Link
-        href="/billing"
+        href="/subscriptions"
         prefetch={false}
         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       >

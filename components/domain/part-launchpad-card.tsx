@@ -191,7 +191,7 @@ function computeState(props: PartLaunchpadCardProps): LaunchpadState {
   if (papers.length > 0 && accessible && accessible.entitlement && !accessible.entitlement.allowed) {
     return {
       pill: { icon: Lock, label: 'Upgrade to unlock Reading papers' },
-      primary: { label: 'View plans', href: '/billing' },
+      primary: { label: 'View plans', href: '/subscriptions' },
     };
   }
 
