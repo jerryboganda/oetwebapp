@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -60,6 +61,24 @@ public class RulebookWritingLockAuthorizationTests : IClassFixture<FirstPartyAut
         var response = await expert.GetAsync("/v1/rulebooks/writing/medicine");
 
         response.EnsureSuccessStatusCode();
+    }
+
+    [Theory]
+    [InlineData("occupational-therapy")]
+    [InlineData("speech-pathology")]
+    [InlineData("other-allied-health")]
+    public async Task Admin_ReadWritingRulebook_AcceptsKebabProfessionSlugs(string profession)
+    {
+        // Kebab-case profession slugs must still resolve on the (now staff-only)
+        // Writing rulebook endpoint. Relocated here from LearnerSpecRegressionTests
+        // because reading the rulebook now requires a teaching-staff client.
+        using var admin = _factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
+
+        var response = await admin.GetAsync($"/v1/rulebooks/writing/{profession}");
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing", json.RootElement.GetProperty("kind").GetString(), ignoreCase: true);
     }
 
     [Fact]

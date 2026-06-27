@@ -636,20 +636,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         });
     }
 
-    [Theory]
-    [InlineData("occupational-therapy")]
-    [InlineData("speech-pathology")]
-    [InlineData("other-allied-health")]
-    public async Task WritingRulebookEndpoint_AcceptsKebabProfessionSlugs(string profession)
-    {
-        using var client = await CreateClientForUserAsync($"rulebook-slug-{profession}");
-
-        var response = await client.GetAsync($"/v1/rulebooks/writing/{profession}");
-
-        response.EnsureSuccessStatusCode();
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("writing", json.RootElement.GetProperty("kind").GetString(), ignoreCase: true);
-    }
+    // Writing-rulebook kebab-slug parsing moved to
+    // RulebookWritingLockAuthorizationTests — the Writing rulebook is now
+    // staff-only (Expert/Admin), which needs the first-party-auth test factory.
 
     [Fact]
     public async Task ReadingStructure_UsesArchivedPaperPolicy_ForLearnerPlayer()
