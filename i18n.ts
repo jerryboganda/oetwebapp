@@ -10,6 +10,7 @@
  * locales later doesn't require backfilling every module bundle at once.
  */
 import { cookies, headers } from 'next/headers';
+import type { AbstractIntlMessages } from 'next-intl';
 import { getRequestConfig } from 'next-intl/server';
 import arWritingMessages from './messages/ar/writing.json';
 import enWritingMessages from './messages/en/writing.json';
@@ -66,17 +67,43 @@ export async function resolveLocale(): Promise<SupportedLocale> {
   return DEFAULT_LOCALE;
 }
 
-export async function loadAllMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+/**
+ * Expand a flat map of dotted keys (`"writing.hub.cards.mocks.title"`) into the
+ * nested object shape next-intl resolves against. next-intl 3.x treats every dot
+ * in a `t('…')` lookup as a namespace separator, so a flat bundle never resolves
+ * and silently falls back — authoring stays flat, but the runtime needs nesting.
+ */
+function unflattenMessages(flat: Record<string, string>): AbstractIntlMessages {
+  const root: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(flat)) {
+    const segments = key.split('.');
+    let node = root;
+    for (let i = 0; i < segments.length - 1; i += 1) {
+      const segment = segments[i];
+      const next = node[segment];
+      if (typeof next !== 'object' || next === null) {
+        node[segment] = {};
+      }
+      node = node[segment] as Record<string, unknown>;
+    }
+    node[segments[segments.length - 1]] = value;
+  }
+  return root as AbstractIntlMessages;
+}
+
+export async function loadAllMessages(locale: SupportedLocale): Promise<AbstractIntlMessages> {
   const baseline = MESSAGE_BUNDLES[DEFAULT_LOCALE];
   const localized = MESSAGE_BUNDLES[locale];
 
-  return MESSAGE_MODULES.reduce<Record<string, string>>((messages, moduleName) => {
+  const merged = MESSAGE_MODULES.reduce<Record<string, string>>((messages, moduleName) => {
     return {
       ...messages,
       ...baseline[moduleName],
       ...(localized[moduleName] ?? {}),
     };
   }, {});
+
+  return unflattenMessages(merged);
 }
 
 export default getRequestConfig(async () => {

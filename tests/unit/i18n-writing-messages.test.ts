@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
+
+// The global test setup mocks `next-intl` down to a key-echoing stub, which
+// hides exactly the nested-vs-flat resolution bug this suite guards against.
+// Restore the real module here so `createTranslator` resolves like production.
+vi.mock('next-intl', async (importOriginal) => importOriginal());
 
 vi.mock('next/headers', () => ({
   cookies: vi.fn(async () => ({ get: () => undefined })),
@@ -66,25 +72,52 @@ describe('writing i18n messages', () => {
 
     for (const locale of ['en', 'ar'] as const) {
       const messages = await loadAllMessages(locale);
+      // Resolve exactly as the app does at runtime (next-intl), not by reading
+      // the raw bundle — dotted keys must resolve against the nested shape, or
+      // the learner UI silently falls back to "Writing copy unavailable".
+      const t = createTranslator({
+        locale,
+        messages: messages as Parameters<typeof createTranslator>[0]['messages'],
+        getMessageFallback: ({ key }) => `__MISSING__${key}`,
+        onError: () => {},
+      });
+
       for (const key of requiredHubKeys) {
-        expect(messages[key], `${locale} should resolve ${key}`).toEqual(expect.any(String));
-        expect(messages[key], `${locale} should not expose raw key ${key}`).not.toBe(key);
+        const resolved = t(key);
+        expect(resolved, `${locale} should resolve ${key}`).toEqual(expect.any(String));
+        expect(resolved, `${locale} should not fall back for ${key}`).not.toContain('__MISSING__');
       }
     }
   });
 
-  it('keeps static writing translation keys covered by the message bundle', async () => {
+  it('resolves every static writing translation key through next-intl', async () => {
     const { loadAllMessages } = await import('@/i18n');
-    const enMessages = await loadAllMessages('en');
-    const arMessages = await loadAllMessages('ar');
     const keys = collectStaticWritingKeys();
 
     expect(keys.length).toBeGreaterThan(100);
 
-    const missingEnglish = keys.filter((key) => typeof enMessages[key] !== 'string');
-    const missingArabicAfterFallback = keys.filter((key) => typeof arMessages[key] !== 'string');
+    for (const locale of ['en', 'ar'] as const) {
+      const messages = await loadAllMessages(locale);
+      // Capture next-intl's error code per lookup: a genuinely absent key raises
+      // `MISSING_MESSAGE` (the bug we guard against), whereas a present key that
+      // needs ICU arguments raises a formatting error here only because the test
+      // passes no values — that's expected and must not fail the suite.
+      let lastErrorCode: string | undefined;
+      const t = createTranslator({
+        locale,
+        messages: messages as Parameters<typeof createTranslator>[0]['messages'],
+        onError: (error: { code?: string }) => {
+          lastErrorCode = error.code;
+        },
+      });
 
-    expect(missingEnglish).toEqual([]);
-    expect(missingArabicAfterFallback).toEqual([]);
+      const missing = keys.filter((key) => {
+        lastErrorCode = undefined;
+        t(key);
+        return lastErrorCode === 'MISSING_MESSAGE';
+      });
+
+      expect(missing, `${locale} bundle is missing keys`).toEqual([]);
+    }
   });
 });

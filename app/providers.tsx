@@ -2,7 +2,7 @@
 
 import '@/lib/zod-jitless';
 import { useEffect, type ReactNode } from 'react';
-import { NextIntlClientProvider } from 'next-intl';
+import { NextIntlClientProvider, type AbstractIntlMessages } from 'next-intl';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
 import { MobileRuntimeBridge } from '@/components/mobile/mobile-runtime-bridge';
@@ -47,7 +47,7 @@ export function AppProviders({
   children: ReactNode;
   nonce?: string;
   locale?: string;
-  messages?: Record<string, string>;
+  messages?: AbstractIntlMessages;
 }) {
   useServiceWorkerRegistration();
 
