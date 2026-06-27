@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -334,7 +335,25 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
         }
 
-        return ParseRubric(result);
+        var rubric = ParseRubric(result);
+        if (rubric is null)
+        {
+            // The AI returned text we could not parse into a complete six-
+            // criterion scoring contract. Never fabricate a grade — fail loud
+            // and retryable so the learner can re-run rather than receive a
+            // fake "all 3s" score.
+            logger.LogWarning(
+                "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId}; refusing to fabricate a grade.",
+                submission.Id);
+            submission.Status = "failed";
+            await db.SaveChangesAsync(ct);
+            throw ApiException.ServiceUnavailable(
+                "writing_rubric_failed",
+                "Writing grading returned an unreadable response. Please retry.",
+                retryable: true);
+        }
+
+        return rubric;
     }
 
     private static string BuildRubricInput(WritingSubmission submission, WritingScenario? scenario)
@@ -361,38 +380,278 @@ public sealed class WritingSubmissionEvaluationPipeline(
         sb.AppendLine(submission.LetterContent);
         sb.AppendLine("---");
         sb.AppendLine();
-        sb.AppendLine("Score on the 6 OET Writing criteria. Return JSON { c1, c2, c3, c4, c5, c6, rawTotal, estimatedBand, bandLabel, perCriterion, topThreePriorities, confidenceFlag, modelUsed }.");
+        // Defer entirely to the grounded reply format in the system prompt.
+        // Emitting a second, conflicting JSON shape here is what previously
+        // desynced the model output from the parser and produced fabricated
+        // fallback grades. The canonical contract is criteriaScores-based.
+        sb.AppendLine(
+            "Score this letter on the six OET Writing criteria and reply with the SINGLE JSON object "
+            + "defined in the grounded reply format above (findings, criteriaScores, estimatedScaledScore, "
+            + "estimatedGrade, passed, passRequires, advisory). Cite only rule IDs that appear in the grounded prompt.");
         return sb.ToString();
     }
 
-    private static RubricResult ParseRubric(AiGatewayResult result)
+    private static readonly JsonSerializerOptions RubricParseOptions = new()
     {
-        var completion = result.Completion ?? string.Empty;
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
+
+    /// <summary>
+    /// Parse the canonical grounded scoring contract (criteriaScores-based, the
+    /// single source of truth built by <see cref="RulebookPromptBuilder"/> /
+    /// <c>lib/rulebook/ai-prompt.ts</c>) into a <see cref="RubricResult"/>.
+    /// Returns <c>null</c> when the AI did not return a complete, in-range
+    /// six-criterion contract — the caller then fails loud rather than
+    /// fabricating a grade. Mirrors <see cref="WritingEvaluationPipeline"/>.
+    /// </summary>
+    private static RubricResult? ParseRubric(AiGatewayResult result)
+    {
+        if (!TryParseRubric(result.Completion, result.AppliedRuleIds, out var ai))
+        {
+            return null;
+        }
+
+        var scores = ai.CriteriaScores!; // non-null & complete per HasCompleteScoringContract
+        var c1 = Math.Clamp(scores.Purpose ?? 0, 0, 3);
+        var c2 = Math.Clamp(scores.Content ?? 0, 0, 7);
+        var c3 = Math.Clamp(scores.ConcisenessClarity ?? 0, 0, 7);
+        var c4 = Math.Clamp(scores.GenreStyle ?? 0, 0, 7);
+        var c5 = Math.Clamp(scores.OrganisationLayout ?? 0, 0, 7);
+        var c6 = Math.Clamp(scores.Language ?? 0, 0, 7);
+        var rawTotal = c1 + c2 + c3 + c4 + c5 + c6;
+
+        var findings = ai.Findings ?? new List<RubricAiFinding>();
+        var perCriterion = BuildPerCriterionFeedbackJson(c1, c2, c3, c4, c5, c6, findings);
+        var topThree = BuildTopThreePrioritiesJson(findings);
+        var model = string.IsNullOrWhiteSpace(result.ResolvedModel) ? "claude-sonnet-4-6" : result.ResolvedModel;
+
+        // EstimatedBand is stored in raw-total units (0–38) to match OetBandLabel
+        // and the seed data; a complete contract is high confidence.
+        return new RubricResult(c1, c2, c3, c4, c5, c6, rawTotal, perCriterion, topThree, "high", model);
+    }
+
+    private static bool TryParseRubric(string? completion, IReadOnlyList<string> allowedRuleIds, out RubricAiResponse response)
+    {
+        response = new RubricAiResponse();
+        if (string.IsNullOrWhiteSpace(completion)) return false;
+
         var start = completion.IndexOf('{');
         var end = completion.LastIndexOf('}');
-        var fallback = new RubricResult(0, 3, 3, 3, 3, 3, 200, "{}", "[]", "low", "writing.score.v1");
-        if (start < 0 || end <= start) return fallback;
+        if (start < 0 || end <= start) return false;
+
         try
         {
-            using var doc = JsonDocument.Parse(completion[start..(end + 1)]);
-            int Get(string name, int max) => doc.RootElement.TryGetProperty(name, out var el) && el.TryGetInt32(out var v) ? Math.Clamp(v, 0, max) : 0;
-            var c1 = Get("c1", 3);
-            var c2 = Get("c2", 7);
-            var c3 = Get("c3", 7);
-            var c4 = Get("c4", 7);
-            var c5 = Get("c5", 7);
-            var c6 = Get("c6", 7);
-            var estimated = doc.RootElement.TryGetProperty("estimatedBand", out var ebEl) && ebEl.TryGetInt32(out var eb) ? eb : 200;
-            var perCriterion = doc.RootElement.TryGetProperty("perCriterion", out var pcEl) ? pcEl.GetRawText() : "{}";
-            var topThree = doc.RootElement.TryGetProperty("topThreePriorities", out var ttEl) ? ttEl.GetRawText() : "[]";
-            var confidence = doc.RootElement.TryGetProperty("confidenceFlag", out var cfEl) && cfEl.ValueKind == JsonValueKind.String ? cfEl.GetString() ?? "medium" : "medium";
-            var model = doc.RootElement.TryGetProperty("modelUsed", out var muEl) && muEl.ValueKind == JsonValueKind.String ? muEl.GetString() ?? "writing.score.v1" : "writing.score.v1";
-            return new RubricResult(c1, c2, c3, c4, c5, c6, estimated, perCriterion, topThree, confidence, model);
+            var parsed = JsonSerializer.Deserialize<RubricAiResponse>(completion[start..(end + 1)], RubricParseOptions);
+            if (parsed is null || !HasCompleteScoringContract(parsed)) return false;
+
+            // Grounding invariant: the AI must not cite rule IDs that are not in
+            // the active rulebook. Drop any that are not in the applied set.
+            if (parsed.Findings is { Count: > 0 } && allowedRuleIds.Count > 0)
+            {
+                parsed.Findings = parsed.Findings
+                    .Where(f => !string.IsNullOrWhiteSpace(f.RuleId)
+                                && allowedRuleIds.Contains(f.RuleId!, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            else
+            {
+                parsed.Findings ??= new List<RubricAiFinding>();
+            }
+
+            response = parsed;
+            return true;
         }
         catch (JsonException)
         {
-            return fallback;
+            return false;
         }
+    }
+
+    private static bool HasCompleteScoringContract(RubricAiResponse parsed)
+    {
+        if (parsed.EstimatedScaledScore is not { } scaled
+            || scaled < OetScoring.ScaledMin
+            || scaled > OetScoring.ScaledMax)
+        {
+            return false;
+        }
+
+        var s = parsed.CriteriaScores;
+        if (s is null || s.ScoredCount != 6) return false;
+
+        return InRange(s.Purpose, 0, 3)
+            && InRange(s.Content, 0, 7)
+            && InRange(s.ConcisenessClarity, 0, 7)
+            && InRange(s.GenreStyle, 0, 7)
+            && InRange(s.OrganisationLayout, 0, 7)
+            && InRange(s.Language, 0, 7);
+    }
+
+    private static bool InRange(int? value, int min, int max)
+        => value is { } v && v >= min && v <= max;
+
+    private static string BuildPerCriterionFeedbackJson(
+        int c1, int c2, int c3, int c4, int c5, int c6,
+        IReadOnlyList<RubricAiFinding> findings)
+    {
+        (string Key, string Criterion, int Score)[] map =
+        {
+            ("c1", "purpose", c1),
+            ("c2", "content", c2),
+            ("c3", "conciseness_clarity", c3),
+            ("c4", "genre_style", c4),
+            ("c5", "organisation_layout", c5),
+            ("c6", "language", c6),
+        };
+
+        var dict = new Dictionary<string, object>();
+        foreach (var (key, criterion, score) in map)
+        {
+            var linked = findings.Where(f => CriterionForFinding(f) == criterion).ToList();
+            var cited = linked
+                .Select(f => f.RuleId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var feedback = string.Join(" ", linked
+                .Select(f => f.Message)
+                .Where(m => !string.IsNullOrWhiteSpace(m)));
+            var exemplar = linked
+                .Select(f => f.FixSuggestion)
+                .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+
+            // Shape consumed by WritingV2ResponseMapper.ToGradeResponse —
+            // keys c1..c6, each { score, feedback, exemplarFix, citedRuleIds }.
+            dict[key] = new
+            {
+                score,
+                feedback,
+                exemplarFix = exemplar,
+                citedRuleIds = cited,
+            };
+        }
+
+        return JsonSerializer.Serialize(dict);
+    }
+
+    private static string BuildTopThreePrioritiesJson(IReadOnlyList<RubricAiFinding> findings)
+    {
+        var top = findings
+            .OrderBy(f => SeverityRank(f.Severity))
+            .Select(f => string.IsNullOrWhiteSpace(f.RuleId)
+                ? (f.Message ?? string.Empty)
+                : $"{f.RuleId}: {f.Message}")
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Take(3)
+            .ToList();
+        return JsonSerializer.Serialize(top);
+    }
+
+    private static int SeverityRank(string? severity) => severity?.Trim().ToLowerInvariant() switch
+    {
+        "critical" => 0,
+        "major" => 1,
+        "minor" => 2,
+        _ => 3,
+    };
+
+    private static string CriterionForFinding(RubricAiFinding f)
+        => !string.IsNullOrWhiteSpace(f.CriterionCode) ? f.CriterionCode! : CriterionFor(f.RuleId, f.Message);
+
+    // Heuristic mapping from rule id / message to one of the six OET Writing
+    // criteria; used only when the AI did not stamp criterionCode itself.
+    private static string CriterionFor(string? ruleId, string? message)
+    {
+        var text = $"{ruleId} {message}".ToLowerInvariant();
+        if (text.Contains("purpose") || text.Contains("intro_contains_purpose")) return "purpose";
+        if (text.Contains("salutation") || text.Contains("yours") || text.Contains("address")
+            || text.Contains("layout") || text.Contains("blank_line") || text.Contains("structure")
+            || text.Contains("paragraph"))
+            return "organisation_layout";
+        if (text.Contains("conciseness") || text.Contains("concise") || text.Contains("length")
+            || text.Contains("clarity") || text.Contains("priorit"))
+            return "conciseness_clarity";
+        if (text.Contains("genre") || text.Contains("register") || text.Contains("tone")
+            || text.Contains("non_medical") || text.Contains("jargon") || text.Contains("style"))
+            return "genre_style";
+        if (text.Contains("grammar") || text.Contains("contraction") || text.Contains("present_perfect")
+            || text.Contains("past_simple") || text.Contains("punctuation") || text.Contains("language")
+            || text.Contains("date_format") || text.Contains("year") || text.Contains("abbrev"))
+            return "language";
+        return "content";
+    }
+
+    // -----------------------------------------------------------------
+    // Tolerant DTOs for the canonical grounded scoring contract. Only the
+    // fields this pipeline consumes are mapped; names match case-insensitively.
+    // -----------------------------------------------------------------
+
+    private sealed record RubricAiResponse
+    {
+        [JsonPropertyName("findings")]
+        public List<RubricAiFinding>? Findings { get; set; }
+
+        [JsonPropertyName("criteriaScores")]
+        public RubricAiCriteriaScores? CriteriaScores { get; set; }
+
+        [JsonPropertyName("estimatedScaledScore")]
+        public int? EstimatedScaledScore { get; set; }
+
+        [JsonPropertyName("estimatedGrade")]
+        public string? EstimatedGrade { get; set; }
+    }
+
+    private sealed record RubricAiFinding
+    {
+        [JsonPropertyName("ruleId")]
+        public string? RuleId { get; set; }
+
+        [JsonPropertyName("severity")]
+        public string? Severity { get; set; }
+
+        [JsonPropertyName("quote")]
+        public string? Quote { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("fixSuggestion")]
+        public string? FixSuggestion { get; set; }
+
+        [JsonPropertyName("criterionCode")]
+        public string? CriterionCode { get; set; }
+    }
+
+    private sealed record RubricAiCriteriaScores
+    {
+        [JsonPropertyName("purpose")]
+        public int? Purpose { get; set; }
+
+        [JsonPropertyName("content")]
+        public int? Content { get; set; }
+
+        [JsonPropertyName("conciseness_clarity")]
+        public int? ConcisenessClarity { get; set; }
+
+        [JsonPropertyName("genre_style")]
+        public int? GenreStyle { get; set; }
+
+        [JsonPropertyName("organisation_layout")]
+        public int? OrganisationLayout { get; set; }
+
+        [JsonPropertyName("language")]
+        public int? Language { get; set; }
+
+        [JsonIgnore]
+        public int ScoredCount =>
+            (Purpose.HasValue ? 1 : 0)
+            + (Content.HasValue ? 1 : 0)
+            + (ConcisenessClarity.HasValue ? 1 : 0)
+            + (GenreStyle.HasValue ? 1 : 0)
+            + (OrganisationLayout.HasValue ? 1 : 0)
+            + (Language.HasValue ? 1 : 0);
     }
 
     private async Task<string> ResolveCanonVersionAsync(CancellationToken ct)
