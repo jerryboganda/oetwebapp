@@ -59,7 +59,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
     {
         _ = userId;
         var query = db.WritingScenarios.AsNoTracking().Where(s => s.Status == "published");
-        if (!string.IsNullOrWhiteSpace(filter.Profession)) query = query.Where(s => s.Profession == filter.Profession);
+        if (!string.IsNullOrWhiteSpace(filter.Profession)) query = query.Where(s => s.Profession.ToLower() == filter.Profession.ToLower());
         if (!string.IsNullOrWhiteSpace(filter.LetterType)) query = query.Where(s => s.LetterType == filter.LetterType);
         if (!string.IsNullOrWhiteSpace(filter.SubDiscipline)) query = query.Where(s => s.SubDiscipline == filter.SubDiscipline);
         if (filter.Difficulty is { } diff) query = query.Where(s => s.Difficulty == diff);
@@ -229,7 +229,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = db.WritingScenarios.AsNoTracking().Where(s => s.Status == "published");
-        if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(s => s.Profession == profession);
+        if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(s => s.Profession.ToLower() == profession.ToLower());
         if (!string.IsNullOrWhiteSpace(letterType)) query = query.Where(s => s.LetterType == letterType);
         if (difficulty is { } diff) query = query.Where(s => s.Difficulty == diff);
         if (isDiagnostic == true) query = query.Where(s => s.IsDiagnostic);

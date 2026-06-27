@@ -11,39 +11,47 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { listWritingScenarios } from '@/lib/writing/api';
+import { WRITING_PROFESSIONS, WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
 import type {
   WritingLetterType,
   WritingProfession,
   WritingScenarioDto,
 } from '@/lib/writing/types';
 
-const PROFESSIONS: WritingProfession[] = ['medicine', 'pharmacy', 'nursing', 'other'];
 const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-RP', 'LT-NM'];
 const DIFFICULTIES = [1, 2, 3, 4, 5] as const;
+const PAGE_SIZE = 50;
 
 export default function WritingPracticeLibraryPage() {
   const t = useTranslations();
   const [scenarios, setScenarios] = useState<WritingScenarioDto[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [profession, setProfession] = useState<WritingProfession | null>(null);
   const [letterType, setLetterType] = useState<WritingLetterType | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [search, setSearch] = useState('');
 
+  // Load page 1 (replacing the list) whenever a filter changes.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setPage(1);
     listWritingScenarios({
       profession: profession ?? undefined,
       letterType: letterType ?? undefined,
       difficulty: difficulty ?? undefined,
       search: search.trim() || undefined,
-      pageSize: 50,
+      page: 1,
+      pageSize: PAGE_SIZE,
     })
       .then((result) => {
         if (cancelled) return;
         setScenarios(result.items);
+        setTotal(result.total);
         setError(null);
       })
       .catch((err) => {
@@ -58,6 +66,33 @@ export default function WritingPracticeLibraryPage() {
       cancelled = true;
     };
   }, [profession, letterType, difficulty, search, t]);
+
+  const loadMore = () => {
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    listWritingScenarios({
+      profession: profession ?? undefined,
+      letterType: letterType ?? undefined,
+      difficulty: difficulty ?? undefined,
+      search: search.trim() || undefined,
+      page: nextPage,
+      pageSize: PAGE_SIZE,
+    })
+      .then((result) => {
+        setScenarios((prev) => [...prev, ...result.items]);
+        setTotal(result.total);
+        setPage(nextPage);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : t('writing.practice.library.error.load'));
+      })
+      .finally(() => {
+        setLoadingMore(false);
+      });
+  };
+
+  const hasMore = scenarios.length < total;
 
   const topicSet = useMemo(() => {
     const s = new Set<string>();
@@ -77,7 +112,7 @@ export default function WritingPracticeLibraryPage() {
           title={t('writing.practice.library.title')}
           description={t('writing.practice.library.description')}
           highlights={[
-            { icon: Layers, label: t('writing.practice.library.highlights.total'), value: `${scenarios.length}` },
+            { icon: Layers, label: t('writing.practice.library.highlights.total'), value: `${scenarios.length} / ${total}` },
             { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[profession, letterType, difficulty, search].filter(Boolean).length}` },
           ]}
         />
@@ -101,8 +136,8 @@ export default function WritingPracticeLibraryPage() {
               className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="">{t('writing.practice.library.filters.all')}</option>
-              {PROFESSIONS.map((p) => (
-                <option key={p} value={p}>{t(`writing.practice.library.profession.${p}`)}</option>
+              {WRITING_PROFESSIONS.map((p) => (
+                <option key={p} value={p}>{WRITING_PROFESSION_LABELS[p]}</option>
               ))}
             </select>
           </label>
@@ -204,6 +239,16 @@ export default function WritingPracticeLibraryPage() {
             </li>
           ))}
         </ul>
+
+        {hasMore ? (
+          <div className="flex justify-center">
+            <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore
+                ? t('writing.practice.library.list.loadingMore')
+                : t('writing.practice.library.list.loadMore', { count: total - scenarios.length })}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </LearnerDashboardShell>
   );

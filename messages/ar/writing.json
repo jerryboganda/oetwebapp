@@ -254,6 +254,8 @@
   "writing.practice.library.list.empty": "لا توجد سيناريوهات مطابقة للتصفيات.",
   "writing.practice.library.list.topics": "المواضيع:",
   "writing.practice.library.list.levelBadge": "المستوى {n}",
+  "writing.practice.library.list.loadMore": "تحميل المزيد ({count})",
+  "writing.practice.library.list.loadingMore": "جارٍ التحميل…",
   "writing.practice.library.cta.practice": "تدرّب على هذا",
   "writing.practice.library.cta.practiceAria": "تدرّب على السيناريو {title}",
   "writing.practice.library.cardAria": "السيناريو: {title}",

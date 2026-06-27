@@ -254,6 +254,8 @@
   "writing.practice.library.list.empty": "No scenarios match the filters.",
   "writing.practice.library.list.topics": "Topics:",
   "writing.practice.library.list.levelBadge": "Level {n}",
+  "writing.practice.library.list.loadMore": "Load more ({count})",
+  "writing.practice.library.list.loadingMore": "Loading…",
   "writing.practice.library.cta.practice": "Practice this",
   "writing.practice.library.cta.practiceAria": "Practice scenario {title}",
   "writing.practice.library.cardAria": "Scenario: {title}",
