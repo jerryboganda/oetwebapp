@@ -7,7 +7,6 @@ import {
   PenTool,
   Award,
   Library,
-  Star,
   History,
   ArrowRight,
   type LucideIcon,
@@ -28,17 +27,8 @@ interface WritingLandingCard {
   accent: string;
 }
 
-/** Primary V2 writing flows. Paper is a variant inside mocks, so it has no card. */
+/** Primary V2 writing flows: practice library + past submissions, side by side. */
 const START_CARDS: WritingLandingCard[] = [
-  {
-    key: 'mocks',
-    href: '/writing/mocks',
-    icon: Award,
-    titleKey: 'writing.hub.cards.mocks.title',
-    descriptionKey: 'writing.hub.cards.mocks.description',
-    ctaKey: 'writing.hub.cards.mocks.cta',
-    accent: 'text-amber-600',
-  },
   {
     key: 'practice',
     href: '/writing/practice/library',
@@ -47,19 +37,6 @@ const START_CARDS: WritingLandingCard[] = [
     descriptionKey: 'writing.hub.cards.practice.description',
     ctaKey: 'writing.hub.cards.practice.cta',
     accent: 'text-primary',
-  },
-];
-
-/** Supporting, non-V1 resources surfaced by the previous hub. */
-const RESOURCE_CARDS: WritingLandingCard[] = [
-  {
-    key: 'model',
-    href: '/writing/model',
-    icon: Star,
-    titleKey: 'writing.hub.cards.model.title',
-    descriptionKey: 'writing.hub.cards.model.description',
-    ctaKey: 'writing.hub.cards.model.cta',
-    accent: 'text-amber-600',
   },
   {
     key: 'submissions',
@@ -127,21 +104,8 @@ export default function WritingHome() {
             title={t('writing.hub.start.title')}
             description={t('writing.hub.start.description')}
           />
-          <ul className="grid gap-4 md:grid-cols-3">
+          <ul className="grid gap-4 sm:grid-cols-2">
             {START_CARDS.map((card) => (
-              <WritingLandingCardItem key={card.key} card={card} />
-            ))}
-          </ul>
-        </section>
-
-        <section className="space-y-4">
-          <LearnerSurfaceSectionHeader
-            eyebrow={t('writing.hub.resources.eyebrow')}
-            title={t('writing.hub.resources.title')}
-            description={t('writing.hub.resources.description')}
-          />
-          <ul className="grid gap-4 md:grid-cols-3">
-            {RESOURCE_CARDS.map((card) => (
               <WritingLandingCardItem key={card.key} card={card} />
             ))}
           </ul>

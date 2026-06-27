@@ -29,15 +29,15 @@ describe('Writing landing page', () => {
   it('routes to the V2 writing flows', () => {
     render(<WritingHome />);
 
-    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.mocks\.cta/ })).toHaveAttribute('href', '/writing/mocks');
     expect(screen.getByRole('link', { name: /writing\.hub\.cards\.practice\.cta/ })).toHaveAttribute('href', '/writing/practice/library');
+    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.submissions\.cta/ })).toHaveAttribute('href', '/submissions');
   });
 
-  it('surfaces the supporting writing resources', () => {
+  it('no longer surfaces mock exams or model answers', () => {
     render(<WritingHome />);
 
-    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.model\.cta/ })).toHaveAttribute('href', '/writing/model');
-    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.submissions\.cta/ })).toHaveAttribute('href', '/submissions');
+    expect(screen.queryByRole('link', { name: /writing\.hub\.cards\.mocks\.cta/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /writing\.hub\.cards\.model\.cta/ })).toBeNull();
   });
 
   it('does not surface the internal rulebook to learners', () => {
