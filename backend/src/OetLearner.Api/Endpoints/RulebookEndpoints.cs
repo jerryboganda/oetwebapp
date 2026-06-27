@@ -28,13 +28,19 @@ public static class RulebookEndpoints
                 authoritySource = b.AuthoritySource,
             })));
 
+        // The Writing rulebook is an internal authoring/AI-grading asset — it is
+        // NOT shown to learners. These two Writing GETs are locked to teaching
+        // staff (Expert/Admin) on top of the group's RulebookReader policy
+        // (ASP.NET AND-combines them), so Learners get 403 while staff pass.
+        // Speaking/Conversation rulebook GETs and the /v1/writing/lint live
+        // checker deliberately stay on RulebookReader (learner-accessible).
         group.MapGet("/writing/{profession}", (string profession, IRulebookLoader loader) =>
         {
             if (!RulebookProfessionParser.TryParse(profession, out var p))
                 return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
             try { return Results.Ok(loader.Load(RuleKind.Writing, p)); }
             catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
-        });
+        }).RequireAuthorization("TeachingStaffOnly");
 
         group.MapGet("/speaking/{profession}", (string profession, IRulebookLoader loader) =>
         {
@@ -59,7 +65,7 @@ public static class RulebookEndpoints
                     return Results.BadRequest(new { error = "Unknown profession." });
                 var rule = loader.FindRule(RuleKind.Writing, p, ruleId);
                 return rule is null ? Results.NotFound() : Results.Ok(rule);
-            });
+            }).RequireAuthorization("TeachingStaffOnly");
 
         group.MapGet("/speaking/{profession}/rule/{ruleId}",
             (string profession, string ruleId, IRulebookLoader loader) =>

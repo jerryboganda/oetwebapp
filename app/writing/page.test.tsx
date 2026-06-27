@@ -37,8 +37,14 @@ describe('Writing landing page', () => {
     render(<WritingHome />);
 
     expect(screen.getByRole('link', { name: /writing\.hub\.cards\.model\.cta/ })).toHaveAttribute('href', '/writing/model');
-    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.rulebook\.cta/ })).toHaveAttribute('href', '/writing/rulebook');
     expect(screen.getByRole('link', { name: /writing\.hub\.cards\.submissions\.cta/ })).toHaveAttribute('href', '/submissions');
+  });
+
+  it('does not surface the internal rulebook to learners', () => {
+    const { container } = render(<WritingHome />);
+
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.startsWith('/writing/rulebook'))).toBe(false);
   });
 
   it('does not link to any retired V1 writing surfaces', () => {

@@ -7,7 +7,6 @@ import {
   PenTool,
   Award,
   Library,
-  BookOpen,
   Star,
   History,
   ArrowRight,
@@ -61,15 +60,6 @@ const RESOURCE_CARDS: WritingLandingCard[] = [
     descriptionKey: 'writing.hub.cards.model.description',
     ctaKey: 'writing.hub.cards.model.cta',
     accent: 'text-amber-600',
-  },
-  {
-    key: 'rulebook',
-    href: '/writing/rulebook',
-    icon: BookOpen,
-    titleKey: 'writing.hub.cards.rulebook.title',
-    descriptionKey: 'writing.hub.cards.rulebook.description',
-    ctaKey: 'writing.hub.cards.rulebook.cta',
-    accent: 'text-primary',
   },
   {
     key: 'submissions',

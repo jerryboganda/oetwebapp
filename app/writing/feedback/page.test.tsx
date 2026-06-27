@@ -86,17 +86,19 @@ describe('Writing detailed feedback page — rule-cited findings', () => {
     mockFetchWritingResult.mockResolvedValue(result);
   });
 
-  it('renders a rule badge linking to the rulebook detail page when ruleId is present', async () => {
-    render(<WritingDetailedFeedback />);
+  it('shows finding context without exposing the internal rulebook to learners', async () => {
+    const { container } = render(<WritingDetailedFeedback />);
 
-    const badge = await waitFor(() => screen.getByTestId('rule-badge'));
-    expect(badge).toHaveTextContent('[R03.4]');
-    expect(badge).toHaveAttribute('href', '/writing/rulebook/R03.4?profession=nursing');
-
-    // Severity pill, source label, and suggested-fix block also render.
-    expect(screen.getByText('critical')).toBeInTheDocument();
+    // Severity pill, source label, and suggested-fix block render for learners.
+    expect(await waitFor(() => screen.getByText('critical'))).toBeInTheDocument();
     expect(screen.getByText(/Rule check/i)).toBeInTheDocument();
     expect(screen.getByText(/Suggested fix/i)).toBeInTheDocument();
     expect(screen.getByText(/Move the allergy line/i)).toBeInTheDocument();
+
+    // The rule code and its rulebook link are NOT surfaced to learners.
+    expect(screen.queryByTestId('rule-badge')).toBeNull();
+    expect(screen.queryByText('[R03.4]')).toBeNull();
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.startsWith('/writing/rulebook'))).toBe(false);
   });
 });

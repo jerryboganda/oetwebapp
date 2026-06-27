@@ -40,14 +40,6 @@ function Highlight({ id, children, active, onToggle }: { id: string; children: R
   );
 }
 
-function writingProfessionSlug(value: string | null | undefined) {
-  return value?.trim().toLowerCase().replace(/[\s_]+/g, '-') || 'medicine';
-}
-
-function writingRulebookHref(ruleId: string, profession: string | null | undefined) {
-  return `/writing/rulebook/${encodeURIComponent(ruleId)}?profession=${encodeURIComponent(writingProfessionSlug(profession))}`;
-}
-
 function WritingDetailedFeedbackContent() {
   const searchParams = useSearchParams();
   const resultId = searchParams?.get('id') ?? '';
@@ -203,18 +195,8 @@ function WritingDetailedFeedbackContent() {
                           return (
                             <button key={comment.id} type="button" onClick={() => setActiveComment(isActive ? null : comment.id)}
                               className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isActive ? 'border-primary/20 bg-primary/5 shadow-sm' : 'border-border bg-background-light hover:border-border-hover'}`}>
-                               {(comment.ruleId || comment.severity || sourceLabel) && (
+                               {(comment.severity || sourceLabel) && (
                                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                                   {comment.ruleId ? (
-                                     <Link
-                                       href={writingRulebookHref(comment.ruleId, result.profession)}
-                                       onClick={(e) => e.stopPropagation()}
-                                       className="inline-flex items-center rounded border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
-                                       data-testid="rule-badge"
-                                     >
-                                       [{comment.ruleId}]
-                                     </Link>
-                                   ) : null}
                                    {comment.severity ? (
                                      <Badge variant={severityVariant} size="sm">{comment.severity}</Badge>
                                    ) : null}
