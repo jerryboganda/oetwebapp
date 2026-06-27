@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
@@ -76,7 +77,8 @@ public partial class LearnerService(
     IFulfillmentService? fulfillmentService = null,
     IAddonEligibilityService? addonEligibilityService = null,
     IAiPackageCreditService? aiPackageCreditService = null,
-    IInvoicePdfService? invoicePdfService = null)
+    IInvoicePdfService? invoicePdfService = null,
+    ILogger<LearnerService>? logger = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -1193,7 +1195,19 @@ public partial class LearnerService(
 
         foreach (var attempt in pageAttempts)
         {
-            var content = contentsById[attempt.ContentId];
+            // Content may be missing if it was force-deleted after the attempt was
+            // recorded (orphaned attempt). Render a fallback row so the learner's
+            // evidence stays visible and the whole list does not 500. Rendering
+            // (rather than skipping) keeps items.Count == pageAttempts.Count, so the
+            // cursor/hasMore pagination math below stays exact.
+            if (!contentsById.TryGetValue(attempt.ContentId, out var content))
+            {
+                logger?.LogWarning(
+                    "Submissions: orphaned attempt {AttemptId} references missing content {ContentId}; rendering fallback row.",
+                    attempt.Id,
+                    attempt.ContentId);
+            }
+
             evaluationsByAttemptId.TryGetValue(attempt.Id, out var eval);
             reviewsByAttemptId.TryGetValue(attempt.Id, out var review);
             var voiceNoteCount = review is not null
@@ -1206,9 +1220,9 @@ public partial class LearnerService(
             {
                 submissionId = attempt.Id,
                 reviewRequestId = review?.Id,
-                contentId = content.Id,
-                taskName = content.Title,
-                subtest = content.SubtestCode,
+                contentId = content?.Id ?? attempt.ContentId,
+                taskName = content?.Title ?? "Removed practice item",
+                subtest = content?.SubtestCode ?? attempt.SubtestCode,
                 attemptDate = attempt.SubmittedAt ?? attempt.StartedAt,
                 scoreEstimate = eval?.ScoreRange,
                 reviewStatus = review is null ? "not_requested" : ToReviewRequestState(review.State),

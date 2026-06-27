@@ -66,6 +66,96 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
         AssertSqlSidePageAndBatchLoad();
     }
 
+    [Fact]
+    public async Task GetSubmissionsAsync_RendersOrphanedAttempt_WhenContentMissing()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var now = DateTimeOffset.UtcNow;
+        const string userId = "learner-orphan";
+
+        db.Users.Add(new LearnerUser
+        {
+            Id = userId,
+            DisplayName = "Orphan Learner",
+            Email = "orphan@example.test",
+            CreatedAt = now,
+            LastActiveAt = now,
+            AccountStatus = "active",
+        });
+
+        db.ContentItems.Add(new ContentItem
+        {
+            Id = "content-valid",
+            ContentType = "writing_task",
+            SubtestCode = "writing",
+            Title = "Valid Writing Task",
+            Difficulty = "medium",
+            EstimatedDurationMinutes = 45,
+            CriteriaFocusJson = "[]",
+            ScenarioType = "referral",
+            ModeSupportJson = "[]",
+            PublishedRevisionId = "content-valid-r1",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.Attempts.Add(new Attempt
+        {
+            Id = "attempt-valid",
+            UserId = userId,
+            ContentId = "content-valid",
+            SubtestCode = "writing",
+            Context = "practice",
+            Mode = "exam",
+            State = AttemptState.Completed,
+            StartedAt = now.AddMinutes(-2),
+            SubmittedAt = now.AddMinutes(-1),
+            CompletedAt = now.AddMinutes(-1),
+            ElapsedSeconds = 900,
+        });
+
+        // Orphaned attempt: ContentId has NO matching ContentItem (content was
+        // force-deleted). Seed it as the NEWEST attempt so the response builder
+        // hits it first — exactly where the unguarded dictionary indexer threw.
+        db.Attempts.Add(new Attempt
+        {
+            Id = "attempt-orphan",
+            UserId = userId,
+            ContentId = "content-deleted",
+            SubtestCode = "writing",
+            Context = "practice",
+            Mode = "exam",
+            State = AttemptState.Completed,
+            StartedAt = now.AddMinutes(-1),
+            SubmittedAt = now,
+            CompletedAt = now,
+            ElapsedSeconds = 900,
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateLearnerService(db);
+
+        // Must NOT throw KeyNotFoundException for the orphaned attempt.
+        var page = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            userId,
+            cursor: null,
+            limit: 10,
+            CancellationToken.None));
+
+        var items = page.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(2, items.Length);
+
+        var ids = items.Select(item => item.GetProperty("submissionId").GetString()).ToArray();
+        Assert.Contains("attempt-valid", ids);
+        Assert.Contains("attempt-orphan", ids);
+
+        var orphan = items.Single(item => item.GetProperty("submissionId").GetString() == "attempt-orphan");
+        Assert.Equal("content-deleted", orphan.GetProperty("contentId").GetString());
+        Assert.Equal("Removed practice item", orphan.GetProperty("taskName").GetString());
+        Assert.Equal("writing", orphan.GetProperty("subtest").GetString());
+        Assert.Equal("not_requested", orphan.GetProperty("reviewStatus").GetString());
+    }
+
     private void AssertSqlSidePageAndBatchLoad()
     {
         var attemptQueries = _sql.Commands
