@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { WritingScenarioDto } from '@/lib/writing/types';
 import { cn } from '@/lib/utils';
 import { WritingStimulus } from './WritingStimulus';
+import type { Highlight } from './WritingStimulusViewer';
 
 export interface WritingReadingWindowOverlayProps {
   open: boolean;
@@ -20,6 +21,9 @@ export interface WritingReadingWindowOverlayProps {
   /** Called EXACTLY once when `secondsRemaining` first reaches 0 while open. */
   onAutoClose: () => void;
   title?: string;
+  /** Controlled highlights, shared with the writing-view PDF so marks persist. */
+  highlights?: Record<number, Highlight[]>;
+  onHighlightsChange?: (next: Record<number, Highlight[]>) => void;
 }
 
 /** mm:ss formatter — mirrors `formatHms` in WritingTimerV2 (copied, not imported). */
@@ -55,6 +59,8 @@ export function WritingReadingWindowOverlay({
   onSkip,
   onAutoClose,
   title,
+  highlights,
+  onHighlightsChange,
 }: WritingReadingWindowOverlayProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const descriptionId = useId();
@@ -231,6 +237,8 @@ export function WritingReadingWindowOverlay({
           locked
           title={title}
           className="h-full"
+          highlights={highlights}
+          onHighlightsChange={onHighlightsChange}
         />
       </div>
 

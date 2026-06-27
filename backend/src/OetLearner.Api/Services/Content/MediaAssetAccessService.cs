@@ -266,7 +266,8 @@ public sealed class MediaAssetAccessService(
     private Task<bool> IsPublishedWritingStimulusPdfAsync(string mediaAssetId, CancellationToken ct)
         => db.WritingScenarios
             .AsNoTracking()
-            .AnyAsync(s => s.StimulusPdfMediaAssetId == mediaAssetId && s.Status == "published", ct);
+            .AnyAsync(s => (s.StimulusPdfMediaAssetId == mediaAssetId || s.AnswerSheetPdfMediaAssetId == mediaAssetId)
+                && s.Status == "published", ct);
 
     /// <summary>
     /// Learner variant: grants access when the stimulus PDF belongs to a published scenario
@@ -277,7 +278,7 @@ public sealed class MediaAssetAccessService(
         => db.WritingScenarios
             .AsNoTracking()
             .AnyAsync(s =>
-                s.StimulusPdfMediaAssetId == mediaAssetId
+                (s.StimulusPdfMediaAssetId == mediaAssetId || s.AnswerSheetPdfMediaAssetId == mediaAssetId)
                 && s.Status == "published"
                 && (string.IsNullOrEmpty(s.Profession)
                     || (!string.IsNullOrWhiteSpace(normalizedProfession)

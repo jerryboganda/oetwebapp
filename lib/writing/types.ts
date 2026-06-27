@@ -792,6 +792,8 @@ export interface WritingTaskDto {
   updatedAt: string;
   stimulusPdfMediaAssetId?: string | null;
   stimulusPdfDownloadPath?: string | null;
+  /** Answer-sheet / model-answer PDF shown on the results page (post-submission only). */
+  answerSheetPdfMediaAssetId?: string | null;
 }
 
 /** Admin create/update payload for a writing task (subset that is editable). */
@@ -814,6 +816,7 @@ export interface WritingTaskUpsertDto {
   sourceProvenance: string;
   integrityAcknowledged: boolean;
   stimulusPdfMediaAssetId?: string | null;
+  answerSheetPdfMediaAssetId?: string | null;
 }
 
 export interface WritingTaskValidationDto {

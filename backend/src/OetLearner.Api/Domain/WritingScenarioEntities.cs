@@ -31,6 +31,14 @@ public class WritingScenario
     [MaxLength(64)]
     public string? StimulusPdfMediaAssetId { get; set; }
 
+    /// <summary>
+    /// Optional answer-sheet / model-answer PDF revealed to the learner on the results page
+    /// (post-submission only) so they can tally their letter against the official answer.
+    /// Never exposed on the live exam surface. References a <c>MediaAsset.Id</c>.
+    /// </summary>
+    [MaxLength(64)]
+    public string? AnswerSheetPdfMediaAssetId { get; set; }
+
     public int EstimatedReadingMinutes { get; set; } = 5;
 
     public bool IsDiagnostic { get; set; }

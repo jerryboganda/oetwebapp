@@ -21,6 +21,30 @@ export interface WritingStimulusViewerProps {
   title?: string;
   /** Optional extra className for the outer container. */
   className?: string;
+  /**
+   * When true, expose a SINGLE yellow highlighter tool (drag to mark, click a
+   * mark to remove) — and nothing else. Highlights are session-local (ephemeral,
+   * never persisted). Used on the writing surface; omit on the results page so
+   * the Answer Sheet renders as a pure read-only viewer.
+   */
+  allowHighlight?: boolean;
+  /**
+   * Controlled highlights. When provided, the parent owns the highlight state so
+   * it survives across viewer instances (e.g. the forced reading window and the
+   * writing view). When omitted, the viewer keeps its own internal state.
+   */
+  highlights?: Record<number, Highlight[]>;
+  onHighlightsChange?: (next: Record<number, Highlight[]>) => void;
+}
+
+/** A yellow highlight rectangle stored in fractional page coordinates (0–1) so it
+ *  scales with zoom automatically. Session-local; never persisted. */
+export interface Highlight {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 interface PdfPage {
@@ -67,12 +91,83 @@ export function WritingStimulusViewer({
   downloadPath,
   title = 'Stimulus',
   className,
+  allowHighlight = false,
+  highlights: controlledHighlights,
+  onHighlightsChange,
 }: WritingStimulusViewerProps) {
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Yellow highlighter (session-local) ──────────────────────────────────
+  // Active only when `allowHighlight`. `markerOn` toggles the single tool; a
+  // drag draws a yellow rectangle, a click on an existing mark removes it.
+  // Highlights are controlled by the parent when `highlights` is supplied (so
+  // they persist across the reading window and the writing view), otherwise the
+  // viewer keeps its own internal copy.
+  const [markerOn, setMarkerOn] = useState(false);
+  const [internalHighlights, setInternalHighlights] = useState<Record<number, Highlight[]>>({});
+  const highlights = controlledHighlights ?? internalHighlights;
+  const commitHighlights = (next: Record<number, Highlight[]>) => {
+    if (onHighlightsChange) onHighlightsChange(next);
+    else setInternalHighlights(next);
+  };
+  const [draft, setDraft] = useState<(Highlight & { page: number }) | null>(null);
+  const drawAnchor = useRef<{ page: number; x: number; y: number } | null>(null);
+  const highlightIdRef = useRef(0);
+
+  const pointFrac = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+  };
+
+  const handleMarkerPointerDown = (page: number) => (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!markerOn) return;
+    const { x, y } = pointFrac(e);
+    // Click inside an existing mark → remove it (the only way to delete a mark).
+    const hit = (highlights[page] ?? []).find(
+      (h) => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h,
+    );
+    if (hit) {
+      commitHighlights({
+        ...highlights,
+        [page]: (highlights[page] ?? []).filter((h) => h.id !== hit.id),
+      });
+      return;
+    }
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drawAnchor.current = { page, x, y };
+    setDraft({ id: 'draft', page, x, y, w: 0, h: 0 });
+  };
+
+  const handleMarkerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const anchor = drawAnchor.current;
+    if (!anchor) return;
+    const { x, y } = pointFrac(e);
+    setDraft({
+      id: 'draft',
+      page: anchor.page,
+      x: Math.min(anchor.x, x),
+      y: Math.min(anchor.y, y),
+      w: Math.abs(x - anchor.x),
+      h: Math.abs(y - anchor.y),
+    });
+  };
+
+  const handleMarkerPointerUp = () => {
+    const anchor = drawAnchor.current;
+    drawAnchor.current = null;
+    if (anchor && draft && draft.w > 0.005 && draft.h > 0.005) {
+      highlightIdRef.current += 1;
+      const mark: Highlight = { id: `h${highlightIdRef.current}`, x: draft.x, y: draft.y, w: draft.w, h: draft.h };
+      commitHighlights({ ...highlights, [anchor.page]: [...(highlights[anchor.page] ?? []), mark] });
+    }
+    setDraft(null);
+  };
 
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
   // The single loaded pdf.js document, reused for sizing and every zoom
@@ -226,7 +321,29 @@ export function WritingStimulusViewer({
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-surface/90 px-3 py-2 backdrop-blur">
         <span className="truncate text-sm font-bold text-navy">{title}</span>
-        <div className="flex items-center gap-1" role="group" aria-label="Zoom stimulus PDF">
+        <div className="flex items-center gap-2">
+          {allowHighlight && (
+            <button
+              type="button"
+              onClick={() => setMarkerOn((v) => !v)}
+              aria-pressed={markerOn}
+              aria-label="Highlighter"
+              title="Highlighter"
+              className={cn(
+                'flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-bold transition-colors duration-150',
+                markerOn
+                  ? 'border-amber-400 bg-amber-200 text-amber-900'
+                  : 'border-border text-muted hover:bg-background-light',
+              )}
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9.5 2.5l4 4-7 7-4 1 1-4 6-8z" />
+                <path d="M2.5 13.5h5" />
+              </svg>
+              Highlight
+            </button>
+          )}
+          <div className="flex items-center gap-1" role="group" aria-label="Zoom stimulus PDF">
           <button
             type="button"
             onClick={() => setZoom((z) => clampZoom(z - 10))}
@@ -257,6 +374,7 @@ export function WritingStimulusViewer({
               <path d="M8 3v10M3 8h10" />
             </svg>
           </button>
+          </div>
         </div>
       </div>
 
@@ -285,6 +403,45 @@ export function WritingStimulusViewer({
                   draggable={false}
                   className="block select-none"
                 />
+
+                {/* Committed yellow highlights (session-local). */}
+                {(highlights[page.pageNumber] ?? []).map((h) => (
+                  <div
+                    key={h.id}
+                    className="pointer-events-none absolute bg-yellow-300/45 mix-blend-multiply"
+                    style={{
+                      left: `${h.x * 100}%`,
+                      top: `${h.y * 100}%`,
+                      width: `${h.w * 100}%`,
+                      height: `${h.h * 100}%`,
+                    }}
+                  />
+                ))}
+
+                {/* In-progress drag rectangle. */}
+                {draft && draft.page === page.pageNumber && (
+                  <div
+                    className="pointer-events-none absolute bg-yellow-300/45 ring-1 ring-amber-500/60 mix-blend-multiply"
+                    style={{
+                      left: `${draft.x * 100}%`,
+                      top: `${draft.y * 100}%`,
+                      width: `${draft.w * 100}%`,
+                      height: `${draft.h * 100}%`,
+                    }}
+                  />
+                )}
+
+                {/* Drawing surface — only active while the marker tool is on. When
+                    off, the overlay is absent so normal scrolling is unaffected. */}
+                {markerOn && (
+                  <div
+                    className="absolute inset-0 cursor-crosshair"
+                    onPointerDown={handleMarkerPointerDown(page.pageNumber)}
+                    onPointerMove={handleMarkerPointerMove}
+                    onPointerUp={handleMarkerPointerUp}
+                  />
+                )}
+
                 <span className="absolute bottom-1 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white pointer-events-none">
                   {page.pageNumber}
                 </span>

@@ -320,6 +320,16 @@ export const getWritingSubmissionGrade = (submissionId: string) =>
     path('/v1/writing/submissions/{id}/grade', { id: submissionId }),
   );
 
+/**
+ * Answer-sheet / model-answer PDF for a submitted letter — revealed on the results page only
+ * (post-submission, owner-gated). Returns `{ answerSheetPdfDownloadPath: null }` when none is
+ * attached, so callers degrade quietly.
+ */
+export const getWritingAnswerSheet = (submissionId: string) =>
+  apiClient.get<{ answerSheetPdfDownloadPath: string | null }>(
+    path('/v1/writing/submissions/{id}/answer-sheet', { id: submissionId }),
+  );
+
 export const reviseWritingSubmission = (submissionId: string, payload: { letterContent: string; wordCount: number; timeSpentSeconds: number }) =>
   apiClient.post<WritingSubmissionDto>(
     path('/v1/writing/submissions/{id}/revise', { id: submissionId }),

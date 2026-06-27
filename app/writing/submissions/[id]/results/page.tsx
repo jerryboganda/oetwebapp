@@ -17,12 +17,14 @@ import {
   appealWritingSubmission,
   disputeWritingCanonViolation,
   getTutorReview,
+  getWritingAnswerSheet,
   getWritingSubmission,
   getWritingSubmissionGrade,
   publishToShowcase,
   requestTutorReview,
 } from '@/lib/writing/api';
 import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
+import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import type {
   WritingCriteriaScoresDto,
   WritingCriterionCode,
@@ -59,6 +61,7 @@ export default function WritingSubmissionResultsPage() {
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
   const [tutorReview, setTutorReview] = useState<WritingTutorReviewDto | null>(null);
+  const [answerSheetPath, setAnswerSheetPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
 
@@ -70,11 +73,14 @@ export default function WritingSubmissionResultsPage() {
       // Tutor's written review (overall + per-criterion) — only rendered for mocks,
       // where it IS the tutor's written feedback channel.
       getTutorReview(submissionId).catch(() => null),
+      // Answer-sheet PDF (post-submission only; null when none attached).
+      getWritingAnswerSheet(submissionId).catch(() => ({ answerSheetPdfDownloadPath: null })),
     ])
-      .then(([sub, g, review]) => {
+      .then(([sub, g, review, answerSheet]) => {
         setSubmission(sub);
         setGrade(g);
         setTutorReview(review);
+        setAnswerSheetPath(answerSheet?.answerSheetPdfDownloadPath ?? null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
   }, [submissionId, t]);
@@ -199,6 +205,20 @@ export default function WritingSubmissionResultsPage() {
                     ))}
               </ul>
             </details>
+          </section>
+        ) : null}
+
+        {/* Answer Sheet PDF — official answer to tally the letter against. Read-only
+            (no highlighter, copy blocked). Only shown when the task has one. */}
+        {answerSheetPath ? (
+          <section aria-labelledby="answer-sheet-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 id="answer-sheet-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
+              <FileText className="h-5 w-5 text-primary" aria-hidden="true" /> Answer sheet
+            </h2>
+            <p className="mt-1 text-sm text-muted">Tally your letter against the official answer sheet.</p>
+            <div className="mt-3 h-[75vh] overflow-hidden rounded-xl border border-border">
+              <WritingStimulusViewer downloadPath={answerSheetPath} title="Answer Sheet" />
+            </div>
           </section>
         ) : null}
 

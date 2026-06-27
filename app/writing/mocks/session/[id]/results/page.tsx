@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Award, Clock, TrendingUp } from 'lucide-react';
+import { Award, Clock, FileText, TrendingUp } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,8 @@ import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { BandHistoryChart } from '@/components/domain/writing/BandHistoryChart';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
-import { getWritingMockResults, getWritingStatsBands } from '@/lib/writing/api';
+import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
+import { getWritingAnswerSheet, getWritingMockResults, getWritingStatsBands } from '@/lib/writing/api';
 import type {
   WritingBandHistoryPointDto,
   WritingCriteriaScoresDto,
@@ -41,6 +42,7 @@ export default function WritingMockResultsPage() {
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
   const [status, setStatus] = useState<string>('graded');
   const [bandHistory, setBandHistory] = useState<WritingBandHistoryPointDto[]>([]);
+  const [answerSheetPath, setAnswerSheetPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +58,14 @@ export default function WritingMockResultsPage() {
           if (cancelled) return;
           setSession(r.session);
           setGrade(r.grade);
+          // Answer-sheet PDF, resolved from the submission behind this session.
+          if (r.session.submissionId) {
+            void getWritingAnswerSheet(r.session.submissionId)
+              .then((a) => {
+                if (!cancelled) setAnswerSheetPath(a.answerSheetPdfDownloadPath ?? null);
+              })
+              .catch(() => {});
+          }
           const nextStatus = r.status ?? (r.grade ? 'graded' : 'awaiting_review');
           setStatus(nextStatus);
           if (b) setBandHistory(b.history);
@@ -132,6 +142,19 @@ export default function WritingMockResultsPage() {
             <div>
               <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.trajectory.heading')}</h2>
               <BandHistoryChart data={mockHistory.map((p) => ({ date: p.date, rawTotal: p.rawTotal, estimatedBand: p.estimatedBand, letterType: p.letterType }))} />
+            </div>
+          </section>
+        ) : null}
+
+        {/* Answer Sheet PDF — official answer to tally the letter against (read-only). */}
+        {answerSheetPath ? (
+          <section aria-labelledby="answer-sheet-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 id="answer-sheet-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
+              <FileText className="h-5 w-5 text-primary" aria-hidden="true" /> Answer sheet
+            </h2>
+            <p className="mt-1 text-sm text-muted">Tally your letter against the official answer sheet.</p>
+            <div className="mt-3 h-[75vh] overflow-hidden rounded-xl border border-border">
+              <WritingStimulusViewer downloadPath={answerSheetPath} title="Answer Sheet" />
             </div>
           </section>
         ) : null}

@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
+import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
+import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
   createWritingSubmission,
@@ -21,7 +23,7 @@ import {
   putWritingDraftV2,
 } from '@/lib/writing/api';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
-import { WRITING_READING_WINDOW_SECONDS } from '@/lib/writing/workflow';
+import { WRITING_READING_WINDOW_SECONDS, WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
 import type {
   WritingEditorMode,
   WritingScenarioDto,
@@ -45,54 +47,66 @@ export default function WritingPracticeSessionPage() {
   const [noCreditsOpen, setNoCreditsOpen] = useState(false);
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
+  // Latest content for auto-submit (timer expiry reads the current letter).
+  const contentRef = useRef('');
+  contentRef.current = content;
 
-  // ── Client-only reading window (skippable) ─────────────────────────────────
-  // Initialise to false for SSR to avoid hydration mismatch; the mount effect
-  // resolves the real value from sessionStorage synchronously.
-  const [readingActive, setReadingActive] = useState(false);
+  // ── Strict 45-minute exam clock ─────────────────────────────────────────────
+  // 5 min forced reading (pad LOCKED) → 40 min writing → hard auto-submit. The
+  // deadlines are persisted per-scenario in sessionStorage so a refresh resumes
+  // the same clock instead of granting extra time.
+  const [phase, setPhase] = useState<'reading' | 'writing' | 'completed'>('reading');
   const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
+  const [writingDeadlineMs, setWritingDeadlineMs] = useState<number | null>(null);
+  // Yellow highlights, lifted here so they persist from the reading window into
+  // the writing view (both render the same Case Notes PDF).
+  const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
 
-  const storageKey = `writing-practice-reading:${scenarioId}`;
+  const clockKey = `writing-practice-clock:${scenarioId}`;
 
-  const closeReading = useCallback(() => {
-    setReadingActive(false);
-    if (typeof window !== 'undefined') {
-      // Store a past timestamp so a later refresh finds the window already closed.
-      sessionStorage.setItem(storageKey, String(Date.now() - 1));
-    }
-  }, [storageKey]);
+  const windowSeconds = scenario?.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS;
 
-  // Resolve reading window on mount — after scenarioId is known and after the
-  // scenario has loaded (so windowSeconds is correct). Runs only client-side.
+  // Resolve/initialise the exam clock once the scenario has loaded.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!scenarioId || !scenario) return;
+    if (typeof window === 'undefined' || !scenarioId || !scenario) return;
 
-    const windowSeconds = scenario.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS;
-    const stored = sessionStorage.getItem(storageKey);
-    let deadline: number;
+    const readingSecs = scenario.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS;
+    let readingDeadline: number;
+    let writingDeadline: number;
 
-    if (stored !== null) {
-      deadline = Number(stored);
-    } else {
-      deadline = Date.now() + windowSeconds * 1000;
-      sessionStorage.setItem(storageKey, String(deadline));
+    const stored = sessionStorage.getItem(clockKey);
+    let parsed: { reading: number; writing: number } | null = null;
+    if (stored) {
+      try {
+        parsed = JSON.parse(stored) as { reading: number; writing: number };
+      } catch {
+        parsed = null;
+      }
     }
 
-    const stillActive = Date.now() < deadline;
-    setReadingDeadlineMs(deadline);
-    setReadingActive(stillActive);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (parsed && Number.isFinite(parsed.reading) && Number.isFinite(parsed.writing)) {
+      readingDeadline = parsed.reading;
+      writingDeadline = parsed.writing;
+    } else {
+      readingDeadline = Date.now() + readingSecs * 1000;
+      writingDeadline = readingDeadline + WRITING_WINDOW_SECONDS * 1000;
+      sessionStorage.setItem(
+        clockKey,
+        JSON.stringify({ reading: readingDeadline, writing: writingDeadline }),
+      );
+    }
+
+    setReadingDeadlineMs(readingDeadline);
+    setWritingDeadlineMs(writingDeadline);
+
+    if (Date.now() < readingDeadline) {
+      setPhase('reading');
+    } else {
+      setPhase('writing');
+      startedAtRef.current = readingDeadline;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarioId, scenario?.id]);
-  // ^ Re-run only when the scenario identity changes, not on every render.
-
-  const readingSeconds = useDeadlineCountdown(
-    readingActive ? readingDeadlineMs : null,
-    { onZero: closeReading },
-  );
-
-  const windowSeconds =
-    (scenario?.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS);
 
   // ── Scenario + draft load ───────────────────────────────────────────────────
   useEffect(() => {
@@ -120,9 +134,9 @@ export default function WritingPracticeSessionPage() {
     };
   }, [scenarioId, mode, t]);
 
-  // ── Autosave ────────────────────────────────────────────────────────────────
+  // ── Autosave (writing phase only) ────────────────────────────────────────────
   useEffect(() => {
-    if (!scenarioId) return;
+    if (phase !== 'writing' || !scenarioId) return;
     const timer = window.setInterval(() => {
       if (content === lastAutosaveContent.current) return;
       lastAutosaveContent.current = content;
@@ -136,61 +150,105 @@ export default function WritingPracticeSessionPage() {
       });
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [scenarioId, content, wordCount, mode]);
+  }, [phase, scenarioId, content, wordCount, mode]);
 
-  const canSubmit = wordCount >= 50 && !submitting;
+  const canSubmit = phase === 'writing' && wordCount >= 50 && !submitting;
 
-  const helperText = wordCount < 50
-    ? t('writing.practice.session.helper.tooShort', { remaining: 50 - wordCount })
-    : t('writing.practice.session.helper.ready');
+  const helperText =
+    phase !== 'writing'
+      ? t('writing.practice.session.helper.tooShort', { remaining: 50 })
+      : wordCount < 50
+        ? t('writing.practice.session.helper.tooShort', { remaining: 50 - wordCount })
+        : t('writing.practice.session.helper.ready');
 
-  const onSubmit = useCallback(async () => {
-    if (!canSubmit || !scenario) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-      const submission = await createWritingSubmission({
-        scenarioId: scenario.id,
-        mode,
-        letterContent: content,
-        wordCount,
-        timeSpentSeconds: elapsed,
-        inputSource: 'editor',
-      });
-      router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
-    } catch (err) {
-      // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
-      // a dedicated modal with a direct path to the AI Credits storefront rather
-      // than a generic inline error. The draft autosaves, so nothing is lost.
-      const code = (err as { code?: string }).code;
-      const status = (err as { status?: number }).status;
-      if (code === 'ai_credits_insufficient' || status === 402) {
-        setNoCreditsOpen(true);
-      } else {
-        setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
+  // Shared submit path. `auto` = true when fired by the writing-timer expiry.
+  const finalizeSubmit = useCallback(
+    async (auto: boolean) => {
+      if (submitting || !scenario) return;
+      setSubmitting(true);
+      setError(null);
+      try {
+        const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
+        const submission = await createWritingSubmission({
+          scenarioId: scenario.id,
+          mode,
+          letterContent: contentRef.current,
+          wordCount,
+          timeSpentSeconds: elapsed,
+          inputSource: 'editor',
+        });
+        // Clear the clock so a future retake of this scenario starts fresh.
+        if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
+        router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
+      } catch (err) {
+        // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
+        // a dedicated modal with a direct path to the AI Credits storefront rather
+        // than a generic inline error. The draft autosaves, so nothing is lost.
+        const code = (err as { code?: string }).code;
+        const status = (err as { status?: number }).status;
+        if (code === 'ai_credits_insufficient' || status === 402) {
+          setNoCreditsOpen(true);
+        } else if (!auto) {
+          setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
+        }
+        setSubmitting(false);
       }
-      setSubmitting(false);
+    },
+    [submitting, scenario, wordCount, mode, router, clockKey, t],
+  );
+
+  const onSubmit = useCallback(() => {
+    if (!canSubmit) return;
+    void finalizeSubmit(false);
+  }, [canSubmit, finalizeSubmit]);
+
+  // ── Phase transitions ───────────────────────────────────────────────────────
+  const beganWritingRef = useRef(false);
+  const handleReadingEnd = useCallback(() => {
+    if (beganWritingRef.current) return;
+    beganWritingRef.current = true;
+    startedAtRef.current = Date.now();
+    setPhase('writing');
+  }, []);
+
+  // Deadline-anchored countdowns; each gated to its active phase.
+  const readingSeconds = useDeadlineCountdown(
+    phase === 'reading' ? readingDeadlineMs : null,
+    { onZero: handleReadingEnd },
+  );
+  const writingSeconds = useDeadlineCountdown(
+    phase === 'writing' ? writingDeadlineMs : null,
+    { onZero: () => setPhase('completed') },
+  );
+
+  // Hard auto-submit when the 40-minute writing window expires.
+  useEffect(() => {
+    if (phase === 'completed' && !submitting) {
+      void finalizeSubmit(true);
     }
-  }, [canSubmit, content, scenario, wordCount, mode, router, t]);
+  }, [phase, submitting, finalizeSubmit]);
+
+  const readingActive = phase === 'reading';
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
-      {/* Skippable reading window overlay — client-only, portal-rendered */}
+      {/* Forced 5-minute reading window — non-skippable. Auto-closes into the
+          writing view at 0:00. */}
       <WritingReadingWindowOverlay
         open={readingActive && !!scenario}
         scenario={scenario}
         secondsRemaining={readingSeconds}
         totalSeconds={windowSeconds}
-        allowSkip
-        onSkip={closeReading}
-        onAutoClose={closeReading}
+        allowSkip={false}
+        onAutoClose={handleReadingEnd}
         title={scenario?.title ?? undefined}
+        highlights={pdfHighlights}
+        onHighlightsChange={setPdfHighlights}
       />
 
       <div className="space-y-4 pb-32" aria-busy={!scenario}>
         <header
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+          className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur"
           aria-label={t('writing.practice.session.controlsLabel')}
         >
           <div className="flex items-center gap-3">
@@ -200,7 +258,6 @@ export default function WritingPracticeSessionPage() {
               {/* Scenario title is OET-authored English content. */}
               <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.practice.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-1">
-                {/* Relaxed practice surface — spellcheck available (spec §20.2). */}
                 <Badge variant="info" size="sm">Practice mode</Badge>
                 {scenario ? (
                   <>
@@ -208,26 +265,38 @@ export default function WritingPracticeSessionPage() {
                     <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
                   </>
                 ) : null}
+                <span className="text-[11px] font-medium text-muted">
+                  5 min reading · 40 min writing · auto-submit
+                </span>
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-4">
             <WordCounter count={wordCount} target={{ min: 180, max: 220 }} ariaLabelPrefix="Letter length" />
+            <WritingTimerV2
+              phase={phase}
+              readingSecondsRemaining={readingSeconds}
+              writingSecondsRemaining={writingSeconds}
+              strict
+            />
           </div>
         </header>
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* Stimulus pane — PDF viewer or text fallback via WritingStimulus */}
+          {/* Case Notes PDF (with yellow highlighter) or text fallback. */}
           <section
             aria-label={t('writing.practice.session.caseNotesLabel')}
             className="min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface"
+            dir="ltr"
           >
             <WritingStimulus
               scenario={scenario}
               locked={readingActive}
               title={scenario?.title ?? undefined}
+              highlights={pdfHighlights}
+              onHighlightsChange={setPdfHighlights}
             />
           </section>
 
@@ -238,6 +307,8 @@ export default function WritingPracticeSessionPage() {
             <WritingEditorV2
               mode={mode}
               initialContent={initialContent}
+              disabled={phase !== 'writing'}
+              blockPaste
               onChange={(text, words) => {
                 setContent(text);
                 setWordCount(words);
@@ -251,7 +322,7 @@ export default function WritingPracticeSessionPage() {
         <SubmitBar
           canSubmit={canSubmit}
           submitLabel={t('writing.practice.session.submit')}
-          onSubmit={() => void onSubmit()}
+          onSubmit={onSubmit}
           loading={submitting}
           helperText={helperText}
         />

@@ -10,6 +10,14 @@ public interface IWritingSubmissionService
     Task<WritingSubmissionResponse> CreateSubmissionAsync(string userId, WritingSubmissionCreateRequest request, CancellationToken ct);
     Task<WritingSubmissionResponse?> GetSubmissionAsync(string userId, Guid submissionId, CancellationToken ct);
     Task<WritingGradeResponseV2?> GetSubmissionGradeAsync(string userId, Guid submissionId, CancellationToken ct);
+
+    /// <summary>
+    /// Resolves the owning scenario's answer-sheet PDF download path for a submitted letter.
+    /// Owner-gated and post-submission only — the answer sheet is never exposed on the live
+    /// exam surface, only revealed on the results page after the learner has submitted.
+    /// Returns null when not owned or no answer sheet is attached.
+    /// </summary>
+    Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct);
     Task<WritingSubmissionResponse?> ReviseSubmissionAsync(string userId, Guid originalSubmissionId, WritingReviseRequest request, CancellationToken ct);
 }
 
@@ -83,6 +91,23 @@ public sealed class WritingSubmissionService(
     {
         var s = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
         return s is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(s);
+    }
+
+    public async Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct)
+    {
+        // Owner-gated, post-submission only: resolve via the submission so the answer sheet is
+        // never reachable from the live exam-surface scenario response.
+        var scenarioId = await db.WritingSubmissions.AsNoTracking()
+            .Where(x => x.Id == submissionId && x.UserId == userId)
+            .Select(x => (Guid?)x.ScenarioId)
+            .FirstOrDefaultAsync(ct);
+        if (scenarioId is null) return null;
+
+        var assetId = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Id == scenarioId.Value)
+            .Select(s => s.AnswerSheetPdfMediaAssetId)
+            .FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(assetId) ? null : $"/v1/media/{assetId}/content";
     }
 
     public async Task<WritingGradeResponseV2?> GetSubmissionGradeAsync(string userId, Guid submissionId, CancellationToken ct)

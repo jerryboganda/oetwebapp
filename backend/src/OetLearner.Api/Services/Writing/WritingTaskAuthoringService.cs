@@ -223,6 +223,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             RetakePolicyJson = source.RetakePolicyJson,
             SourceProvenance = source.SourceProvenance,
             StimulusPdfMediaAssetId = source.StimulusPdfMediaAssetId,
+            AnswerSheetPdfMediaAssetId = source.AnswerSheetPdfMediaAssetId,
             AuthorId = GetUserId(user) ?? source.AuthorId ?? "system",
             ContentOwnerId = GetUserId(user) ?? source.ContentOwnerId,
             CreatedAt = now,
@@ -424,6 +425,10 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             ? null
             : request.StimulusPdfMediaAssetId.Trim();
 
+        scenario.AnswerSheetPdfMediaAssetId = string.IsNullOrWhiteSpace(request.AnswerSheetPdfMediaAssetId)
+            ? null
+            : request.AnswerSheetPdfMediaAssetId.Trim();
+
         scenario.SourceProvenance = request.SourceProvenance;
 
         if (request.IntegrityAcknowledged == true && scenario.IntegrityAcknowledgedAt is null)
@@ -472,6 +477,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             IntegrityAcknowledged = scenario.IntegrityAcknowledgedAt is not null,
             StimulusPdfMediaAssetId = pdfId,
             StimulusPdfDownloadPath = string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content",
+            AnswerSheetPdfMediaAssetId = scenario.AnswerSheetPdfMediaAssetId,
             CreatedAt = scenario.CreatedAt,
             UpdatedAt = scenario.UpdatedAt,
         };
@@ -503,24 +509,13 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             issues.Add(Error("letter_type_not_allowed", $"Letter type '{scenario.LetterType}' is not allowed for profession '{scenario.Profession}'."));
         }
 
-        if (string.IsNullOrWhiteSpace(scenario.TaskPromptMarkdown))
-        {
-            issues.Add(Error("task_prompt_required", "Task prompt (writing instruction) is required."));
-        }
-
+        // PDF-driven authoring: the Case Notes PDF carries the prompt/case-notes, so the
+        // publish gate only requires identity (Title + Profession + Letter type). Task prompt,
+        // source provenance and the integrity acknowledgement are no longer gated; the entity
+        // keeps sane defaults for the fields the simplified admin form no longer surfaces.
         if (scenario.WordGuideMin <= 0 || scenario.WordGuideMax < scenario.WordGuideMin)
         {
             issues.Add(Error("word_guide_invalid", "Word guide must have min > 0 and max >= min."));
-        }
-
-        if (string.IsNullOrWhiteSpace(scenario.SourceProvenance))
-        {
-            issues.Add(Error("source_provenance_required", "Source provenance must be recorded."));
-        }
-
-        if (scenario.IntegrityAcknowledgedAt is null)
-        {
-            issues.Add(Error("integrity_not_acknowledged", "Content integrity must be acknowledged before publishing."));
         }
 
         return new WritingTaskValidationResult
@@ -714,6 +709,7 @@ public sealed record WritingTaskDto
     public bool IntegrityAcknowledged { get; init; }
     public string? StimulusPdfMediaAssetId { get; init; }
     public string? StimulusPdfDownloadPath { get; init; }
+    public string? AnswerSheetPdfMediaAssetId { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 }
@@ -740,6 +736,7 @@ public sealed record WritingTaskUpsertDto
     public string? SourceProvenance { get; init; }
     public bool? IntegrityAcknowledged { get; init; }
     public string? StimulusPdfMediaAssetId { get; init; }
+    public string? AnswerSheetPdfMediaAssetId { get; init; }
 }
 
 public sealed record WritingTaskValidationIssue

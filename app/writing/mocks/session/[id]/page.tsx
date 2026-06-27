@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Award, Lock } from 'lucide-react';
@@ -14,6 +14,7 @@ import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
+import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
   beginWritingMockWriting,
@@ -34,14 +35,13 @@ import type {
 function WritingMockSessionInner() {
   const t = useTranslations();
   const params = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = String(params?.id ?? '');
 
-  // Strict mock is the default; `?practice=1` selects the relaxed variant
-  // (spec §20.2) — adds the planning scratchpad and relaxes paste/spellcheck.
-  const isPractice = searchParams?.get('practice') === '1';
-  const strict = !isPractice;
+  // Strict 45-minute timing is ALWAYS enforced on the mock: 5 min forced reading
+  // (pad locked) → 40 min writing → hard auto-submit. The legacy `?practice=1`
+  // relaxed bypass has been removed so a mock can never skip the reading window.
+  const strict = true;
 
   const [session, setSession] = useState<WritingMockSessionDto | null>(null);
   const [scenario, setScenario] = useState<WritingScenarioDto | null>(null);
@@ -55,6 +55,9 @@ function WritingMockSessionInner() {
   const [content, setContent] = useState('');
   const [wordCount, setWordCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  // Yellow highlights, lifted here so they persist from the reading window into
+  // the writing view (both render the same Case Notes PDF).
+  const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
   // Post-submit lock: instead of navigating away we freeze the letter and show
   // a "Submitted — awaiting tutor review" read-only state with a results link.
   const [locked, setLocked] = useState(false);
@@ -351,6 +354,8 @@ function WritingMockSessionInner() {
               scenario={scenario}
               locked={phase === 'reading'}
               title={scenario?.title ?? undefined}
+              highlights={pdfHighlights}
+              onHighlightsChange={setPdfHighlights}
             />
           </section>
 
@@ -413,19 +418,18 @@ function WritingMockSessionInner() {
         ) : null}
 
         {/* Forced full-screen reading window. Renders only during the reading
-            phase; auto-closes into the writing view at 0:00. allowSkip is true
-            for practice sessions (?practice=1) — the server now permits early
-            begin-writing when IsPractice is set on the session. Strict mocks
-            still block early begin-writing server-side. */}
+            phase; auto-closes into the writing view at 0:00. Never skippable —
+            the 5-minute reading window is mandatory on every mock. */}
         <WritingReadingWindowOverlay
           open={phase === 'reading' && !!session}
           scenario={scenario}
           secondsRemaining={readingSeconds}
           totalSeconds={scenario?.readingTimeSeconds ?? 300}
-          allowSkip={isPractice}
-          onSkip={() => void handlePhaseChange('writing')}
+          allowSkip={false}
           onAutoClose={() => void handlePhaseChange('writing')}
           title={scenario?.title ?? undefined}
+          highlights={pdfHighlights}
+          onHighlightsChange={setPdfHighlights}
         />
       </div>
     </LearnerDashboardShell>

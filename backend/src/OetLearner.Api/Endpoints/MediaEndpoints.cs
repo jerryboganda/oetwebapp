@@ -185,7 +185,8 @@ public static class MediaEndpoints
             || await db.ResultTemplateAssets.AnyAsync(template => template.MediaAssetId == asset.Id, ct)
             || await db.SpeakingSharedResources.AnyAsync(resource => resource.MediaAssetId == asset.Id, ct)
             || await db.MaterialFiles.AnyAsync(f => f.MediaAssetId == asset.Id, ct)
-            || await db.WritingScenarios.AnyAsync(s => s.StimulusPdfMediaAssetId == asset.Id, ct);
+            || await db.WritingScenarios.AnyAsync(s => s.StimulusPdfMediaAssetId == asset.Id, ct)
+            || await db.WritingScenarios.AnyAsync(s => s.AnswerSheetPdfMediaAssetId == asset.Id, ct);
         if (isInUse)
         {
             return Results.Json(

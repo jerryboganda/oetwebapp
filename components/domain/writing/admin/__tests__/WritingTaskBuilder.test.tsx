@@ -116,27 +116,26 @@ describe('WritingTaskBuilder (new mode)', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the core authoring sections', () => {
+  it('renders the simplified PDF-driven sections', () => {
     render(<WritingTaskBuilder mode="new" />);
 
+    // Minimal identity + the two PDF slots — nothing else.
     expect(screen.getByRole('heading', { name: 'Task metadata' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Task prompt' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Word guide & instructions' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Stimulus PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Case Notes PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Answer Sheet PDF' })).toBeInTheDocument();
     expect(screen.getByLabelText('Title')).toBeInTheDocument();
   });
 
   it('does not render the removed field groups', () => {
     render(<WritingTaskBuilder mode="new" />);
 
-    expect(screen.queryByRole('heading', { name: 'Recipient' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Case notes' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Model answer' })).not.toBeInTheDocument();
+    // Stripped out in the PDF-driven simplification.
+    expect(screen.queryByRole('heading', { name: 'Task prompt' })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: 'Key content checklist' }),
+      screen.queryByRole('heading', { name: 'Word guide & instructions' }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Candidate preview' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Stimulus PDF' })).not.toBeInTheDocument();
   });
 
   it('persists via createWritingTask on Save draft', async () => {

@@ -2,7 +2,7 @@
 
 import type { WritingScenarioDto } from '@/lib/writing/types';
 import { cn } from '@/lib/utils';
-import { WritingStimulusViewer } from './WritingStimulusViewer';
+import { WritingStimulusViewer, type Highlight } from './WritingStimulusViewer';
 
 export interface WritingStimulusProps {
   /** The writing scenario DTO, or null while loading. */
@@ -16,6 +16,14 @@ export interface WritingStimulusProps {
   title?: string;
   /** Optional extra className passed through to whichever surface renders. */
   className?: string;
+  /**
+   * Expose the yellow highlighter on the PDF surface (writing surface only).
+   * Defaults to true; pass false for read-only contexts.
+   */
+  allowHighlight?: boolean;
+  /** Controlled highlights, lifted to the page so they persist across instances. */
+  highlights?: Record<number, Highlight[]>;
+  onHighlightsChange?: (next: Record<number, Highlight[]>) => void;
 }
 
 /**
@@ -31,6 +39,9 @@ export function WritingStimulus({
   scenario,
   title,
   className,
+  allowHighlight = true,
+  highlights,
+  onHighlightsChange,
 }: WritingStimulusProps) {
   const path = scenario?.stimulusPdfDownloadPath ?? null;
 
@@ -40,6 +51,9 @@ export function WritingStimulus({
         downloadPath={path}
         title={title}
         className={className}
+        allowHighlight={allowHighlight}
+        highlights={highlights}
+        onHighlightsChange={onHighlightsChange}
       />
     );
   }

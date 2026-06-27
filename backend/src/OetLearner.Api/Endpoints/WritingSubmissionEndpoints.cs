@@ -45,6 +45,20 @@ public static class WritingSubmissionEndpoints
         })
         .WithName("GetWritingSubmissionGrade");
 
+        // Answer-sheet / model-answer PDF for a submitted letter — revealed on the results page
+        // only (post-submission, owner-gated). Returns Ok({ answerSheetPdfDownloadPath: null })
+        // when none is attached or the submission isn't owned, so the results page degrades quietly.
+        group.MapGet("/{id:guid}/answer-sheet", async (
+            Guid id,
+            HttpContext http,
+            IWritingSubmissionService service,
+            CancellationToken ct) =>
+        {
+            var path = await service.GetAnswerSheetDownloadPathAsync(http.WritingV2UserId(), id, ct);
+            return Results.Ok(new { answerSheetPdfDownloadPath = path });
+        })
+        .WithName("GetWritingSubmissionAnswerSheet");
+
         // Tutor's overall voice note for this submission (mock + normal). Returns Ok(null)
         // when owned but no submitted note exists yet; 404 when the submission isn't owned.
         group.MapGet("/{id:guid}/voice-note", async (

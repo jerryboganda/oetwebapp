@@ -9,7 +9,7 @@ import {
 } from '@/components/admin/layout/admin-settings-layout';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
-import { Input, Textarea, Select, Checkbox } from '@/components/ui/form-controls';
+import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -33,8 +33,6 @@ import {
   type WritingTaskDto,
   type WritingProfession,
   type WritingLetterType,
-  type WritingSimulationMode,
-  type WritingMarkingMode,
 } from '@/lib/writing/types';
 import {
   emptyFormState,
@@ -43,14 +41,8 @@ import {
   formStateToImportJson,
   WRITING_LETTER_TYPES,
   WRITING_LETTER_TYPE_LABELS,
-  WRITING_SIMULATION_MODES,
-  WRITING_SIMULATION_MODE_LABELS,
-  WRITING_MARKING_MODES,
-  WRITING_MARKING_MODE_LABELS,
   type WritingTaskFormState,
 } from './builder-state';
-import { StringLineListEditor } from './StringLineListEditor';
-import { TaskPreview } from './TaskPreview';
 
 interface WritingTaskBuilderProps {
   /** Edit an existing task. Omit (or pass mode="new") to author a new one. */
@@ -91,17 +83,137 @@ function letterTypeOptionsFor(profession: WritingProfession) {
   );
   return allowed.map((lt) => ({ value: lt, label: WRITING_LETTER_TYPE_LABELS[lt] }));
 }
-const SIMULATION_OPTIONS = WRITING_SIMULATION_MODES.map((m) => ({
-  value: m,
-  label: WRITING_SIMULATION_MODE_LABELS[m],
-}));
-const MARKING_OPTIONS = WRITING_MARKING_MODES.map((m) => ({
-  value: m,
-  label: WRITING_MARKING_MODE_LABELS[m],
-}));
 
 /**
- * The rich OET Writing Task Builder (spec §3/§4/§5/§6/§18/§19.2).
+ * A single PDF upload slot — attached / uploading / empty states with Replace +
+ * Remove. Used for both the Case Notes PDF (shown left during writing) and the
+ * Answer Sheet PDF (shown on the results page). Owns its own hidden file input.
+ */
+function PdfSlot({
+  title,
+  description,
+  emptyHint,
+  mediaAssetId,
+  uploading,
+  uploadPct,
+  uploadError,
+  canWrite,
+  onUpload,
+  onRemove,
+}: {
+  title: string;
+  description: string;
+  emptyHint: string;
+  mediaAssetId: string | null;
+  uploading: boolean;
+  uploadPct: number;
+  uploadError: string | null;
+  canWrite: boolean;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <SettingsSection title={title} description={description}>
+      <div className="space-y-3">
+        {mediaAssetId ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
+              <svg
+                viewBox="0 0 16 16"
+                className="h-3.5 w-3.5 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+                <path d="M10 2v4h4" />
+              </svg>
+              PDF attached
+            </span>
+            <span className="font-mono text-xs text-admin-fg-muted">{mediaAssetId}</span>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!canWrite || uploading}
+                onClick={() => inputRef.current?.click()}
+              >
+                Replace
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!canWrite || uploading}
+                onClick={onRemove}
+              >
+                Remove
+              </Button>
+            </div>
+          </div>
+        ) : uploading ? (
+          <div className="flex items-center gap-3 text-sm text-admin-fg-muted">
+            <svg
+              className="h-4 w-4 animate-spin text-violet-600"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              />
+            </svg>
+            <span>Uploading… {uploadPct}%</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-admin-fg-muted">{emptyHint}</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!canWrite}
+              onClick={() => inputRef.current?.click()}
+            >
+              Upload PDF
+            </Button>
+          </div>
+        )}
+
+        {uploadError && <p className="text-sm text-admin-danger">{uploadError}</p>}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          className="hidden"
+          disabled={uploading || !canWrite}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onUpload(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
+    </SettingsSection>
+  );
+}
+
+/**
+ * The OET Writing Task Builder — simplified to a PDF-driven flow (Case Notes +
+ * Answer Sheet) plus the minimal catalogue identity the learner library needs.
  *
  * In "edit" mode it loads a task by id; in "new" mode it starts from a blank
  * form and creates-then-redirects on first save. Edits every field of
@@ -146,10 +258,12 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
   const [issues, setIssues] = useState<DisplayIssue[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfUploadPct, setPdfUploadPct] = useState(0);
   const [pdfUploadError, setPdfUploadError] = useState<string | null>(null);
+  const [answerSheetUploading, setAnswerSheetUploading] = useState(false);
+  const [answerSheetUploadPct, setAnswerSheetUploadPct] = useState(0);
+  const [answerSheetUploadError, setAnswerSheetUploadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!taskId) return;
@@ -440,6 +554,27 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
     [patch],
   );
 
+  const handleAnswerSheetUpload = useCallback(
+    async (file: File) => {
+      setAnswerSheetUploading(true);
+      setAnswerSheetUploadPct(0);
+      setAnswerSheetUploadError(null);
+      try {
+        const result = await uploadFileChunked(file, 'AnswerKey', (pct) =>
+          setAnswerSheetUploadPct(Math.round(pct * 100)),
+        );
+        patch({ answerSheetPdfMediaAssetId: result.mediaAssetId });
+      } catch (err) {
+        setAnswerSheetUploadError(
+          err instanceof Error ? err.message : 'Upload failed — please try again.',
+        );
+      } finally {
+        setAnswerSheetUploading(false);
+      }
+    },
+    [patch],
+  );
+
   // ---- Render guards ------------------------------------------------------
 
   if (!authLoading && (!isAuthenticated || role !== 'admin')) {
@@ -607,21 +742,12 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
         description="How this task is catalogued and delivered."
       >
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Title"
-              value={form.title}
-              onChange={(e) => patch({ title: e.target.value })}
-              placeholder="e.g. Discharge — elderly patient post-hip-replacement"
-            />
-            <Input
-              label="Internal code"
-              hint="Optional — your authoring reference."
-              value={form.internalCode}
-              onChange={(e) => patch({ internalCode: e.target.value })}
-              placeholder="e.g. MED-DIS-014"
-            />
-          </div>
+          <Input
+            label="Title"
+            value={form.title}
+            onChange={(e) => patch({ title: e.target.value })}
+            placeholder="e.g. Discharge — elderly patient post-hip-replacement"
+          />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
@@ -649,257 +775,44 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
               onChange={(e) => patch({ difficulty: Number(e.target.value) })}
               options={DIFFICULTY_OPTIONS}
             />
-            <Select
-              label="Simulation modes"
-              value={form.simulationModes}
-              onChange={(e) =>
-                patch({ simulationModes: e.target.value as WritingSimulationMode })
-              }
-              options={SIMULATION_OPTIONS}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Select
-              label="Marking mode"
-              value={form.markingMode}
-              onChange={(e) =>
-                patch({ markingMode: e.target.value as WritingMarkingMode })
-              }
-              options={MARKING_OPTIONS}
-            />
             <div />
           </div>
-
-          <Textarea
-            label="Source provenance"
-            hint="Where this scenario originates (textbook, past paper, original). Required before publish."
-            value={form.sourceProvenance}
-            onChange={(e) => patch({ sourceProvenance: e.target.value })}
-            rows={2}
-          />
-
-          <Checkbox
-            checked={form.integrityAcknowledged}
-            onChange={(e) => patch({ integrityAcknowledged: e.target.checked })}
-            label="I confirm this content is original or properly licensed, is not derived from any recalled or leaked OET exam paper, and contains no real patient data."
-          />
         </div>
       </SettingsSection>
 
-      {/* Task prompt */}
-      <SettingsSection
-        title="Task prompt"
-        description="The instructions the candidate reads, their role, and the in-scenario date."
-      >
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Writer role"
-              hint="Who the candidate is, in role."
-              value={form.writerRole}
-              onChange={(e) => patch({ writerRole: e.target.value })}
-              placeholder="e.g. the charge nurse on the ward"
-            />
-            <Input
-              label="Today's date"
-              hint="Optional — the in-scenario date."
-              value={form.todayDate}
-              onChange={(e) => patch({ todayDate: e.target.value })}
-              placeholder="e.g. 14 March 2026"
-            />
-          </div>
-          <Textarea
-            label="Task prompt"
-            hint="Markdown supported. Describe the writing task."
-            value={form.taskPromptMarkdown}
-            onChange={(e) => patch({ taskPromptMarkdown: e.target.value })}
-            rows={5}
-            placeholder="Using the information given in the case notes, write a letter…"
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Expected purpose"
-              hint="Optional — the letter's core purpose (for marking)."
-              value={form.expectedPurpose}
-              onChange={(e) => patch({ expectedPurpose: e.target.value })}
-              placeholder="e.g. Refer for specialist cardiac assessment"
-            />
-            <Input
-              label="Expected action"
-              hint="Optional — the action requested of the recipient."
-              value={form.expectedAction}
-              onChange={(e) => patch({ expectedAction: e.target.value })}
-              placeholder="e.g. Review and arrange follow-up within 2 weeks"
-            />
-          </div>
-        </div>
-      </SettingsSection>
+      {/* Case Notes PDF — shown on the LEFT while the candidate writes the letter. */}
+      <PdfSlot
+        title="Case Notes PDF"
+        description="Shown on the left while the candidate writes the letter (the candidate cannot copy from it)."
+        emptyHint="No Case Notes PDF attached yet."
+        mediaAssetId={form.stimulusPdfMediaAssetId}
+        uploading={pdfUploading}
+        uploadPct={pdfUploadPct}
+        uploadError={pdfUploadError}
+        canWrite={canWrite}
+        onUpload={(file) => void handlePdfUpload(file)}
+        onRemove={() => {
+          patch({ stimulusPdfMediaAssetId: null });
+          setPdfUploadError(null);
+        }}
+      />
 
-      {/* Stimulus PDF */}
-      <SettingsSection
-        title="Stimulus PDF"
-        description="Optional — attach the real OET question-paper PDF. When present, learners see the PDF; otherwise they see the prompt and fixed instructions only."
-      >
-        <div className="space-y-3">
-          {form.stimulusPdfMediaAssetId ? (
-            /* ── Attached state ── */
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
-                <svg
-                  viewBox="0 0 16 16"
-                  className="h-3.5 w-3.5 shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.75}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
-                  <path d="M10 2v4h4" />
-                </svg>
-                PDF attached
-              </span>
-              <span className="font-mono text-xs text-admin-fg-muted">
-                {form.stimulusPdfMediaAssetId}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={!canWrite || pdfUploading}
-                  onClick={() => pdfInputRef.current?.click()}
-                >
-                  Replace
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!canWrite || pdfUploading}
-                  onClick={() => {
-                    patch({ stimulusPdfMediaAssetId: null });
-                    setPdfUploadError(null);
-                  }}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
-          ) : pdfUploading ? (
-            /* ── Uploading state ── */
-            <div className="flex items-center gap-3 text-sm text-admin-fg-muted">
-              <svg
-                className="h-4 w-4 animate-spin text-violet-600"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                />
-              </svg>
-              <span>Uploading… {pdfUploadPct}%</span>
-            </div>
-          ) : (
-            /* ── Empty state ── */
-            <div className="space-y-2">
-              <p className="text-sm text-admin-fg-muted">
-                No stimulus PDF attached — learners will see the prompt and fixed instructions only.
-              </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!canWrite}
-                onClick={() => pdfInputRef.current?.click()}
-              >
-                Upload PDF
-              </Button>
-            </div>
-          )}
-
-          {pdfUploadError && (
-            <p className="text-sm text-admin-danger">{pdfUploadError}</p>
-          )}
-
-          <input
-            ref={pdfInputRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            className="hidden"
-            disabled={pdfUploading || !canWrite}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handlePdfUpload(file);
-              e.target.value = '';
-            }}
-          />
-        </div>
-      </SettingsSection>
-
-      {/* Word guide + instructions */}
-      <SettingsSection
-        title="Word guide & instructions"
-        description="The word range and the fixed instruction lines shown to candidates."
-      >
-        <div className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Minimum words"
-              type="number"
-              min={0}
-              value={String(form.wordGuideMin)}
-              onChange={(e) => patch({ wordGuideMin: Number(e.target.value) })}
-            />
-            <Input
-              label="Maximum words"
-              type="number"
-              min={0}
-              value={String(form.wordGuideMax)}
-              onChange={(e) => patch({ wordGuideMax: Number(e.target.value) })}
-            />
-          </div>
-          {form.wordGuideMin > form.wordGuideMax && (
-            <p className="text-xs text-amber-600">
-              Minimum is greater than maximum — check the word guide.
-            </p>
-          )}
-          <div>
-            <p className="mb-1.5 text-sm font-semibold tracking-tight text-navy">
-              Fixed instruction lines
-            </p>
-            <p className="mb-2 text-xs text-muted">
-              Shown verbatim under the task. Seeded with the standard four lines.
-            </p>
-            <StringLineListEditor
-              lines={form.fixedInstructions}
-              onChange={(fixedInstructions) => patch({ fixedInstructions })}
-              addLabel="Add instruction line"
-              itemNoun="instruction"
-              placeholder="e.g. Use letter format"
-              emptyHint="No instruction lines."
-            />
-          </div>
-        </div>
-      </SettingsSection>
-
-      {/* Preview */}
-      <SettingsSection
-        title="Candidate preview"
-        description="How the source material reads in paper and computer modes."
-      >
-        <TaskPreview form={form} />
-      </SettingsSection>
+      {/* Answer Sheet PDF — shown on the results page after submission. */}
+      <PdfSlot
+        title="Answer Sheet PDF"
+        description="Shown on the results page after the letter is submitted, to tally answers alongside the scoring."
+        emptyHint="No Answer Sheet PDF attached yet."
+        mediaAssetId={form.answerSheetPdfMediaAssetId}
+        uploading={answerSheetUploading}
+        uploadPct={answerSheetUploadPct}
+        uploadError={answerSheetUploadError}
+        canWrite={canWrite}
+        onUpload={(file) => void handleAnswerSheetUpload(file)}
+        onRemove={() => {
+          patch({ answerSheetPdfMediaAssetId: null });
+          setAnswerSheetUploadError(null);
+        }}
+      />
 
       {toast && (
         <Toast

@@ -97,8 +97,10 @@ export interface WritingTaskFormState {
   todayDate: string;
   expectedPurpose: string;
   expectedAction: string;
-  // Stimulus PDF (optional real exam question-paper PDF)
+  // Case Notes PDF (shown on the LEFT during writing) — formerly "stimulus PDF"
   stimulusPdfMediaAssetId: string | null;
+  // Answer Sheet PDF (shown on the results page after submission)
+  answerSheetPdfMediaAssetId: string | null;
   // Word guide
   wordGuideMin: number;
   wordGuideMax: number;
@@ -123,6 +125,7 @@ export function emptyFormState(seed?: Partial<WritingTaskFormState>): WritingTas
     expectedPurpose: '',
     expectedAction: '',
     stimulusPdfMediaAssetId: null,
+    answerSheetPdfMediaAssetId: null,
     wordGuideMin: DEFAULT_WORD_GUIDE_MIN,
     wordGuideMax: DEFAULT_WORD_GUIDE_MAX,
     fixedInstructions: [...WRITING_DEFAULT_FIXED_INSTRUCTIONS],
@@ -148,6 +151,7 @@ export function formStateFromDto(dto: WritingTaskDto): WritingTaskFormState {
     expectedPurpose: dto.expectedPurpose ?? '',
     expectedAction: dto.expectedAction ?? '',
     stimulusPdfMediaAssetId: dto.stimulusPdfMediaAssetId ?? null,
+    answerSheetPdfMediaAssetId: dto.answerSheetPdfMediaAssetId ?? null,
     wordGuideMin: dto.wordGuideMin ?? DEFAULT_WORD_GUIDE_MIN,
     wordGuideMax: dto.wordGuideMax ?? DEFAULT_WORD_GUIDE_MAX,
     fixedInstructions:
@@ -185,6 +189,7 @@ export function formStateToUpsert(form: WritingTaskFormState): WritingTaskUpsert
     sourceProvenance: form.sourceProvenance.trim(),
     integrityAcknowledged: form.integrityAcknowledged,
     stimulusPdfMediaAssetId: form.stimulusPdfMediaAssetId ?? null,
+    answerSheetPdfMediaAssetId: form.answerSheetPdfMediaAssetId ?? null,
   };
 }
 
