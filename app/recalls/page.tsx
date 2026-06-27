@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { Brain, Layers, BookOpen, Flame, Sparkles, ArrowRight, Heart } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { RevisionPlanCard } from '@/components/domain/recalls/revision-plan-card';
@@ -83,6 +84,8 @@ export default function RecallsHomePage() {
           icon={Sparkles}
           highlights={heroHighlights}
         />
+
+        <LearnerSkillSwitcher compact />
 
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 

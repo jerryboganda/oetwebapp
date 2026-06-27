@@ -456,7 +456,7 @@ export default function Dashboard() {
           </div>
 
           <div data-tour="learner-dashboard-skills">
-            <LearnerSkillSwitcher compact enabledModules={entitlement?.enabledModules} />
+            <LearnerSkillSwitcher compact />
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

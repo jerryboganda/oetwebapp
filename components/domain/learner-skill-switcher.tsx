@@ -2,50 +2,34 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, FilePenLine, FileQuestion, Headphones, MessageSquare, Mic } from 'lucide-react';
+import { BookOpen, FilePenLine, FileQuestion, Headphones, Repeat2, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const learnerSkillModules = [
-  { href: '/writing', label: 'Writing', shortLabel: 'Writing', icon: FilePenLine, description: 'Letters and case notes' },
-  { href: '/speaking', label: 'Speaking', shortLabel: 'Speaking', icon: Mic, description: 'Roleplay and fluency' },
   { href: '/reading', label: 'Reading', shortLabel: 'Reading', icon: BookOpen, description: 'Parts A, B, and C' },
   { href: '/listening', label: 'Listening', shortLabel: 'Listening', icon: Headphones, description: 'Audio, notes, and review' },
+  { href: '/writing', label: 'Writing', shortLabel: 'Writing', icon: FilePenLine, description: 'Letters and case notes' },
+  { href: '/speaking', label: 'Speaking', shortLabel: 'Speaking', icon: Mic, description: 'Roleplay and fluency' },
   { href: '/mocks', label: 'Mocks', shortLabel: 'Mocks', icon: FileQuestion, description: 'Timed transfer practice' },
-  { href: '/conversation', label: 'AI Conversation', shortLabel: 'Conversation', icon: MessageSquare, description: 'Interactive scenarios' },
+  { href: '/recalls', label: 'Recalls', shortLabel: 'Recalls', icon: Repeat2, description: 'Vocabulary and review' },
 ] as const;
-
-const moduleAliases: Record<string, readonly string[]> = {
-  Speaking: ['SpeakingSession'],
-};
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function isModuleAllowed(label: string, enabledModules?: readonly string[]) {
-  if (!enabledModules) return true;
-  const allowed = new Set(enabledModules.map((module) => module.toLowerCase()));
-  if (allowed.size === 0) return false;
-  if (allowed.has(label.toLowerCase())) return true;
-  return (moduleAliases[label] ?? []).some((alias) => allowed.has(alias.toLowerCase()));
-}
-
 export function LearnerSkillSwitcher({
   className,
   compact = false,
   title = 'Switch practice focus',
-  enabledModules,
 }: {
   className?: string;
   compact?: boolean;
   title?: string;
-  enabledModules?: readonly string[];
 }) {
   const pathname = usePathname();
-  const modules = learnerSkillModules.filter((module) => isModuleAllowed(module.label, enabledModules));
-
-  if (modules.length === 0) return null;
+  const modules = learnerSkillModules;
 
   return (
     <nav
@@ -55,7 +39,7 @@ export function LearnerSkillSwitcher({
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">{title}</p>
       </div>
-      <div className={cn('grid gap-2', compact ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4')}>
+      <div className={cn('grid gap-2', compact ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
         {modules.map((module) => {
           const active = isActive(pathname, module.href);
           const Icon = module.icon;
