@@ -803,6 +803,7 @@ public sealed class AiGatewayService(
             Metadata = request.Prompt.Metadata,
             RulebookVersion = request.Prompt.Metadata.RulebookVersion,
             AppliedRuleIds = request.Prompt.Metadata.AppliedRuleIds,
+            ResolvedModel = effectiveModel,
         };
     }
 
@@ -1651,6 +1652,14 @@ public sealed class AiGatewayResult
     public AiGroundedPromptMetadata Metadata { get; init; } = new();
     public string RulebookVersion { get; init; } = "";
     public IReadOnlyList<string> AppliedRuleIds { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The model id the gateway actually routed this call to (e.g.
+    /// "claude-sonnet-4-6"). Lets callers record honest model provenance
+    /// instead of guessing or storing a prompt-template id. Empty when a
+    /// caller/fake does not populate it.
+    /// </summary>
+    public string ResolvedModel { get; init; } = "";
 }
 
 public sealed class AiUsage
