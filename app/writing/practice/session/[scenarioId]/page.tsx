@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Sparkles, PenTool } from 'lucide-react';
+import { PenTool } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -12,8 +12,6 @@ import { Modal } from '@/components/ui/modal';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
-import { CoachPanel } from '@/components/domain/writing/CoachPanel';
-import { PracticeScratchpad } from '@/components/domain/writing/PracticeScratchpad';
 import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
@@ -38,18 +36,15 @@ export default function WritingPracticeSessionPage() {
   const scenarioId = String(params?.scenarioId ?? '');
 
   const [scenario, setScenario] = useState<WritingScenarioDto | null>(null);
-  const [mode, setMode] = useState<ScenarioMode>('practice');
+  const mode: ScenarioMode = 'practice';
   const [content, setContent] = useState('');
   const [initialContent, setInitialContent] = useState('');
   const [wordCount, setWordCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [noCreditsOpen, setNoCreditsOpen] = useState(false);
-  // Local-only planning notes (spec §20.2) — never submitted or graded.
-  const [scratch, setScratch] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
-  const coachSessionId = useMemo(() => `practice-${scenarioId}`, [scenarioId]);
 
   // ── Client-only reading window (skippable) ─────────────────────────────────
   // Initialise to false for SSR to avoid hydration mismatch; the mount effect
@@ -205,8 +200,7 @@ export default function WritingPracticeSessionPage() {
               {/* Scenario title is OET-authored English content. */}
               <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.practice.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-1">
-                {/* Relaxed practice surface — spellcheck, coach + planning notes
-                    are all available (spec §20.2). */}
+                {/* Relaxed practice surface — spellcheck available (spec §20.2). */}
                 <Badge variant="info" size="sm">Practice mode</Badge>
                 {scenario ? (
                   <>
@@ -218,40 +212,17 @@ export default function WritingPracticeSessionPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <fieldset className="inline-flex rounded-lg border border-border bg-background p-0.5">
-              <legend className="sr-only">{t('writing.practice.session.editorModeLegend')}</legend>
-              {(['practice', 'coached'] as const).map((m) => {
-                const active = mode === m;
-                return (
-                  <label
-                    key={m}
-                    className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus-within:ring-2 focus-within:ring-primary ${active ? 'bg-primary text-white' : 'text-navy hover:bg-primary/10 dark:bg-violet-700 dark:hover:bg-violet-600'}`}
-                  >
-                    <input
-                      type="radio"
-                      name="editor-mode"
-                      value={m}
-                      checked={active}
-                      onChange={() => setMode(m)}
-                      className="sr-only"
-                    />
-                    {m === 'practice' ? t('writing.practice.session.mode.practice') : t('writing.practice.session.mode.coached')}
-                    {m === 'coached' ? <Sparkles className="ml-1 inline h-3 w-3" aria-hidden="true" /> : null}
-                  </label>
-                );
-              })}
-            </fieldset>
             <WordCounter count={wordCount} target={{ min: 180, max: 220 }} ariaLabelPrefix="Letter length" />
           </div>
         </header>
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <div className={`grid gap-4 ${mode === 'coached' ? 'lg:grid-cols-12' : 'lg:grid-cols-2'}`}>
+        <div className="grid gap-4 lg:grid-cols-2">
           {/* Stimulus pane — PDF viewer or text fallback via WritingStimulus */}
           <section
             aria-label={t('writing.practice.session.caseNotesLabel')}
-            className={`min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface ${mode === 'coached' ? 'lg:col-span-4' : ''}`}
+            className="min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface"
           >
             <WritingStimulus
               scenario={scenario}
@@ -262,10 +233,8 @@ export default function WritingPracticeSessionPage() {
 
           <section
             aria-label={t('writing.practice.session.editorLabel')}
-            className={`flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 ${mode === 'coached' ? 'lg:col-span-5' : ''}`}
+            className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
           >
-            {/* Practice-only local planning area; never submitted. */}
-            <PracticeScratchpad value={scratch} onChange={setScratch} />
             <WritingEditorV2
               mode={mode}
               initialContent={initialContent}
@@ -277,22 +246,6 @@ export default function WritingPracticeSessionPage() {
               inputId="practice-editor"
             />
           </section>
-
-          {mode === 'coached' && scenario ? (
-            <aside className="lg:col-span-3" aria-label={t('writing.practice.session.coachLabel')}>
-              <CoachPanel
-                sessionId={coachSessionId}
-                mode="on"
-                getFallbackContext={() => ({
-                  scenarioId: scenario.id,
-                  letterContent: content,
-                  wordCount,
-                  letterType: scenario.letterType,
-                  profession: scenario.profession,
-                })}
-              />
-            </aside>
-          ) : null}
         </div>
 
         <SubmitBar

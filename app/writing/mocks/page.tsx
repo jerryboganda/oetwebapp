@@ -55,7 +55,7 @@ export default function WritingMocksCataloguePage() {
         // Paper mode opens the printable booklet session (owned elsewhere).
         router.push(`/writing/paper/session/${id}`);
       } else {
-        // Computer mode; practice adds the relaxed flag (scratchpad, no paste lock).
+        // Computer mode; practice adds the relaxed flag (spellcheck on, no paste lock).
         router.push(
           rigour === 'practice'
             ? `/writing/mocks/session/${id}?practice=1`
@@ -149,7 +149,7 @@ export default function WritingMocksCataloguePage() {
                 <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam conditions">
                   {([
                     { value: 'strict' as const, label: 'Strict mock', hint: 'Exam rules: no paste, locked timing.' },
-                    { value: 'practice' as const, label: 'Practice', hint: 'Relaxed: scratchpad, no paste lock.' },
+                    { value: 'practice' as const, label: 'Practice', hint: 'Relaxed: spellcheck on, no paste lock.' },
                   ]).map((opt) => {
                     const selected = rigour === opt.value;
                     return (

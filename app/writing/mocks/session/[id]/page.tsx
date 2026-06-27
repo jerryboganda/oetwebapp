@@ -15,7 +15,6 @@ import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
-import { PracticeScratchpad } from '@/components/domain/writing/PracticeScratchpad';
 import {
   beginWritingMockWriting,
   getWritingMockSession,
@@ -60,8 +59,6 @@ function WritingMockSessionInner() {
   // a "Submitted — awaiting tutor review" read-only state with a results link.
   const [locked, setLocked] = useState(false);
   const [frozenLetter, setFrozenLetter] = useState('');
-  // Practice-only planning scratchpad (never submitted).
-  const [scratch, setScratch] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef('');
   // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
@@ -324,7 +321,7 @@ function WritingMockSessionInner() {
                   </span>
                 ) : (
                   <span className="text-[11px] font-medium text-muted">
-                    Spellcheck + planning notes on · not exam-timed pressure
+                    Spellcheck on · not exam-timed pressure
                   </span>
                 )}
               </div>
@@ -358,11 +355,6 @@ function WritingMockSessionInner() {
           </section>
 
           <section aria-label={t('writing.mocks.session.editorLabel')} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
-            {/* Practice-only planning area; never shown in strict mock. */}
-            {isPractice && !locked ? (
-              <PracticeScratchpad value={scratch} onChange={setScratch} />
-            ) : null}
-
             {locked ? (
               <div className="flex min-h-[60vh] flex-col">
                 <div

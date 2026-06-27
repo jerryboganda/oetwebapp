@@ -70,9 +70,8 @@ export interface WritingEditorV2Props {
    */
   onPasteBlocked?: (rejectedLength: number) => void;
   /**
-   * Render slot for the right rail (e.g. <CoachPanel />). The editor
-   * lays itself out single-column; the parent wraps it in a grid if a
-   * side panel is needed.
+   * Optional render slot for the right rail. The editor lays itself out
+   * single-column; the parent wraps it in a grid if a side panel is needed.
    */
   children?: ReactNode;
 }
