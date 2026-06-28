@@ -294,6 +294,15 @@ export interface WritingSubmissionDto {
   inputSource: WritingInputSource;
 }
 
+/**
+ * Read-only Case Notes view for the results page + tutor marking surface: the
+ * stimulus PDF path plus the learner's saved highlight snapshot for the submission.
+ */
+export interface WritingCaseNotesDto {
+  stimulusPdfDownloadPath: string | null;
+  caseNoteHighlightsJson: string;
+}
+
 export interface WritingPerCriterionFeedbackDto {
   score: number;
   feedback: string;

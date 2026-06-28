@@ -22,10 +22,11 @@ export interface WritingStimulusViewerProps {
   /** Optional extra className for the outer container. */
   className?: string;
   /**
-   * When true, expose a SINGLE yellow highlighter tool (drag to mark, click a
-   * mark to remove) — and nothing else. Highlights are session-local (ephemeral,
-   * never persisted). Used on the writing surface; omit on the results page so
-   * the Answer Sheet renders as a pure read-only viewer.
+   * When true, expose the yellow highlighter tool (drag to mark) and a red ✕
+   * delete control on each mark. Used on the editable case-notes surface (reading
+   * + writing). When false the marks render read-only with no tools — used on the
+   * results / tutor surfaces and for the Answer Sheet. Persistence is the parent's
+   * job (the page autosaves the controlled `highlights` to the server).
    */
   allowHighlight?: boolean;
   /**
@@ -38,7 +39,7 @@ export interface WritingStimulusViewerProps {
 }
 
 /** A yellow highlight rectangle stored in fractional page coordinates (0–1) so it
- *  scales with zoom automatically. Session-local; never persisted. */
+ *  scales with zoom automatically and survives round-tripping to the server. */
 export interface Highlight {
   id: string;
   x: number;
@@ -113,6 +114,15 @@ export function WritingStimulusViewer({
   const commitHighlights = (next: Record<number, Highlight[]>) => {
     if (onHighlightsChange) onHighlightsChange(next);
     else setInternalHighlights(next);
+  };
+  // Explicit per-mark delete — the small red ✕ on each highlight's top-right
+  // corner. Available whenever editing is allowed (reading + writing surfaces),
+  // independent of whether the draw tool is toggled on.
+  const removeHighlight = (page: number, id: string) => {
+    commitHighlights({
+      ...highlights,
+      [page]: (highlights[page] ?? []).filter((h) => h.id !== id),
+    });
   };
   const [draft, setDraft] = useState<(Highlight & { page: number }) | null>(null);
   const drawAnchor = useRef<{ page: number; x: number; y: number } | null>(null);
@@ -404,18 +414,43 @@ export function WritingStimulusViewer({
                   className="block select-none"
                 />
 
-                {/* Committed yellow highlights (session-local). */}
+                {/* Committed yellow highlights. The wrapper is click-through so
+                    scrolling is unaffected; only the red ✕ delete button (edit
+                    surfaces) re-enables pointer events. */}
                 {(highlights[page.pageNumber] ?? []).map((h) => (
                   <div
                     key={h.id}
-                    className="pointer-events-none absolute bg-yellow-300/45 mix-blend-multiply"
+                    className="pointer-events-none absolute"
                     style={{
                       left: `${h.x * 100}%`,
                       top: `${h.y * 100}%`,
                       width: `${h.w * 100}%`,
                       height: `${h.h * 100}%`,
                     }}
-                  />
+                  >
+                    <div className="absolute inset-0 bg-yellow-300/45 mix-blend-multiply" />
+                    {allowHighlight && (
+                      <button
+                        type="button"
+                        // Stop the marker overlay from treating this as a draw/erase gesture.
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeHighlight(page.pageNumber, h.id);
+                        }}
+                        aria-label="Remove highlight"
+                        title="Remove highlight"
+                        className="pointer-events-auto absolute -right-2 -top-2 z-30 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-white shadow ring-1 ring-white transition-transform duration-100 hover:scale-110"
+                      >
+                        <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" aria-hidden="true">
+                          <path d="M4 4l8 8M12 4l-8 8" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 ))}
 
                 {/* In-progress drag rectangle. */}

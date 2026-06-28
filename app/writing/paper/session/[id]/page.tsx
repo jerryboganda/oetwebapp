@@ -10,14 +10,18 @@ import {
   type WritingPhase,
 } from '@/components/domain/writing/PaperBookletSimulation';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
+import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import {
   beginWritingMockWriting,
   createWritingSubmission,
+  getWritingHighlights,
   getWritingMockSession,
   getWritingScenario,
   putWritingDraftV2,
+  putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { getWritingTask } from '@/lib/writing/exam-api';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
 import {
@@ -153,6 +157,12 @@ export default function WritingPaperSessionPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Case Notes highlights, lifted so they persist across the reading window and
+  // the booklet writing view, and so the page can save/restore them per scenario.
+  const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
+  const highlightsRef = useRef<Record<number, Highlight[]>>({});
+  highlightsRef.current = pdfHighlights;
+  const lastSavedHighlightsRef = useRef<string>(serializeHighlights({}));
 
   const startedAtRef = useRef<number>(Date.now());
   // Guard so the reading→writing transition runs at most once: the reading
@@ -259,6 +269,34 @@ export default function WritingPaperSessionPage() {
 
   const resultsHref = `/writing/paper/session/${encodeURIComponent(routeId)}/results`;
 
+  // ── Case Notes highlights: load once per scenario, autosave (debounced) ────
+  useEffect(() => {
+    if (!scenarioId) return;
+    let cancelled = false;
+    void getWritingHighlights(scenarioId)
+      .then((hl) => {
+        if (cancelled || !hl?.highlightsJson) return;
+        const parsed = parseHighlights(hl.highlightsJson);
+        setPdfHighlights(parsed);
+        lastSavedHighlightsRef.current = serializeHighlights(parsed);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [scenarioId]);
+
+  useEffect(() => {
+    if (!scenarioId || submitted) return;
+    const json = serializeHighlights(pdfHighlights);
+    if (json === lastSavedHighlightsRef.current) return;
+    const timer = window.setTimeout(() => {
+      lastSavedHighlightsRef.current = json;
+      void putWritingHighlights(scenarioId, json).catch(() => {});
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [pdfHighlights, scenarioId, submitted]);
+
   // ── Autosave — page owns the network write (elapsed-time bookkeeping) ──────
   const handleAutosave = useCallback(
     (autoText: string, autoWords: number) => {
@@ -341,6 +379,7 @@ export default function WritingPaperSessionPage() {
             wordCount: submitWords,
             timeSpentSeconds: elapsed,
             inputSource: 'editor',
+            caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
           });
           setSubmissionId(result.id ?? null);
         }
@@ -401,6 +440,8 @@ export default function WritingPaperSessionPage() {
         onContentChange={handleContentChange}
         onSubmit={handleSubmit}
         onAutosave={handleAutosave}
+        highlights={pdfHighlights}
+        onHighlightsChange={setPdfHighlights}
       />
 
       {/* Forced full-screen reading window. Renders only during the reading
@@ -414,6 +455,8 @@ export default function WritingPaperSessionPage() {
         allowSkip={false}
         onAutoClose={beginWriting}
         title={scenario?.title ?? content?.title ?? undefined}
+        highlights={pdfHighlights}
+        onHighlightsChange={setPdfHighlights}
       />
     </LearnerDashboardShell>
   );

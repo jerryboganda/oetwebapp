@@ -134,7 +134,10 @@ public sealed record WritingSubmissionCreateRequest(
     [property: Range(0, 5000)] int WordCount,
     [property: Range(0, 7200)] int TimeSpentSeconds,
     [property: StringLength(16)] string? InputSource,
-    [property: StringLength(32)] string? SimulationMode);
+    [property: StringLength(32)] string? SimulationMode,
+    // JSON snapshot of the learner's Case Notes highlights (`Record<page, Highlight[]>`).
+    // Optional — when absent the server falls back to the user's saved highlights.
+    string? CaseNoteHighlightsJson = null);
 
 public sealed record WritingReviseRequest(
     [property: Required] string LetterContent,
@@ -223,6 +226,24 @@ public sealed record WritingDraftV2Response(
     int WordCount,
     int TimeSpentSeconds,
     DateTimeOffset LastSavedAt);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Case-note highlights (persist per user + scenario across attempts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public sealed record WritingHighlightsUpsertRequest(
+    [property: Required, StringLength(200_000)] string HighlightsJson);
+
+public sealed record WritingHighlightsResponse(string HighlightsJson);
+
+/// <summary>
+/// Read-only Case Notes view for the results page + tutor marking surface: the
+/// stimulus PDF download path plus the learner's highlight snapshot for the
+/// submission. <see cref="StimulusPdfDownloadPath"/> is null when no PDF is attached.
+/// </summary>
+public sealed record WritingCaseNotesResponse(
+    string? StimulusPdfDownloadPath,
+    string CaseNoteHighlightsJson);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scenarios

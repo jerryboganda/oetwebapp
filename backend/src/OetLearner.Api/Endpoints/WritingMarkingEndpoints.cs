@@ -28,6 +28,7 @@ public static class WritingMarkingEndpoints
             .RequireAuthorization("ExpertOnly");
 
         group.MapGet("/{id:guid}/context", GetContextAsync);
+        group.MapGet("/{id:guid}/case-notes", GetCaseNotesAsync);
         group.MapGet("/{id:guid}/pre-assessment", GetPreAssessmentAsync);
         group.MapGet("/{id:guid}/annotations", ListAnnotationsAsync);
         group.MapPost("/{id:guid}/annotations", CreateAnnotationAsync);
@@ -123,6 +124,31 @@ public static class WritingMarkingEndpoints
             voiceNote);
 
         return Results.Ok(dto);
+    }
+
+    // ---- Case Notes (highlighted stimulus, read-only for the tutor) ---------------------------
+
+    private static async Task<IResult> GetCaseNotesAsync(
+        ClaimsPrincipal user,
+        LearnerDbContext db,
+        IWritingSubmissionService submissions,
+        Guid id,
+        CancellationToken ct)
+    {
+        var tutorId = ResolveTutorId(user);
+        if (string.IsNullOrWhiteSpace(tutorId))
+        {
+            return Results.Unauthorized();
+        }
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
+
+        // Staff-authorized: no owner gate (pass null). Returns the stimulus PDF path + the
+        // learner's highlight snapshot so the tutor sees exactly what was marked.
+        var caseNotes = await submissions.GetCaseNotesAsync(id, null, ct);
+        return caseNotes is null ? Results.NotFound() : Results.Ok(caseNotes);
     }
 
     // ---- Pre-assessment ----------------------------------------------------------------------

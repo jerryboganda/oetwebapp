@@ -125,6 +125,7 @@ import type {
   WritingGradeDto,
   WritingScoreAppealDto,
   WritingDisputeViolationDto,
+  WritingCaseNotesDto,
   WritingDraftV2Dto,
   WritingDrillDto,
   WritingDrillResponseDto,
@@ -305,6 +306,12 @@ export interface WritingSubmissionCreatePayload {
   wordCount: number;
   timeSpentSeconds: number;
   inputSource?: 'editor' | 'paper-ocr' | 'voice-draft';
+  /**
+   * JSON snapshot of the learner's Case Notes highlights (`Record<page, Highlight[]>`)
+   * captured at submit time. When omitted the server falls back to the user's
+   * currently-saved highlights for the scenario.
+   */
+  caseNoteHighlightsJson?: string;
 }
 
 export const createWritingSubmission = (payload: WritingSubmissionCreatePayload) =>
@@ -328,6 +335,16 @@ export const getWritingSubmissionGrade = (submissionId: string) =>
 export const getWritingAnswerSheet = (submissionId: string) =>
   apiClient.get<{ answerSheetPdfDownloadPath: string | null }>(
     path('/v1/writing/submissions/{id}/answer-sheet', { id: submissionId }),
+  );
+
+/**
+ * Case Notes PDF + the learner's highlight snapshot for a submitted letter — used
+ * by the results page to render the highlighted stimulus read-only. Owner-gated;
+ * returns null when not owned / not found.
+ */
+export const getWritingSubmissionCaseNotes = (submissionId: string) =>
+  apiClient.get<WritingCaseNotesDto | null>(
+    path('/v1/writing/submissions/{id}/case-notes', { id: submissionId }),
   );
 
 export const reviseWritingSubmission = (submissionId: string, payload: { letterContent: string; wordCount: number; timeSpentSeconds: number }) =>
@@ -395,6 +412,27 @@ export const getWritingDraftV2 = (scenarioId: string, mode: WritingEditorMode) =
 export const deleteWritingDraftV2 = (scenarioId: string, mode: WritingEditorMode) =>
   apiClient.delete<void>(
     path('/v1/writing/drafts/{scenarioId}/{mode}', { scenarioId, mode }),
+  );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Case-note highlights (persist per user + scenario, across every attempt/mode)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The learner's saved yellow highlights on the Case Notes PDF, as a JSON string
+ * of `Record<pageNumber, Highlight[]>`. Persisted per (user, scenario) so they
+ * pre-load on every future attempt, and snapshotted onto the submission at
+ * submit time for the results page + tutor review.
+ */
+export const getWritingHighlights = (scenarioId: string) =>
+  apiClient.get<{ highlightsJson: string }>(
+    path('/v1/writing/highlights/{scenarioId}', { scenarioId }),
+  );
+
+export const putWritingHighlights = (scenarioId: string, highlightsJson: string) =>
+  apiClient.put<{ highlightsJson: string }>(
+    path('/v1/writing/highlights/{scenarioId}', { scenarioId }),
+    { highlightsJson },
   );
 
 // ─────────────────────────────────────────────────────────────────────────────

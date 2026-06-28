@@ -18,7 +18,11 @@ export interface WritingReadingWindowOverlayProps {
   allowSkip?: boolean;
   /** Practice-only: called when the learner chooses to start writing early. */
   onSkip?: () => void;
-  /** Called EXACTLY once when `secondsRemaining` first reaches 0 while open. */
+  /**
+   * Called EXACTLY once when `secondsRemaining` reaches 0 while open — but only
+   * after a real countdown has been observed (a value > 0). A 0 seen before the
+   * countdown starts (clock not yet armed) is ignored.
+   */
   onAutoClose: () => void;
   title?: string;
   /** Controlled highlights, shared with the writing-view PDF so marks persist. */
@@ -67,25 +71,38 @@ export function WritingReadingWindowOverlay({
   // Guards `onAutoClose` so it fires exactly once per open cycle, even though the
   // effect re-runs on every render where `secondsRemaining` stays <= 0.
   const autoClosedRef = useRef(false);
+  // The parent arms its exam clock AFTER the overlay first opens, so it briefly
+  // passes secondsRemaining=0 (readingDeadline still null). We must NOT auto-close
+  // on that spurious 0 — only after a genuine countdown has been observed ticking
+  // (a value > 0). Without this, the early false close poisoned the parent's
+  // transition guards and the reading window stuck at 00:00 forever.
+  const sawCountdownRef = useRef(false);
   // Hold the latest callback so the lock effects can depend only on `open`.
   const onAutoCloseRef = useRef(onAutoClose);
   useEffect(() => {
     onAutoCloseRef.current = onAutoClose;
   }, [onAutoClose]);
 
-  // ── Auto-close at zero (exactly once) ──────────────────────────────────────
+  // ── Auto-close at zero (exactly once, after a real countdown) ──────────────
   useEffect(() => {
     if (!open) return;
-    if (secondsRemaining <= 0 && !autoClosedRef.current) {
+    // Mark that the countdown is genuinely running. Until we've seen a positive
+    // value, a 0 means "clock not armed yet", not "reading time elapsed".
+    if (secondsRemaining > 0) {
+      sawCountdownRef.current = true;
+      return;
+    }
+    if (sawCountdownRef.current && !autoClosedRef.current) {
       autoClosedRef.current = true;
       onAutoCloseRef.current();
     }
   }, [open, secondsRemaining]);
 
-  // Reset the fired-guard when the overlay closes so a future open works again.
+  // Reset the guards when the overlay closes so a future open works again.
   useEffect(() => {
     if (!open) {
       autoClosedRef.current = false;
+      sawCountdownRef.current = false;
     }
   }, [open]);
 

@@ -19,6 +19,14 @@ public interface IWritingSubmissionService
     /// </summary>
     Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct);
     Task<WritingSubmissionResponse?> ReviseSubmissionAsync(string userId, Guid originalSubmissionId, WritingReviseRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Resolves the Case Notes stimulus PDF path + the learner's highlight snapshot for a
+    /// submission, for the results page and tutor marking surface. Pass <paramref name="ownerUserId"/>
+    /// to owner-gate (learner results); pass null when the caller is already authorized as staff
+    /// (tutor marking). Returns null when the submission is absent or not owned.
+    /// </summary>
+    Task<WritingCaseNotesResponse?> GetCaseNotesAsync(Guid submissionId, string? ownerUserId, CancellationToken ct);
 }
 
 /// <summary>
@@ -31,8 +39,10 @@ public sealed class WritingSubmissionService(
     LearnerDbContext db,
     IWritingSubmissionEvaluationPipeline pipeline,
     ILogger<WritingSubmissionService> logger,
+    IWritingCaseNoteHighlightService highlightStore,
     IWritingAttemptEventService? attemptEvents = null) : IWritingSubmissionService
 {
+    private const string EmptyHighlights = "{}";
     public async Task<WritingSubmissionResponse> CreateSubmissionAsync(string userId, WritingSubmissionCreateRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -76,6 +86,23 @@ public sealed class WritingSubmissionService(
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct)
             ?? throw new InvalidOperationException("Submission missing after create.");
 
+        // Snapshot the learner's Case Notes highlights onto the submission (for the results
+        // page + tutor review) and keep the per-(user,scenario) store in sync. Prefer the
+        // request value (the live marks at submit time); otherwise fall back to whatever the
+        // learner has already saved for the scenario.
+        var requestedHighlights = request.CaseNoteHighlightsJson?.Trim();
+        var highlightsJson = !string.IsNullOrEmpty(requestedHighlights) && requestedHighlights != EmptyHighlights
+            ? requestedHighlights
+            : await highlightStore.GetAsync(userId, request.ScenarioId, ct);
+        if (!string.IsNullOrWhiteSpace(highlightsJson) && highlightsJson != EmptyHighlights)
+        {
+            await db.WritingSubmissions
+                .Where(s => s.Id == submissionId)
+                .ExecuteUpdateAsync(set => set.SetProperty(s => s.CaseNoteHighlightsJson, highlightsJson), ct);
+            entity.CaseNoteHighlightsJson = highlightsJson;
+            await highlightStore.SaveAsync(userId, request.ScenarioId, highlightsJson, ct);
+        }
+
         // §17.7 — the submission is now persisted in a graded/locked state. Emit the
         // lifecycle markers carrying the simulation mode (paper|computer) in payload,
         // best-effort so event logging never fails the submit.
@@ -108,6 +135,33 @@ public sealed class WritingSubmissionService(
             .Select(s => s.AnswerSheetPdfMediaAssetId)
             .FirstOrDefaultAsync(ct);
         return string.IsNullOrWhiteSpace(assetId) ? null : $"/v1/media/{assetId}/content";
+    }
+
+    public async Task<WritingCaseNotesResponse?> GetCaseNotesAsync(Guid submissionId, string? ownerUserId, CancellationToken ct)
+    {
+        var submission = await db.WritingSubmissions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == submissionId, ct);
+        if (submission is null) return null;
+        // Owner gate for the learner results page; tutors pass null (already staff-authorized).
+        if (ownerUserId is not null && !string.Equals(submission.UserId, ownerUserId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var assetId = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Id == submission.ScenarioId)
+            .Select(s => s.StimulusPdfMediaAssetId)
+            .FirstOrDefaultAsync(ct);
+        var path = string.IsNullOrWhiteSpace(assetId) ? null : $"/v1/media/{assetId}/content";
+        // Prefer the submission's own snapshot; fall back to the learner's per-scenario
+        // store (highlights persist forever per user+scenario, so submit paths that don't
+        // snapshot — e.g. mock/paper — still surface the learner's marks here).
+        var highlights = submission.CaseNoteHighlightsJson;
+        if (string.IsNullOrWhiteSpace(highlights) || highlights == EmptyHighlights)
+        {
+            highlights = await highlightStore.GetAsync(submission.UserId, submission.ScenarioId, ct);
+        }
+        return new WritingCaseNotesResponse(path, string.IsNullOrWhiteSpace(highlights) ? EmptyHighlights : highlights);
     }
 
     public async Task<WritingGradeResponseV2?> GetSubmissionGradeAsync(string userId, Guid submissionId, CancellationToken ct)

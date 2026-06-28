@@ -14,6 +14,7 @@ public partial class LearnerDbContext
         modelBuilder.Entity<WritingSubmission>(e =>
         {
             e.HasKey(x => x.Id);
+            e.Property(x => x.CaseNoteHighlightsJson).HasColumnType("jsonb").HasDefaultValue("{}");
             e.HasIndex(x => new { x.UserId, x.CreatedAt })
                 .IsDescending(false, true)
                 .HasDatabaseName("IX_WritingSubmissions_User_CreatedAt");

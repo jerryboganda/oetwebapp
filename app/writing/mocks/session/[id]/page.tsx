@@ -18,11 +18,14 @@ import type { Highlight } from '@/components/domain/writing/WritingStimulusViewe
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
   beginWritingMockWriting,
+  getWritingHighlights,
   getWritingMockSession,
   getWritingScenario,
   putWritingDraftV2,
+  putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
 import { WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
 import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
@@ -64,6 +67,8 @@ function WritingMockSessionInner() {
   const [frozenLetter, setFrozenLetter] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef('');
+  // Last highlights JSON persisted to the server (avoids redundant autosaves).
+  const lastSavedHighlightsRef = useRef<string>(serializeHighlights({}));
   // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
   const lastTypedEventAt = useRef(0);
   // Guard so the reading→writing transition calls `beginWritingMockWriting` at
@@ -115,6 +120,13 @@ function WritingMockSessionInner() {
         if (s.scenarioId) {
           const sc = await getWritingScenario(s.scenarioId).catch(() => null);
           if (sc) setScenario(sc);
+          // Saved Case Notes highlights persist per (user, scenario) across attempts.
+          const hl = await getWritingHighlights(s.scenarioId).catch(() => null);
+          if (hl?.highlightsJson && !cancelled) {
+            const parsed = parseHighlights(hl.highlightsJson);
+            setPdfHighlights(parsed);
+            lastSavedHighlightsRef.current = serializeHighlights(parsed);
+          }
         }
         if (s.status === 'submitted' && s.id) {
           router.replace(`/writing/mocks/session/${encodeURIComponent(s.id)}/results`);
@@ -154,6 +166,22 @@ function WritingMockSessionInner() {
     }, 5000);
     return () => window.clearInterval(timer);
   }, [phase, scenario?.id, content, wordCount, emitEvent]);
+
+  // Highlight autosave (reading + writing) — persists Case Notes marks per
+  // (user, scenario) so they survive refresh and pre-load on future attempts.
+  useEffect(() => {
+    const scenarioId = scenario?.id;
+    if (!scenarioId || phase === 'completed' || locked) return;
+    const json = serializeHighlights(pdfHighlights);
+    if (json === lastSavedHighlightsRef.current) return;
+    const timer = window.setTimeout(() => {
+      lastSavedHighlightsRef.current = json;
+      void putWritingHighlights(scenarioId, json).catch(() => {
+        /* best-effort */
+      });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [pdfHighlights, scenario?.id, phase, locked]);
 
   // attempt_started + reading_started once on mount (computer mode).
   useEffect(() => {

@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { UserRoundCheck } from 'lucide-react';
 import { TutorRouteHero, TutorRouteWorkspace } from '@/components/domain/tutor-route-surface';
 import { TutorMarkingWorkspace } from '@/components/domain/writing/marking/TutorMarkingWorkspace';
+import { TutorCaseNotesPanel } from '@/components/domain/writing/marking/TutorCaseNotesPanel';
 
 /**
  * Tutor writing review screen (spec §12/§13/§14, WS-F5).
@@ -27,7 +28,8 @@ export default function TutorWritingReviewPage() {
         description="Annotate the response, score the six OET criteria, mark the content checklist, and add feedback. The AI pre-analysis is a starting point you can confirm, edit, or reject."
       />
 
-      <div className="mt-4">
+      <div className="mt-4 space-y-4">
+        <TutorCaseNotesPanel submissionId={submissionId} />
         <TutorMarkingWorkspace
           submissionId={submissionId}
           variant="tutor"

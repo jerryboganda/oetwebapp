@@ -18,6 +18,7 @@ public static class WritingRouteBuilderExtensions
         app.MapWritingPathwayV2Endpoints();
         app.MapWritingSubmissionEndpoints();
         app.MapWritingDraftV2Endpoints();
+        app.MapWritingHighlightsEndpoints();
         app.MapWritingScenarioEndpoints();
         app.MapWritingDrillV2Endpoints();
         app.MapWritingLessonV2Endpoints();

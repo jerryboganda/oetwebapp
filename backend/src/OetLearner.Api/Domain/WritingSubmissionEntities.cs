@@ -60,6 +60,13 @@ public class WritingSubmission
     [MaxLength(16)]
     public string InputSource { get; set; } = "typed";
 
+    /// <summary>
+    /// JSON snapshot of the learner's Case Notes PDF highlights at submit time
+    /// (<c>Record&lt;pageNumber, Highlight[]&gt;</c>). Rendered read-only on the
+    /// results page and in the tutor marking surface. Defaults to an empty map.
+    /// </summary>
+    public string CaseNoteHighlightsJson { get; set; } = "{}";
+
     public DateTimeOffset CreatedAt { get; set; }
 }
 

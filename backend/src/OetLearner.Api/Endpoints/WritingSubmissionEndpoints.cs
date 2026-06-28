@@ -59,6 +59,20 @@ public static class WritingSubmissionEndpoints
         })
         .WithName("GetWritingSubmissionAnswerSheet");
 
+        // Case Notes PDF + the learner's highlight snapshot for a submitted letter — rendered
+        // read-only on the results page so the learner can review what they highlighted.
+        // Owner-gated; Ok(null) when not owned / not found.
+        group.MapGet("/{id:guid}/case-notes", async (
+            Guid id,
+            HttpContext http,
+            IWritingSubmissionService service,
+            CancellationToken ct) =>
+        {
+            var caseNotes = await service.GetCaseNotesAsync(id, http.WritingV2UserId(), ct);
+            return Results.Ok(caseNotes);
+        })
+        .WithName("GetWritingSubmissionCaseNotes");
+
         // Tutor's overall voice note for this submission (mock + normal). Returns Ok(null)
         // when owned but no submitted note exists yet; 404 when the submission isn't owned.
         group.MapGet("/{id:guid}/voice-note", async (
