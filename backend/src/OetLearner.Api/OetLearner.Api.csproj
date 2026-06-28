@@ -149,18 +149,6 @@
   </ItemGroup>
 
   <!--
-    Writing samples seed (Writing 1-6, extracted from official PDFs by
-    scripts/extract-writing-pdfs). Loaded by WritingSampleSeeder at boot when
-    Content:WritingSeed:Enabled=true. Idempotent — matched by SourceProvenance.
-  -->
-  <ItemGroup>
-    <None Include="Data\Seeds\writing-samples.v1.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </None>
-  </ItemGroup>
-
-  <!--
     OET 2026 27-SKU catalog manifest. Loaded by Oet2026CatalogSeeder at
     boot (when Content:Oet2026Catalog:Enabled=true) and by the admin
     "/admin/billing/catalog" reseed button. Idempotent — matched by Code.
@@ -185,19 +173,5 @@
     </None>
   </ItemGroup>
 
-  <!--
-    OET Writing Module V2 launch content (OET_WRITING_MODULE_PATHWAY.md
-    §13/14/15/16/17). Eight versioned JSON files loaded at boot by
-    WritingV2ContentSeeder: 25 canon rules, 12 diagnostic scenarios, 6
-    exemplars, 16 lessons (2 per W1-W8), 30 sentence drills, 12 case-note
-    drills, 6 mocks, 20 common mistakes. Copied to publish output so the
-    seeder finds them in containerised deploys.
-  -->
-  <ItemGroup>
-    <None Include="Data\Seeds\WritingV2\**\*.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </None>
-  </ItemGroup>
 
 </Project>

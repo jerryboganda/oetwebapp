@@ -117,7 +117,6 @@ services:
       Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-1073741824}
       Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-false}
       Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
-      Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
       Proxy__TrustForwardHeaders: true
       Proxy__EnforceHttps: true
       Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}
