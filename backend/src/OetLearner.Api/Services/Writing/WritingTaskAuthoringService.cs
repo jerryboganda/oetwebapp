@@ -503,11 +503,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         {
             issues.Add(Error("letter_type_required", "Letter type is required."));
         }
-        else if (!string.IsNullOrWhiteSpace(scenario.Profession)
-            && !WritingContentStructure.IsLetterTypeAllowedForProfession(scenario.Profession, scenario.LetterType))
-        {
-            issues.Add(Error("letter_type_not_allowed", $"Letter type '{scenario.LetterType}' is not allowed for profession '{scenario.Profession}'."));
-        }
 
         // PDF-driven authoring: the Case Notes PDF carries the prompt/case-notes, so the
         // publish gate only requires identity (Title + Profession + Letter type). Task prompt,

@@ -227,9 +227,6 @@ public sealed class ContentPaperService(
             throw new ArgumentException("Title required.");
         if (string.IsNullOrWhiteSpace(args.ProfessionId))
             throw new ArgumentException("Profession id required for writing tasks.");
-        if (!WritingContentStructure.IsLetterTypeAllowedForProfession(args.ProfessionId, args.LetterType))
-            throw new ArgumentException(
-                $"Letter type '{args.LetterType}' is not allowed for profession '{args.ProfessionId}'.");
         if (string.IsNullOrWhiteSpace(args.SourceProvenance))
             throw new ArgumentException("SourceProvenance required for writing tasks.");
 
