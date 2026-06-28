@@ -11,7 +11,6 @@ public sealed class WritingV2Options
     public const string SectionName = "Writing";
 
     public bool CronsEnabled { get; set; } = true;
-    public WritingV2SeederOptions V2Seeder { get; set; } = new();
     public bool CoachEnabled { get; set; } = true;
     public decimal CoachDailyCostCapPerLearnerUsd { get; set; } = 0.5m;
     public int CoachMaxHintsPerSession { get; set; } = 80;
@@ -31,9 +30,4 @@ public sealed class WritingV2Options
     public int TutorReviewMaxWaitHours { get; set; } = 36;
     public int MaxDailyPlanRegenerationsPerDay { get; set; } = 1;
     public int GradeIdempotencyTtlHours { get; set; } = 24;
-}
-
-public sealed class WritingV2SeederOptions
-{
-    public bool Enabled { get; set; } = true;
 }

@@ -1323,13 +1323,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentTextExtractio
     OetLearner.Api.Services.Content.ContentTextExtractionService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.ContentTextExtractionWorker>();
 
-// Writing sample seeder — one-shot startup load of canonical OET Writing 1-6
-// papers from the bundled seed JSON. Disabled by default; enable per-environment
-// with Content:WritingSeed:Enabled=true. Idempotent: skips rows whose
-// SourceProvenance already matches the seed id.
-builder.Services.Configure<WritingSeedOptions>(
-    builder.Configuration.GetSection(WritingSeedOptions.SectionName));
-builder.Services.AddHostedService<OetLearner.Api.Services.Content.WritingSampleSeeder>();
+// NOTE: The Writing sample seeder (WritingSampleSeeder) and the Writing V2
+// content seeder (WritingV2ContentSeeder) were removed permanently — the
+// platform now runs on real, admin-authored Writing content only. Auto-seeding
+// re-created admin-deleted tasks on every deploy, so it has been retired.
 
 // OET 2026 catalog seeder — startup load of 20+ BillingPlans + 7 BillingAddOns +
 // matching ContentPackages from Data/Seeds/oet-2026-catalog.json. Disabled by
@@ -2279,22 +2276,24 @@ await using (var scope = app.Services.CreateAsyncScope())
     //     seedLogger.LogWarning(ex, "RecallSetTagRegistrySeeder failed at boot; continuing.");
     // }
 
-    // Writing Module V2 content seed (OET_WRITING_MODULE_PATHWAY.md §13/14/15/16/17).
-    // Loads 25 canon rules, 12 diagnostic scenarios, 6 exemplars, 16 lessons,
-    // 30 sentence drills, 12 case-note drills, 6 mocks, 20 common mistakes from
-    // Data/Seeds/WritingV2/*.json. Idempotent — re-runs are no-ops if rows present.
-    // Gated by Writing:V2Seeder:Enabled (default true). Non-fatal on failure.
-    var writingV2Logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-        .CreateLogger("WritingV2ContentSeeder");
+    // Writing Module V2 *content* seeding (demo scenarios, mocks, lessons,
+    // drills, exemplars, common mistakes, sample papers) has been removed
+    // permanently — it resurrected admin-deleted tasks on every deploy. The
+    // platform now runs on real, admin-authored Writing content only.
+    //
+    // The AI-grading canon rulebook is NOT learner-facing content and creates
+    // no tasks, so its idempotent materialisation is preserved here so writing
+    // scoring keeps the same R* rules the lint engine uses.
+    var writingCanonLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("BackendRulebookCanonBridge");
     try
     {
-        var writingV2Config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        await OetLearner.Api.Services.Writing.WritingV2ContentSeeder.EnsureAsync(
-            db, app.Environment, writingV2Config, writingV2Logger);
+        await OetLearner.Api.Services.Writing.BackendRulebookCanonBridge
+            .SeedFromRulebooksAsync(db, writingCanonLogger, CancellationToken.None);
     }
     catch (Exception ex)
     {
-        writingV2Logger.LogWarning(ex, "WritingV2ContentSeeder failed at boot; continuing.");
+        writingCanonLogger.LogWarning(ex, "BackendRulebookCanonBridge failed at boot; continuing.");
     }
 }
 
