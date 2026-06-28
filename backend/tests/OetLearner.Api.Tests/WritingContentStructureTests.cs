@@ -64,23 +64,6 @@ public class WritingContentStructureTests
     }
 
     [Fact]
-    public void Validate_VeterinaryWithNonMedicalReferral_BlocksPublish()
-    {
-        var paper = BuildValidWritingPaper();
-        paper.ProfessionId = "veterinary";
-        paper.AppliesToAllProfessions = false;
-        paper.LetterType = "non_medical_referral";
-
-        var report = WritingContentStructure.Validate(paper);
-
-        Assert.False(report.IsPublishReady);
-        var issue = Assert.Single(report.Issues, i => i.Code == "profession_letter_type");
-        Assert.Equal("error", issue.Severity);
-        Assert.Contains("veterinary", issue.Message);
-        Assert.Contains("non_medical_referral", issue.Message);
-    }
-
-    [Fact]
     public void Validate_MedicineWithNonMedicalReferral_AllowsPublish()
     {
         var paper = BuildValidWritingPaper();

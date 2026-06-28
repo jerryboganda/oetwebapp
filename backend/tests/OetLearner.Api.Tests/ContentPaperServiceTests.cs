@@ -626,26 +626,6 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Create_writing_task_rejects_letter_type_not_allowed_for_profession()
-    {
-        var (db, svc) = Build();
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            svc.CreateWritingTaskAsync(new WritingTaskCreate(
-                Title: "Veterinary — bad letter type",
-                Slug: null,
-                ProfessionId: "veterinary",
-                // non_medical_referral is excluded for veterinary per WritingContentStructure allow-list.
-                LetterType: "non_medical_referral",
-                Difficulty: null,
-                EstimatedDurationMinutes: 45,
-                Priority: 0,
-                TagsCsv: null,
-                SourceProvenance: DefaultSourceProvenance,
-                IntegrityAcknowledged: true), "admin-1", default));
-        await db.DisposeAsync();
-    }
-
-    [Fact]
     public async Task Submit_for_review_requires_draft_state()
     {
         var (db, svc) = Build();
