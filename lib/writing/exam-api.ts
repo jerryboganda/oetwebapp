@@ -129,6 +129,15 @@ export const getTutorMarkingContext = (submissionId: string) =>
     p('/v1/writing/tutor/reviews/{id}/context', { id: submissionId }),
   );
 
+/**
+ * Case Notes PDF + the learner's highlight snapshot for a submission, so the tutor
+ * can see exactly what the learner highlighted (read-only). Staff-authorized.
+ */
+export const getTutorCaseNotes = (submissionId: string) =>
+  apiClient.get<import('./types').WritingCaseNotesDto>(
+    p('/v1/writing/tutor/reviews/{id}/case-notes', { id: submissionId }),
+  );
+
 export const getWritingPreAssessment = (submissionId: string) =>
   apiClient.get<WritingPreAssessmentDto>(
     p('/v1/writing/tutor/reviews/{id}/pre-assessment', { id: submissionId }),

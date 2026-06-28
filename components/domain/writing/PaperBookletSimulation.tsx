@@ -19,7 +19,7 @@ import {
 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
-import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
+import { WritingStimulusViewer, type Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
 import type { WritingAttemptEventType } from '@/lib/writing/types';
 
@@ -95,6 +95,9 @@ export interface PaperBookletSimulationProps {
    * attempt event.
    */
   onAutosave: (text: string, wordCount: number) => void;
+  /** Controlled Case Notes highlights, lifted to the page so they persist + save. */
+  highlights?: Record<number, Highlight[]>;
+  onHighlightsChange?: (next: Record<number, Highlight[]>) => void;
 }
 
 const AUTOSAVE_INTERVAL_MS = 5000;
@@ -152,6 +155,8 @@ export function PaperBookletSimulation({
   onContentChange,
   onSubmit,
   onAutosave,
+  highlights,
+  onHighlightsChange,
 }: PaperBookletSimulationProps) {
   const t = useTranslations();
   const [text, setText] = useState('');
@@ -398,6 +403,8 @@ export function PaperBookletSimulation({
                   downloadPath={stimulusDownloadPath}
                   title="Question paper"
                   className="h-full"
+                  highlights={highlights}
+                  onHighlightsChange={onHighlightsChange}
                 />
               </div>
             </BookletPage>

@@ -169,4 +169,37 @@ describe('WritingStimulusViewer', () => {
     const root = container.firstElementChild as HTMLElement;
     expect(root.classList.contains('select-none')).toBe(true);
   });
+
+  it('renders a red ✕ delete control per highlight when editable, and removing one calls onHighlightsChange', async () => {
+    const onHighlightsChange = vi.fn();
+    render(
+      <WritingStimulusViewer
+        downloadPath="/v1/media/abc123/content"
+        allowHighlight
+        highlights={{ 1: [{ id: 'h1', x: 0.1, y: 0.1, w: 0.3, h: 0.05 }] }}
+        onHighlightsChange={onHighlightsChange}
+      />,
+    );
+
+    const removeBtn = await screen.findByRole('button', { name: /remove highlight/i });
+    removeBtn.click();
+
+    expect(onHighlightsChange).toHaveBeenCalledWith({ 1: [] });
+  });
+
+  it('does not render highlight delete controls in read-only mode (allowHighlight=false)', async () => {
+    render(
+      <WritingStimulusViewer
+        downloadPath="/v1/media/abc123/content"
+        allowHighlight={false}
+        highlights={{ 1: [{ id: 'h1', x: 0.1, y: 0.1, w: 0.3, h: 0.05 }] }}
+      />,
+    );
+
+    // Wait until the page (and therefore any highlight layer) has rendered.
+    await waitFor(() => {
+      expect(screen.queryByText(/loading document/i)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: /remove highlight/i })).toBeNull();
+  });
 });

@@ -19,9 +19,12 @@ import { WritingReadingWindowOverlay } from '@/components/domain/writing/Writing
 import {
   createWritingSubmission,
   getWritingDraftV2,
+  getWritingHighlights,
   getWritingScenario,
   putWritingDraftV2,
+  putWritingHighlights,
 } from '@/lib/writing/api';
+import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
 import { WRITING_READING_WINDOW_SECONDS, WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
 import type {
@@ -61,6 +64,12 @@ export default function WritingPracticeSessionPage() {
   // Yellow highlights, lifted here so they persist from the reading window into
   // the writing view (both render the same Case Notes PDF).
   const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
+  // Latest highlights for auto-submit (timer expiry snapshots the current marks).
+  const highlightsRef = useRef<Record<number, Highlight[]>>({});
+  highlightsRef.current = pdfHighlights;
+  // Last value persisted to the server — avoids redundant autosaves. Seeded to an
+  // empty map so a scenario with no saved marks doesn't trigger a no-op save.
+  const lastSavedHighlightsRef = useRef<string>(serializeHighlights({}));
 
   const clockKey = `writing-practice-clock:${scenarioId}`;
 
@@ -115,14 +124,23 @@ export default function WritingPracticeSessionPage() {
     void Promise.all([
       getWritingScenario(scenarioId),
       getWritingDraftV2(scenarioId, mode).catch(() => null),
+      // Saved Case Notes highlights persist per (user, scenario) across attempts.
+      getWritingHighlights(scenarioId).catch(() => null),
     ])
-      .then(([sc, draft]) => {
+      .then(([sc, draft, hl]) => {
         if (cancelled) return;
         setScenario(sc);
         if (draft?.content) {
           setInitialContent(draft.content);
           setContent(draft.content);
           setWordCount(draft.wordCount);
+        }
+        if (hl?.highlightsJson) {
+          const parsed = parseHighlights(hl.highlightsJson);
+          setPdfHighlights(parsed);
+          // Record what's already on the server so the autosave effect doesn't
+          // immediately echo the just-loaded marks back.
+          lastSavedHighlightsRef.current = serializeHighlights(parsed);
         }
       })
       .catch((err) => {
@@ -152,6 +170,23 @@ export default function WritingPracticeSessionPage() {
     return () => window.clearInterval(timer);
   }, [phase, scenarioId, content, wordCount, mode]);
 
+  // ── Highlight autosave (reading + writing) ───────────────────────────────────
+  // Persists Case Notes marks per (user, scenario) the moment they change, so
+  // they survive refresh and pre-load on every future attempt. Debounced; skips
+  // when nothing changed and once the exam is over.
+  useEffect(() => {
+    if (!scenarioId || phase === 'completed') return;
+    const json = serializeHighlights(pdfHighlights);
+    if (json === lastSavedHighlightsRef.current) return;
+    const timer = window.setTimeout(() => {
+      lastSavedHighlightsRef.current = json;
+      void putWritingHighlights(scenarioId, json).catch(() => {
+        /* best-effort */
+      });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [pdfHighlights, scenarioId, phase]);
+
   const canSubmit = phase === 'writing' && wordCount >= 50 && !submitting;
 
   const helperText =
@@ -176,6 +211,7 @@ export default function WritingPracticeSessionPage() {
           wordCount,
           timeSpentSeconds: elapsed,
           inputSource: 'editor',
+          caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
         });
         // Clear the clock so a future retake of this scenario starts fresh.
         if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);

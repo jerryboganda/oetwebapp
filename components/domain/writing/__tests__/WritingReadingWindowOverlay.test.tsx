@@ -152,7 +152,16 @@ describe('WritingReadingWindowOverlay', () => {
 
   it('re-fires onAutoClose on a fresh open cycle (guard resets on close)', () => {
     const onAutoClose = vi.fn();
+    // First cycle: a real countdown (2 → 0) auto-closes once.
     const { rerender } = render(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={2}
+        onAutoClose={onAutoClose}
+      />,
+    );
+    rerender(
       <WritingReadingWindowOverlay
         open
         scenario={scenario}
@@ -162,6 +171,7 @@ describe('WritingReadingWindowOverlay', () => {
     );
     expect(onAutoClose).toHaveBeenCalledTimes(1);
 
+    // Close, then reopen with a fresh countdown — the guard resets so it fires again.
     rerender(
       <WritingReadingWindowOverlay
         open={false}
@@ -174,11 +184,59 @@ describe('WritingReadingWindowOverlay', () => {
       <WritingReadingWindowOverlay
         open
         scenario={scenario}
+        secondsRemaining={2}
+        onAutoClose={onAutoClose}
+      />,
+    );
+    rerender(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
         secondsRemaining={0}
         onAutoClose={onAutoClose}
       />,
     );
     expect(onAutoClose).toHaveBeenCalledTimes(2);
+  });
+
+  // Regression: the exam clock is armed AFTER the overlay first opens, so the
+  // parent transiently passes secondsRemaining=0 (readingDeadline still null).
+  // The overlay must NOT auto-close on that spurious 0 — doing so poisoned the
+  // transition guards and left the reading window stuck at 00:00 forever.
+  it('does not auto-close on a transient 0 before any real countdown (clock not ready)', () => {
+    const onAutoClose = vi.fn();
+    const { rerender } = render(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={0}
+        onAutoClose={onAutoClose}
+      />,
+    );
+    // Clock not armed yet → must stay open, no transition.
+    expect(onAutoClose).not.toHaveBeenCalled();
+
+    // Clock arms → real countdown begins.
+    rerender(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={300}
+        onAutoClose={onAutoClose}
+      />,
+    );
+    expect(onAutoClose).not.toHaveBeenCalled();
+
+    // Genuine expiry now auto-closes exactly once.
+    rerender(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={0}
+        onAutoClose={onAutoClose}
+      />,
+    );
+    expect(onAutoClose).toHaveBeenCalledTimes(1);
   });
 
   it('swallows Escape (preventDefault) without calling onAutoClose/onSkip', () => {

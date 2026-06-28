@@ -19,13 +19,16 @@ import {
   getTutorReview,
   getWritingAnswerSheet,
   getWritingSubmission,
+  getWritingSubmissionCaseNotes,
   getWritingSubmissionGrade,
   publishToShowcase,
   requestTutorReview,
 } from '@/lib/writing/api';
+import { parseHighlights } from '@/lib/writing/highlights';
 import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
 import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import type {
+  WritingCaseNotesDto,
   WritingCriteriaScoresDto,
   WritingCriterionCode,
   WritingGradeDto,
@@ -62,6 +65,7 @@ export default function WritingSubmissionResultsPage() {
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
   const [tutorReview, setTutorReview] = useState<WritingTutorReviewDto | null>(null);
   const [answerSheetPath, setAnswerSheetPath] = useState<string | null>(null);
+  const [caseNotes, setCaseNotes] = useState<WritingCaseNotesDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
 
@@ -75,12 +79,15 @@ export default function WritingSubmissionResultsPage() {
       getTutorReview(submissionId).catch(() => null),
       // Answer-sheet PDF (post-submission only; null when none attached).
       getWritingAnswerSheet(submissionId).catch(() => ({ answerSheetPdfDownloadPath: null })),
+      // Case Notes PDF + the learner's highlight snapshot (read-only review).
+      getWritingSubmissionCaseNotes(submissionId).catch(() => null),
     ])
-      .then(([sub, g, review, answerSheet]) => {
+      .then(([sub, g, review, answerSheet, notes]) => {
         setSubmission(sub);
         setGrade(g);
         setTutorReview(review);
         setAnswerSheetPath(answerSheet?.answerSheetPdfDownloadPath ?? null);
+        setCaseNotes(notes ?? null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
   }, [submissionId, t]);
@@ -205,6 +212,25 @@ export default function WritingSubmissionResultsPage() {
                     ))}
               </ul>
             </details>
+          </section>
+        ) : null}
+
+        {/* Case Notes PDF with the learner's own highlights — read-only review of which
+            portions they marked during the exam. Shown when a stimulus PDF exists. */}
+        {caseNotes?.stimulusPdfDownloadPath ? (
+          <section aria-labelledby="case-notes-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 id="case-notes-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
+              <FileText className="h-5 w-5 text-amber-600" aria-hidden="true" /> Your highlighted case notes
+            </h2>
+            <p className="mt-1 text-sm text-muted">The portions you highlighted during the exam.</p>
+            <div className="mt-3 h-[75vh] overflow-hidden rounded-xl border border-border">
+              <WritingStimulusViewer
+                downloadPath={caseNotes.stimulusPdfDownloadPath}
+                title="Case Notes"
+                allowHighlight={false}
+                highlights={parseHighlights(caseNotes.caseNoteHighlightsJson)}
+              />
+            </div>
           </section>
         ) : null}
 
