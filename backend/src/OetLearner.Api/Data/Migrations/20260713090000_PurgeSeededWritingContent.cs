@@ -82,12 +82,21 @@ namespace OetLearner.Api.Data.Migrations
 
             // 6. Sample-paper rows created by the removed WritingSampleSeeder
             //    (ContentItem mirrors the ContentPaper id). Both carry the
-            //    'system:writing-seed' sentinel and never collide with admin work.
+            //    'system:writing-seed' sentinel — used by NO other seeder
+            //    (Listening uses 'system:seed', Mock 'system:mock-sample-seed',
+            //    Reading samples live in SeedData.cs with their own ids, Recalls
+            //    'system:seeder'). The extra SubtestCode='writing' guard makes
+            //    this provably writing-only and never touches Reading/Listening
+            //    sample papers or Recalls even if the marker were ever reused.
             migrationBuilder.Sql(
                 @"DELETE FROM ""ContentItems"" WHERE ""Id"" IN (
-                      SELECT ""Id"" FROM ""ContentPapers"" WHERE ""CreatedByAdminId"" = 'system:writing-seed');");
+                      SELECT ""Id"" FROM ""ContentPapers""
+                      WHERE ""CreatedByAdminId"" = 'system:writing-seed'
+                        AND ""SubtestCode"" = 'writing');");
             migrationBuilder.Sql(
-                @"DELETE FROM ""ContentPapers"" WHERE ""CreatedByAdminId"" = 'system:writing-seed';");
+                @"DELETE FROM ""ContentPapers""
+                  WHERE ""CreatedByAdminId"" = 'system:writing-seed'
+                    AND ""SubtestCode"" = 'writing';");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
