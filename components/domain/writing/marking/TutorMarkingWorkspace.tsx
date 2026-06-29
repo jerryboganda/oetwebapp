@@ -236,8 +236,12 @@ export function TutorMarkingWorkspace({
     setSubmitting(true);
     setToast(null);
     try {
-      // Normal writing: the tutor's qualitative feedback is the voice note only —
-      // never persist written text or per-criterion comments. Mocks keep both.
+      // Writing feedback channels by mode:
+      //   • Mock   → written toolkit (annotations + per-criterion comments) +
+      //              optional overall text + voice note. No AI.
+      //   • Normal → optional overall text + voice note + AI. No per-criterion
+      //              comments (that structured "written feedback" is mock-only).
+      // The overall free text is OPTIONAL in both modes (null when left blank).
       const isMockSubmit = context.submission.mode === 'mock';
       const cleanedComments: Partial<Record<WritingCriterionCode, string>> = {};
       if (isMockSubmit) {
@@ -247,7 +251,7 @@ export function TutorMarkingWorkspace({
       }
       const scoreOverride = draftToScoreOverride(scoreDraft);
       const result = await submitWritingTutorReview(submissionId, {
-        freeTextFeedback: isMockSubmit ? (freeText.trim() || null) : null,
+        freeTextFeedback: freeText.trim() || null,
         perCriterionComments: isMockSubmit && Object.keys(cleanedComments).length > 0 ? cleanedComments : undefined,
         scoreOverride: Object.keys(scoreOverride).length > 0 ? scoreOverride : undefined,
         markerSequence: context.markerSequence,
@@ -306,8 +310,9 @@ export function TutorMarkingWorkspace({
   const { task, submission, preAssessment } = context;
   // Writing feedback rule: mocks get the full WRITTEN toolkit (annotations,
   // per-criterion comments, overall text) + a voice note, and ZERO AI. Normal
-  // writing keeps AI + the rubric score, but the tutor's qualitative feedback is
-  // a voice note only — written text channels are hidden.
+  // writing keeps AI + the rubric score + a voice note + an OPTIONAL overall
+  // text note; only the structured written channels (annotations, per-criterion
+  // comments) stay mock-only.
   const isMock = submission.mode === 'mock';
   const liveScores = draftToScoreOverride(scoreDraft);
   const radarScores: WritingCriteriaScoresDto = {
@@ -480,11 +485,18 @@ export function TutorMarkingWorkspace({
           </Card>
           ) : null}
 
-          {/* Overall feedback — mock only (written feedback channel). */}
-          {isMock ? (
+          {/* Overall text feedback — OPTIONAL in BOTH modes. For mocks it's part
+              of the written toolkit; for normal writing it's the optional
+              text-based channel that accompanies the voice note + AI. */}
           <Card padding="md">
-            <label htmlFor="overall-feedback" className="text-sm font-bold text-navy">Overall feedback</label>
-            <p className="text-xs text-muted">Summarise strengths and the top priorities for the learner.</p>
+            <label htmlFor="overall-feedback" className="text-sm font-bold text-navy">
+              Overall feedback <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <p className="text-xs text-muted">
+              {isMock
+                ? 'Summarise strengths and the top priorities for the learner.'
+                : 'Optional written note to accompany your voice feedback. Leave blank to send a voice note only.'}
+            </p>
             <textarea
               id="overall-feedback"
               rows={5}
@@ -495,7 +507,6 @@ export function TutorMarkingWorkspace({
             />
             <p className="mt-1 text-right text-xs text-muted">{freeText.length} characters</p>
           </Card>
-          ) : null}
 
           {/* Voice note — the tutor's spoken feedback, in BOTH mock and normal. */}
           <OverallVoiceNote submissionId={submissionId} existingVoiceNote={context.voiceNote} />

@@ -171,6 +171,14 @@ public sealed class WritingEvaluationPipeline(
                 FeatureCode = AiFeatureCodes.WritingGrade,
                 UserId = attempt.UserId,
                 PromptTemplateId = "writing.score.v1",
+                // Arms the gateway's mock_assessment_forbidden backstop: mock
+                // Writing is human-marked, never AI. The V2 submission pipeline
+                // is the live path and already branches away from AI for mocks;
+                // this legacy attempt-based path tags the context too so a mock
+                // attempt fails loud here instead of silently grading.
+                AssessmentContext = string.Equals(attempt.Context, "mock", StringComparison.OrdinalIgnoreCase)
+                    ? AiAssessmentContext.Mock
+                    : AiAssessmentContext.Practice,
             }, cancellationToken);
         }
         catch (PromptNotGroundedException ex)

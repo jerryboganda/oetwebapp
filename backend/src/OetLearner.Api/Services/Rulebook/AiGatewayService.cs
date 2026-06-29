@@ -61,17 +61,21 @@ public sealed class AiGatewayService(
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
 
     /// <summary>
-    /// WRITING scoring feature codes that are FORBIDDEN when the call's
+    /// Scoring feature codes that are FORBIDDEN when the call's
     /// <see cref="AiGatewayRequest.AssessmentContext"/> is
-    /// <see cref="AiAssessmentContext.Mock"/>. Mock WRITING is graded by a human
-    /// examiner — never by AI.
+    /// <see cref="AiAssessmentContext.Mock"/>. Mock WRITING and mock SPEAKING are
+    /// graded by a human examiner — never by AI.
     ///
-    /// SPEAKING policy change (2026-06-11 owner decision): mock/exam SPEAKING is
-    /// now AI-marked when the candidate chooses AI mode, and human-marked only
-    /// when they book a live tutor (the pipeline branches on
-    /// <see cref="SpeakingSessionMode.LiveTutor"/>, not on the gateway). So the
-    /// Speaking scoring codes (<c>SpeakingGrade</c>, <c>SpeakingScoreV2</c>) are
-    /// deliberately NOT in this ban list. WRITING stays human-marked in mocks.
+    /// SPEAKING policy (2026-06-29 owner rule): in a MOCK — a two-card exam
+    /// launched from a curated Mock Set, or a full mock bundle — Speaking is
+    /// human-marked via a live-tutor booking, never by AI. This reverses the
+    /// 2026-06-11 interim decision that allowed AI marking of mock Speaking, so
+    /// <c>SpeakingGrade</c> is now banned in Mock context. Random two-card
+    /// "AI exam" simulations and single-card practice are NOT mocks — their
+    /// sessions carry no MockSetId/MockSessionId, so the assessor tags them
+    /// <see cref="AiAssessmentContext.Practice"/> and they keep AI marking.
+    /// <c>SpeakingScoreV2</c> is a provider/route key, never a gateway feature
+    /// code, so it is intentionally NOT listed.
     ///
     /// These codes remain valid for <see cref="AiAssessmentContext.Practice"/>
     /// (the ban is context-scoped, not code-scoped). Pronunciation/Reading/
@@ -85,6 +89,7 @@ public sealed class AiGatewayService(
             AiFeatureCodes.WritingSampleScore,
             AiFeatureCodes.MockFullGrade,
             AiFeatureCodes.ConversationEvaluation,
+            AiFeatureCodes.SpeakingGrade,
         };
 
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
@@ -98,11 +103,11 @@ public sealed class AiGatewayService(
             ? AiFeatureCodes.Unclassified
             : request.FeatureCode!;
 
-        // ── Mock invariant: physically refuse AI WRITING assessment ──
-        // Product rule: in mock exams, WRITING is graded by a human examiner —
-        // never by AI. (Speaking is AI-marked in AI mode as of 2026-06-11 and is
-        // no longer in the ban list.) The writing mock pipeline branches away
-        // from AI before ever calling the gateway; this is the belt-and-
+        // ── Mock invariant: physically refuse AI WRITING + SPEAKING assessment ──
+        // Product rule: in mock exams, WRITING and SPEAKING are graded by a human
+        // examiner — never by AI. Both module pipelines branch away from AI
+        // before ever calling the gateway (mock Writing parks as awaiting_review;
+        // mock Speaking is forced to a live-tutor booking); this is the belt-and-
         // suspenders backstop so any future caller that forgets fails loud (and
         // is audited) instead of silently grading. The refusal happens before
         // provider selection or any credit debit, so no credits are consumed.
@@ -111,7 +116,7 @@ public sealed class AiGatewayService(
         {
             await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
                 errorCode: "mock_assessment_forbidden",
-                errorMessage: "AI assessment is forbidden for Writing in a mock context.",
+                errorMessage: "AI assessment is forbidden for Writing and Speaking in a mock context.",
                 ct);
             throw new MockAssessmentForbiddenException(featureCode);
         }
