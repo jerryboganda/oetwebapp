@@ -1,6 +1,6 @@
 [package]
 name = "oet-desktop"
-version = "0.1.0"
+version = "0.3.0"
 description = "OET Prep desktop shell (Tauri 2, remote-only thin client)"
 edition = "2021"
 
