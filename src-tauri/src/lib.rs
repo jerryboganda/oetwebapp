@@ -207,23 +207,39 @@ pub fn run() {
             // The window starts on the bundled splash (index.html), which probes
             // the remote and navigates to it (or shows an offline/retry screen).
             let guard_remote = remote_url.clone();
-            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("OET Prep")
-                .inner_size(1440.0, 980.0)
-                .min_inner_size(1200.0, 800.0)
-                .initialization_script(bridge_script(&remote_url))
-                .on_navigation(move |url| {
-                    if is_allowed_origin(url, &guard_remote) {
-                        return true;
-                    }
-                    // External http(s) link → open in the system browser, block
-                    // the in-app navigation (treat the remote page as untrusted).
-                    if matches!(url.scheme(), "http" | "https") {
-                        let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
-                    }
-                    false
-                })
-                .build()?;
+            #[cfg_attr(not(windows), allow(unused_mut))]
+            let mut builder =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("OET Prep")
+                    .inner_size(1440.0, 980.0)
+                    .min_inner_size(1200.0, 800.0)
+                    .initialization_script(bridge_script(&remote_url))
+                    .on_navigation(move |url| {
+                        if is_allowed_origin(url, &guard_remote) {
+                            return true;
+                        }
+                        // External http(s) link → open in the system browser, block
+                        // the in-app navigation (treat the remote page as untrusted).
+                        if matches!(url.scheme(), "http" | "https") {
+                            let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                        }
+                        false
+                    });
+
+            // Speaking-module microphone capture: WebView2 denies getUserMedia by
+            // default unless the host grants it. The window is already locked to the
+            // trusted origin + bundled splash (see is_allowed_origin / on_navigation),
+            // so auto-accepting the media prompt for this first-party app is safe.
+            // NOTE: additional_browser_args REPLACES Tauri's defaults, so the default
+            // --disable-features set is re-specified here before appending our flag.
+            #[cfg(windows)]
+            {
+                builder = builder.additional_browser_args(
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --use-fake-ui-for-media-stream",
+                );
+            }
+
+            let window = builder.build()?;
             let _ = window.show();
 
             // Deep links arriving while the app runs (macOS open-url & runtime registration).

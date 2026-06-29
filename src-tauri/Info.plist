@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged into the macOS app bundle's Info.plist by tauri-bundler.
+  NSMicrophoneUsageDescription is mandatory: without it macOS terminates the app
+  the moment the Speaking module requests the microphone (getUserMedia). The
+  com.apple.security.device.audio-input entitlement in entitlements.plist is
+  necessary but not sufficient — this usage string drives the TCC consent prompt.
+-->
+<plist version="1.0">
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>OET Prep records your voice for Speaking practice and exams.</string>
+  </dict>
+</plist>
