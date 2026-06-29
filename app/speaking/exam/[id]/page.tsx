@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { OfficialCandidateCard } from '@/components/domain/speaking/OfficialCandidateCard';
 import { ExamConversationPanel } from '@/components/domain/speaking/ExamConversationPanel';
+import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking/intro-questions';
 import {
   getSpeakingExam,
   finishSpeakingExamIntro,
@@ -206,11 +207,22 @@ export default function SpeakingExamPage() {
             This part is <strong>not scored</strong> — it just helps you settle in. When you&apos;re
             ready, begin Part 2.
           </p>
+          <div className="mt-4 rounded-lg border border-border bg-background-light p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              You may be asked questions like these
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">
+              {SPEAKING_INTRO_QUESTIONS.map((q) => (
+                <li key={q}>{q}</li>
+              ))}
+            </ul>
+          </div>
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
             <FileText className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>
               Before you begin, have a <strong>blank sheet of paper and a pen</strong> ready for
-              rough notes during preparation.
+              rough notes during preparation. You <strong>cannot highlight the card on screen</strong>,
+              so use your paper — and destroy it after the exam.
             </span>
           </div>
           <Button className="mt-5 w-full" onClick={handleFinishIntro} disabled={busy}>
@@ -226,8 +238,9 @@ export default function SpeakingExamPage() {
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             <FileText className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>
-              Use your <strong>blank paper and pen</strong> to make rough notes. Read the card
-              carefully — the discussion begins automatically when preparation ends.
+              Use your <strong>blank paper and pen</strong> to make rough notes — you{' '}
+              <strong>cannot highlight the card on screen</strong>. Read the card carefully; the
+              discussion begins automatically when preparation ends. Destroy your notes after the exam.
             </span>
           </div>
           <OfficialCandidateCard

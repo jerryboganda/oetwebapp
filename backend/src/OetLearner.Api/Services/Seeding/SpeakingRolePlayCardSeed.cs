@@ -41,11 +41,19 @@ public static class SpeakingRolePlayCardSeed
         var now = DateTimeOffset.UtcNow;
         var allCards = NursingCards().Concat(MedicineCards()).ToList();
 
+        // Map each seeded card to a hidden card type by id. Only assign when the
+        // target type row actually exists (FK-safe): if an admin has cleared the
+        // seeded types, cards seed untyped rather than failing the whole seeder.
+        var knownTypeIds = new HashSet<string>(
+            await db.SpeakingCardTypes.AsNoTracking().Select(t => t.Id).ToListAsync(ct));
+
         foreach (var card in allCards)
         {
             var contentItemId = $"ci-seed-speaking-{card.ProfessionId}-{card.Slug}";
             var rolePlayCardId = $"rpc-seed-{card.ProfessionId}-{card.Slug}";
             var interlocutorScriptId = $"is-seed-{card.ProfessionId}-{card.Slug}";
+            var seededTypeId = SpeakingCardTypeSeed.SeedId(CardTypeSlugFor(card));
+            var cardTypeId = knownTypeIds.Contains(seededTypeId) ? seededTypeId : null;
 
             db.ContentItems.Add(new ContentItem
             {
@@ -90,6 +98,7 @@ public static class SpeakingRolePlayCardSeed
                 Id = rolePlayCardId,
                 ContentItemId = contentItemId,
                 ProfessionId = card.ProfessionId,
+                CardTypeId = cardTypeId,
                 ScenarioTitle = card.ScenarioTitle,
                 Setting = card.Setting,
                 CandidateRole = card.CandidateRole,
@@ -140,6 +149,30 @@ public static class SpeakingRolePlayCardSeed
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    // Maps a seed card to one of the 6 hidden communication-function card types
+    // (see SpeakingCardTypeSeed) using its communication goal, with a topic
+    // override for breaking-bad-news. Keeps the seeded sample set spread across
+    // every type so each type has live example content.
+    private static string CardTypeSlugFor(SeedCardData card)
+    {
+        if (card.ClinicalTopic.Contains("breaking bad news", StringComparison.OrdinalIgnoreCase)
+            || card.CommunicationGoal.Equals("BreakBadNews", StringComparison.OrdinalIgnoreCase))
+        {
+            return "bad-news";
+        }
+
+        return card.CommunicationGoal.Trim().ToLowerInvariant() switch
+        {
+            "inform" => "diagnosis",
+            "reassure" => "reassurance",
+            "negotiate" => "persuasion",
+            "empower" => "health-education",
+            "counsel" => "counselling",
+            "advise" => "counselling",
+            _ => "counselling",
+        };
     }
 
     // ─── Nursing cards (6) ────────────────────────────────────────────────

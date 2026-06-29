@@ -168,6 +168,40 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task LiveTutorLearnerProjection_NeverLeaksRoleplayerCard_OrCardType_InAnyPhase()
+    {
+        // Mission-critical guarantee holds in live-tutor mode too: the learner
+        // sees only the candidate card, never the roleplayer (patient) card or
+        // the hidden card type — even though a human tutor plays the patient.
+        await SeedTwoPublishedCardsAsync();
+        var now = DateTimeOffset.UtcNow;
+        _db.PrivateSpeakingBookings.Add(new PrivateSpeakingBooking
+        {
+            Id = "psb-leak-1",
+            LearnerUserId = UserId,
+            TutorProfileId = "tutor-1",
+            Status = PrivateSpeakingBookingStatus.Confirmed,
+            SessionStartUtc = now.AddDays(1),
+            DurationMinutes = 30,
+            ProfessionTrack = "Medicine",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await _db.SaveChangesAsync();
+
+        var exam = await _exams.CreateExamForBookingAsync(UserId, "psb-leak-1", default);
+        Assert.Equal("live_tutor", exam.Mode);
+
+        // Intro phase.
+        AssertNoLeak(await _exams.GetExamForLearnerAsync(UserId, exam.ExamId, default));
+        // Prep A (no credit debit in live-tutor mode).
+        var prepA = await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        AssertNoLeak(prepA);
+        // Active A.
+        AssertNoLeak(await _exams.StartCardAsync(UserId, exam.ExamId, default));
+    }
+
+    [Fact]
     public async Task CreateExam_RefusesWhenWalletShortOfTwoCredits()
     {
         await SeedWalletAsync(speakingCredits: 1);
