@@ -272,6 +272,28 @@ describe('TutorMarkingWorkspace', () => {
     expect(await screen.findByText('Review submitted.')).toBeInTheDocument();
   });
 
+  it('renders + persists the optional overall text feedback in normal (non-mock) mode', async () => {
+    // Rule 2: normal writing is voice note + OPTIONAL text + AI. The overall
+    // text box (previously mock-only) now renders for normal mode too, and the
+    // tutor's text is persisted when present.
+    getTutorMarkingContext.mockResolvedValue(makeContext()); // mode 'timed' = normal
+    submitWritingTutorReview.mockResolvedValue({ review: { id: 'rev-1' }, moderation: null });
+
+    render(<TutorMarkingWorkspace submissionId="sub-1" variant="tutor" />);
+
+    const box = await screen.findByPlaceholderText('Overall feedback for the learner…');
+    fireEvent.change(box, { target: { value: 'Strong letter — tidy your tenses.' } });
+
+    fireEvent.click(await screen.findByRole('button', { name: /submit review/i }));
+
+    await waitFor(() => {
+      expect(submitWritingTutorReview).toHaveBeenCalledTimes(1);
+    });
+    expect(submitWritingTutorReview.mock.calls[0][1]).toMatchObject({
+      freeTextFeedback: 'Strong letter — tidy your tenses.',
+    });
+  });
+
   it('renders WritingStimulusViewer in the case-notes card when stimulusPdfDownloadPath is set', async () => {
     const { fetchAuthorizedObjectUrl } = await import('@/lib/api');
 

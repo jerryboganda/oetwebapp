@@ -58,6 +58,20 @@ public sealed class SpeakingExamService(
 
         var mode = SpeakingExamModes.Parse(req.Mode);
 
+        // ── No AI for MOCK Speaking (2026-06-29 owner rule) ───────────────────
+        // A Speaking exam launched from a curated Mock Set (or a full mock
+        // bundle) is a MOCK: it must be marked by a human examiner via a
+        // live-tutor booking, never by AI. Reject an AI-mode mock launch up
+        // front with a clear error rather than letting it fall through to the
+        // AI wallet pre-check (which would surface a misleading 402). The
+        // LiveTutor branch below then requires a BookingId, so mock ⇒ booked.
+        var isMockLaunch = !string.IsNullOrWhiteSpace(req.MockSetId);
+        if (isMockLaunch && mode != SpeakingExamMode.LiveTutor)
+        {
+            throw ApiException.Validation("SPEAKING_MOCK_REQUIRES_LIVE_TUTOR",
+                "Mock Speaking exams are marked by a human examiner. Start this mock as a live-tutor booking.");
+        }
+
         var (cardA, cardB, professionId) = await ResolveCardsAsync(req, ct);
 
         // AI exams pre-check the wallet so the candidate is never stranded
@@ -458,7 +472,13 @@ public sealed class SpeakingExamService(
         string overall;
         int? combined = null;
         string? band = null;
-        if (exam.Mode == SpeakingExamMode.LiveTutor)
+        // Human-marked when a live-tutor booking OR a mock-set exam. Mock
+        // Speaking is always LiveTutor after the creation guard; the MockSetId
+        // clause is defensive so any legacy AI-mode mock row still reports
+        // awaiting_tutor (human marking) rather than pending (AI).
+        var humanMarked = exam.Mode == SpeakingExamMode.LiveTutor
+            || !string.IsNullOrWhiteSpace(exam.MockSetId);
+        if (humanMarked)
         {
             overall = cards.All(c => c.Status == "scored") ? "scored" : "awaiting_tutor";
         }
@@ -504,9 +524,11 @@ public sealed class SpeakingExamService(
             return new SpeakingExamCardResult(cardNumber, string.Empty, "pending", null);
         }
 
-        if (exam.Mode == SpeakingExamMode.LiveTutor)
+        // Human-marked: live-tutor booking OR a mock-set exam (defensive against
+        // any legacy AI-mode mock row). Surface the tutor assessment when final,
+        // else pending — never fall through to AI scoring below.
+        if (exam.Mode == SpeakingExamMode.LiveTutor || !string.IsNullOrWhiteSpace(exam.MockSetId))
         {
-            // Human-marked: surface the tutor assessment when final, else pending.
             var tutor = await db.SpeakingTutorAssessments.AsNoTracking()
                 .Where(t => t.SpeakingSessionId == sessionId && t.IsFinal)
                 .OrderByDescending(t => t.SubmittedAt)
@@ -631,6 +653,10 @@ public sealed class SpeakingExamService(
             UserId = exam.UserId,
             RolePlayCardId = card.Id,
             ExamSessionId = exam.Id,
+            // Carry mock provenance onto the child so the assessor (which loads
+            // only the child) can tell a genuine mock from a random AI exam.
+            // Null for non-mock exams → treated as AI-allowed.
+            MockSetId = exam.MockSetId,
             ExamSlot = slot,
             Mode = sessionMode,
             State = SpeakingSessionState.Prep,

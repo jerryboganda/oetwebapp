@@ -212,6 +212,52 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(1, await _db.SpeakingExamSessions.CountAsync());
     }
 
+    // ── No AI for MOCK Speaking (2026-06-29 owner rule) ──────────────────────
+
+    [Fact]
+    public async Task CreateExam_WithMockSetId_InAiMode_IsRejected()
+    {
+        // A mock-set Speaking exam must be human-marked via a live-tutor booking.
+        // AI mode is forbidden — the guard fires before card resolution / wallet,
+        // so no seeding is needed.
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync(UserId,
+                new CreateSpeakingExamRequest("ai", MockSetId: "sms-anything", ProfessionId: "medicine"), default));
+        Assert.Equal("SPEAKING_MOCK_REQUIRES_LIVE_TUTOR", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExam_WithMockSetId_InLiveTutorMode_Succeeds_AsHumanMarked()
+    {
+        var setId = await SeedPublishedMockSetAsync();
+
+        var exam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("live_tutor", MockSetId: setId, BookingId: "psb-mock-1"), default);
+
+        Assert.Equal("live_tutor", exam.Mode);
+        Assert.Equal("intro", exam.State);
+        var saved = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        Assert.Equal(setId, saved.MockSetId);
+    }
+
+    [Fact]
+    public async Task FinishIntro_OnMockSetExam_PropagatesMockSetId_AndLiveTutorMode_ToChildSession()
+    {
+        var setId = await SeedPublishedMockSetAsync();
+        var exam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("live_tutor", MockSetId: setId, BookingId: "psb-mock-2"), default);
+
+        var afterIntro = await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        Assert.Equal("prep_a", afterIntro.State);
+        Assert.NotNull(afterIntro.CurrentSessionId);
+        var childA = await _db.SpeakingSessions.FirstAsync(s => s.Id == afterIntro.CurrentSessionId);
+        // The child self-identifies as a mock so the assessor (which loads only the
+        // child) can skip AI, and inherits the human-marked LiveTutor mode.
+        Assert.Equal(setId, childA.MockSetId);
+        Assert.Equal(SpeakingSessionMode.LiveTutor, childA.Mode);
+    }
+
     private static void AssertNoLeak(SpeakingExamDetail detail)
     {
         var json = JsonSerializer.Serialize(detail);
@@ -258,6 +304,36 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         await SeedCardAsync("A", cardType.Id, prepSeconds, discussionSeconds);
         await SeedCardAsync("B", cardType.Id, prepSeconds, discussionSeconds);
         await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Seeds two published medicine cards and a published Mock Set that
+    /// pairs them (by ContentItemId, the key ResolveCardsAsync matches on).
+    /// Returns the mock-set id.</summary>
+    private async Task<string> SeedPublishedMockSetAsync()
+    {
+        await SeedTwoPublishedCardsAsync();
+        var contentIds = await _db.RolePlayCards.AsNoTracking()
+            .Where(c => c.ProfessionId == "medicine")
+            .Select(c => c.ContentItemId)
+            .ToListAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var set = new SpeakingMockSet
+        {
+            Id = $"sms-{Guid.NewGuid():N}",
+            ProfessionId = "medicine",
+            Title = "Mock Set 1",
+            RolePlay1ContentId = contentIds[0],
+            RolePlay2ContentId = contentIds[1],
+            Status = SpeakingMockSetStatus.Published,
+            Difficulty = "exam",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        };
+        _db.SpeakingMockSets.Add(set);
+        await _db.SaveChangesAsync();
+        return set.Id;
     }
 
     private async Task SeedCardAsync(string slot, string cardTypeId, int prepSeconds, int discussionSeconds)

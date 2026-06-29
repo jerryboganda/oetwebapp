@@ -215,11 +215,13 @@ public class AiGatewayRoutingTests
         Assert.Null(mockProvider.LastRequest);
     }
 
-    // ── No AI for mock WRITING — gateway backstop (2026-06-11 rebuild) ───────
-    // The gateway must hard-refuse every banned WRITING assessment code when the
-    // call's AssessmentContext is Mock, BEFORE any provider is contacted.
-    // SPEAKING codes are deliberately NOT banned any more — mock/exam Speaking is
-    // AI-marked in AI mode (see SpeakingCodesAllowedInMockContext below).
+    // ── No AI for mock WRITING + SPEAKING — gateway backstop ─────────────────
+    // The gateway must hard-refuse every banned assessment code when the call's
+    // AssessmentContext is Mock, BEFORE any provider is contacted. SpeakingGrade
+    // is banned (2026-06-29 owner rule: mock Speaking is human-marked via a
+    // live-tutor booking — reversing the 2026-06-11 interim AI-marking allowance).
+    // SpeakingScoreV2 is a route key, never a gateway feature code, so it stays
+    // allowed (see SpeakingRouteKeyAllowedInMock below).
 
     public static IEnumerable<object[]> BannedMockAssessmentCodes() => new[]
     {
@@ -227,6 +229,7 @@ public class AiGatewayRoutingTests
         new object[] { AiFeatureCodes.WritingSampleScore },
         new object[] { AiFeatureCodes.MockFullGrade },
         new object[] { AiFeatureCodes.ConversationEvaluation },
+        new object[] { AiFeatureCodes.SpeakingGrade },
     };
 
     [Theory]
@@ -248,18 +251,20 @@ public class AiGatewayRoutingTests
         Assert.Null(mockProvider.LastRequest);
     }
 
-    // SPEAKING grading codes must SUCCEED in Mock context now (owner decision
-    // 2026-06-11): AI marks the Speaking exam in AI mode. Live-tutor sessions are
-    // human-marked, but that branch lives in the pipeline, not the gateway.
-    public static IEnumerable<object[]> SpeakingGradingCodesAllowedInMock() => new[]
+    // SpeakingScoreV2 is a provider/route key, NOT a gateway feature code — the
+    // real Speaking scorer always passes AiFeatureCodes.SpeakingGrade. It must
+    // therefore still pass through the gateway untouched even in Mock context;
+    // the mock ban is enforced on SpeakingGrade (above) plus the service +
+    // creation guards. Banning the route key would be a no-op with no behavioral
+    // gain.
+    public static IEnumerable<object[]> SpeakingRouteKeyAllowedInMock() => new[]
     {
-        new object[] { AiFeatureCodes.SpeakingGrade },
         new object[] { SpeakingAiFeatureCodes.SpeakingScoreV2 },
     };
 
     [Theory]
-    [MemberData(nameof(SpeakingGradingCodesAllowedInMock))]
-    public async Task CompleteAsync_AllowsSpeakingGradingCode_InMockContext(string featureCode)
+    [MemberData(nameof(SpeakingRouteKeyAllowedInMock))]
+    public async Task CompleteAsync_AllowsSpeakingRouteKey_InMockContext(string featureCode)
     {
         var mockProvider = new CapturingProvider("mock");
         var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });

@@ -94,21 +94,29 @@ Scoring rules:
             ?? throw ApiException.NotFound("speaking_session_not_found",
                 "That Speaking session does not exist.");
 
-        // ── No AI for LIVE-TUTOR Speaking (2026-06-11 rebuild) ─────────────
-        // When the candidate books a human tutor as the patient (Mode =
-        // LiveTutor), the tutor marks the exam — never the AI. The finished
-        // session is visible in the tutor review queue
-        // (TutorReviewQueueService.ListQueueAsync); the tutor's
+        // ── No AI for MOCK or LIVE-TUTOR Speaking ──────────────────────────
+        // Two ways a Speaking session is human-marked, never AI:
+        //   1. Live-tutor booking (Mode = LiveTutor) — the booked tutor plays the
+        //      patient and marks the exam.
+        //   2. A MOCK (2026-06-29 owner rule) — a two-card exam launched from a
+        //      curated Mock Set (or full mock bundle) carries a MockSetId /
+        //      MockSessionId. Mock Speaking is forced to a live-tutor booking at
+        //      creation, so in practice mocks are already LiveTutor; this second
+        //      clause also catches any legacy AI-mode mock row.
+        // In both cases the finished session is visible in the tutor review queue
+        // (TutorReviewQueueService.ListQueueAsync) and the tutor's
         // SpeakingTutorAssessment becomes the released band. Do NOT call the AI
         // gateway or write a SpeakingAiAssessment row.
         //
-        // AI-mode sessions (AiSelfPractice / AiExam) fall through and ARE
-        // AI-scored. For AiExam the assessment is OFFICIAL (IsAdvisory=false);
+        // Non-mock AI sessions (AiSelfPractice / random AiExam) fall through and
+        // ARE AI-scored. For AiExam the assessment is OFFICIAL (IsAdvisory=false);
         // for practice it is advisory (IsAdvisory=true).
-        if (session.Mode == SpeakingSessionMode.LiveTutor)
+        if (session.Mode == SpeakingSessionMode.LiveTutor
+            || !string.IsNullOrWhiteSpace(session.MockSetId)
+            || !string.IsNullOrWhiteSpace(session.MockSessionId))
         {
             logger.LogInformation(
-                "Speaking session {SessionId} is live-tutor — AI assessment skipped; routed to human examiner marking.",
+                "Speaking session {SessionId} is mock/live-tutor — AI assessment skipped; routed to human examiner marking.",
                 sessionId);
             return new SpeakingAiAssessmentProjection(
                 AssessmentId: string.Empty,
@@ -186,15 +194,19 @@ Scoring rules:
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
-                // Tag the assessment context for the audit trail. Exam-linked
-                // sessions (ExamSessionId set) or legacy mock sessions use Mock;
-                // standalone practice uses Practice. Speaking scoring is permitted
-                // in both contexts now — only Writing is banned in Mock.
-                AssessmentContext = !string.IsNullOrWhiteSpace(session.ExamSessionId)
-                    || !string.IsNullOrWhiteSpace(session.MockSessionId)
-                    || !string.IsNullOrWhiteSpace(session.MockSetId)
-                    ? AiAssessmentContext.Mock
-                    : AiAssessmentContext.Practice,
+                // Tag the assessment context for the audit trail + gateway
+                // backstop. ONLY a genuine mock (curated Mock Set / full mock
+                // bundle — MockSetId/MockSessionId set) is Mock context; a plain
+                // ExamSessionId does NOT make a session a mock (every two-card
+                // exam card has one), so random AI exams are Practice and keep AI
+                // marking. Mock Speaking never reaches here (it is human-marked
+                // above) — this tag just arms the gateway's mock_assessment_
+                // forbidden backstop if a future caller ever bypasses the guard.
+                AssessmentContext =
+                    (!string.IsNullOrWhiteSpace(session.MockSetId)
+                        || !string.IsNullOrWhiteSpace(session.MockSessionId))
+                        ? AiAssessmentContext.Mock
+                        : AiAssessmentContext.Practice,
             }, ct);
         }
         catch (PromptNotGroundedException)

@@ -478,7 +478,13 @@ public sealed class WritingTutorReviewService(
         {
             throw ApiException.Forbidden("writing_tutor_review_forbidden", "Tutor review belongs to another learner.");
         }
-        var review = await db.WritingTutorReviews.AsNoTracking().FirstOrDefaultAsync(r => r.SubmissionId == submissionId, ct);
+        // Only surface the tutor's written/text feedback to the learner once the
+        // review is SUBMITTED — never a draft in progress. Mirrors the learner
+        // voice-note gate (WritingMarkingVoiceNoteService.GetForLearnerAsync) and
+        // applies to BOTH mock and normal submissions. This is the only caller of
+        // this method (the learner-facing GetTutorReviewAsync adapter).
+        var review = await db.WritingTutorReviews.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.SubmissionId == submissionId && r.Status == "submitted", ct);
         return review is null ? null : ToView(review);
     }
 

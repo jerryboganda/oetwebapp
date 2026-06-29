@@ -74,8 +74,8 @@ export default function WritingSubmissionResultsPage() {
     void Promise.all([
       getWritingSubmission(submissionId),
       getWritingSubmissionGrade(submissionId),
-      // Tutor's written review (overall + per-criterion) — only rendered for mocks,
-      // where it IS the tutor's written feedback channel.
+      // Tutor's review. Per-criterion comments render for mocks only; the
+      // optional overall text note renders in BOTH modes when present.
       getTutorReview(submissionId).catch(() => null),
       // Answer-sheet PDF (post-submission only; null when none attached).
       getWritingAnswerSheet(submissionId).catch(() => ({ answerSheetPdfDownloadPath: null })),
@@ -248,8 +248,11 @@ export default function WritingSubmissionResultsPage() {
           </section>
         ) : null}
 
-        {/* Tutor written feedback — mock only (human-marked written channel). */}
-        {isMock && tutorReview?.freeTextFeedback ? (
+        {/* Tutor text feedback — shown in BOTH modes when the tutor left an
+            optional written note. For mocks it's the human-marked written
+            channel; for normal writing it's the optional text note alongside
+            the voice note + AI. */}
+        {tutorReview?.freeTextFeedback ? (
           <section aria-labelledby="tutor-feedback-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <h2 id="tutor-feedback-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
               <UserRoundCheck className="h-5 w-5 text-primary" aria-hidden="true" /> Tutor feedback
