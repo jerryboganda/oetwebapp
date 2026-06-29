@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
@@ -18,28 +17,30 @@ namespace OetLearner.Api.Tests.Speaking;
 /// legacy AI-mock shape). The gateway is a throwing stub, so any AI-path code
 /// fails the test loudly.
 ///
-/// Uses SQLite in-memory (per repo convention).
+/// Uses the in-memory provider: the guard returns after a single trivial
+/// id lookup (no query-translation rigor needed), and we deliberately exercise
+/// a session whose card/exam rows are NOT seeded — proving the guard fires
+/// before any of them is loaded.
 /// </summary>
-public sealed class SpeakingMockNoAiTests : IAsyncDisposable
+public sealed class SpeakingMockNoAiTests : IAsyncLifetime
 {
-    private readonly SqliteConnection _connection;
-    private readonly LearnerDbContext _db;
+    private LearnerDbContext _db = default!;
 
-    public SpeakingMockNoAiTests()
+    public Task InitializeAsync()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
-            .UseSqlite(_connection)
+            .UseInMemoryDatabase($"speaking-mock-noai-{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(
+                Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         _db = new LearnerDbContext(options);
-        _db.Database.EnsureCreated();
+        return Task.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
+    public Task DisposeAsync()
     {
-        await _db.DisposeAsync();
-        await _connection.DisposeAsync();
+        _db.Dispose();
+        return Task.CompletedTask;
     }
 
     [Fact]
