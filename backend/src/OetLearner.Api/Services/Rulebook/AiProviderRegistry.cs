@@ -288,7 +288,16 @@ public sealed class AnthropicProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("Anthropic", (int)response.StatusCode, response.ReasonPhrase));
+        {
+            // Include Anthropic's error body (truncated) — a bare "HTTP 400" hides
+            // the actionable reason (bad model id, empty content block, etc.) and
+            // makes production failures undiagnosable from logs.
+            var reason = string.IsNullOrWhiteSpace(body)
+                ? response.ReasonPhrase
+                : body.Length > 600 ? body[..600] : body;
+            throw new InvalidOperationException(
+                $"{AiProviderErrorMessages.HttpFailure("Anthropic", (int)response.StatusCode, response.ReasonPhrase)} Body: {reason}");
+        }
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;

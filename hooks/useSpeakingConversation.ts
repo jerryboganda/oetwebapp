@@ -62,12 +62,18 @@ interface ConversationHubBridge {
 }
 
 // ── VAD tuning (normalised 0-1 level = min(1, rms * 3)) ───────────────────
+// The recorder runs CONTINUOUSLY while the phase is 'listening' — VAD only
+// decides when an utterance has ENDED (trailing silence after speech) or when
+// a speechless buffer should be discarded. Starting the recorder on speech
+// onset (the previous design) lost the first words of every reply because
+// capture began ~3 frames after the learner had already started talking.
 const START_LEVEL = 0.16; // sustained level to treat as speech onset
 const CONTINUE_LEVEL = 0.09; // above this keeps an utterance "alive"
 const START_FRAMES = 3; // consecutive frames above threshold to commit onset
 const SILENCE_MS = 1000; // trailing silence that ends an utterance
-const MIN_UTTERANCE_MS = 450; // ignore blips/coughs
-const MAX_UTTERANCE_MS = 30_000; // safety cap on a single turn
+const MIN_SPEECH_MS = 450; // ignore blips/coughs (measured from speech onset)
+const MAX_UTTERANCE_MS = 30_000; // safety cap on a single turn (after onset)
+const SILENT_BUFFER_RESET_MS = 20_000; // drop + restart a buffer with no speech
 const THINKING_TIMEOUT_MS = 25_000; // watchdog if no reply arrives
 
 async function loadConversationHub(): Promise<ConversationHubBridge | null> {
@@ -194,9 +200,12 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const utteranceStartRef = useRef(0);
+  const utteranceStartRef = useRef(0); // when the (continuous) buffer began
+  const speechStartRef = useRef(0); // when VAD confirmed speech onset
   const lastVoiceRef = useRef(0);
   const startFramesRef = useRef(0);
+  const hadSpeechRef = useRef(false); // buffer contains confirmed speech
+  const discardStopRef = useRef(false); // next recorder stop discards the buffer
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
@@ -270,7 +279,11 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     [clearThinkingWatchdog, setPhase],
   );
 
-  // ── Capture lifecycle (per utterance) ────────────────────────────────
+  // ── Capture lifecycle ────────────────────────────────────────────────
+  // Starts a continuous buffer for the whole 'listening' window. The buffer
+  // is only SENT if VAD confirmed speech inside it; otherwise it is quietly
+  // discarded — so nothing the learner says is ever missed, and silence is
+  // never submitted.
   const beginCapture = useCallback(() => {
     const stream = streamRef.current;
     if (!stream || recorderRef.current) return;
@@ -284,6 +297,9 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     chunksRef.current = [];
     utteranceStartRef.current = performance.now();
     lastVoiceRef.current = performance.now();
+    hadSpeechRef.current = false;
+    discardStopRef.current = false;
+    startFramesRef.current = 0;
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
@@ -291,23 +307,21 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       const chunks = chunksRef.current;
       chunksRef.current = [];
       recorderRef.current = null;
-      const durationMs = performance.now() - utteranceStartRef.current;
+      const send = hadSpeechRef.current && !discardStopRef.current;
+      hadSpeechRef.current = false;
+      discardStopRef.current = false;
+      if (!send) return; // silent/discarded buffer — the frame loop restarts capture
       const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
-      // Drop blips and echo false-positives; keep listening.
-      if (durationMs < MIN_UTTERANCE_MS || blob.size < 1_200) {
-        if (micEnabledRef.current && phaseRef.current !== 'speaking') setPhase('listening');
-        return;
-      }
+      if (blob.size < 1_200) return; // corrupt/empty despite VAD — keep listening
       void sendUtterance(blob, blob.type);
     };
     recorderRef.current = recorder;
-    setPhase('listening');
     try {
       recorder.start(200);
     } catch {
       recorderRef.current = null;
     }
-  }, [sendUtterance, setPhase]);
+  }, [sendUtterance]);
 
   const finishCapture = useCallback(() => {
     const recorder = recorderRef.current;
@@ -340,29 +354,52 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
 
     // While the AI is speaking or thinking the mic track is disabled (see
     // setPhase), so the analyser reads silence and we never capture — the
-    // patient is heard in full. We only segment speech while listening.
+    // patient is heard in full. While listening the recorder runs from the
+    // very first frame, so no leading words are ever lost; VAD only decides
+    // when the utterance ENDED (or that the buffer never contained speech).
     if (phaseNow === 'listening') {
-      if (isRecording) {
-        if (level >= CONTINUE_LEVEL) lastVoiceRef.current = now;
-        const silentFor = now - lastVoiceRef.current;
-        const totalFor = now - utteranceStartRef.current;
-        if (silentFor >= SILENCE_MS || totalFor >= MAX_UTTERANCE_MS) {
-          finishCapture();
-        }
-      } else if (level >= START_LEVEL) {
-        startFramesRef.current += 1;
-        if (startFramesRef.current >= START_FRAMES) {
+      if (!isRecording) {
+        beginCapture();
+      } else if (!hadSpeechRef.current) {
+        // Waiting for speech onset inside the running buffer.
+        if (level >= START_LEVEL) {
+          startFramesRef.current += 1;
+          if (startFramesRef.current >= START_FRAMES) {
+            startFramesRef.current = 0;
+            hadSpeechRef.current = true;
+            speechStartRef.current = now;
+            lastVoiceRef.current = now;
+          }
+        } else {
           startFramesRef.current = 0;
-          beginCapture();
+          // Periodically drop a speechless buffer so it can't grow unbounded.
+          if (now - utteranceStartRef.current >= SILENT_BUFFER_RESET_MS) {
+            discardStopRef.current = true;
+            finishCapture(); // onstop discards; next frame restarts capture
+          }
         }
       } else {
-        startFramesRef.current = 0;
+        // Speech confirmed — wait for the trailing silence that ends the turn.
+        if (level >= CONTINUE_LEVEL) lastVoiceRef.current = now;
+        const silentFor = now - lastVoiceRef.current;
+        const speechFor = now - speechStartRef.current;
+        if (silentFor >= SILENCE_MS) {
+          if (speechFor - silentFor < MIN_SPEECH_MS) {
+            // Blip/cough — reset the buffer instead of submitting it.
+            discardStopRef.current = true;
+            finishCapture();
+          } else {
+            finishCapture(); // onstop sends the full buffer (leading silence is fine for Whisper)
+          }
+        } else if (speechFor >= MAX_UTTERANCE_MS) {
+          finishCapture();
+        }
       }
     }
     // 'thinking' / 'idle': ignore onsets so turns never overlap.
 
     rafRef.current = requestAnimationFrame(runVadFrame);
-  }, [beginCapture, finishCapture, setPhase, stopPlayback]);
+  }, [beginCapture, finishCapture]);
 
   // ── Play an AI reply, then resume listening ───────────────────────────
   const playReply = useCallback(
@@ -456,6 +493,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    discardStopRef.current = true; // never submit a partial turn on teardown
     finishCapture();
     recorderRef.current = null;
     if (streamRef.current) {
