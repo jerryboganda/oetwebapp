@@ -52,17 +52,17 @@ public sealed record AiFeatureRouteResolution(string ProviderCode, string? Model
 public static class SpeakingAiFeatureCodes
 {
     /// <summary>OET Speaking dual-grader v2 — scoring-critical.
-    /// Default provider/model: Anthropic <c>claude-sonnet-4-6</c> with prompt
+    /// Default provider/model: Anthropic <c>claude-sonnet-5</c> with prompt
     /// caching on; fallback OpenAI <c>gpt-4o</c>.</summary>
     public const string SpeakingScoreV2 = "speaking.score.v2";
 
     /// <summary>Per-turn AI patient LLM used during the AI role-play loop.
-    /// Cheap, low-latency. Default: Anthropic <c>claude-haiku-4-5</c> with
+    /// Cheap, low-latency. Default: Anthropic <c>claude-sonnet-5</c> with
     /// prompt caching on; fallback OpenAI <c>gpt-4o-mini</c>.</summary>
     public const string SpeakingPatientTurnV1 = "speaking.patient.turn.v1";
 
     /// <summary>Admin AI-draft tool for new role-play cards. Default:
-    /// Anthropic <c>claude-sonnet-4-6</c> with prompt caching on.</summary>
+    /// Anthropic <c>claude-sonnet-5</c> with prompt caching on.</summary>
     public const string CardDraftV1 = "card.draft.v1";
 
     /// <summary>All Speaking-module feature codes registered by this file.
@@ -87,7 +87,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.SpeakingScoreV2,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -95,7 +95,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.SpeakingPatientTurnV1,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -103,7 +103,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.CardDraftV1,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: null,
             FallbackModel: null,
             PromptCachingEnabled: true,
@@ -111,7 +111,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ConversationOpening,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -119,7 +119,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ConversationReply,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -127,7 +127,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ConversationEvaluation,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -153,7 +153,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassRecordingSummarize,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -161,7 +161,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassRecordingTranslate,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -169,7 +169,7 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassAssistantQna,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
@@ -177,14 +177,14 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.TutorRecommendation,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-4-6",
+            PrimaryModel: "claude-sonnet-5",
             FallbackProviderCode: "openai",
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
             Description: "Post-attendance next-class recommendation (Claude Sonnet 4.6)."),
 
         // ── Universal Claude Sonnet 4.6 contextual-understanding defaults ────
-        // Every remaining text-LLM feature defaults to anthropic/claude-sonnet-4-6
+        // Every remaining text-LLM feature defaults to anthropic/claude-sonnet-5
         // (locked product decision). Admins still override per feature via the
         // DB-backed AiFeatureRoutes (which win over these static defaults), and
         // the resolver's key-guard falls through to the keyed top provider when
@@ -231,7 +231,7 @@ public static class AiFeatureRouteDefaults
     /// contextual-understanding model (Anthropic Claude Sonnet 4.6) with an
     /// OpenAI gpt-4o fallback and prompt caching on.</summary>
     private static SpeakingAiRouteDefault SonnetDefault(string featureCode, string description) =>
-        new(featureCode, "anthropic", "claude-sonnet-4-6", "openai", "gpt-4o", true, description);
+        new(featureCode, "anthropic", "claude-sonnet-5", "openai", "gpt-4o", true, description);
 }
 
 public static class SpeakingAiRouteDefaults

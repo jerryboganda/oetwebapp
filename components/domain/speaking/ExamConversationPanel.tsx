@@ -1,141 +1,23 @@
 'use client';
 
 /**
- * Speaking module rebuild (2026-06-11 spec).
+ * Speaking module — AI patient conversation panel for the Active phase of one
+ * exam card.
  *
- * Embedded AI-patient conversation panel for the Active phase of one exam card.
- * Connects to ConversationHub keyed on the exam's current child SpeakingSession,
- * renders the live caption strip, and provides push-to-talk. The exam page owns
- * the countdown + phase machine; this panel is purely the conversation surface.
+ * Thin view over `useSpeakingConversation`: it renders the live caption strip,
+ * connection/turn status, a mic level meter, and the hands-free controls. The
+ * exam page owns the countdown + phase machine; this panel is purely the
+ * conversation surface.
  *
- * Adapted from the proven flow in `app/speaking/sessions/[id]/page.tsx` so the
- * audio capture + hub contract stay identical.
+ * Voice loop (hands-free, barge-in): tap "Start talking" once (browsers require
+ * a user gesture for mic + audio), then just speak — the AI patient listens,
+ * replies in a real voice, and the mic re-opens automatically.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Mic } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Mic, MicOff, Send, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-interface PatientUtterance {
-  speaker: 'patient' | 'interlocutor';
-  phase: 'warmup' | 'roleplay';
-  text: string;
-  audioUrl?: string | null;
-  emotionHint?: string | null;
-  shouldEnd?: boolean;
-}
-
-interface LearnerCaption {
-  speaker: 'candidate';
-  text: string;
-  confidence?: number;
-}
-
-interface ConversationHubBridge {
-  start: (sessionId: string) => Promise<void>;
-  stop: () => Promise<void>;
-  sendTurn: (sessionId: string, audioBase64: string, mimeType: string) => Promise<void>;
-  onUtterance: (cb: (u: PatientUtterance) => void) => void;
-  onLearnerCaption: (cb: (c: LearnerCaption) => void) => void;
-  onShouldEnd: (cb: () => void) => void;
-  onError: (cb: (code: string, message: string) => void) => void;
-}
-
-async function loadConversationHub(): Promise<ConversationHubBridge | null> {
-  try {
-    const { HubConnectionBuilder, LogLevel } = await import('@microsoft/signalr');
-    const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-    const connection = new HubConnectionBuilder()
-      .withUrl('/api/backend/v1/conversations/hub', {
-        accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
-      })
-      .configureLogging(LogLevel.None)
-      .withAutomaticReconnect([0, 2_000, 5_000])
-      .build();
-
-    let utter: ((u: PatientUtterance) => void) | null = null;
-    let learner: ((c: LearnerCaption) => void) | null = null;
-    let shouldEnd: (() => void) | null = null;
-    let error: ((code: string, message: string) => void) | null = null;
-
-    connection.on('PatientUtterance', (p: PatientUtterance) => {
-      if (p?.text) utter?.(p);
-    });
-    connection.on('LearnerCaption', (p: LearnerCaption) => {
-      if (p?.text) learner?.(p);
-    });
-    connection.on('SpeakingShouldEnd', () => shouldEnd?.());
-    connection.on('SpeakingRoleplayError', (code: string, message: string) => error?.(code, message));
-
-    return {
-      start: async (sessionId) => {
-        await connection.start();
-        await connection.invoke('StartSpeakingRoleplay', sessionId);
-      },
-      stop: async () => {
-        try {
-          await connection.stop();
-        } catch {
-          /* ignore */
-        }
-      },
-      sendTurn: async (sessionId, audioBase64, mimeType) => {
-        await connection.invoke('SendSpeakingRoleplayTurn', sessionId, audioBase64, mimeType);
-      },
-      onUtterance: (cb) => {
-        utter = cb;
-      },
-      onLearnerCaption: (cb) => {
-        learner = cb;
-      },
-      onShouldEnd: (cb) => {
-        shouldEnd = cb;
-      },
-      onError: (cb) => {
-        error = cb;
-      },
-    };
-  } catch {
-    return null;
-  }
-}
-
-function resolveMediaUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith('/api/backend')) return url;
-  if (url.startsWith('/')) return `/api/backend${url}`;
-  return `/api/backend/${url}`;
-}
-
-function playUtteranceAudio(url: string): void {
-  try {
-    const audio = new Audio(resolveMediaUrl(url));
-    void audio.play().catch(() => undefined);
-  } catch {
-    /* ignore */
-  }
-}
-
-function pickRecorderMime(): string | undefined {
-  if (typeof MediaRecorder === 'undefined') return undefined;
-  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((c) =>
-    MediaRecorder.isTypeSupported(c),
-  );
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read audio.'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function dataUrlToBase64(dataUrl: string): string {
-  const comma = dataUrl.indexOf(',');
-  return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-}
+import { useSpeakingConversation, type ConversationPhase } from '@/hooks/useSpeakingConversation';
 
 export interface ExamConversationPanelProps {
   /** The child SpeakingSession id for the current card. */
@@ -143,108 +25,38 @@ export interface ExamConversationPanelProps {
   className?: string;
 }
 
+const PHASE_LABEL: Record<ConversationPhase, string> = {
+  idle: 'Paused',
+  listening: 'Listening…',
+  thinking: 'Thinking…',
+  speaking: 'Speaking…',
+};
+
 export function ExamConversationPanel({ sessionId, className }: ExamConversationPanelProps) {
-  const [hubReady, setHubReady] = useState(false);
-  const [hubError, setHubError] = useState<string | null>(null);
-  const [captions, setCaptions] = useState<Array<{ id: string; text: string; speaker: string }>>([]);
-  const [recording, setRecording] = useState(false);
-  const [sending, setSending] = useState(false);
+  const {
+    connection,
+    phase,
+    captions,
+    error,
+    micEnabled,
+    micLevel,
+    voiceUnavailable,
+    ended,
+    enableMic,
+    disableMic,
+    sendText,
+  } = useSpeakingConversation(sessionId);
 
-  const hubRef = useRef<ConversationHubBridge | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const [text, setText] = useState('');
+  const [showText, setShowText] = useState(false);
+  const connected = connection === 'connected';
 
-  useEffect(() => {
-    if (!sessionId) return;
-    let cancelled = false;
-    loadConversationHub().then(async (hub) => {
-      if (cancelled || !hub) {
-        if (!hub) setHubError('Could not reach the AI patient. Please refresh.');
-        return;
-      }
-      hubRef.current = hub;
-      hub.onLearnerCaption((c) =>
-        setCaptions((prev) =>
-          [...prev, { id: `${prev.length}-c`, text: c.text, speaker: 'candidate' }].slice(-12),
-        ),
-      );
-      hub.onUtterance((u) => {
-        setCaptions((prev) =>
-          [...prev, { id: `${prev.length}-p`, text: u.text, speaker: 'patient' }].slice(-12),
-        );
-        if (u.audioUrl) playUtteranceAudio(u.audioUrl);
-      });
-      hub.onError((_code, message) => setHubError(message));
-      try {
-        await hub.start(sessionId);
-        if (!cancelled) setHubReady(true);
-      } catch (err) {
-        if (!cancelled) setHubError(err instanceof Error ? err.message : 'Could not start the AI patient.');
-      }
-    });
-    return () => {
-      cancelled = true;
-      hubRef.current?.stop().catch(() => undefined);
-      hubRef.current = null;
-    };
-  }, [sessionId]);
-
-  // Stop any in-flight recorder on unmount.
-  useEffect(() => {
-    return () => {
-      try {
-        recorderRef.current?.stop();
-      } catch {
-        /* ignore */
-      }
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-  }, []);
-
-  const toggleRecording = useCallback(async () => {
-    if (!hubReady) return;
-    const recorder = recorderRef.current;
-    if (recording && recorder) {
-      recorder.stop();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mimeType = pickRecorderMime();
-      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      rec.onstop = async () => {
-        setRecording(false);
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        const chunks = chunksRef.current;
-        chunksRef.current = [];
-        if (chunks.length === 0) return;
-        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
-        if (blob.size === 0) return;
-        setSending(true);
-        try {
-          const dataUrl = await blobToDataUrl(blob);
-          await hubRef.current?.sendTurn(sessionId, dataUrlToBase64(dataUrl), blob.type || 'audio/webm');
-        } catch (err) {
-          setHubError(err instanceof Error ? err.message : 'Could not send your turn.');
-        } finally {
-          setSending(false);
-        }
-      };
-      recorderRef.current = rec;
-      rec.start();
-      setRecording(true);
-    } catch {
-      setHubError('Microphone access is required to speak. Please enable it and try again.');
-    }
-  }, [hubReady, recording, sessionId]);
+  const submitText = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setText('');
+    await sendText(value);
+  };
 
   return (
     <div className={cn('flex flex-col gap-3 rounded-xl border border-border bg-surface p-4', className)}>
@@ -253,23 +65,55 @@ export function ExamConversationPanel({ sessionId, className }: ExamConversation
         <span
           className={cn(
             'inline-flex items-center gap-1.5 text-xs',
-            hubReady ? 'text-emerald-600' : 'text-muted',
+            connected ? 'text-emerald-600' : connection === 'error' ? 'text-rose-600' : 'text-muted',
           )}
         >
           <span
             className={cn(
               'h-2 w-2 rounded-full',
-              hubReady ? 'bg-emerald-500' : 'bg-amber-400',
+              connected ? 'bg-emerald-500' : connection === 'error' ? 'bg-rose-500' : 'bg-amber-400',
             )}
           />
-          {hubReady ? 'Connected' : 'Connecting…'}
+          {connected ? 'Connected' : connection === 'error' ? 'Disconnected' : 'Connecting…'}
         </span>
       </div>
 
-      {hubError ? (
+      {error ? (
         <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
-          {hubError}
+          {error}
         </p>
+      ) : null}
+
+      {voiceUnavailable ? (
+        <p className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <Volume2 className="h-4 w-4 flex-shrink-0" />
+          The patient&apos;s voice is currently unavailable — showing text only. Please tell your administrator.
+        </p>
+      ) : null}
+
+      {/* Live status + mic meter */}
+      {micEnabled ? (
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
+              phase === 'listening' && 'bg-emerald-50 text-emerald-700',
+              phase === 'thinking' && 'bg-sky-50 text-sky-700',
+              phase === 'speaking' && 'bg-violet-50 text-violet-700',
+              phase === 'idle' && 'bg-muted/10 text-muted',
+            )}
+            aria-live="polite"
+          >
+            {phase === 'thinking' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {PHASE_LABEL[phase]}
+          </span>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background/70">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-[width] duration-100"
+              style={{ width: `${Math.round(micLevel * 100)}%` }}
+            />
+          </div>
+        </div>
       ) : null}
 
       <div
@@ -278,7 +122,9 @@ export function ExamConversationPanel({ sessionId, className }: ExamConversation
       >
         {captions.length === 0 ? (
           <p className="text-sm text-muted">
-            The patient will speak first. Tap the mic to respond.
+            {micEnabled
+              ? 'The patient will speak first. Just talk naturally when you are ready.'
+              : 'Tap “Start talking” to begin the conversation with the patient.'}
           </p>
         ) : (
           captions.map((c) => (
@@ -297,27 +143,51 @@ export function ExamConversationPanel({ sessionId, className }: ExamConversation
         )}
       </div>
 
-      <Button
-        type="button"
-        onClick={toggleRecording}
-        disabled={!hubReady || sending}
-        variant={recording ? 'destructive' : 'primary'}
-        className="w-full"
-      >
-        {sending ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…
-          </>
-        ) : recording ? (
-          <>
-            <Mic className="mr-2 h-4 w-4 animate-pulse" /> Stop &amp; send
-          </>
-        ) : (
-          <>
-            <Mic className="mr-2 h-4 w-4" /> Hold to speak
-          </>
-        )}
-      </Button>
+      {ended ? (
+        <p className="rounded-md bg-muted/10 px-3 py-2 text-center text-sm text-muted">
+          The patient has finished. The card will move on automatically.
+        </p>
+      ) : !micEnabled ? (
+        <Button type="button" onClick={() => void enableMic()} disabled={!connected} className="w-full">
+          <Mic className="mr-2 h-4 w-4" /> Start talking
+        </Button>
+      ) : (
+        <Button type="button" onClick={disableMic} variant="outline" className="w-full">
+          <MicOff className="mr-2 h-4 w-4" /> Pause microphone
+        </Button>
+      )}
+
+      {/* Keyboard fallback for accessibility / no-mic environments */}
+      {!ended ? (
+        <div>
+          {showText ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submitText();
+                }}
+                placeholder="Type your response…"
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                aria-label="Type your response to the patient"
+              />
+              <Button type="button" size="sm" onClick={() => void submitText()} disabled={!connected || !text.trim()}>
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowText(true)}
+              className="text-xs text-muted underline underline-offset-2 hover:text-foreground"
+            >
+              Type instead
+            </button>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

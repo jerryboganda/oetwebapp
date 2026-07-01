@@ -11,9 +11,9 @@ namespace OetLearner.Api.Services.Seeding;
 // Gateway can route Speaking calls to the correct provider/model without
 // an admin having to click through the route editor first:
 //
-//   * speaking.score.v2        → Anthropic claude-sonnet-4-6 (caching)
-//   * speaking.patient.turn.v1 → Anthropic claude-haiku-4-5  (caching)
-//   * card.draft.v1            → Anthropic claude-sonnet-4-6 (caching)
+//   * speaking.score.v2        → Anthropic claude-sonnet-5 (caching)
+//   * speaking.patient.turn.v1 → Anthropic claude-sonnet-5  (caching)
+//   * card.draft.v1            → Anthropic claude-sonnet-5 (caching)
 //
 // Strictly additive — never overwrites an existing row, so admins can
 // retune routes via the editor without their changes being clobbered on

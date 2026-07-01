@@ -75,7 +75,7 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = featureCode,
-            Model = ResolveReplyModel(task, options),
+            Model = ResolveReplyModel(options),
             Temperature = options.ReplyTemperature,
             MaxTokens = 600,
             PromptTemplateId = task.ToString(),
@@ -112,7 +112,7 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = AiFeatureCodes.ConversationEvaluation,
-            Model = string.IsNullOrWhiteSpace(options.EvaluationModel) ? "claude-sonnet-4-6" : options.EvaluationModel,
+            Model = string.IsNullOrWhiteSpace(options.EvaluationModel) ? "claude-sonnet-5" : options.EvaluationModel,
             Temperature = options.EvaluationTemperature,
             MaxTokens = 4096,
             PromptTemplateId = "EvaluateConversation",
@@ -121,12 +121,11 @@ public sealed class ConversationAiOrchestrator(
         return ParseEvaluation(result.Completion, prompt.Metadata.AppliedRuleIds, result.RulebookVersion);
     }
 
-    private static string ResolveReplyModel(AiTaskMode task, ConversationOptions options)
+    private static string ResolveReplyModel(ConversationOptions options)
     {
-        if (!string.IsNullOrWhiteSpace(options.ReplyModel)) return options.ReplyModel;
-        return task == AiTaskMode.GenerateConversationOpening
-            ? "claude-sonnet-4-6"
-            : "claude-haiku-4-5";
+        // Opening and reply turns both run on Sonnet 5.0 (owner directive
+        // 2026-07-01); admins can still override via ConversationOptions.ReplyModel.
+        return string.IsNullOrWhiteSpace(options.ReplyModel) ? "claude-sonnet-5" : options.ReplyModel;
     }
 
     private (string text, string? emotion, bool shouldEnd, IReadOnlyList<string> rules) ParseReply(

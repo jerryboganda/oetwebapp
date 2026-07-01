@@ -70,7 +70,7 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
               "advisory": "AI-generated — pending tutor review"
             }
             """;
-        var gateway = new FakeAiGateway(completion, "claude-sonnet-4-6", new[] { "R03.4" });
+        var gateway = new FakeAiGateway(completion, "claude-sonnet-5", new[] { "R03.4" });
         var pipeline = BuildPipeline(gateway, aiPathReached: true);
 
         var outcome = await pipeline.EvaluateAsync(submissionId, default);
@@ -89,7 +89,7 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
         Assert.Equal("B", grade.BandLabel);
         Assert.Equal("high", grade.ConfidenceFlag);
         // Honest model provenance — not the prompt-template id.
-        Assert.Equal("claude-sonnet-4-6", grade.ModelUsed);
+        Assert.Equal("claude-sonnet-5", grade.ModelUsed);
         Assert.Equal(31, outcome.RawTotal);
         Assert.Equal("B", outcome.BandLabel);
         Assert.False(outcome.IdempotentReuse);
@@ -175,7 +175,7 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
         private readonly string _model;
         private readonly IReadOnlyList<string> _appliedRuleIds;
 
-        public FakeAiGateway(string completion, string model = "claude-sonnet-4-6", IReadOnlyList<string>? appliedRuleIds = null)
+        public FakeAiGateway(string completion, string model = "claude-sonnet-5", IReadOnlyList<string>? appliedRuleIds = null)
         {
             _completion = completion;
             _model = model;

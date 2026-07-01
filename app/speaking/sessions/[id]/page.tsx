@@ -4,26 +4,28 @@
  * Recording room for a Speaking session (plan C.2).
  *
  * Mounted at `/speaking/sessions/[id]`. Branches by `mode`:
- *   • `ai_self_practice` / `ai_exam` → connects to `ConversationHub`
- *     and starts an AI role-play. Renders the card, a 5-minute timer,
- *     an "End early" button, a captions strip and a mic-level indicator.
+ *   • `ai_self_practice` / `ai_exam` → runs the hands-free AI patient voice
+ *     conversation via `useSpeakingConversation` (mic → Whisper → Claude →
+ *     ElevenLabs → auto-play, with barge-in). Renders the card, a 5-minute
+ *     timer, an "End early" button, a captions strip and a mic-level indicator.
  *   • `live_tutor` → immediately redirects to `./live-tutor` where the
  *     LiveKit room is provisioned.
  *
- * The consent banner is mounted up front for AI sessions — the
- * existing `SpeakingConsentBanner` writes a server-side consent row
- * before mic capture begins (Phase 7 contract).
+ * The consent banner is mounted up front for AI sessions — the existing
+ * `SpeakingConsentBanner` writes a server-side consent row before mic capture
+ * begins (Phase 7 contract). The conversation hook is only handed the session
+ * id once consent is accepted, so no hub/mic work starts before then.
  *
- * NOTE: this page does NOT replace the 50KB native-capable recorder
- * at `app/speaking/task/[id]/page.tsx`. It targets the new
- * SessionId-based flow only.
+ * NOTE: this page does NOT replace the 50KB native-capable recorder at
+ * `app/speaking/task/[id]/page.tsx`. It targets the new SessionId-based flow.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Activity, Loader2, Mic, PhoneOff } from 'lucide-react';
+import { Activity, Loader2, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
+import { useSpeakingConversation, type ConversationPhase } from '@/hooks/useSpeakingConversation';
 import {
   endSpeakingSession,
   getSpeakingSession,
@@ -39,138 +41,12 @@ import { trackSpeaking } from '@/lib/analytics/speaking-events';
 const ROLE_PLAY_HARD_LIMIT_SECONDS = 5 * 60;
 const CLOCK_SYNC_INTERVAL_MS = 10_000;
 
-/** AI patient / interlocutor utterance pushed by the hub (WS2). */
-interface PatientUtterance {
-  speaker: 'patient' | 'interlocutor';
-  phase: 'warmup' | 'roleplay';
-  text: string;
-  audioUrl?: string | null;
-  emotionHint?: string | null;
-  shouldEnd?: boolean;
-  timestamp?: string;
-}
-
-/** Recognised learner speech echoed back by the hub (WS2). */
-interface LearnerCaption {
-  speaker: 'candidate';
-  text: string;
-  confidence?: number;
-  timestamp?: string;
-}
-
-interface ConversationHubBridge {
-  start: (sessionId: string) => Promise<void>;
-  stop: () => Promise<void>;
-  sendTurn: (sessionId: string, audioBase64: string, mimeType: string) => Promise<void>;
-  onUtterance: (cb: (utterance: PatientUtterance) => void) => void;
-  onLearnerCaption: (cb: (caption: LearnerCaption) => void) => void;
-  onShouldEnd: (cb: () => void) => void;
-  onError: (cb: (code: string, message: string) => void) => void;
-}
-
-async function loadConversationHub(): Promise<ConversationHubBridge | null> {
-  try {
-    const { HubConnectionBuilder, LogLevel } = await import('@microsoft/signalr');
-    const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-    const connection = new HubConnectionBuilder()
-      .withUrl('/api/backend/v1/conversations/hub', {
-        accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
-      })
-      .configureLogging(LogLevel.None)
-      .withAutomaticReconnect([0, 2_000, 5_000])
-      .build();
-
-    let utteranceHandler: ((u: PatientUtterance) => void) | null = null;
-    let learnerCaptionHandler: ((c: LearnerCaption) => void) | null = null;
-    let shouldEndHandler: (() => void) | null = null;
-    let errorHandler: ((code: string, message: string) => void) | null = null;
-
-    // The hub seeds the opening line + every AI reply on `PatientUtterance`.
-    connection.on('PatientUtterance', (payload: PatientUtterance) => {
-      if (payload?.text) utteranceHandler?.(payload);
-    });
-    // Recognised learner speech is echoed back on `LearnerCaption`.
-    connection.on('LearnerCaption', (payload: LearnerCaption) => {
-      if (payload?.text) learnerCaptionHandler?.(payload);
-    });
-    connection.on('SpeakingShouldEnd', () => shouldEndHandler?.());
-    connection.on('SpeakingRoleplayError', (code: string, message: string) => {
-      errorHandler?.(code, message);
-    });
-
-    return {
-      start: async (sessionId) => {
-        await connection.start();
-        await connection.invoke('StartSpeakingRoleplay', sessionId);
-      },
-      stop: async () => {
-        try {
-          await connection.stop();
-        } catch {
-          /* ignore */
-        }
-      },
-      sendTurn: async (sessionId, audioBase64, mimeType) => {
-        await connection.invoke('SendSpeakingRoleplayTurn', sessionId, audioBase64, mimeType);
-      },
-      onUtterance: (cb) => {
-        utteranceHandler = cb;
-      },
-      onLearnerCaption: (cb) => {
-        learnerCaptionHandler = cb;
-      },
-      onShouldEnd: (cb) => {
-        shouldEndHandler = cb;
-      },
-      onError: (cb) => {
-        errorHandler = cb;
-      },
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** Strips the `data:<mime>;base64,` prefix from a FileReader data URL. */
-function dataUrlToBase64(dataUrl: string): string {
-  const comma = dataUrl.indexOf(',');
-  return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-}
-
-/** Resolves a (possibly relative) media URL to one the browser can fetch. */
-function resolveMediaUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith('/api/backend')) return url;
-  if (url.startsWith('/')) return `/api/backend${url}`;
-  return `/api/backend/${url}`;
-}
-
-/** Plays the AI patient's synthesised reply audio, best-effort. */
-function playUtteranceAudio(url: string): void {
-  try {
-    const audio = new Audio(resolveMediaUrl(url));
-    void audio.play().catch(() => undefined);
-  } catch {
-    /* ignore — captions still render the reply text */
-  }
-}
-
-/** Picks a MediaRecorder MIME type the browser + backend ASR both accept. */
-function pickRecorderMime(): string | undefined {
-  if (typeof MediaRecorder === 'undefined') return undefined;
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
-  return candidates.find((c) => MediaRecorder.isTypeSupported(c));
-}
-
-/** Reads a recorded Blob into a base64 data URL. */
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read audio.'));
-    reader.readAsDataURL(blob);
-  });
-}
+const PHASE_LABEL: Record<ConversationPhase, string> = {
+  idle: 'Paused',
+  listening: 'Listening…',
+  thinking: 'Thinking…',
+  speaking: 'Speaking…',
+};
 
 function isAiMode(mode: string | SpeakingSessionMode): boolean {
   return mode === 'ai_self_practice' || mode === 'ai_exam';
@@ -193,26 +69,23 @@ export default function SpeakingSessionRecordingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [consentAccepted, setConsentAccepted] = useState(false);
-  const [hubReady, setHubReady] = useState(false);
-  const [hubError, setHubError] = useState<string | null>(null);
-  const [captions, setCaptions] = useState<Array<{ id: string; text: string; speaker: string }>>([]);
   const [secondsLeft, setSecondsLeft] = useState<number>(ROLE_PLAY_HARD_LIMIT_SECONDS);
-  const [micLevel, setMicLevel] = useState(0);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [sending, setSending] = useState(false);
 
-  const hubRef = useRef<ConversationHubBridge | null>(null);
   const endedRef = useRef(false);
-  const audioCleanupRef = useRef<(() => void) | null>(null);
   const roleplayStartedAtRef = useRef<number | null>(null);
   const trackedRoleplayStartRef = useRef(false);
   const trackedTimeWarningRef = useRef(false);
   const handleFinalizeRef = useRef<((reason?: 'manual' | 'timer') => Promise<void>) | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
-  const recordStreamRef = useRef<MediaStream | null>(null);
+
+  // The conversation hook only engages once consent is accepted for an AI
+  // session — until then it is handed an empty id and stays fully idle.
+  const convoSessionId =
+    consentAccepted && session && isAiMode(session.mode) && session.mode !== 'live_tutor'
+      ? session.sessionId
+      : '';
+  const convo = useSpeakingConversation(convoSessionId);
 
   // ── Load session ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -306,83 +179,13 @@ export default function SpeakingSessionRecordingPage() {
     };
   }, [session]);
 
-  // ── Connect hub once consent is accepted ─────────────────────────────────
-  useEffect(() => {
-    if (!session || !consentAccepted) return;
-    if (!isAiMode(session.mode)) return;
-    let cancelled = false;
-    loadConversationHub().then(async (hub) => {
-      if (cancelled || !hub) {
-        if (!hub) {
-          setHubError(
-            'Could not reach the AI partner. Please refresh, or end the session and try again.',
-          );
-        }
-        return;
-      }
-      hubRef.current = hub;
-      hub.onLearnerCaption((caption) => {
-        setCaptions((prev) => {
-          const next = [
-            ...prev,
-            { id: `${Date.now()}-${prev.length}`, text: caption.text, speaker: 'candidate' },
-          ];
-          return next.slice(-10);
-        });
-      });
-      hub.onUtterance((utterance) => {
-        setCaptions((prev) => {
-          const next = [
-            ...prev,
-            { id: `${Date.now()}-${prev.length}`, text: utterance.text, speaker: 'patient' },
-          ];
-          return next.slice(-10);
-        });
-        if (utterance.audioUrl) playUtteranceAudio(utterance.audioUrl);
-      });
-      hub.onShouldEnd(() => {
-        if (!endedRef.current) void handleFinalizeRef.current?.('timer');
-      });
-      hub.onError((_code, message) => {
-        setHubError(message);
-      });
-      try {
-        await hub.start(session.sessionId);
-        if (!cancelled) {
-          roleplayStartedAtRef.current ??= Date.now();
-          if (!trackedRoleplayStartRef.current) {
-            trackedRoleplayStartRef.current = true;
-            trackSpeaking('roleplay_started', {
-              sessionId: session.sessionId,
-              cardId: session.card.cardId,
-            });
-          }
-          setHubReady(true);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : 'Could not start the AI partner.';
-        setHubError(msg);
-      }
-    });
-    return () => {
-      cancelled = true;
-      hubRef.current?.stop().catch(() => undefined);
-      hubRef.current = null;
-    };
-  }, [consentAccepted, session]);
-
   const handleFinalize = useCallback(async (reason: 'manual' | 'timer' = 'manual') => {
     if (!session || endedRef.current) return;
-    if (reason === 'manual' && (recording || sending)) {
-      setEndError('Finish sending your current turn before ending the session.');
-      return;
-    }
     endedRef.current = true;
     setEnding(true);
     setEndError(null);
     try {
-      await hubRef.current?.stop().catch(() => undefined);
+      convo.disableMic();
       await endSpeakingSession(session.sessionId);
       // WS4 (§14.2) — commit the finished role-play for marking. Best-effort:
       // the backend gate stamps `submittedAt` only when assessable evidence
@@ -422,69 +225,26 @@ export default function SpeakingSessionRecordingPage() {
       endedRef.current = false;
       setEnding(false);
     }
-  }, [recording, router, sending, session]);
+  }, [convo, router, session]);
   handleFinalizeRef.current = handleFinalize;
 
-  // ── Push-to-talk: record one learner turn, send it to the AI ───────────────
-  const toggleRecording = useCallback(async () => {
-    if (!session || !hubReady) return;
-    const recorder = mediaRecorderRef.current;
-    if (recording && recorder) {
-      recorder.stop();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      recordStreamRef.current = stream;
-      const mimeType = pickRecorderMime();
-      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      recordChunksRef.current = [];
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) recordChunksRef.current.push(e.data);
-      };
-      rec.onstop = async () => {
-        setRecording(false);
-        recordStreamRef.current?.getTracks().forEach((t) => t.stop());
-        recordStreamRef.current = null;
-        const chunks = recordChunksRef.current;
-        recordChunksRef.current = [];
-        if (chunks.length === 0) return;
-        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
-        if (blob.size === 0) return;
-        setSending(true);
-        try {
-          const dataUrl = await blobToDataUrl(blob);
-          await hubRef.current?.sendTurn(
-            session.sessionId,
-            dataUrlToBase64(dataUrl),
-            blob.type || 'audio/webm',
-          );
-        } catch (err) {
-          setHubError(err instanceof Error ? err.message : 'Could not send your turn.');
-        } finally {
-          setSending(false);
-        }
-      };
-      mediaRecorderRef.current = rec;
-      rec.start();
-      setRecording(true);
-    } catch {
-      setHubError('Microphone access is required to speak. Please enable it and try again.');
-    }
-  }, [session, hubReady, recording]);
-
-  // Stop any in-flight recorder when the page unmounts.
+  // Track the role-play start the first time the learner enables the mic.
   useEffect(() => {
-    return () => {
-      try {
-        mediaRecorderRef.current?.stop();
-      } catch {
-        /* ignore */
-      }
-      recordStreamRef.current?.getTracks().forEach((t) => t.stop());
-      recordStreamRef.current = null;
-    };
-  }, []);
+    if (!session || !convo.micEnabled || trackedRoleplayStartRef.current) return;
+    trackedRoleplayStartRef.current = true;
+    roleplayStartedAtRef.current ??= Date.now();
+    trackSpeaking('roleplay_started', {
+      sessionId: session.sessionId,
+      cardId: session.card.cardId,
+    });
+  }, [convo.micEnabled, session]);
+
+  // The AI (or the server-side timer) can signal the conversation is over.
+  useEffect(() => {
+    if (convo.ended && !endedRef.current) {
+      void handleFinalizeRef.current?.('timer');
+    }
+  }, [convo.ended]);
 
   useEffect(() => {
     if (!session || !consentAccepted || !isAiMode(session.mode)) return;
@@ -512,64 +272,6 @@ export default function SpeakingSessionRecordingPage() {
       window.clearTimeout(timer);
     };
   }, [consentAccepted, handleFinalize, secondsLeft, session]);
-
-  // ── Mic level meter (purely visual) ──────────────────────────────────────
-  useEffect(() => {
-    if (!consentAccepted) return;
-    let stream: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
-    let rafId = 0;
-    let cancelled = false;
-
-    async function setup() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        const AudioCtxCtor =
-          (window.AudioContext as typeof AudioContext | undefined) ??
-          ((window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
-        ctx = new AudioCtxCtor();
-        const source = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        const data = new Uint8Array(analyser.frequencyBinCount);
-
-        function tick() {
-          if (cancelled || !ctx) return;
-          analyser.getByteTimeDomainData(data);
-          let peak = 0;
-          for (const sample of data) {
-            const delta = Math.abs(sample - 128);
-            if (delta > peak) peak = delta;
-          }
-          setMicLevel(Math.min(1, peak / 80));
-          rafId = window.requestAnimationFrame(tick);
-        }
-        tick();
-
-        audioCleanupRef.current = () => {
-          cancelled = true;
-          if (rafId) window.cancelAnimationFrame(rafId);
-          ctx?.close().catch(() => undefined);
-          stream?.getTracks().forEach((t) => t.stop());
-        };
-      } catch {
-        // Mic permission denied or unavailable — we still let the
-        // session run; the recorder will surface the real error.
-      }
-    }
-    void setup();
-
-    return () => {
-      cancelled = true;
-      audioCleanupRef.current?.();
-      audioCleanupRef.current = null;
-    };
-  }, [consentAccepted]);
 
   if (loading) {
     return (
@@ -610,6 +312,7 @@ export default function SpeakingSessionRecordingPage() {
 
   const { card } = session;
   const isWarning = secondsLeft > 0 && secondsLeft <= 30;
+  const connected = convo.connection === 'connected';
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
@@ -638,7 +341,7 @@ export default function SpeakingSessionRecordingPage() {
             variant="destructive"
             size="md"
             onClick={() => void handleFinalize('manual')}
-            disabled={ending || recording || sending}
+            disabled={ending}
             data-testid="speaking-session-end-early"
           >
             {ending ? (
@@ -678,45 +381,54 @@ export default function SpeakingSessionRecordingPage() {
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
               <Mic className="h-4 w-4 text-muted" aria-hidden /> Microphone
             </div>
-            <MicLevelMeter level={micLevel} />
-            <p className="mt-2 text-xs text-muted">
-              {hubReady ? 'AI partner connected.' : 'Connecting AI partner…'}
+            <MicLevelMeter level={convo.micLevel} />
+            <p className="mt-2 text-xs text-muted" aria-live="polite">
+              {!connected
+                ? 'Connecting AI patient…'
+                : convo.micEnabled
+                  ? PHASE_LABEL[convo.phase]
+                  : 'AI patient connected.'}
             </p>
-            <Button
-              type="button"
-              variant={recording ? 'destructive' : 'primary'}
-              size="md"
-              className="mt-3 w-full"
-              onClick={() => void toggleRecording()}
-              disabled={!hubReady || sending}
-              aria-pressed={recording}
-              data-testid="speaking-session-record-turn"
-            >
-              {recording ? (
-                <>
-                  <Activity className="mr-2 h-4 w-4 animate-pulse" aria-hidden /> Stop & send
-                </>
-              ) : sending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> Sending…
-                </>
-              ) : (
-                <>
-                  <Mic className="mr-2 h-4 w-4" aria-hidden /> Record turn
-                </>
-              )}
-            </Button>
+            {!convo.micEnabled ? (
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                className="mt-3 w-full"
+                onClick={() => void convo.enableMic()}
+                disabled={!connected || !consentAccepted}
+                data-testid="speaking-session-record-turn"
+              >
+                <Mic className="mr-2 h-4 w-4" aria-hidden /> Start talking
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                className="mt-3 w-full"
+                onClick={convo.disableMic}
+                data-testid="speaking-session-pause-mic"
+              >
+                <MicOff className="mr-2 h-4 w-4" aria-hidden /> Pause microphone
+              </Button>
+            )}
             <p className="mt-2 text-[11px] leading-snug text-muted">
-              Tap <span className="font-medium">Record turn</span>, speak to the patient, then tap{' '}
-              <span className="font-medium">Stop &amp; send</span>. The patient replies in
-              character.
+              Tap <span className="font-medium">Start talking</span>, then just speak to the patient
+              naturally — they listen, reply in character, and the mic re-opens automatically.
             </p>
-            {hubError ? (
+            {convo.voiceUnavailable ? (
+              <p className="mt-2 flex items-center gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-[11px] text-warning">
+                <Volume2 className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+                The patient&apos;s voice is unavailable — showing text only. Please tell your administrator.
+              </p>
+            ) : null}
+            {convo.error ? (
               <p
                 role="alert"
                 className="mt-2 rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger"
               >
-                {hubError}
+                {convo.error}
               </p>
             ) : null}
           </div>
@@ -729,13 +441,13 @@ export default function SpeakingSessionRecordingPage() {
               className="h-40 overflow-y-auto rounded-md bg-muted p-2 text-sm text-foreground"
               aria-live="polite"
             >
-              {captions.length === 0 ? (
+              {convo.captions.length === 0 ? (
                 <p className="italic text-muted">
                   Captions will appear here as you speak.
                 </p>
               ) : (
                 <ul className="space-y-1">
-                  {captions.map((c) => (
+                  {convo.captions.map((c) => (
                     <li key={c.id}>
                       <span
                         className={cn(

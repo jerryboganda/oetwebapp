@@ -207,7 +207,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingCoachV1,
             TemplateId = "writing.coach.v1",
-            Model = "claude-haiku-4-5",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.CoachV1,
             Temperature = 0.2,
             MaxInputTokens = 8_000,
@@ -229,7 +229,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingRewriteV1,
             TemplateId = "writing.rewrite.v1",
-            Model = "claude-sonnet-4-6",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.RewriteV1,
             Temperature = 0.7,
             MaxInputTokens = 8_000,
@@ -242,7 +242,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingScenarioGenerateV1,
             TemplateId = "writing.scenario.generate.v1",
-            Model = "claude-sonnet-4-6",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.ScenarioGenerateV1,
             Temperature = 0.7,
             MaxInputTokens = 4_000,
@@ -295,7 +295,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingCanonDetectV1,
             TemplateId = "writing.canon.detect.v1",
-            Model = "claude-haiku-4-5",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.CanonDetectV1,
             Temperature = 0.2,
             MaxInputTokens = 8_000,
@@ -314,7 +314,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingDrillGradeV1,
             TemplateId = "writing.drill.grade.v1",
-            Model = "claude-haiku-4-5",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.DrillGradeV1,
             Temperature = 0.2,
             MaxInputTokens = 2_000,
@@ -330,7 +330,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingOutlineV1,
             TemplateId = "writing.outline.v1",
-            Model = "claude-haiku-4-5",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.OutlineV1,
             Temperature = 0.2,
             MaxInputTokens = 4_000,
@@ -348,7 +348,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingParaphraseV1,
             TemplateId = "writing.paraphrase.v1",
-            Model = "claude-haiku-4-5",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.ParaphraseV1,
             Temperature = 0.7,
             MaxInputTokens = 1_000,
@@ -366,7 +366,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingAskV1,
             TemplateId = "writing.ask.v1",
-            Model = "claude-haiku-4-5",
+            Model = "claude-sonnet-5",
             SystemPrompt = WritingPromptTemplates.AskV1,
             Temperature = 0.2,
             MaxInputTokens = 8_000,

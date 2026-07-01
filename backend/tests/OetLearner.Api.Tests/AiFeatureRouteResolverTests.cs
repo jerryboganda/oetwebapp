@@ -37,11 +37,11 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
     }
 
     [Theory]
-    [InlineData(AiFeatureCodes.ConversationOpening, "anthropic", "claude-sonnet-4-6")]
-    [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-sonnet-4-6")]
-    [InlineData(AiFeatureCodes.ConversationEvaluation, "anthropic", "claude-sonnet-4-6")]
-    [InlineData(AiFeatureCodes.WritingGrade, "anthropic", "claude-sonnet-4-6")]
-    [InlineData(AiFeatureCodes.ReadingExplanation, "anthropic", "claude-sonnet-4-6")]
+    [InlineData(AiFeatureCodes.ConversationOpening, "anthropic", "claude-sonnet-5")]
+    [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-sonnet-5")]
+    [InlineData(AiFeatureCodes.ConversationEvaluation, "anthropic", "claude-sonnet-5")]
+    [InlineData(AiFeatureCodes.WritingGrade, "anthropic", "claude-sonnet-5")]
+    [InlineData(AiFeatureCodes.ReadingExplanation, "anthropic", "claude-sonnet-5")]
     [InlineData(AiFeatureCodes.PronunciationLinguisticScore, "gemini-pronunciation-audio", "gemini-3.5-flash")]
     public async Task ResolveAsync_NoRow_ReturnsStaticDefault_WhenProviderKeyed(string featureCode, string provider, string model)
     {

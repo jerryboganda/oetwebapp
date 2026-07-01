@@ -610,7 +610,7 @@ public class ListeningAnswer
     /// scorer only processes answers where this is null.</summary>
     public DateTimeOffset? AiScoredAt { get; set; }
 
-    /// <summary>Model id that produced the verdict (e.g. claude-sonnet-4-6).</summary>
+    /// <summary>Model id that produced the verdict (e.g. claude-sonnet-5).</summary>
     [MaxLength(64)]
     public string? AiModel { get; set; }
 

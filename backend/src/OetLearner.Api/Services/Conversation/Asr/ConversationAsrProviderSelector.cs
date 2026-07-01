@@ -36,6 +36,9 @@ public sealed class ConversationAsrProviderSelector(
             if (p is null) throw new InvalidOperationException($"ASR provider '{requested}' not registered.");
             if (!p.IsConfigured && requested != "mock")
                 throw new InvalidOperationException($"ASR provider '{requested}' not configured.");
+            if (string.Equals(requested, "mock", StringComparison.Ordinal) && IsProductionMockForbidden())
+                throw new InvalidOperationException(
+                    "Conversation ASR is pinned to 'mock', which is forbidden in production. Configure Whisper/Azure/Deepgram, or set the allow-mock override.");
             return p;
         }
 
@@ -51,6 +54,13 @@ public sealed class ConversationAsrProviderSelector(
         var mock = Find("mock");
         if (mock is not null)
         {
+            // Fail loud in production instead of silently transcribing with the
+            // deterministic mock (which produced canned "candidate" text and made
+            // a mis-keyed Whisper look like it was "working"). Dev/test keep the
+            // mock fallback so the loop runs without external credentials.
+            if (IsProductionMockForbidden())
+                throw new InvalidOperationException(
+                    "No real Conversation ASR provider (Whisper/Azure/Deepgram) is configured; refusing to fall back to the mock transcriber in production. Configure Speaking Whisper credentials in the admin AI providers panel.");
             logger.LogWarning("Conversation ASR: falling back to mock.");
             return mock;
         }

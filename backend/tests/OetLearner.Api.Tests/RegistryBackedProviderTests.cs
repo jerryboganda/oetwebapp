@@ -103,7 +103,7 @@ public sealed class RegistryBackedProviderTests
         var completion = await provider.CompleteAsync(new AiProviderRequest
         {
             ProviderCode = "anthropic",
-            Model = "claude-sonnet-4-6",
+            Model = "claude-sonnet-5",
             SystemPrompt = "rulebook and scoring criteria",
             UserPrompt = "grade this",
         }, CancellationToken.None);
@@ -175,7 +175,7 @@ public sealed class RegistryBackedProviderTests
             BaseUrl = "https://anthropic.example.test/v1",
             EncryptedApiKey = protector.Protect("anthropic-key-1234567890"),
             ApiKeyHint = "...7890",
-            DefaultModel = "claude-sonnet-4-6",
+            DefaultModel = "claude-sonnet-5",
             IsActive = true,
             FailoverPriority = 10,
             CreatedAt = DateTimeOffset.UtcNow,

@@ -137,11 +137,14 @@ public partial class ConversationHub
                 ? questions[0]
                 : "Hello! It is nice to meet you. To start, could you tell me a little about yourself?";
 
+            var warmUpAudioUrl = await TrySynthesizeReplyAudioAsync(scope.ServiceProvider, opening, Context.ConnectionAborted);
+
             await Clients.Caller.SendAsync("PatientUtterance", new
             {
                 speaker = "interlocutor",
                 phase = "warmup",
                 text = opening,
+                audioUrl = warmUpAudioUrl,
                 timestamp = DateTimeOffset.UtcNow,
             });
             return;
@@ -169,11 +172,14 @@ public partial class ConversationHub
             speakingSessionId,
             personaPrompt.Length);
 
+        var openingAudioUrl = await TrySynthesizeReplyAudioAsync(scope.ServiceProvider, script.OpeningResponse, Context.ConnectionAborted);
+
         await Clients.Caller.SendAsync("PatientUtterance", new
         {
             speaker = "patient",
             phase = "roleplay",
             text = script.OpeningResponse,
+            audioUrl = openingAudioUrl,
             timestamp = DateTimeOffset.UtcNow,
         });
     }
@@ -427,27 +433,7 @@ public partial class ConversationHub
         segments.Add(new SpeakingTurnSegment(
             isWarmUp ? "interlocutor" : "patient", replyMs, replyMs, replyText, 1.0));
 
-        string? replyAudioUrl = null;
-        try
-        {
-            var ttsSelector = sp.GetRequiredService<IConversationTtsProviderSelector>();
-            var tts = await ttsSelector.TrySelectAsync(ct);
-            if (tts is not null)
-            {
-                var ttsResult = await tts.SynthesizeAsync(
-                    new ConversationTtsRequest(replyText, string.Empty, "en-GB"), ct);
-                if (ttsResult.Audio.Length > 0)
-                {
-                    var audio = sp.GetRequiredService<IConversationAudioService>();
-                    var aref = await audio.WriteAsync(ttsResult.Audio, ttsResult.MimeType, ct);
-                    replyAudioUrl = aref.Url;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Speaking reply TTS failed for session {SessionId}.", speakingSessionId);
-        }
+        var replyAudioUrl = await TrySynthesizeReplyAudioAsync(sp, replyText, ct);
 
         await PersistSpeakingSegmentsAsync(db, transcriptRow, speakingSessionId, segments, ct);
 
@@ -627,6 +613,40 @@ public partial class ConversationHub
             cts.Dispose();
         }
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Synthesises spoken audio for one AI utterance (opening line or reply)
+    /// via the configured ElevenLabs voice and persists it, returning the
+    /// authorised media URL the learner client fetches (with a bearer token)
+    /// and plays. Returns <c>null</c> when TTS is disabled/unconfigured or the
+    /// synthesis fails — the caller then falls back to text-only, and the
+    /// frontend surfaces a "voice unavailable" hint. Passing an empty voice id
+    /// lets the provider resolve the configured default (the Adam Stone voice).
+    /// </summary>
+    private async Task<string?> TrySynthesizeReplyAudioAsync(
+        IServiceProvider sp, string text, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        try
+        {
+            var ttsSelector = sp.GetRequiredService<IConversationTtsProviderSelector>();
+            var tts = await ttsSelector.TrySelectAsync(ct);
+            if (tts is null) return null;
+
+            var ttsResult = await tts.SynthesizeAsync(
+                new ConversationTtsRequest(text, string.Empty, "en-GB"), ct);
+            if (ttsResult.Audio.Length == 0) return null;
+
+            var audio = sp.GetRequiredService<IConversationAudioService>();
+            var aref = await audio.WriteAsync(ttsResult.Audio, ttsResult.MimeType, ct);
+            return aref.Url;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Speaking utterance TTS failed.");
+            return null;
+        }
     }
 
     /// <summary>

@@ -73,7 +73,7 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     baseUrl: 'https://api.anthropic.com/v1',
     // Default contextual-understanding model across the app (admin can still
     // override per feature in /admin/ai-providers → Feature routes).
-    defaultModel: 'claude-sonnet-4-6',
+    defaultModel: 'claude-sonnet-5',
     pricePer1kPromptTokens: 0.003,
     pricePer1kCompletionTokens: 0.015,
     retryCount: 2,
