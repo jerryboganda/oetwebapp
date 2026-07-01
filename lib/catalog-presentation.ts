@@ -284,10 +284,14 @@ export function deriveDefaultBullets(plan: PublicCatalogPlanRow): string[] {
     bullets.push(`${plan.bundledWritingAssessments} bundled writing assessment${plan.bundledWritingAssessments === 1 ? '' : 's'}`);
   }
   if (plan.bundledSpeakingSessions > 0) {
-    bullets.push(`${plan.bundledSpeakingSessions} private speaking session${plan.bundledSpeakingSessions === 1 ? '' : 's'}`);
+    bullets.push(
+      `${plan.bundledSpeakingSessions} private Speaking session${plan.bundledSpeakingSessions === 1 ? '' : 's'} with a human tutor`,
+    );
   }
   if (plan.bundledAiCredits > 0) {
-    bullets.push(`${plan.bundledAiCredits} AI practice credits`);
+    bullets.push(
+      `${plan.bundledAiCredits} AI credit${plan.bundledAiCredits === 1 ? '' : 's'} for AI-marked Speaking & Writing (AI Speaking exam: 2 credits — 1 per card)`,
+    );
   }
   if (plan.bundledTutorBook) {
     bullets.push('The Tutor Book, First Edition 2026 (PDF + Telegram)');

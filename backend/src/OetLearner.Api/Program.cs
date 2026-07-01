@@ -2320,6 +2320,28 @@ using (var speakingDrillScope = app.Services.CreateScope())
     }
 }
 
+// Speaking card types + role-play cards seed (Speaking module rules pass,
+// 2026-06-29). Seeds the 6 hidden communication-function card types (one-off
+// bootstrap, admin-editable thereafter) THEN the original sample role-play
+// cards, each mapped to a card type. Ordered so the card-type FK target exists
+// before the cards reference it. Both are idempotent; non-fatal on failure.
+using (var speakingContentScope = app.Services.CreateScope())
+{
+    var speakingContentLogger = speakingContentScope.ServiceProvider
+        .GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var speakingContentDb = speakingContentScope.ServiceProvider
+            .GetRequiredService<OetLearner.Api.Data.LearnerDbContext>();
+        await OetLearner.Api.Services.Seeding.SpeakingCardTypeSeed.SeedAsync(speakingContentDb, CancellationToken.None);
+        await OetLearner.Api.Services.Seeding.SpeakingRolePlayCardSeed.SeedAsync(speakingContentDb, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        speakingContentLogger.LogWarning(ex, "Speaking card type / role-play card seeder failed (non-fatal)");
+    }
+}
+
 // Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).
 // Reads `Project Real Content/Listening (..)/Listening Sample {1,2,3}/` and
 // registers each as a Draft ContentPaper with all 4 required asset roles

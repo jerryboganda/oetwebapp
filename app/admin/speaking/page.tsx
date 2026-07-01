@@ -23,6 +23,7 @@ import {
   Minus,
   Pencil,
   Plus,
+  Tags,
 } from 'lucide-react';
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { AdminHubSection, type AdminHubLink } from '@/components/admin/ui/hub-card';
@@ -301,6 +302,9 @@ export default function AdminSpeakingPage() {
       </Button>
       <Button asChild variant="outline">
         <Link href="/admin/speaking/mock-sets/new"><Plus className="h-4 w-4" /> New mock set</Link>
+      </Button>
+      <Button asChild variant="outline">
+        <Link href="/admin/content/speaking/card-types"><Tags className="h-4 w-4" /> Card types</Link>
       </Button>
     </div>
   ) : null;
