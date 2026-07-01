@@ -64,7 +64,7 @@ public sealed class ListeningPartBCExtractionService(
 {
     private const string AnthropicProviderCode = "anthropic";
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
-    private const string DefaultModel = "claude-sonnet-4-6";
+    private const string DefaultModel = "claude-sonnet-5";
     private const string ToolName = "emit_part_bc_answers";
 
     private static readonly JsonSerializerOptions CamelJson = new()

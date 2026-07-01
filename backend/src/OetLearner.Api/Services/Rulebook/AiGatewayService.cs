@@ -1660,7 +1660,7 @@ public sealed class AiGatewayResult
 
     /// <summary>
     /// The model id the gateway actually routed this call to (e.g.
-    /// "claude-sonnet-4-6"). Lets callers record honest model provenance
+    /// "claude-sonnet-5"). Lets callers record honest model provenance
     /// instead of guessing or storing a prompt-template id. Empty when a
     /// caller/fake does not populate it.
     /// </summary>

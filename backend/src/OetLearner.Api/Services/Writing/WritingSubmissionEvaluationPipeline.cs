@@ -424,7 +424,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var findings = ai.Findings ?? new List<RubricAiFinding>();
         var perCriterion = BuildPerCriterionFeedbackJson(c1, c2, c3, c4, c5, c6, findings);
         var topThree = BuildTopThreePrioritiesJson(findings);
-        var model = string.IsNullOrWhiteSpace(result.ResolvedModel) ? "claude-sonnet-4-6" : result.ResolvedModel;
+        var model = string.IsNullOrWhiteSpace(result.ResolvedModel) ? "claude-sonnet-5" : result.ResolvedModel;
 
         // EstimatedBand is stored in raw-total units (0–38) to match OetBandLabel
         // and the seed data; a complete contract is high confidence.

@@ -117,7 +117,7 @@ public sealed class ListeningPartAExtractionService(
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
     // Claude Sonnet 4.6 is the app-wide contextual-understanding model; the
     // registered `anthropic` row's DefaultModel overrides this when set.
-    private const string DefaultModel = "claude-sonnet-4-6";
+    private const string DefaultModel = "claude-sonnet-5";
     private const string ToolName = "emit_part_a_manifest";
 
     private static readonly JsonSerializerOptions CamelJson = new()

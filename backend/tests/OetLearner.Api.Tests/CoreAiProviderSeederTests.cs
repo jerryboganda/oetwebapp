@@ -38,7 +38,7 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Contains(seeds, s => s.Code == "anthropic"
             && s.Dialect == AiProviderDialect.Anthropic
             && s.Category == AiProviderCategory.TextChat
-            && s.DefaultModel == "claude-sonnet-4-6");
+            && s.DefaultModel == "claude-sonnet-5");
         Assert.Contains(seeds, s => s.Code == "mistral-ocr"
             && s.Category == AiProviderCategory.Ocr
             && s.DefaultModel == "mistral-ocr-latest");

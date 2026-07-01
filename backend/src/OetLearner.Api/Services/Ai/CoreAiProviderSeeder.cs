@@ -108,7 +108,7 @@ public sealed class CoreAiProviderSeeder(
             Category: AiProviderCategory.TextChat,
             Dialect: AiProviderDialect.Anthropic,
             BaseUrl: "https://api.anthropic.com/v1",
-            DefaultModel: "claude-sonnet-4-6",
+            DefaultModel: "claude-sonnet-5",
             PricePer1kPromptTokens: 0.003m,
             PricePer1kCompletionTokens: 0.015m,
             FailoverPriority: 20),

@@ -422,7 +422,7 @@ public sealed class AiProviderConnectionTester(
         // Share the runtime provider's base-URL normalization so the probe
         // predicts runtime behavior exactly (bare host or /v1-suffixed).
         var url = new Uri(AnthropicProvider.NormalizeBaseUrl(baseUrl) + "/v1/messages", UriKind.Absolute);
-        var model = string.IsNullOrWhiteSpace(defaultModel) ? "claude-sonnet-4-6" : defaultModel;
+        var model = string.IsNullOrWhiteSpace(defaultModel) ? "claude-sonnet-5" : defaultModel;
         var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.TryAddWithoutValidation("x-api-key", apiKey);
         req.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
