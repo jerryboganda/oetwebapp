@@ -31,6 +31,14 @@ public sealed record EffectiveEntitlementSnapshot(
     public IReadOnlyList<string> EnabledModules { get; init; } = Array.Empty<string>();
     public bool WritingAddonsEnabled { get; init; }
     public bool SpeakingAddonsEnabled { get; init; }
+
+    /// <summary>Gates Speaking "Practice Card Access" (ai_self_practice
+    /// mode). Defaults true (see <see cref="Domain.BillingPlan.SpeakingPracticeAccessEnabled"/>)
+    /// so accounts with no eligible subscription — who today buy AI package
+    /// credits a la carte regardless of plan — are never blocked by this
+    /// flag; it only takes effect for a resolved, eligible plan that
+    /// explicitly disables it.</summary>
+    public bool SpeakingPracticeAccessEnabled { get; init; } = true;
     public bool TutorBookDiscountEnabled { get; init; }
     public int WritingAssessmentsRemaining { get; init; }
     public int SpeakingSessionsRemaining { get; init; }
@@ -186,6 +194,7 @@ public sealed class EffectiveEntitlementResolver(
                 EnabledModules = ParseDashboardModules(plan.DashboardModulesJson),
                 WritingAddonsEnabled = plan.WritingAddonsEnabled,
                 SpeakingAddonsEnabled = plan.SpeakingAddonsEnabled,
+                SpeakingPracticeAccessEnabled = plan.SpeakingPracticeAccessEnabled,
                 TutorBookDiscountEnabled = plan.TutorBookDiscountEnabled,
                 WritingAssessmentsRemaining = subscription.WritingAssessmentsRemaining,
                 SpeakingSessionsRemaining = subscription.SpeakingSessionsRemaining,

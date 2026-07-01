@@ -3,6 +3,11 @@
 /**
  * OET Speaking — Phase 3 P3.4 — warm-up timer page.
  *
+ * Part of the interlocutor-trainee practice route tree
+ * (`app/speaking/sessions/[id]/*`), reached from
+ * `app/admin/onboarding/interlocutor/page.tsx` — not the candidate exam
+ * flow, which lives under `app/speaking/exam/[id]`.
+ *
  * Renders a 90-second unscored warm-up phase between intake and prep.
  * The actual conversational state is owned by the backend session
  * machine; this page is purely a timer + transition shell.

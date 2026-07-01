@@ -3,6 +3,11 @@
 /**
  * Prep-phase countdown for the OET Speaking session (plan C.3).
  *
+ * Used only by the interlocutor-trainee practice route
+ * (`app/speaking/sessions/[id]/prep`), not the candidate exam flow — see
+ * `app/speaking/exam/[id]/page.tsx` for the current candidate-facing prep
+ * screen.
+ *
  * Renders a large mm:ss display with a circular SVG progress ring.
  * The ring fills counter-clockwise as time runs out. Below ~30 s
  * remaining the digits flip red and a subtle pulse engages to give

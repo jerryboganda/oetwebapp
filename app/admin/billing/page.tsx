@@ -110,6 +110,7 @@ interface BillingPlanFormState {
   accessDurationDays: string;
   writingAddonsEnabled: boolean;
   speakingAddonsEnabled: boolean;
+  speakingPracticeAccessEnabled: boolean;
   tutorBookDiscountEnabled: boolean;
   profession: string;
   productCategory: string;
@@ -195,6 +196,7 @@ const defaultPlanForm: BillingPlanFormState = {
   accessDurationDays: '180',
   writingAddonsEnabled: false,
   speakingAddonsEnabled: false,
+  speakingPracticeAccessEnabled: true,
   tutorBookDiscountEnabled: false,
   profession: 'all',
   productCategory: '',
@@ -509,6 +511,7 @@ function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
     accessDurationDays: String(plan.accessDurationDays ?? 180),
     writingAddonsEnabled: plan.writingAddonsEnabled ?? false,
     speakingAddonsEnabled: plan.speakingAddonsEnabled ?? false,
+    speakingPracticeAccessEnabled: plan.speakingPracticeAccessEnabled ?? true,
     tutorBookDiscountEnabled: plan.tutorBookDiscountEnabled ?? false,
     profession: plan.profession ?? 'all',
     productCategory: plan.productCategory ?? '',
@@ -2395,6 +2398,7 @@ export default function BillingPage() {
         accessDurationDays: toNumber(planForm.accessDurationDays, 180),
         writingAddonsEnabled: planForm.writingAddonsEnabled,
         speakingAddonsEnabled: planForm.speakingAddonsEnabled,
+        speakingPracticeAccessEnabled: planForm.speakingPracticeAccessEnabled,
         tutorBookDiscountEnabled: planForm.tutorBookDiscountEnabled,
         profession: planForm.profession,
         productCategory: planForm.productCategory,
@@ -3318,18 +3322,22 @@ export default function BillingPage() {
               />
             </div>
             <div className="mt-4 rounded-md border border-amber-300/40 bg-admin-bg-surface/60 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
-              <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Three add-on eligibility flags</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Add-on eligibility &amp; access flags</p>
               <div className="mt-2 flex flex-wrap gap-4">
                 <Checkbox label="W: Writing letter assessment add-ons" checked={planForm.writingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, writingAddonsEnabled: event.target.checked }))} />
-                <Checkbox label="S: Speaking session add-ons" checked={planForm.speakingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingAddonsEnabled: event.target.checked }))} />
+                <Checkbox label="S: Human Tutor Speaking session add-ons" checked={planForm.speakingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingAddonsEnabled: event.target.checked }))} />
+                <Checkbox label="Speaking Practice Card Access" checked={planForm.speakingPracticeAccessEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingPracticeAccessEnabled: event.target.checked }))} />
                 <Checkbox label="TB £32: Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
               </div>
+              <p className="mt-2 text-[11px] text-admin-text-secondary">
+                &ldquo;Human Tutor Speaking&rdquo; (bookable live-tutor sessions) and AI Speaking Credits (self-practice + full mock exam, sold separately as AI Packages) are distinct quotas — see the AI Packages editor for the latter. Speaking Practice Card Access gates ai_self_practice for this plan; disabling it blocks self-practice regardless of any AI credit balance the learner holds.
+              </p>
             </div>
             <div className="mt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Bundled grants on activation</p>
               <div className="mt-2 grid gap-3 md:grid-cols-3">
                 <Input label="Writing assessments" type="number" min={0} value={planForm.bundledWritingAssessments} onChange={(event) => setPlanForm((current) => ({ ...current, bundledWritingAssessments: event.target.value }))} />
-                <Input label="Speaking sessions" type="number" min={0} value={planForm.bundledSpeakingSessions} onChange={(event) => setPlanForm((current) => ({ ...current, bundledSpeakingSessions: event.target.value }))} />
+                <Input label="Human Tutor Speaking sessions" type="number" min={0} value={planForm.bundledSpeakingSessions} onChange={(event) => setPlanForm((current) => ({ ...current, bundledSpeakingSessions: event.target.value }))} hint="Bookable live-tutor sessions, distinct from AI Speaking Credits" />
                 <Input label="AI credits" type="number" min={0} value={planForm.bundledAiCredits} onChange={(event) => setPlanForm((current) => ({ ...current, bundledAiCredits: event.target.value }))} />
               </div>
               <div className="mt-2 flex flex-wrap gap-4">

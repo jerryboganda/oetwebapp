@@ -65,7 +65,7 @@ Production deploys are exact-SHA only. After CI publishes immutable digest image
 refs for the target SHA:
 
 ```bash
-ssh root@68.183.32.122
+ssh root@185.252.233.186
 cd /opt/oetwebapp
 DEPLOY_REF=<40-char-sha> \
 WEB_IMAGE=<web-image@sha256:...> \
@@ -117,7 +117,7 @@ This rolls back **without restarting** any container.
 If the issue is broader (auth, API, scoring, gateway):
 
 ```bash
-ssh root@68.183.32.122
+ssh root@185.252.233.186
 cd /opt/oetwebapp
 bash ./scripts/deploy/rollback-prod.sh   # rolls to previous-good image digests
 ```

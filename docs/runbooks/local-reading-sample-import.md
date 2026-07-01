@@ -1,7 +1,7 @@
 # Local Reading Sample Import Runbook
 
 > Audience: local developer or content operator preparing owner-supplied OET Reading samples.
-> Scope: localhost Docker only. Do not use this runbook against staging, production, or the `oet-dev` VPS.
+> Scope: localhost Docker only. Do not use this runbook against staging, production, or the `185.252.233.186` VPS.
 
 This runbook imports structured Reading papers through the real admin API and
 publishes them as active learner-visible papers. PDFs alone are not enough: the

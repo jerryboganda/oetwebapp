@@ -3,6 +3,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Speaking;
 
@@ -23,7 +24,8 @@ namespace OetLearner.Api.Services.Speaking;
 /// </summary>
 public sealed class SpeakingSessionService(
     LearnerDbContext db,
-    IAiPackageCreditService? aiPackageCreditService = null)
+    IAiPackageCreditService? aiPackageCreditService = null,
+    IEffectiveEntitlementResolver? entitlementResolver = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -172,6 +174,22 @@ public sealed class SpeakingSessionService(
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        // "Practice Card Access": a plan can disable ai_self_practice
+        // outright (see BillingPlan.SpeakingPracticeAccessEnabled). Only
+        // takes effect for a resolved, eligible subscription that explicitly
+        // disables it — no-subscription/free accounts (today's a-la-carte
+        // credit buyers) are never blocked by this check.
+        if (session.Mode == SpeakingSessionMode.AiSelfPractice && entitlementResolver is not null)
+        {
+            var snapshot = await entitlementResolver.ResolveAsync(userId, ct);
+            if (snapshot.HasEligibleSubscription && !snapshot.SpeakingPracticeAccessEnabled)
+            {
+                throw ApiException.Forbidden(
+                    "speaking_practice_not_included",
+                    "Speaking practice cards are not included in your current plan.");
+            }
+        }
 
         // Speaking module rebuild (2026-06-11): AI self-practice charges exactly
         // ONE speaking package credit per card, taken here at CARD REVEAL (prep

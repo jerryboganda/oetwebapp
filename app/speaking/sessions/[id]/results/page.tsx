@@ -3,6 +3,10 @@
 /**
  * Learner: dual-scoring results view for a speaking session.
  *
+ * Part of the interlocutor-trainee practice route tree
+ * (`app/speaking/sessions/[id]/*`) — not the candidate exam results page,
+ * which lives under `app/speaking/exam/[id]`.
+ *
  * Three tabs:
  * - Overview: DualAssessmentLayout (AI + Tutor side-by-side + divergence banner)
  * - Transcript: TranscriptPlayerWithComments (readOnly — comments are tutor-only)

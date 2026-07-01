@@ -439,8 +439,8 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
             <div className="grid gap-4 sm:grid-cols-3">
               <Input label="Flexible credits" inputMode="numeric" value={form.flexibleCredits} onChange={(e) => setField('flexibleCredits', e.target.value)} hint="Writing or Speaking" />
               <Input label="Writing credits" inputMode="numeric" value={form.writingCredits} onChange={(e) => setField('writingCredits', e.target.value)} />
-              <Input label="Speaking credits" inputMode="numeric" value={form.speakingCredits} onChange={(e) => setField('speakingCredits', e.target.value)} />
-              <Input label="Mock exams" inputMode="numeric" value={form.mocks} onChange={(e) => setField('mocks', e.target.value)} />
+              <Input label="AI Speaking Credits (practice)" inputMode="numeric" value={form.speakingCredits} onChange={(e) => setField('speakingCredits', e.target.value)} hint="Self-practice cards + exam fallback; 1 credit per card" />
+              <Input label="Full Mock Exam Credits" inputMode="numeric" value={form.mocks} onChange={(e) => setField('mocks', e.target.value)} hint="For Speaking: 1 credit = 1 whole two-card exam (Card A + B), separate from AI Speaking Credits above" />
               <Input label="Listening tests" inputMode="numeric" value={form.listeningTests} onChange={(e) => setField('listeningTests', e.target.value)} hint="Blank = unlimited" />
               <Input label="Reading tests" inputMode="numeric" value={form.readingTests} onChange={(e) => setField('readingTests', e.target.value)} hint="Blank = unlimited" />
               <Input label="Pass-guarantee (months)" inputMode="numeric" value={form.passGuaranteeMonths} onChange={(e) => setField('passGuaranteeMonths', e.target.value)} />

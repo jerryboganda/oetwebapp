@@ -313,6 +313,7 @@ public partial class AdminService(
         int? AccessDurationDays,
         bool? WritingAddonsEnabled,
         bool? SpeakingAddonsEnabled,
+        bool? SpeakingPracticeAccessEnabled,
         bool? TutorBookDiscountEnabled,
         string? Profession,
         string? ProductCategory,
@@ -328,7 +329,7 @@ public partial class AdminService(
         string? ComparisonFeaturesJson)
     {
         public static Oet2026PlanFields Empty { get; } = new(
-            null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null, null,
             null, null, null, null, null, null, null, null, null);
     }
 
@@ -388,6 +389,7 @@ public partial class AdminService(
         if (fields.AccessDurationDays.HasValue) plan.AccessDurationDays = Math.Max(0, fields.AccessDurationDays.Value);
         if (fields.WritingAddonsEnabled.HasValue) plan.WritingAddonsEnabled = fields.WritingAddonsEnabled.Value;
         if (fields.SpeakingAddonsEnabled.HasValue) plan.SpeakingAddonsEnabled = fields.SpeakingAddonsEnabled.Value;
+        if (fields.SpeakingPracticeAccessEnabled.HasValue) plan.SpeakingPracticeAccessEnabled = fields.SpeakingPracticeAccessEnabled.Value;
         if (fields.TutorBookDiscountEnabled.HasValue) plan.TutorBookDiscountEnabled = fields.TutorBookDiscountEnabled.Value;
         if (!string.IsNullOrWhiteSpace(fields.Profession)) plan.Profession = fields.Profession.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(fields.ProductCategory)) plan.ProductCategory = fields.ProductCategory.Trim().ToLowerInvariant();
@@ -549,6 +551,7 @@ public partial class AdminService(
             request.AccessDurationDays,
             request.WritingAddonsEnabled,
             request.SpeakingAddonsEnabled,
+            request.SpeakingPracticeAccessEnabled,
             request.TutorBookDiscountEnabled,
             request.Profession,
             request.ProductCategory,
@@ -585,6 +588,7 @@ public partial class AdminService(
             request.AccessDurationDays,
             request.WritingAddonsEnabled,
             request.SpeakingAddonsEnabled,
+            request.SpeakingPracticeAccessEnabled,
             request.TutorBookDiscountEnabled,
             request.Profession,
             request.ProductCategory,
@@ -1404,6 +1408,7 @@ public partial class AdminService(
         accessDurationDays = plan.AccessDurationDays,
         writingAddonsEnabled = plan.WritingAddonsEnabled,
         speakingAddonsEnabled = plan.SpeakingAddonsEnabled,
+        speakingPracticeAccessEnabled = plan.SpeakingPracticeAccessEnabled,
         tutorBookDiscountEnabled = plan.TutorBookDiscountEnabled,
         profession = plan.Profession,
         productCategory = plan.ProductCategory,
@@ -1517,6 +1522,7 @@ public partial class AdminService(
         AccessDurationDays = plan.AccessDurationDays,
         WritingAddonsEnabled = plan.WritingAddonsEnabled,
         SpeakingAddonsEnabled = plan.SpeakingAddonsEnabled,
+        SpeakingPracticeAccessEnabled = plan.SpeakingPracticeAccessEnabled,
         TutorBookDiscountEnabled = plan.TutorBookDiscountEnabled,
         Profession = plan.Profession,
         ProductCategory = plan.ProductCategory,

@@ -394,6 +394,7 @@ export interface AdminBillingPlan {
   accessDurationDays?: number;
   writingAddonsEnabled?: boolean;
   speakingAddonsEnabled?: boolean;
+  speakingPracticeAccessEnabled?: boolean;
   tutorBookDiscountEnabled?: boolean;
   profession?: string;
   productCategory?: string;
@@ -1145,6 +1146,7 @@ export interface PublicCatalogPlanRow {
   profession: string;
   writingAddonsEnabled: boolean;
   speakingAddonsEnabled: boolean;
+  speakingPracticeAccessEnabled: boolean;
   tutorBookDiscountEnabled: boolean;
   bundledWritingAssessments: number;
   bundledSpeakingSessions: number;

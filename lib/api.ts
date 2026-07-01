@@ -5549,6 +5549,7 @@ export interface AdminBillingPlanOet2026Fields {
   accessDurationDays?: number;
   writingAddonsEnabled?: boolean;
   speakingAddonsEnabled?: boolean;
+  speakingPracticeAccessEnabled?: boolean;
   tutorBookDiscountEnabled?: boolean;
   profession?: string;
   productCategory?: string;
@@ -5604,6 +5605,7 @@ export async function createAdminBillingPlan(payload: {
       accessDurationDays: payload.accessDurationDays ?? null,
       writingAddonsEnabled: payload.writingAddonsEnabled ?? null,
       speakingAddonsEnabled: payload.speakingAddonsEnabled ?? null,
+      speakingPracticeAccessEnabled: payload.speakingPracticeAccessEnabled ?? null,
       tutorBookDiscountEnabled: payload.tutorBookDiscountEnabled ?? null,
       profession: payload.profession ?? null,
       productCategory: payload.productCategory ?? null,
@@ -5660,6 +5662,7 @@ export async function updateAdminBillingPlan(planId: string, payload: {
       accessDurationDays: payload.accessDurationDays ?? null,
       writingAddonsEnabled: payload.writingAddonsEnabled ?? null,
       speakingAddonsEnabled: payload.speakingAddonsEnabled ?? null,
+      speakingPracticeAccessEnabled: payload.speakingPracticeAccessEnabled ?? null,
       tutorBookDiscountEnabled: payload.tutorBookDiscountEnabled ?? null,
       profession: payload.profession ?? null,
       productCategory: payload.productCategory ?? null,
@@ -5891,6 +5894,7 @@ export interface MyEntitlementSnapshot {
   enabledModules: string[];
   writingAddonsEnabled: boolean;
   speakingAddonsEnabled: boolean;
+  speakingPracticeAccessEnabled: boolean;
   tutorBookDiscountEnabled: boolean;
   writingAssessmentsRemaining: number;
   speakingSessionsRemaining: number;

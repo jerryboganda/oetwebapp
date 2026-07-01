@@ -311,7 +311,8 @@ export function planFeatureBullets(plan: PublicCatalogPlanRow, presentation: Cat
 export function addOnEnabledFlags(plan: PublicCatalogPlanRow): Array<{ key: string; label: string }> {
   const flags: Array<{ key: string; label: string }> = [];
   if (plan.writingAddonsEnabled) flags.push({ key: 'W', label: 'Writing add-ons' });
-  if (plan.speakingAddonsEnabled) flags.push({ key: 'S', label: 'Speaking add-ons' });
+  if (plan.speakingAddonsEnabled) flags.push({ key: 'S', label: 'Human Tutor Speaking add-ons' });
+  if (plan.speakingPracticeAccessEnabled) flags.push({ key: 'SP', label: 'Speaking Practice Card Access' });
   if (plan.tutorBookDiscountEnabled) flags.push({ key: 'TB', label: 'Tutor Book £32' });
   return flags;
 }

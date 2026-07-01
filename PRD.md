@@ -7,7 +7,7 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 
 ## Locked Decisions
 - Preserve current modified and untracked work; no reset/clean/branch switch.
-- Heavy validation/build/test runs only inside local Docker Desktop containers per `AGENTS.md`; `oet-dev` is production deployment only.
+- Heavy validation/build/test runs only inside local Docker Desktop containers per `AGENTS.md`; the production VPS (`185.252.233.186`) is for deployment only.
 - Production deploy remains explicitly gated after local validation; content publishing remains explicitly review-gated.
 - Strict mock enforcement applies to final-readiness and explicit exam-mode mocks.
 - Mock booking reschedule limit is admin-configurable, default `2`.

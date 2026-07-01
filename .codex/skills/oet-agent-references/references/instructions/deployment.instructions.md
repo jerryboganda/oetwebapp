@@ -32,7 +32,7 @@ Local validation is NOT done here — it runs on the host via pnpm (see `validat
 
 ## VPS production operational notes
 
-The VPS (`oet-dev`, production deploy target — never run validation there) has known gotchas:
+The VPS (`185.252.233.186`, production deploy target — never run validation there) has known gotchas:
 
 - **No heavy builds on the VPS:** frontend, API, backend, Next.js, and .NET
   builds must run on GitHub Actions. The VPS only fetches the exact commit,

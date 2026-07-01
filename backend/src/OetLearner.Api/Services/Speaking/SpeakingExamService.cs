@@ -19,10 +19,12 @@ namespace OetLearner.Api.Services.Speaking;
 /// persisted timestamps (never from in-memory timers), so the exam survives a
 /// server restart — see <see cref="AdvanceAsync"/>.
 ///
-/// Credits (AI mode): one speaking package credit is debited per card at card
-/// reveal (prep start), idempotent on the exam+slot reference, so an exam costs
-/// exactly two credits. Live-tutor exams cost no credits (pay-per-session via
-/// the Stripe booking) and are human-marked.
+/// Credits (AI mode): Card A first tries to fund the whole exam from a "Full
+/// Mock Speaking Exam Access" unit (<see cref="Domain.SpeakingExamSession.FundedByMockCredit"/>);
+/// otherwise one AI Speaking Credit is debited per card at card reveal (prep
+/// start), idempotent on the exam+slot reference, so an exam costs exactly
+/// two credits. Live-tutor exams cost no credits (pay-per-session via the
+/// Stripe booking) and are human-marked.
 /// </summary>
 public sealed class SpeakingExamService(
     LearnerDbContext db,
@@ -75,22 +77,28 @@ public sealed class SpeakingExamService(
         var (cardA, cardB, professionId) = await ResolveCardsAsync(req, ct);
 
         // AI exams pre-check the wallet so the candidate is never stranded
-        // after Card A with no credit for Card B. Two speaking credits needed.
+        // after Card A with no credit for Card B. Two speaking credits needed
+        // — UNLESS the account has a "Full Mock Speaking Exam Access" unit
+        // (MockExamsRemaining), which alone funds the whole exam (see
+        // DebitCardAsync). This mirrors the fallback order used at debit time.
         if (mode == SpeakingExamMode.Ai && creditService is not null)
         {
             var snapshot = await creditService.GetSnapshotAsync(userId, 0, ct);
-            var available = snapshot.SpeakingOnlyCredits + snapshot.FlexibleCredits;
-            // Legacy/subscription accounts whose package is uninitialised still
-            // pass — the per-card debit later bypasses them the same way grading
-            // did. We only hard-block when a package wallet exists and is short.
-            var hasPackageWallet = snapshot.ExpiresAt is not null
-                || snapshot.SpeakingOnlyCredits > 0
-                || snapshot.FlexibleCredits > 0
-                || snapshot.WritingOnlyCredits > 0;
-            if (hasPackageWallet && available < 2)
+            if (snapshot.MockExamsRemaining < 1)
             {
-                throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
-                    "A Speaking exam needs 2 AI credits (one per card). Purchase a package to continue.");
+                var available = snapshot.SpeakingOnlyCredits + snapshot.FlexibleCredits;
+                // Legacy/subscription accounts whose package is uninitialised still
+                // pass — the per-card debit later bypasses them the same way grading
+                // did. We only hard-block when a package wallet exists and is short.
+                var hasPackageWallet = snapshot.ExpiresAt is not null
+                    || snapshot.SpeakingOnlyCredits > 0
+                    || snapshot.FlexibleCredits > 0
+                    || snapshot.WritingOnlyCredits > 0;
+                if (hasPackageWallet && available < 2)
+                {
+                    throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
+                        "A Speaking exam needs 2 AI credits (one per card), or 1 Full Mock Exam credit. Purchase a package to continue.");
+                }
             }
         }
 
@@ -705,15 +713,59 @@ public sealed class SpeakingExamService(
         }
     }
 
-    /// <summary>Debits one speaking package credit for a card at reveal,
-    /// idempotent on the exam+slot reference. AI mode only. Stores the ref on
-    /// the exam so a retried transition never double-charges.</summary>
+    /// <summary>Debits credit for a card at reveal, idempotent on the
+    /// exam+slot reference. AI mode only. Stores the ref on the exam so a
+    /// retried transition never double-charges.
+    ///
+    /// Card A first tries to fund the WHOLE exam from the account's "Full
+    /// Mock Speaking Exam Access" allowance (<c>MockExamsRemaining</c>, one
+    /// unit = one two-card exam) — a distinct, separately-purchasable quota
+    /// from the per-card "AI Speaking Credits" wallet. If that allowance is
+    /// absent/exhausted, Card A falls back to the existing per-card debit
+    /// unchanged. Card B is a no-op once Card A was mock-funded (already
+    /// covered); otherwise it debits its own per-card credit as before.</summary>
     private async Task DebitCardAsync(SpeakingExamSession exam, string slot, CancellationToken ct)
     {
         if (exam.Mode != SpeakingExamMode.Ai || creditService is null) return;
 
         var alreadyDebited = slot == "a" ? exam.CreditARefId : exam.CreditBRefId;
         if (!string.IsNullOrWhiteSpace(alreadyDebited)) return;
+
+        if (slot == "a")
+        {
+            // IMPORTANT: only attempt the mock-exam debit when the balance is
+            // actually positive. DeductMockAsync has a "legacy account"
+            // grandfather bypass (grants it for free when MockExamsRemaining
+            // is 0 AND the account has never received a mock-exam grant) —
+            // correct for its original caller (MockService, where that really
+            // does mean a pre-quota legacy account) but WRONG here, since
+            // every Speaking account today has zero MockExamsRemaining and no
+            // grant history simply because Speaking never drew from this pool
+            // before. Gating on a positive balance first guarantees we only
+            // ever call DeductMockAsync when it will do a real decrement, per
+            // its own first-line check, never the bypass.
+            var snapshot = await creditService.GetSnapshotAsync(exam.UserId, 0, ct);
+            if (snapshot.MockExamsRemaining > 0)
+            {
+                var mockRefId = $"exam:{exam.Id}:mock";
+                var mockDebit = await creditService.DeductMockAsync(exam.UserId, mockRefId, ct);
+                if (mockDebit.Debited
+                    || string.Equals(mockDebit.ErrorCode, "already_debited", StringComparison.Ordinal))
+                {
+                    exam.FundedByMockCredit = true;
+                    exam.CreditARefId = mockRefId;
+                    return;
+                }
+                // Lost a race for the last unit (or expired) — fall through to
+                // the per-card AI Speaking Credits wallet below.
+            }
+        }
+        else if (exam.FundedByMockCredit)
+        {
+            // Whole exam already paid for by Card A's mock-credit debit.
+            exam.CreditBRefId = exam.CreditARefId;
+            return;
+        }
 
         var refId = $"exam:{exam.Id}:card{slot.ToUpperInvariant()}";
         var debit = await creditService.DeductGradingCreditAsync(exam.UserId, "speaking", refId, ct);

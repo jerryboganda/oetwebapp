@@ -41,7 +41,7 @@ must then receive the same target SHA plus the immutable image digest refs from
 before SSH deploy. The VPS command shape is:
 
 ```bash
-ssh root@68.183.32.122
+ssh root@185.252.233.186
 cd /opt/oetwebapp
 DEPLOY_REF=<40-character-sha> \
 WEB_IMAGE=<web-image@sha256:...> \
@@ -94,7 +94,7 @@ windows above at the approver's discretion.
 ## Rollback Procedure
 
 ```bash
-ssh root@68.183.32.122
+ssh root@185.252.233.186
 cd /opt/oetwebapp
 # Identify the rollback SHA, image digests, and slot from
 # .deploy/rollback-target.env first, then .deploy/release-history.tsv if needed.

@@ -607,6 +607,7 @@ export async function getAdminBillingPlanData(params?: Parameters<typeof fetchAd
     accessDurationDays: item.accessDurationDays == null ? undefined : toNumberValue(item.accessDurationDays),
     writingAddonsEnabled: toBooleanValue(item.writingAddonsEnabled),
     speakingAddonsEnabled: toBooleanValue(item.speakingAddonsEnabled),
+    speakingPracticeAccessEnabled: item.speakingPracticeAccessEnabled == null ? true : toBooleanValue(item.speakingPracticeAccessEnabled),
     tutorBookDiscountEnabled: toBooleanValue(item.tutorBookDiscountEnabled),
     profession: toNullableString(item.profession) ?? undefined,
     productCategory: toNullableString(item.productCategory) ?? undefined,

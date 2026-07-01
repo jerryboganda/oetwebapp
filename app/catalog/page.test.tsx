@@ -31,6 +31,7 @@ describe('CatalogPage', () => {
           profession: 'medicine',
           writingAddonsEnabled: true,
           speakingAddonsEnabled: false,
+          speakingPracticeAccessEnabled: true,
           tutorBookDiscountEnabled: true,
           bundledWritingAssessments: 5,
           bundledSpeakingSessions: 1,

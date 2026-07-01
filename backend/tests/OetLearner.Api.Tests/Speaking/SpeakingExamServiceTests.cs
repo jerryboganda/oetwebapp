@@ -144,6 +144,73 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
     }
 
+    // ── "Full Mock Speaking Exam Access" (requirements gap audit 2026-07-01) ──
+    // Card A prefers a dedicated mock-exam-allowance unit over the per-card AI
+    // Speaking Credits wallet; when it does, Card B must not charge again.
+
+    [Fact]
+    public async Task FinishIntro_WithMockExamCredit_FundsWholeExam_WithoutTouchingSpeakingCredits()
+    {
+        await SeedWalletAsync(speakingCredits: 5, mockExams: 1);
+        await SeedTwoPublishedCardsAsync();
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
+
+        var afterIntro = await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+
+        Assert.Equal("prep_a", afterIntro.State);
+        Assert.True(tracked.FundedByMockCredit);
+        Assert.NotNull(tracked.CreditARefId);
+        var snapshot = await _credits.GetSnapshotAsync(UserId, 0, default);
+        Assert.Equal(0, snapshot.MockExamsRemaining);
+        // Untouched — the mock allowance paid for the exam, not the per-card wallet.
+        Assert.Equal(5, snapshot.SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task AutoAdvance_WithMockExamCredit_CardBIsFree_NoDoubleCharge()
+    {
+        await SeedWalletAsync(speakingCredits: 5, mockExams: 1);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
+        await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        var afterA = DateTimeOffset.UtcNow.AddMinutes(9);
+        await _exams.AdvanceAsync(tracked, afterA, default);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(SpeakingExamState.PrepB, tracked.State);
+        Assert.NotNull(tracked.SessionBId);
+        Assert.NotNull(tracked.CreditBRefId);
+        Assert.Equal(tracked.CreditARefId, tracked.CreditBRefId);
+        var snapshot = await _credits.GetSnapshotAsync(UserId, 0, default);
+        Assert.Equal(0, snapshot.MockExamsRemaining);
+        Assert.Equal(5, snapshot.SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task CreateExam_MockExamCreditAlone_SatisfiesTheCreditGate_EvenWithZeroSpeakingCredits()
+    {
+        await SeedWalletAsync(speakingCredits: 0, mockExams: 1);
+        await SeedTwoPublishedCardsAsync();
+
+        // Would throw PaymentRequired under the old gate (0 < 2 speaking credits);
+        // the mock-exam allowance alone must satisfy the pre-flight check.
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
+        Assert.Equal("intro", exam.State);
+    }
+
+    [Fact]
+    public async Task CreateExam_NoMockExamCredit_AndInsufficientSpeakingCredits_StillBlocked()
+    {
+        await SeedWalletAsync(speakingCredits: 1, mockExams: 0);
+        await SeedTwoPublishedCardsAsync();
+
+        await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default));
+    }
+
     [Fact]
     public async Task LearnerProjection_NeverLeaksRoleplayerCard_OrCardType_InAnyPhase()
     {
@@ -273,7 +340,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
 
     // ── Fixtures ─────────────────────────────────────────────────────────
 
-    private async Task SeedWalletAsync(int speakingCredits)
+    private async Task SeedWalletAsync(int speakingCredits, int mockExams = 0)
     {
         var now = DateTimeOffset.UtcNow;
         _db.AiPackageCreditAccounts.Add(new AiPackageCreditAccount
@@ -281,6 +348,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
             Id = $"aipkg-{Guid.NewGuid():N}",
             UserId = UserId,
             SpeakingOnlyCredits = speakingCredits,
+            MockExamsRemaining = mockExams,
             ExpiresAt = now.AddDays(90),
             CreatedAt = now,
             UpdatedAt = now,

@@ -369,6 +369,14 @@ public class BillingPlan
     public bool SpeakingAddonsEnabled { get; set; }
     public bool TutorBookDiscountEnabled { get; set; }
 
+    /// <summary>Gates Speaking "Practice Card Access" (ai_self_practice mode)
+    /// for accounts on this plan. Defaults true so every existing plan keeps
+    /// today's behaviour (practice metered only by the AI credit wallet,
+    /// available regardless of plan) until an admin explicitly disables it.
+    /// See <see cref="OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver"/>
+    /// and <see cref="OetLearner.Api.Services.Speaking.SpeakingSessionService"/>.</summary>
+    public bool SpeakingPracticeAccessEnabled { get; set; } = true;
+
     [MaxLength(32)]
     public string Profession { get; set; } = "all";
 
@@ -452,6 +460,7 @@ public class BillingPlanVersion
     public int AccessDurationDays { get; set; } = 180;
     public bool WritingAddonsEnabled { get; set; }
     public bool SpeakingAddonsEnabled { get; set; }
+    public bool SpeakingPracticeAccessEnabled { get; set; } = true;
     public bool TutorBookDiscountEnabled { get; set; }
 
     [MaxLength(32)]

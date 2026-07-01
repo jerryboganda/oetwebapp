@@ -11,8 +11,8 @@
 #       cmdk              → ⌘K command palette
 #       @tanstack/react-table → headless table for admin grids
 #
-# How to run (remote dev VPS)
-#   ssh oet-dev "cd /opt/oetwebapp && bash scripts/install-admin-deps.sh"
+# How to run (remote production VPS)
+#   ssh root@185.252.233.186 "cd /opt/oetwebapp && bash scripts/install-admin-deps.sh"
 #
 # How to run (local Windows / WSL)
 #   bash scripts/install-admin-deps.sh

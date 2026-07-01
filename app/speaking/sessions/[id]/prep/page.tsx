@@ -3,6 +3,16 @@
 /**
  * Prep page for a Speaking session (plan C.2 / C.3).
  *
+ * NOT the candidate exam flow — that lives at `app/speaking/exam/[id]`
+ * (2026-06-11 rebuild). This route is reached exclusively from
+ * `app/admin/onboarding/interlocutor/page.tsx` ("Start practice") to let
+ * interlocutor trainees rehearse handling a role-play card before they are
+ * marked trained; it is staff-only and gated behind admin auth upstream.
+ * Because trainees are not real candidates sitting an exam, the OET
+ * candidate-facing prep instructions (e.g. "bring blank paper and a pen")
+ * are intentionally not shown here — see `app/speaking/exam/[id]/page.tsx`
+ * for that copy.
+ *
  * Mounted at `/speaking/sessions/[id]/prep`. The session has already
  * been created by an upstream flow (selection or mock test launcher),
  * so the only thing this route does is:

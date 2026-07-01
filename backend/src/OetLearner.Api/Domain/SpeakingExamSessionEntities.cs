@@ -111,6 +111,13 @@ public class SpeakingExamSession
     [MaxLength(96)]
     public string? CreditBRefId { get; set; }
 
+    /// <summary>True when this exam's Card A debit was funded from the
+    /// account's "Full Mock Speaking Exam Access" allowance
+    /// (<c>AiPackageCreditAccount.MockExamsRemaining</c>, one unit = one
+    /// whole two-card exam) instead of the per-card AI Speaking Credits
+    /// wallet. When true, Card B's debit is a no-op (already covered).</summary>
+    public bool FundedByMockCredit { get; set; }
+
     // ── Aggregate snapshot, computed once both cards are scored. ──
     public double? CombinedScaledSnapshot { get; set; }
 

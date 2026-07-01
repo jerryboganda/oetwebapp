@@ -17,6 +17,7 @@ function planFixture(overrides: Partial<PublicCatalogPlanRow> = {}): PublicCatal
     profession: 'nursing',
     writingAddonsEnabled: true,
     speakingAddonsEnabled: false,
+    speakingPracticeAccessEnabled: true,
     tutorBookDiscountEnabled: true,
     bundledWritingAssessments: 5,
     bundledSpeakingSessions: 0,
