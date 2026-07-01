@@ -86,6 +86,9 @@ x-learner-api-slot: &learner-api-slot
     Conversation__Enabled: ${CONVERSATION__ENABLED:-}
     Conversation__AsrProvider: ${CONVERSATION__ASRPROVIDER:-}
     Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY:-}
+    Conversation__WhisperApiKey: ${CONVERSATION__WHISPERAPIKEY:-}
+    Conversation__WhisperBaseUrl: ${CONVERSATION__WHISPERBASEURL:-}
+    Conversation__WhisperModel: ${CONVERSATION__WHISPERMODEL:-whisper-1}
     Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER:-}
     Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY:-}
     Listening__TtsProvider: ${LISTENING__TTSPROVIDER:-elevenlabs}
