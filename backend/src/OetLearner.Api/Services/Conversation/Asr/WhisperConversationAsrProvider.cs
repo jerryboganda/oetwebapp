@@ -68,7 +68,17 @@ public sealed class WhisperConversationAsrProvider(
 
         using var form = new MultipartFormDataContent();
         var audioContent = new StreamContent(request.Audio);
-        audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
+        // MediaRecorder sends parametered mime types (e.g. "audio/webm;codecs=opus").
+        // The MediaTypeHeaderValue(string) ctor rejects parameters and throws a
+        // FormatException, so parse it (which accepts parameters) and fall back to
+        // the base type if that fails — otherwise the whole turn fails before the
+        // request is even sent to Whisper.
+        audioContent.Headers.ContentType =
+            MediaTypeHeaderValue.TryParse(request.AudioMimeType, out var parsedMime)
+                ? parsedMime
+                : new MediaTypeHeaderValue(request.AudioMimeType.Split(';')[0].Trim() is { Length: > 0 } baseMime
+                    ? baseMime
+                    : "audio/webm");
         form.Add(audioContent, "file", GuessFileName(request.AudioMimeType));
         form.Add(new StringContent(resolvedModel), "model");
         var locale = request.Locale ?? "en-GB";

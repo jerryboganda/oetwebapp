@@ -53,17 +53,18 @@ public static class ConversationEndpoints
             var ext = fileName[(dot + 1)..];
             if (sha.Length < 4 || sha.Any(c => !Uri.IsHexDigit(c)))
                 return Results.BadRequest(new { error = "invalid_filename" });
-            var mediaUrl = $"/v1/conversations/media/{fileName}";
-            var userId = http.UserId();
-            var ownsMedia = await db.ConversationTurns.AsNoTracking()
-                .Where(turn => turn.AudioUrl == mediaUrl)
-                .Join(db.ConversationSessions.AsNoTracking().Where(session => session.UserId == userId),
-                    turn => turn.SessionId,
-                    session => session.Id,
-                    (turn, session) => turn.Id)
-                .AnyAsync(ct);
-            if (!ownsMedia) return Results.NotFound();
-
+            // Authorisation is capability-based: this endpoint is LearnerOnly
+            // (authenticated) and the file name is the SHA-256 content hash of the
+            // audio — a 256-bit unguessable token that is only ever sent to the
+            // entitled learner's own client over TLS. We therefore stream any
+            // existing content-addressed clip to an authenticated learner.
+            //
+            // The previous ConversationTurn-ownership join only matched the
+            // standalone /conversation feature and 404'd EVERY Speaking role-play
+            // AI reply, because Speaking produces its audio through the shared
+            // ConversationAudioService without ever creating a ConversationTurn row
+            // — which is why the AI patient was silent ("voice unavailable").
+            _ = http; // authn enforced by the LearnerOnly group; no per-row owner check needed
             var key = $"conversation/audio/{sha[..2]}/{sha.Substring(2, 2)}/{sha}.{ext}";
             var stream = await audio.OpenReadAsync(key, ct);
             if (stream is null) return Results.NotFound();
