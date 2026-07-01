@@ -14,8 +14,10 @@
  *                       is LearnerOnly, so a bare <audio src> would 401)
  *                   ──▶ auto-play the reply, then auto-resume listening.
  *
- * Barge-in: if the learner starts talking while the AI is speaking, the AI
- * audio is stopped and capture begins immediately.
+ * The mic is hard-gated to the "listening" phase only: while the patient is
+ * speaking (or the AI is thinking) the mic track is disabled, so the patient
+ * is always heard in full and the AI can never be cut off by speaker echo or
+ * an eager first word. Listening resumes automatically once playback ends.
  *
  * Whisper is a batch API, so "continuous" here means always-listening with
  * VAD segmentation + one Whisper call per utterance — not token streaming.
@@ -62,7 +64,6 @@ interface ConversationHubBridge {
 // ── VAD tuning (normalised 0-1 level = min(1, rms * 3)) ───────────────────
 const START_LEVEL = 0.16; // sustained level to treat as speech onset
 const CONTINUE_LEVEL = 0.09; // above this keeps an utterance "alive"
-const BARGE_IN_LEVEL = 0.26; // higher bar while AI audio plays (echo guard)
 const START_FRAMES = 3; // consecutive frames above threshold to commit onset
 const SILENCE_MS = 1000; // trailing silence that ends an utterance
 const MIN_UTTERANCE_MS = 450; // ignore blips/coughs
@@ -196,7 +197,6 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   const utteranceStartRef = useRef(0);
   const lastVoiceRef = useRef(0);
   const startFramesRef = useRef(0);
-  const bargeFramesRef = useRef(0);
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
@@ -205,6 +205,12 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   const setPhase = useCallback((p: ConversationPhase) => {
     phaseRef.current = p;
     setPhaseState(p);
+    // Hard mic gate: the mic only captures while we are actively listening.
+    // This is what stops the AI's own audio (speaker echo) or the learner's
+    // first words from cutting the patient off, and prevents spurious
+    // transcription turns firing while the AI is still speaking or thinking.
+    const track = streamRef.current?.getAudioTracks?.()[0];
+    if (track) track.enabled = p === 'listening';
   }, []);
 
   const pushCaption = useCallback((speaker: 'patient' | 'candidate', text: string) => {
@@ -332,20 +338,10 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     const phaseNow = phaseRef.current;
     const isRecording = recorderRef.current?.state === 'recording';
 
-    if (phaseNow === 'speaking') {
-      // Barge-in: sustained speech over the AI's own audio interrupts it.
-      if (level >= BARGE_IN_LEVEL) {
-        bargeFramesRef.current += 1;
-        if (bargeFramesRef.current >= START_FRAMES) {
-          bargeFramesRef.current = 0;
-          stopPlayback();
-          setPhase('listening');
-          beginCapture();
-        }
-      } else {
-        bargeFramesRef.current = 0;
-      }
-    } else if (phaseNow === 'listening') {
+    // While the AI is speaking or thinking the mic track is disabled (see
+    // setPhase), so the analyser reads silence and we never capture — the
+    // patient is heard in full. We only segment speech while listening.
+    if (phaseNow === 'listening') {
       if (isRecording) {
         if (level >= CONTINUE_LEVEL) lastVoiceRef.current = now;
         const silentFor = now - lastVoiceRef.current;
@@ -377,7 +373,9 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       try {
         objectUrl = await fetchAuthorizedObjectUrl(url);
       } catch {
-        // Audio fetch/401 failed — fall back to listening so the loop survives.
+        // Audio was generated but could not be fetched/played — surface it
+        // (don't fail silently) and keep the loop alive.
+        setVoiceUnavailable(true);
         setPhase(micEnabledRef.current ? 'listening' : 'idle');
         return;
       }
@@ -501,8 +499,15 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       micEnabledRef.current = true;
       setMicEnabled(true);
       setError(null);
-      setPhase('listening');
+      // Hold the mic closed until the patient's opening line has played, so
+      // the opening audio is never clipped by an early capture. If no opening
+      // arrives (rare), the watchdog falls back to listening.
+      setPhase('thinking');
       rafRef.current = requestAnimationFrame(runVadFrame);
+      clearThinkingWatchdog();
+      thinkingTimerRef.current = setTimeout(() => {
+        if (phaseRef.current === 'thinking') setPhase('listening');
+      }, THINKING_TIMEOUT_MS);
 
       // Kick off the opening line (patient speaks first). Best-effort.
       try {
@@ -518,7 +523,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
           : 'Could not access the microphone.',
       );
     }
-  }, [runVadFrame, setPhase]);
+  }, [runVadFrame, setPhase, clearThinkingWatchdog]);
 
   const disableMic = useCallback(() => {
     micEnabledRef.current = false;
