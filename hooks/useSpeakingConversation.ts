@@ -73,8 +73,17 @@ const START_FRAMES = 3; // consecutive frames above threshold to commit onset
 const SILENCE_MS = 1000; // trailing silence that ends an utterance
 const MIN_SPEECH_MS = 450; // ignore blips/coughs (measured from speech onset)
 const MAX_UTTERANCE_MS = 30_000; // safety cap on a single turn (after onset)
-const SILENT_BUFFER_RESET_MS = 20_000; // drop + restart a buffer with no speech
+const SILENT_BUFFER_RESET_MS = 8_000; // drop + restart a buffer with no speech
 const THINKING_TIMEOUT_MS = 25_000; // watchdog if no reply arrives
+// Speech-only bitrate. Browsers default MediaRecorder/Opus to ~128kbps, which
+// blows past the hub's 384KB max message (the connection is closed, not the
+// call rejected) once the buffer includes leading silence. 32kbps mono is
+// ample for Whisper and keeps a worst-case turn (~40s) around ~160KB binary.
+const RECORDER_BITS_PER_SECOND = 32_000;
+// Hub max receive message is 384KB (ConversationRealtimeTransportLimits).
+// Base64 inflates 4/3, so refuse to send blobs that would exceed it — better
+// a visible "too long" error than SignalR silently killing the connection.
+const MAX_TURN_BLOB_BYTES = 280_000;
 
 async function loadConversationHub(): Promise<ConversationHubBridge | null> {
   try {
@@ -290,9 +299,17 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     const mimeType = pickRecorderMime();
     let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        audioBitsPerSecond: RECORDER_BITS_PER_SECOND,
+      });
     } catch {
-      return;
+      // Some browsers reject bitrate hints — retry without one.
+      try {
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      } catch {
+        return;
+      }
     }
     chunksRef.current = [];
     utteranceStartRef.current = performance.now();
@@ -313,6 +330,12 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       if (!send) return; // silent/discarded buffer — the frame loop restarts capture
       const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
       if (blob.size < 1_200) return; // corrupt/empty despite VAD — keep listening
+      if (blob.size > MAX_TURN_BLOB_BYTES) {
+        // Oversized payloads make SignalR close the whole connection — refuse
+        // client-side and keep the conversation alive instead.
+        setError('That turn was too long to send. Please make your point in shorter turns.');
+        return;
+      }
       void sendUtterance(blob, blob.type);
     };
     recorderRef.current = recorder;
