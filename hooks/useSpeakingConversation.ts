@@ -70,6 +70,12 @@ interface ConversationHubBridge {
 const START_LEVEL = 0.16; // sustained level to treat as speech onset
 const CONTINUE_LEVEL = 0.09; // above this keeps an utterance "alive"
 const START_FRAMES = 3; // consecutive frames above threshold to commit onset
+// While the patient is speaking the mic stays live (echoCancellation strips
+// the AI's own audio) so a learner who starts replying early is not clipped —
+// but onset needs a much higher, longer signal so residual echo can't
+// false-trigger a turn. Playback itself is never interrupted.
+const SPEAKING_START_LEVEL = 0.3;
+const SPEAKING_START_FRAMES = 6;
 const SILENCE_MS = 1000; // trailing silence that ends an utterance
 const MIN_SPEECH_MS = 450; // ignore blips/coughs (measured from speech onset)
 const MAX_UTTERANCE_MS = 30_000; // safety cap on a single turn (after onset)
@@ -223,12 +229,13 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   const setPhase = useCallback((p: ConversationPhase) => {
     phaseRef.current = p;
     setPhaseState(p);
-    // Hard mic gate: the mic only captures while we are actively listening.
-    // This is what stops the AI's own audio (speaker echo) or the learner's
-    // first words from cutting the patient off, and prevents spurious
-    // transcription turns firing while the AI is still speaking or thinking.
+    // Mic gate: capture while listening AND while the patient is speaking —
+    // echoCancellation strips the AI's own audio from the mic signal, and the
+    // VAD uses a much higher onset bar during playback, so the patient is
+    // heard in full while a learner who replies early is still captured from
+    // their first word. Only 'thinking'/'idle' silence the mic entirely.
     const track = streamRef.current?.getAudioTracks?.()[0];
-    if (track) track.enabled = p === 'listening';
+    if (track) track.enabled = p === 'listening' || p === 'speaking';
   }, []);
 
   const pushCaption = useCallback((speaker: 'patient' | 'candidate', text: string) => {
@@ -375,12 +382,37 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     const phaseNow = phaseRef.current;
     const isRecording = recorderRef.current?.state === 'recording';
 
-    // While the AI is speaking or thinking the mic track is disabled (see
-    // setPhase), so the analyser reads silence and we never capture — the
-    // patient is heard in full. While listening the recorder runs from the
-    // very first frame, so no leading words are ever lost; VAD only decides
-    // when the utterance ENDED (or that the buffer never contained speech).
-    if (phaseNow === 'listening') {
+    // While the patient is speaking the recorder ALSO runs (mic live, AEC
+    // strips the AI's own audio) so a learner who starts replying early is
+    // captured from their first word. Onset detection during playback uses a
+    // higher, longer bar so residual echo can't false-trigger, and playback
+    // is never interrupted — end-of-turn is only evaluated while listening.
+    if (phaseNow === 'speaking') {
+      if (!isRecording) {
+        beginCapture();
+      } else if (!hadSpeechRef.current) {
+        if (level >= SPEAKING_START_LEVEL) {
+          startFramesRef.current += 1;
+          if (startFramesRef.current >= SPEAKING_START_FRAMES) {
+            startFramesRef.current = 0;
+            hadSpeechRef.current = true;
+            speechStartRef.current = now;
+            lastVoiceRef.current = now;
+          }
+        } else {
+          startFramesRef.current = 0;
+          // Bound speechless buffers during long patient turns too.
+          if (now - utteranceStartRef.current >= SILENT_BUFFER_RESET_MS) {
+            discardStopRef.current = true;
+            finishCapture(); // onstop discards; next frame restarts capture
+          }
+        }
+      } else if (level >= CONTINUE_LEVEL) {
+        // Speech already confirmed — keep the utterance alive; the end-of-turn
+        // silence check only runs once we transition to 'listening'.
+        lastVoiceRef.current = now;
+      }
+    } else if (phaseNow === 'listening') {
       if (!isRecording) {
         beginCapture();
       } else if (!hadSpeechRef.current) {

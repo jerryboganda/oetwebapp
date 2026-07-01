@@ -225,6 +225,22 @@ public sealed class AnthropicProvider(
         return trimmed;
     }
 
+    /// <summary>
+    /// Claude 5-family models (and Opus 4.8+) reject the `temperature`
+    /// parameter with HTTP 400 "`temperature` is deprecated for this model."
+    /// Known-affected ids are skipped up front; unknown future models are
+    /// covered by the strip-and-retry in <see cref="CompleteAsync"/>.
+    /// </summary>
+    internal static bool ModelRejectsTemperature(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.Trim().ToLowerInvariant();
+        return m.StartsWith("claude-sonnet-5", StringComparison.Ordinal)
+            || m.StartsWith("claude-fable-5", StringComparison.Ordinal)
+            || m.StartsWith("claude-haiku-5", StringComparison.Ordinal)
+            || m.StartsWith("claude-opus-4-8", StringComparison.Ordinal);
+    }
+
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var baseUrl = request.BaseUrlOverride;
@@ -255,13 +271,20 @@ public sealed class AnthropicProvider(
         client.DefaultRequestHeaders.Remove("anthropic-beta");
         client.DefaultRequestHeaders.Add("anthropic-beta", "prompt-caching-2024-07-31");
 
+        // Claude 5-family models reject `temperature` with an HTTP 400
+        // ("`temperature` is deprecated for this model."). Omit it for them and
+        // keep sending it to older models that still honour it.
+        var supportsTemperature = !ModelRejectsTemperature(request.Model);
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
             ["messages"] = AiProviderPayloadBuilder.BuildAnthropicMessages(request),
-            ["temperature"] = request.Temperature,
             ["max_tokens"] = request.MaxTokens ?? 1024,
         };
+        if (supportsTemperature)
+        {
+            payload["temperature"] = request.Temperature;
+        }
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {
             payload["system"] = new object[]
@@ -281,12 +304,31 @@ public sealed class AnthropicProvider(
             payload["tool_choice"] = new Dictionary<string, object?> { ["type"] = "auto" };
         }
 
-        using var response = await client.PostAsync(
-            "v1/messages",
-            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
-            ct);
+        async Task<(HttpResponseMessage Response, string Body)> SendAsync()
+        {
+            var res = await client.PostAsync(
+                "v1/messages",
+                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+                ct);
+            var resBody = await res.Content.ReadAsStringAsync(ct);
+            return (res, resBody);
+        }
 
-        var body = await response.Content.ReadAsStringAsync(ct);
+        var (response, body) = await SendAsync();
+
+        // Self-healing for future models: if Anthropic rejects `temperature` as
+        // deprecated, strip it and retry once instead of failing the learner turn.
+        if (!response.IsSuccessStatusCode
+            && payload.ContainsKey("temperature")
+            && body.Contains("temperature", StringComparison.OrdinalIgnoreCase)
+            && body.Contains("deprecated", StringComparison.OrdinalIgnoreCase))
+        {
+            response.Dispose();
+            payload.Remove("temperature");
+            (response, body) = await SendAsync();
+        }
+
+        using var _response = response;
         if (!response.IsSuccessStatusCode)
         {
             // Include Anthropic's error body (truncated) — a bare "HTTP 400" hides
