@@ -90,7 +90,7 @@ public sealed class WhisperConversationAsrProvider(
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Whisper ASR returned status {Status}", (int)response.StatusCode);
+            logger.LogWarning("Whisper ASR returned status {Status}: {Body}", (int)response.StatusCode, body);
             await usageRecorder.RecordFailureAsync(
                 sttContext, WhisperProviderCode, resolvedModel, AiCallOutcome.ProviderError,
                 $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.conversation", ct);
@@ -139,13 +139,22 @@ public sealed class WhisperConversationAsrProvider(
             request.EnableDiarization ? speakerSegments : null);
     }
 
-    private static string GuessFileName(string mime) => mime switch
+    private static string GuessFileName(string mime)
     {
-        "audio/wav" or "audio/x-wav" => "audio.wav",
-        "audio/webm" => "audio.webm",
-        "audio/ogg" => "audio.ogg",
-        "audio/mpeg" => "audio.mp3",
-        "audio/mp4" => "audio.m4a",
-        _ => "audio.bin",
-    };
+        // Normalise the parametered mime ("audio/webm;codecs=opus") to its base
+        // type before mapping — otherwise the switch misses and we upload
+        // "audio.bin", which OpenAI Whisper rejects with HTTP 400 (it detects the
+        // format from the file extension). Default to .webm (the MediaRecorder
+        // default) rather than .bin so an unlabelled clip still transcodes.
+        var baseMime = (mime ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+        return baseMime switch
+        {
+            "audio/wav" or "audio/x-wav" => "audio.wav",
+            "audio/webm" => "audio.webm",
+            "audio/ogg" => "audio.ogg",
+            "audio/mpeg" or "audio/mp3" => "audio.mp3",
+            "audio/mp4" => "audio.m4a",
+            _ => "audio.webm",
+        };
+    }
 }
