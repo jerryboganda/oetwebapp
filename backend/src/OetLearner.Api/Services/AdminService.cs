@@ -2723,8 +2723,6 @@ public partial class AdminService(
 
         if (!string.IsNullOrWhiteSpace(role) && role != "all")
             filtered = filtered.Where(u => u.Role == role);
-        if (!string.IsNullOrWhiteSpace(status) && status != "all")
-            filtered = filtered.Where(u => u.Status == status);
         if (!string.IsNullOrWhiteSpace(search))
         {
             filtered = filtered.Where(u =>
@@ -2733,21 +2731,27 @@ public partial class AdminService(
                 || u.Id.Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
+        var summaryBase = filtered.ToList();
+
+        filtered = string.IsNullOrWhiteSpace(status) || status == "all"
+            ? summaryBase.Where(u => u.Status != DeletedUserStatus)
+            : summaryBase.Where(u => u.Status == status);
+
         var materialized = filtered
             .OrderByDescending(u => u.LastLogin ?? DateTimeOffset.MinValue)
             .ToList();
 
         var summary = new
         {
-            total = materialized.Count,
-            active = materialized.Count(u => u.Status == ActiveUserStatus),
-            suspended = materialized.Count(u => u.Status == SuspendedUserStatus),
-            deleted = materialized.Count(u => u.Status == DeletedUserStatus),
-            mfaEnabled = materialized.Count(u =>
+            total = summaryBase.Count,
+            active = summaryBase.Count(u => u.Status == ActiveUserStatus),
+            suspended = summaryBase.Count(u => u.Status == SuspendedUserStatus),
+            deleted = summaryBase.Count(u => u.Status == DeletedUserStatus),
+            mfaEnabled = summaryBase.Count(u =>
                 !string.IsNullOrWhiteSpace(u.AuthAccountId)
                 && authFlagsLookup.TryGetValue(u.AuthAccountId!, out var f)
                 && f.MfaEnabled),
-            lockedOut = materialized.Count(u =>
+            lockedOut = summaryBase.Count(u =>
                 !string.IsNullOrWhiteSpace(u.AuthAccountId)
                 && authFlagsLookup.TryGetValue(u.AuthAccountId!, out var f)
                 && f.LockoutUntil != null
