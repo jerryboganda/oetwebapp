@@ -955,9 +955,7 @@ public sealed class ContentPaperService(
         content.CaseNotes = SpeakingContentStructure.ReadString(detail, "background");
         content.DetailJson = JsonSupport.Serialize(detail);
         content.SourceType = "content-paper";
-        content.SourceProvenance = string.IsNullOrWhiteSpace(paper.SourceProvenance)
-            ? "curated"
-            : paper.SourceProvenance!;
+        content.SourceProvenance = MapProvenanceCode(paper.SourceProvenance);
         content.RightsStatus = "owned";
         content.FreshnessConfidence = "current";
         content.UpdatedAt = now;
@@ -996,13 +994,28 @@ public sealed class ContentPaperService(
         content.DetailJson = JsonSupport.Serialize(detail);
         content.ModelAnswerJson = JsonSupport.Serialize(WritingContentStructure.BuildModelAnswerPayload(paper));
         content.SourceType = "content-paper";
-        content.SourceProvenance = string.IsNullOrWhiteSpace(paper.SourceProvenance)
-            ? "curated"
-            : paper.SourceProvenance!;
+        content.SourceProvenance = MapProvenanceCode(paper.SourceProvenance);
         content.RightsStatus = "owned";
         content.FreshnessConfidence = "current";
         content.UpdatedAt = now;
         content.PublishedAt = now;
+    }
+
+    // ContentItem.SourceProvenance is a coded varchar(32) (original,
+    // official_sample, recall, benchmark, contributed, curated) while
+    // ContentPaper.SourceProvenance is free-text citation prose. Copying the
+    // prose verbatim overflowed the column, so every Writing/Speaking publish
+    // 500-failed once the citation passed 32 characters. The full citation
+    // stays on the paper row; the item only carries the coded class.
+    private static string MapProvenanceCode(string? paperProvenance)
+    {
+        if (string.IsNullOrWhiteSpace(paperProvenance)) return "curated";
+        var normalized = paperProvenance.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "original" or "official_sample" or "recall" or "benchmark" or "contributed" or "curated" => normalized,
+            _ => "curated",
+        };
     }
 
     private static string NormalizeSlug(string input)

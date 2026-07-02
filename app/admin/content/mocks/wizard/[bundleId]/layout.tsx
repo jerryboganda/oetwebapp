@@ -1,12 +1,12 @@
-import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import {
   AdminRoutePanel,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
-import { fetchAdminMockBundle } from '@/lib/api';
-import { WizardShell, type WizardMockBundle } from '@/components/domain/mock-wizard/WizardShell';
+import { WizardShellLoader } from '@/components/domain/mock-wizard/WizardShellLoader';
 
+// The bundle fetch must happen client-side: the admin API client resolves its
+// bearer token from web storage, which is unavailable during server render.
 export default async function MockWizardLayout({
   children,
   params,
@@ -15,18 +15,11 @@ export default async function MockWizardLayout({
   params: Promise<{ bundleId: string }>;
 }) {
   const { bundleId } = await params;
-  let bundle: WizardMockBundle;
-  try {
-    bundle = (await fetchAdminMockBundle(bundleId)) as WizardMockBundle;
-  } catch {
-    notFound();
-  }
-  if (!bundle?.id) notFound();
 
   return (
     <AdminRouteWorkspace>
       <AdminRoutePanel>
-        <WizardShell bundle={bundle}>{children}</WizardShell>
+        <WizardShellLoader bundleId={bundleId}>{children}</WizardShellLoader>
       </AdminRoutePanel>
     </AdminRouteWorkspace>
   );

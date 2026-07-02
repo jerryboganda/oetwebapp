@@ -530,12 +530,19 @@ public static class MockProctoringKinds
     public const string MultipleDisplaysDetected = "multiple_displays_detected";
     public const string RecordingChunkRejected = "recording_chunk_rejected";
 
+    /// <summary>Strict-mode section was started server-side with no preflight
+    /// confirmation in the request — e.g. an API client skipping the webcam
+    /// check the browser UI enforces. Advisory: surfaced on the integrity
+    /// summary for tutor/admin review.</summary>
+    public const string SectionStartedWithoutPreflight = "section_started_without_preflight";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         FullscreenExit, VisibilityHidden, TabSwitch, PasteBlocked, CopyBlocked,
         MicCheckPassed, MicCheckFailed, CamCheckPassed, CamCheckFailed,
         AudioIssueReported, AudioPlaybackPassed, AudioPlaybackFailed,
         NetworkDrop, MultipleDisplaysDetected, RecordingChunkRejected,
+        SectionStartedWithoutPreflight,
     };
 
     public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)

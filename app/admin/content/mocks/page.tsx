@@ -21,6 +21,7 @@ import {
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   addAdminMockBundleSection,
+  ApiError,
   bulkAdminMockBundles,
   createAdminMockBundle,
   fetchAdminMockBundles,
@@ -280,7 +281,14 @@ export default function AdminMockBundlesPage() {
       setToast({ variant: 'success', message: 'Mock bundle published.' });
       await load();
     } catch (err) {
-      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Publish gate failed.' });
+      // Surface the gate's field errors — "not ready to publish" alone gives
+      // the admin nothing to act on.
+      const details =
+        err instanceof ApiError && err.fieldErrors.length > 0
+          ? ` ${err.fieldErrors.map((f) => f.message).join(' ')}`
+          : '';
+      const message = err instanceof Error ? err.message : 'Publish gate failed.';
+      setToast({ variant: 'error', message: `${message}${details}` });
     }
   }
 
@@ -735,7 +743,14 @@ export default function AdminMockBundlesPage() {
         ) : null}
       </Modal>
 
-      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+      {toast ? (
+        <Toast
+          variant={toast.variant}
+          message={toast.message}
+          duration={toast.variant === 'error' ? 12000 : 5000}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
     </>
   );
 }

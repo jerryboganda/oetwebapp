@@ -6,7 +6,10 @@ using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services;
 
-public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? aiPackageCreditService = null)
+public sealed class MockService(
+    LearnerDbContext db,
+    IAiPackageCreditService? aiPackageCreditService = null,
+    IMockEntitlementService? mockEntitlementService = null)
 {
     private static readonly string[] FullMockOrder = ["listening", "reading", "writing", "speaking"];
     private static readonly HashSet<string> ProductiveSubtests = new(["writing", "speaking"], StringComparer.OrdinalIgnoreCase);
@@ -240,6 +243,12 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
     {
         await EnsureUserAsync(userId, ct);
         var wallet = await EnsureWalletAsync(userId, ct);
+        // The learner's own profession so the setup page can preselect it
+        // instead of defaulting to whichever profession sorts first.
+        var learnerProfession = await db.Users.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
         var bundles = await QueryPublishedBundles()
             .Include(x => x.Sections.OrderBy(s => s.SectionOrder))
                 .ThenInclude(s => s.ContentPaper)
@@ -294,6 +303,7 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
                 new { id = MockStrictness.FinalReadiness, label = "Final readiness", description = "Strictest preset \u2014 used right before the real exam." },
             },
             professions,
+            learnerProfession,
             reviewSelections = new[]
             {
                 new { id = "none", label = "No Review", cost = 0 },
@@ -339,6 +349,13 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
         }
 
         var id = $"mock-attempt-{Guid.NewGuid():N}";
+
+        // Billing: an attempt must consume exactly one allowance. AI-package
+        // customers spend from their package's mock_exams pool; everyone else
+        // spends a BillingAddOn mock credit (the same bucket the setup page
+        // displays and gates on). Before this, the add-on ledger was never
+        // debited at all — credits gated the UI but were never consumed.
+        var aiPackageCovered = false;
         if (aiPackageCreditService is not null
             && (string.Equals(mockType, MockTypes.Full, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(mockType, MockTypes.FinalReadiness, StringComparison.OrdinalIgnoreCase)))
@@ -349,6 +366,19 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
                 throw ApiException.PaymentRequired(
                     debit.ErrorCode ?? "no_mock_exams",
                     debit.ErrorMessage ?? "You have no mock exams remaining. Purchase a package to continue.");
+            }
+            aiPackageCovered = !debit.Bypassed;
+        }
+
+        if (!aiPackageCovered && mockEntitlementService is not null)
+        {
+            // Premium/trial subscribers no-op inside DebitAsync (unlimited).
+            var creditDebit = await mockEntitlementService.DebitAsync(userId, mockType, id, ct);
+            if (!creditDebit.Success)
+            {
+                throw ApiException.PaymentRequired(
+                    creditDebit.Reason,
+                    creditDebit.Message);
             }
         }
 
@@ -504,6 +534,30 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
             section.StartedAt = now;
             section.DeadlineAt = attempt.StrictTimer ? now.AddMinutes(bundleSection.TimeLimitMinutes) : null;
             RecordEvent(userId, "mock_section_started", new { mockAttemptId = attempt.Id, sectionId = section.Id, subtest = section.SubtestCode });
+
+            // The webcam/environment preflight only ran client-side, so an API
+            // caller could start a strict section with no check at all and
+            // nothing was recorded. A hard server block is not possible (the
+            // browser owns the camera), but the absence is now a durable
+            // proctoring event tutors/admins see on the integrity summary.
+            var strictAttempt = attempt.Strictness is MockStrictness.Exam or MockStrictness.FinalReadiness;
+            var preflightConfirmed = request.ClientState is not null
+                && request.ClientState.TryGetValue("preflight", out var preflight)
+                && string.Equals(preflight?.ToString(), "passed", StringComparison.OrdinalIgnoreCase);
+            if (strictAttempt && !preflightConfirmed)
+            {
+                db.MockProctoringEvents.Add(new MockProctoringEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    MockAttemptId = attempt.Id,
+                    MockSectionAttemptId = section.Id,
+                    Kind = MockProctoringKinds.SectionStartedWithoutPreflight,
+                    Severity = "warning",
+                    MetadataJson = JsonSupport.Serialize(new { subtest = section.SubtestCode }),
+                    OccurredAt = now,
+                });
+            }
+
             await db.SaveChangesAsync(ct);
         }
 
@@ -698,6 +752,13 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
             }
         }
 
+        // Productive sections must also show work. Reading/Listening already
+        // require a submitted content attempt above; before this check a
+        // learner could mark Writing and Speaking "complete" from the mock
+        // dashboard without ever opening the workspace (proctoring logged it
+        // as advisory but nothing blocked).
+        await RequireProductiveSectionEvidenceAsync(userId, attempt, section, request, ct);
+
         var now = DateTimeOffset.UtcNow;
         section.State = AttemptState.Completed;
         section.SubmittedAt ??= now;
@@ -765,6 +826,56 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Evidence gate for the human-marked (productive) sections. Writing
+    /// completions must come from the mock writing workspace: the section has
+    /// to be started and the request must carry a substantive writing payload
+    /// (word count &gt; 0). Speaking completions require a live-tutor booking
+    /// on this attempt (mocks are human-marked — no AI path exists to grade
+    /// them) or, failing that, a started section with an evidence payload.
+    /// </summary>
+    private async Task RequireProductiveSectionEvidenceAsync(
+        string userId,
+        MockAttempt attempt,
+        MockSectionAttempt section,
+        MockSectionCompleteRequest request,
+        CancellationToken ct)
+    {
+        var subtest = section.SubtestCode.Trim().ToLowerInvariant();
+        if (subtest is not ("writing" or "speaking")) return;
+
+        var sectionStarted = section.State is AttemptState.InProgress or AttemptState.Paused or AttemptState.Evaluating
+            || section.StartedAt is not null;
+
+        if (subtest == "writing")
+        {
+            var hasWritingPayload = request.Evidence is not null
+                && request.Evidence.TryGetValue("wordCount", out var wc)
+                && int.TryParse(wc?.ToString(), out var words)
+                && words > 0;
+            if (!sectionStarted || !hasWritingPayload)
+            {
+                throw ApiException.Validation(
+                    "writing_evidence_required",
+                    "Writing mock sections require a submitted response from the writing workspace.");
+            }
+            return;
+        }
+
+        var hasBooking = await db.MockBookings.AsNoTracking().AnyAsync(b =>
+            b.UserId == userId
+            && b.MockAttemptId == attempt.Id
+            && b.Status != MockBookingStatuses.Cancelled,
+            ct);
+        var hasSpeakingPayload = sectionStarted && request.Evidence is { Count: > 0 };
+        if (!hasBooking && !hasSpeakingPayload)
+        {
+            throw ApiException.Validation(
+                "speaking_evidence_required",
+                "Speaking mock sections require a live-tutor booking or a completed speaking session.");
         }
     }
 
@@ -1801,16 +1912,36 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
             .ToListAsync(ct);
 
         var errors = ValidatePublishGate(bundle, sections);
+        errors.AddRange(await ValidateSectionContentReadinessAsync(sections, ct));
         if (errors.Count > 0)
         {
             throw ApiException.Validation("mock_publish_gate_failed", "The mock bundle is not ready to publish.", errors);
         }
 
+        var publishedAt = DateTimeOffset.UtcNow;
         bundle.Status = ContentStatus.Published;
-        bundle.PublishedAt = DateTimeOffset.UtcNow;
-        bundle.UpdatedAt = DateTimeOffset.UtcNow;
+        bundle.PublishedAt = publishedAt;
+        bundle.UpdatedAt = publishedAt;
         bundle.UpdatedByAdminId = adminId;
         bundle.EstimatedDurationMinutes = sections.Sum(x => x.TimeLimitMinutes);
+
+        // Keep the editorial review-stage timeline coherent for bundles that
+        // publish directly (without walking academic→…→pilot): record the
+        // terminal "published" transition so the stage summary never reports
+        // a live bundle as having no stage at all.
+        db.MockContentReviews.Add(new MockContentReview
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            MockBundleId = bundle.Id,
+            ReviewType = Mocks.MockBundleReviewStageService.EditorialReviewType,
+            Severity = "info",
+            Status = "resolved",
+            Stage = "published",
+            Notes = "Published directly from the mock bundles admin (bypassed staged review).",
+            CreatedAt = publishedAt,
+            ResolvedAt = publishedAt,
+        });
+
         LogAudit(adminId, "Published", "MockBundle", bundle.Id, $"Published mock bundle {bundle.Title}.");
         await db.SaveChangesAsync(ct);
         return await GetBundleAsync(bundle.Id, ct);
@@ -1997,6 +2128,7 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
                 .ToListAsync(ct);
 
             var gate = ValidatePublishGate(bundle, sections);
+            gate.AddRange(await ValidateSectionContentReadinessAsync(sections, ct));
             if (gate.Count > 0)
             {
                 throw ApiException.Validation("mock_publish_gate_failed", "The mock bundle is not ready to publish.", gate);
@@ -2241,6 +2373,68 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
         return scaledScore.HasValue
             ? Math.Clamp(scaledScore.Value, OetScoring.ScaledMin, OetScoring.ScaledMax)
             : null;
+    }
+
+    /// <summary>
+    /// Startability pre-checks the static gate can't see: a Listening paper
+    /// publishes with zero constraints (owner decision), so without this a
+    /// published mock could contain a Listening section whose player shows
+    /// "Audio is not available yet" forever — after the learner's credit was
+    /// already spent. Same for a Reading paper with no authored questions
+    /// (renders an unanswerable "0/0" exam). Returns per-paper blocking issues.
+    /// </summary>
+    private async Task<List<ApiFieldError>> ValidateSectionContentReadinessAsync(
+        IReadOnlyList<MockBundleSection> sections, CancellationToken ct)
+    {
+        var errors = new List<ApiFieldError>();
+
+        var listeningPaperIds = sections
+            .Where(s => string.Equals(s.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.ContentPaperId)
+            .Distinct()
+            .ToList();
+        if (listeningPaperIds.Count > 0)
+        {
+            var papersWithAudio = await db.ContentPaperAssets.AsNoTracking()
+                .Where(a => listeningPaperIds.Contains(a.PaperId) && a.Role == PaperAssetRole.Audio)
+                .Select(a => a.PaperId)
+                .Distinct()
+                .ToListAsync(ct);
+            foreach (var section in sections.Where(s =>
+                string.Equals(s.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase)
+                && !papersWithAudio.Contains(s.ContentPaperId)))
+            {
+                var title = section.ContentPaper?.Title ?? section.ContentPaperId;
+                errors.Add(new ApiFieldError("sections", "listening_audio_missing",
+                    $"{title} has no audio yet — learners could not start this section."));
+            }
+        }
+
+        var readingPaperIds = sections
+            .Where(s => string.Equals(s.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.ContentPaperId)
+            .Distinct()
+            .ToList();
+        if (readingPaperIds.Count > 0)
+        {
+            var papersWithQuestions = await (
+                from q in db.ReadingQuestions.AsNoTracking()
+                join p in db.ReadingParts.AsNoTracking() on q.ReadingPartId equals p.Id
+                where readingPaperIds.Contains(p.PaperId)
+                select p.PaperId)
+                .Distinct()
+                .ToListAsync(ct);
+            foreach (var section in sections.Where(s =>
+                string.Equals(s.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase)
+                && !papersWithQuestions.Contains(s.ContentPaperId)))
+            {
+                var title = section.ContentPaper?.Title ?? section.ContentPaperId;
+                errors.Add(new ApiFieldError("sections", "reading_questions_missing",
+                    $"{title} has no authored questions yet — learners would face an empty exam."));
+            }
+        }
+
+        return errors;
     }
 
     private static List<ApiFieldError> ValidatePublishGate(MockBundle bundle, IReadOnlyList<MockBundleSection> sections)

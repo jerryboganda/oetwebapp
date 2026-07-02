@@ -214,8 +214,16 @@ export default function MockSetup() {
           if (defaults.deliveryMode) setDeliveryMode(defaults.deliveryMode);
           if (isSubShape(queryType) && isSubtest(querySubtest)) setSubType(querySubtest);
         }
-        const firstProfession = result.professions[0]?.id;
-        if (firstProfession) setProfession(firstProfession);
+        // Preselect the learner's own profession; only fall back to the
+        // catalog's first entry when the profile has none set.
+        const learnerProfession =
+          typeof (result as { learnerProfession?: unknown }).learnerProfession === 'string'
+            ? ((result as { learnerProfession?: string }).learnerProfession ?? null)
+            : null;
+        const preferred =
+          (learnerProfession && result.professions.find((p) => p.id === learnerProfession)?.id)
+          || result.professions[0]?.id;
+        if (preferred) setProfession(preferred);
       })
       .catch(() => setStartError('Failed to load mock setup options.'))
       .finally(() => {

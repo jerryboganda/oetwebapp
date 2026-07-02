@@ -679,6 +679,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       await annotations.flush();
       const graded = await submitReadingAttempt(attempt.attemptId);
       if (mockAttemptId && mockSectionId) {
+        let mockCompletionRecorded = true;
         try {
           await completeMockSection(mockAttemptId, mockSectionId, {
             contentAttemptId: attempt.attemptId,
@@ -689,6 +690,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             evidence: { source: 'reading_player' },
           });
         } catch (mockErr) {
+          mockCompletionRecorded = false;
           // Phase 6 closure — do not lose the learner's submission on
           // mock-write failure. Persist a pending-completion marker so the
           // results route surfaces a retry CTA, and surface a non-blocking
@@ -720,7 +722,16 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             + 'the score. Open results to retry the mock-completion step.',
           );
         }
-        router.push(`/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`);
+        // Mock context: return to the mock dashboard as the banner promises.
+        // The full section review stays held back until the whole mock is
+        // submitted and the report releases — landing on the reading results
+        // page here leaked the item review mid-mock. On a failed completion
+        // write we still go to results, where the retry CTA lives.
+        router.push(
+          mockCompletionRecorded
+            ? `/mocks/player/${mockAttemptId}`
+            : `/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`,
+        );
         return;
       }
       router.push(`/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`);

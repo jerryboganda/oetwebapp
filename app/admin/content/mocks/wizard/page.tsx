@@ -47,6 +47,15 @@ export default function MockWizardLandingPage() {
   async function handleStart() {
     setCreating(true);
     try {
+      // Reuse an untouched wizard seed draft instead of piling up orphans —
+      // every prior "Start new mock" click left one behind when navigation failed.
+      const existing = drafts.find(
+        (d) => d.title === 'New mock (draft)' && (d.sections?.length ?? 0) === 0,
+      );
+      if (existing) {
+        router.push(`/admin/content/mocks/wizard/${existing.id}/bundle`);
+        return;
+      }
       const created = (await createAdminMockBundle({
         title: 'New mock (draft)',
         mockType: 'full',

@@ -3067,10 +3067,14 @@ export async function submitMockSession(sessionId: string): Promise<{ sessionId:
   return { sessionId, state: response.state ?? 'queued' };
 }
 
-export async function startMockSection(sessionId: string, sectionId: string): Promise<MockSession['sectionStates'][number]> {
+export async function startMockSection(
+  sessionId: string,
+  sectionId: string,
+  clientState: Record<string, unknown> = {},
+): Promise<MockSession['sectionStates'][number]> {
   const response = normalizeRouteValues(await apiRequest<ApiRecord>(`/v1/mock-attempts/${sessionId}/sections/${sectionId}/start`, {
     method: 'POST',
-    body: JSON.stringify({ clientState: {} }),
+    body: JSON.stringify({ clientState }),
   }));
   return mapMockSession({ mockAttemptId: sessionId, config: {}, sectionStates: [response] }).sectionStates[0];
 }
