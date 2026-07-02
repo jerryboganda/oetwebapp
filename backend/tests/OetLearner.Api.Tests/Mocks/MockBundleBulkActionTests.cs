@@ -84,6 +84,26 @@ public class MockBundleBulkActionTests
                 IsRequired = true,
                 CreatedAt = now,
             });
+
+            // The publish gate now also verifies content readiness: a reading
+            // section must reference a paper with at least one authored
+            // question, otherwise learners would face an empty exam.
+            db.ReadingParts.Add(new ReadingPart
+            {
+                Id = $"part-{id}",
+                PaperId = paperId,
+                PartCode = ReadingPartCode.A,
+                TimeLimitMinutes = 15,
+            });
+            db.ReadingQuestions.Add(new ReadingQuestion
+            {
+                Id = $"question-{id}",
+                ReadingPartId = $"part-{id}",
+                DisplayOrder = 1,
+                QuestionType = ReadingQuestionType.ShortAnswer,
+                Stem = "Seeded question so the readiness gate passes.",
+                CorrectAnswerJson = "\"answer\"",
+            });
         }
     }
 

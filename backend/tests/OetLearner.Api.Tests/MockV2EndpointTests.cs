@@ -166,6 +166,12 @@ public class MockV2EndpointTests : IClassFixture<TestWebApplicationFactory>
     private async Task<HttpClient> CreateLearnerClientAsync(string userId)
     {
         await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        // Attempt creation debits a mock credit — grant a test bucket first.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await Mocks.MockCreditTestSeeder.SeedMockCreditsAsync(db, userId);
+        }
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
