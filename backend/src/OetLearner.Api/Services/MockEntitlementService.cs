@@ -54,9 +54,12 @@ public sealed class MockEntitlementService(
                 $"Unknown mock type '{mockType}'.");
         }
 
-        // Premium / Trial subscribers bypass the credit ledger.
+        // Premium-tier subscribers bypass the credit ledger. Any-active-plan
+        // was too broad: a learner whose subscription exists only to carry a
+        // mock add-on read as "unlimited", so the buckets they paid for were
+        // never consumed.
         var resolved = await entitlementResolver.ResolveAsync(userId, ct);
-        if (resolved.HasEligibleSubscription)
+        if (await HasUnlimitedMockSubscriptionAsync(resolved, ct))
         {
             return new MockEntitlementCheck(true, normalised, int.MaxValue, int.MaxValue,
                 ReasonAllowedSubscription,
@@ -95,10 +98,10 @@ public sealed class MockEntitlementService(
                 $"Unknown mock type '{mockType}'.");
         }
 
-        // Premium subscribers do not consume credits. The debit becomes a no-op
-        // but still reports success so callers can treat the result uniformly.
+        // Premium-tier subscribers do not consume credits. The debit becomes a
+        // no-op but still reports success so callers can treat the result uniformly.
         var resolved = await entitlementResolver.ResolveAsync(userId, ct);
-        if (resolved.HasEligibleSubscription)
+        if (await HasUnlimitedMockSubscriptionAsync(resolved, ct))
         {
             return new MockEntitlementDebit(true, normalised, int.MaxValue, int.MaxValue, null,
                 ReasonAllowedSubscription, "Subscription covers mock attempt — no credit consumed.");
@@ -154,6 +157,7 @@ public sealed class MockEntitlementService(
         }
 
         var resolved = await entitlementResolver.ResolveAsync(userId, ct);
+        var unlimited = await HasUnlimitedMockSubscriptionAsync(resolved, ct);
 
         // Aggregate granted credits across the user's active add-on items.
         var grantedByType = await AggregateGrantedByTypeAsync(userId, ct);
@@ -174,16 +178,16 @@ public sealed class MockEntitlementService(
         {
             grantedByType.TryGetValue(token, out var granted);
             consumedByType.TryGetValue(token, out var consumed);
-            var remaining = resolved.HasEligibleSubscription
+            var remaining = unlimited
                 ? int.MaxValue
                 : Math.Max(0, granted - consumed);
             items.Add(new MockEntitlementSummaryItem(
                 MockType: token,
                 Label: MockEntitlementKeys.Label(token),
-                Granted: resolved.HasEligibleSubscription ? int.MaxValue : granted,
+                Granted: unlimited ? int.MaxValue : granted,
                 Consumed: consumed,
                 Remaining: remaining,
-                Unlimited: resolved.HasEligibleSubscription));
+                Unlimited: unlimited));
         }
 
         return new MockEntitlementSummary(
@@ -194,6 +198,53 @@ public sealed class MockEntitlementService(
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True when the learner's plan itself covers unlimited mocks — i.e. the
+    /// plan's EntitlementsJson declares the premium content tier. A merely
+    /// Active subscription is NOT enough: subscriptions also act as carriers
+    /// for one-off add-on purchases (mock packs), and those learners must
+    /// consume their per-type credit buckets.
+    /// </summary>
+    private async Task<bool> HasUnlimitedMockSubscriptionAsync(
+        OetLearner.Api.Services.Entitlements.EffectiveEntitlementSnapshot resolved,
+        CancellationToken ct)
+    {
+        if (!resolved.HasEligibleSubscription) return false;
+        if (string.IsNullOrWhiteSpace(resolved.PlanId)) return false;
+
+        var entitlementsJson = await db.BillingPlans.AsNoTracking()
+            .Where(p => p.Id == resolved.PlanId)
+            .Select(p => p.EntitlementsJson)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(entitlementsJson)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(entitlementsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            if (doc.RootElement.TryGetProperty("tier", out var tier)
+                && tier.ValueKind == JsonValueKind.String
+                && string.Equals(tier.GetString(), "premium", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            // Nested content-node form: { "content": { "tier": "premium", ... } }
+            if (doc.RootElement.TryGetProperty("content", out var content)
+                && content.ValueKind == JsonValueKind.Object
+                && content.TryGetProperty("tier", out var contentTier)
+                && contentTier.ValueKind == JsonValueKind.String
+                && string.Equals(contentTier.GetString(), "premium", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Sums entitlement counts granted by the user's active add-on subscription
