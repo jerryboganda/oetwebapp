@@ -66,7 +66,7 @@ public interface IContentEntitlementService
 
 public sealed record ContentEntitlementResult(
     bool Allowed,
-    string Reason,            // "free_paper" | "admin" | "plan_grants_tier" | "plan_grants_subtest" | "plan_grants_paper" | "no_active_subscription" | "plan_does_not_grant"
+    string Reason,            // "free_paper" | "admin" | "mock_attempt_grants" | "plan_grants_tier" | "plan_grants_subtest" | "plan_grants_paper" | "no_active_subscription" | "plan_does_not_grant"
     string? CurrentTier,      // null if anonymous-equivalent; "free"|"premium"|"trial"
     string? RequiredScope);   // e.g. "subtest:listening" | "tier:premium" | "paper:<id>"
 
@@ -107,6 +107,29 @@ public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEnt
                 Allowed: false, Reason: "no_active_subscription",
                 CurrentTier: null,
                 RequiredScope: $"subtest:{paper.SubtestCode}");
+        }
+
+        // 3. Paid mock attempt in flight. A mock credit was already consumed
+        //    when the attempt started, so the attempt itself grants access to
+        //    every paper bundled into it — otherwise a learner who bought a
+        //    mock pack (but no content plan) would be debited and then hit a
+        //    "Subscription required" wall on the first section.
+        var mockAttemptGrants = await db.MockSectionAttempts.AsNoTracking()
+            .Join(db.MockAttempts.AsNoTracking(),
+                section => section.MockAttemptId,
+                attempt => attempt.Id,
+                (section, attempt) => new { section, attempt })
+            .AnyAsync(x =>
+                x.attempt.UserId == userId
+                && x.section.ContentPaperId == paper.Id
+                && x.attempt.State != AttemptState.Abandoned
+                && x.attempt.State != AttemptState.Completed,
+                ct);
+        if (mockAttemptGrants)
+        {
+            return new ContentEntitlementResult(
+                Allowed: true, Reason: "mock_attempt_grants",
+                CurrentTier: "mock", RequiredScope: null);
         }
 
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
