@@ -243,6 +243,12 @@ public sealed class MockService(
     {
         await EnsureUserAsync(userId, ct);
         var wallet = await EnsureWalletAsync(userId, ct);
+        // The learner's own profession so the setup page can preselect it
+        // instead of defaulting to whichever profession sorts first.
+        var learnerProfession = await db.Users.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
         var bundles = await QueryPublishedBundles()
             .Include(x => x.Sections.OrderBy(s => s.SectionOrder))
                 .ThenInclude(s => s.ContentPaper)
@@ -297,6 +303,7 @@ public sealed class MockService(
                 new { id = MockStrictness.FinalReadiness, label = "Final readiness", description = "Strictest preset \u2014 used right before the real exam." },
             },
             professions,
+            learnerProfession,
             reviewSelections = new[]
             {
                 new { id = "none", label = "No Review", cost = 0 },
@@ -527,6 +534,30 @@ public sealed class MockService(
             section.StartedAt = now;
             section.DeadlineAt = attempt.StrictTimer ? now.AddMinutes(bundleSection.TimeLimitMinutes) : null;
             RecordEvent(userId, "mock_section_started", new { mockAttemptId = attempt.Id, sectionId = section.Id, subtest = section.SubtestCode });
+
+            // The webcam/environment preflight only ran client-side, so an API
+            // caller could start a strict section with no check at all and
+            // nothing was recorded. A hard server block is not possible (the
+            // browser owns the camera), but the absence is now a durable
+            // proctoring event tutors/admins see on the integrity summary.
+            var strictAttempt = attempt.Strictness is MockStrictness.Exam or MockStrictness.FinalReadiness;
+            var preflightConfirmed = request.ClientState is not null
+                && request.ClientState.TryGetValue("preflight", out var preflight)
+                && string.Equals(preflight?.ToString(), "passed", StringComparison.OrdinalIgnoreCase);
+            if (strictAttempt && !preflightConfirmed)
+            {
+                db.MockProctoringEvents.Add(new MockProctoringEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    MockAttemptId = attempt.Id,
+                    MockSectionAttemptId = section.Id,
+                    Kind = MockProctoringKinds.SectionStartedWithoutPreflight,
+                    Severity = "warning",
+                    MetadataJson = JsonSupport.Serialize(new { subtest = section.SubtestCode }),
+                    OccurredAt = now,
+                });
+            }
+
             await db.SaveChangesAsync(ct);
         }
 

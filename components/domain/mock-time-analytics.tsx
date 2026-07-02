@@ -175,13 +175,8 @@ export function TimeAnalyticsBreakdown({
                   <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-navy capitalize">
-                        {row.subtest || 'Section'}
+                        {row.subtest ? `${row.subtest} section` : 'Section'}
                       </span>
-                      {row.sectionId ? (
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted">
-                          {row.sectionId}
-                        </span>
-                      ) : null}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted">
                       <span className="font-bold text-navy">

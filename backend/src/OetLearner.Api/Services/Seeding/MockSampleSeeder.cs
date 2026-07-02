@@ -85,8 +85,11 @@ public sealed class MockSampleSeeder(
         var sourceRoot = ResolveSourceRoot(opts.Value.SourceRootPath);
         if (sourceRoot is null)
         {
-            logger.LogInformation(
-                "MockSampleSeeder: source root not found (configured='{Configured}'); skipping.",
+            // Warning, not info: with the sample folder absent the dev
+            // environment silently comes up with zero mock content, which
+            // reads as "mocks are broken" rather than "seed input missing".
+            logger.LogWarning(
+                "MockSampleSeeder: source root not found (configured='{Configured}'); skipping — the dev environment will have no sample mock bundles.",
                 opts.Value.SourceRootPath);
             return;
         }

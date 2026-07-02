@@ -195,7 +195,11 @@ export default function MockPlayerPage() {
     setLaunchingSectionId(selectedSection.id);
     setError(null);
     try {
-      const started = await startMockSection(session.sessionId, selectedSection.id);
+      const started = await startMockSection(session.sessionId, selectedSection.id, {
+        // Tell the server the client-side proctoring preflight actually ran —
+        // strict sections started without this are flagged on the integrity summary.
+        preflight: cameraCheckPassed[selectedSection.id] ? 'passed' : 'not_required',
+      });
       await refreshSession();
       router.push(started.launchRoute);
     } catch (err) {
@@ -436,9 +440,19 @@ export default function MockPlayerPage() {
                       </Button>
                     ) : null}
 
-                    <Button variant="outline" fullWidth onClick={handleSubmit} loading={submitting}>
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={handleSubmit}
+                      loading={submitting}
+                      disabled={!getMockSubmissionReadiness(session).canSubmit}
+                      title={getMockSubmissionReadiness(session).canSubmit ? undefined : getMockSubmissionReadiness(session).message}
+                    >
                       Submit mock for report generation
                     </Button>
+                    {!getMockSubmissionReadiness(session).canSubmit ? (
+                      <p className="text-xs text-muted">{getMockSubmissionReadiness(session).message}</p>
+                    ) : null}
 
                     {session.reportRoute ? (
                       <Button variant="ghost" fullWidth onClick={() => router.push(session.reportRoute!)}>
