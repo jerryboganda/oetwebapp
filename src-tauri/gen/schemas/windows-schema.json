@@ -423,6 +423,12 @@
           "markdownDescription": "Enables the show_notification command without any pre-configured scope."
         },
         {
+          "description": "Enables the sign_video_challenge command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-sign-video-challenge",
+          "markdownDescription": "Enables the sign_video_challenge command without any pre-configured scope."
+        },
+        {
           "description": "Enables the speaking_audio_discard command without any pre-configured scope.",
           "type": "string",
           "const": "allow-speaking-audio-discard",
@@ -523,6 +529,12 @@
           "type": "string",
           "const": "deny-show-notification",
           "markdownDescription": "Denies the show_notification command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sign_video_challenge command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-sign-video-challenge",
+          "markdownDescription": "Denies the sign_video_challenge command without any pre-configured scope."
         },
         {
           "description": "Denies the speaking_audio_discard command without any pre-configured scope.",

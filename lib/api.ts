@@ -116,12 +116,6 @@ import type {
 } from './rulebook';
 import type { WeaknessDataPoint } from './writing-analytics/types';
 import type {
-  VideoLessonDetail,
-  VideoLessonListItem,
-  VideoLessonProgram,
-  VideoProgressUpdateResponse,
-} from './types/video-lessons';
-import type {
   StrategyGuideAdminItem,
   StrategyGuideBookmarkUpdateResponse,
   StrategyGuideDetail,
@@ -9135,29 +9129,8 @@ export async function adminFetchGrammarStats(lessonId: string) {
 
 
 // ── Video Lessons ─────────────────────────────────────────────────────────────
-
-export async function fetchVideoLessons(params?: { examTypeCode?: string; subtestCode?: string; category?: string }) {
-  const p = new URLSearchParams();
-  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
-  if (params?.subtestCode) p.set('subtestCode', params.subtestCode);
-  if (params?.category) p.set('category', params.category);
-  return apiRequest<VideoLessonListItem[]>(`/v1/lessons?${p}`);
-}
-
-export async function fetchVideoLesson(lessonId: string) {
-  return apiRequest<VideoLessonDetail>(`/v1/lessons/${encodeURIComponent(lessonId)}`);
-}
-
-export async function updateVideoProgress(lessonId: string, watchedSeconds: number) {
-  return apiRequest<VideoProgressUpdateResponse>(`/v1/lessons/${encodeURIComponent(lessonId)}/progress`, {
-    method: 'POST',
-    body: JSON.stringify({ watchedSeconds }),
-  });
-}
-
-export async function fetchVideoLessonProgram(programId: string) {
-  return apiRequest<VideoLessonProgram>(`/v1/lessons/programs/${encodeURIComponent(programId)}`);
-}
+// Retired 2026-07: the legacy /v1/lessons feature was superseded by the Video
+// Library (`lib/api/videos.ts`, /v1/video-library). Old endpoints return 410.
 
 // ── Strategy Guides ───────────────────────────────────────────────────────────
 

@@ -65,6 +65,12 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/mocks/attempts/{mockAttemptId}/sections/writing/pdf")]
     [InlineData("/v1/speaking/evaluations/{evaluationId}/pdf")]
     [InlineData("/v1/ai-assistant/hub/negotiate")]
+    [InlineData("/v1/video-library")]
+    [InlineData("/v1/video-library/videos/{videoId}")]
+    [InlineData("/v1/video-library/videos/{videoId}/playback-session")]
+    [InlineData("/v1/admin/video-library/videos")]
+    [InlineData("/v1/admin/video-library/videos/{videoId}/publish-gate")]
+    [InlineData("/v1/webhooks/bunny-stream")]
     public void Program_RegistersFeatureRoutes(string routePattern)
     {
         using var client = _factory.CreateClient();
@@ -89,6 +95,9 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/admin/mocks/item-analysis")]
     [InlineData("/v1/admin/mocks/analytics")]
     [InlineData("/v1/admin/mocks/risk-list")]
+    [InlineData("/v1/admin/video-library/analytics/summary")]
+    [InlineData("/v1/admin/video-library/videos/{videoId}/analytics/summary")]
+    [InlineData("/v1/admin/video-library/videos/{videoId}/analytics/viewers")]
     public void AnalyticsRoutes_RequireQualityAnalyticsPolicy(string routePattern)
     {
         using var client = _factory.CreateClient();

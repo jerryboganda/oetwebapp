@@ -86,6 +86,7 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
+  { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/subscriptions', label: 'Subscriptions & Packages', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/subscriptions' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
@@ -94,7 +95,7 @@ export const learnerMainNavItems: NavItem[] = [
 export const learnNavItems: NavItem[] = [
   { href: '/grammar', label: 'Grammar', icon: <BookMarked className="w-5 h-5" />, matchPrefix: '/grammar' },
   { href: '/classes', label: 'Live Classes', icon: <CalendarCheck className="w-5 h-5" />, matchPrefix: '/classes' },
-  { href: '/lessons', label: 'Video Lessons', icon: <Video className="w-5 h-5" />, matchPrefix: '/lessons', featureFlag: 'video_lessons' },
+  { href: '/videos', label: 'Video Library', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library' },
   { href: '/strategies', label: 'Strategies', icon: <Lightbulb className="w-5 h-5" />, matchPrefix: '/strategies', featureFlag: 'strategy_guides' },
   // Per PRD Phase 2 §2 the dedicated /pronunciation tab is removed and the
   // pronunciation engine is merged into Recalls — clicking a recall word plays
@@ -114,8 +115,9 @@ export const mobileNavItems: NavItem[] = [
 ];
 
 // Curated 7-item learner bottom-nav (fits grid-cols-7 without overflow).
-// The full learnerMainNavItems list has 10 items — Progress and Billing
-// remain reachable via the desktop sidebar and Settings page.
+// Videos takes the 7th slot (mobile is a primary Video Library surface —
+// playback is native-app-only); Materials, Progress and Billing remain
+// reachable via the desktop sidebar and Settings page.
 export const learnerMobileNavItems: NavItem[] = [
   learnerMainNavItems[0], // Dashboard
   learnerMainNavItems[1], // Listening
@@ -123,7 +125,7 @@ export const learnerMobileNavItems: NavItem[] = [
   learnerMainNavItems[3], // Writing
   learnerMainNavItems[4], // Speaking
   learnerMainNavItems[5], // Mocks
-  learnerMainNavItems[7], // Materials
+  learnerMainNavItems[8], // Videos
 ];
 
 function isActive(pathname: string | null, item: NavItem): boolean {
@@ -232,11 +234,18 @@ export function Sidebar({
   const displayName = userSummary?.displayName ?? user?.displayName ?? 'User';
   const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
   const email = userSummary?.email ?? user?.email ?? '';
-  const learnFeatureKeys = useMemo(() => collectFeatureFlagKeys(learnNavItems), []);
-  const learnerFeatureFlags = useFeatureFlagMap(learnFeatureKeys, isLearnerWorkspace);
+  const navFeatureKeys = useMemo(
+    () => collectFeatureFlagKeys([...learnNavItems, ...resolvedItems]),
+    [resolvedItems],
+  );
+  const learnerFeatureFlags = useFeatureFlagMap(navFeatureKeys, isLearnerWorkspace);
   const visibleLearnNavItems = useMemo(
     () => learnNavItems.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)),
     [isLearnerWorkspace, learnerFeatureFlags],
+  );
+  const visibleMainItems = useMemo(
+    () => resolvedItems.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)),
+    [isLearnerWorkspace, learnerFeatureFlags, resolvedItems],
   );
 
   const handleSignOut = async () => {
@@ -283,7 +292,7 @@ export function Sidebar({
             />
           ))
         ) : (
-          <NavSection label="Practice" items={resolvedItems} pathname={pathname} reducedMotion={reducedMotion} />
+          <NavSection label="Practice" items={visibleMainItems} pathname={pathname} reducedMotion={reducedMotion} />
         )}
         {/* The dedicated "Learn" group (Grammar, Live Classes, Lessons, Strategies,
             AI Conversation) is intentionally hidden from the learner workspace per the

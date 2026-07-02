@@ -1370,6 +1370,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // assignment. Partial class in LearnerDbContext.Materials.cs.
         OnModelCreatingMaterials(modelBuilder);
 
+        // Video Library — Bunny Stream backed videos, categories, learner
+        // progress/bookmarks, attested playback sessions, and telemetry.
+        // Partial class in LearnerDbContext.VideoLibrary.cs.
+        OnModelCreatingVideoLibrary(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1509,6 +1514,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.Materials.cs (partial).
     /// </summary>
     partial void OnModelCreatingMaterials(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.VideoLibrary.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingVideoLibrary(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

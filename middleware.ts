@@ -45,7 +45,7 @@ function generateNonce(): string {
  *   reading module — that path is being additionally sanitized server-side separately).
  * - 'unsafe-eval' only in dev for React fast-refresh.
  */
-function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], isDev: boolean): string {
+function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], mediaCdnOrigins: string[], isDev: boolean): string {
   const zoomHttpOrigins = ['https://zoom.us', 'https://*.zoom.us', 'https://zoom.com', 'https://*.zoom.com', 'https://source.zoom.us'];
   const zoomWsOrigins = ['wss://zoom.us', 'wss://*.zoom.us', 'wss://zoom.com', 'wss://*.zoom.com'];
   // PayPal embedded checkout (JS SDK + Smart Buttons + Advanced Card Fields). The SDK
@@ -71,6 +71,10 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     ...zoomHttpOrigins,
     ...zoomWsOrigins,
     ...paypalHttpOrigins,
+    // Bunny Stream CDN — hls.js fetches HLS playlists/segments via XHR inside
+    // the native app WebViews (which load this same remote origin, so this CSP
+    // governs them too). Browsers never receive a playback URL (server-gated).
+    ...mediaCdnOrigins,
     'https://*.googleapis.com',
   ].join(' ');
 
@@ -79,9 +83,9 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`,
+    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')}`,
     `connect-src ${connectSrc}`,
-    `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')}`,
+    `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')}`,
     `worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}`,
     `frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`,
     "frame-ancestors 'self'",
@@ -133,6 +137,24 @@ function resolveApiOrigins(): { http: string[]; ws: string[] } {
 
 const API_ORIGINS = resolveApiOrigins();
 
+/**
+ * Media CDN origins (Bunny Stream) for media-src/connect-src/img-src.
+ * The wildcard default covers every Bunny pull-zone host (vz-*.b-cdn.net) so
+ * the admin-configured hostname works without a rebuild; a custom CNAME needs
+ * MEDIA_CDN_ORIGINS set (comma-separated origins) + redeploy — Edge middleware
+ * env is baked at build time.
+ */
+function resolveMediaCdnOrigins(): string[] {
+  const raw = process.env.MEDIA_CDN_ORIGINS;
+  if (!raw) return ['https://*.b-cdn.net'];
+  return raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+const MEDIA_CDN_ORIGINS = resolveMediaCdnOrigins();
+
 // Public routes that don't require authentication
 // Convention: all pages under the (auth) route group are public
 const PUBLIC_PATHS = new Set([
@@ -151,6 +173,7 @@ const PUBLIC_PATHS = new Set([
   '/mfa/setup',
   '/mfa/recovery',
   '/auth/callback',
+  '/get-app',
   '/.well-known/apple-app-site-association',
   '/.well-known/assetlinks.json',
 ]);
@@ -199,7 +222,7 @@ export function middleware(request: NextRequest) {
   // framework <script> tags. 'strict-dynamic' lets those trusted scripts then
   // load further chunks without every chunk needing its own allowlist entry.
   const nonce = generateNonce();
-  const csp = buildCsp(nonce, API_ORIGINS.http, API_ORIGINS.ws, isDev);
+  const csp = buildCsp(nonce, API_ORIGINS.http, API_ORIGINS.ws, MEDIA_CDN_ORIGINS, isDev);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(NONCE_HEADER, nonce);

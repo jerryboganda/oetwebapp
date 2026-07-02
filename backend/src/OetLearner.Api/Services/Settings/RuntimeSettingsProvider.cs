@@ -344,6 +344,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var pdfExtraction = ResolvePdfExtraction(r, _pdfExtraction.Value);
         var pronunciation = ResolvePronunciation(r, _pronunciation.Value);
         var authTokens = ResolveAuthTokens(r, _authTokens.Value);
+        var bunnyStream = ResolveBunnyStream(r);
+        var videoAttestation = ResolveVideoAttestation(r);
 
         return new EffectiveSettings(
             Email: email,
@@ -381,7 +383,54 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             AuthTokens: authTokens,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
-            UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
+            UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt)
+        {
+            BunnyStream = bunnyStream,
+            VideoAttestation = videoAttestation,
+        };
+    }
+
+    // ── Bunny Stream + Video attestation (Video Library) ───────────
+    // (DB-over-env: null DB field → BunnyStream:* / VideoAttestation:* config)
+    private BunnyStreamSettings ResolveBunnyStream(RuntimeSettingsRow r)
+    {
+        var ttl = r.BunnyStreamPlaybackTokenTtlSeconds
+            ?? ParseInt(_config["BunnyStream:PlaybackTokenTtlSeconds"])
+            ?? 14400;
+        return new BunnyStreamSettings(
+            Enabled: r.BunnyStreamEnabled ?? ParseBool(_config["BunnyStream:Enabled"]) ?? false,
+            LibraryId: Coalesce(r.BunnyStreamLibraryId, _config["BunnyStream:LibraryId"]),
+            ApiKey: Unprotect(r.BunnyStreamApiKeyEncrypted) ?? NullIfEmpty(_config["BunnyStream:ApiKey"]),
+            CdnHostname: Coalesce(r.BunnyStreamCdnHostname, _config["BunnyStream:CdnHostname"]),
+            TokenAuthKey: Unprotect(r.BunnyStreamTokenAuthKeyEncrypted) ?? NullIfEmpty(_config["BunnyStream:TokenAuthKey"]),
+            WebhookSecret: Unprotect(r.BunnyStreamWebhookSecretEncrypted) ?? NullIfEmpty(_config["BunnyStream:WebhookSecret"]),
+            CollectionId: Coalesce(r.BunnyStreamCollectionId, _config["BunnyStream:CollectionId"]),
+            PlaybackTokenTtlSeconds: Math.Clamp(ttl, 300, 86_400));
+    }
+
+    private VideoAttestationSettings ResolveVideoAttestation(RuntimeSettingsRow r)
+    {
+        var json = Unprotect(r.VideoAttestationKeysEncrypted)
+            ?? NullIfEmpty(_config["VideoAttestation:KeysJson"]);
+        if (string.IsNullOrWhiteSpace(json)) return VideoAttestationSettings.Unconfigured;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            if (parsed is null || parsed.Count == 0) return VideoAttestationSettings.Unconfigured;
+            var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (k, v) in parsed)
+            {
+                if (string.IsNullOrWhiteSpace(k) || string.IsNullOrWhiteSpace(v)) continue;
+                keys[k.Trim()] = v.Trim();
+            }
+            return keys.Count == 0 ? VideoAttestationSettings.Unconfigured : new VideoAttestationSettings(keys);
+        }
+        catch (JsonException)
+        {
+            // Malformed key map ⇒ treat as unconfigured (fail-closed: playback
+            // sessions return 403 attestation_unavailable, never a weaker check).
+            return VideoAttestationSettings.Unconfigured;
+        }
     }
 
     // ── Payment gateways + Soketi (DB-over-env, null DB field → env value) ──

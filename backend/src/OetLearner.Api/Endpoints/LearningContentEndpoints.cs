@@ -22,15 +22,17 @@ public static class LearningContentEndpoints
         var features = v1.MapGroup("/features");
         features.MapGet("/{featureKey}", async (
             string featureKey,
-            VideoLessonService videoLessons,
+            OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService videoLibrary,
             StrategyGuideService strategyGuides,
             CancellationToken ct) =>
         {
             var normalized = featureKey.Trim().ToLowerInvariant();
             return normalized switch
             {
-                "video_lessons" or "video-lessons" =>
-                    Results.Ok(new LearnerFeatureFlagResponse("video_lessons", await videoLessons.IsEnabledAsync(ct))),
+                // video_lessons was retired in favour of video_library (see the
+                // 410 handlers below); the new flag defaults ENABLED.
+                "video_library" or "video-library" =>
+                    Results.Ok(new LearnerFeatureFlagResponse("video_library", await videoLibrary.IsEnabledAsync(ct))),
                 "strategy_guides" or "strategy-guides" =>
                     Results.Ok(new LearnerFeatureFlagResponse("strategy_guides", await strategyGuides.IsEnabledAsync(ct))),
                 _ => Results.NotFound(new { code = "NOT_FOUND", message = "Feature flag is not exposed to learners." })
@@ -236,58 +238,22 @@ public static class LearningContentEndpoints
             return Results.Ok(new { status = "completed", score = req.Score, progress = GrammarLessonEndpointHelpers.MapGrammarProgress(progress) });
         });
 
-        // ── Video Lessons ─────────────────────────────────────────────────
+        // ── Video Lessons — RETIRED (replaced by the Video Library) ───────
+        // The legacy /v1/lessons feature is gone; every route answers 410 with
+        // a successor pointer so stale clients get a deterministic signal.
+        // The VideoLessons/LearnerVideoProgress tables are intentionally kept.
         var lessons = v1.MapGroup("/lessons");
-        static IResult FeatureDisabled(string featureName) => Results.NotFound(new { code = "FEATURE_DISABLED", message = $"{featureName} are not enabled." });
-
-        lessons.MapGet("/", async (
-            HttpContext http,
-            [FromQuery] string? examTypeCode,
-            [FromQuery] string? subtestCode,
-            [FromQuery] string? category,
-            VideoLessonService service,
-            CancellationToken ct) =>
+        static IResult FeatureRetired() => Results.Json(new
         {
-            if (!await service.IsEnabledAsync(ct))
-            {
-                return FeatureDisabled("Video lessons");
-            }
+            code = "feature_retired",
+            message = "Video lessons have been replaced by the Video Library.",
+            successor = "/v1/video-library",
+        }, statusCode: StatusCodes.Status410Gone);
 
-            return Results.Ok(await service.ListLessonsAsync(http.UserId(), ExamCodes.NormalizeOrNull(examTypeCode) ?? ExamCodes.DefaultCode, subtestCode, category, ct));
-        });
-
-        lessons.MapGet("/programs/{programId}", async (HttpContext http, string programId, VideoLessonService service, CancellationToken ct) =>
-        {
-            if (!await service.IsEnabledAsync(ct))
-            {
-                return FeatureDisabled("Video lessons");
-            }
-
-            var program = await service.GetProgramAsync(http.UserId(), programId, ct);
-            return program is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(program);
-        });
-
-        lessons.MapGet("/{lessonId}", async (HttpContext http, string lessonId, VideoLessonService service, CancellationToken ct) =>
-        {
-            if (!await service.IsEnabledAsync(ct))
-            {
-                return FeatureDisabled("Video lessons");
-            }
-
-            var lesson = await service.GetLessonAsync(http.UserId(), lessonId, ct);
-            return lesson is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(lesson);
-        });
-
-        lessons.MapPost("/{lessonId}/progress", async (HttpContext http, string lessonId, VideoProgressRequest req, VideoLessonService service, CancellationToken ct) =>
-        {
-            if (!await service.IsEnabledAsync(ct))
-            {
-                return FeatureDisabled("Video lessons");
-            }
-
-            var progress = await service.UpdateProgressAsync(http.UserId(), lessonId, req.WatchedSeconds, ct);
-            return progress is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(progress);
-        });
+        lessons.MapGet("/", () => FeatureRetired());
+        lessons.MapGet("/programs/{programId}", (string programId) => FeatureRetired());
+        lessons.MapGet("/{lessonId}", (string lessonId) => FeatureRetired());
+        lessons.MapPost("/{lessonId}/progress", (string lessonId) => FeatureRetired());
 
         // ── Strategy Guides ───────────────────────────────────────────────
         var strategies = v1.MapGroup("/strategies");

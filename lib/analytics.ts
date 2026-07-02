@@ -108,6 +108,8 @@ const TRACKED_EVENTS = [
   'grammar_draft_rejected',
   'lessons_page_viewed',
   'video_lesson_viewed',
+  'videos_page_viewed',
+  'video_detail_viewed',
   'strategies_page_viewed',
   'strategy_guide_viewed',
   'community_page_viewed',

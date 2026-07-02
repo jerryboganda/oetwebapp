@@ -121,13 +121,22 @@ jobs:
           ].join('\n'));
           NODE
 
+      # OET_MOBILE_ATTEST_SECRET is read by android/app/build.gradle via
+      # System.getenv and compiled into BuildConfig.OET_ATTEST_SECRET (video
+      # playback attestation). A release build without it still succeeds but
+      # refuses to sign attestations at runtime ("attestation secret not
+      # embedded") — it never falls back to the public dev constant.
       - name: Build release AAB
         working-directory: android
         run: ./gradlew bundleRelease --no-daemon
+        env:
+          OET_MOBILE_ATTEST_SECRET: ${{ secrets.OET_MOBILE_ATTEST_SECRET }}
 
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
+        env:
+          OET_MOBILE_ATTEST_SECRET: ${{ secrets.OET_MOBILE_ATTEST_SECRET }}
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
@@ -192,6 +201,23 @@ jobs:
           cd ios/App
           agvtool new-marketing-version "$MOBILE_VERSION"
           agvtool new-version -all "$MOBILE_VERSION_CODE"
+
+      # Video playback attestation: AttestationSecret.swift reads the
+      # OET_ATTEST_SECRET Info.plist key, which is injected here at build time
+      # only (the committed Info.plist deliberately has no such key). Without
+      # it a release build refuses to sign attestations at runtime — it never
+      # falls back to the public dev constant.
+      - name: Inject playback attestation secret into Info.plist
+        env:
+          OET_MOBILE_ATTEST_SECRET: ${{ secrets.OET_MOBILE_ATTEST_SECRET }}
+        run: |
+          if [ -z "$OET_MOBILE_ATTEST_SECRET" ]; then
+            echo "::warning::OET_MOBILE_ATTEST_SECRET is not set — this IPA will refuse to sign playback attestations."
+            exit 0
+          fi
+          /usr/libexec/PlistBuddy -c "Add :OET_ATTEST_SECRET string $OET_MOBILE_ATTEST_SECRET" ios/App/App/Info.plist \
+            || /usr/libexec/PlistBuddy -c "Set :OET_ATTEST_SECRET $OET_MOBILE_ATTEST_SECRET" ios/App/App/Info.plist
+          echo "Injected OET_ATTEST_SECRET into ios/App/App/Info.plist."
 
       - name: Import signing certificate
         uses: apple-actions/import-codesign-certs@v3

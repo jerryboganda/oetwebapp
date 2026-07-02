@@ -30,6 +30,7 @@ describe('admin navigation registry', () => {
       ['Writing', '/admin/writing'],
       ['Speaking', '/admin/speaking'],
       ['Mocks', '/admin/content/mocks'],
+      ['Video Library', '/admin/content/videos'],
       ['Recalls', '/admin/recalls'],
       ['Materials', '/admin/content/materials'],
     ]);

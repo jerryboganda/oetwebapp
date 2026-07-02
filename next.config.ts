@@ -66,6 +66,11 @@ const nextConfig: NextConfig = {
       { source, destination, permanent: true },
       { source: `${source}/:path*`, destination: `${destination}/:path*`, permanent: true },
     ]).concat([
+      // Legacy Video Lessons → Video Library. Old /lessons/{id} ids don't
+      // exist in the new library, so deep links land on the library home.
+      // Kept temporary (307) until the legacy tables are dropped.
+      { source: '/lessons', destination: '/videos', permanent: false },
+      { source: '/lessons/:path*', destination: '/videos', permanent: false },
       // Recalls consolidation — see docs/RECALLS-MODULE-PLAN.md.
       // Only the bare landing routes redirect; deeper /vocabulary/* tooling
       // pages remain accessible until their feature parity ships under /recalls.

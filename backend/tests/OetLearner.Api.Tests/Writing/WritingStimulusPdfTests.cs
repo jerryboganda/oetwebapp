@@ -39,7 +39,8 @@ public class WritingStimulusPdfTests
             db,
             new StubContentEntitlementService(),
             new StubReadingPolicyService(),
-            materialAccess);
+            materialAccess,
+            new OetLearner.Api.Services.VideoLibrary.VideoEntitlementService(db, new StubEntitlementResolver()));
     }
 
     private static ClaimsPrincipal MakePrincipal(string userId, string role, string? profession = null)

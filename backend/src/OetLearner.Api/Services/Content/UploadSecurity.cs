@@ -131,6 +131,36 @@ public sealed class MagicByteValidator : IUploadContentValidator
         if (header[0] == 0x50 && header[1] == 0x4B && (header[2] == 0x03 || header[2] == 0x05 || header[2] == 0x07))
             return ext == "zip" ? new(true, "application/zip", "zip", null) : new(false, "application/zip", "zip", $"Declared .{ext} but file is a ZIP container.");
 
+        // Caption tracks (Video Library) are plain text with no magic bytes.
+        // Only sniffed when the DECLARED extension is vtt/srt — every binary
+        // format above has already been identified and rejected as a mismatch,
+        // so this cannot be used to smuggle a binary past the validator.
+        if (ext is "vtt" or "srt")
+        {
+            var textStart = header[0] == 0xEF && header[1] == 0xBB && header[2] == 0xBF ? 3 : 0; // skip UTF-8 BOM
+            if (ext == "vtt")
+            {
+                var isWebVtt = read >= textStart + 6
+                    && header[textStart] == (byte)'W' && header[textStart + 1] == (byte)'E'
+                    && header[textStart + 2] == (byte)'B' && header[textStart + 3] == (byte)'V'
+                    && header[textStart + 4] == (byte)'T' && header[textStart + 5] == (byte)'T';
+                return isWebVtt
+                    ? new(true, "text/vtt", "vtt", null)
+                    : new(false, null, null, "Declared .vtt but file does not start with a WEBVTT header.");
+            }
+
+            // SRT: first meaningful byte is the numeric cue index (digits,
+            // possibly preceded by whitespace/newlines).
+            var i = textStart;
+            while (i < read && (header[i] == (byte)' ' || header[i] == (byte)'\r' || header[i] == (byte)'\n' || header[i] == (byte)'\t'))
+            {
+                i++;
+            }
+            return i < read && header[i] is >= (byte)'0' and <= (byte)'9'
+                ? new(true, "application/x-subrip", "srt", null)
+                : new(false, null, null, "Declared .srt but file does not look like a SubRip track.");
+        }
+
         return new(false, null, null, "Unrecognised file format.");
     }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "dev-localhost",
-  "description": "Dev-only: the same minimal IPC surface as app-remote, granted to the local Next.js dev server (http://localhost:3000) that `tauri dev` loads. The navigation guard in lib.rs only permits loopback origins in dev builds, so this never applies in a packaged app even though the capability is compiled in.",
+  "description": "Dev-only: the same minimal IPC surface as app-remote (runtime-info plus the signature-only, server-nonce-bound sign-video-challenge attestation command — the secret itself can never be exfiltrated), granted to the local Next.js dev server (http://localhost:3000) that `tauri dev` loads. The navigation guard in lib.rs only permits loopback origins in dev builds, so this never applies in a packaged app even though the capability is compiled in.",
   "remote": {
     "urls": [
       "http://localhost",
@@ -11,5 +11,5 @@
     ]
   },
   "windows": ["main"],
-  "permissions": ["core:default", "allow-runtime-info"]
+  "permissions": ["core:default", "allow-runtime-info", "allow-sign-video-challenge"]
 }

@@ -170,7 +170,7 @@ export default function PackagesPage() {
                   {previews.map((preview) => (
                     <MotionItem key={preview.id}>
                       <Link
-                        href={preview.contentItemId ? `/lessons/${preview.contentItemId}` : '#'}
+                        href="/videos"
                         className="group block rounded-lg border border-border bg-surface p-4 hover:shadow-sm transition-shadow"
                       >
                         <Badge variant="muted" className="text-[10px] mb-2">{preview.previewType.replaceAll('_', ' ')}</Badge>
