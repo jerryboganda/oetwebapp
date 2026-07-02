@@ -48,7 +48,7 @@ public sealed record AiPackageCreditTransactionDto(
     DateTimeOffset? ExpiresAt,
     DateTimeOffset CreatedAt);
 
-public sealed record AiPackageDebitResult(bool Debited, string? ErrorCode, string? ErrorMessage, string? DebitReferenceId);
+public sealed record AiPackageDebitResult(bool Debited, string? ErrorCode, string? ErrorMessage, string? DebitReferenceId, bool Bypassed = false);
 
 public sealed record AiPackageCreditAdjustmentRequest(
     int FlexibleCreditsDelta,
@@ -272,7 +272,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         if (await ShouldBypassMockDebitForLegacyAccountAsync(account, ct))
         {
-            return new(true, null, null, referenceId);
+            // Not an AI-package customer — signal the bypass so the caller can
+            // charge the add-on mock-credit ledger instead of skipping billing.
+            return new(true, null, null, referenceId, Bypassed: true);
         }
 
         if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))

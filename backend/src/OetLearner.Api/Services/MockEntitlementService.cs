@@ -260,8 +260,11 @@ public sealed class MockEntitlementService(
     private async Task<IReadOnlyList<ActiveAddOnGrant>> LoadActiveGrantsAsync(string userId, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
+        // Only honour grants whose parent subscription is actually live —
+        // Pending/Cancelled/Expired parents must not confer mock credits.
         var subscriptionIds = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId)
+            .Where(s => s.UserId == userId
+                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
             .Select(s => s.Id)
             .ToListAsync(ct);
         if (subscriptionIds.Count == 0)
