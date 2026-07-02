@@ -880,6 +880,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         wallet.LastUpdatedAt = now;
 
         await db.SaveChangesAsync();
+
+        // Attempt creation debits a mock credit — grant a test bucket first.
+        await Mocks.MockCreditTestSeeder.SeedMockCreditsAsync(db, userId);
         return bundleId;
     }
 
