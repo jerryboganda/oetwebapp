@@ -1,14 +1,15 @@
 'use client';
 
+import { Suspense } from 'react';
 import { LearnerDashboardShell } from '@/components/layout';
-import { CatalogStorefront } from '@/components/domain/catalog';
-import { AiPackagesStorefront } from '@/components/domain/billing';
+import { SubscriptionsCatalog } from '@/components/domain/catalog/subscriptions-catalog';
 
 export default function SubscriptionsPage() {
   return (
     <LearnerDashboardShell>
-      <CatalogStorefront variant="dashboard" />
-      <AiPackagesStorefront />
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl border border-border bg-surface" />}>
+        <SubscriptionsCatalog />
+      </Suspense>
     </LearnerDashboardShell>
   );
 }
