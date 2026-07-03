@@ -86,12 +86,15 @@ public class PayPalSandboxLiveTests
         // UseSandbox=false → the gateway must call the LIVE host. Sandbox creds against the
         // live host are rejected (401 invalid_client), so order creation throws. This is the
         // empirical proof that honouring the runtime sandbox/live flag is what unblocks go-live.
+        // The gateway now parses PayPal's error envelope and throws a typed
+        // PaymentGatewayApiException (carrying the upstream 401) instead of a raw
+        // HttpRequestException — see EnsurePayPalSuccessAsync.
         var gateway = new PayPalGateway(
             new HttpClient(),
             Options.Create(options),
             RuntimeFor(creds.Value.ClientId, creds.Value.Secret, useSandbox: false));
 
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+        var ex = await Assert.ThrowsAsync<PaymentGatewayApiException>(() => gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
             UserId: "live-sandbox-test",
             Amount: 24.00m,
             Currency: "GBP",
@@ -99,5 +102,6 @@ public class PayPalSandboxLiveTests
             ProductId: null,
             Description: "Live host rejection check",
             Metadata: null), default));
+        Assert.Equal(401, ex.UpstreamStatusCode);
     }
 }

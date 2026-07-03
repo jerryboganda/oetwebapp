@@ -544,13 +544,81 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
 public sealed class PayPalGateway(
     HttpClient httpClient,
     IOptions<BillingOptions> billingOptions,
-    IRuntimeSettingsProvider? runtimeSettings = null) : IPaymentGateway
+    IRuntimeSettingsProvider? runtimeSettings = null,
+    ILogger<PayPalGateway>? logger = null) : IPaymentGateway
 {
     private readonly HttpClient _httpClient = httpClient;
     private readonly BillingOptions _billing = billingOptions.Value;
     private readonly IRuntimeSettingsProvider? _runtimeSettings = runtimeSettings;
+    private readonly ILogger<PayPalGateway>? _logger = logger;
 
     public string GatewayName => "paypal";
+
+    /// <summary>
+    /// Replacement for <c>HttpResponseMessage.EnsureSuccessStatusCode()</c> that, on a
+    /// non-2xx PayPal response, reads and parses PayPal's <c>{ "name", "message", "details":[...] }</c>
+    /// error envelope, logs the real reason server-side (including the <c>debug_id</c>), and
+    /// throws a typed <see cref="PaymentGatewayApiException"/>. Without this, a misconfigured
+    /// gateway (e.g. live creds hitting the sandbox host → <c>invalid_client</c> 401) surfaces
+    /// only as an opaque <see cref="HttpRequestException"/> that the fulfilment path treats as a
+    /// generic 500 — invisible in logs and impossible to diagnose. Mirrors the Stripe gateway's
+    /// <c>EnsureStripeSuccessAsync</c>. Never leaks the upstream detail verbatim to the learner.
+    /// </summary>
+    private async Task EnsurePayPalSuccessAsync(HttpResponseMessage response, string operation, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var status = (int)response.StatusCode;
+        string? name = null;
+        string? message = null;
+        string? issue = null;
+        string? debugId = null;
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                using var document = JsonDocument.Parse(body);
+                var root = document.RootElement;
+                // PayPal error envelopes come in two shapes: the OAuth token endpoint returns
+                // { error, error_description }; the REST v2 endpoints return { name, message,
+                // details:[{ issue, description }], debug_id }.
+                name = GetString(root, "name") ?? GetString(root, "error");
+                message = GetString(root, "message") ?? GetString(root, "error_description");
+                debugId = GetString(root, "debug_id");
+                if (root.TryGetProperty("details", out var details)
+                    && details.ValueKind == JsonValueKind.Array
+                    && details.GetArrayLength() > 0)
+                {
+                    issue = GetString(details[0], "issue");
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Non-JSON error body (e.g. an HTML proxy/gateway page). Fall back to the status line.
+        }
+
+        var detail = message ?? response.ReasonPhrase ?? "Unknown PayPal error";
+        _logger?.LogWarning(
+            "PayPal {Operation} failed: HTTP {Status} name={Name} issue={Issue} debug_id={DebugId} message={Message}",
+            operation,
+            status,
+            name,
+            issue,
+            debugId,
+            detail);
+
+        throw new PaymentGatewayApiException(
+            gateway: GatewayName,
+            upstreamStatusCode: status,
+            message: $"PayPal {operation} failed (HTTP {status}): {detail}",
+            upstreamErrorCode: issue ?? name,
+            upstreamErrorType: name);
+    }
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
@@ -612,7 +680,7 @@ public sealed class PayPalGateway(
         message.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsurePayPalSuccessAsync(response, "create order", ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -660,7 +728,7 @@ public sealed class PayPalGateway(
         message.Content = new StringContent("{}", Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsurePayPalSuccessAsync(response, "capture order", ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -705,7 +773,7 @@ public sealed class PayPalGateway(
                 new Uri(new Uri(EnsureTrailingSlash(GetPayPalApiBaseUrl(options))), $"v2/checkout/orders/{Uri.EscapeDataString(transactionId)}"));
             orderRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             using var orderResponse = await _httpClient.SendAsync(orderRequest, ct);
-            orderResponse.EnsureSuccessStatusCode();
+            await EnsurePayPalSuccessAsync(orderResponse, "get order", ct);
             await using var orderStream = await orderResponse.Content.ReadAsStreamAsync(ct);
             using var orderDocument = await JsonDocument.ParseAsync(orderStream, cancellationToken: ct);
             captureId = FindFirstCaptureId(orderDocument.RootElement)
@@ -732,7 +800,7 @@ public sealed class PayPalGateway(
         }), Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsurePayPalSuccessAsync(response, "refund", ct);
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
         var status = GetString(document.RootElement, "status") ?? "PENDING";
@@ -897,7 +965,7 @@ public sealed class PayPalGateway(
         });
 
         using var response = await _httpClient.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsurePayPalSuccessAsync(response, "access token", ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
