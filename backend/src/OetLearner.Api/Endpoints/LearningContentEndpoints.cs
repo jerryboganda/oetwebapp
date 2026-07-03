@@ -243,6 +243,7 @@ public static class LearningContentEndpoints
         // a successor pointer so stale clients get a deterministic signal.
         // The VideoLessons/LearnerVideoProgress tables are intentionally kept.
         var lessons = v1.MapGroup("/lessons");
+        static IResult FeatureDisabled(string featureName) => Results.NotFound(new { code = "FEATURE_DISABLED", message = $"{featureName} are not enabled." });
         static IResult FeatureRetired() => Results.Json(new
         {
             code = "feature_retired",
