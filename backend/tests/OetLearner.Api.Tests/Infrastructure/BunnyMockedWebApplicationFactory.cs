@@ -37,6 +37,7 @@ public sealed class FakeBunnyStreamClient : IBunnyStreamClient
         Status: 3,
         EncodeProgress: 100,
         LengthSeconds: 720,
+        StorageSizeBytes: 0,
         ThumbnailUrl: "https://vz-test.b-cdn.net/unset/thumbnail.jpg",
         Width: 1920,
         Height: 1080,
