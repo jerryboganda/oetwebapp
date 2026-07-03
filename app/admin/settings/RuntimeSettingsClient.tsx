@@ -183,6 +183,24 @@ export interface CheckoutComSettings {
   isConfigured?: boolean | null;
 }
 
+export interface BunnyStreamSettings {
+  enabled: boolean | null;
+  libraryId: string;
+  apiKey: string;
+  cdnHostname: string;
+  tokenAuthKey: string;
+  webhookSecret: string;
+  collectionId: string;
+  playbackTokenTtlSeconds: number | null;
+  /** Write field sent on PUT: the raw JSON key map. */
+  videoAttestationKeysJson: string;
+  /** Read-only from GET: masked indicator that attestation keys are set. */
+  videoAttestationKeys?: string;
+  /** Read-only from GET: configured "platform:keyId" identifiers. */
+  videoAttestationKeyIds?: string[];
+  isConfigured?: boolean | null;
+}
+
 export interface PaymobSettings {
   apiBaseUrl: string;
   apiKey: string;
@@ -400,6 +418,7 @@ export interface RuntimeSettingsResponse {
   speakingCompliance: SpeakingComplianceSettingsData;
   speakingFeatures: SpeakingFeaturesSettings;
   checkoutCom: CheckoutComSettings;
+  bunnyStream: BunnyStreamSettings;
   paymob: PaymobSettings;
   payTabs: PayTabsSettings;
   soketi: SoketiSettings;
@@ -431,7 +450,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush';
+type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush';
 
 // The object-valued payload keys (every UI section maps to one of these; the "paypal"
 // UI section writes into "billing"). Excludes the scalar audit fields so updateField can
@@ -608,6 +627,18 @@ const CHECKOUT_COM_FIELDS: FieldDef<CheckoutComSettings>[] = [
   { key: 'webhookSecret', label: 'Webhook Signing Secret', secret: true, hint: 'Verifies Cko-Signature webhook headers.' },
   { key: 'successUrl', label: 'Success URL', type: 'url' },
   { key: 'cancelUrl', label: 'Cancel URL', type: 'url' },
+];
+
+const BUNNY_STREAM_FIELDS: FieldDef<BunnyStreamSettings>[] = [
+  { key: 'enabled', label: 'Enabled', type: 'checkbox', hint: 'Master toggle. When off, the Video Library stays dormant (uploads/playback return 503 bunny_not_configured).' },
+  { key: 'libraryId', label: 'Library ID', hint: 'Numeric Bunny Stream library id (Bunny dashboard → Stream → your library).' },
+  { key: 'apiKey', label: 'API Key', secret: true, hint: 'The per-library API key (Stream → library → API). Used for uploads + metadata. Stored encrypted.' },
+  { key: 'cdnHostname', label: 'CDN Hostname', hint: 'The pull-zone hostname, e.g. vz-xxxxxxxx-xxx.b-cdn.net.' },
+  { key: 'tokenAuthKey', label: 'CDN Token-Auth Key', secret: true, hint: "The pull-zone Token Authentication Key (pull zone → Security). Signs playback URLs. Requires the zone's token authentication to be ON. Stored encrypted." },
+  { key: 'webhookSecret', label: 'Webhook Secret', secret: true, hint: 'Shared secret embedded in the Bunny webhook URL as ?secret=… (set the webhook to https://api.oetwithdrhesham.co.uk/v1/webhooks/bunny-stream?secret=<this>). Stored encrypted.' },
+  { key: 'collectionId', label: 'Collection ID (optional)', hint: 'Optional Bunny collection to place newly-created videos in.' },
+  { key: 'playbackTokenTtlSeconds', label: 'Playback Token TTL (seconds)', type: 'number', hint: 'Signed-URL lifetime, 300–86400. Default 14400 (4 hours).' },
+  { key: 'videoAttestationKeysJson', label: 'App Attestation Keys (JSON)', secret: true, hint: 'JSON map of "platform:keyId" → hex secret, e.g. {"tauri:v1":"<hex>","capacitor-android:v1":"<hex>","capacitor-ios:v1":"<hex>"}. Must match the OET_DESKTOP/MOBILE_ATTEST_SECRET baked into the app builds. Enables app-only playback; leave blank to keep playback disabled. Stored encrypted.' },
 ];
 
 const PAYMOB_FIELDS: FieldDef<PaymobSettings>[] = [
@@ -826,6 +857,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'speakingCompliance', title: 'Speaking: Compliance & Retention', description: 'Consent versioning, recording retention windows, and audit log retention.' },
   { id: 'speakingFeatures', title: 'Speaking: Feature Flags', description: 'Controls the Speaking v2 module rollout to learners.' },
   { id: 'checkoutCom', title: 'Payments: Checkout.com', description: 'Premium MENA + global cards (3DS2, Apple/Google Pay, mada). Keys override env config; webhook verification uses the same key.' },
+  { id: 'bunnyStream', title: 'Video Library: Bunny Stream', description: 'Bunny Stream hosting for the Video Library — library credentials, CDN token-auth key, webhook secret, and the app-only playback attestation keys. Test does a non-destructive Bunny API probe. Videos play only in the desktop/mobile apps; leave disabled to keep the whole feature dormant.' },
   { id: 'paymob', title: 'Payments: Paymob', description: 'Egypt — cards, Meeza, Fawry, wallets. Keys override env config; webhook verification uses the same HMAC secret.' },
   { id: 'payTabs', title: 'Payments: PayTabs', description: 'Gulf + Egypt — cards, mada, KNET, Apple Pay. Keys override env config; webhook verification uses the same key.' },
   { id: 'soketi', title: 'Realtime: Soketi', description: 'Server-side websocket push. The browser client key comes from NEXT_PUBLIC_* env — changes here affect server dispatch only.' },
@@ -988,6 +1020,20 @@ function emptyResponse(): RuntimeSettingsResponse {
       webhookSecret: '',
       successUrl: '',
       cancelUrl: '',
+      isConfigured: false,
+    },
+    bunnyStream: {
+      enabled: null,
+      libraryId: '',
+      apiKey: '',
+      cdnHostname: '',
+      tokenAuthKey: '',
+      webhookSecret: '',
+      collectionId: '',
+      playbackTokenTtlSeconds: null,
+      videoAttestationKeysJson: '',
+      videoAttestationKeys: '',
+      videoAttestationKeyIds: [],
       isConfigured: false,
     },
     paymob: {
@@ -1198,6 +1244,13 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     speakingCompliance: { ...empty.speakingCompliance, ...data.speakingCompliance },
     speakingFeatures: { ...empty.speakingFeatures, ...data.speakingFeatures },
     checkoutCom: { ...empty.checkoutCom, ...data.checkoutCom },
+    bunnyStream: {
+      ...empty.bunnyStream,
+      ...data.bunnyStream,
+      // GET returns the masked "videoAttestationKeys" indicator; surface it as the
+      // draft's write field so the SecretField shows "Set" when configured.
+      videoAttestationKeysJson: data.bunnyStream?.videoAttestationKeys ?? '',
+    },
     paymob: { ...empty.paymob, ...data.paymob },
     payTabs: { ...empty.payTabs, ...data.payTabs },
     soketi: { ...empty.soketi, ...data.soketi },
@@ -1279,6 +1332,13 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       ...data.checkoutCom,
       secretKey: maskUnexpectedSecret(data.checkoutCom.secretKey),
       webhookSecret: maskUnexpectedSecret(data.checkoutCom.webhookSecret),
+    },
+    bunnyStream: {
+      ...data.bunnyStream,
+      apiKey: maskUnexpectedSecret(data.bunnyStream.apiKey),
+      tokenAuthKey: maskUnexpectedSecret(data.bunnyStream.tokenAuthKey),
+      webhookSecret: maskUnexpectedSecret(data.bunnyStream.webhookSecret),
+      videoAttestationKeysJson: maskUnexpectedSecret(data.bunnyStream.videoAttestationKeysJson),
     },
     paymob: {
       ...data.paymob,
@@ -1618,6 +1678,7 @@ export function RuntimeSettingsClient() {
     speakingCompliance: false,
     speakingFeatures: false,
     checkoutCom: false,
+    bunnyStream: false,
     paymob: false,
     payTabs: false,
     soketi: false,
@@ -2223,6 +2284,50 @@ export function RuntimeSettingsClient() {
                     />
                   ),
                 )}
+
+              {section.id === 'bunnyStream' &&
+                BUNNY_STREAM_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.bunnyStream[field.key] ?? '')}
+                      draftValue={String(draft.bunnyStream[field.key] ?? '')}
+                      onChange={(next) => updateField('bunnyStream', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.bunnyStream[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'bunnyStream',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'bunnyStream' && (
+                <p className="text-xs text-muted">
+                  {server.bunnyStream.isConfigured
+                    ? 'Bunny Stream credentials are configured.'
+                    : 'Not fully configured yet — set the library id, API key, CDN hostname and token-auth key, then turn Enabled on.'}
+                  {server.bunnyStream.videoAttestationKeyIds && server.bunnyStream.videoAttestationKeyIds.length > 0
+                    ? ` App attestation keys set: ${server.bunnyStream.videoAttestationKeyIds.join(', ')}.`
+                    : ' No app attestation keys set — playback stays disabled until they are added.'}
+                </p>
+              )}
 
               {section.id === 'paymob' &&
                 PAYMOB_FIELDS.map((field) =>
