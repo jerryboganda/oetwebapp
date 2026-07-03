@@ -402,7 +402,33 @@ public sealed class ReadinessComputationService(
             db.ReadinessHistories.Add(entry);
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException) when (existing is null)
+        {
+            // Concurrent first-visit requests race on IX_ReadinessHistories_UserId_WeekStartDate;
+            // the loser re-reads the winner's row and applies its values instead of failing the request.
+            db.Entry(entry).State = EntityState.Detached;
+            var winner = await db.ReadinessHistories
+                .FirstOrDefaultAsync(h => h.UserId == userId && h.WeekStartDate == weekStart, ct);
+            if (winner is null)
+            {
+                throw;
+            }
+
+            winner.RecordedAt = entry.RecordedAt;
+            winner.Overall = entry.Overall;
+            winner.Writing = entry.Writing;
+            winner.Speaking = entry.Speaking;
+            winner.Reading = entry.Reading;
+            winner.Listening = entry.Listening;
+            winner.Vocabulary = entry.Vocabulary;
+            winner.Risk = entry.Risk;
+            winner.TargetDateProbability = entry.TargetDateProbability;
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     private static SubtestComputationResult ComputeSubtestReadiness(

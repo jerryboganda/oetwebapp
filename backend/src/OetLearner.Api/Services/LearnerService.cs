@@ -4296,9 +4296,46 @@ public partial class LearnerService(
         await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureSubscriptionInvoiceAsync(userId, cancellationToken);
         var hasInvoices = await db.Invoices.AnyAsync(x => x.UserId == userId, cancellationToken);
-        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+        // Fresh accounts have no Subscription/Wallet rows until their first purchase —
+        // the summary must degrade to a well-formed "no subscription" payload, not 500.
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        var wallet = await db.Wallets.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
         var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
+        var walletPayload = new
+        {
+            walletId = wallet?.Id,
+            creditBalance = wallet?.CreditBalance ?? 0,
+            ledgerSummary = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(wallet?.LedgerSummaryJson ?? "[]", [])
+        };
+        if (subscription is null)
+        {
+            return new
+            {
+                subscriptionId = (string?)null,
+                planId = (string?)null,
+                planCode = "none",
+                planName = "No subscription",
+                planDescription = (string?)null,
+                status = "none",
+                nextRenewalAt = (DateTimeOffset?)null,
+                startedAt = (DateTimeOffset?)null,
+                changedAt = (DateTimeOffset?)null,
+                freeze,
+                price = new { amount = 0m, currency = "GBP", interval = "none" },
+                wallet = walletPayload,
+                activeAddOns = Enumerable.Empty<object>(),
+                entitlements = new
+                {
+                    productiveSkillReviewsEnabled = false,
+                    supportedReviewSubtests = new List<string> { "writing", "speaking" },
+                    invoiceDownloadsAvailable = hasInvoices
+                },
+                plan = (object?)null
+            };
+        }
         var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
         var activeAddOns = await db.SubscriptionItems.AsNoTracking()
             .Where(x => x.SubscriptionId == subscription.Id && x.Status == SubscriptionItemStatus.Active)
@@ -4322,7 +4359,7 @@ public partial class LearnerService(
             changedAt = subscription.ChangedAt,
             freeze,
             price = new { amount = subscription.PriceAmount, currency = subscription.Currency, interval = subscription.Interval },
-            wallet = new { walletId = wallet.Id, creditBalance = wallet.CreditBalance, ledgerSummary = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(wallet.LedgerSummaryJson, []) },
+            wallet = walletPayload,
             activeAddOns = activeAddOns.Select(item =>
             {
                 var addOn = addOnCatalog.FirstOrDefault(x => string.Equals(x.Code, item.ItemCode, StringComparison.OrdinalIgnoreCase));
@@ -4375,7 +4412,8 @@ public partial class LearnerService(
         if (!isPublic)
         {
             await EnsureUserAsync(userId, cancellationToken);
-            subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+            // Null for accounts that never purchased — the plan list below already handles it.
+            subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         }
 
         var normalizedSubscriptionPlanId = subscription is not null ? NormalizeBillingCode(subscription.PlanId) : string.Empty;
@@ -5035,7 +5073,20 @@ public partial class LearnerService(
 
         if (changed)
         {
-            await db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Concurrent first-visit requests race to create the same profile rows
+                // (Wallets.UserId is unique). The loser drops its pending inserts — the
+                // winner's rows already exist and every caller re-reads per request.
+                foreach (var entry in db.ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList())
+                {
+                    entry.State = EntityState.Detached;
+                }
+            }
         }
 
         return user;
