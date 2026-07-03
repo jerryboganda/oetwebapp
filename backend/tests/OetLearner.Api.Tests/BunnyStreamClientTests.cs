@@ -103,12 +103,15 @@ public class BunnyStreamClientTests
     [Fact]
     public void BunnyStatusMapping_Maps3And4ToReady()
     {
-        Assert.Equal(VideoEncodeStatus.Queued, VideoLibraryAdminService.MapBunnyStatus(0));
+        // 0 = Created (object exists, bytes not yet received) → Uploading so an
+        // interrupted upload stays recoverable, not a phantom encode.
+        Assert.Equal(VideoEncodeStatus.Uploading, VideoLibraryAdminService.MapBunnyStatus(0));
         Assert.Equal(VideoEncodeStatus.Processing, VideoLibraryAdminService.MapBunnyStatus(1));
         Assert.Equal(VideoEncodeStatus.Encoding, VideoLibraryAdminService.MapBunnyStatus(2));
         Assert.Equal(VideoEncodeStatus.Ready, VideoLibraryAdminService.MapBunnyStatus(3));
         Assert.Equal(VideoEncodeStatus.Ready, VideoLibraryAdminService.MapBunnyStatus(4));
         Assert.Equal(VideoEncodeStatus.Failed, VideoLibraryAdminService.MapBunnyStatus(5));
+        Assert.Equal(VideoEncodeStatus.Failed, VideoLibraryAdminService.MapBunnyStatus(6));
     }
 
     // ── Doubles ─────────────────────────────────────────────────────────────

@@ -244,7 +244,13 @@ export function BunnyVideoUploadCard({ videoId, video, canWrite, onChanged }: Bu
   }
 
   const showPicker = state.kind === 'idle';
-  const showReplace = state.kind === 'ready' || state.kind === 'encode-failed';
+  // idle + an existing Bunny video = a prior upload was started but never
+  // completed (early/mid interruption). Re-selecting the same file resumes it.
+  const uploadInterrupted = state.kind === 'idle' && Boolean(video.bunnyVideoId);
+  // Offer a re-upload escape hatch while polling too, so a stuck / never-progressing
+  // encode is always recoverable — not only in the ready/failed states.
+  const showReplace =
+    state.kind === 'ready' || state.kind === 'encode-failed' || state.kind === 'polling-encode';
 
   return (
     <div className="rounded-2xl border border-border bg-background-light p-4">
@@ -265,23 +271,31 @@ export function BunnyVideoUploadCard({ videoId, video, canWrite, onChanged }: Bu
       ) : null}
 
       {showPicker ? (
-        <label
-          className={`mt-3 inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-navy ${canWrite ? 'cursor-pointer hover:bg-background-light' : 'cursor-not-allowed opacity-60'}`}
-        >
-          <UploadCloud className="h-4 w-4" />
-          <span>Choose video file</span>
-          <input
-            type="file"
-            accept={VIDEO_FILE_ACCEPT}
-            className="hidden"
-            disabled={!canWrite}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handlePick(f);
-              e.target.value = '';
-            }}
-          />
-        </label>
+        <div className="mt-3 space-y-2">
+          {uploadInterrupted ? (
+            <InlineAlert variant="warning">
+              This upload didn&rsquo;t finish. Re-select the <strong>same</strong> video file to resume from
+              where it stopped, or pick a different file to start over.
+            </InlineAlert>
+          ) : null}
+          <label
+            className={`inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-navy ${canWrite ? 'cursor-pointer hover:bg-background-light' : 'cursor-not-allowed opacity-60'}`}
+          >
+            <UploadCloud className="h-4 w-4" />
+            <span>{uploadInterrupted ? 'Resume / choose video file' : 'Choose video file'}</span>
+            <input
+              type="file"
+              accept={VIDEO_FILE_ACCEPT}
+              className="hidden"
+              disabled={!canWrite}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handlePick(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
       ) : null}
 
       {state.kind === 'requesting-session' ? (
@@ -335,6 +349,9 @@ export function BunnyVideoUploadCard({ videoId, video, canWrite, onChanged }: Bu
             Bunny is transcoding ({state.status}
             {state.progress != null ? ` · ${Math.round(state.progress)}%` : ''}) — this can take a few
             minutes. You can keep working; the status updates automatically.
+          </p>
+          <p className="text-xs text-muted">
+            Stuck for more than a few minutes? Use <strong>Replace video</strong> below to re-upload.
           </p>
         </div>
       ) : null}

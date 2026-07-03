@@ -78,6 +78,14 @@ export function createBunnyUpload(
       title: file.name,
     },
     retryDelays: BUNNY_TUS_RETRY_DELAYS,
+    // Chunk large files (50 MB = exact 256 KiB multiple, required by TUS). Each
+    // acknowledged chunk advances the server offset, so an interrupted upload
+    // resumes at the last completed chunk instead of restarting a giant PATCH.
+    // Files ≤ 50 MB upload as a single chunk — identical to the prior behaviour.
+    chunkSize: 50 * 1024 * 1024,
+    // Clear the resume fingerprint once done so a finished video isn't mistaken
+    // for a resumable partial upload if the same file is picked again.
+    removeFingerprintOnSuccess: true,
     onProgress: (bytesUploaded, bytesTotal) => {
       events.onProgress?.(bytesUploaded, bytesTotal);
     },

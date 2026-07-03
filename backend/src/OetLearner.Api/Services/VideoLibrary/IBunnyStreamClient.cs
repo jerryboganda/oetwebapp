@@ -16,6 +16,7 @@ public sealed record BunnyVideoInfo(
     int Status,
     int EncodeProgress,
     int LengthSeconds,
+    long StorageSizeBytes,
     string? ThumbnailUrl,
     int? Width,
     int? Height,

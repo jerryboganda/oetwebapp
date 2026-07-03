@@ -91,6 +91,7 @@ public sealed class BunnyStreamClient(
             Status: ReadInt(root, "status") ?? 0,
             EncodeProgress: ReadInt(root, "encodeProgress") ?? 0,
             LengthSeconds: ReadInt(root, "length") ?? 0,
+            StorageSizeBytes: ReadLong(root, "storageSize") ?? 0,
             ThumbnailUrl: string.IsNullOrWhiteSpace(thumbnailFileName)
                 ? null
                 : $"https://{s.CdnHostname}/{bunnyVideoId}/{thumbnailFileName}",
@@ -254,6 +255,14 @@ public sealed class BunnyStreamClient(
         if (v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i)) return i;
         // Bunny reports length as a float for some containers.
         if (v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d)) return (int)Math.Round(d);
+        return null;
+    }
+
+    private static long? ReadLong(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var v)) return null;
+        if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var i)) return i;
+        if (v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d)) return (long)Math.Round(d);
         return null;
     }
 
