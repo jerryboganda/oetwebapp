@@ -16,11 +16,23 @@ import {
   Clapperboard,
   FolderTree,
   ImageIcon,
+  Loader2,
   Pencil,
   Plus,
   ShieldAlert,
   Star,
+  Trash2,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/admin/ui/alert-dialog';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
@@ -68,6 +80,8 @@ export default function AdminVideoLibraryPage() {
   const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<AdminVideoCategory[]>([]);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminVideoSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [status, setStatus] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -129,6 +143,22 @@ export default function AdminVideoLibraryPage() {
           : '';
       const message = err instanceof Error ? err.message : 'Publish failed.';
       setToast({ variant: 'error', message: `${message}${details}` });
+    }
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await adminForceDeleteVideo(deleteTarget.videoId, 'Permanently deleted from the Video Library.');
+      setToast({ variant: 'success', message: `Permanently deleted "${deleteTarget.title}".` });
+      setDeleteTarget(null);
+      await load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Delete failed.';
+      setToast({ variant: 'error', message });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -246,6 +276,17 @@ export default function AdminVideoLibraryPage() {
               <Link href={buildVideoStepHref(row.videoId, 'details')}>
                 <Pencil className="mr-1 h-4 w-4" /> Edit
               </Link>
+            </Button>
+          ) : null}
+          {canWrite ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDeleteTarget(row)}
+              aria-label={`Delete ${row.title}`}
+              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           ) : null}
         </div>
@@ -456,6 +497,44 @@ export default function AdminVideoLibraryPage() {
           onClose={() => setToast(null)}
         />
       ) : null}
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? (
+                <>
+                  &ldquo;{deleteTarget.title}&rdquo; and its Bunny Stream video will be deleted, along with all
+                  learner watch progress, bookmarks, captions, attachments and analytics. This is irreversible
+                  and cannot be undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteConfirmed();
+              }}
+              disabled={deleting}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-1 h-4 w-4" /> Delete permanently
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
