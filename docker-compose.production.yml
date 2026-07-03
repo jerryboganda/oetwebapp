@@ -109,6 +109,19 @@ x-learner-api-slot: &learner-api-slot
     UploadScanner__Host: ${UPLOAD_SCANNER__HOST:-clamav}
     UploadScanner__Port: ${UPLOAD_SCANNER__PORT:-3310}
     UploadScanner__FailClosedOnError: ${UPLOAD_SCANNER__FAILCLOSEDONERROR:-true}
+    # Video Library — Bunny Stream hosting. DB runtime-settings (admin panel)
+    # take precedence when set; these env values are the bootstrap fallback.
+    # Empty defaults keep the feature dormant/safe until .env.production is set.
+    BunnyStream__Enabled: ${BUNNYSTREAM__ENABLED:-false}
+    BunnyStream__LibraryId: ${BUNNYSTREAM__LIBRARYID:-}
+    BunnyStream__ApiKey: ${BUNNYSTREAM__APIKEY:-}
+    BunnyStream__CdnHostname: ${BUNNYSTREAM__CDNHOSTNAME:-}
+    BunnyStream__TokenAuthKey: ${BUNNYSTREAM__TOKENAUTHKEY:-}
+    BunnyStream__WebhookSecret: ${BUNNYSTREAM__WEBHOOKSECRET:-}
+    BunnyStream__PlaybackTokenTtlSeconds: ${BUNNYSTREAM__PLAYBACKTOKENTTLSECONDS:-14400}
+    # App-only playback attestation key map: {"platform:keyId":"<hmac secret>"}.
+    # Must match the OET_DESKTOP/MOBILE_ATTEST_SECRET baked into the app builds.
+    VideoAttestation__KeysJson: ${VIDEOATTESTATION__KEYSJSON:-}
   volumes:
     - oet_learner_storage:/var/opt/oet-learner/storage
   expose:
