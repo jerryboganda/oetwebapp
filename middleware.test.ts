@@ -23,3 +23,21 @@ describe('middleware sponsor launch gate', () => {
     expect(response.headers.get('location')).toBe('https://app.oetwithdrhesham.co.uk/support');
   });
 });
+
+describe('middleware CSP — Bunny Stream hosts', () => {
+  it('allows both the Bunny playback CDN and the TUS upload host in connect-src', () => {
+    const response = middleware(new NextRequest('https://app.oetwithdrhesham.co.uk/sign-in'));
+    const csp = response.headers.get('content-security-policy') ?? '';
+    const connectSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('connect-src')) ?? '';
+
+    // Playback: hls.js fetches HLS from the pull-zone CDN inside the native app.
+    expect(connectSrc).toContain('https://*.b-cdn.net');
+    // Upload: the admin browser uploads video files straight to Bunny via TUS.
+    // Without this the upload POST is blocked ("tus: failed to create upload …
+    // response code: n/a").
+    expect(connectSrc).toContain('https://video.bunnycdn.com');
+  });
+});
