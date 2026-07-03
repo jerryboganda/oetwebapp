@@ -247,19 +247,30 @@ public sealed class VideoLibraryAdminService(
     }
 
     /// <summary>Bunny status int → local encode status. 3 (Finished) and 4 (Resolution finished) → Ready.</summary>
+    // Bunny Stream video status enum: 0 Created (object exists, bytes NOT yet
+    // received) · 1 Uploaded · 2 Processing · 3 Transcoding · 4 Finished ·
+    // 5 Error · 6 UploadFailed. Status 0 is the "awaiting upload" state — map it
+    // to Uploading (not Queued) so an interrupted/never-completed upload stays
+    // recoverable in the admin card (which re-offers the upload; tus resumes)
+    // instead of polling a phantom encode forever.
     public static VideoEncodeStatus MapBunnyStatus(int bunnyStatus) => bunnyStatus switch
     {
-        0 => VideoEncodeStatus.Queued,
+        0 => VideoEncodeStatus.Uploading,
         1 => VideoEncodeStatus.Processing,
         2 => VideoEncodeStatus.Encoding,
         3 or 4 => VideoEncodeStatus.Ready,
-        5 => VideoEncodeStatus.Failed,
+        5 or 6 => VideoEncodeStatus.Failed,
         _ => VideoEncodeStatus.Processing,
     };
 
     public static void ApplyBunnyInfo(LibraryVideo video, BunnyVideoInfo info)
     {
         video.EncodeStatus = MapBunnyStatus(info.Status);
+        // Robust guard: a video with no stored bytes was never actually uploaded
+        // (early/mid interruption). Keep it in the uploadable "Uploading" state
+        // regardless of the raw Bunny status so the card re-offers the upload.
+        if (info.StorageSizeBytes <= 0 && video.EncodeStatus != VideoEncodeStatus.Failed)
+            video.EncodeStatus = VideoEncodeStatus.Uploading;
         video.EncodeProgress = Math.Clamp(info.EncodeProgress, 0, 100);
         if (info.LengthSeconds > 0) video.DurationSeconds = info.LengthSeconds;
         if (!string.IsNullOrWhiteSpace(info.ThumbnailUrl)) video.BunnyThumbnailUrl = info.ThumbnailUrl;
