@@ -551,6 +551,7 @@ public static class VideoLibraryAdminEndpoints
         .WithAdminWrite("AdminContentPublish");
 
         admin.MapVideoLibraryCategoryEndpoints();
+        admin.MapVideoLibraryCollectionEndpoints();
         admin.MapVideoLibraryAnalyticsEndpoints();
 
         return app;

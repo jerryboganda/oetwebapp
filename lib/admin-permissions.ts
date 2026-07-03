@@ -57,6 +57,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content/new': [AdminPermission.ContentWrite],
   '/admin/content/mocks': [AdminPermission.ContentRead],
   '/admin/content/videos': [AdminPermission.ContentRead],
+  '/admin/content/videos/collections': [AdminPermission.ContentRead],
   '/admin/content/scoring-system': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/result-templates': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/speaking/shared-resources': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],

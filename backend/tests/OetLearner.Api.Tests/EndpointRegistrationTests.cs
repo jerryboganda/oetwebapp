@@ -70,6 +70,12 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/video-library/videos/{videoId}/playback-session")]
     [InlineData("/v1/admin/video-library/videos")]
     [InlineData("/v1/admin/video-library/videos/{videoId}/publish-gate")]
+    [InlineData("/v1/admin/video-library/collections")]
+    [InlineData("/v1/admin/video-library/collections/{collectionId}")]
+    [InlineData("/v1/admin/video-library/collections/{collectionId}/videos")]
+    [InlineData("/v1/admin/video-library/collections/videos/{bunnyVideoId}/import")]
+    [InlineData("/v1/admin/video-library/collections/videos/{bunnyVideoId}/move")]
+    [InlineData("/v1/admin/video-library/collections/videos/{bunnyVideoId}/bunny-delete")]
     [InlineData("/v1/webhooks/bunny-stream")]
     public void Program_RegistersFeatureRoutes(string routePattern)
     {

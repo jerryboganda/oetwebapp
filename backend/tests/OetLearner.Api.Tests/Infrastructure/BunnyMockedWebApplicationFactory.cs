@@ -31,6 +31,25 @@ public sealed class FakeBunnyStreamClient : IBunnyStreamClient
     public ConcurrentQueue<string> DeletedVideoIds { get; } = new();
     public ConcurrentQueue<(string VideoId, string LanguageCode)> UploadedCaptions { get; } = new();
 
+    // ── Collections (live Bunny management) ──────────────────────────────────
+    public ConcurrentQueue<string> CreatedCollectionNames { get; } = new();
+    public ConcurrentQueue<string> DeletedCollectionIds { get; } = new();
+    public ConcurrentQueue<(string VideoId, string? CollectionId)> Moves { get; } = new();
+
+    /// <summary>Seedable in-memory Bunny collections.</summary>
+    public List<BunnyCollectionInfo> Collections { get; } = new();
+
+    /// <summary>Seedable in-memory videos keyed by collection guid.</summary>
+    public Dictionary<string, List<BunnyVideoListItem>> CollectionVideos { get; } = new();
+
+    /// <summary>When true, every collection method throws as if Bunny is dormant.</summary>
+    public bool ThrowNotConfigured { get; set; }
+
+    private void GuardConfigured()
+    {
+        if (ThrowNotConfigured) throw new BunnyNotConfiguredException();
+    }
+
     /// <summary>Metadata returned by GetVideoAsync. Mutable per test.</summary>
     public BunnyVideoInfo NextVideoInfo { get; set; } = new(
         VideoId: "unset",
@@ -86,5 +105,86 @@ public sealed class FakeBunnyStreamClient : IBunnyStreamClient
         var token = BunnyStreamClient.ComputeCdnToken("token-auth-key", tokenPath, expiresUnix);
         return Task.FromResult(BunnyStreamClient.BuildSignedPlaybackUrl(
             "vz-test.b-cdn.net", bunnyVideoId, token, expiresUnix, tokenPath));
+    }
+
+    // ── Collections ──────────────────────────────────────────────────────────
+
+    public Task<BunnyCollectionListPage> ListCollectionsAsync(
+        int page, int itemsPerPage, string? search, string? orderBy, CancellationToken ct)
+    {
+        GuardConfigured();
+        var filtered = Collections
+            .Where(c => string.IsNullOrWhiteSpace(search) || c.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var pageItems = filtered.Skip((page - 1) * itemsPerPage).Take(itemsPerPage).ToList();
+        return Task.FromResult(new BunnyCollectionListPage(filtered.Count, page, itemsPerPage, pageItems));
+    }
+
+    public Task<BunnyCollectionInfo> GetCollectionAsync(string collectionId, CancellationToken ct)
+        => Task.FromResult(Collections.FirstOrDefault(c => c.Guid == collectionId)
+            ?? new BunnyCollectionInfo(collectionId, collectionId, 0, 0, Array.Empty<string>()));
+
+    public Task<BunnyCollectionInfo> CreateCollectionAsync(string name, CancellationToken ct)
+    {
+        GuardConfigured();
+        CreatedCollectionNames.Enqueue(name);
+        var created = new BunnyCollectionInfo($"col-{Guid.NewGuid():N}", name, 0, 0, Array.Empty<string>());
+        Collections.Add(created);
+        return Task.FromResult(created);
+    }
+
+    public Task<BunnyCollectionInfo> UpdateCollectionAsync(string collectionId, string name, CancellationToken ct)
+    {
+        GuardConfigured();
+        var idx = Collections.FindIndex(c => c.Guid == collectionId);
+        var updated = (idx >= 0 ? Collections[idx] : new BunnyCollectionInfo(collectionId, name, 0, 0, Array.Empty<string>()))
+            with { Name = name };
+        if (idx >= 0) Collections[idx] = updated; else Collections.Add(updated);
+        return Task.FromResult(updated);
+    }
+
+    public Task DeleteCollectionAsync(string collectionId, CancellationToken ct)
+    {
+        GuardConfigured();
+        DeletedCollectionIds.Enqueue(collectionId);
+        Collections.RemoveAll(c => c.Guid == collectionId);
+        CollectionVideos.Remove(collectionId);
+        return Task.CompletedTask;
+    }
+
+    public Task<BunnyVideoListPage> ListCollectionVideosAsync(
+        string collectionId, int page, int itemsPerPage, string? search, string? orderBy, CancellationToken ct)
+    {
+        GuardConfigured();
+        var all = CollectionVideos.TryGetValue(collectionId, out var list) ? list : new List<BunnyVideoListItem>();
+        var filtered = all
+            .Where(v => string.IsNullOrWhiteSpace(search) || v.Title.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var pageItems = filtered.Skip((page - 1) * itemsPerPage).Take(itemsPerPage).ToList();
+        return Task.FromResult(new BunnyVideoListPage(filtered.Count, page, itemsPerPage, pageItems));
+    }
+
+    public Task MoveVideoToCollectionAsync(string bunnyVideoId, string? collectionId, CancellationToken ct)
+    {
+        GuardConfigured();
+        Moves.Enqueue((bunnyVideoId, collectionId));
+        var sourceKey = CollectionVideos.Keys.FirstOrDefault(k => CollectionVideos[k].Any(v => v.VideoId == bunnyVideoId));
+        if (sourceKey is not null)
+        {
+            var list = CollectionVideos[sourceKey];
+            var idx = list.FindIndex(v => v.VideoId == bunnyVideoId);
+            var moved = list[idx] with { CollectionId = collectionId };
+            list.RemoveAt(idx);
+            if (!string.IsNullOrWhiteSpace(collectionId))
+            {
+                if (!CollectionVideos.TryGetValue(collectionId, out var dest))
+                {
+                    dest = new List<BunnyVideoListItem>();
+                    CollectionVideos[collectionId] = dest;
+                }
+                dest.Add(moved);
+            }
+        }
+        return Task.CompletedTask;
     }
 }

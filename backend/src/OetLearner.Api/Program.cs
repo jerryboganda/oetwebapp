@@ -922,6 +922,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IVideoPlaybackSe
     OetLearner.Api.Services.VideoLibrary.VideoPlaybackSessionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryAdminService>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.BunnyCollectionAdminService>();
 // Leader lock — only one replica runs the encode reconciliation + challenge
 // sweep. Postgres advisory lock in prod; always-leader otherwise.
 builder.Services.AddSingleton<OetLearner.Api.Services.VideoLibrary.IVideoWorkerLeaderLock>(sp =>

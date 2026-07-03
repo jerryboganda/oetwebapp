@@ -105,6 +105,7 @@ export interface AdminVideoDetail {
   accessTier: VideoAccessTier;
   targetProfessionIds: string[];
   bunnyVideoId: string | null;
+  bunnyCollectionId: string | null;
   encodeStatus: VideoEncodeStatus;
   encodeProgress: number | null;
   encodeError: string | null;
@@ -141,6 +142,8 @@ export interface AdminVideoPatch {
   sortOrder?: number;
   publishAt?: string | null;
   subtestCode?: string | null;
+  /** Bunny collection membership mirror. Omitted = unchanged; '' = clear; guid = set. */
+  bunnyCollectionId?: string | null;
 }
 
 /** Presigned Bunny TUS authorization from the backend. */
@@ -527,5 +530,120 @@ export async function adminListVideoViewers(
   return pagedGet<AdminVideoViewerRow>(
     `${BASE}/videos/${encodeURIComponent(videoId)}/analytics/viewers${suffix ? `?${suffix}` : ''}`,
     'Failed to list viewers:',
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collections (live Bunny Stream library management)
+//
+// These read straight from the Bunny library (source of truth for membership).
+// The list responses carry their own `totalItems` in the body, so they use the
+// shared `apiClient` (not the X-Total-Count `pagedGet` path). A dormant Bunny
+// (not configured) answers 503 `bunny_not_configured` — callers branch on that.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AdminCollection {
+  collectionId: string;
+  name: string;
+  videoCount: number;
+  totalSizeBytes: number;
+}
+
+export interface AdminCollectionList {
+  totalItems: number;
+  page: number;
+  itemsPerPage: number;
+  items: AdminCollection[];
+}
+
+export interface AdminCollectionVideo {
+  bunnyVideoId: string;
+  title: string;
+  encodeStatus: VideoEncodeStatus;
+  encodeProgress: number;
+  durationSeconds: number;
+  storageSizeBytes: number;
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+  isImported: boolean;
+  localVideoId: string | null;
+  localStatus: VideoLifecycleStatus | null;
+}
+
+export interface AdminCollectionVideoPage {
+  totalItems: number;
+  page: number;
+  itemsPerPage: number;
+  items: AdminCollectionVideo[];
+}
+
+export interface ListCollectionQuery {
+  page?: number;
+  itemsPerPage?: number;
+  search?: string;
+}
+
+function collectionQueryString(query: ListCollectionQuery): string {
+  const qs = new URLSearchParams();
+  if (query.page !== undefined) qs.set('page', String(query.page));
+  if (query.itemsPerPage !== undefined) qs.set('itemsPerPage', String(query.itemsPerPage));
+  if (query.search) qs.set('search', query.search);
+  const suffix = qs.toString();
+  return suffix ? `?${suffix}` : '';
+}
+
+export function adminListCollections(query: ListCollectionQuery = {}): Promise<AdminCollectionList> {
+  return apiClient.get<AdminCollectionList>(`${BASE}/collections${collectionQueryString(query)}`);
+}
+
+export function adminCreateCollection(name: string): Promise<AdminCollection> {
+  return apiClient.post<AdminCollection>(`${BASE}/collections`, { name });
+}
+
+export function adminRenameCollection(collectionId: string, name: string): Promise<AdminCollection> {
+  return apiClient.post<AdminCollection>(
+    `${BASE}/collections/${encodeURIComponent(collectionId)}`,
+    { name },
+  );
+}
+
+export function adminDeleteCollection(collectionId: string): Promise<void> {
+  return apiClient.delete<void>(`${BASE}/collections/${encodeURIComponent(collectionId)}`);
+}
+
+export function adminListCollectionVideos(
+  collectionId: string,
+  query: ListCollectionQuery = {},
+): Promise<AdminCollectionVideoPage> {
+  return apiClient.get<AdminCollectionVideoPage>(
+    `${BASE}/collections/${encodeURIComponent(collectionId)}/videos${collectionQueryString(query)}`,
+  );
+}
+
+export function adminMoveCollectionVideo(
+  bunnyVideoId: string,
+  collectionId: string | null,
+): Promise<{ moved: boolean }> {
+  return apiClient.post<{ moved: boolean }>(
+    `${BASE}/collections/videos/${encodeURIComponent(bunnyVideoId)}/move`,
+    { collectionId },
+  );
+}
+
+export function adminImportCollectionVideo(
+  bunnyVideoId: string,
+  input: { title?: string; collectionId?: string | null } = {},
+): Promise<AdminVideoDetail> {
+  return apiClient.post<AdminVideoDetail>(
+    `${BASE}/collections/videos/${encodeURIComponent(bunnyVideoId)}/import`,
+    input,
+  );
+}
+
+export function adminBunnyDeleteCollectionVideo(bunnyVideoId: string): Promise<{ deleted: boolean }> {
+  return apiClient.post<{ deleted: boolean }>(
+    `${BASE}/collections/videos/${encodeURIComponent(bunnyVideoId)}/bunny-delete`,
+    { force: true },
   );
 }

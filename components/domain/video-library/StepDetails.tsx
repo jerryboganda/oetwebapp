@@ -16,8 +16,11 @@ import { useAdminWizard } from '@/components/domain/wizard/useAdminWizard';
 import { useStepRegistration } from '@/lib/wizard/use-step-registration';
 import {
   adminCreateVideoCategory,
+  adminListCollections,
   adminListVideoCategories,
+  adminMoveCollectionVideo,
   adminPatchVideo,
+  type AdminCollection,
   type AdminVideoCategory,
   type AdminVideoDetail,
   type VideoDifficulty,
@@ -38,8 +41,10 @@ export function StepDetails() {
   const [difficulty, setDifficulty] = useState<string>(video.difficulty ?? 'core');
   const [subtestCode, setSubtestCode] = useState(video.subtestCode ?? 'general');
   const [categoryIds, setCategoryIds] = useState<string[]>(video.categoryIds ?? []);
+  const [bunnyCollectionId, setBunnyCollectionId] = useState(video.bunnyCollectionId ?? '');
 
   const [categories, setCategories] = useState<AdminVideoCategory[]>([]);
+  const [collections, setCollections] = useState<AdminCollection[]>([]);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryTitle, setNewCategoryTitle] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
@@ -50,6 +55,11 @@ export function StepDetails() {
     adminListVideoCategories(true)
       .then(setCategories)
       .catch(() => setCategories([]));
+    // Bunny collections are optional here — a dormant/unconfigured Bunny (503)
+    // simply yields no picker rather than an error.
+    adminListCollections({ itemsPerPage: 100 })
+      .then((page) => setCollections(page.items))
+      .catch(() => setCollections([]));
   }, []);
 
   const canAdvance = title.trim().length > 0;
@@ -67,9 +77,27 @@ export function StepDetails() {
       difficulty: difficulty as VideoDifficulty,
       categoryIds,
       subtestCode: subtestCode || null,
+      bunnyCollectionId: bunnyCollectionId || '',
     });
+    // Keep Bunny in sync when the video already exists there and the collection
+    // changed. Not-yet-uploaded drafts just persist the field; the upload uses it.
+    if (video.bunnyVideoId && (video.bunnyCollectionId ?? '') !== bunnyCollectionId) {
+      await adminMoveCollectionVideo(video.bunnyVideoId, bunnyCollectionId || null);
+    }
     await wizard.refresh();
-  }, [video.videoId, title, description, tagsCsv, difficulty, categoryIds, subtestCode, wizard]);
+  }, [
+    video.videoId,
+    video.bunnyVideoId,
+    video.bunnyCollectionId,
+    title,
+    description,
+    tagsCsv,
+    difficulty,
+    categoryIds,
+    subtestCode,
+    bunnyCollectionId,
+    wizard,
+  ]);
 
   useStepRegistration('details', { canAdvance, submit });
 
@@ -153,6 +181,18 @@ export function StepDetails() {
           required
         />
       </div>
+
+      {collections.length > 0 ? (
+        <Select
+          label="Bunny collection (optional)"
+          value={bunnyCollectionId}
+          onChange={(e) => setBunnyCollectionId(e.target.value)}
+          options={[
+            { value: '', label: 'Use default collection' },
+            ...collections.map((c) => ({ value: c.collectionId, label: c.name })),
+          ]}
+        />
+      ) : null}
 
       <div className="space-y-2">
         <p className="text-sm font-semibold tracking-tight text-navy">Categories</p>
