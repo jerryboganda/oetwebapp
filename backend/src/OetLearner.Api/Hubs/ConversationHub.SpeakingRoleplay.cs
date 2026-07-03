@@ -34,11 +34,12 @@ namespace OetLearner.Api.Hubs;
 //     `Task.Delay` fires that emit `TimeNearlyUp` at `T-30s` and `TimeUp`
 //     at `T-0s`, auto-ending the session and triggering AI assessment.
 //
-// We deliberately stop at "seed the opening line + drive cues" — the
-// full audio/STT/TTS round-trip continues to use the `StartSession`
-// family already in the main hub. The bridge is the SignalR group
-// `speaking-session:{sessionId}` which the frontend subscribes to for
-// patient utterances + cues.
+// Start semantics (owner rule 2026-07-03): the warm-up interlocutor
+// speaks first (as in the real OET exam); the role-play CANDIDATE opens
+// the consultation — StartSpeakingRoleplay only signals readiness and
+// the patient stays silent until spoken to. The bridge is the SignalR
+// group `speaking-session:{sessionId}` which the frontend subscribes to
+// for patient utterances + cues.
 public partial class ConversationHub
 {
     private const string SpeakingRoleplayGroupPrefix = "speaking-session:";
@@ -56,9 +57,10 @@ public partial class ConversationHub
     /// Bootstraps the AI patient conversation for an existing typed
     /// Speaking session. Validates ownership, the session is in
     /// <c>warmup</c>, <c>prep</c> or <c>active</c>, joins the SignalR
-    /// group keyed off the session id, and pushes the appropriate
-    /// opening line so the learner UI can begin rendering the
-    /// conversation transcript.
+    /// group keyed off the session id, and emits <c>SpeakingRoleplayReady</c>
+    /// telling the client who opens. In the warm-up the interlocutor speaks
+    /// first (as in the real OET exam); in the role-play consultation the
+    /// CANDIDATE opens — the patient stays silent until spoken to.
     /// </summary>
     public async Task StartSpeakingRoleplay(string speakingSessionId)
     {
@@ -137,6 +139,15 @@ public partial class ConversationHub
                 ? questions[0]
                 : "Hello! It is nice to meet you. To start, could you tell me a little about yourself?";
 
+            // Uniform "server ready, who opens?" contract with the role-play
+            // branch below — the warm-up interlocutor still speaks first.
+            await Clients.Caller.SendAsync("SpeakingRoleplayReady", new
+            {
+                phase = "warmup",
+                patientSpeaksFirst = true,
+                timestamp = DateTimeOffset.UtcNow,
+            });
+
             var warmUpAudioUrl = await TrySynthesizeReplyAudioAsync(scope.ServiceProvider, opening, Context.ConnectionAborted);
 
             await Clients.Caller.SendAsync("PatientUtterance", new
@@ -168,18 +179,18 @@ public partial class ConversationHub
         // ConversationHub pipeline takes over.
         var personaPrompt = BuildPatientPersonaPrompt(card, script);
         logger.LogInformation(
-            "Speaking role-play opening seeded for session {SessionId} (persona length={PersonaLength}).",
+            "Speaking role-play ready for session {SessionId} (persona length={PersonaLength}, candidate opens).",
             speakingSessionId,
             personaPrompt.Length);
 
-        var openingAudioUrl = await TrySynthesizeReplyAudioAsync(scope.ServiceProvider, script.OpeningResponse, Context.ConnectionAborted);
-
-        await Clients.Caller.SendAsync("PatientUtterance", new
+        // The candidate opens the consultation (owner rule, 2026-07-03): the
+        // patient stays silent until spoken to. The admin-authored
+        // OpeningResponse is delivered by the persona as the patient's first
+        // scripted REPLY instead (see BuildPatientPersonaPrompt).
+        await Clients.Caller.SendAsync("SpeakingRoleplayReady", new
         {
-            speaker = "patient",
             phase = "roleplay",
-            text = script.OpeningResponse,
-            audioUrl = openingAudioUrl,
+            patientSpeaksFirst = false,
             timestamp = DateTimeOffset.UtcNow,
         });
     }
@@ -212,9 +223,13 @@ public partial class ConversationHub
     /// role-play or warm-up, transcribes it, generates the AI patient's
     /// in-character reply, synthesises speech, persists the exchange, and
     /// streams the caption + patient utterance back to the caller.
+    /// <paramref name="turnMetaJson"/> is optional client-side turn metadata
+    /// (<c>{"interruptedPatient":true,"speechDurationMs":N}</c>) — an
+    /// interruption is recorded on the transcript segment so the AI grader
+    /// can weigh it; it never blocks the turn.
     /// </summary>
-    public Task SendSpeakingRoleplayTurn(string speakingSessionId, string audioBase64, string? mimeType)
-        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64, transcribedText: null, mimeType);
+    public Task SendSpeakingRoleplayTurn(string speakingSessionId, string audioBase64, string? mimeType, string? turnMetaJson = null)
+        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64, transcribedText: null, mimeType, turnMetaJson);
 
     /// <summary>
     /// Text-input variant of <see cref="SendSpeakingRoleplayTurn"/> for
@@ -222,13 +237,14 @@ public partial class ConversationHub
     /// the supplied text straight into the in-character AI reply loop.
     /// </summary>
     public Task SendSpeakingRoleplayText(string speakingSessionId, string text)
-        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64: null, transcribedText: text, mimeType: null);
+        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64: null, transcribedText: text, mimeType: null, turnMetaJson: null);
 
     private async Task ProcessSpeakingTurnAsync(
         string speakingSessionId,
         string? audioBase64,
         string? transcribedText,
-        string? mimeType)
+        string? mimeType,
+        string? turnMetaJson)
     {
         var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId))
@@ -366,7 +382,16 @@ public partial class ConversationHub
         var nowMs = startedAt.HasValue
             ? (long)Math.Max(0, (DateTimeOffset.UtcNow - startedAt.Value).TotalMilliseconds)
             : 0L;
-        segments.Add(new SpeakingTurnSegment("candidate", nowMs, nowMs, learnerText, learnerConfidence));
+        // Client-reported turn metadata. Interruptions only count in the
+        // scored role-play — the warm-up interlocutor legitimately speaks
+        // first and the phase is unscored.
+        var (interruptedPatient, speechDurationMs) = ParseTurnMeta(turnMetaJson);
+        if (isWarmUp) interruptedPatient = false;
+        var turnStartMs = speechDurationMs is > 0
+            ? Math.Max(0, nowMs - speechDurationMs.Value)
+            : nowMs;
+        segments.Add(new SpeakingTurnSegment(
+            "candidate", turnStartMs, nowMs, learnerText, learnerConfidence, interruptedPatient));
         var learnerTurnCount = segments.Count(s => string.Equals(s.Speaker, "candidate", StringComparison.Ordinal));
 
         // ── 3. Ask the grounded AI to reply in character ──
@@ -385,6 +410,7 @@ public partial class ConversationHub
         {
             role = string.Equals(s.Speaker, "candidate", StringComparison.Ordinal) ? "learner" : "ai",
             text = s.Text,
+            interrupted = s.Interrupted,
         }));
 
         var elapsedSeconds = (int)(nowMs / 1000);
@@ -433,9 +459,13 @@ public partial class ConversationHub
         segments.Add(new SpeakingTurnSegment(
             isWarmUp ? "interlocutor" : "patient", replyMs, replyMs, replyText, 1.0));
 
-        var replyAudioUrl = await TrySynthesizeReplyAudioAsync(sp, replyText, ct);
-
-        await PersistSpeakingSegmentsAsync(db, transcriptRow, speakingSessionId, segments, ct);
+        // TTS and transcript persistence are independent — run them
+        // concurrently to shave reply latency (owner asks for a fast,
+        // natural patient response).
+        var ttsTask = TrySynthesizeReplyAudioAsync(sp, replyText, ct);
+        var persistTask = PersistSpeakingSegmentsAsync(db, transcriptRow, speakingSessionId, segments, ct);
+        await Task.WhenAll(ttsTask, persistTask);
+        var replyAudioUrl = ttsTask.Result;
 
         // ── 5. Stream the patient utterance back (hidden card stays server-side) ──
         await Clients.Caller.SendAsync("PatientUtterance", new
@@ -679,8 +709,10 @@ public partial class ConversationHub
             : script.EmotionalState);
         sb.Append("Resistance level: ").AppendLine(ResistanceLevels.ToCode(script.ResistanceLevel));
 
-        sb.AppendLine("Open with this line, naturally and in character:");
+        sb.AppendLine("The candidate (a healthcare professional) OPENS the consultation. Do not speak until they do.");
+        sb.AppendLine("When they first ask why you are here / how you are feeling, deliver this scripted response naturally, in character:");
         sb.AppendLine(script.OpeningResponse);
+        sb.AppendLine("If they only greet you or ask your name, respond briefly (a few words) and wait for them to lead the consultation.");
 
         var prompts = new[] { script.Prompt1, script.Prompt2, script.Prompt3 }
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -707,7 +739,13 @@ public partial class ConversationHub
             sb.AppendLine(script.ClosingCue);
         }
 
-        sb.AppendLine("Stay in character. Do not break the fourth wall. Use plain, patient-style language.");
+        sb.AppendLine("Behave like a real patient, not an examiner or a host:");
+        sb.AppendLine("  - Answer ONLY the question the candidate asked. Do not volunteer other information unless they probe further.");
+        sb.AppendLine("  - Keep replies short and realistic — one to three short sentences is typical.");
+        sb.AppendLine("  - Use plain, everyday lay language; avoid clinical terminology a patient would not use.");
+        sb.AppendLine("  - Never lead the consultation, never summarise it, and never ask what you should do next unless it is in character.");
+        sb.AppendLine("Transcript entries marked interrupted:true mean the candidate started speaking before you finished your previous utterance — you were cut off mid-sentence. React naturally to being interrupted; do not robotically repeat your whole line.");
+        sb.AppendLine("Stay in character. Do not break the fourth wall.");
         sb.AppendLine("Never coach the candidate. Never reveal that you are an AI.");
         sb.AppendLine("Escalate resistance subtly if the candidate dismisses your concerns or fails to acknowledge feelings.");
         return sb.ToString();
@@ -786,10 +824,38 @@ public partial class ConversationHub
     // ── WS2 turn-loop helpers ───────────────────────────────────────────
 
     /// <summary>One transcript segment in the canonical
-    /// <c>{speaker, startMs, endMs, text, confidence, words[]}</c> shape the
-    /// Speaking analytics + assessment layers read back.</summary>
-    private sealed record SpeakingTurnSegment(
-        string Speaker, long StartMs, long EndMs, string Text, double Confidence);
+    /// <c>{speaker, startMs, endMs, text, confidence, interrupted, words[]}</c>
+    /// shape the Speaking analytics + assessment layers read back.
+    /// <c>Interrupted</c> is true on a candidate segment when the candidate
+    /// started this turn while the patient was still speaking (barge-in) —
+    /// the AI grader weighs it under relationship building/appropriateness.</summary>
+    internal sealed record SpeakingTurnSegment(
+        string Speaker, long StartMs, long EndMs, string Text, double Confidence, bool Interrupted = false);
+
+    /// <summary>Parses the optional client turn metadata JSON
+    /// (<c>{"interruptedPatient":true,"speechDurationMs":N}</c>). Defensive:
+    /// malformed or missing input yields the no-op defaults — turn metadata
+    /// must never block a learner turn.</summary>
+    internal static (bool InterruptedPatient, long? SpeechDurationMs) ParseTurnMeta(string? turnMetaJson)
+    {
+        if (string.IsNullOrWhiteSpace(turnMetaJson)) return (false, null);
+        try
+        {
+            using var doc = JsonDocument.Parse(turnMetaJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return (false, null);
+            var interrupted = doc.RootElement.TryGetProperty("interruptedPatient", out var i)
+                && i.ValueKind == JsonValueKind.True;
+            long? durationMs = doc.RootElement.TryGetProperty("speechDurationMs", out var d)
+                && d.ValueKind == JsonValueKind.Number && d.TryGetInt64(out var ms) && ms > 0
+                ? ms
+                : null;
+            return (interrupted, durationMs);
+        }
+        catch (JsonException)
+        {
+            return (false, null);
+        }
+    }
 
     /// <summary>Maps a free-form profession id (e.g. <c>"occupational-therapy"</c>)
     /// to the <see cref="ExamProfession"/> enum, mirroring
@@ -810,7 +876,7 @@ public partial class ConversationHub
     /// <summary>Parses an existing <c>SpeakingTranscript.SegmentsJson</c>
     /// array into the typed segment list, tolerating malformed / failure
     /// envelopes by returning an empty list.</summary>
-    private static List<SpeakingTurnSegment> ParseSpeakingSegments(string? segmentsJson)
+    internal static List<SpeakingTurnSegment> ParseSpeakingSegments(string? segmentsJson)
     {
         var list = new List<SpeakingTurnSegment>();
         if (string.IsNullOrWhiteSpace(segmentsJson)) return list;
@@ -826,7 +892,8 @@ public partial class ConversationHub
                 var endMs = s.TryGetProperty("endMs", out var en) && en.ValueKind == JsonValueKind.Number ? en.GetInt64() : startMs;
                 var text = s.TryGetProperty("text", out var tx) ? tx.GetString() ?? string.Empty : string.Empty;
                 var conf = s.TryGetProperty("confidence", out var cf) && cf.ValueKind == JsonValueKind.Number ? cf.GetDouble() : 1.0;
-                list.Add(new SpeakingTurnSegment(speaker, startMs, endMs, text, conf));
+                var interrupted = s.TryGetProperty("interrupted", out var ir) && ir.ValueKind == JsonValueKind.True;
+                list.Add(new SpeakingTurnSegment(speaker, startMs, endMs, text, conf, interrupted));
             }
         }
         catch (JsonException)
@@ -840,6 +907,18 @@ public partial class ConversationHub
     /// <summary>Upserts the running role-play transcript so the latest row
     /// always holds the full ordered exchange. The AI assessment + analytics
     /// layers consume this single latest <see cref="SpeakingTranscript"/>.</summary>
+    internal static string SerializeSpeakingSegments(IEnumerable<SpeakingTurnSegment> segments)
+        => JsonSerializer.Serialize(segments.Select(s => new
+        {
+            speaker = s.Speaker,
+            startMs = s.StartMs,
+            endMs = s.EndMs,
+            text = s.Text,
+            confidence = s.Confidence,
+            interrupted = s.Interrupted,
+            words = Array.Empty<string>(),
+        }));
+
     private static async Task PersistSpeakingSegmentsAsync(
         LearnerDbContext db,
         SpeakingTranscript? existing,
@@ -847,15 +926,7 @@ public partial class ConversationHub
         List<SpeakingTurnSegment> segments,
         CancellationToken ct)
     {
-        var serialised = JsonSerializer.Serialize(segments.Select(s => new
-        {
-            speaker = s.Speaker,
-            startMs = s.StartMs,
-            endMs = s.EndMs,
-            text = s.Text,
-            confidence = s.Confidence,
-            words = Array.Empty<string>(),
-        }));
+        var serialised = SerializeSpeakingSegments(segments);
         var wordCount = segments.Sum(s => s.Text.Split(
             (char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length);
         var meanConfidence = segments.Count > 0 ? segments.Average(s => s.Confidence) : 0.0;

@@ -32,7 +32,15 @@ import type {
 
 const PREP_DURATION_DEFAULT = 120;
 const DEFAULT_TIME_LIMIT = 300;
-const MAX_TURN_MS = 60_000;
+// Safety cap only — candidates are never cut off mid-answer (owner rule);
+// the recording is still SENT when it fires. Must stay within the backend's
+// ConversationOptions.MaxTurnDurationSeconds (240s).
+const MAX_TURN_MS = 240_000;
+// Keep long batch-fallback turns inside the hub's 2MB max message
+// (base64 inflates 4/3): cap the blob client-side instead of letting
+// SignalR kill the connection.
+const MAX_TURN_BLOB_BYTES = 1_400_000;
+const RECORDER_BITS_PER_SECOND = 32_000;
 const REALTIME_CHUNK_TIMESLICE_MS = 1000;
 const DEFAULT_REALTIME_MAX_CHUNK_BYTES = 256 * 1024;
 const DEFAULT_AUDIO_CONSENT_VERSION = 'realtime-stt-v1-2026-05-14';
@@ -208,6 +216,9 @@ export default function ConversationSessionPage() {
   const [consentVersion, setConsentVersion] = useState(DEFAULT_AUDIO_CONSENT_VERSION);
   const [audioRetentionDays, setAudioRetentionDays] = useState(30);
   const [hubReady, setHubReady] = useState(false);
+  // True while the AI partner waits for the learner's opening line — the
+  // learner starts the conversation (owner rule 2026-07-03).
+  const [awaitingOpening, setAwaitingOpening] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -224,6 +235,10 @@ export default function ConversationSessionPage() {
   const chunkSendQueueRef = useRef<Promise<void>>(Promise.resolve());
   const discardCurrentRecordingRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
+  // Set when the learner pressed record while AI audio was still playing
+  // (barge-in) — reported with the next submitted turn so the evaluator can
+  // weigh the interruption.
+  const interruptedAiRef = useRef(false);
   const sttModeRef = useRef<RealtimeSttMode>('batch-fallback');
   const hasStartedRef = useRef(false);
   const resumeTokenRef = useRef<string | null>(null);
@@ -351,6 +366,7 @@ export default function ConversationSessionPage() {
       connection.onclose(() => { setHubReady(false); setConnectionState('offline'); });
 
       connection.on('ReceiveTranscript', (turnNumber: number, text: string, _confidence?: number, meta?: ConversationTranscriptMeta) => {
+        setAwaitingOpening(false);
         setPartialTranscript(null);
         setTurns((prev) => [...prev, { turnNumber, role: 'learner', content: text, timestamp: Date.now(), audioUrl: meta?.audioUrl ?? null }]);
         setRecording(false);
@@ -359,10 +375,16 @@ export default function ConversationSessionPage() {
       });
 
       connection.on('ReceiveAIResponse', (turnNumber: number, text: string, meta?: ConversationAiMeta) => {
+        setAwaitingOpening(false);
         setAiThinking(false);
         setConnectionState(sttModeRef.current === 'realtime' ? 'live' : 'fallback');
         setTurns((prev) => [...prev, { turnNumber, role: 'ai', content: text, timestamp: Date.now(), audioUrl: meta?.audioUrl ?? null, appliedRuleIds: meta?.appliedRuleIds ?? [] }]);
         if (meta?.audioUrl) playAiAudio(turnNumber, meta.audioUrl);
+      });
+
+      connection.on('AwaitingLearnerOpening', () => {
+        // The AI partner no longer speaks first — the learner opens.
+        setAwaitingOpening(true);
       });
 
       connection.on('RealtimeTranscriptPartial', (turnClientId: string, text: string, confidence?: number | null) => {
@@ -459,6 +481,14 @@ export default function ConversationSessionPage() {
       setConnectionState('reconnecting');
       return;
     }
+    if (aiSpeakingTurn !== null) {
+      // Barge-in: the learner may interrupt the AI partner. Stop the audio,
+      // record the interruption — the evaluator weighs it in feedback.
+      try { currentAudioRef.current?.pause(); } catch { /* noop */ }
+      currentAudioRef.current = null;
+      setAiSpeakingTurn(null);
+      interruptedAiRef.current = true;
+    }
     setRecording(true); setError(null); setConnectionState('listening'); setPartialTranscript(null);
     audioChunksRef.current = [];
     discardCurrentRecordingRef.current = false;
@@ -504,9 +534,20 @@ export default function ConversationSessionPage() {
           return;
         }
       }
-      const mediaRecorder = format.recorderMimeType
-        ? new MediaRecorder(stream, { mimeType: format.recorderMimeType })
-        : new MediaRecorder(stream);
+      // Speech-only bitrate keeps a full-length (240s) batch-fallback blob
+      // inside the hub message cap; some browsers reject the hint, so fall
+      // back to defaults (the blob cap below still protects the connection).
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, {
+          ...(format.recorderMimeType ? { mimeType: format.recorderMimeType } : {}),
+          audioBitsPerSecond: RECORDER_BITS_PER_SECOND,
+        });
+      } catch {
+        mediaRecorder = format.recorderMimeType
+          ? new MediaRecorder(stream, { mimeType: format.recorderMimeType })
+          : new MediaRecorder(stream);
+      }
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size <= 0) return;
@@ -551,26 +592,43 @@ export default function ConversationSessionPage() {
           return;
         }
         await chunkSendQueueRef.current;
+        // Turn metadata (barge-in) rides along with whichever submit path
+        // wins; the ref resets only after a successful hand-off.
+        const turnMetaJson = interruptedAiRef.current
+          ? JSON.stringify({
+              interruptedPatient: true,
+              speechDurationMs: Math.max(0, Date.now() - recordingStartedAtRef.current),
+            })
+          : null;
+        const buildCappedBase64 = async () => {
+          const blob = new Blob(audioChunksRef.current, { type: format.apiMimeType });
+          if (blob.size > MAX_TURN_BLOB_BYTES) {
+            setError('That answer was too long to send in one turn. Please make your point in shorter turns.');
+            return null;
+          }
+          return blobToBase64Payload(blob);
+        };
         const streamId = currentStreamIdRef.current;
         if (hubRef.current && streamId && realtimeTurnActiveRef.current) {
           try {
-            const result = await hubRef.current.invoke<RealtimeCommitResult>('CompleteRealtimeTurn', sessionId, streamId);
+            const result = await hubRef.current.invoke<RealtimeCommitResult>('CompleteRealtimeTurn', sessionId, streamId, turnMetaJson);
             if (result.status === 'committing') {
               setConnectionState('transcribing');
               return;
             }
             if (result.status !== 'committed' && result.status !== 'already-committed') {
-              const blob = new Blob(audioChunksRef.current, { type: format.apiMimeType });
-              const base64 = await blobToBase64Payload(blob);
+              const base64 = await buildCappedBase64();
               if (base64) {
-                await hubRef.current.invoke('SendAudio', sessionId, base64, format.apiMimeType);
+                await hubRef.current.invoke('SendAudio', sessionId, base64, format.apiMimeType, turnMetaJson);
+                interruptedAiRef.current = false;
                 setConnectionState('ai-thinking');
                 return;
               }
-              setError('Live transcription could not be committed. Please try that turn again.');
+              setError((prev) => prev ?? 'Live transcription could not be committed. Please try that turn again.');
               setRecording(false); setAiThinking(false); setConnectionState('error');
               return;
             }
+            interruptedAiRef.current = false;
             setConnectionState('ai-thinking');
             return;
           } catch {
@@ -579,11 +637,16 @@ export default function ConversationSessionPage() {
             return;
           }
         }
-        const blob = new Blob(audioChunksRef.current, { type: format.apiMimeType });
-        const base64 = await blobToBase64Payload(blob);
+        const base64 = await buildCappedBase64();
         if (hubRef.current && base64) {
-          try { await hubRef.current.invoke('SendAudio', sessionId, base64, format.apiMimeType); setConnectionState('ai-thinking'); }
+          try {
+            await hubRef.current.invoke('SendAudio', sessionId, base64, format.apiMimeType, turnMetaJson);
+            interruptedAiRef.current = false;
+            setConnectionState('ai-thinking');
+          }
           catch { setError('Failed to send audio. Please try again.'); setRecording(false); setAiThinking(false); setConnectionState('error'); }
+        } else if (!base64) {
+          setRecording(false); setAiThinking(false); setConnectionState('error');
         }
       };
       recordingStartedAtRef.current = Date.now();
@@ -636,7 +699,7 @@ export default function ConversationSessionPage() {
       activeMediaStreamRef.current = null;
       setError(readableMicrophoneError(captureError)); setRecording(false); setConnectionState('error');
     }
-  }, [hubReady, recording, sessionId]);
+  }, [aiSpeakingTurn, hubReady, recording, sessionId]);
 
   const handleEnd = useCallback(async () => {
     if (recording || aiThinking || connectionState === 'transcribing') {
@@ -666,7 +729,9 @@ export default function ConversationSessionPage() {
   }, [recording, aiThinking, connectionState, hubReady, sessionId, turns.length, elapsed, router]);
 
   const timeLimit = scenario?.timeLimitSeconds ?? scenario?.timeLimit ?? DEFAULT_TIME_LIMIT;
-  const micDisabled = !hubReady || aiThinking || ending || aiSpeakingTurn !== null || connectionState === 'connecting' || connectionState === 'reconnecting' || connectionState === 'offline' || connectionState === 'transcribing';
+  // The mic stays ENABLED while the AI partner is speaking — pressing record
+  // then is a barge-in: allowed, but recorded and weighed in feedback.
+  const micDisabled = !hubReady || aiThinking || ending || connectionState === 'connecting' || connectionState === 'reconnecting' || connectionState === 'offline' || connectionState === 'transcribing';
   const canEndSession = turns.length >= 2 && !recording && !aiThinking && connectionState !== 'transcribing';
   const turnState: ConversationTurnState = recording
     ? 'listening'
@@ -683,10 +748,8 @@ export default function ConversationSessionPage() {
             : sttMode === 'batch-fallback'
               ? 'fallback'
               : 'ready';
-  const micDisabledReason = aiSpeakingTurn !== null
-    ? 'Mic is locked while the AI partner is speaking.'
-    : !hubReady
-      ? 'Connect to the conversation server before recording.'
+  const micDisabledReason = !hubReady
+    ? 'Connect to the conversation server before recording.'
     : connectionState === 'reconnecting'
       ? 'Reconnecting before accepting another turn.'
       : connectionState === 'transcribing'
@@ -732,6 +795,11 @@ export default function ConversationSessionPage() {
           <div className="flex flex-col h-[calc(100dvh-200px)]">
             <ConversationTimerBar elapsed={elapsed} timeLimit={timeLimit} turns={turns.length} scenarioTitle={scenario?.title}
               connectionState={connectionState} sttMode={sttMode} fallbackReason={fallbackReason} />
+            {awaitingOpening && turns.length === 0 ? (
+              <p className="mb-2 rounded-md bg-primary/5 px-3 py-2 text-center text-sm text-foreground" aria-live="polite">
+                The patient is waiting — press the mic and introduce yourself to begin.
+              </p>
+            ) : null}
             <ConversationChatView turns={turns} aiThinking={aiThinking} aiSpeakingTurn={aiSpeakingTurn}
               partialTranscript={partialTranscript} turnState={turnState}
               onReplay={(turn) => playAiAudio(turn.turnNumber, turn.audioUrl)} />

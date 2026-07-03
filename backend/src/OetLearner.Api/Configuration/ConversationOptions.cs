@@ -79,7 +79,10 @@ public class ConversationOptions
     // Session shape
     public int PrepDurationSeconds { get; set; } = 120;
     public int MaxSessionDurationSeconds { get; set; } = 360;
-    public int MaxTurnDurationSeconds { get; set; } = 60;
+    // Must cover the longest uninterrupted candidate turn the clients allow
+    // (voice loop 210s, push-to-talk 240s) — realtime streams older than this
+    // are force-expired, which would kill live captions mid-turn.
+    public int MaxTurnDurationSeconds { get; set; } = 240;
     public string[] EnabledTaskTypes { get; set; } = { "oet-roleplay", "oet-handover" };
 
     // Entitlement

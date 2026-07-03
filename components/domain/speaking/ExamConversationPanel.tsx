@@ -11,7 +11,8 @@
  *
  * Voice loop (hands-free, barge-in): tap "Start talking" once (browsers require
  * a user gesture for mic + audio), then just speak — the AI patient listens,
- * replies in a real voice, and the mic re-opens automatically.
+ * replies in a real voice, and the mic re-opens automatically. The CANDIDATE
+ * opens the consultation: the patient waits silently until spoken to.
  */
 import { useState } from 'react';
 import { Loader2, Mic, MicOff, Send, Volume2 } from 'lucide-react';
@@ -42,6 +43,7 @@ export function ExamConversationPanel({ sessionId, className }: ExamConversation
     micLevel,
     voiceUnavailable,
     ended,
+    awaitingCandidateStart,
     enableMic,
     disableMic,
     sendText,
@@ -122,9 +124,11 @@ export function ExamConversationPanel({ sessionId, className }: ExamConversation
       >
         {captions.length === 0 ? (
           <p className="text-sm text-muted">
-            {micEnabled
-              ? 'The patient will speak first. Just talk naturally when you are ready.'
-              : 'Tap “Start talking” to begin the conversation with the patient.'}
+            {!micEnabled
+              ? 'Tap “Start talking” to begin the conversation with the patient.'
+              : awaitingCandidateStart
+                ? 'The patient is waiting — introduce yourself to begin.'
+                : 'Just talk naturally when you are ready.'}
           </p>
         ) : (
           captions.map((c) => (
