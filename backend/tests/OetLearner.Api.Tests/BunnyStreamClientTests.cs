@@ -65,10 +65,12 @@ public class BunnyStreamClientTests
     [Fact]
     public void CdnToken_MatchesPinnedVector()
     {
-        // base64url-nopad(raw sha256("token-auth-key" + "/video-guid-1/" + "1700000000"))
+        // base64url-nopad(raw sha256("token-auth-key" + "/video-guid-1/" + "1700000000"
+        //   + "token_path=/video-guid-1/")) — the trailing token_path parameter-data
+        // suffix is required; verified against the live Bunny CDN (2026-07-03).
         var token = BunnyStreamClient.ComputeCdnToken("token-auth-key", "/video-guid-1/", 1700000000);
 
-        Assert.Equal("r1VtNWzUNJlsasCGIso_WqugKoEs0_DIpm2G8Isdit8", token);
+        Assert.Equal("TzIgH5lOXdzgaFl7T-fdR-ZHj4nTU3QCZoPIpKvbTWI", token);
     }
 
     [Fact]
@@ -80,7 +82,7 @@ public class BunnyStreamClientTests
             1700000000, "/video-guid-1/");
 
         Assert.StartsWith("https://vz-test.b-cdn.net/video-guid-1/playlist.m3u8?token=", url, StringComparison.Ordinal);
-        Assert.Contains("token=r1VtNWzUNJlsasCGIso_WqugKoEs0_DIpm2G8Isdit8", url, StringComparison.Ordinal);
+        Assert.Contains("token=TzIgH5lOXdzgaFl7T-fdR-ZHj4nTU3QCZoPIpKvbTWI", url, StringComparison.Ordinal);
         Assert.Contains("expires=1700000000", url, StringComparison.Ordinal);
         Assert.Contains("token_path=%2Fvideo-guid-1%2F", url, StringComparison.Ordinal);
     }

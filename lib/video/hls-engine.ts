@@ -40,6 +40,12 @@ export function supportsNativeHls(video: HTMLVideoElement): boolean {
   return video.canPlayType('application/vnd.apple.mpegurl') !== '';
 }
 
+/** The signed query ("token=…&expires=…&token_path=…") from a Bunny playback URL, without the leading "?". */
+function signedQuery(url: string): string {
+  const q = url.indexOf('?');
+  return q >= 0 ? url.slice(q + 1) : '';
+}
+
 export async function createHlsEngine(video: HTMLVideoElement, url: string): Promise<HlsEngineHandle> {
   if (supportsNativeHls(video)) {
     return createNativeEngine(video, url);
@@ -54,11 +60,33 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
   let fatalHandler: (() => void) | null = null;
   let levelsHandler: ((levels: HlsQualityLevel[]) => void) | null = null;
 
-  let hls = new Hls({
+  // Bunny directory token authentication signs a token_path covering /{videoId}/,
+  // and the ?token&expires&token_path query MUST be present on EVERY request —
+  // master playlist, media playlists, segments and keys. hls.js drops the parent
+  // playlist's query string when resolving relative child URLs (verified: child
+  // segment without the query → HTTP 403), so a custom loader re-appends it.
+  // `currentQuery` is mutable so a renewed token propagates on recoverWithUrl().
+  let currentQuery = signedQuery(url);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const BaseLoader = Hls.DefaultConfig.loader as any;
+  class TokenPropagatingLoader extends BaseLoader {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    load(context: any, config: unknown, callbacks: unknown) {
+      if (currentQuery && context?.url && !/[?&]token=/.test(context.url)) {
+        context.url += (context.url.includes('?') ? '&' : '?') + currentQuery;
+      }
+      super.load(context, config, callbacks);
+    }
+  }
+  const makeConfig = () => ({
     // Keep buffers modest for long lecture videos inside WebViews.
     maxBufferLength: 60,
     backBufferLength: 30,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    loader: TokenPropagatingLoader as any,
   });
+
+  let hls = new Hls(makeConfig());
 
   const mapLevels = (): HlsQualityLevel[] =>
     hls.levels.map((level, index) => ({
@@ -99,10 +127,11 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       return hls.currentLevel;
     },
     async recoverWithUrl(nextUrl: string) {
+      currentQuery = signedQuery(nextUrl);
       const position = video.currentTime;
       const wasPlaying = !video.paused && !video.ended;
       hls.destroy();
-      hls = new Hls({ maxBufferLength: 60, backBufferLength: 30 });
+      hls = new Hls(makeConfig());
       wire();
       hls.loadSource(nextUrl);
       hls.attachMedia(video);

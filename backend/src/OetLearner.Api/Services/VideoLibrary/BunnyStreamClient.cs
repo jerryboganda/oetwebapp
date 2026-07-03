@@ -191,17 +191,31 @@ public sealed class BunnyStreamClient(
     }
 
     /// <summary>
-    /// Bunny CDN token-auth v2 token with a directory <paramref name="tokenPath"/>:
-    /// Base64Url(no padding) of the RAW SHA-256 of
-    /// <c>tokenAuthKey + tokenPath + expiresUnix</c> — the token is signed over
-    /// token_path (not the request path) when token_path is supplied.
-    /// // VERIFY against the Bunny token-authentication docs before first
-    /// production playback — the signed-string composition is pinned by
-    /// BunnyStreamClientTests so any correction is a one-line change.
+    /// Bunny CDN directory token-authentication token: Base64Url(no padding) of
+    /// the RAW SHA-256 of
+    /// <c>tokenAuthKey + tokenPath + expiresUnix + "token_path=" + tokenPath</c>.
+    /// <para>
+    /// The trailing <c>token_path=&lt;path&gt;</c> is Bunny's "parameter data":
+    /// when directory auth is used, <c>token_path</c> is added to the signed
+    /// query parameters, so it appears BOTH as the signature path prefix AND in
+    /// the appended parameter data (raw, un-encoded). Omitting the suffix makes
+    /// Bunny reject the token with HTTP 403.
+    /// </para>
+    /// <para>
+    /// VERIFIED end-to-end against the live Bunny Stream CDN (2026-07-03): with
+    /// this composition the master playlist AND its child sub-playlists/segments
+    /// under <c>/{videoId}/</c> authorize with a single token; the previous
+    /// suffix-less form returned 403. Pinned by BunnyStreamClientTests.
+    /// </para>
+    /// <para>
+    /// The Bunny library must also have <c>AllowDirectPlay = true</c> and not
+    /// block referrer-less requests, or the CDN blocks direct HLS access (403)
+    /// before the token is ever evaluated — see docs/VIDEO-LIBRARY-BUNNY-SETUP.md.
+    /// </para>
     /// </summary>
     public static string ComputeCdnToken(string tokenAuthKey, string tokenPath, long expiresUnix)
     {
-        var payload = $"{tokenAuthKey}{tokenPath}{expiresUnix}";
+        var payload = $"{tokenAuthKey}{tokenPath}{expiresUnix}token_path={tokenPath}";
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return Convert.ToBase64String(hash)
             .Replace("+", "-", StringComparison.Ordinal)
