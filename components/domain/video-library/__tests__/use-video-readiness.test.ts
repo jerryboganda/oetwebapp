@@ -16,6 +16,7 @@ function makeVideo(overrides: Partial<AdminVideoDetail> = {}): AdminVideoDetail 
     accessTier: 'free',
     targetProfessionIds: [],
     bunnyVideoId: 'bunny-1',
+    bunnyCollectionId: null,
     encodeStatus: 'ready',
     encodeProgress: 100,
     encodeError: null,
