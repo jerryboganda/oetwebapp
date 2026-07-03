@@ -71,10 +71,14 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     ...zoomHttpOrigins,
     ...zoomWsOrigins,
     ...paypalHttpOrigins,
-    // Bunny Stream CDN — hls.js fetches HLS playlists/segments via XHR inside
-    // the native app WebViews (which load this same remote origin, so this CSP
-    // governs them too). Browsers never receive a playback URL (server-gated).
+    // Bunny Stream. Two distinct hosts:
+    //  - playback CDN (vz-*.b-cdn.net): hls.js fetches HLS playlists/segments via
+    //    XHR inside the native app WebViews (which load this same remote origin).
+    //  - upload API (video.bunnycdn.com): the admin browser uploads video files
+    //    straight to Bunny via resumable TUS (POST/PATCH/HEAD). Without this host
+    //    in connect-src the browser blocks the upload ("response code: n/a").
     ...mediaCdnOrigins,
+    'https://video.bunnycdn.com',
     'https://*.googleapis.com',
   ].join(' ');
 
