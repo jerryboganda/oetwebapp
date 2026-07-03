@@ -111,9 +111,11 @@ public class VideoLibraryAdminFlowsTests(BunnyMockedWebApplicationFactory factor
     }
 
     [Fact]
-    public async Task ForceDelete_RequiresArchivedStatus()
+    public async Task ForceDelete_WorksFromAnyStatus_WithoutArchivingFirst()
     {
         await ConfigureBunnyAsync();
+        // A permanent delete must not require archiving first — it works from any
+        // status (Published here), removing the row outright.
         var videoId = await SeedReadyVideoAsync(status: ContentStatus.Published, publishAt: null);
         using var admin = CreateAdminClient();
 
@@ -121,8 +123,11 @@ public class VideoLibraryAdminFlowsTests(BunnyMockedWebApplicationFactory factor
             $"/v1/admin/video-library/videos/{videoId}/force-delete",
             new { force = true, reason = "cleanup" });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("video_not_archived", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await db.LibraryVideos.AnyAsync(v => v.Id == videoId));
     }
 
     [Fact]

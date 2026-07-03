@@ -405,20 +405,15 @@ public sealed class VideoLibraryAdminService(
     }
 
     /// <summary>
-    /// Irreversible purge (grammar force-delete is the template): requires
-    /// Archived; deletes the Bunny video then removes dependents-first —
-    /// events → sessions → progress → bookmarks → captions → attachments →
-    /// category items → the video row.
+    /// Irreversible permanent delete: deletes the Bunny video then removes
+    /// dependents-first — events → sessions → progress → bookmarks → captions →
+    /// attachments → category items → the video row. Callable from ANY status
+    /// (the system-admin policy + an explicit confirm are the safety); a video
+    /// need not be archived first.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, int>> ForceDeleteAsync(
         LibraryVideo video, string adminId, CancellationToken ct)
     {
-        if (video.Status != ContentStatus.Archived)
-        {
-            throw ApiException.Validation("video_not_archived",
-                "Archive the video before force-deleting it.");
-        }
-
         if (!string.IsNullOrWhiteSpace(video.BunnyVideoId))
         {
             try
