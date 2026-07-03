@@ -1,10 +1,12 @@
 fn main() {
     // Declaring the app commands generates `allow-<command>` permissions. In the
     // remote-only shell, capabilities/app-remote.json grants ONLY `allow-runtime-info`
-    // to the remote origin; the rest stay declared for localhost/dev and future use.
+    // and `allow-sign-video-challenge` to the remote origin; the rest stay declared
+    // for localhost/dev and future use.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_info",
+            "sign_video_challenge",
             "open_external",
             "secret_get",
             "secret_set",

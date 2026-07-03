@@ -10,13 +10,17 @@ public static class MediaStoragePolicy
     private static readonly HashSet<string> AllowedMediaContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf",
-        "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm"
+        "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm",
+        // Video Library caption tracks (WebVTT canonical; SRT accepted on upload).
+        "text/vtt", "application/x-subrip"
     };
 
     private static readonly HashSet<string> AllowedMediaExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf",
-        ".mp3", ".m4a", ".mp4", ".wav", ".ogg", ".webm"
+        ".mp3", ".m4a", ".mp4", ".wav", ".ogg", ".webm",
+        // Video Library caption tracks.
+        ".vtt", ".srt"
     };
 
     public static bool IsAllowedMediaContentType(string? contentType)

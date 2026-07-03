@@ -68,6 +68,19 @@ declare global {
     print: {
       printPage: (options?: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
     };
+    /**
+     * Native HMAC signer for app-only video playback (desktop shell >= 0.4.0).
+     * Optional because v0.3 shells lack it — feature-detect before calling.
+     * Signs "{nonce}|{videoId}|{userId}|tauri|v1" with a build-time secret that
+     * never leaves the Rust side; rejects on invalid input or rate flood.
+     */
+    attestation?: {
+      signVideoChallenge(
+        nonce: string,
+        videoId: string,
+        userId: string,
+      ): Promise<{ signature: string; platform: 'tauri'; keyId: string; appVersion: string }>;
+    };
     speakingAudio: {
       start: (sessionId: string, mimeType?: string) => Promise<{
         ok: boolean;

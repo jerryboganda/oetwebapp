@@ -17,7 +17,7 @@
  * version, so a bump purges all stale `oet-v*` caches on the next SW activation.
  */
 
-const CACHE_VERSION = 'oet-v2';
+const CACHE_VERSION = 'oet-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGES_CACHE = `${CACHE_VERSION}-pages`;
 const API_CACHE = `${CACHE_VERSION}-api`;
@@ -31,6 +31,16 @@ const APP_SHELL_URLS = [
 
 const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|webp|ico|json)$/i;
 const API_PATH = /\/v1\//;
+
+// Video Library streaming must NEVER touch SW caches:
+//  - HLS playlists/segments/keys stream from the Bunny CDN with short-lived
+//    signed tokens — caching them would persist expired-token URLs (and video
+//    bytes) in Cache Storage.
+//  - Playback-session / attestation API responses embed signed URLs; caching
+//    one would let an expired session "replay" from cache while offline.
+const STREAMING_MEDIA = /\.(m3u8|ts|m4s|mp4|key|vtt)(\?|$)/i;
+const VIDEO_PLAYBACK_API = /\/v1\/video-library\/(attestation|playback-sessions)|\/v1\/video-library\/videos\/[^/]+\/playback-session/i;
+const MEDIA_CDN_HOST = /\.b-cdn\.net$/i;
 
 // ---------- Install ----------
 self.addEventListener('install', (event) => {
@@ -69,6 +79,16 @@ self.addEventListener('fetch', (event) => {
 
   // Skip chrome-extension, blob, etc.
   if (!url.protocol.startsWith('http')) return;
+
+  // Streaming media + playback-session endpoints bypass the SW entirely
+  // (no interception, no caching) — see constants above.
+  if (
+    MEDIA_CDN_HOST.test(url.hostname) ||
+    STREAMING_MEDIA.test(url.pathname) ||
+    VIDEO_PLAYBACK_API.test(url.pathname)
+  ) {
+    return;
+  }
 
   // API requests → Network First (never serve stale auth-gated data without validation)
   if (API_PATH.test(url.pathname)) {

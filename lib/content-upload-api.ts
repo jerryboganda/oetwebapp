@@ -21,7 +21,11 @@ export type PaperAssetRole =
   | 'RoleCard'
   | 'AssessmentCriteria'
   | 'WarmUpQuestions'
-  | 'Supplementary';
+  | 'Supplementary'
+  // Video Library small-file assets (thumbnail image / VTT captions / PDF attachments)
+  | 'VideoThumbnail'
+  | 'VideoCaption'
+  | 'VideoAttachment';
 
 export type ContentStatus = 'Draft' | 'InReview' | 'Published' | 'Archived' | 'Rejected';
 

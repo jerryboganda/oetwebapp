@@ -18,6 +18,7 @@ const EXPECTED_SHAPE: Record<string, string[] | null> = {
   notifications: ['show'],
   fileInfo: ['getDroppedFileInfo'],
   print: ['printPage'],
+  attestation: ['signVideoChallenge'],
   speakingAudio: ['start', 'stop', 'getBlob', 'discard', 'getPlatform'],
 };
 
@@ -72,6 +73,7 @@ describe('tauri desktop-bridge conformance', () => {
     await bridge.notifications.show('t', 'b', '/dashboard');
     await bridge.fileInfo.getDroppedFileInfo('C:/file.pdf');
     await bridge.speakingAudio.start('sess-1', 'audio/webm');
+    await bridge.attestation.signVideoChallenge('nonce-1', 'vid-1', 'user-1');
 
     expect(invoked).toEqual([
       { cmd: 'open_external', args: { url: 'https://example.com' } },
@@ -80,6 +82,8 @@ describe('tauri desktop-bridge conformance', () => {
       { cmd: 'show_notification', args: { title: 't', body: 'b', route: '/dashboard' } },
       { cmd: 'get_dropped_file_info', args: { filePath: 'C:/file.pdf' } },
       { cmd: 'speaking_audio_start', args: { sessionId: 'sess-1', mimeType: 'audio/webm' } },
+      // camelCase JS keys map onto the snake_case Rust params (video_id, user_id).
+      { cmd: 'sign_video_challenge', args: { nonce: 'nonce-1', videoId: 'vid-1', userId: 'user-1' } },
     ]);
   });
 

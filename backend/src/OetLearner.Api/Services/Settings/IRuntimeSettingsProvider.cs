@@ -80,7 +80,56 @@ public sealed record EffectiveSettings(
     AuthTokenSettings AuthTokens,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt)
+{
+    // ── Video Library (Bunny Stream + playback attestation) ────────
+    // Declared as init-only properties (not positional params) so existing
+    // EffectiveSettings construction sites keep compiling unchanged; the
+    // provider sets them via object initializer in Merge.
+    public BunnyStreamSettings BunnyStream { get; init; } = BunnyStreamSettings.Unconfigured;
+    public VideoAttestationSettings VideoAttestation { get; init; } = VideoAttestationSettings.Unconfigured;
+}
+
+/// <summary>
+/// Bunny Stream (Video Library CDN) settings (DB-over-env merged). ApiKey,
+/// TokenAuthKey and WebhookSecret are secrets decrypted by the provider.
+/// <see cref="IsConfigured"/> gates every live Bunny call — the feature is
+/// dormant (503 bunny_not_configured) until an admin supplies credentials
+/// AND flips <see cref="Enabled"/> on.
+/// </summary>
+public sealed record BunnyStreamSettings(
+    bool Enabled,
+    string? LibraryId,
+    string? ApiKey,
+    string? CdnHostname,
+    string? TokenAuthKey,
+    string? WebhookSecret,
+    string? CollectionId,
+    int PlaybackTokenTtlSeconds)
+{
+    public bool IsConfigured => Enabled
+        && !string.IsNullOrWhiteSpace(LibraryId)
+        && !string.IsNullOrWhiteSpace(ApiKey)
+        && !string.IsNullOrWhiteSpace(CdnHostname)
+        && !string.IsNullOrWhiteSpace(TokenAuthKey);
+
+    public static BunnyStreamSettings Unconfigured { get; } =
+        new(false, null, null, null, null, null, null, 14400);
+}
+
+/// <summary>
+/// Video Library playback attestation keys (DB-over-env merged). Map of
+/// "{platform}:{keyId}" → lowercase-hex HMAC-SHA256 secret. Playback sessions
+/// are refused with 403 attestation_unavailable while unconfigured.
+/// </summary>
+public sealed record VideoAttestationSettings(
+    IReadOnlyDictionary<string, string> Keys)
+{
+    public bool IsConfigured => Keys.Count > 0;
+
+    public static VideoAttestationSettings Unconfigured { get; } =
+        new(new Dictionary<string, string>(StringComparer.Ordinal));
+}
 
 public sealed record EmailSettings(
     string? BrevoApiKey,

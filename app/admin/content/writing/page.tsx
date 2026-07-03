@@ -65,6 +65,9 @@ const ROLE_SHORT_LABELS: Record<PaperAssetRole, string> = {
   AssessmentCriteria: 'AC',
   WarmUpQuestions: 'WU',
   Supplementary: 'SUP',
+  VideoThumbnail: 'VT',
+  VideoCaption: 'VC',
+  VideoAttachment: 'VA',
 };
 
 function hasRole(paper: ContentPaperDto, role: PaperAssetRole): boolean {

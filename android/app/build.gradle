@@ -1,14 +1,27 @@
 apply plugin: 'com.android.application'
 
+// Video playback attestation secret, injected at BUILD time. CI (mobile-release.yml)
+// exports OET_MOBILE_ATTEST_SECRET; local builds may pass -POET_ATTEST_SECRET=....
+// Deliberately EMPTY when neither is set: PlaybackAttestationPlugin falls back to the
+// public dev constant only on DEBUG builds and refuses to sign on release builds, so a
+// release APK can never ship signing with a publicly-known secret.
+def oetAttestSecret = project.findProperty('OET_ATTEST_SECRET') ?: System.getenv('OET_MOBILE_ATTEST_SECRET') ?: ''
+
 android {
     namespace "com.oetprep.learner"
     compileSdk rootProject.ext.compileSdkVersion
+    buildFeatures {
+        // AGP 8 disables BuildConfig generation by default; needed for the
+        // OET_ATTEST_SECRET / VERSION_NAME fields PlaybackAttestationPlugin reads.
+        buildConfig true
+    }
     defaultConfig {
         applicationId "com.oetprep.learner"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        buildConfigField "String", "OET_ATTEST_SECRET", "\"${oetAttestSecret}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

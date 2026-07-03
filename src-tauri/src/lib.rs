@@ -7,6 +7,7 @@
 // app runs unchanged. A navigation guard locks the window to the trusted origin
 // and routes any other link to the system browser.
 
+mod attestation;
 mod commands;
 mod runtime;
 
@@ -136,6 +137,7 @@ pub fn run() {
         .manage(RuntimeState::default())
         .manage(commands::SpeakingAudioState::default())
         .invoke_handler(tauri::generate_handler![
+            attestation::sign_video_challenge,
             commands::runtime_info,
             commands::open_external,
             commands::secret_get,

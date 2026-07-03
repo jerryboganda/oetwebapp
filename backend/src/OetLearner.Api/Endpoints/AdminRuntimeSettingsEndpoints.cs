@@ -92,6 +92,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplySpeakingCompliance(row, request.SpeakingCompliance, changedKeys);
                     ApplySpeakingFeatures(row, request.SpeakingFeatures, changedKeys);
                     ApplyCheckoutCom(row, request.CheckoutCom, provider, changedKeys);
+                    ApplyBunnyStream(row, request.BunnyStream, provider, changedKeys);
                     ApplyPaymob(row, request.Paymob, provider, changedKeys);
                     ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
                     ApplySoketi(row, request.Soketi, provider, changedKeys);
@@ -367,6 +368,22 @@ public static class AdminRuntimeSettingsEndpoints
                 successUrl = settings.CheckoutCom.SuccessUrl,
                 cancelUrl = settings.CheckoutCom.CancelUrl,
                 isConfigured = settings.CheckoutCom.IsConfigured,
+            },
+            bunnyStream = new
+            {
+                enabled = settings.BunnyStream.Enabled,
+                libraryId = settings.BunnyStream.LibraryId,
+                apiKey = MaskPlainSecret(settings.BunnyStream.ApiKey),
+                cdnHostname = settings.BunnyStream.CdnHostname,
+                tokenAuthKey = MaskPlainSecret(settings.BunnyStream.TokenAuthKey),
+                webhookSecret = MaskPlainSecret(settings.BunnyStream.WebhookSecret),
+                collectionId = settings.BunnyStream.CollectionId,
+                playbackTokenTtlSeconds = settings.BunnyStream.PlaybackTokenTtlSeconds,
+                isConfigured = settings.BunnyStream.IsConfigured,
+                // Attestation key map is write-only: only its configured state
+                // and the platform:keyId identifiers are ever surfaced.
+                videoAttestationKeys = settings.VideoAttestation.IsConfigured ? SecretMask : string.Empty,
+                videoAttestationKeyIds = settings.VideoAttestation.Keys.Keys.Order(StringComparer.Ordinal).ToArray(),
             },
             paymob = new
             {
@@ -1023,6 +1040,45 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.CancelUrl, v => row.CheckoutComCancelUrl = v, "checkoutCom.cancelUrl", changed)) { }
     }
 
+    private static void ApplyBunnyStream(RuntimeSettingsRow row, RuntimeSettingsBunnyStreamUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.Enabled, v => row.BunnyStreamEnabled = v, "bunnyStream.enabled", changed)) { }
+        if (TrySetPlain(d.LibraryId, v => row.BunnyStreamLibraryId = v, "bunnyStream.libraryId", changed)) { }
+        if (TrySetSecret(d.ApiKey, p, v => row.BunnyStreamApiKeyEncrypted = v, "bunnyStream.apiKey", changed)) { }
+        if (TrySetPlain(d.CdnHostname, v => row.BunnyStreamCdnHostname = v, "bunnyStream.cdnHostname", changed)) { }
+        if (TrySetSecret(d.TokenAuthKey, p, v => row.BunnyStreamTokenAuthKeyEncrypted = v, "bunnyStream.tokenAuthKey", changed)) { }
+        if (TrySetSecret(d.WebhookSecret, p, v => row.BunnyStreamWebhookSecretEncrypted = v, "bunnyStream.webhookSecret", changed)) { }
+        if (TrySetPlain(d.CollectionId, v => row.BunnyStreamCollectionId = v, "bunnyStream.collectionId", changed)) { }
+        if (TrySetNullableInt(d.PlaybackTokenTtlSeconds, v => row.BunnyStreamPlaybackTokenTtlSeconds = v, "bunnyStream.playbackTokenTtlSeconds", changed, min: 300, max: 86_400)) { }
+
+        if (d.VideoAttestationKeysJson is not null && d.VideoAttestationKeysJson != SecretMask)
+        {
+            // Validate the JSON map shape before encrypting — a malformed map
+            // would silently disable playback attestation.
+            if (d.VideoAttestationKeysJson.Length > 0)
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(d.VideoAttestationKeysJson);
+                    if (parsed is null || parsed.Count == 0 || parsed.Any(kv =>
+                            string.IsNullOrWhiteSpace(kv.Key) || !kv.Key.Contains(':') || string.IsNullOrWhiteSpace(kv.Value)))
+                    {
+                        throw new RuntimeSettingsValidationException(
+                            "bunnyStream.videoAttestationKeys must be a JSON map of \"platform:keyId\" → hex secret.");
+                    }
+                }
+                catch (JsonException)
+                {
+                    throw new RuntimeSettingsValidationException(
+                        "bunnyStream.videoAttestationKeys must be valid JSON.");
+                }
+            }
+            if (TrySetSecret(d.VideoAttestationKeysJson, p, v => row.VideoAttestationKeysEncrypted = v, "bunnyStream.videoAttestationKeys", changed)) { }
+        }
+    }
+
     private static void ApplyPaymob(RuntimeSettingsRow row, RuntimeSettingsPaymobUpdate? d,
         IRuntimeSettingsProvider p, List<string> changed)
     {
@@ -1524,9 +1580,10 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
+        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
             ? normalized
-            : normalized == "upload-scanner" ? "uploadscanner" : null;
+            : normalized == "upload-scanner" ? "uploadscanner"
+            : normalized == "bunny-stream" ? "bunnystream" : null;
     }
 
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestSectionAsync(
@@ -1590,6 +1647,7 @@ public static class AdminRuntimeSettingsEndpoints
             "speakingcompliance" => Ok(sectionId, "Speaking compliance settings are configured via defaults or admin overrides.", testedAt),
             "speakingfeatures" => Ok(sectionId, $"Speaking V2 feature flag is {(settings.SpeakingFeatures.SpeakingV2Enabled ? "enabled" : "disabled")}.", testedAt),
             "checkoutcom" => await TestCheckoutComAsync(settings.CheckoutCom, httpClientFactory, sectionId, testedAt, ct),
+            "bunnystream" => await TestBunnyStreamAsync(settings.BunnyStream, settings.VideoAttestation, httpClientFactory, sectionId, testedAt, ct),
             "paymob" => await TestPaymobAsync(settings.Paymob, httpClientFactory, sectionId, testedAt, ct),
             "paytabs" => await TestPayTabsAsync(settings.PayTabs, httpClientFactory, sectionId, testedAt, ct),
             "soketi" => await TestSoketiAsync(settings.Soketi, httpClientFactory, sectionId, testedAt, ct),
@@ -1722,6 +1780,34 @@ public static class AdminRuntimeSettingsEndpoints
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", s.SecretKey);
             return req;
         });
+    }
+
+    /// <summary>Non-destructive Bunny probe: GET the video library resource with
+    /// the API key. 2xx proves the key + library id pair; nothing is mutated.</summary>
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestBunnyStreamAsync(
+        BunnyStreamSettings s, VideoAttestationSettings attestation, IHttpClientFactory httpClientFactory,
+        string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        if (!s.Enabled)
+            return Ok(sectionId, "Bunny Stream is disabled. The Video Library stays dormant (uploads/playback return 503 bunny_not_configured).", testedAt);
+        if (string.IsNullOrWhiteSpace(s.LibraryId) || string.IsNullOrWhiteSpace(s.ApiKey))
+            return Failed(sectionId, "Configure the Bunny Stream library id and API key.", testedAt);
+        if (string.IsNullOrWhiteSpace(s.CdnHostname) || string.IsNullOrWhiteSpace(s.TokenAuthKey))
+            return Failed(sectionId, "Configure the CDN hostname and token authentication key for signed playback URLs.", testedAt);
+
+        var attestationNote = attestation.IsConfigured
+            ? $" Attestation keys configured: {attestation.Keys.Count}."
+            : " ⚠ No video attestation keys set — native playback sessions will return 403 attestation_unavailable.";
+        var result = await ProbeAsync(httpClientFactory, sectionId, testedAt, s.ApiKey!, ct, () =>
+        {
+            var req = new HttpRequestMessage(
+                HttpMethod.Get, $"https://video.bunnycdn.com/library/{Uri.EscapeDataString(s.LibraryId!)}");
+            req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+            return req;
+        });
+        return result.Status == "ok"
+            ? Ok(sectionId, $"Bunny Stream credentials accepted for library {s.LibraryId}. No video was created.{attestationNote}", testedAt)
+            : result;
     }
 
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestPaymobAsync(
@@ -1892,6 +1978,7 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsSpeakingComplianceUpdate? SpeakingCompliance { get; set; }
     public RuntimeSettingsSpeakingFeaturesUpdate? SpeakingFeatures { get; set; }
     public RuntimeSettingsCheckoutComUpdate? CheckoutCom { get; set; }
+    public RuntimeSettingsBunnyStreamUpdate? BunnyStream { get; set; }
     public RuntimeSettingsPaymobUpdate? Paymob { get; set; }
     public RuntimeSettingsPayTabsUpdate? PayTabs { get; set; }
     public RuntimeSettingsSoketiUpdate? Soketi { get; set; }
@@ -2039,6 +2126,23 @@ public sealed class RuntimeSettingsCheckoutComUpdate
     public string? WebhookSecret { get; set; }
     public string? SuccessUrl { get; set; }
     public string? CancelUrl { get; set; }
+}
+
+/// <summary>Bunny Stream (Video Library) overrides. ApiKey / TokenAuthKey /
+/// WebhookSecret / VideoAttestationKeysJson are secrets ("********" leaves
+/// unchanged; "" clears; anything else is validated then encrypted).</summary>
+public sealed class RuntimeSettingsBunnyStreamUpdate
+{
+    public JsonElement? Enabled { get; set; }
+    public string? LibraryId { get; set; }
+    public string? ApiKey { get; set; }
+    public string? CdnHostname { get; set; }
+    public string? TokenAuthKey { get; set; }
+    public string? WebhookSecret { get; set; }
+    public string? CollectionId { get; set; }
+    public JsonElement? PlaybackTokenTtlSeconds { get; set; }
+    /// <summary>JSON map {"tauri:v1":"&lt;hex&gt;", ...} for playback attestation.</summary>
+    public string? VideoAttestationKeysJson { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

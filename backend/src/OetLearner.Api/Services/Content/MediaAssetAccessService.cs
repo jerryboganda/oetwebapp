@@ -10,7 +10,8 @@ public sealed class MediaAssetAccessService(
     LearnerDbContext db,
     IContentEntitlementService contentEntitlements,
     IReadingPolicyService readingPolicy,
-    MaterialAccessService materialAccess)
+    MaterialAccessService materialAccess,
+    OetLearner.Api.Services.VideoLibrary.IVideoEntitlementService videoEntitlements)
 {
     public async Task<bool> CanAccessAsync(ClaimsPrincipal principal, string mediaAssetId, CancellationToken ct)
     {
@@ -93,6 +94,11 @@ public sealed class MediaAssetAccessService(
             return true;
         }
 
+        if (await CanLearnerAccessVideoLibraryAssetAsync(userId, media.Id, normalizedProfession, ct))
+        {
+            return true;
+        }
+
         if (await CanLearnerAccessActiveResultTemplateAsync(media.Id, normalizedProfession, ct))
         {
             return true;
@@ -165,6 +171,67 @@ public sealed class MediaAssetAccessService(
         PaperAssetRole.RoleCard,
         PaperAssetRole.WarmUpQuestions,
     ];
+
+    /// <summary>
+    /// Video Library assets served through /v1/media/{id}/content:
+    ///   • custom thumbnail — visible whenever the video itself is visible
+    ///     (it shows in the locked catalog too), so NO entitlement check;
+    ///   • attachments + caption tracks — require the video entitlement.
+    /// All three require the owning video to be Published, release-dated,
+    /// and profession-visible.
+    /// </summary>
+    private async Task<bool> CanLearnerAccessVideoLibraryAssetAsync(
+        string userId, string mediaAssetId, string? normalizedProfession, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var thumbnailVideos = await db.LibraryVideos
+            .AsNoTracking()
+            .Where(v => v.CustomThumbnailMediaAssetId == mediaAssetId
+                && v.Status == ContentStatus.Published
+                && (v.PublishAt == null || v.PublishAt <= now))
+            .Select(v => v.ProfessionIdsJson)
+            .ToListAsync(ct);
+        if (thumbnailVideos.Any(json =>
+            OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService.IsProfessionVisible(json, normalizedProfession)))
+        {
+            return true;
+        }
+
+        var attachmentVideoIds = await db.VideoAttachments.AsNoTracking()
+            .Where(a => a.MediaAssetId == mediaAssetId)
+            .Select(a => a.VideoId)
+            .ToListAsync(ct);
+        var captionVideoIds = await db.VideoCaptionTracks.AsNoTracking()
+            .Where(c => c.MediaAssetId == mediaAssetId)
+            .Select(c => c.VideoId)
+            .ToListAsync(ct);
+        var videoIds = attachmentVideoIds.Concat(captionVideoIds).Distinct().ToList();
+        if (videoIds.Count == 0)
+        {
+            return false;
+        }
+
+        var videos = await db.LibraryVideos.AsNoTracking()
+            .Where(v => videoIds.Contains(v.Id)
+                && v.Status == ContentStatus.Published
+                && (v.PublishAt == null || v.PublishAt <= now))
+            .ToListAsync(ct);
+        foreach (var video in videos)
+        {
+            if (!OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService.IsProfessionVisible(
+                    video.ProfessionIdsJson, normalizedProfession))
+            {
+                continue;
+            }
+            var entitlement = await videoEntitlements.AllowAccessAsync(userId, video, ct);
+            if (entitlement.Allowed)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private Task<bool> IsPublishedFreePreviewMediaAsync(string mediaAssetId, CancellationToken ct)
         => db.FreePreviewAssets

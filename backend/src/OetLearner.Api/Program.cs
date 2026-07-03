@@ -907,7 +907,36 @@ builder.Services.AddScoped<ContentAccessService>();
 builder.Services.AddScoped<ContentImportService>();
 builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
-builder.Services.AddScoped<VideoLessonService>();
+// Video Library (Bunny Stream) — replaces the retired VideoLessonService.
+// Playback sessions are attested-native-client only; catalog is universal.
+builder.Services.AddHttpClient(
+    OetLearner.Api.Services.VideoLibrary.BunnyStreamClient.HttpClientName,
+    c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IBunnyStreamClient,
+    OetLearner.Api.Services.VideoLibrary.BunnyStreamClient>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IVideoEntitlementService,
+    OetLearner.Api.Services.VideoLibrary.VideoEntitlementService>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IVideoAttestationService,
+    OetLearner.Api.Services.VideoLibrary.VideoAttestationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IVideoPlaybackSessionService,
+    OetLearner.Api.Services.VideoLibrary.VideoPlaybackSessionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryAdminService>();
+// Leader lock — only one replica runs the encode reconciliation + challenge
+// sweep. Postgres advisory lock in prod; always-leader otherwise.
+builder.Services.AddSingleton<OetLearner.Api.Services.VideoLibrary.IVideoWorkerLeaderLock>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    var cs = OetLearner.Api.Data.DatabaseConfiguration.ResolveConnectionString(cfg, env.IsDevelopment());
+    var isPostgres = !cs.StartsWith("InMemory:", StringComparison.OrdinalIgnoreCase)
+        && cs.Contains("Host=", StringComparison.OrdinalIgnoreCase);
+    return isPostgres
+        ? new OetLearner.Api.Services.VideoLibrary.PostgresVideoWorkerLeaderLock(
+            cs, sp.GetRequiredService<ILogger<OetLearner.Api.Services.VideoLibrary.PostgresVideoWorkerLeaderLock>>())
+        : new OetLearner.Api.Services.VideoLibrary.AlwaysVideoWorkerLeaderLock();
+});
+builder.Services.AddHostedService<OetLearner.Api.Services.VideoLibrary.BunnyEncodeStatusWorker>();
 builder.Services.AddScoped<StrategyGuideService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Admin.UserHardDeleteService>();
 builder.Services.AddScoped<NotificationService>();
@@ -2093,6 +2122,10 @@ app.MapBillingSubscriptionEndpoints();
 app.MapBillingPromoCodeEndpoints();
 app.MapAiPackageCreditEndpoints();
 app.MapStripeWebhookEndpoints();
+// Video Library — learner catalog + attested playback, admin CRUD, Bunny webhook.
+app.MapVideoLibraryEndpoints();
+app.MapVideoLibraryAdminEndpoints();
+app.MapVideoLibraryWebhookEndpoints();
 // Wave B4 — finance/ops admin surface (revenue/MRR/churn/LTV/refunds + product
 // & coupon CRUD + Stripe Tax registrations). Each route requires a specific
 // granular billing permission (read/refund_write/catalog_write).

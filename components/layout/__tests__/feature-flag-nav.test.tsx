@@ -83,12 +83,12 @@ describe('learner feature-gated navigation', () => {
   });
 
   it('keeps the Learn group visible to admin/tutor workspaces when the flag is enabled', async () => {
-    mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_lessons', enabled: true });
+    mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_library', enabled: true });
     mockUseAuth.mockReturnValue({ user: adminUser, signOut: mockSignOut });
 
     renderWithRouter(<Sidebar workspaceRole="admin" />, { pathname: '/' });
 
-    expect(await screen.findByRole('link', { name: /video lessons/i })).toHaveAttribute('href', '/lessons');
+    expect(await screen.findByRole('link', { name: /video library/i })).toHaveAttribute('href', '/videos');
   });
 
   it('hides feature-gated entries in the mobile menu while keeping other learn links available', async () => {

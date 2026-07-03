@@ -319,6 +319,11 @@ public sealed class ChunkedUploadService(
         "QuestionPaper" or "AudioScript" or "AnswerKey" or "CaseNotes" or "ModelAnswer"
             or "RoleCard" or "AssessmentCriteria" or "WarmUpQuestions" or "Supplementary"
             => _opts.MaxPdfBytes,
+        // Video Library asset slots: captions are small VTT text files,
+        // thumbnails small images, attachments PDF-sized documents.
+        "VideoCaption" => 2L * 1024 * 1024,
+        "VideoThumbnail" => 5L * 1024 * 1024,
+        "VideoAttachment" => _opts.MaxPdfBytes,
         _ => _opts.MaxPdfBytes,
     };
 

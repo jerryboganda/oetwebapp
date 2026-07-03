@@ -430,6 +430,27 @@ public class RuntimeSettingsRow
     // Null = client uses built-in defaults (zero behaviour change until set).
     public string? CatalogPresentationJson { get; set; }
 
+    // ── Bunny Stream (Video Library CDN) ───────────────────────────
+    // Video hosting + HLS delivery for the Video Library. ApiKey (Bunny
+    // Stream library API key), TokenAuthKey (CDN token-auth signing key) and
+    // WebhookSecret are SECRETS (encrypted at rest). LibraryId / CdnHostname /
+    // CollectionId are public identifiers. Enabled=null falls back to env.
+    [MaxLength(32)] public string? BunnyStreamLibraryId { get; set; }
+    public string? BunnyStreamApiKeyEncrypted { get; set; }
+    [MaxLength(256)] public string? BunnyStreamCdnHostname { get; set; }
+    public string? BunnyStreamTokenAuthKeyEncrypted { get; set; }
+    public string? BunnyStreamWebhookSecretEncrypted { get; set; }
+    [MaxLength(64)] public string? BunnyStreamCollectionId { get; set; }
+    public int? BunnyStreamPlaybackTokenTtlSeconds { get; set; }
+    public bool? BunnyStreamEnabled { get; set; }
+
+    // ── Video Library playback attestation keys ────────────────────
+    // Encrypted JSON map of "{platform}:{keyId}" → lowercase-hex HMAC secret,
+    // e.g. {"tauri:v1":"<hex>","capacitor-android:v1":"<hex>","capacitor-ios:v1":"<hex>"}.
+    // Playback sessions are issued ONLY to clients that can produce a valid
+    // HMAC over the attestation challenge with one of these secrets.
+    public string? VideoAttestationKeysEncrypted { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

@@ -8,6 +8,7 @@ import {
   BookOpenText,
   BrainCircuit,
   CalendarDays,
+  Clapperboard,
   Cog,
   Cpu,
   CreditCard,
@@ -135,6 +136,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: 'Mocks',
         icon: <FileQuestion className={iconClassName} />,
         matchPrefix: '/admin/content/mocks',
+        requiredPermissions: [AdminPermission.ContentRead],
+      },
+      {
+        href: '/admin/content/videos',
+        label: 'Video Library',
+        icon: <Clapperboard className={iconClassName} />,
+        matchPrefix: '/admin/content/videos',
         requiredPermissions: [AdminPermission.ContentRead],
       },
       {
@@ -409,6 +417,7 @@ export function isContentWorkspace(pathname: string | null | undefined): boolean
     'scoring-system',
     'speaking',
     'strategies',
+    'videos',
     'vocabulary',
     'writing',
   ];
@@ -422,6 +431,10 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/content/reading', title: 'Reading' },
   { prefix: '/admin/content/listening', title: 'Listening' },
   { prefix: '/admin/content/mocks', title: 'Mocks' },
+  // Video Library — most-specific first so categories/analytics win the prefix scan.
+  { prefix: '/admin/content/videos/categories', title: 'Video Categories' },
+  { prefix: '/admin/content/videos/analytics', title: 'Video Analytics' },
+  { prefix: '/admin/content/videos', title: 'Video Library' },
   { prefix: '/admin/content/writing', title: 'Writing' },
   { prefix: '/admin/content/speaking/shared-resources', title: 'Speaking Shared Resources' },
   { prefix: '/admin/content/scoring-system', title: 'Scoring System' },

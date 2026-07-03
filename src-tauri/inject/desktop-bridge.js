@@ -87,6 +87,14 @@
         }
       },
     },
+    attestation: {
+      // Native HMAC signer for app-only video playback. Tauri 2 invoke maps
+      // camelCase JS arg keys onto the snake_case Rust params (same convention
+      // as filePath/sessionId above). Returns { signature, platform: 'tauri',
+      // keyId, appVersion }; the secret never leaves the Rust side.
+      signVideoChallenge: (nonce, videoId, userId) =>
+        invoke('sign_video_challenge', { nonce, videoId, userId }),
+    },
     speakingAudio: {
       start: (sessionId, mimeType) => invoke('speaking_audio_start', { sessionId, mimeType }),
       stop: (sessionId, chunks) => {

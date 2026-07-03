@@ -217,5 +217,16 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WebPushEnabled"" bool
 
 -- Catalog storefront presentation (admin CMS) -- sync with migration 20260708000000
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CatalogPresentationJson"" text;
+
+-- Bunny Stream (Video Library) + playback attestation -- sync with migration 20260718090000
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamLibraryId"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamCdnHostname"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamTokenAuthKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamWebhookSecretEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamCollectionId"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamPlaybackTokenTtlSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoAttestationKeysEncrypted"" text;
 ";
 }

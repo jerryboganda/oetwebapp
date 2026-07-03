@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sign-video-challenge"
+description = "Enables the sign_video_challenge command without any pre-configured scope."
+commands.allow = ["sign_video_challenge"]
+
+[[permission]]
+identifier = "deny-sign-video-challenge"
+description = "Denies the sign_video_challenge command without any pre-configured scope."
+commands.deny = ["sign_video_challenge"]

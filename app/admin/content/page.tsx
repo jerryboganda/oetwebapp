@@ -6,6 +6,7 @@ import {
   BarChart3,
   BookOpenText,
   Calculator,
+  Clapperboard,
   Copy,
   FileSearch,
   FileCheck2,
@@ -57,6 +58,7 @@ const hubSections: HubSection[] = [
     description: 'Shared assets that support every subtest: paper records, lessons, media, vocabulary, conversation, grammar, pronunciation, and strategies.',
     links: [
       { href: '/admin/content/library', title: 'Content Library', description: 'Browse, search, edit, and publish every published or draft item across professions.', icon: <Library className="h-5 w-5" /> },
+      { href: '/admin/content/videos', title: 'Video Library', description: 'Bunny Stream video catalog: direct browser uploads, categories, access tiers, scheduling, and analytics.', icon: <Clapperboard className="h-5 w-5" /> },
       { href: '/admin/content/papers', title: 'Content Papers', description: 'Canonical paper records with typed asset slots for case notes, audio, scripts, and role cards.', icon: <FileCheck2 className="h-5 w-5" />, badge: 'Canonical', badgeVariant: 'success' },
       { href: '/admin/content/vocabulary', title: 'Vocabulary', description: 'Term banks tagged by profession with examples and audio.', icon: <BookOpenText className="h-5 w-5" /> },
       { href: '/admin/content/conversation', title: 'Conversation Templates', description: 'Role-play scenarios, objectives, and patient context for AI-led conversation practice.', icon: <MessageSquareText className="h-5 w-5" /> },
