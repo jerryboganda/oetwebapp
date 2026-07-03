@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -59,9 +60,6 @@ public partial class ConversationHub(
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<LearnerDbContext>();
         var options = await sp.GetRequiredService<IConversationOptionsProvider>().GetAsync(Context.ConnectionAborted);
-        var orchestrator = sp.GetRequiredService<IConversationAiOrchestrator>();
-        var ttsSelector = sp.GetRequiredService<IConversationTtsProviderSelector>();
-        var audio = sp.GetRequiredService<IConversationAudioService>();
 
         var session = await db.ConversationSessions.FindAsync(new object?[] { sessionId }, Context.ConnectionAborted);
         if (session == null || session.UserId != userId)
@@ -98,74 +96,13 @@ public partial class ConversationHub(
             return;
         }
 
-        try
-        {
-            var ctx = BuildAiContext(session, turnIndex: 0, elapsed: 0);
-            var reply = await orchestrator.GenerateOpeningAsync(ctx, Context.ConnectionAborted);
-            session.TurnCount++;
-            var turnNumber = session.TurnCount;
-
-            string? audioUrl = null;
-            var tts = await ttsSelector.TrySelectAsync(Context.ConnectionAborted);
-            if (tts is not null)
-            {
-                try
-                {
-                    var ttsResult = await tts.SynthesizeAsync(new ConversationTtsRequest(reply.Text, ResolveVoice(session), "en-GB"), Context.ConnectionAborted);
-                    if (ttsResult.Audio.Length > 0)
-                    {
-                        var aref = await audio.WriteAsync(ttsResult.Audio, ttsResult.MimeType, Context.ConnectionAborted);
-                        audioUrl = aref.Url;
-                    }
-                }
-                catch (Exception ex) { logger.LogWarning(ex, "Opening TTS failed"); }
-            }
-
-            db.ConversationTurns.Add(new ConversationTurn
-            {
-                Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = turnNumber,
-                Role = "ai", Content = reply.Text, AudioUrl = audioUrl,
-                DurationMs = reply.Text.Split(' ').Length * 300, TimestampMs = 0,
-                ConfidenceScore = 1.0, AnalysisJson = "{}",
-                AiFeatureCode = AiFeatureCodes.ConversationOpening,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync(Context.ConnectionAborted);
-            session.TranscriptJson = await BuildTranscriptJsonAsync(db, sessionId, Context.ConnectionAborted);
-            await db.SaveChangesAsync(Context.ConnectionAborted);
-
-            await Clients.Caller.SendAsync("ReceiveAIResponse", turnNumber, reply.Text, new
-            {
-                audioUrl, emotionHint = reply.EmotionHint, appliedRuleIds = reply.AppliedRuleIds,
-            });
-        }
-        catch (PromptNotGroundedException)
-        {
-            logger.LogError("Conversation opening refused — ungrounded.");
-            await Clients.Caller.SendAsync("ConversationError", "UNGROUNDED", "AI grounding failed.");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Conversation opening failed");
-            var fallback = "Hello — thank you for coming in today. How can I help you?";
-            session.TurnCount++;
-            db.ConversationTurns.Add(new ConversationTurn
-            {
-                Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = session.TurnCount,
-                Role = "ai", Content = fallback, DurationMs = 3000, TimestampMs = 0,
-                ConfidenceScore = 1.0, AnalysisJson = JsonSupport.Serialize(new { fallback = true }),
-                AiFeatureCode = AiFeatureCodes.ConversationOpening,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync(Context.ConnectionAborted);
-            session.TranscriptJson = await BuildTranscriptJsonAsync(db, sessionId, Context.ConnectionAborted);
-            await db.SaveChangesAsync(Context.ConnectionAborted);
-            await Clients.Caller.SendAsync("ReceiveAIResponse", session.TurnCount, fallback,
-                new { audioUrl = (string?)null, emotionHint = "neutral", appliedRuleIds = Array.Empty<string>() });
-        }
+        // The learner opens the conversation (owner rule 2026-07-03): the AI
+        // partner no longer speaks an unprompted opening — it replies to the
+        // learner's first turn instead.
+        await Clients.Caller.SendAsync("AwaitingLearnerOpening");
     }
 
-    public async Task SendAudio(string sessionId, string audioBase64, string? mimeType = null)
+    public async Task SendAudio(string sessionId, string audioBase64, string? mimeType = null, string? turnMetaJson = null)
     {
         var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return;
@@ -214,7 +151,7 @@ public partial class ConversationHub(
             return;
         }
 
-        await ProcessAudioTurnAsync(sp, db, session, sessionId, audioBytes, audioMime, null, null, Context.ConnectionAborted);
+        await ProcessAudioTurnAsync(sp, db, session, sessionId, audioBytes, audioMime, null, null, Context.ConnectionAborted, turnMetaJson: turnMetaJson);
     }
 
     public async Task<string> BeginRealtimeTurn(string sessionId, string streamId, string? mimeType = null, string? locale = null)
@@ -474,7 +411,7 @@ public partial class ConversationHub(
         }
     }
 
-    public async Task<object> CompleteRealtimeTurn(string sessionId, string streamId)
+    public async Task<object> CompleteRealtimeTurn(string sessionId, string streamId, string? turnMetaJson = null)
     {
         var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return new { status = "denied", streamId };
@@ -603,7 +540,7 @@ public partial class ConversationHub(
                 return new { status = "failed", streamId };
             }
 
-            var committed = await ProcessAudioTurnAsync(sp, db, session, sessionId, snapshot.AudioBytes, snapshot.AudioMimeType, streamId, finalProviderEventId, commitCts.Token, realtimeAsr);
+            var committed = await ProcessAudioTurnAsync(sp, db, session, sessionId, snapshot.AudioBytes, snapshot.AudioMimeType, streamId, finalProviderEventId, commitCts.Token, realtimeAsr, turnMetaJson);
             if (committed)
             {
                 if (providerSession is not null) await DisposeProviderSessionAsync(providerSession);
@@ -748,7 +685,8 @@ public partial class ConversationHub(
         string? turnClientId,
         string? providerEventId,
         CancellationToken ct,
-        ConversationAsrResult? preTranscribed = null)
+        ConversationAsrResult? preTranscribed = null,
+        string? turnMetaJson = null)
     {
         var asrSelector = sp.GetRequiredService<IConversationAsrProviderSelector>();
         var ttsSelector = sp.GetRequiredService<IConversationTtsProviderSelector>();
@@ -801,6 +739,11 @@ public partial class ConversationHub(
             learnerAudioRef = await audio.WriteAsync(audioStream, audioMime, ct);
         }
 
+        // Client-reported turn metadata: the learner barged in while the AI
+        // partner was still speaking. Recorded for the evaluator — never
+        // blocks the turn.
+        var (interruptedAi, _) = ParseTurnMeta(turnMetaJson);
+
         session.TurnCount++;
         var learnerTurnNumber = session.TurnCount;
         var elapsedMs = (int)(DateTimeOffset.UtcNow - (session.StartedAt ?? DateTimeOffset.UtcNow)).TotalMilliseconds;
@@ -815,6 +758,7 @@ public partial class ConversationHub(
                 asr.ProviderName,
                 asr.ProviderResponseSummary,
                 speakerSegments = asr.SpeakerSegments ?? Array.Empty<ConversationSpeakerSegment>(),
+                interrupted = interruptedAi,
             }),
             TurnClientId = turnClientId,
             ProviderEventId = providerEventId,
@@ -914,9 +858,36 @@ public partial class ConversationHub(
         var turns = await db.ConversationTurns
             .Where(t => t.SessionId == sessionId)
             .OrderBy(t => t.TurnNumber)
-            .Select(t => new { turnNumber = t.TurnNumber, role = t.Role, content = t.Content, audioUrl = t.AudioUrl })
+            .Select(t => new { t.TurnNumber, t.Role, t.Content, t.AudioUrl, t.AnalysisJson })
             .ToListAsync(ct);
-        return JsonSupport.Serialize(turns);
+        // `interrupted` (learner barged in on the AI partner) is projected so
+        // both the reply prompt and the evaluation see it.
+        return JsonSupport.Serialize(turns.Select(t => new
+        {
+            turnNumber = t.TurnNumber,
+            role = t.Role,
+            content = t.Content,
+            audioUrl = t.AudioUrl,
+            interrupted = HasInterruptedFlag(t.AnalysisJson),
+        }));
+    }
+
+    /// <summary>Reads the <c>interrupted</c> flag from a turn's
+    /// <c>AnalysisJson</c>; malformed JSON means false.</summary>
+    private static bool HasInterruptedFlag(string? analysisJson)
+    {
+        if (string.IsNullOrWhiteSpace(analysisJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(analysisJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("interrupted", out var ir)
+                && ir.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private sealed class HubRealtimeTranscriptSink(

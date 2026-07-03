@@ -76,6 +76,17 @@ Scoring rules:
     relevant criterion descriptor.
   * `overallSummary` is 2–4 sentences of advisory feedback. Never claim
     this is an official OET score.
+  * Candidate transcript segments marked `"interrupted": true` mean the
+    candidate started speaking BEFORE the patient had finished their
+    response (they cut the patient off). Weigh repeated or abrupt
+    interruptions under `relationshipBuilding` and `appropriateness` —
+    judge severity in context (a single empathetic clarifying
+    interjection differs from persistently talking over the patient);
+    never apply a mechanical per-interruption deduction. When
+    interruptions occurred, include an `improvements` entry in the
+    spirit of: "You interrupted the patient before they completed their
+    response. In OET, you should allow the patient to finish before
+    speaking."
 """;
 
     public async Task<SpeakingAiAssessmentProjection> RunAssessmentAsync(
@@ -483,8 +494,51 @@ Scoring rules:
         sb.AppendLine("---- TRANSCRIPT (latest revision) ----");
         sb.AppendLine(transcript.SegmentsJson);
         sb.AppendLine();
+        // Server-computed so sparse per-segment flags cannot be overlooked
+        // in a long transcript.
+        var (interruptionCount, interruptedAtMs) = ComputeInteractionSignals(transcript.SegmentsJson);
+        sb.AppendLine("---- INTERACTION SIGNALS (server-computed) ----");
+        sb.AppendLine(JsonSerializer.Serialize(new
+        {
+            interruptionCount,
+            interruptedAtMs,
+        }));
+        sb.AppendLine();
         sb.AppendLine("Now produce the strict JSON object specified above.");
         return sb.ToString();
+    }
+
+    /// <summary>Scans the transcript segments for candidate turns flagged
+    /// <c>interrupted: true</c> (the candidate barged in while the patient
+    /// was still speaking). Malformed JSON yields zero signals — grading
+    /// must never fail on transcript-shape drift.</summary>
+    internal static (int InterruptionCount, long[] InterruptedAtMs) ComputeInteractionSignals(
+        string? segmentsJson)
+    {
+        if (string.IsNullOrWhiteSpace(segmentsJson)) return (0, Array.Empty<long>());
+        try
+        {
+            using var doc = JsonDocument.Parse(segmentsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return (0, Array.Empty<long>());
+            var atMs = new List<long>();
+            foreach (var s in doc.RootElement.EnumerateArray())
+            {
+                if (s.ValueKind != JsonValueKind.Object) continue;
+                var isCandidate = s.TryGetProperty("speaker", out var sp)
+                    && string.Equals(sp.GetString(), "candidate", StringComparison.Ordinal);
+                var interrupted = s.TryGetProperty("interrupted", out var ir)
+                    && ir.ValueKind == JsonValueKind.True;
+                if (!isCandidate || !interrupted) continue;
+                atMs.Add(s.TryGetProperty("startMs", out var st) && st.ValueKind == JsonValueKind.Number
+                    ? st.GetInt64()
+                    : 0L);
+            }
+            return (atMs.Count, atMs.ToArray());
+        }
+        catch (JsonException)
+        {
+            return (0, Array.Empty<long>());
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

@@ -386,7 +386,9 @@ export default function SpeakingSessionRecordingPage() {
               {!connected
                 ? 'Connecting AI patient…'
                 : convo.micEnabled
-                  ? PHASE_LABEL[convo.phase]
+                  ? convo.awaitingCandidateStart
+                    ? 'The patient is waiting — introduce yourself to begin.'
+                    : PHASE_LABEL[convo.phase]
                   : 'AI patient connected.'}
             </p>
             {!convo.micEnabled ? (
@@ -414,8 +416,9 @@ export default function SpeakingSessionRecordingPage() {
               </Button>
             )}
             <p className="mt-2 text-[11px] leading-snug text-muted">
-              Tap <span className="font-medium">Start talking</span>, then just speak to the patient
-              naturally — they listen, reply in character, and the mic re-opens automatically.
+              Tap <span className="font-medium">Start talking</span>, then open the consultation
+              yourself — greet the patient and ask what brings them in. They listen, reply in
+              character, and the mic re-opens automatically.
             </p>
             {convo.voiceUnavailable ? (
               <p className="mt-2 flex items-center gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-[11px] text-warning">

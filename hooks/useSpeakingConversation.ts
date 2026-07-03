@@ -14,10 +14,17 @@
  *                       is LearnerOnly, so a bare <audio src> would 401)
  *                   ──▶ auto-play the reply, then auto-resume listening.
  *
- * The mic is hard-gated to the "listening" phase only: while the patient is
- * speaking (or the AI is thinking) the mic track is disabled, so the patient
- * is always heard in full and the AI can never be cut off by speaker echo or
- * an eager first word. Listening resumes automatically once playback ends.
+ * Start semantics (owner rule 2026-07-03): in the ROLE-PLAY the candidate
+ * opens the consultation — the server signals `SpeakingRoleplayReady
+ * { patientSpeaksFirst: false }` and the loop goes straight to listening
+ * (the patient stays silent until spoken to). The WARM-UP keeps the
+ * interlocutor-speaks-first opening, matching the real OET exam.
+ *
+ * Barge-in: the candidate MAY talk over the patient. A confirmed speech
+ * onset during playback stops the patient's audio, keeps capturing, and
+ * flags the turn `interruptedPatient` — the AI grader weighs interruptions
+ * in feedback. The high onset bar (see SPEAKING_START_*) stops residual
+ * speaker echo from triggering false barge-ins.
  *
  * Whisper is a batch API, so "continuous" here means always-listening with
  * VAD segmentation + one Whisper call per utterance — not token streaming.
@@ -49,14 +56,27 @@ interface LearnerCaptionMsg {
   confidence?: number;
 }
 
+interface RoleplayReadyMsg {
+  phase: 'warmup' | 'roleplay';
+  patientSpeaksFirst: boolean;
+}
+
+/** Client-side turn metadata sent alongside the audio — the backend records
+ * it on the transcript segment so the AI grader can weigh interruptions. */
+interface TurnMeta {
+  interruptedPatient: boolean;
+  speechDurationMs: number;
+}
+
 interface ConversationHubBridge {
   connect: () => Promise<void>;
   begin: (sessionId: string) => Promise<void>;
   stop: () => Promise<void>;
-  sendTurn: (sessionId: string, audioBase64: string, mimeType: string) => Promise<void>;
+  sendTurn: (sessionId: string, audioBase64: string, mimeType: string, metaJson: string | null) => Promise<void>;
   sendText: (sessionId: string, text: string) => Promise<void>;
   onUtterance: (cb: (u: PatientUtterance) => void) => void;
   onLearnerCaption: (cb: (c: LearnerCaptionMsg) => void) => void;
+  onReady: (cb: (r: RoleplayReadyMsg) => void) => void;
   onShouldEnd: (cb: () => void) => void;
   onError: (cb: (code: string, message: string) => void) => void;
 }
@@ -71,25 +91,31 @@ const START_LEVEL = 0.16; // sustained level to treat as speech onset
 const CONTINUE_LEVEL = 0.09; // above this keeps an utterance "alive"
 const START_FRAMES = 3; // consecutive frames above threshold to commit onset
 // While the patient is speaking the mic stays live (echoCancellation strips
-// the AI's own audio) so a learner who starts replying early is not clipped —
-// but onset needs a much higher, longer signal so residual echo can't
-// false-trigger a turn. Playback itself is never interrupted.
+// the AI's own audio) — but onset needs a much higher, longer signal so
+// residual echo can't false-trigger. A CONFIRMED onset during playback is a
+// barge-in: playback stops, the turn is captured from the first word, and
+// the interruption is recorded for the grader.
 const SPEAKING_START_LEVEL = 0.3;
 const SPEAKING_START_FRAMES = 6;
-const SILENCE_MS = 1000; // trailing silence that ends an utterance
+const SILENCE_MS = 1000; // trailing silence that ends an utterance (owner target: 1–2s)
 const MIN_SPEECH_MS = 450; // ignore blips/coughs (measured from speech onset)
-const MAX_UTTERANCE_MS = 30_000; // safety cap on a single turn (after onset)
+// Candidates are NEVER cut off (owner rule): this is a safety cap that in
+// practice never fires — and when it does, the turn is SENT, not discarded.
+const MAX_UTTERANCE_MS = 210_000;
 const SILENT_BUFFER_RESET_MS = 8_000; // drop + restart a buffer with no speech
 const THINKING_TIMEOUT_MS = 25_000; // watchdog if no reply arrives
-// Speech-only bitrate. Browsers default MediaRecorder/Opus to ~128kbps, which
-// blows past the hub's 384KB max message (the connection is closed, not the
-// call rejected) once the buffer includes leading silence. 32kbps mono is
-// ample for Whisper and keeps a worst-case turn (~40s) around ~160KB binary.
+// Speech-only bitrate. Browsers default MediaRecorder/Opus to ~128kbps —
+// 32kbps mono is ample for Whisper and keeps a worst-case 210s turn around
+// ~840KB binary (~1.12MB base64), inside the hub's 2MB max message.
 const RECORDER_BITS_PER_SECOND = 32_000;
-// Hub max receive message is 384KB (ConversationRealtimeTransportLimits).
+// Hub max receive message is 2MB (ConversationRealtimeTransportLimits).
 // Base64 inflates 4/3, so refuse to send blobs that would exceed it — better
 // a visible "too long" error than SignalR silently killing the connection.
-const MAX_TURN_BLOB_BYTES = 280_000;
+const MAX_TURN_BLOB_BYTES = 1_400_000;
+// Some browsers reject the bitrate hint and record at default ~128kbps. Track
+// the running buffer size and end the turn EARLY (still sending it) before it
+// can outgrow the hard cap — a long turn must never be silently refused.
+const MAX_TURN_SOFT_BYTES = 1_200_000;
 
 async function loadConversationHub(): Promise<ConversationHubBridge | null> {
   try {
@@ -105,6 +131,7 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
 
     let utter: ((u: PatientUtterance) => void) | null = null;
     let learner: ((c: LearnerCaptionMsg) => void) | null = null;
+    let ready: ((r: RoleplayReadyMsg) => void) | null = null;
     let shouldEnd: (() => void) | null = null;
     let error: ((code: string, message: string) => void) | null = null;
 
@@ -113,6 +140,9 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
     });
     connection.on('LearnerCaption', (p: LearnerCaptionMsg) => {
       if (p?.text) learner?.(p);
+    });
+    connection.on('SpeakingRoleplayReady', (r: RoleplayReadyMsg) => {
+      if (r) ready?.(r);
     });
     connection.on('SpeakingShouldEnd', () => shouldEnd?.());
     connection.on('SpeakingRoleplayError', (code: string, message: string) => error?.(code, message));
@@ -131,8 +161,8 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
           /* ignore */
         }
       },
-      sendTurn: async (sessionId, audioBase64, mimeType) => {
-        await connection.invoke('SendSpeakingRoleplayTurn', sessionId, audioBase64, mimeType);
+      sendTurn: async (sessionId, audioBase64, mimeType, metaJson) => {
+        await connection.invoke('SendSpeakingRoleplayTurn', sessionId, audioBase64, mimeType, metaJson);
       },
       sendText: async (sessionId, text) => {
         await connection.invoke('SendSpeakingRoleplayText', sessionId, text);
@@ -142,6 +172,9 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
       },
       onLearnerCaption: (cb) => {
         learner = cb;
+      },
+      onReady: (cb) => {
+        ready = cb;
       },
       onShouldEnd: (cb) => {
         shouldEnd = cb;
@@ -185,7 +218,16 @@ export interface UseSpeakingConversationResult {
   /** True when a reply arrived without audio — TTS is off/misconfigured. */
   voiceUnavailable: boolean;
   ended: boolean;
-  /** User-gesture entry point: grants mic, starts VAD, plays the opening line. */
+  /**
+   * True while the role-play waits for the candidate's opening line — the
+   * patient stays silent until spoken to. Surfaces should hint
+   * "The patient is waiting — introduce yourself to begin."
+   */
+  awaitingCandidateStart: boolean;
+  /**
+   * User-gesture entry point: grants mic and starts VAD. In the warm-up the
+   * interlocutor speaks first; in the role-play the candidate opens.
+   */
   enableMic: () => Promise<void>;
   disableMic: () => void;
   sendText: (text: string) => Promise<void>;
@@ -200,6 +242,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   const [micLevel, setMicLevel] = useState(0);
   const [voiceUnavailable, setVoiceUnavailable] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [awaitingCandidateStart, setAwaitingCandidateStart] = useState(false);
 
   const hubRef = useRef<ConversationHubBridge | null>(null);
   const sessionIdRef = useRef(sessionId);
@@ -215,12 +258,16 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const bufferBytesRef = useRef(0); // running size of the current buffer
   const utteranceStartRef = useRef(0); // when the (continuous) buffer began
   const speechStartRef = useRef(0); // when VAD confirmed speech onset
   const lastVoiceRef = useRef(0);
   const startFramesRef = useRef(0);
   const hadSpeechRef = useRef(false); // buffer contains confirmed speech
   const discardStopRef = useRef(false); // next recorder stop discards the buffer
+  // Set when a confirmed onset stopped the patient's playback (barge-in) —
+  // attached to the next SENT turn so the grader sees the interruption.
+  const interruptedPatientRef = useRef(false);
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
@@ -268,7 +315,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
 
   // ── Send one captured utterance ──────────────────────────────────────
   const sendUtterance = useCallback(
-    async (blob: Blob, mimeType: string) => {
+    async (blob: Blob, mimeType: string, speechDurationMs: number) => {
       const hub = hubRef.current;
       if (!hub || !sessionIdRef.current) {
         setPhase('listening');
@@ -285,7 +332,17 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       }, THINKING_TIMEOUT_MS);
       try {
         const base64 = await blobToBase64(blob);
-        await hub.sendTurn(sessionIdRef.current, base64, mimeType || 'audio/webm');
+        const meta: TurnMeta = {
+          interruptedPatient: interruptedPatientRef.current,
+          speechDurationMs: Math.max(0, Math.round(speechDurationMs)),
+        };
+        await hub.sendTurn(
+          sessionIdRef.current,
+          base64,
+          mimeType || 'audio/webm',
+          JSON.stringify(meta),
+        );
+        interruptedPatientRef.current = false;
       } catch (err) {
         clearThinkingWatchdog();
         setError(err instanceof Error ? err.message : 'Could not send your turn.');
@@ -319,19 +376,27 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       }
     }
     chunksRef.current = [];
+    bufferBytesRef.current = 0;
     utteranceStartRef.current = performance.now();
     lastVoiceRef.current = performance.now();
     hadSpeechRef.current = false;
     discardStopRef.current = false;
     startFramesRef.current = 0;
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+        bufferBytesRef.current += e.data.size;
+      }
     };
     recorder.onstop = () => {
       const chunks = chunksRef.current;
       chunksRef.current = [];
+      bufferBytesRef.current = 0;
       recorderRef.current = null;
       const send = hadSpeechRef.current && !discardStopRef.current;
+      // Speech span of this buffer (onset → last voice), captured before the
+      // refs reset — reported to the backend so segments get real timings.
+      const speechDurationMs = send ? Math.max(0, lastVoiceRef.current - speechStartRef.current) : 0;
       hadSpeechRef.current = false;
       discardStopRef.current = false;
       if (!send) return; // silent/discarded buffer — the frame loop restarts capture
@@ -339,11 +404,12 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       if (blob.size < 1_200) return; // corrupt/empty despite VAD — keep listening
       if (blob.size > MAX_TURN_BLOB_BYTES) {
         // Oversized payloads make SignalR close the whole connection — refuse
-        // client-side and keep the conversation alive instead.
+        // client-side and keep the conversation alive instead. (The soft-cap
+        // check in the frame loop should end the turn long before this.)
         setError('That turn was too long to send. Please make your point in shorter turns.');
         return;
       }
-      void sendUtterance(blob, blob.type);
+      void sendUtterance(blob, blob.type, speechDurationMs);
     };
     recorderRef.current = recorder;
     try {
@@ -385,8 +451,10 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     // While the patient is speaking the recorder ALSO runs (mic live, AEC
     // strips the AI's own audio) so a learner who starts replying early is
     // captured from their first word. Onset detection during playback uses a
-    // higher, longer bar so residual echo can't false-trigger, and playback
-    // is never interrupted — end-of-turn is only evaluated while listening.
+    // higher, longer bar so residual echo can't false-trigger. A CONFIRMED
+    // onset is a barge-in: the patient's playback stops, the interruption is
+    // recorded for the grader, and the loop drops to 'listening' where the
+    // normal end-of-turn silence logic takes over.
     if (phaseNow === 'speaking') {
       if (!isRecording) {
         beginCapture();
@@ -398,6 +466,9 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
             hadSpeechRef.current = true;
             speechStartRef.current = now;
             lastVoiceRef.current = now;
+            interruptedPatientRef.current = true;
+            stopPlayback();
+            setPhase('listening');
           }
         } else {
           startFramesRef.current = 0;
@@ -407,10 +478,6 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
             finishCapture(); // onstop discards; next frame restarts capture
           }
         }
-      } else if (level >= CONTINUE_LEVEL) {
-        // Speech already confirmed — keep the utterance alive; the end-of-turn
-        // silence check only runs once we transition to 'listening'.
-        lastVoiceRef.current = now;
       }
     } else if (phaseNow === 'listening') {
       if (!isRecording) {
@@ -446,7 +513,9 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
           } else {
             finishCapture(); // onstop sends the full buffer (leading silence is fine for Whisper)
           }
-        } else if (speechFor >= MAX_UTTERANCE_MS) {
+        } else if (speechFor >= MAX_UTTERANCE_MS || bufferBytesRef.current >= MAX_TURN_SOFT_BYTES) {
+          // Safety caps only — the turn is SENT, never discarded. The byte cap
+          // covers browsers that ignored the 32kbps hint (~128kbps default).
           finishCapture();
         }
       }
@@ -454,7 +523,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     // 'thinking' / 'idle': ignore onsets so turns never overlap.
 
     rafRef.current = requestAnimationFrame(runVadFrame);
-  }, [beginCapture, finishCapture]);
+  }, [beginCapture, finishCapture, setPhase, stopPlayback]);
 
   // ── Play an AI reply, then resume listening ───────────────────────────
   const playReply = useCallback(
@@ -505,9 +574,21 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
         return;
       }
       hubRef.current = hub;
-      hub.onLearnerCaption((c) => pushCaption('candidate', c.text));
+      hub.onLearnerCaption((c) => {
+        setAwaitingCandidateStart(false);
+        pushCaption('candidate', c.text);
+      });
+      hub.onReady((r) => {
+        if (r.patientSpeaksFirst) return; // warm-up: opening utterance is on its way
+        // Role-play: the candidate opens. Go straight to listening — the
+        // patient stays silent until spoken to.
+        clearThinkingWatchdog();
+        setAwaitingCandidateStart(true);
+        if (micEnabledRef.current) setPhase('listening');
+      });
       hub.onUtterance((u) => {
         clearThinkingWatchdog();
+        setAwaitingCandidateStart(false);
         pushCaption('patient', u.text);
         if (u.audioUrl) {
           setVoiceUnavailable(false);
@@ -592,9 +673,11 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       micEnabledRef.current = true;
       setMicEnabled(true);
       setError(null);
-      // Hold the mic closed until the patient's opening line has played, so
-      // the opening audio is never clipped by an early capture. If no opening
-      // arrives (rare), the watchdog falls back to listening.
+      // Hold the mic closed until the server says who opens. Warm-up: the
+      // interlocutor's opening line plays first (mic stays gated so it is
+      // never clipped). Role-play: SpeakingRoleplayReady flips us straight
+      // to listening — the candidate opens. If neither signal arrives
+      // (old backend / dropped event), the watchdog falls back to listening.
       setPhase('thinking');
       rafRef.current = requestAnimationFrame(runVadFrame);
       clearThinkingWatchdog();
@@ -602,11 +685,12 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
         if (phaseRef.current === 'thinking') setPhase('listening');
       }, THINKING_TIMEOUT_MS);
 
-      // Kick off the opening line (patient speaks first). Best-effort.
+      // Signal the server we are ready (it responds with
+      // SpeakingRoleplayReady and, in the warm-up, the opening line).
       try {
         await hubRef.current?.begin(sessionIdRef.current);
       } catch {
-        /* opening will still work on the first learner turn */
+        /* the loop still works from the first learner turn */
       }
     } catch (err) {
       const name = err instanceof Error ? err.name : '';
@@ -659,6 +743,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     micLevel,
     voiceUnavailable,
     ended,
+    awaitingCandidateStart,
     enableMic,
     disableMic,
     sendText,

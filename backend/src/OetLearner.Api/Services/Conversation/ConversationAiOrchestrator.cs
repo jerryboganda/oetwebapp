@@ -70,7 +70,7 @@ public sealed class ConversationAiOrchestrator(
             Prompt = prompt,
             UserInput = task == AiTaskMode.GenerateConversationOpening
                 ? "Produce the AI partner's first spoken utterance in role. 1–3 sentences. Respond strictly in JSON."
-                : $"Produce the AI partner's next in-role reply. Turn: {ctx.TurnIndex}, elapsed {ctx.ElapsedSeconds}s, remaining {ctx.RemainingSeconds}s. 1–3 sentences. Respond strictly in JSON.",
+                : $"Produce the AI partner's next in-role reply. Turn: {ctx.TurnIndex}, elapsed {ctx.ElapsedSeconds}s, remaining {ctx.RemainingSeconds}s. 1–3 sentences. Transcript entries marked interrupted:true mean the learner started speaking before you finished that utterance — react naturally to having been cut off; do not repeat your whole line. Respond strictly in JSON.",
             UserId = ctx.UserId,
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
@@ -107,7 +107,7 @@ public sealed class ConversationAiOrchestrator(
         var result = await gateway.CompleteAsync(new AiGatewayRequest
         {
             Prompt = prompt,
-            UserInput = "Evaluate the transcript above strictly in the reply format.",
+            UserInput = "Evaluate the transcript above strictly in the reply format. Learner entries marked interrupted:true cut the AI partner off mid-utterance — factor repeated interruptions into appropriateness, and where present add an improvement advising the candidate to let the other speaker finish before responding.",
             UserId = ctx.UserId,
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,

@@ -402,7 +402,10 @@ public sealed record RealtimeTurnSnapshot(
 
 public static class ConversationRealtimeTransportLimits
 {
-    public const int MaximumReceiveMessageBytes = 384 * 1024;
+    // Candidates are never cut off mid-turn (owner rule), so a single voice-loop
+    // turn can run minutes: 210s at 32kbps ≈ 840KB binary ≈ 1.12MB base64. 2MB
+    // keeps headroom above the client-side 1.4MB blob cap.
+    public const int MaximumReceiveMessageBytes = 2 * 1024 * 1024;
     public const int MaxBinaryChunkBytes = 256 * 1024;
     public const int MaximumActiveStreams = 512;
     public const long MaximumBufferedBytes = 64L * 1024 * 1024;
