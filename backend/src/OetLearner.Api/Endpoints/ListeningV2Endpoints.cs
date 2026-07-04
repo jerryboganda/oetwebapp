@@ -543,8 +543,7 @@ public static class ListeningV2Endpoints
             .Where(p => p.Status == ContentStatus.Published
                 && p.SubtestCode == "listening"
                 && (p.AppliesToAllProfessions
-                    || (!string.IsNullOrWhiteSpace(profession) && p.ProfessionId == profession))
-                && db.ListeningQuestions.Any(q => q.PaperId == p.Id))
+                    || (!string.IsNullOrWhiteSpace(profession) && p.ProfessionId == profession)))
             .OrderByDescending(p => p.Priority)
             .ThenByDescending(p => p.PublishedAt)
             .ThenBy(p => p.Title)
@@ -553,6 +552,21 @@ public static class ListeningV2Endpoints
 
         foreach (var candidate in candidates)
         {
+            // A listening paper is a valid Part A/B/C launch target when it
+            // exposes graded questions in EITHER store the full-exam path
+            // accepts (see ListeningLearnerService.BuildPaperSourceAsync): the
+            // relational ListeningQuestions table OR JSON-authored questions on
+            // ContentPaper.ExtractedTextJson. Requiring only the relational
+            // store made a JSON-authored paper play as a full exam yet stay
+            // invisible to part practice (2026-07-05 prod bug — every part
+            // showed "No Part X listening paper is available yet").
+            var hasQuestions = await db.ListeningQuestions.AnyAsync(q => q.PaperId == candidate.Id, ct)
+                || PaperHasJsonAuthoredQuestions(candidate.ExtractedTextJson);
+            if (!hasQuestions)
+            {
+                continue;
+            }
+
             try
             {
                 var access = await entitlements.AllowAccessAsync(userId, candidate, ct);
@@ -569,5 +583,45 @@ public static class ListeningV2Endpoints
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// True when a paper carries JSON-authored listening questions on
+    /// <see cref="Domain.ContentPaper.ExtractedTextJson"/>, mirroring the JSON
+    /// fallback branch of <c>ListeningLearnerService.BuildPaperSourceAsync</c>
+    /// (keys <c>listeningQuestions</c> / <c>questions</c>). Malformed or empty
+    /// JSON counts as "no questions" rather than throwing.
+    /// </summary>
+    private static bool PaperHasJsonAuthoredQuestions(string? extractedTextJson)
+    {
+        if (string.IsNullOrWhiteSpace(extractedTextJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(extractedTextJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            foreach (var key in new[] { "listeningQuestions", "questions" })
+            {
+                if (document.RootElement.TryGetProperty(key, out var array)
+                    && array.ValueKind == JsonValueKind.Array
+                    && array.GetArrayLength() > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }
