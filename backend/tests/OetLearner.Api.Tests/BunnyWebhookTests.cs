@@ -71,7 +71,11 @@ public class BunnyWebhookTests(BunnyMockedWebApplicationFactory factory)
     }
 
     [Theory]
-    [InlineData(0, VideoEncodeStatus.Queued)]
+    // Bunny status 0 (Created — object exists, bytes not yet received) maps to
+    // Uploading, not Queued: MapBunnyStatus(0) keeps an interrupted/never-started
+    // upload recoverable in the admin card. See the "incomplete upload recovery"
+    // hardening in VideoLibraryAdminService.
+    [InlineData(0, VideoEncodeStatus.Uploading)]
     [InlineData(1, VideoEncodeStatus.Processing)]
     [InlineData(2, VideoEncodeStatus.Encoding)]
     [InlineData(5, VideoEncodeStatus.Failed)]
@@ -99,6 +103,10 @@ public class BunnyWebhookTests(BunnyMockedWebApplicationFactory factory)
             Status = 3,
             EncodeProgress = 100,
             LengthSeconds = 987,
+            // Non-zero stored bytes: a real finished encode. Without this the
+            // ApplyBunnyInfo guard (<=0 bytes => Uploading, for interrupted
+            // uploads) would override Ready and the metadata pull would be moot.
+            StorageSizeBytes = 5_000_000,
             Width = 1280,
             Height = 720,
         };
