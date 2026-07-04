@@ -76,6 +76,9 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/video-library/videos", "GET", "AdminContentRead")]
     [InlineData("/v1/admin/video-library/videos/{videoId}/publish", "POST", "AdminContentPublish")]
     [InlineData("/v1/admin/video-library/videos/{videoId}/force-delete", "POST", "AdminSystemAdmin")]
+    [InlineData("/v1/admin/video-library/collections", "GET", "AdminContentRead")]
+    [InlineData("/v1/admin/video-library/collections/{collectionId}", "DELETE", "AdminSystemAdmin")]
+    [InlineData("/v1/admin/video-library/collections/videos/{bunnyVideoId}/bunny-delete", "POST", "AdminSystemAdmin")]
     public void SensitiveAdminRoutes_UseExpectedGranularPolicies(string routePattern, string method, string policy)
     {
         using var client = _factory.CreateClient();

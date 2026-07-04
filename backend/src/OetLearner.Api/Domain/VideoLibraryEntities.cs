@@ -60,6 +60,16 @@ public class LibraryVideo
     [MaxLength(32)]
     public string? BunnyLibraryId { get; set; }
 
+    /// <summary>
+    /// The Bunny collection (folder) this video belongs to, mirrored from the
+    /// live library so the admin can filter/assign per video. Nullable = the
+    /// global default collection is used at upload time. Bunny remains the
+    /// source of truth for membership; this is a convenience mirror kept in
+    /// sync by the collections console + the wizard picker.
+    /// </summary>
+    [MaxLength(64)]
+    public string? BunnyCollectionId { get; set; }
+
     public VideoEncodeStatus EncodeStatus { get; set; } = VideoEncodeStatus.NotUploaded;
 
     public int EncodeProgress { get; set; }

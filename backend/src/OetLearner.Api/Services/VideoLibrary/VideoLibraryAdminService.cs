@@ -37,6 +37,7 @@ public sealed record AdminVideoDetailDto(
     string AccessTier,
     IReadOnlyList<string> TargetProfessionIds,
     string? BunnyVideoId,
+    string? BunnyCollectionId,
     string EncodeStatus,
     int EncodeProgress,
     string? EncodeError,
@@ -152,6 +153,8 @@ public sealed class VideoLibraryAdminService(
         }
         if (patch.IsFeatured is not null) video.IsFeatured = patch.IsFeatured.Value;
         if (patch.SortOrder is not null) video.SortOrder = patch.SortOrder.Value;
+        if (patch.BunnyCollectionId is not null)
+            video.BunnyCollectionId = string.IsNullOrWhiteSpace(patch.BunnyCollectionId) ? null : patch.BunnyCollectionId.Trim();
         if (patch.PublishAt is { } publishAtEl)
         {
             video.PublishAt = publishAtEl.ValueKind switch
@@ -186,7 +189,8 @@ public sealed class VideoLibraryAdminService(
         var settings = (await settingsProvider.GetAsync(ct)).BunnyStream;
         if (video.BunnyVideoId is null)
         {
-            var bunnyVideoId = await bunny.CreateVideoAsync(video.Title, settings.CollectionId, ct);
+            var collectionId = video.BunnyCollectionId ?? settings.CollectionId;
+            var bunnyVideoId = await bunny.CreateVideoAsync(video.Title, collectionId, ct);
             video.BunnyVideoId = bunnyVideoId;
             video.BunnyLibraryId = settings.LibraryId;
             video.EncodeStatus = VideoEncodeStatus.Uploading;
@@ -217,7 +221,7 @@ public sealed class VideoLibraryAdminService(
             }
         }
 
-        var bunnyVideoId = await bunny.CreateVideoAsync(video.Title, settings.CollectionId, ct);
+        var bunnyVideoId = await bunny.CreateVideoAsync(video.Title, video.BunnyCollectionId ?? settings.CollectionId, ct);
         video.BunnyVideoId = bunnyVideoId;
         video.BunnyLibraryId = settings.LibraryId;
         video.EncodeStatus = VideoEncodeStatus.Uploading;
@@ -488,6 +492,7 @@ public sealed class VideoLibraryAdminService(
             AccessTier: video.AccessTier,
             TargetProfessionIds: ParseProfessionIds(video.ProfessionIdsJson),
             BunnyVideoId: video.BunnyVideoId,
+            BunnyCollectionId: video.BunnyCollectionId,
             EncodeStatus: EncodeStatusLabel(video.EncodeStatus),
             EncodeProgress: video.EncodeProgress,
             EncodeError: video.EncodeError,
@@ -626,4 +631,6 @@ public sealed class AdminVideoPatchRequest
     public int? SortOrder { get; set; }
     /// <summary>Tri-state: omitted = unchanged; null/"" = clear; ISO string = set.</summary>
     public JsonElement? PublishAt { get; set; }
+    /// <summary>Bunny collection membership mirror. Omitted = unchanged; "" = clear; guid = set.</summary>
+    public string? BunnyCollectionId { get; set; }
 }

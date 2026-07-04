@@ -175,6 +175,201 @@ public sealed class BunnyStreamClient(
         return BuildSignedPlaybackUrl(s.CdnHostname!, bunnyVideoId, token, expiresUnix, tokenPath);
     }
 
+    // ── Collections (live Bunny library management) ──────────────────────────
+
+    public async Task<BunnyCollectionListPage> ListCollectionsAsync(
+        int page, int itemsPerPage, string? search, string? orderBy, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        var url = $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/collections?page={page}&itemsPerPage={itemsPerPage}";
+        if (!string.IsNullOrWhiteSpace(search)) url += $"&search={Uri.EscapeDataString(search)}";
+        if (!string.IsNullOrWhiteSpace(orderBy)) url += $"&orderBy={Uri.EscapeDataString(orderBy)}";
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+
+        using var resp = await client.SendAsync(req, ct);
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.LogError("Bunny ListCollections failed with HTTP {Status}: {Body}", (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_collection_list_failed",
+                $"Bunny Stream collection listing failed (HTTP {(int)resp.StatusCode}).");
+        }
+
+        // VERIFY field casing against a live Bunny /collections response before first prod use.
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var items = new List<BunnyCollectionInfo>();
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in arr.EnumerateArray()) items.Add(ParseCollection(el));
+        }
+        return new BunnyCollectionListPage(
+            TotalItems: ReadInt(root, "totalItems") ?? items.Count,
+            CurrentPage: ReadInt(root, "currentPage") ?? page,
+            ItemsPerPage: ReadInt(root, "itemsPerPage") ?? itemsPerPage,
+            Items: items);
+    }
+
+    public async Task<BunnyCollectionInfo> GetCollectionAsync(string collectionId, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var req = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/collections/{Uri.EscapeDataString(collectionId)}");
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+
+        using var resp = await client.SendAsync(req, ct);
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Bunny GetCollection {CollectionId} failed with HTTP {Status}: {Body}",
+                collectionId, (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_collection_fetch_failed",
+                $"Bunny Stream collection lookup failed (HTTP {(int)resp.StatusCode}).");
+        }
+
+        // VERIFY field casing against a live Bunny /collections/{id} response before first prod use.
+        using var doc = JsonDocument.Parse(body);
+        return ParseCollection(doc.RootElement);
+    }
+
+    public async Task<BunnyCollectionInfo> CreateCollectionAsync(string name, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post, $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/collections");
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+        req.Content = JsonContent.Create(new { name });
+
+        using var resp = await client.SendAsync(req, ct);
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.LogError("Bunny CreateCollection failed with HTTP {Status}: {Body}", (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_collection_create_failed",
+                $"Bunny Stream collection creation failed (HTTP {(int)resp.StatusCode}).");
+        }
+
+        // VERIFY field casing against a live Bunny create-collection response before first prod use.
+        using var doc = JsonDocument.Parse(body);
+        var created = ParseCollection(doc.RootElement);
+        if (string.IsNullOrWhiteSpace(created.Guid))
+        {
+            throw ApiException.ServiceUnavailable("bunny_collection_create_failed",
+                "Bunny Stream did not return a collection guid.");
+        }
+        // A freshly created collection is empty; use the requested name if Bunny echoes none.
+        return created with { Name = string.IsNullOrWhiteSpace(created.Name) ? name : created.Name };
+    }
+
+    public async Task<BunnyCollectionInfo> UpdateCollectionAsync(string collectionId, string name, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/collections/{Uri.EscapeDataString(collectionId)}");
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+        req.Content = JsonContent.Create(new { name });
+
+        using var resp = await client.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            logger.LogError("Bunny UpdateCollection {CollectionId} failed with HTTP {Status}: {Body}",
+                collectionId, (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_collection_update_failed",
+                $"Bunny Stream collection update failed (HTTP {(int)resp.StatusCode}).");
+        }
+        // Bunny's update endpoint returns 200 with no reliable body — re-fetch for accurate counts.
+        return await GetCollectionAsync(collectionId, ct);
+    }
+
+    public async Task DeleteCollectionAsync(string collectionId, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var req = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/collections/{Uri.EscapeDataString(collectionId)}");
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+        using var resp = await client.SendAsync(req, ct);
+        // 404 = already gone at Bunny — treat as success (idempotent delete).
+        if (!resp.IsSuccessStatusCode && resp.StatusCode != System.Net.HttpStatusCode.NotFound)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            logger.LogError("Bunny DeleteCollection {CollectionId} failed with HTTP {Status}: {Body}",
+                collectionId, (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_collection_delete_failed",
+                $"Bunny Stream collection deletion failed (HTTP {(int)resp.StatusCode}).");
+        }
+    }
+
+    public async Task<BunnyVideoListPage> ListCollectionVideosAsync(
+        string collectionId, int page, int itemsPerPage, string? search, string? orderBy, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        var url = $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/videos"
+                  + $"?collection={Uri.EscapeDataString(collectionId)}&page={page}&itemsPerPage={itemsPerPage}";
+        if (!string.IsNullOrWhiteSpace(search)) url += $"&search={Uri.EscapeDataString(search)}";
+        if (!string.IsNullOrWhiteSpace(orderBy)) url += $"&orderBy={Uri.EscapeDataString(orderBy)}";
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+
+        using var resp = await client.SendAsync(req, ct);
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.LogError("Bunny ListCollectionVideos {CollectionId} failed with HTTP {Status}: {Body}",
+                collectionId, (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_collection_videos_failed",
+                $"Bunny Stream video listing failed (HTTP {(int)resp.StatusCode}).");
+        }
+
+        // VERIFY field casing against a live Bunny /videos?collection= response before first prod use.
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var items = new List<BunnyVideoListItem>();
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in arr.EnumerateArray()) items.Add(ParseVideoListItem(el, s.CdnHostname));
+        }
+        return new BunnyVideoListPage(
+            TotalItems: ReadInt(root, "totalItems") ?? items.Count,
+            CurrentPage: ReadInt(root, "currentPage") ?? page,
+            ItemsPerPage: ReadInt(root, "itemsPerPage") ?? itemsPerPage,
+            Items: items);
+    }
+
+    public async Task MoveVideoToCollectionAsync(string bunnyVideoId, string? collectionId, CancellationToken ct)
+    {
+        var s = await RequireConfiguredAsync(ct);
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{ApiBase}/library/{Uri.EscapeDataString(s.LibraryId!)}/videos/{Uri.EscapeDataString(bunnyVideoId)}");
+        req.Headers.TryAddWithoutValidation("AccessKey", s.ApiKey);
+        // Empty string clears collection membership (moves to "no collection").
+        req.Content = JsonContent.Create(new { collectionId = collectionId ?? string.Empty });
+
+        using var resp = await client.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            logger.LogError("Bunny MoveVideo {VideoId} -> {CollectionId} failed with HTTP {Status}: {Body}",
+                bunnyVideoId, collectionId, (int)resp.StatusCode, Truncate(body));
+            throw ApiException.ServiceUnavailable("bunny_video_move_failed",
+                $"Bunny Stream video move failed (HTTP {(int)resp.StatusCode}).");
+        }
+    }
+
     // ── Pure signature helpers (unit-test pinned) ─────────────────────────
 
     /// <summary>
@@ -240,6 +435,43 @@ public sealed class BunnyStreamClient(
             throw new BunnyNotConfiguredException();
         }
         return settings;
+    }
+
+    private static BunnyCollectionInfo ParseCollection(JsonElement el)
+    {
+        var previewCsv = ReadString(el, "previewVideoIds");
+        return new BunnyCollectionInfo(
+            Guid: ReadString(el, "guid") ?? string.Empty,
+            Name: ReadString(el, "name") ?? string.Empty,
+            VideoCount: ReadInt(el, "videoCount") ?? 0,
+            TotalSize: ReadLong(el, "totalSize") ?? 0,
+            PreviewVideoIds: string.IsNullOrWhiteSpace(previewCsv)
+                ? Array.Empty<string>()
+                : previewCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    private static BunnyVideoListItem ParseVideoListItem(JsonElement el, string? cdnHostname)
+    {
+        var guid = ReadString(el, "guid") ?? string.Empty;
+        var thumbnailFileName = ReadString(el, "thumbnailFileName");
+        var resolutionsCsv = ReadString(el, "availableResolutions");
+        var collectionId = ReadString(el, "collectionId");
+        return new BunnyVideoListItem(
+            VideoId: guid,
+            Title: ReadString(el, "title") ?? string.Empty,
+            CollectionId: string.IsNullOrWhiteSpace(collectionId) ? null : collectionId,
+            Status: ReadInt(el, "status") ?? 0,
+            EncodeProgress: ReadInt(el, "encodeProgress") ?? 0,
+            LengthSeconds: ReadInt(el, "length") ?? 0,
+            StorageSizeBytes: ReadLong(el, "storageSize") ?? 0,
+            ThumbnailUrl: string.IsNullOrWhiteSpace(thumbnailFileName) || string.IsNullOrWhiteSpace(cdnHostname)
+                ? null
+                : $"https://{cdnHostname}/{guid}/{thumbnailFileName}",
+            Width: ReadInt(el, "width"),
+            Height: ReadInt(el, "height"),
+            AvailableResolutions: string.IsNullOrWhiteSpace(resolutionsCsv)
+                ? Array.Empty<string>()
+                : resolutionsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     private static string? ReadString(JsonElement element, string name)

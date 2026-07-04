@@ -16,6 +16,7 @@ import {
   Clapperboard,
   FolderTree,
   ImageIcon,
+  Layers,
   Loader2,
   Pencil,
   Plus,
@@ -404,6 +405,12 @@ export default function AdminVideoLibraryPage() {
                   </Link>
                 </Button>
               ) : null}
+              <Link
+                href="/admin/content/videos/collections"
+                className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-admin-bg-subtle"
+              >
+                <Layers className="mr-2 h-4 w-4" /> Collections
+              </Link>
               <Link
                 href="/admin/content/videos/categories"
                 className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-admin-bg-subtle"

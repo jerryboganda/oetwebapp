@@ -30,6 +30,42 @@ public sealed record BunnyTusAuthorization(
     string AuthorizationSignature,
     long AuthorizationExpire);
 
+/// <summary>A Bunny Stream collection (folder) as returned by the collections API.</summary>
+public sealed record BunnyCollectionInfo(
+    string Guid,
+    string Name,
+    int VideoCount,
+    long TotalSize,
+    IReadOnlyList<string> PreviewVideoIds);
+
+/// <summary>One page of Bunny collections.</summary>
+public sealed record BunnyCollectionListPage(
+    int TotalItems,
+    int CurrentPage,
+    int ItemsPerPage,
+    IReadOnlyList<BunnyCollectionInfo> Items);
+
+/// <summary>A video row from the Bunny Stream video-list API (subset we consume).</summary>
+public sealed record BunnyVideoListItem(
+    string VideoId,
+    string Title,
+    string? CollectionId,
+    int Status,
+    int EncodeProgress,
+    int LengthSeconds,
+    long StorageSizeBytes,
+    string? ThumbnailUrl,
+    int? Width,
+    int? Height,
+    IReadOnlyList<string> AvailableResolutions);
+
+/// <summary>One page of Bunny videos (optionally filtered to a collection).</summary>
+public sealed record BunnyVideoListPage(
+    int TotalItems,
+    int CurrentPage,
+    int ItemsPerPage,
+    IReadOnlyList<BunnyVideoListItem> Items);
+
 /// <summary>
 /// Bunny Stream API + CDN token signing. All methods read the effective
 /// runtime settings per call (admin can rotate keys without restart) and
@@ -59,4 +95,27 @@ public interface IBunnyStreamClient
     /// https://{cdnHost}/{bunnyVideoId}/playlist.m3u8?token=...&amp;expires=...&amp;token_path=/{bunnyVideoId}/
     /// </summary>
     Task<string> SignPlaybackUrlAsync(string bunnyVideoId, long expiresUnix, CancellationToken ct);
+
+    // ── Collections (live Bunny library management) ──────────────────────────
+
+    /// <summary>List collections (folders) in the Bunny library, paged.</summary>
+    Task<BunnyCollectionListPage> ListCollectionsAsync(int page, int itemsPerPage, string? search, string? orderBy, CancellationToken ct);
+
+    /// <summary>Fetch a single collection by its guid.</summary>
+    Task<BunnyCollectionInfo> GetCollectionAsync(string collectionId, CancellationToken ct);
+
+    /// <summary>Create a collection; returns the created collection.</summary>
+    Task<BunnyCollectionInfo> CreateCollectionAsync(string name, CancellationToken ct);
+
+    /// <summary>Rename a collection; returns the updated collection.</summary>
+    Task<BunnyCollectionInfo> UpdateCollectionAsync(string collectionId, string name, CancellationToken ct);
+
+    /// <summary>Delete a collection (idempotent: 404 is treated as success).</summary>
+    Task DeleteCollectionAsync(string collectionId, CancellationToken ct);
+
+    /// <summary>List the videos inside a collection, paged.</summary>
+    Task<BunnyVideoListPage> ListCollectionVideosAsync(string collectionId, int page, int itemsPerPage, string? search, string? orderBy, CancellationToken ct);
+
+    /// <summary>Move a video into a collection (null/empty clears membership).</summary>
+    Task MoveVideoToCollectionAsync(string bunnyVideoId, string? collectionId, CancellationToken ct);
 }
