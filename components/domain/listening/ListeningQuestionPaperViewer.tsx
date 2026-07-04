@@ -128,7 +128,13 @@ export function ListeningQuestionPaperViewer({
         const canvas = canvases.current.get(info.pageNumber);
         if (!canvas) continue;
         const page = await pdf.getPage(info.pageNumber);
-        const viewport = page.getViewport({ scale: 1 });
+        // Render at device-pixel density (was a flat scale:1) so the canvas isn't
+        // upscaled (blurry) on hi-DPI / Retina / 4K screens. Cap the ratio at 3 to
+        // bound memory. The canvas keeps its responsive `w-full` display size — the
+        // wrapper caps it at maxWidth:page.width and height auto-preserves the
+        // (unchanged) aspect ratio, so only sharpness improves.
+        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+        const viewport = page.getViewport({ scale: dpr });
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
         canvas.width = viewport.width;

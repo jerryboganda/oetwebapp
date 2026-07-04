@@ -279,11 +279,19 @@ export function WritingStimulusViewer({
         if (!canvas) continue;
         const page = await pdf.getPage(info.pageNumber);
         if (cancelled) return;
-        const viewport = page.getViewport({ scale: zoom / 100 });
+        // Render at device-pixel density so the canvas isn't upscaled (blurry) on
+        // hi-DPI / Retina / 4K screens. Cap the ratio at 3 to bound memory at max
+        // zoom; the CSS size stays logical so the %-based yellow-highlight overlay
+        // and getBoundingClientRect() pointer math are unaffected. (Kept in sync
+        // with reading-pdf-viewer.tsx per the header note.)
+        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+        const viewport = page.getViewport({ scale: (zoom / 100) * dpr });
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
+        canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
         await page.render({ canvasContext: ctx, viewport }).promise;
         if (cancelled) return;
       }

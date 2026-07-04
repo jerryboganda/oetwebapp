@@ -136,11 +136,17 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
         const canvas = canvases.current.get(info.pageNumber);
         if (!canvas) continue;
         const page = await pdf.getPage(info.pageNumber);
-        const viewport = page.getViewport({ scale: zoom / 100 });
+        // Render at device-pixel density so the canvas isn't upscaled (blurry) on
+        // hi-DPI / Retina / 4K screens. Cap the ratio at 3 to bound memory; the CSS
+        // size stays logical so the %-based author boxes stay aligned to the blanks.
+        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+        const viewport = page.getViewport({ scale: (zoom / 100) * dpr });
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
+        canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
         await page.render({ canvasContext: ctx, viewport }).promise;
       }
     })();
