@@ -38,7 +38,15 @@ public class VideoLibraryAdminFlowsTests(BunnyMockedWebApplicationFactory factor
         Assert.Equal("https://video.bunnycdn.com/tusupload", auth.GetProperty("tusEndpoint").GetString());
 
         // 3. Bunny reports the encode finished via webhook → metadata pulled.
-        factory.Bunny.NextVideoInfo = factory.Bunny.NextVideoInfo with { Status = 3, LengthSeconds = 654 };
+        // StorageSizeBytes must be > 0 or the ApplyBunnyInfo guard (<=0 bytes =>
+        // Uploading, to keep interrupted uploads recoverable) would override Ready
+        // and the publish gate below would never pass.
+        factory.Bunny.NextVideoInfo = factory.Bunny.NextVideoInfo with
+        {
+            Status = 3,
+            LengthSeconds = 654,
+            StorageSizeBytes = 5_000_000,
+        };
         using var anonymous = factory.CreateClient();
         var webhookResponse = await anonymous.PostAsJsonAsync(
             $"/v1/webhooks/bunny-stream?secret={WebhookSecret}",
