@@ -1,10 +1,13 @@
 'use client';
 
-// Listening V2 — sticky audio transport bar. Renders play/pause control,
+// Listening V2 — audio transport bar. Renders play/pause control,
 // scrub-or-progress, save-state indicator, and the optional whole-attempt
 // 40-minute countdown chip. Visual-only; the parent owns the timer & save
 // state. Extracted from the monolithic player so the chrome can be
 // Storybook'd in isolation.
+//
+// In-flow (NOT sticky) so it never floats over the question/notes content as
+// an overlay on scroll (owner directive 2026-07-05).
 
 import { Clock, Loader2, Pause, Play, Save, WifiOff } from 'lucide-react';
 import { formatReviewSeconds } from '@/lib/listening-sections';
@@ -65,7 +68,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
   return (
     <div
       data-testid="listening-audio-transport"
-      className="sticky top-20 z-20 flex items-center gap-4 rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5"
+      className="flex items-center gap-4 rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5"
     >
       <button
         onClick={onTogglePlayPause}

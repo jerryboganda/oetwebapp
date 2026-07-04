@@ -325,7 +325,7 @@ function WritingMockSessionInner() {
     <LearnerDashboardShell pageTitle={t('writing.mocks.session.pageTitle')} distractionFree>
       <div className="space-y-4 pb-32" aria-busy={!session}>
         <header
-          className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
           aria-label={t('writing.mocks.session.controlsLabel')}
         >
           <div className="flex items-center gap-3">

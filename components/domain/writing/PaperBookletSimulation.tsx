@@ -303,9 +303,10 @@ export function PaperBookletSimulation({
 
   return (
     <div className="space-y-4 pb-32" aria-busy={loading}>
-      {/* Sticky control bar — timer + word count (brand-accented). */}
+      {/* Control bar — timer + word count (brand-accented). In-flow (not sticky)
+          so it never floats over the letter content as an overlay on scroll. */}
       <header
-        className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
         aria-label={t('writing.paper.controlsLabel')}
       >
         <div className="min-w-0">
