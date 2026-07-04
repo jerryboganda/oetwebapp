@@ -97,6 +97,38 @@ public class ListeningV2PathwayLaunchTargetEndpointTests : IClassFixture<TestWeb
     }
 
     [Fact]
+    public async Task Pathway_endpoint_launches_json_authored_paper_without_relational_questions()
+    {
+        // Regression (2026-07-05 prod bug): the only published listening paper
+        // stored its 42 questions in ContentPaper.ExtractedTextJson (JSON-backed)
+        // with ZERO rows in the relational ListeningQuestions table. The full
+        // exam played fine (BuildPaperSourceAsync reads either store) but Part
+        // A/B/C practice showed "No Part X listening paper is available yet"
+        // because the launch resolver only recognised relational questions.
+        await ClearPathwayLaunchPapersAsync();
+
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var paperId = $"paper-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await SeedJsonAuthoredPaperAsync(paperId);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        var response = await client.GetAsync("/v1/listening/v2/me/pathway");
+        response.EnsureSuccessStatusCode();
+        var rows = await response.Content.ReadFromJsonAsync<JsonElement[]>(JsonSupport.Options);
+
+        Assert.NotNull(rows);
+        var foundation = rows.Single(row => row.GetProperty("stage").GetString() == "foundation_partA");
+        Assert.Equal("Unlocked", foundation.GetProperty("status").GetString());
+        Assert.Equal(
+            $"/listening/player/{paperId}?mode=practice&pathwayStage=foundation_partA",
+            foundation.GetProperty("actionHref").GetString());
+    }
+
+    [Fact]
     public async Task Pathway_endpoint_omits_player_launches_when_no_objective_ready_paper_exists()
     {
         await ClearPathwayLaunchPapersAsync();
@@ -209,6 +241,33 @@ public class ListeningV2PathwayLaunchTargetEndpointTests : IClassFixture<TestWeb
                 UpdatedAt = now,
             });
         }
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedJsonAuthoredPaperAsync(string paperId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var now = DateTimeOffset.UtcNow;
+
+        // JSON-authored paper: questions live in ExtractedTextJson, NOT the
+        // relational ListeningQuestions table (deliberately none seeded).
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = paperId,
+            SubtestCode = "listening",
+            Title = "JSON authored listening paper",
+            Slug = $"pathway-launch-{paperId}",
+            AppliesToAllProfessions = true,
+            Status = ContentStatus.Published,
+            TagsCsv = "access:free",
+            SourceProvenance = "Test seed",
+            ExtractedTextJson = "{\"listeningQuestions\":[{\"id\":\"q1\",\"number\":1,\"partCode\":\"A1\",\"stem\":\"Patient name?\",\"answer\":\"Smith\"}]}",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
 
         await db.SaveChangesAsync();
     }
