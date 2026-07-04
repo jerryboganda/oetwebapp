@@ -1620,9 +1620,11 @@ function PlayerContent() {
                     </InlineAlert>
                   ) : null}
 
-                  {/* Question jumper — intra-section in CBT, all-parts in paper mode. */}
+                  {/* Question jumper — intra-section in CBT, all-parts in paper mode.
+                      In-flow (NOT sticky) so it never floats over the questions as a
+                      translucent overlay on scroll (owner directive 2026-07-05). */}
                   {navigationQuestions.length > 1 ? (
-                    <div className="sticky top-40 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/95 p-3 backdrop-blur">
+                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
                       <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-muted">
                         {allPartsReviewEnabled ? 'All-parts jump' : 'Jump to'}
                       </span>
