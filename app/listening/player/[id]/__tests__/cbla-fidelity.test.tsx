@@ -379,18 +379,20 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     vi.useRealTimers();
   });
 
-  it('renders the pre-audio reading window banner and does not auto-play audio', async () => {
+  it('drops straight into the audio phase with no pre-audio reading window', async () => {
     mockGetListeningSession.mockResolvedValue(makeSession());
 
-    render(<ListeningPlayer />);
+    const { container } = render(<ListeningPlayer />);
 
+    // Audio mounts immediately — the practice player has no reading-window gate.
     await waitFor(() => {
-      expect(screen.getByTestId('listening-preview-banner')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
     });
-    expect(screen.getByTestId('listening-preview-banner')).toHaveTextContent(/Reading time/i);
+    // There is no pre-audio reading-window countdown in the Listening module.
+    expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
     expect(mockRecordTechReadiness).not.toHaveBeenCalled();
     expect(mockV2Advance).not.toHaveBeenCalled();
-    // Audio must NOT have been auto-played during the preview window.
+    // Audio is not auto-played — the learner starts it with the Play button.
     expect(playCalls).toBe(0);
   });
 
@@ -611,37 +613,6 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       expect(screen.getByText(/audio readiness check is required/i)).toBeInTheDocument();
     });
     expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
-  });
-
-  it('auto-advances from preview to audio when the countdown reaches zero', async () => {
-    mockGetListeningSession.mockResolvedValue(makeSession());
-
-    vi.useFakeTimers();
-    try {
-      render(<ListeningPlayer />);
-
-      // Flush the session.then() microtask chain and any zero-delay timers
-      // queued by React so the preview banner mounts.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(0);
-      });
-
-      expect(screen.getByTestId('listening-preview-banner')).toBeInTheDocument();
-
-      // Drive the per-second countdown one tick at a time so React can
-      // flush its render + new effect (which schedules the next 1000ms
-      // setTimeout) between each fake clock advance.
-      for (let i = 0; i <= LISTENING_PREVIEW_SECONDS.A1 + 1; i += 1) {
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(1_000);
-        });
-      }
-
-      expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
-      expect(playCalls).toBeGreaterThanOrEqual(1);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 
   it('advances strict preview through the V2 FSM before playing audio', async () => {
@@ -973,8 +944,9 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
 
   it('auto-advances to the next section when the active extract ends — no manual Next button', async () => {
     // Non-strict practice: audio is non-pausable and there is no manual Next
-    // control. Crossing the section's cue end auto-advances to the next
-    // section's reading window with zero clicks.
+    // control. There is also no pre-audio reading window — the section drops
+    // straight into audio. Crossing the section's cue end auto-advances to the
+    // next section with zero clicks.
     mockGetListeningSession.mockResolvedValue(makeTwoSectionSession({ mode: 'practice' }));
 
     vi.useFakeTimers();
@@ -984,13 +956,6 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
-
-      // Run out the A1 reading window so we land in the audio phase.
-      for (let i = 0; i <= LISTENING_PREVIEW_SECONDS.A1 + 1; i += 1) {
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(1_000);
-        });
-      }
 
       // No manual advance control exists during section audio.
       expect(screen.queryByRole('button', { name: /^next$/i })).not.toBeInTheDocument();
@@ -1005,13 +970,13 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       });
       expect(screen.getByText('A1 first blank?')).toBeInTheDocument();
 
-      // Cross the A1 cue end → auto-advance into the A2 reading window.
+      // Cross the A1 cue end → auto-advance straight into the A2 audio phase.
       (audio as unknown as { __ct?: number }).__ct = 240;
       await act(async () => {
         fireEvent.timeUpdate(audio);
         await vi.advanceTimersByTimeAsync(0);
       });
-      // Flush the section-change → preview re-entry effects.
+      // Flush the section-change → audio re-entry effects.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });

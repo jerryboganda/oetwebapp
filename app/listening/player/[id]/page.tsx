@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, StickyNote, Volume2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Volume2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,6 @@ import {
   type ListeningSessionDto,
 } from '@/lib/listening-api';
 import {
-  LISTENING_PREVIEW_SECONDS,
   LISTENING_REVIEW_SECONDS,
   LISTENING_SECTION_LABEL,
   LISTENING_SECTION_SEQUENCE,
@@ -54,7 +53,6 @@ import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from
 import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
 import { presentationModeFromSession } from '@/lib/listening/modes';
 import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
-import { NotePanel } from '@/components/domain/listening/NotePanel';
 import { useListeningAnnotations, type ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
@@ -304,22 +302,6 @@ function PlayerContent() {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
-  const [isNotePanelOpen, setIsNotePanelOpen] = useState(false);
-
-  // Press N to toggle the notes panel (only in non-exam modes)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (mode === 'exam' || mode === 'home') return;
-      if (event.key === 'n' || event.key === 'N') {
-        // Don't trigger when typing in an input/textarea
-        const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-        setIsNotePanelOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [mode]);
 
   const strictReadinessRequired = mode === 'exam'
     || mode === 'home'
@@ -848,7 +830,6 @@ function PlayerContent() {
     : (allPartsReviewEnabled ? paperAudioEndMs : currentSectionAudioEndMs);
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
-  const currentSectionPreviewSeconds = currentSection ? LISTENING_PREVIEW_SECONDS[currentSection] : 0;
   const canSkipPreview = session?.modePolicy.mode === 'practice';
   const allCurrentExtractsCompleted = currentExtracts.every((extract) => {
     if (extract.audioEndMs == null) return true;
@@ -973,9 +954,11 @@ function PlayerContent() {
     return () => window.clearTimeout(timer);
   }, [phase, previewSecondsRemaining]);
 
-  // C8f — when entering a new section after the player has started, drop into
-  // the preview phase with the section's reading window. Skipped entirely
-  // when the section has no preview seconds authored (e.g. legacy data).
+  // When entering a new section after the player has started, drop straight
+  // into the audio phase. The Listening module has NO pre-audio reading-window
+  // countdown (owner directive 2026-07-05) — the learner starts each section's
+  // audio with the transport Play button. Strict @home exams keep the
+  // server-driven window (applied by applyStrictServerState) and bail above.
   useEffect(() => {
     if (!hasStarted || !currentSection) return;
     if (allPartsReviewEnabled) return;
@@ -985,16 +968,8 @@ function PlayerContent() {
     hasReachedEndRef.current = false;
     autoAdvanceInFlightRef.current = false;
     audioStartedLoggedRef.current = false;
-    if (currentSectionPreviewSeconds > 0) {
-      previewArmedRef.current = true;
-      setPhase('preview');
-      setPreviewSecondsRemaining(currentSectionPreviewSeconds);
-      // §17.11 — the pre-audio reading window for this section just armed.
-      logAttemptEvent('reading_time_started', { section: currentSection, durationSeconds: currentSectionPreviewSeconds });
-    } else {
-      previewArmedRef.current = false;
-      setPhase('audio');
-    }
+    previewArmedRef.current = false;
+    setPhase('audio');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSection, hasStarted]);
 
@@ -1524,41 +1499,21 @@ function PlayerContent() {
           />
         ) : (
           <motion.div {...listMotion} className="space-y-5 sm:space-y-8">
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <ListeningAudioTransport
-                  isPlaying={isPlaying}
-                  progressSeconds={progress}
-                  durationSeconds={duration}
-                  canScrub={session.modePolicy.canScrub !== false}
-                  canPause={session.modePolicy.canPause !== false}
-                  isPreviewPhase={phase === 'preview'}
-                  audioState={audioState}
-                  saveState={saveState}
-                  answeredCount={answeredCount}
-                  totalQuestions={session.questions.length}
-                  attemptSecondsRemaining={attemptSecondsRemaining}
-                  onTogglePlayPause={togglePlayPause}
-                  onScrub={handleScrub}
-                />
-              </div>
-              {mode !== 'exam' && mode !== 'home' ? (
-                <button
-                  type="button"
-                  onClick={() => setIsNotePanelOpen((prev) => !prev)}
-                  aria-label={isNotePanelOpen ? 'Close notes' : 'Open notes'}
-                  title="Notes (N)"
-                  className={`mt-1 flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                    isNotePanelOpen
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-surface text-muted hover:border-primary/50 hover:text-navy'
-                  }`}
-                >
-                  <StickyNote className="h-4 w-4" />
-                  <span>Notes</span>
-                </button>
-              ) : null}
-            </div>
+            <ListeningAudioTransport
+              isPlaying={isPlaying}
+              progressSeconds={progress}
+              durationSeconds={duration}
+              canScrub={session.modePolicy.canScrub !== false}
+              canPause={session.modePolicy.canPause !== false}
+              isPreviewPhase={phase === 'preview'}
+              audioState={audioState}
+              saveState={saveState}
+              answeredCount={answeredCount}
+              totalQuestions={session.questions.length}
+              attemptSecondsRemaining={attemptSecondsRemaining}
+              onTogglePlayPause={togglePlayPause}
+              onScrub={handleScrub}
+            />
 
             {mockAttemptId ? (
               <InlineAlert variant="info">
@@ -1929,16 +1884,6 @@ function PlayerContent() {
           </div>
         ) : null}
       </div>
-
-      {/* Notes panel — learning/practice modes only */}
-      {mode !== 'exam' && mode !== 'home' && attempt?.attemptId ? (
-        <NotePanel
-          attemptId={attempt.attemptId}
-          currentPositionMs={Math.round(progress * 1000)}
-          isOpen={isNotePanelOpen}
-          onClose={() => setIsNotePanelOpen(false)}
-        />
-      ) : null}
     </AppShell>
     </ListeningPlayerSkinShell>
   );
