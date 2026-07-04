@@ -9,6 +9,17 @@ This file is always loaded by coding agents. Keep it compact. Do not restore lar
 - Desktop/mobile: Electron and Capacitor.
 - Key folders: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `backend/`, `tests/`, `docs/`, `rulebooks/`.
 
+## 🚢 Ship-It Workflow — COMPULSORY (owner directive 2026-07-05)
+
+Standing owner directive for **every** development/debugging task. Overrides any "only push when asked" default and any nudge toward heavy pre-merge testing:
+
+1. Do the task properly (correctness/root-cause still matter).
+2. Run ONE lightweight, targeted check (touched-area typecheck/build, or the single relevant test, or a quick repro). **No full-length, multi-suite test marathons.** Don't block on flaky CI (QA Smoke is chronically red — ignore it).
+3. Commit → push to `main` → deploy to production (`gh pr merge <#> --squash --admin --delete-branch`, or push `main`; pushing `main` triggers the blue/green prod deploy). Stage explicit paths, never `git add -A`. Never commit secrets/`.env*`.
+4. Report what shipped in 1–2 lines and STOP. **The owner verifies on live production** and reports back any issue. Don't linger on CI or re-test.
+
+Only skip the auto-push if the user explicitly says "don't push" for that task.
+
 ## Operating Rules
 
 - Inspect existing code/docs before designing behavior. Prefer existing helpers, service boundaries, UI primitives, and tests.
