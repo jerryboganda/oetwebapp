@@ -7816,6 +7816,21 @@ public partial class LearnerService(
                 targetPlan.Currency,
                 Math.Max(1, request.Quantity),
                 targetPlan.Description));
+
+            // Cart (multi-item) checkout: a plan bought together with add-ons/AI packages.
+            // Compose the AddOnCodes as one-each add-on line items in the same quote so the
+            // whole cart is one payment, fulfilled by the ApplyCheckoutCompletionAsync loop
+            // (plan block + add-on items). Only for a fresh plan purchase — upgrades and
+            // downgrades price on a plan-price delta and never carry cart add-ons.
+            if (normalizedProductType == "plan_purchase")
+            {
+                subtotal += await AppendCartAddOnItemsAsync(request.AddOnCodes, planCode, currentPlan, items, snapshotAddOns, cancellationToken);
+                addOnCodes = NormalizeCodes(items.Where(line => line.Kind == "addon").Select(line => line.Code).ToList());
+                if (items.Count(line => line.Kind == "addon") > 0)
+                {
+                    summary = $"{items.Count} items in your cart.";
+                }
+            }
         }
         else if (normalizedProductType == "addon_purchase")
         {
@@ -7849,19 +7864,29 @@ public partial class LearnerService(
                     [new ApiFieldError("quantity", "max_exceeded", "Reduce the quantity and try again.")]);
             }
 
-            addOnCodes = NormalizeCodes([addOn.Code]);
             snapshotAddOns.Add(addOn);
             planCode = currentPlan?.Code;
-            subtotal = Math.Round(addOn.Price * request.Quantity, 2, MidpointRounding.AwayFromZero);
-            summary = $"{request.Quantity} x {addOn.Name}.";
+            var primaryLineAmount = Math.Round(addOn.Price * request.Quantity, 2, MidpointRounding.AwayFromZero);
+            subtotal = primaryLineAmount;
             items.Add(new BillingQuoteLineItem(
                 "addon",
                 addOn.Code,
                 addOn.Name,
-                subtotal,
+                primaryLineAmount,
                 addOn.Currency,
                 request.Quantity,
                 addOn.Description));
+
+            // Cart (multi-item) checkout: any AddOnCodes beyond the primary priceId are
+            // composed as additional one-each add-on line items in the SAME quote, so the
+            // whole cart is charged in one payment and fulfilled by the existing
+            // ApplyCheckoutCompletionAsync loop over the quote items. An empty AddOnCodes
+            // list keeps the single add-on behaviour byte-for-byte.
+            subtotal += await AppendCartAddOnItemsAsync(request.AddOnCodes, addOn.Code, currentPlan, items, snapshotAddOns, cancellationToken);
+            addOnCodes = NormalizeCodes(items.Select(line => line.Code).ToList());
+            summary = items.Count == 1
+                ? $"{request.Quantity} x {addOn.Name}."
+                : $"{items.Count} items in your cart.";
         }
         else
         {
@@ -8183,6 +8208,75 @@ public partial class LearnerService(
             quote.ExpiresAt,
             summary,
             validation);
+    }
+
+    /// <summary>
+    /// Composes the "extra" cart add-ons (every code in <paramref name="cartAddOnCodes"/>
+    /// except the primary <paramref name="primaryCode"/> and anything already staged in
+    /// <paramref name="snapshotAddOns"/>) into the shared quote as one-each add-on line
+    /// items, returning the summed price of the appended lines so the caller can fold it
+    /// into the quote subtotal. Standalone-only: an add-on that requires an eligible parent
+    /// is rejected here (must be purchased on its own) rather than silently attached to the
+    /// wrong enrolment. An empty/absent list is a no-op, preserving single-item behaviour.
+    /// </summary>
+    private async Task<decimal> AppendCartAddOnItemsAsync(
+        List<string>? cartAddOnCodes,
+        string? primaryCode,
+        BillingPlan? currentPlan,
+        List<BillingQuoteLineItem> items,
+        List<BillingAddOn> snapshotAddOns,
+        CancellationToken cancellationToken)
+    {
+        var appendedTotal = 0m;
+        foreach (var extraCode in NormalizeCodes(cartAddOnCodes))
+        {
+            if (!string.IsNullOrWhiteSpace(primaryCode)
+                && string.Equals(extraCode, primaryCode, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (snapshotAddOns.Any(existing => string.Equals(existing.Code, extraCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var extraAddOn = await FindPurchasableBillingAddOnAsync(extraCode, cancellationToken)
+                ?? throw ApiException.Validation(
+                    "unknown_addon",
+                    $"Unknown billing add-on '{extraCode}'.",
+                    [new ApiFieldError("addOnCodes", "unknown", "Remove the unavailable item from your cart.")]);
+
+            if (!IsAddOnCompatibleWithPlan(extraAddOn, currentPlan))
+            {
+                throw ApiException.Validation(
+                    "addon_incompatible",
+                    $"'{extraAddOn.Name}' is not available for your current plan.",
+                    [new ApiFieldError("addOnCodes", "incompatible", "Remove the incompatible item from your cart.")]);
+            }
+
+            if (extraAddOn.RequiresEligibleParent)
+            {
+                throw ApiException.Validation(
+                    "addon_requires_parent",
+                    $"'{extraAddOn.Name}' must be purchased on its own.",
+                    [new ApiFieldError("addOnCodes", "requires_parent", "Check this item out separately.")]);
+            }
+
+            var lineAmount = Math.Round(extraAddOn.Price, 2, MidpointRounding.AwayFromZero);
+            appendedTotal += lineAmount;
+            snapshotAddOns.Add(extraAddOn);
+            items.Add(new BillingQuoteLineItem(
+                "addon",
+                extraAddOn.Code,
+                extraAddOn.Name,
+                lineAmount,
+                extraAddOn.Currency,
+                1,
+                extraAddOn.Description));
+        }
+
+        return appendedTotal;
     }
 
     private async Task ReleaseExpiredCouponReservationsAsync(BillingCoupon coupon, DateTimeOffset now, CancellationToken cancellationToken)
