@@ -24,6 +24,7 @@ import {
 import type { BillingProductType, BillingQuote } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
 import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
+import { cn } from '@/lib/utils';
 
 function newIdempotencyKey() {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -297,159 +298,242 @@ function CheckoutReviewContent() {
   return (
     <main className="min-h-screen bg-background-light text-navy">
       <section className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
           <Link href="/catalog" className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-navy">
             <ArrowLeft className="h-4 w-4" /> Back to catalogue
           </Link>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase text-primary">Secure checkout</p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight">Review your order</h1>
-              <p className="mt-2 text-sm text-muted">Confirm the order details before opening the hosted payment portal.</p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight">Choose how you&apos;d like to pay</h1>
+              <p className="mt-2 text-sm text-muted">Pick a payment route on the left — your order summary is on the right.</p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-background-light px-3 py-2 text-sm">
-              <ShieldCheck className="h-4 w-4 text-success" /> Hosted payment
+              <ShieldCheck className="h-4 w-4 text-success" /> Secure checkout
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-4xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.4fr_0.8fr]">
+      <section className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
+        {/* LEFT · payment routes (prominent) */}
         <div className="space-y-4">
           {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
           {quoteRefreshed && !error ? (
             <InlineAlert variant="info">Your quote was refreshed with current pricing.</InlineAlert>
           ) : null}
-          {!quote ? (
-            <InlineAlert variant="warning">This order could not be prepared. Return to the catalogue and try again.</InlineAlert>
-          ) : (
-            <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
-              <h2 className="text-lg font-semibold">Order items</h2>
-              <ul className="mt-4 divide-y divide-border">
+
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <Wallet className="h-5 w-5 text-primary" /> How would you like to pay?
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Every option is secure — your access unlocks as soon as we confirm the payment.
+            </p>
+
+            <div className="mt-5">
+              <CheckoutPayRegion
+                value={payRegion}
+                onChange={(r) => {
+                  regionTouchedRef.current = true;
+                  setPayRegion(r);
+                }}
+                egyptHref={egyptHref}
+                disabled={!quote}
+              >
+                {!quote ? (
+                  <InlineAlert variant="warning">
+                    This order could not be prepared. Return to the catalogue and try again.
+                  </InlineAlert>
+                ) : (
+                  <>
+                    {methods.length > 0 ? (
+                      <fieldset>
+                        <legend className="text-sm font-semibold text-navy">Card &amp; wallet</legend>
+                        <div className="mt-2.5 space-y-2">
+                          {methods.map((method) => {
+                            const brand = methodBrand(method);
+                            const active = selectedGateway === method.name;
+                            const selectable = methods.length > 1;
+                            return (
+                              <label
+                                key={method.name}
+                                className={cn(
+                                  'flex items-center gap-3 rounded-xl border-2 px-3.5 py-3 transition',
+                                  selectable ? 'cursor-pointer' : 'cursor-default',
+                                  active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
+                                )}
+                              >
+                                {selectable ? (
+                                  <input
+                                    type="radio"
+                                    name="paymentMethod"
+                                    value={method.name}
+                                    checked={active}
+                                    onChange={() => setSelectedGateway(method.name)}
+                                    className="sr-only"
+                                  />
+                                ) : null}
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background-light text-primary">
+                                  <MethodIcon iconName={method.iconName} name={method.name} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-bold text-navy">{brand.title}</span>
+                                  <span className="block text-xs text-muted">{brand.subtitle}</span>
+                                </span>
+                                {selectable ? (
+                                  <span
+                                    className={cn(
+                                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition',
+                                      active ? 'border-primary' : 'border-border',
+                                    )}
+                                  >
+                                    {active ? <span className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
+                                  </span>
+                                ) : null}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    ) : null}
+
+                    {selectedMode === 'embedded' && !paypalUnavailable ? (
+                      <div className="mt-4">
+                        <PayPalExpandedCheckout
+                          createOrder={createPaypalOrder}
+                          onCaptured={handlePaypalCaptured}
+                          onError={(msg) => setError(msg)}
+                          onUnavailable={() => setPaypalUnavailable(true)}
+                          amountLabel={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : ''}
+                          disabled={!quote}
+                        />
+                        <p className="mt-3 text-xs leading-5 text-muted">
+                          Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <Button className="mt-4" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
+                          <CreditCard className="h-4 w-4" /> Continue to secure payment
+                        </Button>
+                        <p className="mt-3 text-xs leading-5 text-muted">
+                          Payment opens in the hosted portal. Your account unlocks after webhook confirmation.
+                        </p>
+                      </>
+                    )}
+                  </>
+                )}
+              </CheckoutPayRegion>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT · order summary (compact, sticky) */}
+        <aside className="space-y-4 lg:sticky lg:top-8">
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <ShoppingBag className="h-5 w-5 text-primary" /> Order summary
+            </h2>
+
+            {quote ? (
+              <ul className="mt-4 space-y-3">
                 {quote.items.map((item) => (
-                  <li key={`${item.kind}:${item.code}`} className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      {item.description ? <p className="mt-1 text-sm text-muted">{item.description}</p> : null}
-                      <p className="mt-1 text-xs uppercase text-muted">Qty {item.quantity}</p>
+                  <li key={`${item.kind}:${item.code}`} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-navy">{item.name}</p>
+                      {item.description ? (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-muted">{item.description}</p>
+                      ) : null}
+                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted">Qty {item.quantity}</p>
                     </div>
-                    <p className="font-semibold">{formatMoney(item.amount, { currency: item.currency })}</p>
+                    <p className="shrink-0 text-sm font-bold text-navy">
+                      {formatMoney(item.amount, { currency: item.currency })}
+                    </p>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-        </div>
+            ) : (
+              <p className="mt-4 text-sm text-muted">Preparing your order…</p>
+            )}
 
-        <aside className="h-fit rounded-lg border border-border bg-surface p-5 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <ShoppingBag className="h-5 w-5" /> Total
-          </h2>
-          <div className="mt-4 space-y-2 text-sm">
-            <Row label="Subtotal" value={quote ? formatMoney(quote.subtotalAmount, { currency: quote.currency }) : '-'} />
-            <Row label="Discount" value={quote ? `-${formatMoney(quote.discountAmount, { currency: quote.currency })}` : '-'} />
-            <Row strong label="Amount due" value={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : '-'} />
-          </div>
-          {quote && quoteSecondsLeft !== null ? (
-            <p className="mt-3 text-xs text-muted">
-              {quoteSecondsLeft > 0
-                ? `Quoted price valid for ${formatCountdown(quoteSecondsLeft)} — it refreshes automatically.`
-                : 'Refreshing your quote with current pricing…'}
-            </p>
-          ) : null}
-          <label className="mt-5 block text-sm font-medium">
-            Coupon code
-            <input
-              className="mt-2 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm outline-none focus:border-primary"
-              value={couponCode}
-              onChange={(event) => setCouponCode(event.target.value)}
-              placeholder="Optional"
-            />
-          </label>
-          <Button
-            className="mt-3"
-            variant="outline"
-            fullWidth
-            disabled={busy}
-            onClick={() => {
-              setQuoteRefreshed(false);
-              void loadQuote(couponCode);
-            }}
-          >
-            Apply coupon
-          </Button>
-          <CheckoutPayRegion
-            value={payRegion}
-            onChange={(r) => {
-              regionTouchedRef.current = true;
-              setPayRegion(r);
-            }}
-            egyptHref={egyptHref}
-            disabled={!quote}
-          >
-            {methods.length > 1 ? (
-              <fieldset className="mt-5">
-                <legend className="text-sm font-medium">Payment method</legend>
-                <div className="mt-2 space-y-2">
-                  {methods.map((method) => (
-                    <label
-                      key={method.name}
-                      className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${
-                        selectedGateway === method.name
-                          ? 'border-primary ring-1 ring-primary'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value={method.name}
-                        checked={selectedGateway === method.name}
-                        onChange={() => setSelectedGateway(method.name)}
-                        className="accent-primary"
-                      />
-                      <MethodIcon iconName={method.iconName} />
-                      <span className="font-medium">{method.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+            <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
+              <Row label="Subtotal" value={quote ? formatMoney(quote.subtotalAmount, { currency: quote.currency }) : '—'} />
+              <Row label="Discount" value={quote ? `-${formatMoney(quote.discountAmount, { currency: quote.currency })}` : '—'} />
+              <Row strong label="Amount due" value={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : '—'} />
+            </div>
+
+            {quote && quoteSecondsLeft !== null ? (
+              <p className="mt-3 text-xs text-muted">
+                {quoteSecondsLeft > 0
+                  ? `Quoted price valid for ${formatCountdown(quoteSecondsLeft)} — it refreshes automatically.`
+                  : 'Refreshing your quote with current pricing…'}
+              </p>
             ) : null}
 
-            {selectedMode === 'embedded' && !paypalUnavailable ? (
-              <div className="mt-3">
-                <PayPalExpandedCheckout
-                  createOrder={createPaypalOrder}
-                  onCaptured={handlePaypalCaptured}
-                  onError={(msg) => setError(msg)}
-                  onUnavailable={() => setPaypalUnavailable(true)}
-                  amountLabel={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : ''}
-                  disabled={!quote}
-                />
-                <p className="mt-3 text-xs leading-5 text-muted">Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.</p>
-              </div>
-            ) : (
-              <>
-                <Button className="mt-3" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
-                  <CreditCard className="h-4 w-4" /> Continue to secure payment
-                </Button>
-                <p className="mt-3 text-xs leading-5 text-muted">Payment opens in the hosted portal. Your account unlocks after webhook confirmation.</p>
-              </>
-            )}
-          </CheckoutPayRegion>
+            <div className="mt-4 border-t border-border pt-4">
+              <label className="block text-sm font-medium">
+                Coupon code
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm outline-none focus:border-primary"
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value)}
+                    placeholder="Optional"
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setQuoteRefreshed(false);
+                      void loadQuote(couponCode);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs text-muted">
+            <ShieldCheck className="h-4 w-4 text-success" /> Encrypted, secure checkout
+          </div>
         </aside>
       </section>
     </main>
   );
 }
 
-function MethodIcon({ iconName }: { iconName: string }) {
-  if (iconName === 'wallet') {
-    return <Wallet className="h-4 w-4 text-muted" />;
+/** Brand-forward display for the method picker: the title always names the gateway
+ *  (Stripe / PayPal) rather than a generic "Credit or debit card". */
+function methodBrand(method: PaymentMethodOption): { title: string; subtitle: string } {
+  switch (method.name) {
+    case 'paypal':
+      return { title: 'PayPal', subtitle: 'Pay with your PayPal balance or card' };
+    case 'stripe':
+      return { title: 'Stripe', subtitle: 'Credit or debit card — Visa, Mastercard, Amex' };
+    case 'checkoutcom':
+      return { title: 'Checkout.com', subtitle: 'Credit or debit card' };
+    case 'paymob':
+      return { title: 'Paymob', subtitle: 'Card & local wallets' };
+    case 'paytabs':
+      return { title: 'PayTabs', subtitle: 'Card & local payment methods' };
+    default:
+      return {
+        title: method.label,
+        subtitle: method.mode === 'embedded' ? 'Pay on this page' : 'Secure hosted checkout',
+      };
   }
-  // "paypal", "credit-card", and any unknown hint render the neutral card icon —
-  // lucide has no PayPal brand mark and the label already names the method.
-  return <CreditCard className="h-4 w-4 text-muted" />;
+}
+
+function MethodIcon({ iconName, name }: { iconName: string; name?: string }) {
+  if (name === 'paypal' || iconName === 'paypal' || iconName === 'wallet') {
+    return <Wallet className="h-4 w-4" />;
+  }
+  // "credit-card" and any unknown hint render the neutral card icon — lucide has no
+  // brand marks and the title already names the gateway.
+  return <CreditCard className="h-4 w-4" />;
 }
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
