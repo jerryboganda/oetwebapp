@@ -10,8 +10,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { cn } from '@/lib/utils';
 import {
   getSpeakingExamResults,
@@ -85,21 +87,23 @@ export default function SpeakingExamResultsPage() {
           </div>
         </div>
       ) : (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-            Combined result
-          </p>
-          <div className="mt-1 flex items-baseline gap-3">
-            <span className="text-4xl font-bold tabular-nums text-emerald-800">
-              {results.combinedScaledScore ?? '—'}
-            </span>
-            <span className="text-sm text-emerald-700">/ 500</span>
-            {results.readinessBand ? (
-              <span className="ml-auto rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold uppercase text-white">
-                Band {results.readinessBand}
-              </span>
-            ) : null}
-          </div>
+        <div className="mt-4">
+          <ResultsScorePanel
+            eyebrow="Speaking exam"
+            icon={Mic}
+            title="Combined result"
+            subtitle={results.readinessBand ? `Readiness band ${results.readinessBand}` : undefined}
+            gaugeValue={typeof results.combinedScaledScore === 'number' ? (results.combinedScaledScore / 500) * 100 : 0}
+            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{results.combinedScaledScore ?? '—'}</span>}
+            gaugeLabel="/ 500"
+            gaugeColor="var(--color-success)"
+            grade={results.readinessBand ? { label: `Band ${results.readinessBand}`, tone: 'success' } : null}
+            stats={results.cards.map((card) => ({
+              label: `Card ${card.cardNumber === 1 ? 'A' : 'B'}`,
+              value: card.assessment ? `${card.assessment.estimatedScaledScore}/500` : '—',
+              tone: 'info' as const,
+            }))}
+          />
         </div>
       )}
 
@@ -142,19 +146,14 @@ export default function SpeakingExamResultsPage() {
                     {card.assessment.overallSummary}
                   </p>
                 ) : null}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {Object.entries(card.assessment.criterionScores).map(([code, c]) => (
-                    <div
+                    <CriterionScoreRow
                       key={code}
-                      className="flex items-center justify-between rounded-md bg-background/60 px-3 py-1.5 text-xs"
-                    >
-                      <span className="capitalize text-muted">
-                        {code.replace(/([A-Z])/g, ' $1').trim()}
-                      </span>
-                      <span className="font-semibold text-foreground">
-                        {c.score}/{c.maxScore}
-                      </span>
-                    </div>
+                      label={code.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase()).trim()}
+                      score={c.score}
+                      max={c.maxScore}
+                    />
                   ))}
                 </div>
               </div>
