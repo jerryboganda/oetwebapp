@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileLock2, GraduationCap, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, FileLock2, GraduationCap, Headphones, MinusCircle, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
 import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
@@ -226,6 +228,29 @@ export default function ListeningReviewPage() {
 
         {!loading && review ? (
           <>
+            <ResultsScorePanel
+              eyebrow="Listening review"
+              icon={Headphones}
+              title={review.paper.title}
+              subtitle={review.scoreDisplay
+                ?? `${review.rawScore}/${review.maxRawScore} raw${typeof review.scaledScore === 'number' ? ` · ${review.scaledScore}/500 scaled` : ''}`}
+              gaugeValue={review.maxRawScore > 0 ? (review.rawScore / review.maxRawScore) * 100 : 0}
+              gaugeLabel="Accuracy"
+              gaugeColor={review.passed ? 'var(--color-success)' : 'var(--color-warning)'}
+              grade={review.grade ? { label: `Grade ${review.grade}`, tone: review.passed ? 'success' : 'warning' } : null}
+              stats={[
+                { label: 'Correct', value: review.correctCount, tone: 'success', icon: <CheckCircle2 /> },
+                { label: 'Incorrect', value: review.incorrectCount, tone: 'danger', icon: <XCircle /> },
+                { label: 'Unanswered', value: review.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
+                {
+                  label: 'Scaled',
+                  value: typeof review.scaledScore === 'number' ? `${review.scaledScore}/500` : '—',
+                  tone: 'info',
+                  icon: <Target />,
+                },
+              ]}
+            />
+
             <LearnerPageHero
               eyebrow="Transcript-backed Review"
               icon={Quote}
@@ -374,100 +399,84 @@ export default function ListeningReviewPage() {
             ) : null}
 
             <section className="space-y-4">
-              {review.itemReview.map((question) => (
-                <div key={question.questionId} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                  <div className="flex items-start gap-3">
-                    {question.isCorrect ? (
-                      <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-success" />
-                    ) : (
-                      <XCircle className="mt-1 h-5 w-5 shrink-0 text-danger" />
-                    )}
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">
-                        Part {question.partCode} / Question {question.number}
-                      </p>
-                      <h2 className="mt-2 text-lg font-bold text-navy">{question.prompt}</h2>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-border bg-background-light p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">Your answer</p>
-                      <p className="mt-2 text-sm text-navy">{question.learnerAnswer || 'No answer recorded'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-background-light p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">Correct answer</p>
-                      <p className="mt-2 text-sm text-navy">{question.correctAnswer}</p>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-sm text-muted">{question.explanation}</p>
-                  {(() => {
-                    const chip = missReasonChip(question);
-                    if (!chip) return null;
-                    return (
-                      <div className="mt-3 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                        <div>
-                          <p className="font-bold uppercase tracking-widest text-xs">Missed because: {chip.label}</p>
-                          <p className="mt-1 text-warning/90">{chip.hint}</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted">
-                    {question.speakerAttitude ? (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-navy">
-                        <Quote className="h-4 w-4" /> {question.speakerAttitude.replace(/_/g, ' ')}
-                      </span>
-                    ) : null}
-                    {question.transcriptEvidenceStartMs != null ? (
-                      <button
-                        type="button"
-                        onClick={() => playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs, question.partCode)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-3 py-2 font-semibold text-info transition hover:bg-info/20"
-                      >
-                        <Volume2 className="h-4 w-4" /> Evidence {formatMilliseconds(question.transcriptEvidenceStartMs)}
-                        {question.transcriptEvidenceEndMs != null ? `-${formatMilliseconds(question.transcriptEvidenceEndMs)}` : ''}
-                      </button>
-                    ) : null}
-                    {question.transcriptEvidenceStartMs == null && question.transcriptEvidenceEndMs == null ? (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2">
-                        <Clock className="h-4 w-4" /> No time-coded evidence
-                      </span>
-                    ) : null}
-                  </div>
-                  {question.transcript?.allowed && question.transcript.excerpt ? (
-                    <SelectionToVocab source="listening" sourceRefPrefix={`listening:${attemptId}:${question.questionId}`}>
-                      <div className="mt-4 rounded-2xl border border-info/30 bg-info/10 p-4 text-sm text-info">
-                        Transcript clue: {question.transcript.excerpt}
-                      </div>
-                    </SelectionToVocab>
-                  ) : (
-                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                      <FileLock2 className="mt-0.5 h-4 w-4 shrink-0" />
-                      Transcript excerpt restricted for this item.
-                    </div>
-                  )}
-                  {question.distractorExplanation ? (
-                    <div className="mt-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-                      Distractor explanation: {question.distractorExplanation}
-                    </div>
-                  ) : null}
-                  {question.optionAnalysis?.length ? (
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                      {question.optionAnalysis.map((option) => (
-                        <div
-                          key={`${question.questionId}-${option.optionLabel}`}
-                          className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning'}`}
+              <LearnerSurfaceSectionHeader
+                eyebrow="Item review"
+                title="Question-by-question review"
+                description="Your answer beside the correct answer, colour-coded green for correct and red for incorrect, with transcript evidence and distractor analysis."
+                className="mb-1"
+              />
+              {review.itemReview.map((question) => {
+                const chip = missReasonChip(question);
+                const unanswered = !question.learnerAnswer;
+                return (
+                  <AnswerComparisonCard
+                    key={question.questionId}
+                    testId={`listening-review-item-${question.questionId}`}
+                    label={`Part ${question.partCode} · Question ${question.number}`}
+                    stem={question.prompt}
+                    isCorrect={question.isCorrect}
+                    unanswered={!question.isCorrect && unanswered}
+                    yourAnswer={question.learnerAnswer || 'No answer recorded'}
+                    correctAnswer={question.correctAnswer}
+                    missReason={chip ? { title: `Missed because: ${chip.label}`, detail: chip.hint } : null}
+                    explanation={question.explanation ? <p>{question.explanation}</p> : null}
+                  >
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      {question.speakerAttitude ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-navy">
+                          <Quote className="h-4 w-4" /> {question.speakerAttitude.replace(/_/g, ' ')}
+                        </span>
+                      ) : null}
+                      {question.transcriptEvidenceStartMs != null ? (
+                        <button
+                          type="button"
+                          onClick={() => playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs, question.partCode)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-3 py-2 font-semibold text-info transition hover:bg-info/20"
                         >
-                          <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
-                          <p className="mt-2 text-xs font-black uppercase tracking-widest">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
-                          {option.whyMarkdown ? <MarkdownContent markdown={option.whyMarkdown} className="mt-2 text-xs leading-5" /> : null}
-                        </div>
-                      ))}
+                          <Volume2 className="h-4 w-4" /> Evidence {formatMilliseconds(question.transcriptEvidenceStartMs)}
+                          {question.transcriptEvidenceEndMs != null ? `-${formatMilliseconds(question.transcriptEvidenceEndMs)}` : ''}
+                        </button>
+                      ) : null}
+                      {question.transcriptEvidenceStartMs == null && question.transcriptEvidenceEndMs == null ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2">
+                          <Clock className="h-4 w-4" /> No time-coded evidence
+                        </span>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              ))}
+                    {question.transcript?.allowed && question.transcript.excerpt ? (
+                      <SelectionToVocab source="listening" sourceRefPrefix={`listening:${attemptId}:${question.questionId}`}>
+                        <div className="rounded-2xl border border-info/30 bg-info/10 p-4 text-sm text-info">
+                          Transcript clue: {question.transcript.excerpt}
+                        </div>
+                      </SelectionToVocab>
+                    ) : (
+                      <div className="flex items-start gap-3 rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
+                        <FileLock2 className="mt-0.5 h-4 w-4 shrink-0" />
+                        Transcript excerpt restricted for this item.
+                      </div>
+                    )}
+                    {question.distractorExplanation ? (
+                      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+                        Distractor explanation: {question.distractorExplanation}
+                      </div>
+                    ) : null}
+                    {question.optionAnalysis?.length ? (
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {question.optionAnalysis.map((option) => (
+                          <div
+                            key={`${question.questionId}-${option.optionLabel}`}
+                            className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning'}`}
+                          >
+                            <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
+                            <p className="mt-2 text-xs font-black uppercase tracking-widest">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
+                            {option.whyMarkdown ? <MarkdownContent markdown={option.whyMarkdown} className="mt-2 text-xs leading-5" /> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </AnswerComparisonCard>
+                );
+              })}
             </section>
 
             {review.recommendedNextDrill ? (

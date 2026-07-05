@@ -27,6 +27,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ResultGauge } from '@/components/domain/results/gauge';
 import {
   fetchMockReport,
   reportMockLeak,
@@ -73,6 +75,24 @@ function scoreColor(score: string) {
   if (grade === 'C+' || grade === 'C') return 'text-warning';
   if (grade === 'D' || grade === 'E') return 'text-danger';
   return 'text-muted';
+}
+
+/** Map a sub-test score to a stat-strip tone (mirrors {@link scoreColor}). */
+function scoreTone(score: string): 'success' | 'warning' | 'danger' | 'default' {
+  const color = scoreColor(score);
+  if (color === 'text-success') return 'success';
+  if (color === 'text-warning') return 'warning';
+  if (color === 'text-danger') return 'danger';
+  return 'default';
+}
+
+/** CSS colour for a sub-test gauge arc, derived from the same grade bands. */
+function scoreGaugeColor(score: string): string {
+  const color = scoreColor(score);
+  if (color === 'text-success') return 'var(--color-success)';
+  if (color === 'text-warning') return 'var(--color-warning)';
+  if (color === 'text-danger') return 'var(--color-danger)';
+  return 'var(--color-primary)';
 }
 
 function MockReportContent() {
@@ -197,6 +217,15 @@ function MockReportContent() {
   };
   const comp = report.priorComparison;
   const readiness = getMockReadinessDecision(report);
+  const readinessTone: 'success' | 'warning' | 'danger' | 'info' | 'muted' =
+    readiness.variant === 'success' ? 'success'
+      : readiness.variant === 'warning' ? 'warning'
+        : readiness.variant === 'danger' ? 'danger'
+          : readiness.variant === 'info' ? 'info'
+            : 'muted';
+  const overallNumeric = Number(String(report.overallScore).replace(/[^0-9.]/g, ''));
+  const overallScaled = Number.isFinite(overallNumeric) && overallNumeric > 0 ? overallNumeric : null;
+  const overallGaugePct = overallScaled != null ? Math.min(100, (overallScaled / 500) * 100) : 0;
   const pendingTeacherReviews = report.reviewSummary
     ? report.reviewSummary.pending + report.reviewSummary.queued + report.reviewSummary.inReview
     : report.subTests.filter((test) => test.reviewState && test.reviewState !== 'completed').length;
@@ -288,25 +317,35 @@ function MockReportContent() {
         ) : null}
 
         {/* 1. Overall Score */}
-        <MotionSection
-          delayIndex={1}
-          className="bg-surface rounded-2xl border border-border p-8 sm:p-10 text-center shadow-sm flex flex-col items-center"
-        >
-          <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-            <span className="text-5xl font-black text-primary">{report.overallScore}</span>
-          </div>
-          <h2 className="text-xl font-black text-navy mb-3">Overall Performance</h2>
-          <p className="text-sm text-muted max-w-lg leading-relaxed">{report.summary}</p>
-          <div className="mt-5 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={readiness.variant} size="sm">{readiness.label}</Badge>
-              <Badge variant="outline" size="sm">Estimated academy report</Badge>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-muted">{readiness.description}</p>
-            <p className="mt-2 text-xs leading-5 text-muted">
-              Do not treat mock results as a guaranteed pass. Use repeated green mock evidence and tutor feedback before booking the official OET.
-            </p>
-          </div>
+        <MotionSection delayIndex={1}>
+          <ResultsScorePanel
+            eyebrow="Mock report"
+            icon={ShieldCheck}
+            title="Overall performance"
+            subtitle={report.summary}
+            gaugeValue={overallGaugePct}
+            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{report.overallGrade ?? report.overallScore}</span>}
+            gaugeLabel={overallScaled != null ? `${overallScaled}/500` : undefined}
+            gaugeColor={
+              readinessTone === 'success' ? 'var(--color-success)'
+                : readinessTone === 'warning' ? 'var(--color-warning)'
+                  : readinessTone === 'danger' ? 'var(--color-danger)'
+                    : 'var(--color-primary)'
+            }
+            grade={{ label: readiness.label, tone: readinessTone }}
+            stats={report.subTests.map((test) => {
+              const Icon = SUBTEST_META[test.id]?.icon ?? Headphones;
+              return { label: test.name, value: test.score, tone: scoreTone(test.score), icon: <Icon /> };
+            })}
+            aside={(
+              <div className="rounded-2xl border border-border bg-background-light p-4">
+                <p className="text-sm leading-6 text-muted">{readiness.description}</p>
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  Do not treat mock results as a guaranteed pass. Use repeated green mock evidence and tutor feedback before booking the official OET.
+                </p>
+              </div>
+            )}
+          />
         </MotionSection>
 
         {pendingTeacherReviews > 0 ? (
@@ -415,7 +454,14 @@ function MockReportContent() {
                         ) : null}
                       </div>
                     </div>
-                    <span className={`text-2xl font-black ${scoreColor(test.score)}`}>{test.score}</span>
+                    <ResultGauge
+                      value={typeof test.scaledScore === 'number' ? (test.scaledScore / 500) * 100 : 0}
+                      size={56}
+                      stroke={6}
+                      color={scoreGaugeColor(test.score)}
+                    >
+                      <span className={`text-sm font-black ${scoreColor(test.score)}`}>{test.grade ?? test.score}</span>
+                    </ResultGauge>
                   </div>
                   {canDownload ? (
                     <div className="mt-4 border-t border-border pt-3">

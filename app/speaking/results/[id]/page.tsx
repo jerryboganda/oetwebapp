@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
+import { ResultGauge } from '@/components/domain/results/gauge';
+import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { apiClient, downloadSpeakingEvaluationPdf, fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
@@ -275,6 +277,23 @@ export default function SpeakingResultSummary() {
 
         <MotionSection>
           <Card className="p-8 flex flex-col md:flex-row items-center gap-8">
+            {typeof result.estimatedScaledScore === 'number' ? (
+              <ResultGauge
+                value={(result.estimatedScaledScore / 500) * 100}
+                color={
+                  result.readinessBand === 'strong' || result.readinessBand === 'exam_ready'
+                    ? 'var(--color-success)'
+                    : result.readinessBand === 'borderline'
+                      ? 'var(--color-warning)'
+                      : result.readinessBand
+                        ? 'var(--color-danger)'
+                        : 'var(--color-primary)'
+                }
+              >
+                <span className="text-2xl font-black text-navy dark:text-white">{result.estimatedScaledScore}</span>
+                <span className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">/ 500</span>
+              </ResultGauge>
+            ) : null}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
                 <span className="text-xs font-bold text-muted uppercase tracking-widest">Estimated Score Range</span>
@@ -379,32 +398,19 @@ export default function SpeakingResultSummary() {
                         {family === 'linguistic' ? 'Linguistic (0–6)' : 'Clinical communication (0–3)'}
                       </p>
                       <ul className="space-y-3">
-                        {items.map((criterion) => {
-                          const pct = criterion.max > 0 ? Math.min(100, Math.max(0, (criterion.score / criterion.max) * 100)) : 0;
-                          const label = criterionLabel(criterion.criterionCode);
-                          return (
-                            <li key={criterion.criterionCode}>
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="text-sm font-semibold text-navy">{label}</span>
-                                <span className="font-mono text-sm tabular-nums text-navy">
-                                  {criterion.score}/{criterion.max}
-                                </span>
-                              </div>
-                              <div className="mt-1 h-1.5 rounded-full bg-background-light overflow-hidden">
-                                <div
-                                  className="h-full bg-primary transition-[width,background-color] duration-300"
-                                  style={{ width: `${pct}%` }}
-                                  aria-hidden="true"
-                                />
-                              </div>
-                              {criterion.linkedRuleIds && criterion.linkedRuleIds.length > 0 ? (
-                                <p className="mt-1 text-[11px] text-muted">
-                                  Linked rules: {criterion.linkedRuleIds.join(', ')}
-                                </p>
-                              ) : null}
-                            </li>
-                          );
-                        })}
+                        {items.map((criterion) => (
+                          <li key={criterion.criterionCode}>
+                            <CriterionScoreRow
+                              label={criterionLabel(criterion.criterionCode)}
+                              score={criterion.score}
+                              max={criterion.max}
+                              feedback={criterion.explanation ?? criterion.descriptor ?? null}
+                              meta={criterion.linkedRuleIds && criterion.linkedRuleIds.length > 0
+                                ? `Linked rules: ${criterion.linkedRuleIds.join(', ')}`
+                                : null}
+                            />
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   );
