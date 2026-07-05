@@ -10,7 +10,9 @@
  * tutor surfaces).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { usePanScroll, PAN_SURFACE_CLASS } from '@/lib/use-pan-scroll';
 import type { PartAOverlayBlank } from '@/components/domain/listening/admin/PartAPdfOverlayEditor';
 
 export interface PartAPdfOverlayDocumentProps {
@@ -44,6 +46,9 @@ export function PartAPdfOverlayDocument({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const canvases = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  // Grab-to-pan the paper. The hook ignores drags that start on the answer
+  // inputs, so typing/focus is unaffected — only empty page area drags to move.
+  const pan = usePanScroll(true);
 
   useEffect(() => {
     if (!pdfDownloadPath) {
@@ -162,7 +167,12 @@ export function PartAPdfOverlayDocument({
           const height = page.height * (zoom / 100);
           const pageBlanks = blanks.filter((b) => b.page === page.pageNumber);
           return (
-            <div key={page.pageNumber} className="relative mx-auto bg-white shadow" style={{ width, height }}>
+            <div
+              key={page.pageNumber}
+              {...pan}
+              className={cn('relative mx-auto bg-white shadow', PAN_SURFACE_CLASS)}
+              style={{ width, height }}
+            >
               <canvas
                 ref={(el) => {
                   if (el) canvases.current.set(page.pageNumber, el);

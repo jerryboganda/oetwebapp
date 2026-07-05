@@ -11,8 +11,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState, KeyboardEvent } from 'react';
+import { Hand } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { usePanScroll, PAN_SURFACE_CLASS } from '@/lib/use-pan-scroll';
 
 export interface WritingStimulusViewerProps {
   /** Authenticated download path, e.g. `/v1/media/{id}/content`. */
@@ -108,7 +110,12 @@ export function WritingStimulusViewer({
   // Highlights are controlled by the parent when `highlights` is supplied (so
   // they persist across the reading window and the writing view), otherwise the
   // viewer keeps its own internal copy.
-  const [markerOn, setMarkerOn] = useState(false);
+  // Active pointer tool: 'pan' (Hand — default, drag to move the page) or
+  // 'marker' (yellow highlighter). Mutually exclusive so only one drag gesture
+  // is live at a time. On read-only surfaces (no highlighter) it stays 'pan'.
+  const [wtool, setWtool] = useState<'pan' | 'marker'>('pan');
+  const markerOn = wtool === 'marker';
+  const pan = usePanScroll(wtool === 'pan');
   const [internalHighlights, setInternalHighlights] = useState<Record<number, Highlight[]>>({});
   const highlights = controlledHighlights ?? internalHighlights;
   const commitHighlights = (next: Record<number, Highlight[]>) => {
@@ -340,10 +347,26 @@ export function WritingStimulusViewer({
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-surface/90 px-3 py-2 backdrop-blur">
         <span className="truncate text-sm font-bold text-navy">{title}</span>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setWtool('pan')}
+            aria-pressed={wtool === 'pan'}
+            aria-label="Hand (move page)"
+            title="Hand (move page)"
+            className={cn(
+              'flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-bold transition-colors duration-150',
+              wtool === 'pan'
+                ? 'border-amber-400 bg-amber-200 text-amber-900'
+                : 'border-border text-muted hover:bg-background-light',
+            )}
+          >
+            <Hand className="h-3.5 w-3.5" aria-hidden="true" />
+            Move
+          </button>
           {allowHighlight && (
             <button
               type="button"
-              onClick={() => setMarkerOn((v) => !v)}
+              onClick={() => setWtool((t) => (t === 'marker' ? 'pan' : 'marker'))}
               aria-pressed={markerOn}
               aria-label="Highlighter"
               title="Highlighter"
@@ -408,8 +431,9 @@ export function WritingStimulusViewer({
               <div
                 key={page.pageNumber}
                 {...lockProps}
+                {...pan}
                 draggable={false}
-                className="relative mx-auto shadow select-none"
+                className={cn('relative mx-auto shadow select-none', wtool === 'pan' && PAN_SURFACE_CLASS)}
                 style={{ width: page.width * (zoom / 100), height: page.height * (zoom / 100) }}
               >
                 <canvas

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { usePanScroll, PAN_SURFACE_CLASS } from '@/lib/use-pan-scroll';
 
 /**
  * Learner-facing question-paper PDF pane for the Listening player.
@@ -50,6 +52,10 @@ export function ListeningQuestionPaperViewer({
   const [error, setError] = useState<string | null>(null);
   const canvases = useRef<Map<number, HTMLCanvasElement>>(new Map());
   const assetKind = detectAssetKind(url);
+  // Grab-to-pan is always available here — this viewer has no drawing tools, so
+  // dragging the paper simply moves it (both axes), which is easier than fighting
+  // a nested touch-scroll.
+  const pan = usePanScroll(true);
 
   // 1) Resolve the authenticated media URL to a local blob URL.
   useEffect(() => {
@@ -172,14 +178,20 @@ export function ListeningQuestionPaperViewer({
             {assetKind === 'image' ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
+                {...pan}
                 src={src}
                 alt={`Question paper${partLabel ? ` for Part ${partLabel}` : ''}`}
-                className="mx-auto block w-full max-w-3xl rounded border border-border bg-white shadow"
+                className={cn('mx-auto block w-full max-w-3xl rounded border border-border bg-white shadow', PAN_SURFACE_CLASS)}
                 draggable={false}
               />
             ) : (
               pages.map((page) => (
-                <div key={page.pageNumber} className="relative mx-auto w-full bg-white shadow" style={{ maxWidth: page.width }}>
+                <div
+                  key={page.pageNumber}
+                  {...pan}
+                  className={cn('relative mx-auto w-full bg-white shadow', PAN_SURFACE_CLASS)}
+                  style={{ maxWidth: page.width }}
+                >
                   <canvas
                     ref={(el) => {
                       if (el) canvases.current.set(page.pageNumber, el);

@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
-import { Eraser, Highlighter, Minus, MousePointer2, PenLine, Plus, Redo2, RotateCcw, Square, Trash2, Undo2 } from 'lucide-react';
+import { Eraser, Hand, Highlighter, Minus, MousePointer2, PenLine, Plus, Redo2, RotateCcw, Square, Trash2, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from '@/lib/reading-authoring-api';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { usePanScroll, PAN_SURFACE_CLASS } from '@/lib/use-pan-scroll';
 
-type Tool = 'select' | 'Text' | 'Rectangle' | 'Freehand';
+type Tool = 'Hand' | 'select' | 'Text' | 'Rectangle' | 'Freehand';
 
 export interface ReadingPdfAsset {
   id: string;
@@ -85,7 +86,10 @@ export function ReadingPdfViewer({
   }, [assets, partCode]);
   const assetKind = useMemo<AssetKind>(() => detectAssetKind(asset?.downloadPath ?? ''), [asset?.downloadPath]);
   const [zoom, setZoom] = useState(100);
-  const [tool, setTool] = useState<Tool>('select');
+  // Hand tool is the default so a learner/admin can grab-and-drag to move the
+  // page the instant it opens; the annotation tools are one tap away.
+  const [tool, setTool] = useState<Tool>('Hand');
+  const pan = usePanScroll(tool === 'Hand');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
@@ -308,6 +312,7 @@ export function ReadingPdfViewer({
           <span className="text-sm font-semibold text-navy">{asset.title}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1">
+          <ToolbarButton active={tool === 'Hand'} label="Hand (move page)" onClick={() => setTool('Hand')} icon={Hand} />
           {!readOnly ? (
             <>
               <ToolbarButton active={tool === 'select'} label="Select" onClick={() => setTool('select')} icon={MousePointer2} />
@@ -336,9 +341,10 @@ export function ReadingPdfViewer({
           return (
             <div
               key={page.pageNumber}
-              className="relative mx-auto bg-white shadow"
+              className={cn('relative mx-auto bg-white shadow', tool === 'Hand' && PAN_SURFACE_CLASS)}
               style={{ width, height }}
               onPointerDown={(event) => {
+                if (tool === 'Hand') { pan.onPointerDown(event); return; }
                 if (readOnly || tool === 'select') return;
                 const point = normalizedPoint(event);
                 dragStart.current = { pageNumber: page.pageNumber, ...point };
@@ -346,6 +352,7 @@ export function ReadingPdfViewer({
                 (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
               }}
               onPointerMove={(event) => {
+                if (tool === 'Hand') { pan.onPointerMove(event); return; }
                 if (!dragStart.current || dragStart.current.pageNumber !== page.pageNumber) return;
                 const point = normalizedPoint(event);
                 if (tool === 'Freehand') {
@@ -357,6 +364,7 @@ export function ReadingPdfViewer({
                 }
               }}
               onPointerUp={(event) => {
+                if (tool === 'Hand') { pan.onPointerUp(event); return; }
                 if (!dragStart.current || dragStart.current.pageNumber !== page.pageNumber) return;
                 const currentDraft = draft;
                 dragStart.current = null;
@@ -367,6 +375,7 @@ export function ReadingPdfViewer({
                 if ('width' in currentDraft.geometry && (currentDraft.geometry.width < 0.002 || currentDraft.geometry.height < 0.002)) return;
                 void pushCreate(page.pageNumber, currentDraft.kind as ReadingPaperAnnotationKind, currentDraft.geometry);
               }}
+              onPointerCancel={(event) => { if (tool === 'Hand') pan.onPointerCancel(event); }}
             >
               {assetKind === 'pdf' ? (
                 <canvas ref={(el) => { if (el) canvases.current.set(page.pageNumber, el); else canvases.current.delete(page.pageNumber); }} />

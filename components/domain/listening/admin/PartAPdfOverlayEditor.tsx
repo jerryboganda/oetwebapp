@@ -12,10 +12,11 @@
  * N binds to the Nth Part A question, mirroring the WYSIWYG gap rule.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Minus, Plus, Trash2 } from 'lucide-react';
+import { Hand, Minus, Plus, Square, Trash2 } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { cn } from '@/lib/utils';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { usePanScroll, PAN_SURFACE_CLASS } from '@/lib/use-pan-scroll';
 
 export interface PartAOverlayBlank {
   page: number;
@@ -53,6 +54,9 @@ function clamp01(v: number) {
 
 export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabled = false }: PartAPdfOverlayEditorProps) {
   const [zoom, setZoom] = useState(100);
+  // 'Hand' (default) drags to move the page; 'box' drags to author a blank.
+  const [tool, setTool] = useState<'Hand' | 'box'>('Hand');
+  const pan = usePanScroll(tool === 'Hand');
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -187,9 +191,35 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
     <div className="rounded-2xl border border-border bg-surface shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
         <p className="text-xs text-admin-fg-muted">
-          Drag a box over each printed blank. Boxes auto-number top-to-bottom ({value.length} placed).
+          Pick the ▫ Box tool, then drag over each printed blank (the Hand tool moves the page). Boxes auto-number top-to-bottom ({value.length} placed).
         </p>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setTool('Hand')}
+            aria-pressed={tool === 'Hand'}
+            aria-label="Hand (move page)"
+            title="Hand (move page)"
+            className={cn(tool === 'Hand' && 'bg-primary/15 text-primary')}
+          >
+            <Hand className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setTool('box')}
+            disabled={disabled}
+            aria-pressed={tool === 'box'}
+            aria-label="Draw blank box"
+            title="Draw blank box"
+            className={cn(tool === 'box' && 'bg-primary/15 text-primary')}
+          >
+            <Square className="h-4 w-4" />
+          </Button>
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
           <Button type="button" variant="ghost" size="sm" onClick={() => setZoom((z) => Math.max(50, z - 10))} aria-label="Zoom out">
             <Minus className="h-4 w-4" />
           </Button>
@@ -209,9 +239,10 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
           return (
             <div
               key={page.pageNumber}
-              className={cn('relative mx-auto bg-white shadow', !disabled && 'cursor-crosshair')}
+              className={cn('relative mx-auto bg-white shadow', tool === 'Hand' ? PAN_SURFACE_CLASS : !disabled && 'cursor-crosshair')}
               style={{ width, height }}
               onPointerDown={(event) => {
+                if (tool === 'Hand') { pan.onPointerDown(event); return; }
                 if (disabled) return;
                 const p = normalizedPoint(event);
                 dragStart.current = { pageNumber: page.pageNumber, x: p.x, y: p.y };
@@ -219,6 +250,7 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
                 (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
               }}
               onPointerMove={(event) => {
+                if (tool === 'Hand') { pan.onPointerMove(event); return; }
                 if (!dragStart.current || dragStart.current.pageNumber !== page.pageNumber) return;
                 const p = normalizedPoint(event);
                 const s = dragStart.current;
@@ -231,6 +263,7 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
                 });
               }}
               onPointerUp={(event) => {
+                if (tool === 'Hand') { pan.onPointerUp(event); return; }
                 if (!dragStart.current || dragStart.current.pageNumber !== page.pageNumber) return;
                 const d = draft;
                 dragStart.current = null;
@@ -239,6 +272,7 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
                 if (!d || d.w < 0.01 || d.h < 0.005) return; // ignore tiny/stray drags
                 addBlank(page.pageNumber, d.x, d.y, d.w, d.h);
               }}
+              onPointerCancel={(event) => { if (tool === 'Hand') pan.onPointerCancel(event); }}
             >
               <canvas
                 ref={(el) => {
