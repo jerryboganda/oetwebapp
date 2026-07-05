@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { BandHistoryChart } from '@/components/domain/writing/BandHistoryChart';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
@@ -19,9 +21,23 @@ import { getWritingAnswerSheet, getWritingMockResults, getWritingStatsBands } fr
 import type {
   WritingBandHistoryPointDto,
   WritingCriteriaScoresDto,
+  WritingCriterionCode,
   WritingGradeDto,
   WritingMockSessionDto,
 } from '@/lib/writing/types';
+
+const CRITERION_NAMES: Record<WritingCriterionCode, string> = {
+  c1: 'C1 Purpose',
+  c2: 'C2 Content',
+  c3: 'C3 Conciseness & Clarity',
+  c4: 'C4 Genre & Style',
+  c5: 'C5 Organisation & Layout',
+  c6: 'C6 Language Accuracy',
+};
+
+// C1 Purpose is out of 3, the rest out of 7; targets mirror the radar overlay.
+const CRITERION_MAX: Record<WritingCriterionCode, number> = { c1: 3, c2: 7, c3: 7, c4: 7, c5: 7, c6: 7 };
+const CRITERION_TARGET: Record<WritingCriterionCode, number> = { c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 };
 
 function gradeToScores(g: WritingGradeDto): WritingCriteriaScoresDto {
   return {
@@ -105,17 +121,35 @@ export default function WritingMockResultsPage() {
   return (
     <LearnerDashboardShell pageTitle={t('writing.mocks.results.pageTitle')}>
       <div className="space-y-6" aria-busy={!grade}>
-        <LearnerPageHero
-          eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
-          icon={Award}
-          accent="amber"
-          title={grade?.bandLabel ? t('writing.mocks.results.heroTitle', { band: grade.bandLabel }) : t('writing.mocks.results.heroTitleFallback')}
-          description={t('writing.mocks.results.description')}
-          highlights={[
-            { icon: Award, label: t('writing.mocks.results.highlights.raw'), value: grade ? `${grade.rawTotal}/38` : '-' },
-            { icon: TrendingUp, label: t('writing.mocks.results.highlights.delta'), value: delta === null ? t('writing.mocks.results.highlights.firstMock') : (delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)) },
-          ]}
-        />
+        {grade ? (
+          <ResultsScorePanel
+            eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
+            icon={Award}
+            title={t('writing.mocks.results.heroTitle', { band: grade.bandLabel })}
+            subtitle={t('writing.mocks.results.description')}
+            gaugeValue={(grade.estimatedBand / 7) * 100}
+            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{grade.bandLabel}</span>}
+            gaugeLabel={`${grade.rawTotal}/38`}
+            gaugeColor={grade.estimatedBand >= 6 ? 'var(--color-success)' : grade.estimatedBand >= 4 ? 'var(--color-warning)' : 'var(--color-danger)'}
+            stats={[
+              { label: t('writing.mocks.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
+              {
+                label: t('writing.mocks.results.highlights.delta'),
+                value: delta === null ? t('writing.mocks.results.highlights.firstMock') : (delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)),
+                tone: delta != null && delta > 0 ? 'success' : delta != null && delta < 0 ? 'danger' : 'default',
+                icon: <TrendingUp />,
+              },
+            ]}
+          />
+        ) : (
+          <LearnerPageHero
+            eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
+            icon={Award}
+            accent="amber"
+            title={t('writing.mocks.results.heroTitleFallback')}
+            description={t('writing.mocks.results.description')}
+          />
+        )}
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -138,6 +172,17 @@ export default function WritingMockResultsPage() {
             <div>
               <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.criteria.heading')}</h2>
               <CriteriaRadar scores={scores} targetScores={{ c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 }} />
+              <div className="mt-4 space-y-2">
+                {(Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => (
+                  <CriterionScoreRow
+                    key={code}
+                    label={CRITERION_NAMES[code]}
+                    score={scores![code]}
+                    max={CRITERION_MAX[code]}
+                    target={CRITERION_TARGET[code]}
+                  />
+                ))}
+              </div>
             </div>
             <div>
               <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.trajectory.heading')}</h2>
