@@ -254,6 +254,10 @@ export function WritingReadingWindowOverlay({
           locked
           title={title}
           className="h-full"
+          // Reading window is scroll-only: NO highlighter during the forced
+          // 5-minute reading time (owner directive). Any pre-existing marks
+          // still render read-only; the tool + per-mark delete are hidden.
+          allowHighlight={false}
           highlights={highlights}
           onHighlightsChange={onHighlightsChange}
         />
