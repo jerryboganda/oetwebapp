@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { fetchAiPackages, fetchMyAiPackageCredits } from '@/lib/api';
 import type { AiPackage, AiPackageCreditSnapshot, AiPackagesResponse } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
+import { useAddToCart } from '@/lib/cart/use-add-to-cart';
+import { CartNavButton } from '@/components/cart';
 
 type PackageTab = 'full' | 'separate' | 'mock';
 type SeparateKey = 'listening' | 'reading' | 'writing' | 'speaking';
@@ -45,6 +47,7 @@ export default function AiPackagesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { addToCart } = useAddToCart();
   const [activeTab, setActiveTab] = useState<PackageTab>('full');
   const [packages, setPackages] = useState<AiPackagesResponse | null>(null);
   const [credits, setCredits] = useState<AiPackageCreditSnapshot | null>(null);
@@ -110,10 +113,10 @@ export default function AiPackagesPage() {
     submittingRef.current = true;
     setBusyCode(pkg.code);
     setMessage(null);
-    router.push(`/checkout/review?productType=addon_purchase&priceId=${encodeURIComponent(pkg.code)}&quantity=1`);
+    addToCart({ code: pkg.code, kind: 'addon', name: pkg.name, price: pkg.price, currency: pkg.currency });
     setBusyCode(null);
     submittingRef.current = false;
-  }, [authLoading, isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router, addToCart]);
 
   useEffect(() => {
     const code = searchParams?.get('package');
@@ -153,7 +156,7 @@ export default function AiPackagesPage() {
       </ul>
       <Button className="mt-5" fullWidth loading={busyCode === pkg.code} onClick={() => startCheckout(pkg)}>
         <ShoppingCart className="h-4 w-4" />
-        Buy now
+        Add to cart
       </Button>
     </article>
   );
@@ -173,10 +176,13 @@ export default function AiPackagesPage() {
                 Full packages, separate subtest packages, and mock packages are sold as one-time GBP purchases.
               </p>
             </div>
-            <Link className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-dark" href="/billing">
-              <CreditCard className="h-4 w-4" />
-              Billing dashboard
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-dark" href="/billing">
+                <CreditCard className="h-4 w-4" />
+                Billing dashboard
+              </Link>
+              <CartNavButton />
+            </div>
           </div>
 
           {credits ? (

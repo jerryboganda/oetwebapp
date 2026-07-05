@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowRight, CheckCircle2, Clock, Layers, Tag } from 'lucide-react';
+import { CheckCircle2, Clock, Layers, ShoppingCart, Tag } from 'lucide-react';
 import { Drawer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
@@ -28,6 +27,8 @@ export interface CatalogPlanDetailDrawerProps {
   owned?: boolean;
   variant: 'dashboard' | 'public';
   onClose: () => void;
+  /** Adds the plan to the client cart instead of deep-linking to /checkout/review. */
+  onAddToCart: (plan: PublicCatalogPlanRow) => void;
 }
 
 interface BundledStat {
@@ -45,7 +46,7 @@ function bundledStats(plan: PublicCatalogPlanRow): BundledStat[] {
   return stats;
 }
 
-export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, variant, onClose }: CatalogPlanDetailDrawerProps) {
+export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, variant, onClose, onAddToCart }: CatalogPlanDetailDrawerProps) {
   const card = plan ? resolveCardPresentation(plan.code, presentation) : {};
   const Icon = plan ? (resolveCatalogIcon(card.iconKey) ?? defaultIconForCategory(plan.productCategory)) : Layers;
   const accent = normalizeAccent(card.accent, config.accent);
@@ -54,9 +55,6 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
   const flags = plan ? addOnEnabledFlags(plan) : [];
   const stats = plan ? bundledStats(plan) : [];
   const hasDiscount = plan?.originalPrice != null && plan.originalPrice > plan.price;
-  const buyHref = plan
-    ? `/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`
-    : '#';
 
   return (
     <Drawer open={plan != null} onClose={onClose} title={plan?.name ?? 'Package details'}>
@@ -129,12 +127,13 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
                 <CheckCircle2 className="h-4 w-4" /> This package is active on your account
               </div>
             ) : (
-              <Link
-                href={buyHref}
+              <button
+                type="button"
+                onClick={() => plan && onAddToCart(plan)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100"
               >
-                {variant === 'dashboard' ? 'Continue to purchase' : 'Get this package'} <ArrowRight className="h-4 w-4" />
-              </Link>
+                <ShoppingCart className="h-4 w-4" /> Add to cart
+              </button>
             )}
             <p className="mt-2 text-center text-xs text-muted">
               <Clock className="mr-1 inline h-3 w-3" />

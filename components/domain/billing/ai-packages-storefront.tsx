@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { CheckCircle2, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,6 +9,7 @@ import { fetchAiPackages, fetchBillingContent } from '@/lib/api';
 import { makeBillingCopy } from '@/lib/billing-copy-defaults';
 import type { AiPackage, AiPackagesResponse } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
+import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 
 const AI_PACKAGE_SUBTEST_SECTIONS: Array<{
   key: 'listening' | 'reading' | 'writing' | 'speaking';
@@ -40,7 +40,7 @@ function aiPackageHeadline(pkg: AiPackage): string {
  * button hands off to the standard checkout review flow.
  */
 export function AiPackagesStorefront() {
-  const router = useRouter();
+  const { addToCart } = useAddToCart();
   const [packages, setPackages] = useState<AiPackagesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'full' | 'separate'>('full');
@@ -118,10 +118,10 @@ export function AiPackagesStorefront() {
         <Button
           className="mt-5"
           fullWidth
-          onClick={() => router.push(`/checkout/review?productType=addon_purchase&priceId=${encodeURIComponent(pkg.code)}&quantity=1`)}
+          onClick={() => addToCart({ code: pkg.code, kind: 'addon', name: pkg.name, price: pkg.price, currency: pkg.currency })}
         >
           <ShoppingCart className="h-4 w-4" />
-          {copy('billing.ai.buyNow')}
+          Add to cart
         </Button>
       </article>
     );

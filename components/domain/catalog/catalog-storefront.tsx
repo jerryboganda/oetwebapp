@@ -22,12 +22,14 @@ import {
   CatalogAddOnsSection,
   CatalogEntitlementSummary,
 } from './catalog-sections';
+import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 
 export interface CatalogStorefrontProps {
   variant: 'dashboard' | 'public';
 }
 
 export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
+  const { addToCart } = useAddToCart();
   const [data, setData] = useState<PublicCatalogResponseWithPresentation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -174,6 +176,10 @@ export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
         owned={ownedPlanCode != null && selectedPlan != null && ownedPlanCode === selectedPlan.code}
         variant={variant}
         onClose={() => setSelectedPlan(null)}
+        onAddToCart={(plan) => {
+          addToCart({ code: plan.code, kind: 'plan', name: plan.name, price: plan.price, currency: plan.currency });
+          setSelectedPlan(null);
+        }}
       />
     </div>
   );

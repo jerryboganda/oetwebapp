@@ -443,6 +443,85 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         }
     }
 
+    [Fact]
+    public async Task CartMultiAddOn_GrantsEveryLineItem()
+    {
+        // Regression guard for the storefront cart: BuildBillingQuoteAsync now composes a
+        // multi-item quote (a letters pack AND a tutor-book unlock bought together), and
+        // ApplyCheckoutCompletionAsync must fulfil EVERY line in the one checkout.
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var ctx = new FulfillmentContext(suffix);
+        var now = DateTimeOffset.UtcNow;
+
+        var addOnBId = $"addon-b-{suffix}";
+        var addOnBCode = $"addon-b-pack-{suffix}";
+        var addOnBVersionId = $"addon-b-version-{suffix}";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+
+            SeedLearnerWithSubscription(db, ctx, now, writingAssessmentsRemaining: 2);
+            // Add-on A: 5-letter writing pack (ctx-based helper).
+            SeedAddOn(db, ctx, lettersGranted: 5, sessionsGranted: 0, addonKind: "writing_assessments", grantCredits: 0, now: now);
+            // Add-on B: tutor-book unlock (inline, distinct identity).
+            db.BillingAddOns.Add(new BillingAddOn
+            {
+                Id = addOnBId, Code = addOnBCode, Name = "Tutor Book", Price = 49m, Currency = "AUD",
+                Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0,
+                GrantCredits = 0, GrantEntitlementsJson = "{}", ActiveVersionId = addOnBVersionId, LatestVersionId = addOnBVersionId,
+                AddonKind = "tutor_book", LettersGranted = 0, SessionsGranted = 0, ExtensionDays = 0, CreatedAt = now, UpdatedAt = now,
+            });
+            db.BillingAddOnVersions.Add(new BillingAddOnVersion
+            {
+                Id = addOnBVersionId, AddOnId = addOnBId, VersionNumber = 1, Code = addOnBCode, Name = "Tutor Book",
+                Price = 49m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false,
+                DurationDays = 0, GrantCredits = 0, GrantEntitlementsJson = "{}", AddonKind = "tutor_book",
+                LettersGranted = 0, SessionsGranted = 0, ExtensionDays = 0, CreatedAt = now,
+            });
+
+            // A two-line add-on-only quote (no plan) — the shape the storefront cart now
+            // produces via BuildBillingQuoteAsync's multi-item composition.
+            var items = new[]
+            {
+                new BillingQuoteLineItem("addon", ctx.AddOnCode, "Add-on Pack", 29m, "AUD", 1),
+                new BillingQuoteLineItem("addon", addOnBCode, "Tutor Book", 49m, "AUD", 1),
+            };
+            db.BillingQuotes.Add(new BillingQuote
+            {
+                Id = ctx.QuoteId, UserId = ctx.UserId, SubscriptionId = ctx.SubscriptionId,
+                PlanCode = null, PlanVersionId = null,
+                AddOnCodesJson = JsonSupport.Serialize(items.Select(i => i.Code).ToList()),
+                AddOnVersionIdsJson = JsonSupport.Serialize(new Dictionary<string, string>
+                {
+                    [ctx.AddOnCode] = ctx.AddOnVersionId,
+                    [addOnBCode] = addOnBVersionId,
+                }),
+                CouponCode = null, CouponVersionId = null, Currency = "AUD",
+                SubtotalAmount = 78m, DiscountAmount = 0m, TotalAmount = 78m,
+                Status = BillingQuoteStatus.Applied, CreatedAt = now, ExpiresAt = now.AddMinutes(30),
+                SnapshotJson = JsonSupport.Serialize(new { items, summary = "2 items in your cart", validation = new { } }),
+            });
+            SeedSubscriptionPaymentTransaction(db, ctx, now);
+            SeedVerifiedCompletedWebhookEvent(db, ctx, now);
+
+            await db.SaveChangesAsync();
+        }
+
+        await DriveCompletionAsync(ctx);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == ctx.UserId);
+
+            // BOTH cart lines fulfilled in the single checkout: +5 letters AND tutor book.
+            Assert.Equal(7, subscription.WritingAssessmentsRemaining); // 2 + 5
+            Assert.True(subscription.TutorBookUnlocked);
+        }
+    }
+
     // ── Driver ────────────────────────────────────────────────────────────────
 
     private Task DriveCompletionAsync(FulfillmentContext ctx, Guid? eventId = null)
