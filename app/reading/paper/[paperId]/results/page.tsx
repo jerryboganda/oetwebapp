@@ -3,10 +3,13 @@
 import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, CheckCircle2, Clock, FileText, Lightbulb, MessageSquare, RefreshCw, SpellCheck, Target, XCircle } from 'lucide-react';
+import { BookOpen, CheckCircle2, FileText, MessageSquare, MinusCircle, RefreshCw, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { formatAnswerValue } from '@/lib/results/format-answer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,7 +26,6 @@ import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { readErrorMessage } from '@/lib/read-error-message';
-import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 /**
  * The backend post-submit review payload returns a few fields that are not
@@ -196,6 +198,27 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   const isPracticeOnly = scaled === null;
   const passed = !isPracticeOnly && typeof scaled === 'number' && isListeningReadingPassByScaled(scaled);
 
+  const partTotals = (review?.partBreakdown ?? []).reduce(
+    (acc, part) => ({
+      correct: acc.correct + part.correctCount,
+      incorrect: acc.incorrect + part.incorrectCount,
+      unanswered: acc.unanswered + part.unansweredCount,
+    }),
+    { correct: 0, incorrect: 0, unanswered: 0 },
+  );
+  const gradedItems = partTotals.correct + partTotals.incorrect + partTotals.unanswered;
+  const accuracyPct = gradedItems > 0 ? (partTotals.correct / gradedItems) * 100 : 0;
+  const nextAction = !isPracticeOnly && passed
+    ? { label: 'Enter Mock Setup', href: '/mocks', title: 'Validate in a mock', desc: 'Confirm the Reading gain transfers under full-exam pressure.' }
+    : {
+        label: 'Back to Reading',
+        href: '/reading',
+        title: isPracticeOnly ? 'Keep sharpening this cluster' : 'Repeat focused Reading practice',
+        desc: isPracticeOnly
+          ? 'Repeat the same skill, then return to a full Reading paper.'
+          : 'Review missed clusters, then start another structured Reading paper.',
+      };
+
   return (
     <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
       <main className="space-y-5 sm:space-y-8">
@@ -281,11 +304,38 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               )}
             />
 
-            <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <LearnerSurfaceCard card={scoreCard(review, passed, isPracticeOnly)} />
-              <LearnerSurfaceCard card={nextActionCard(passed, isPracticeOnly)} />
-              <LearnerSurfaceCard card={policyCard(review)} />
-            </section>
+            <ResultsScorePanel
+              eyebrow="Reading review"
+              icon={BookOpen}
+              title={review.paper.title}
+              subtitle={isPracticeOnly
+                ? `${raw}/${review.attempt.maxRawScore} practice marks`
+                : `${scaled}/500 scaled · Grade ${review.attempt.gradeLetter}`}
+              gaugeValue={accuracyPct}
+              gaugeLabel="Accuracy"
+              gaugeColor={isPracticeOnly ? 'var(--color-primary)' : passed ? 'var(--color-success)' : 'var(--color-warning)'}
+              grade={isPracticeOnly ? null : { label: `Grade ${review.attempt.gradeLetter}`, tone: passed ? 'success' : 'warning' }}
+              stats={[
+                { label: 'Correct', value: partTotals.correct, tone: 'success', icon: <CheckCircle2 /> },
+                { label: 'Incorrect', value: partTotals.incorrect, tone: 'danger', icon: <XCircle /> },
+                { label: 'Unanswered', value: partTotals.unanswered, tone: 'warning', icon: <MinusCircle /> },
+                {
+                  label: isPracticeOnly ? 'Raw score' : 'Scaled',
+                  value: isPracticeOnly ? `${raw}/${review.attempt.maxRawScore}` : `${scaled}/500`,
+                  tone: 'info',
+                  icon: <Target />,
+                },
+              ]}
+              aside={(
+                <div className="rounded-2xl border border-border bg-background-light p-4">
+                  <p className="text-sm font-semibold text-navy dark:text-white">{nextAction.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">{nextAction.desc}</p>
+                  <Button asChild variant="primary" size="sm" className="mt-3">
+                    <Link href={nextAction.href}>{nextAction.label}</Link>
+                  </Button>
+                </div>
+              )}
+            />
 
             {structure?.paper.questionPaperAssets?.length ? (
               <section id="pdf-review">
@@ -390,7 +440,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <LearnerSurfaceSectionHeader
                 eyebrow="Item Review"
                 title="Question-by-question review"
-                description="Review shows your response and scoring outcome. Answer keys, explanations, and miss diagnostics appear only when the review policy releases them."
+                description="Each question shows your answer beside the correct answer, colour-coded green for correct and red for incorrect, with explanations and miss diagnostics."
                 className="mb-5"
               />
               <div className="space-y-3">
@@ -434,179 +484,60 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   );
 }
 
-function scoreCard(review: ReadingAttemptReviewDto, passed: boolean, isPracticeOnly: boolean): LearnerSurfaceCardModel {
-  return {
-    kind: 'evidence',
-    sourceType: 'backend_summary',
-    accent: isPracticeOnly ? 'blue' : passed ? 'emerald' : 'amber',
-    eyebrow: 'Score',
-    eyebrowIcon: isPracticeOnly ? BookOpen : passed ? CheckCircle2 : Target,
-    title: `${review.attempt.rawScore ?? 0}/${review.attempt.maxRawScore} raw`,
-    description: isPracticeOnly
-      ? 'Practice-only subset | No OET grade'
-      : `${review.attempt.scaledScore ?? 0}/500 | Grade ${review.attempt.gradeLetter}`,
-    metaItems: [
-      { icon: FileText, label: isPracticeOnly ? 'Subset practice' : passed ? 'Pass anchor met' : 'Needs 30/42' },
-    ],
-  };
-}
-
-function nextActionCard(passed: boolean, isPracticeOnly: boolean): LearnerSurfaceCardModel {
-  return {
-    kind: 'navigation',
-    sourceType: 'frontend_navigation',
-    accent: 'blue',
-    eyebrow: 'Next Action',
-    eyebrowIcon: BookOpen,
-    title: isPracticeOnly ? 'Keep sharpening this cluster' : passed ? 'Validate in a mock' : 'Repeat focused Reading practice',
-    description: isPracticeOnly
-      ? 'Use the reviewed items to repeat the same skill, then move back to a full Reading paper.'
-      : passed
-      ? 'Use a full mock to confirm the Reading gain transfers under cross-subtest pressure.'
-      : 'Review missed clusters, then start another structured Reading paper.',
-    primaryAction: {
-      label: !isPracticeOnly && passed ? 'Enter Mock Setup' : 'Back to Reading',
-      href: !isPracticeOnly && passed ? '/mocks' : '/reading',
-    },
-  };
-}
-
-function policyCard(review: ReadingAttemptReviewDto): LearnerSurfaceCardModel {
-  return {
-    kind: 'status',
-    sourceType: 'backend_summary',
-    accent: 'slate',
-    eyebrow: 'Review Policy',
-    eyebrowIcon: FileText,
-    title: 'Answer keys redacted',
-    description: 'Learner review payloads show outcomes and clusters without exposing answer-key-only explanations or synonyms.',
-    metaItems: [
-      { icon: Target, label: review.policy.showExplanationsOnlyIfWrong ? 'Wrong-only explanations' : 'Policy-redacted review' },
-    ],
-  };
-}
-
-function ReviewValue({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="rounded-xl bg-background-light p-3">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">{label}</p>
-      <p className="mt-1 break-words font-semibold text-navy">{formatReviewValue(value)}</p>
-    </div>
-  );
-}
-
-function formatReviewValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return 'No answer';
-  if (Array.isArray(value)) return value.join(', ');
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
 function ReviewItemDetails({ item }: { item: ReviewItem }) {
-  const missReason = !item.isCorrect && item.missReason ? item.missReason : null;
+  const missReason = !item.isCorrect && item.missReason ? missReasonLabel(item.missReason) : null;
   const distractor = !item.isCorrect && item.selectedDistractorCategory
     ? distractorCategoryLabel(item.selectedDistractorCategory)
     : null;
-  const spellingMiss = missReason === 'spelling';
+  const unanswered =
+    item.userAnswer === null ||
+    item.userAnswer === undefined ||
+    item.userAnswer === '' ||
+    (Array.isArray(item.userAnswer) && item.userAnswer.length === 0);
+  const timeMs = typeof item.totalElapsedMs === 'number' && item.totalElapsedMs > 0
+    ? item.totalElapsedMs
+    : typeof item.elapsedMs === 'number' && item.elapsedMs > 0
+      ? item.elapsedMs
+      : null;
 
   return (
-    <details
-      className="rounded-[16px] border border-border bg-surface p-4 shadow-sm"
-      data-testid={`reading-review-item-${item.questionId}`}
+    <AnswerComparisonCard
+      testId={`reading-review-item-${item.questionId}`}
+      label={`Part ${item.partCode} · Question ${item.displayOrder}`}
+      stem={item.stem}
+      isCorrect={item.isCorrect}
+      unanswered={!item.isCorrect && unanswered}
+      yourAnswer={formatAnswerValue(item.userAnswer)}
+      correctAnswer={item.correctAnswer ?? null}
+      pointsEarned={item.pointsEarned}
+      maxPoints={item.maxPoints}
+      timeMs={timeMs}
+      missReason={missReason}
+      distractor={distractor}
+      explanation={item.explanationMarkdown ? (
+        <MarkdownContent markdown={item.explanationMarkdown} className="text-sm leading-6 text-navy dark:text-white/90" />
+      ) : null}
     >
-      <summary className="cursor-pointer list-none">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-bold text-navy">Part {item.partCode} | Question {item.displayOrder}</p>
-            <p className="mt-1 text-sm text-muted">{item.stem}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {typeof item.elapsedMs === 'number' && item.elapsedMs > 0 ? (
-              <Badge variant="muted" className="inline-flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" aria-hidden />
-                {formatDuration(item.elapsedMs)}
-              </Badge>
-            ) : null}
-            <Badge variant={item.isCorrect ? 'success' : 'danger'}>{item.isCorrect ? 'Correct' : 'Review'}</Badge>
-            <Badge variant="muted">{item.pointsEarned}/{item.maxPoints}</Badge>
-          </div>
-        </div>
-      </summary>
-
-      {missReason ? (
-        <div
-          className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-sm ${
-            spellingMiss
-              ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200'
-              : 'border-border bg-background-light text-navy'
-          }`}
-          data-testid={spellingMiss ? 'reading-miss-spelling' : 'reading-miss-reason'}
-        >
-          {spellingMiss ? (
-            <SpellCheck className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
-          ) : (
-            <Lightbulb className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
-          )}
-          <span>
-            <span className="font-bold">{missReasonLabel(missReason).title}</span>
-            {missReasonLabel(missReason).detail ? (
-              <span className="block text-xs leading-5 opacity-90">{missReasonLabel(missReason).detail}</span>
-            ) : null}
-          </span>
-        </div>
-      ) : null}
-
-      <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-        <ReviewValue label="Your answer" value={item.userAnswer} />
-        {item.correctAnswer ? (
-          <ReviewValue label="Correct answer" value={item.correctAnswer} />
-        ) : (
-          <ReviewValue label="Review status" value={item.isCorrect ? 'Answered correctly' : 'Needs review'} />
-        )}
-        {distractor ? <ReviewValue label="Distractor type you chose" value={distractor} /> : null}
-        {typeof item.totalElapsedMs === 'number' && item.totalElapsedMs > 0 ? (
-          <ReviewValue label="Total time on this question" value={formatDuration(item.totalElapsedMs)} />
-        ) : null}
-      </div>
-
-      {item.explanationMarkdown ? (
-        <div
-          className="mt-3 rounded-xl border border-border bg-background-light p-3"
-          data-testid="reading-explanation"
-        >
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Explanation</p>
-          <MarkdownContent markdown={item.explanationMarkdown} className="mt-1 text-sm leading-6 text-navy" />
-        </div>
-      ) : null}
-
       {item.boxExplanations && Object.keys(item.boxExplanations).length > 0 ? (
-        <div className="mt-3 space-y-2">
+        <div className="space-y-2">
           {Object.entries(item.boxExplanations).map(([key, text]) => (
             <div
               key={key}
               className="rounded-xl border border-border bg-background-light p-3"
               data-testid={`reading-box-explanation-${key}`}
             >
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Explanation ({key})</p>
-              <p className="mt-1 text-sm leading-6 text-navy">{text}</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted">Explanation ({key})</p>
+              <p className="mt-1 text-sm leading-6 text-navy dark:text-white">{text}</p>
             </div>
           ))}
         </div>
       ) : null}
-    </details>
+    </AnswerComparisonCard>
   );
 }
 
 function formatPercent(value: number): string {
   return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
-}
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
 }
 
 function missReasonLabel(reason: string): { title: string; detail?: string } {

@@ -4,10 +4,11 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, FileText, Loader2, Quote, Target, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Quote, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { getListeningResult, type ListeningReviewDto } from '@/lib/listening-api';
@@ -131,56 +132,44 @@ function ListeningResultsContent() {
   return (
     <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
       <div className="space-y-5 sm:space-y-8 pb-24">
-        <MotionSection
-          className="rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-10"
-        >
-          {isFullOetPaper ? (
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Canonical OET Listening Score</p>
-                <h2 className="mt-2 text-3xl font-black text-navy">{result.scoreDisplay}</h2>
-                <p className="mt-3 max-w-2xl text-sm text-muted">
-                  This is graded against the official answer key. A pass on Listening is 30/42 (350/500, Grade B).
+        <MotionSection>
+          <ResultsScorePanel
+            eyebrow="Listening result"
+            icon={Headphones}
+            title={result.paper.title}
+            subtitle={isFullOetPaper
+              ? result.scoreDisplay
+              : `${result.rawScore}/${result.maxRawScore} correct · practice paper`}
+            gaugeValue={percentCorrect}
+            gaugeLabel="Accuracy"
+            gaugeColor={isFullOetPaper ? (result.passed ? 'var(--color-success)' : 'var(--color-danger)') : 'var(--color-primary)'}
+            grade={isFullOetPaper ? { label: `Grade ${result.grade}`, tone: result.passed ? 'success' : 'danger' } : null}
+            stats={[
+              { label: 'Correct', value: result.correctCount, tone: 'success', icon: <CheckCircle2 /> },
+              { label: 'Incorrect', value: result.incorrectCount, tone: 'danger', icon: <XCircle /> },
+              { label: 'Unanswered', value: result.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
+              {
+                label: isFullOetPaper ? 'Scaled' : 'Raw',
+                value: isFullOetPaper ? `${result.scaledScore}/500` : `${result.rawScore}/${result.maxRawScore}`,
+                tone: 'info',
+                icon: <Target />,
+              },
+            ]}
+            aside={(
+              <div className={`rounded-2xl border p-4 text-center ${
+                isFullOetPaper
+                  ? result.passed
+                    ? 'border-success/20 bg-success/10 text-success'
+                    : 'border-danger/20 bg-danger/10 text-danger'
+                  : 'border-border bg-background-light text-navy'
+              }`}>
+                <p className="text-xs font-black uppercase tracking-widest">
+                  {isFullOetPaper ? (result.passed ? 'Threshold met' : 'Below threshold') : 'Practice only'}
                 </p>
+                <p className="mt-1 text-xs leading-5 opacity-90">A pass on Listening is 30/42 (350/500, Grade B).</p>
               </div>
-              <div className={`rounded-2xl border p-5 text-center ${result.passed ? 'border-success/20 bg-success/10 text-success' : 'border-danger/20 bg-danger/10 text-danger'}`}>
-                <p className="text-xs font-black uppercase tracking-widest">{result.passed ? 'Threshold Met' : 'Below Threshold'}</p>
-                <p className="mt-2 text-4xl font-black">Grade {result.grade}</p>
-                <p className="mt-1 text-sm">{result.scaledScore} / 500</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Practice Score</p>
-                <h2 className="mt-2 text-3xl font-black text-navy">{result.rawScore} / {result.maxRawScore} correct ({percentCorrect}%)</h2>
-                <p className="mt-3 max-w-2xl text-sm text-muted">
-                  This is a drill / starter paper, not a full OET Listening test. Official OET grade and 350/500 scaled
-                  pass mark only apply to full 42-item papers.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border bg-background-light p-5 text-center text-navy">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Practice</p>
-                <p className="mt-2 text-4xl font-black">{percentCorrect}%</p>
-                <p className="mt-1 text-sm text-muted">{result.rawScore} of {result.maxRawScore}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-border bg-background-light p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Raw</p>
-              <p className="mt-2 text-2xl font-black text-navy">{result.rawScore} / {result.maxRawScore}</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-background-light p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Correct</p>
-              <p className="mt-2 text-2xl font-black text-navy">{result.correctCount}</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-background-light p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Review Policy</p>
-              <p className="mt-2 text-sm font-bold capitalize text-navy">{result.transcriptAccess.state.replace(/_/g, ' ')}</p>
-            </div>
-          </div>
+            )}
+          />
         </MotionSection>
 
         {result.recommendedNextDrill ? (

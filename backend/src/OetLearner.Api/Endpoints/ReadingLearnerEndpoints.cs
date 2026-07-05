@@ -618,9 +618,14 @@ public static class ReadingLearnerEndpoints
             // attempt is not Submitted, force everything off regardless of
             // policy (defence in depth — the endpoint already 400s above).
             var isSubmitted = attempt.Status == ReadingAttemptStatus.Submitted;
-            var isDrillReview = attempt.Mode == ReadingAttemptMode.Drill;
-            var showCorrectAnswer = isSubmitted && policy.ShowCorrectAnswerOnReview && !isDrillReview;
-            var showExplanations = isSubmitted && policy.ShowExplanationsAfterSubmit && !isDrillReview;
+            // Owner directive (2026-07-05): once an attempt is Submitted, the
+            // learner results/review page always shows the correct answer beside
+            // their own answer, plus explanations — for every mode (practice,
+            // drill, mock section) and regardless of the admin policy toggles.
+            // The pre-submit HARD GUARD is preserved: nothing is disclosed until
+            // the attempt reaches Submitted.
+            var showCorrectAnswer = isSubmitted;
+            var showExplanations = isSubmitted;
             var explanationsOnlyIfWrong = policy.ShowExplanationsOnlyIfWrong;
 
             var items = parts

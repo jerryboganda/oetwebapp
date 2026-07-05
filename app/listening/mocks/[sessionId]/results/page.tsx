@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { Headphones } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 
 interface MockResult {
   sessionId: string;
@@ -59,15 +61,35 @@ export default function ListeningMockResultsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
-      <header className="rounded-2xl border border-border bg-surface p-8 shadow-sm text-center">
-        <h1 className="text-3xl font-bold text-navy">{result.scaledScore}</h1>
-        <p className="text-sm text-muted mt-1">
-          Scaled OET Listening • Grade {result.gradeLabel}
-        </p>
-        <p className="mt-2 text-muted">
-          Raw: <span className="font-mono text-navy">{result.rawScore} / 42</span>
-        </p>
-      </header>
+      <ResultsScorePanel
+        eyebrow="Listening mock"
+        icon={Headphones}
+        title="Mock result"
+        subtitle={`Scaled OET Listening · Grade ${result.gradeLabel}`}
+        gaugeValue={(result.scaledScore / 500) * 100}
+        gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{result.gradeLabel}</span>}
+        gaugeLabel={`${result.scaledScore}/500`}
+        gaugeColor={
+          result.gradeLabel === 'A' || result.gradeLabel === 'B'
+            ? 'var(--color-success)'
+            : result.gradeLabel === 'C'
+              ? 'var(--color-warning)'
+              : 'var(--color-danger)'
+        }
+        grade={{
+          label: `Grade ${result.gradeLabel}`,
+          tone: result.gradeLabel === 'A' || result.gradeLabel === 'B' ? 'success' : result.gradeLabel === 'C' ? 'warning' : 'danger',
+        }}
+        stats={[
+          { label: 'Scaled', value: `${result.scaledScore}/500`, tone: 'info' },
+          { label: 'Raw score', value: `${result.rawScore}/42`, tone: 'default' },
+          {
+            label: 'Grade',
+            value: result.gradeLabel,
+            tone: result.gradeLabel === 'A' || result.gradeLabel === 'B' ? 'success' : result.gradeLabel === 'C' ? 'warning' : 'danger',
+          },
+        ]}
+      />
       <nav className="flex flex-wrap gap-3 text-sm">
         <Link href="/listening" className="rounded-md bg-primary px-4 py-2 text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
           Back to dashboard

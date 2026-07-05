@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
 import {
@@ -44,6 +46,11 @@ const CRITERION_NAMES: Record<WritingCriterionCode, string> = {
   c5: 'C5 Organisation & Layout',
   c6: 'C6 Language Accuracy',
 };
+
+// OET writing criterion scales: C1 Purpose is out of 3, the rest out of 7.
+// Targets mirror the CriteriaRadar overlay (band-6 style anchor).
+const CRITERION_MAX: Record<WritingCriterionCode, number> = { c1: 3, c2: 7, c3: 7, c4: 7, c5: 7, c6: 7 };
+const CRITERION_TARGET: Record<WritingCriterionCode, number> = { c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 };
 
 function gradeToScores(g: WritingGradeDto): WritingCriteriaScoresDto {
   return {
@@ -153,19 +160,32 @@ export default function WritingSubmissionResultsPage() {
   return (
     <LearnerDashboardShell pageTitle={t('writing.submissions.results.pageTitle')}>
       <div className="space-y-6" aria-busy={!grade}>
-        <LearnerPageHero
-          eyebrow={t('writing.submissions.results.eyebrow')}
-          icon={Award}
-          accent="amber"
-          title={grade?.bandLabel ? t('writing.submissions.results.estimatedBand', { band: grade.bandLabel }) : t('writing.submissions.results.awaiting')}
-          description={t('writing.submissions.results.description')}
-          highlights={grade ? [
-            { icon: Award, label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/38` },
-            // Confidence is an AI signal — hide it on mocks (human-marked, zero AI).
-            ...(isMock ? [] : [{ icon: Sparkles, label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag }]),
-            { icon: FileText, label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-' },
-          ] : []}
-        />
+        {grade ? (
+          <ResultsScorePanel
+            eyebrow={t('writing.submissions.results.eyebrow')}
+            icon={Award}
+            title={t('writing.submissions.results.estimatedBand', { band: grade.bandLabel })}
+            subtitle={t('writing.submissions.results.description')}
+            gaugeValue={(grade.estimatedBand / 7) * 100}
+            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{grade.bandLabel}</span>}
+            gaugeLabel={`${grade.rawTotal}/38`}
+            gaugeColor={grade.estimatedBand >= 6 ? 'var(--color-success)' : grade.estimatedBand >= 4 ? 'var(--color-warning)' : 'var(--color-danger)'}
+            stats={[
+              { label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
+              { label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-', tone: 'default', icon: <FileText /> },
+              // Confidence is an AI signal — hide it on mocks (human-marked, zero AI).
+              ...(isMock ? [] : [{ label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag, tone: 'default' as const, icon: <Sparkles /> }]),
+            ]}
+          />
+        ) : (
+          <LearnerPageHero
+            eyebrow={t('writing.submissions.results.eyebrow')}
+            icon={Award}
+            accent="amber"
+            title={t('writing.submissions.results.awaiting')}
+            description={t('writing.submissions.results.description')}
+          />
+        )}
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {actionStatus ? <InlineAlert variant="info">{actionStatus}</InlineAlert> : null}
@@ -183,31 +203,31 @@ export default function WritingSubmissionResultsPage() {
                   // Mock: iterate the fixed criteria so the tutor's human scores + written
                   // comments always render, regardless of the AI feedback map. Zero AI.
                   ? (Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => (
-                      <li key={code} className="rounded-lg border border-border bg-surface p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-sm font-bold text-navy" dir="ltr">{CRITERION_NAMES[code]}</h3>
-                          <Badge variant="info" size="sm">{scores![code]}</Badge>
-                        </div>
-                        {tutorReview?.perCriterionComments?.[code] ? (
-                          <p className="mt-1 text-xs text-muted leading-snug" dir="ltr">{tutorReview.perCriterionComments[code]}</p>
-                        ) : null}
+                      <li key={code}>
+                        <CriterionScoreRow
+                          label={CRITERION_NAMES[code]}
+                          score={scores![code]}
+                          max={CRITERION_MAX[code]}
+                          target={CRITERION_TARGET[code]}
+                          feedback={tutorReview?.perCriterionComments?.[code] ?? null}
+                        />
                       </li>
                     ))
                   : (Object.entries(grade!.perCriterion) as Array<[WritingCriterionCode, NonNullable<typeof grade>['perCriterion'][WritingCriterionCode]]>).map(([code, feedback]) => (
-                      <li key={code} className="rounded-lg border border-border bg-surface p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          {/* Criterion names are OET-authored English content. */}
-                          <h3 className="text-sm font-bold text-navy" dir="ltr">{CRITERION_NAMES[code]}</h3>
-                          <Badge variant="info" size="sm">{feedback.score}</Badge>
-                        </div>
-                        {/* AI feedback is English content per spec. */}
-                        <p className="mt-1 text-xs text-muted leading-snug" dir="ltr">{feedback.feedback}</p>
-                        {feedback.exemplarFix ? (
-                          <p className="mt-1 rounded bg-emerald-50 p-2 text-xs text-emerald-800">
-                            <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
-                            <span dir="ltr">{feedback.exemplarFix}</span>
-                          </p>
-                        ) : null}
+                      <li key={code}>
+                        <CriterionScoreRow
+                          label={CRITERION_NAMES[code]}
+                          score={feedback.score}
+                          max={CRITERION_MAX[code]}
+                          target={CRITERION_TARGET[code]}
+                          feedback={feedback.feedback}
+                          exemplar={feedback.exemplarFix ? (
+                            <>
+                              <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
+                              <span dir="ltr">{feedback.exemplarFix}</span>
+                            </>
+                          ) : null}
+                        />
                       </li>
                     ))}
               </ul>

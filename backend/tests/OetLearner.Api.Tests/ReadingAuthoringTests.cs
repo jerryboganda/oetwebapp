@@ -3510,12 +3510,15 @@ public class ReadingAuthoringTests
         var reviewResponse = await client.GetAsync($"/v1/reading-papers/attempts/{run.AttemptId}/review");
         reviewResponse.EnsureSuccessStatusCode();
         var reviewPayload = await reviewResponse.Content.ReadAsStringAsync();
-        Assert.DoesNotContain("\"correctAnswer\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("\"explanationMarkdown\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        // Owner directive (2026-07-05): a Submitted attempt — including Drill —
+        // now discloses the correct answer + explanation on the review payload.
+        Assert.Contains("\"correctAnswer\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"explanationMarkdown\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SECRET-REVIEW-ANSWER", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SECRET-REVIEW-EXPLANATION", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        // Accepted synonyms remain answer-key-only internal data — never surfaced.
         Assert.DoesNotContain("acceptedSynonyms", reviewPayload, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("SECRET-REVIEW-ANSWER", reviewPayload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SECRET-REVIEW-SYNONYM", reviewPayload, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("SECRET-REVIEW-EXPLANATION", reviewPayload, StringComparison.OrdinalIgnoreCase);
         var review = JsonSerializer.Deserialize<JsonElement>(reviewPayload);
 
         var attemptJson = review.GetProperty("attempt");

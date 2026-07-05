@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { getMockResults, type MockResultDto } from '@/lib/reading-pathway-api';
 
 type Tab = 'score' | 'sections' | 'skills' | 'time' | 'next';
@@ -68,11 +69,6 @@ export default function MockResultsPage() {
           Back to Mocks
         </Link>
 
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Mock Results</h1>
-          <p className="mt-1 text-sm text-muted">Session: {sessionId}</p>
-        </div>
-
         {loading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
@@ -85,6 +81,36 @@ export default function MockResultsPage() {
           </div>
         ) : result ? (
           <>
+            <ResultsScorePanel
+              eyebrow="Reading mock"
+              icon={BookOpen}
+              title="Mock result"
+              subtitle={`Session ${sessionId}`}
+              gaugeValue={(result.scaledScore / 500) * 100}
+              gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{result.grade}</span>}
+              gaugeLabel={`${result.scaledScore}/500`}
+              gaugeColor={
+                result.grade === 'A' || result.grade === 'B'
+                  ? 'var(--color-success)'
+                  : result.grade === 'C'
+                    ? 'var(--color-warning)'
+                    : 'var(--color-danger)'
+              }
+              grade={{
+                label: `Grade ${result.grade}`,
+                tone: result.grade === 'A' || result.grade === 'B' ? 'success' : result.grade === 'C' ? 'warning' : 'danger',
+              }}
+              stats={[
+                { label: 'Scaled', value: `${result.scaledScore}/500`, tone: 'info' },
+                { label: 'Raw score', value: result.rawScore, tone: 'default' },
+                {
+                  label: 'Grade',
+                  value: result.grade,
+                  tone: result.grade === 'A' || result.grade === 'B' ? 'success' : result.grade === 'C' ? 'warning' : 'danger',
+                },
+              ]}
+            />
+
             {/* Tab bar */}
             <div className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1">
               {TABS.map((tab) => (
