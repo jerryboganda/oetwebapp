@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { CatalogStorefront } from '@/components/domain/catalog';
+import { CartNavButton } from '@/components/cart';
 
 export default function CatalogPage() {
   return (
@@ -12,6 +13,7 @@ export default function CatalogPage() {
             OET with Dr. Ahmed Hesham
           </Link>
           <div className="flex items-center gap-2">
+            <CartNavButton />
             <Link
               href="/sign-in"
               className="rounded-lg px-3 py-1.5 text-sm font-semibold text-navy transition-colors hover:bg-background-light"

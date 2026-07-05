@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
+import { CheckCircle2, ShoppingCart, Sparkles } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { CatalogEntitlementSummary } from './catalog-sections';
 import { PromoHeroSlider } from './promo-hero-slider';
@@ -25,6 +24,7 @@ import {
   type WebsiteSectionKey,
 } from '@/lib/catalog-website-packages';
 import { cn } from '@/lib/utils';
+import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 
 // Live billing values (price is the source of truth for what the learner is charged).
 interface LivePrice {
@@ -68,10 +68,6 @@ function buildPriceMap(
   return map;
 }
 
-function checkoutHref(pkg: WebsitePackage): string {
-  return `/checkout/review?productType=${pkg.productType}&priceId=${encodeURIComponent(pkg.code)}&quantity=1`;
-}
-
 function SubscriptionPackageCard({
   pkg,
   live,
@@ -83,9 +79,20 @@ function SubscriptionPackageCard({
   owned: boolean;
   highlighted: boolean;
 }) {
+  const { addToCart } = useAddToCart();
   const currency = live?.currency ?? 'GBP';
   const price = live?.price;
   const hasDiscount = live?.originalPrice != null && price != null && live.originalPrice > price;
+
+  const onAddToCart = () => {
+    addToCart({
+      code: pkg.code,
+      kind: pkg.productType === 'plan_purchase' ? 'plan' : 'addon',
+      name: pkg.name,
+      price: price ?? 0,
+      currency,
+    });
+  };
 
   return (
     <article
@@ -173,12 +180,13 @@ function SubscriptionPackageCard({
               <CheckCircle2 className="h-4 w-4" /> Active on your account
             </span>
           ) : (
-            <Link
-              href={checkoutHref(pkg)}
+            <button
+              type="button"
+              onClick={onAddToCart}
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
-              Get this package <ArrowRight className="h-4 w-4" />
-            </Link>
+              <ShoppingCart className="h-4 w-4" /> Add to cart
+            </button>
           )}
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { CatalogPlanDetailDrawer } from './catalog-detail-drawer';
 import { DEFAULT_CATALOG_STOREFRONT } from '@/lib/catalog-presentation';
@@ -31,7 +32,8 @@ function planFixture(overrides: Partial<PublicCatalogPlanRow> = {}): PublicCatal
 }
 
 describe('CatalogPlanDetailDrawer', () => {
-  it('routes "Continue to purchase" straight to checkout, not the marketplace package page', () => {
+  it('adds the plan to the cart instead of deep-linking to checkout (dashboard variant)', () => {
+    const onAddToCart = vi.fn();
     renderWithRouter(
       <CatalogPlanDetailDrawer
         plan={planFixture()}
@@ -39,18 +41,17 @@ describe('CatalogPlanDetailDrawer', () => {
         owned={false}
         variant="dashboard"
         onClose={() => {}}
+        onAddToCart={onAddToCart}
       />,
     );
 
-    const link = screen.getByRole('link', { name: /continue to purchase/i });
-    expect(link).toHaveAttribute(
-      'href',
-      '/checkout/review?productType=plan_purchase&priceId=full-nursing-assessment&quantity=1',
-    );
-    expect(link.getAttribute('href')).not.toContain('/marketplace/packages/');
+    const button = screen.getByRole('button', { name: /add to cart/i });
+    button.click();
+    expect(onAddToCart).toHaveBeenCalledWith(planFixture());
   });
 
-  it('uses the same checkout route for the public "Get this package" CTA', () => {
+  it('adds the plan to the cart for the public variant too', () => {
+    const onAddToCart = vi.fn();
     renderWithRouter(
       <CatalogPlanDetailDrawer
         plan={planFixture()}
@@ -58,10 +59,12 @@ describe('CatalogPlanDetailDrawer', () => {
         owned={false}
         variant="public"
         onClose={() => {}}
+        onAddToCart={onAddToCart}
       />,
     );
 
-    const link = screen.getByRole('link', { name: /get this package/i });
-    expect(link.getAttribute('href')).toContain('/checkout/review?productType=plan_purchase');
+    const button = screen.getByRole('button', { name: /add to cart/i });
+    button.click();
+    expect(onAddToCart).toHaveBeenCalledTimes(1);
   });
 });
