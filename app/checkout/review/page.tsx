@@ -66,6 +66,13 @@ function CheckoutReviewContent() {
   const initialGateway = searchParams?.get('gateway') ?? '';
   const initialCoupon = searchParams?.get('couponCode') ?? '';
   const quantity = Number(searchParams?.get('quantity') ?? '1') || 1;
+  // Cart checkout: the review page carries the primary item in `priceId` and every
+  // additional cart line as repeated (or comma-joined) `addOnCodes`, so the quote and
+  // the checkout session both cover the whole cart in one payment.
+  const addOnCodes = useMemo(() => {
+    const raw = searchParams?.getAll('addOnCodes') ?? [];
+    return raw.flatMap((value) => value.split(',')).map((code) => code.trim()).filter(Boolean);
+  }, [searchParams]);
 
   const [couponCode, setCouponCode] = useState(initialCoupon);
   const [quote, setQuote] = useState<BillingQuote | null>(null);
@@ -132,6 +139,7 @@ function CheckoutReviewContent() {
         quantity,
         priceId,
         couponCode: couponOverride.trim() || null,
+        addOnCodes,
         parentSubscriptionId,
       });
       setQuote(result);
@@ -141,7 +149,7 @@ function CheckoutReviewContent() {
     } finally {
       setLoading(false);
     }
-  }, [couponCode, parentSubscriptionId, priceId, productType, quantity]);
+  }, [addOnCodes, couponCode, parentSubscriptionId, priceId, productType, quantity]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -243,6 +251,7 @@ function CheckoutReviewContent() {
         quantity,
         priceId,
         couponCode: couponCode.trim() || null,
+        addOnCodes,
         parentSubscriptionId,
         quoteId: quote.quoteId,
         gateway: selectedGateway,
@@ -278,13 +287,14 @@ function CheckoutReviewContent() {
       quantity,
       priceId,
       couponCode: couponCode.trim() || null,
+      addOnCodes,
       parentSubscriptionId,
       quoteId: quote.quoteId,
       gateway: selectedGateway || 'paypal',
       idempotencyKey: newIdempotencyKey(),
     });
     return checkout.checkoutSessionId;
-  }, [quote, productType, quantity, priceId, couponCode, parentSubscriptionId, selectedGateway]);
+  }, [quote, productType, quantity, priceId, couponCode, addOnCodes, parentSubscriptionId, selectedGateway]);
 
   const handlePaypalCaptured = useCallback(
     (result: PaymentCaptureResult) => {

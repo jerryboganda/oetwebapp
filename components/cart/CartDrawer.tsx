@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowRight, ShoppingBag, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { formatMoney } from '@/lib/money';
 import { useCartItems, useCartStore } from '@/lib/cart/cart-store';
-import { startCartCheckout } from '@/lib/cart/checkout';
+import { buildCheckoutReviewHref } from '@/lib/cart/checkout';
 
 /**
  * Slide-out cart drawer — lightweight peek into the cart from any page.
@@ -22,6 +23,7 @@ export interface CartDrawerProps {
 }
 
 export function CartDrawer({ open, onClose }: CartDrawerProps) {
+  const router = useRouter();
   const items = useCartItems();
   const removeItem = useCartStore((state) => state.removeItem);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -35,14 +37,12 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const onCheckout = useCallback(async () => {
+  const onCheckout = useCallback(() => {
+    if (items.length === 0) return;
     setCheckoutBusy(true);
-    try {
-      await startCartCheckout(items, {});
-    } finally {
-      setCheckoutBusy(false);
-    }
-  }, [items]);
+    onClose();
+    router.push(buildCheckoutReviewHref(items));
+  }, [items, onClose, router]);
 
   if (!open) return null;
 

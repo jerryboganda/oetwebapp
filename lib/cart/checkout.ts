@@ -1,69 +1,44 @@
-import { createBillingCheckoutSession, isApiError } from '@/lib/api';
-import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
-import { toast } from '@/components/admin/ui/toaster';
 import type { CartItem } from './cart-store';
 
-/** Backend error codes with a cart-specific, friendlier message than the raw API text. */
-const CART_ERROR_MESSAGES: Record<string, string> = {
-  cart_one_subscription: 'You can only check out one subscription plan at a time.',
-  addon_requires_parent: 'This add-on requires an active parent plan — add the plan to your cart first.',
-  addon_incompatible: 'One of the add-ons in your cart is not compatible with the selected plan.',
-};
-
-export interface StartCartCheckoutOptions {
-  couponCode?: string | null;
-  gateway?: string;
-}
-
 /**
- * Maps the client cart onto the existing `/v1/billing/checkout-sessions`
- * express endpoint (one plan + multiple add-ons per checkout) and redirects
- * the learner to the returned hosted checkout URL.
+ * Builds the `/checkout/review` URL for the current cart.
+ *
+ * The cart hands its selected items to the shared checkout review page, which
+ * owns the payment-route UI (Pay globally / Egypt, Stripe / PayPal / bank
+ * transfer), the live quote + countdown, and the actual checkout-session
+ * creation. This keeps ONE professional checkout surface for both the cart and
+ * the single-item "buy now" deep links, instead of the cart silently
+ * redirecting to a hosted portal.
+ *
+ * Mapping onto the express checkout contract: a plan (if present) is the primary
+ * `priceId` with every add-on as a repeated `addOnCodes` param; otherwise the
+ * first add-on is the primary and the rest are `addOnCodes`. The backend quote
+ * builder composes them into one multi-item quote.
  */
-export async function startCartCheckout(
+export function buildCheckoutReviewHref(
   items: CartItem[],
-  options: StartCartCheckoutOptions = {},
-): Promise<void> {
-  if (items.length === 0) {
-    toast.error('Your cart is empty.');
-    return;
-  }
+  couponCode?: string | null,
+): string {
+  const params = new URLSearchParams();
+  params.set('quantity', '1');
 
   const plan = items.find((item) => item.kind === 'plan');
-
-  try {
-    const result = plan
-      ? await createBillingCheckoutSession({
-        productType: 'plan_purchase',
-        quantity: 1,
-        priceId: plan.code,
-        addOnCodes: items.filter((item) => item.kind === 'addon').map((item) => item.code),
-        couponCode: options.couponCode ?? null,
-        gateway: options.gateway ?? 'stripe',
-      })
-      : await createBillingCheckoutSession({
-        productType: 'addon_purchase',
-        quantity: 1,
-        priceId: items[0].code,
-        addOnCodes: items.slice(1).map((item) => item.code),
-        couponCode: options.couponCode ?? null,
-        gateway: options.gateway ?? 'stripe',
-      });
-
-    if (!result.checkoutUrl) {
-      throw new Error('Checkout session did not return a redirect URL.');
+  if (plan) {
+    params.set('productType', 'plan_purchase');
+    params.set('priceId', plan.code);
+    for (const item of items) {
+      if (item.kind === 'addon') params.append('addOnCodes', item.code);
     }
-
-    try {
-      await openCheckoutUrl(result.checkoutUrl);
-    } catch {
-      window.location.href = result.checkoutUrl;
+  } else {
+    params.set('productType', 'addon_purchase');
+    if (items[0]) params.set('priceId', items[0].code);
+    for (const item of items.slice(1)) {
+      params.append('addOnCodes', item.code);
     }
-  } catch (err) {
-    if (isApiError(err) && CART_ERROR_MESSAGES[err.code]) {
-      toast.error(CART_ERROR_MESSAGES[err.code]);
-      return;
-    }
-    toast.error(err instanceof Error ? err.message : 'Could not start checkout.');
   }
+
+  const coupon = couponCode?.trim();
+  if (coupon) params.set('couponCode', coupon);
+
+  return `/checkout/review?${params.toString()}`;
 }

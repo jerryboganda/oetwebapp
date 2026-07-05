@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowRight, ShoppingBag, Tag, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { formatMoney } from '@/lib/money';
 import { useCartItems, useCartStore } from '@/lib/cart/cart-store';
-import { startCartCheckout } from '@/lib/cart/checkout';
+import { buildCheckoutReviewHref } from '@/lib/cart/checkout';
 
 /**
  * Full-page cart view used by `/cart`. Reads items from the client cart
@@ -26,21 +27,19 @@ export interface CartPageViewProps {
 }
 
 export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps) {
+  const router = useRouter();
   const items = useCartItems();
   const removeItem = useCartStore((state) => state.removeItem);
   const [promoInput, setPromoInput] = useState('');
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const onCheckout = useCallback(async () => {
-    setCheckoutBusy(true);
+  const onCheckout = useCallback(() => {
+    if (items.length === 0) return;
     setErrorMessage(null);
-    try {
-      await startCartCheckout(items, { couponCode: promoInput.trim() || null });
-    } finally {
-      setCheckoutBusy(false);
-    }
-  }, [items, promoInput]);
+    setCheckoutBusy(true);
+    router.push(buildCheckoutReviewHref(items, promoInput.trim() || null));
+  }, [items, promoInput, router]);
 
   const currency = items[0]?.currency ?? 'GBP';
   const hasItems = items.length > 0;
