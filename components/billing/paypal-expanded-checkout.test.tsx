@@ -13,13 +13,35 @@ vi.mock('@/lib/api', () => ({
 
 // The real PayPal SDK is heavy ESM with side effects; stub the pieces this
 // component imports. PayPalButtons invokes onApprove when clicked so the
-// capture path can be exercised deterministically.
+// capture path can be exercised deterministically. The `pp-create-order`
+// button mirrors the real SDK's behavior when createOrder rejects: it awaits
+// the prop, and on failure calls the SDK's own onError — the exact sequence
+// that used to let handleSdkError clobber a more specific message.
 vi.mock('@paypal/react-paypal-js', () => ({
   PayPalScriptProvider: ({ children }: { children?: React.ReactNode }) => <div data-testid="pp-script">{children}</div>,
-  PayPalButtons: (props: { onApprove?: (d: { orderID: string }) => void }) => (
-    <button type="button" data-testid="pp-approve" onClick={() => props.onApprove?.({ orderID: 'ORDER-1' })}>
-      pay
-    </button>
+  PayPalButtons: (props: {
+    createOrder?: () => Promise<string>;
+    onApprove?: (d: { orderID: string }) => void;
+    onError?: (err: unknown) => void;
+  }) => (
+    <>
+      <button type="button" data-testid="pp-approve" onClick={() => props.onApprove?.({ orderID: 'ORDER-1' })}>
+        pay
+      </button>
+      <button
+        type="button"
+        data-testid="pp-create-order"
+        onClick={async () => {
+          try {
+            await props.createOrder?.();
+          } catch (e) {
+            props.onError?.(e);
+          }
+        }}
+      >
+        create
+      </button>
+    </>
   ),
   PayPalCardFieldsProvider: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   PayPalNameField: () => <div />,
@@ -106,5 +128,31 @@ describe('PayPalExpandedCheckout', () => {
     await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/did not complete/i)));
     expect(onCaptured).not.toHaveBeenCalled();
     expect(screen.getByText(/did not complete/i)).toBeTruthy();
+  });
+
+  it('preserves the specific createOrder failure message when the SDK onError fires afterward', async () => {
+    mockFetchPayPalClientConfig.mockResolvedValue(enabledConfig);
+    const specificMessage = 'This payment method is temporarily unavailable. Please pay by card instead.';
+    const onError = vi.fn();
+
+    render(
+      <PayPalExpandedCheckout
+        createOrder={vi.fn().mockRejectedValue(new Error(specificMessage))}
+        onCaptured={vi.fn()}
+        onError={onError}
+        amountLabel="£10.00"
+      />,
+    );
+
+    // Mirrors the real PayPal SDK: it calls createOrder, and when that rejects,
+    // it invokes its own onError (handleSdkError) right after. Before the fix,
+    // handleSdkError unconditionally overwrote the specific message set by
+    // handleCreateOrder with the generic "could not be completed" copy.
+    const createOrderButton = await screen.findByTestId('pp-create-order');
+    await userEvent.click(createOrderButton);
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(specificMessage));
+    expect(onError).not.toHaveBeenCalledWith(expect.stringMatching(/could not be completed/i));
+    expect(screen.getByText(specificMessage)).toBeTruthy();
   });
 });

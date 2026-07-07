@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   PayPalScriptProvider,
   PayPalButtons,
@@ -78,6 +78,18 @@ export function PayPalExpandedCheckout({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks the last error synchronously (state updates are batched/async, so a
+  // closure over `error` inside handleSdkError could still see the pre-update
+  // value). Cleared at the start of each new attempt, set alongside every
+  // setError call so handleSdkError can tell whether a specific message was
+  // already surfaced before the SDK's own onError fires.
+  const errorRef = useRef<string | null>(null);
+
+  const applyError = (message: string) => {
+    errorRef.current = message;
+    setError(message);
+    onError?.(message);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -103,14 +115,14 @@ export function PayPalExpandedCheckout({
   }, [onUnavailable]);
 
   const handleCreateOrder = async (): Promise<string> => {
+    errorRef.current = null;
     setError(null);
     setBusy(true);
     try {
       return await createOrder();
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : GENERIC_START_ERROR;
-      setError(msg);
-      onError?.(msg);
+      applyError(msg);
       setBusy(false);
       throw e;
     }
@@ -127,22 +139,24 @@ export function PayPalExpandedCheckout({
       if (result.status === 'completed') {
         onCaptured(result);
       } else {
-        const msg = captureFailureMessage(result.failureReason);
-        setError(msg);
-        onError?.(msg);
+        applyError(captureFailureMessage(result.failureReason));
       }
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : GENERIC_CAPTURE_ERROR;
-      setError(msg);
-      onError?.(msg);
+      applyError(msg);
     } finally {
       setBusy(false);
     }
   };
 
+  // The PayPal JS SDK invokes its own onError whenever createOrder/onApprove
+  // throws or rejects — which happens right after handleCreateOrder/handleApprove
+  // already surfaced a specific message via applyError. Only fall back to the
+  // generic copy if nothing more specific was already set for this attempt.
   const handleSdkError = () => {
-    setError(GENERIC_CAPTURE_ERROR);
-    onError?.(GENERIC_CAPTURE_ERROR);
+    if (!errorRef.current) {
+      applyError(GENERIC_CAPTURE_ERROR);
+    }
     setBusy(false);
   };
 
