@@ -49,12 +49,12 @@
       // network failure rejects — exactly the reachability signal we need.
       await fetch(PROBE_URL, { method: 'GET', cache: 'no-store', mode: 'no-cors', signal: controller.signal });
       clearTimeout(timer);
-      showLoading('Loading OET Prep…');
+      showLoading('Loading OET with Dr Hesham…');
       window.location.replace(REMOTE);
     } catch (err) {
       clearTimeout(timer);
       probing = false;
-      const message = err && err.name === 'AbortError' ? 'The server took too long to respond.' : 'Could not reach the OET Prep servers.';
+      const message = err && err.name === 'AbortError' ? 'The server took too long to respond.' : 'Could not reach the OET with Dr Hesham servers.';
       showOffline(message);
     }
   }

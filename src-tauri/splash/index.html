@@ -1,37 +1,384 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OET Prep</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f7f5ef; color: #1c1917; display: grid; place-items: center; height: 100vh; margin: 0; }
-    @media (prefers-color-scheme: dark) { body { background: #07111d; color: #e7e5e4; } }
-    .card { text-align: center; max-width: 30rem; padding: 2rem; }
-    .spinner { width: 36px; height: 36px; margin: 0 auto 1.25rem; border: 3px solid rgba(120,113,108,0.3); border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.9s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
-    p { color: #57534e; font-size: 0.95rem; line-height: 1.5; margin: 0.25rem 0; }
-    @media (prefers-color-scheme: dark) { p { color: #a8a29e; } }
-    button { margin-top: 1.25rem; padding: 0.6rem 1.4rem; font-size: 0.95rem; font-weight: 600; color: #fff; background: #7c3aed; border: none; border-radius: 0.75rem; cursor: pointer; }
-    button:hover { background: #6d28d9; }
-    button:disabled { opacity: 0.6; cursor: default; }
-    [hidden] { display: none !important; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#7c3aed">
+<title>OET with Dr Hesham</title>
+<style>
+  :root {
+    --violet: #7c3aed;
+    --violet-dark: #6d28d9;
+    --blue: #4f46e5;
+    --blue-2: #6366f1;
+    --pink: #ec4899;
+    --pink-2: #f0abfc;
+
+    --bg: #f7f5ef;
+    --text: #1c1917;
+    --muted: #57534e;
+
+    --card-bg: rgba(255, 255, 255, 0.6);
+    --card-border: rgba(28, 25, 23, 0.09);
+    --card-shadow: rgba(28, 25, 23, 0.16);
+    --offline-text: #b91c1c;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #07111d;
+      --text: #e7e5e4;
+      --muted: #a8a29e;
+
+      --card-bg: rgba(16, 24, 39, 0.55);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --card-shadow: rgba(0, 0, 0, 0.5);
+      --offline-text: #f87171;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .scene {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .bg-glow {
+    position: absolute;
+    width: 60vmax;
+    height: 60vmax;
+    border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  .bg-glow--a {
+    top: -12%;
+    left: -12%;
+    background: radial-gradient(circle, var(--violet) 0%, transparent 70%);
+    opacity: 0.16;
+    animation: driftA 24s ease-in-out infinite;
+  }
+
+  .bg-glow--b {
+    bottom: -16%;
+    right: -12%;
+    background: radial-gradient(circle, var(--pink) 0%, transparent 70%);
+    opacity: 0.13;
+    animation: driftB 28s ease-in-out infinite;
+  }
+
+  @keyframes driftA {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(6%, 5%) scale(1.1); }
+  }
+
+  @keyframes driftB {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-5%, -6%) scale(1.08); }
+  }
+
+  .state {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Author-origin `.state{display:flex}` ties the UA `[hidden]{display:none}`
+     rule on specificity; author beats user-agent at a tie, so without this the
+     hidden attribute is silently ignored and both states render at once. */
+  .state[hidden] {
+    display: none;
+  }
+
+  .card-frame {
+    position: relative;
+    border-radius: 28px;
+    animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .card-frame::before {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+    border-radius: 29.5px;
+    background: conic-gradient(from 0deg, var(--violet), var(--blue-2), var(--pink), var(--blue), var(--violet));
+    animation: spin 10s linear infinite;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    width: 440px;
+    max-width: 90vw;
+    padding: 56px 48px 44px;
+    border-radius: 28px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    box-shadow: 0 24px 60px -20px var(--card-shadow), 0 2px 8px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .mark {
+    position: relative;
+    width: 108px;
+    height: 90px;
+    margin-bottom: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mark-glow {
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.35), rgba(99, 102, 241, 0.18) 45%, transparent 72%);
+    animation: glowPulse 3.4s ease-in-out infinite;
+    will-change: transform, opacity;
+    z-index: 0;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { transform: scale(0.88); opacity: 0.55; }
+    50% { transform: scale(1.12); opacity: 1; }
+  }
+
+  .mark-svg {
+    position: relative;
+    z-index: 1;
+    width: 108px;
+    height: 90px;
+    display: block;
+    filter: drop-shadow(0 6px 16px rgba(124, 58, 237, 0.25));
+    /* Belt-and-suspenders: the source lockup PNG has faint anti-aliased
+       fringing right at the edge of the icon crop (adjacent to baked-in
+       text elsewhere in the source canvas). Clip a couple px off the two
+       edges nearest that text so no sub-pixel bleed can ever show. */
+    clip-path: inset(2% 4% 2% 2%);
+  }
+
+  .wordmark {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 30px;
+  }
+
+  .wordmark-main {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text);
+  }
+
+  .wordmark-sub {
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+  }
+
+  .status {
+    margin: 0 0 22px;
+    font-size: 14px;
+    color: var(--muted);
+    min-height: 18px;
+  }
+
+  .loader {
+    display: flex;
+    gap: 8px;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--violet), var(--blue-2));
+    animation: dotWave 1.3s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .dot:nth-child(2) { animation-delay: 0.15s; }
+  .dot:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes dotWave {
+    0%, 60%, 100% { transform: translateY(0) scale(0.8); opacity: 0.45; }
+    30% { transform: translateY(-6px) scale(1); opacity: 1; }
+  }
+
+  .offline-icon {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 18px;
+    color: var(--violet);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .offline-title {
+    margin: 0 0 10px;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .offline-body {
+    margin: 0 0 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .offline-detail {
+    margin: 0 0 24px;
+    font-size: 13px;
+    color: var(--offline-text);
+    min-height: 16px;
+  }
+
+  .retry-btn {
+    appearance: none;
+    border: none;
+    cursor: pointer;
+    padding: 12px 32px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #fff;
+    background: linear-gradient(135deg, var(--violet), var(--blue));
+    box-shadow: 0 10px 24px -8px rgba(124, 58, 237, 0.5);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .retry-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--violet-dark), var(--blue));
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px -8px rgba(124, 58, 237, 0.6);
+  }
+
+  .retry-btn:active:not(:disabled) { transform: translateY(0); }
+
+  .retry-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+    transform: none;
+  }
+
+  .retry-btn:focus-visible {
+    outline: 2px solid var(--blue-2);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bg-glow,
+    .card-frame::before,
+    .mark-glow,
+    .dot {
+      animation: none !important;
+    }
+    .card-frame {
+      animation: fadeOnly 0.5s ease both !important;
+    }
+    .mark-glow { opacity: 0.65; transform: scale(1); }
+    .dot { opacity: 0.8; }
+  }
+
+  @keyframes fadeOnly {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+</style>
 </head>
 <body>
-  <div class="card" id="loading">
-    <div class="spinner"></div>
-    <h1>OET Prep</h1>
-    <p id="status">Connecting…</p>
+  <div class="scene">
+    <div class="bg-glow bg-glow--a" aria-hidden="true"></div>
+    <div class="bg-glow bg-glow--b" aria-hidden="true"></div>
+
+    <div id="loading" class="state">
+      <div class="card-frame">
+        <div class="card">
+          <div class="mark">
+            <div class="mark-glow" aria-hidden="true"></div>
+            <svg class="mark-svg" viewBox="0 0 102 110" role="img" aria-label="OET with Dr Hesham logo">
+              <image href="assets/brand-mark.png" x="-8" y="-40" width="400" height="200" />
+            </svg>
+          </div>
+          <div class="wordmark">
+            <span class="wordmark-main">OET</span>
+            <span class="wordmark-sub">with Dr Hesham</span>
+          </div>
+          <p id="status" class="status" role="status" aria-live="polite">Connecting&hellip;</p>
+          <div class="loader" aria-hidden="true">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="offline" class="state" hidden role="alert">
+      <div class="card-frame">
+        <div class="card">
+          <svg class="offline-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 3l18 18M8.5 8.5a11 11 0 0113.6 1.9M5.1 11.1A15.9 15.9 0 0112 8c1.7 0 3.3.3 4.8.9M12 19h.01M9.2 15.2a5.5 5.5 0 015.6 0" />
+          </svg>
+          <h1 class="offline-title">You're offline</h1>
+          <p class="offline-body">OET with Dr Hesham needs an internet connection. Check your network and try again.</p>
+          <p id="offline-detail" class="offline-detail" aria-live="polite"></p>
+          <button id="retry" type="button" class="retry-btn">Retry</button>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="card" id="offline" hidden>
-    <h1>You're offline</h1>
-    <p>OET Prep needs an internet connection. Check your network and try again.</p>
-    <p id="offline-detail"></p>
-    <button id="retry" type="button">Retry</button>
-  </div>
-  <script src="splash.js"></script>
+<script src="splash.js"></script>
 </body>
 </html>
