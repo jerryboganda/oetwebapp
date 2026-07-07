@@ -1358,6 +1358,50 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminVocabularyImport_LegacyTermWithUnmigratedSetCodes_PreservesOrphanedSetsOnReimport()
+    {
+        // Rows created before RecallSetOccurrencesJson existed (migration
+        // 20260708090000) may carry set codes in RecallSetCodesJson that were
+        // never migrated into the map (the column defaults to '{}' with no
+        // backfill). Re-importing just ONE of that term's sets must not evict
+        // it from the OTHERS — regression for a real prod-data gap where
+        // touching one recall set silently wiped legacy multi-set membership.
+        var term = $"recall-legacy-{Guid.NewGuid():N}";
+        var id = $"VOC-{Guid.NewGuid():N}"[..12];
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.VocabularyTerms.Add(new VocabularyTerm
+            {
+                Id = id,
+                Term = term,
+                Definition = "Legacy definition.",
+                ExamTypeCode = "OET",
+                Category = "medical",
+                ProfessionId = "medicine",
+                RecallSetCodesJson = JsonSerializer.Serialize(new[] { "old", "2023-2025" }),
+                RecallSetOccurrencesJson = "{}",
+                ExamFrequencyCount = 2,
+                SourceProvenance = "src=legacy-seed;p=1;row=1",
+                Status = "draft",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var row = $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
+        var csv = VocabularyImportCsvHeader + row;
+        var batchId = $"recall-legacy-{Guid.NewGuid():N}"[..32];
+        using (var dry = CsvContent(csv, "recalls-legacy.csv"))
+            (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=2026&importBatchId={Uri.EscapeDataString(batchId)}", dry)).EnsureSuccessStatusCode();
+        using (var commit = CsvContent(csv, "recalls-legacy.csv"))
+            (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=2026&importBatchId={Uri.EscapeDataString(batchId)}", commit)).EnsureSuccessStatusCode();
+
+        var (map, freq) = await ReadRecallOccurrencesAsync(term);
+        Assert.Equal(new Dictionary<string, int> { ["old"] = 1, ["2023-2025"] = 1, ["2026"] = 1 }, map);
+        Assert.Equal(3, freq);
+    }
+
+    [Fact]
     public async Task AdminVocabularyImport_PreviewAndDryRun_BlockSameFileDuplicatesAndOverLimitFields()
     {
         var duplicateTerm = $"duplicate-recall-{Guid.NewGuid():N}";
