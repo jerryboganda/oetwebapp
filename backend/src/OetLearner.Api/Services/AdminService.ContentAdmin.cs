@@ -1858,6 +1858,23 @@ public partial class AdminService
     {
         if (occurrences < 1) occurrences = 1;
         var map = ParseRecallSetOccurrences(term.RecallSetOccurrencesJson);
+        // Legacy rows created before this map existed (or a term whose map has
+        // not yet been rebuilt for every set it carries) can list codes in
+        // RecallSetCodesJson that are absent from the map. Both RecallSetCodesJson
+        // and ExamFrequencyCount below are recomputed purely from the map, so
+        // without this, replacing just ONE set's count here would silently evict
+        // the term from every OTHER set it's tagged with until that set is ALSO
+        // re-imported. Seed orphaned codes with a conservative occurrence of 1 so
+        // membership survives an incremental, one-set-at-a-time rebuild.
+        try
+        {
+            var existingCodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(term.RecallSetCodesJson ?? "[]") ?? new();
+            foreach (var orphanCode in existingCodes)
+            {
+                if (!map.ContainsKey(orphanCode)) map[orphanCode] = 1;
+            }
+        }
+        catch { /* malformed legacy JSON — nothing to preserve */ }
         map[setCode] = occurrences;
         var clean = map.Where(kv => kv.Value > 0)
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
