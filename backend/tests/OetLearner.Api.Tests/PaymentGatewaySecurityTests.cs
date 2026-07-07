@@ -96,6 +96,51 @@ public class PaymentGatewaySecurityTests
     }
 
     [Fact]
+    public async Task PayPalCheckout_StripsStripeSessionPlaceholder_FromReturnUrls()
+    {
+        // Regression: the shared checkout URL builder (LearnerService.CreateCheckoutSessionAsync)
+        // embeds Stripe's literal `{CHECKOUT_SESSION_ID}` template token in SuccessUrl/CancelUrl for
+        // every gateway. Stripe substitutes it on redirect, but PayPal has no equivalent and its
+        // v2/checkout/orders API rejects literal `{`/`}` in application_context URLs with
+        // 400 INVALID_PARAMETER_SYNTAX — which is exactly what learners saw as the generic
+        // "Your payment could not be completed" error on every PayPal order creation in production.
+        var billingOptions = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            PayPal = new PayPalBillingOptions { UseSandbox = false },
+        };
+        var handler = new CapturingPayPalHandler();
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: null,
+            PayPalCancelUrl: null));
+        var gateway = new PayPalGateway(new HttpClient(handler), Options.Create(billingOptions), runtime);
+
+        await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            UserId: "learner-1",
+            Amount: 4.00m,
+            Currency: "GBP",
+            ProductType: "addon_purchase",
+            ProductId: "quote-1",
+            Description: "Listening Starter",
+            Metadata: null,
+            SuccessUrl: "https://app.example/billing/payment-return?status=success&quote=quote-1&session={CHECKOUT_SESSION_ID}",
+            CancelUrl: "https://app.example/billing/payment-return?status=cancelled&quote=quote-1"), default);
+
+        Assert.NotNull(handler.OrderPayload);
+        using var payload = System.Text.Json.JsonDocument.Parse(handler.OrderPayload!);
+        var returnUrl = payload.RootElement.GetProperty("application_context").GetProperty("return_url").GetString();
+        Assert.Equal("https://app.example/billing/payment-return?status=success&quote=quote-1&session=", returnUrl);
+    }
+
+    [Fact]
     public async Task StripeRefund_SendsIdempotencyKeyHeader()
     {
         var options = new BillingOptions

@@ -623,8 +623,8 @@ public sealed class PayPalGateway(
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
         var options = await GetEffectivePayPalOptionsAsync(ct);
-        var successUrl = request.SuccessUrl ?? options.SuccessUrl;
-        var cancelUrl = request.CancelUrl ?? options.CancelUrl;
+        var successUrl = StripStripeSessionPlaceholder(request.SuccessUrl ?? options.SuccessUrl);
+        var cancelUrl = StripStripeSessionPlaceholder(request.CancelUrl ?? options.CancelUrl);
         if (string.IsNullOrWhiteSpace(options.ClientId)
             || string.IsNullOrWhiteSpace(options.ClientSecret)
             || string.IsNullOrWhiteSpace(successUrl)
@@ -1077,6 +1077,21 @@ public sealed class PayPalGateway(
             ? "https://api-m.sandbox.paypal.com"
             : "https://api-m.paypal.com";
     }
+
+    /// <summary>
+    /// PayPal's <c>application_context.return_url</c>/<c>cancel_url</c> must be
+    /// well-formed URLs — literal <c>{</c>/<c>}</c> characters fail PayPal's schema
+    /// validation with <c>400 INVALID_PARAMETER_SYNTAX</c> ("Request is not
+    /// well-formed..."), which is what surfaced in production as the generic "Your
+    /// payment could not be completed" error on every PayPal order creation. The
+    /// shared checkout URL builder (see <c>AbsolutizeReturnUrl</c> above) deliberately
+    /// leaves Stripe's literal <c>{CHECKOUT_SESSION_ID}</c> template token unescaped
+    /// because Stripe substitutes it on redirect. PayPal has no equivalent — the
+    /// embedded checkout captures using the order id the SDK already holds
+    /// client-side — so strip the token here before it reaches PayPal's API.
+    /// </summary>
+    private static string? StripStripeSessionPlaceholder(string? url)
+        => url?.Replace("{CHECKOUT_SESSION_ID}", string.Empty, StringComparison.Ordinal);
 }
 
 /// <summary>
