@@ -84,4 +84,17 @@ describe('mobile runtime', () => {
 
     cleanup();
   });
+
+  it('does not stamp capacitor-native on a plain web browser', async () => {
+    // No desktopBridge and Capacitor.isNativePlatform() === false in jsdom, so
+    // the web app must NOT be mislabelled as a native shell (regression: the
+    // update toolbar was appearing on the website).
+    const cleanup = await initializeMobileRuntime();
+
+    expect(document.documentElement.dataset.runtimeKind).toBeUndefined();
+    expect(document.documentElement.dataset.capacitorNative).toBeUndefined();
+    expect(document.documentElement.dataset.appActive).toBeUndefined();
+
+    cleanup();
+  });
 });

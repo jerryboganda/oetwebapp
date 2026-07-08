@@ -84,6 +84,14 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     return () => undefined;
   }
 
+  // Plain web browser (not a native shell): do NOT stamp capacitor-native.
+  // Without this guard the web app is mislabelled as 'capacitor-native'
+  // (leaving data-runtime-kind wrong for getAppRuntimeKind), which surfaced
+  // shell-only UI like the update toolbar on the website.
+  if (!Capacitor.isNativePlatform()) {
+    return () => undefined;
+  }
+
   setViewportMetrics();
   document.documentElement.dataset.runtimeKind = 'capacitor-native';
   document.documentElement.dataset.colorScheme = getPreferredColorScheme();
