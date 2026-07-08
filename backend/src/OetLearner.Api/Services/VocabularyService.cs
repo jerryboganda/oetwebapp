@@ -46,10 +46,13 @@ public class VocabularyService(
 
         // Recall-set filter — string-contains over the JSON array column. Cheap
         // first-cut; if hot we move it to a normalised join table later.
-        var normalisedSet = OetLearner.Api.Domain.RecallSetCodes.Normalise(recallSet);
-        if (normalisedSet is not null)
+        // Accept ANY recall-set code, not just the 3 canonical RecallSetCodes
+        // values — admins can tag terms with custom recall-set codes, and
+        // restricting this filter to the canonical set would silently return
+        // everything unfiltered for any custom code.
+        if (!string.IsNullOrWhiteSpace(recallSet))
         {
-            var needle = $"\"{normalisedSet}\"";
+            var needle = $"\"{recallSet.Trim().ToLowerInvariant()}\"";
             query = query.Where(t => t.RecallSetCodesJson.Contains(needle));
         }
 
