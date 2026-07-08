@@ -262,6 +262,44 @@ public class ListeningGradingServiceTests
         Assert.Equal(OetScoring.OetRawToScaled(expectedRawScore), result.ScaledScore);
     }
 
+    // Part B/C grading MUST key on the option LETTER/position (OptionKey), not on
+    // the display text — so authoring real option prose (replacing "Option A/B/C")
+    // can never change a score. Historical answers that carried the option TEXT or
+    // a bare INDEX must still resolve to the same option.
+    [Theory]
+    [InlineData("B", true)]                              // canonical forward path — option key
+    [InlineData("b", true)]                              // key match is case-insensitive
+    [InlineData("The dosage must be reduced", true)]     // legacy: real option text
+    [InlineData("1", true)]                              // legacy: zero-based index
+    [InlineData("A", false)]                             // wrong option, by key
+    [InlineData("Refer to a specialist", false)]         // wrong option, by text
+    [InlineData("", false)]                              // no answer
+    public void Evaluate_Mc3_matches_by_option_key_text_or_index(string savedAnswer, bool expectedCorrect)
+    {
+        var question = new ListeningQuestion
+        {
+            Id = "q-mc3",
+            QuestionType = ListeningQuestionType.MultipleChoice3,
+            Points = 1,
+            Options = new List<ListeningQuestionOption>
+            {
+                new() { OptionKey = "A", DisplayOrder = 0, Text = "The patient is stable", IsCorrect = false },
+                new() { OptionKey = "B", DisplayOrder = 1, Text = "The dosage must be reduced", IsCorrect = true },
+                new() { OptionKey = "C", DisplayOrder = 2, Text = "Refer to a specialist", IsCorrect = false },
+            },
+        };
+        var answer = new ListeningAnswer
+        {
+            Id = "a-mc3",
+            ListeningQuestionId = question.Id,
+            UserAnswerJson = System.Text.Json.JsonSerializer.Serialize(savedAnswer),
+        };
+
+        var (isCorrect, _, _) = ListeningGradingService.Evaluate(question, answer);
+
+        Assert.Equal(expectedCorrect, isCorrect);
+    }
+
     [Fact]
     public async Task GradeAsync_rejects_attempt_owned_by_different_user()
     {
