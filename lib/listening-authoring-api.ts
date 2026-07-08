@@ -495,6 +495,12 @@ export interface ListeningPartBCAnswer {
   correctAnswer: string;
   /** AI-drafted "why correct" rationale (learner-visible on review), or null. */
   rationale: string | null;
+  /** Question stem transcribed from the paper (null when OCR left it blank). */
+  stem?: string | null;
+  /** Option A/B/C text transcribed from the paper (null when unclear). */
+  optionA?: string | null;
+  optionB?: string | null;
+  optionC?: string | null;
 }
 
 export interface ListeningPartBCImportResult {

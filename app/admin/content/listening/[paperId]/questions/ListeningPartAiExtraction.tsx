@@ -20,7 +20,7 @@ import { Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
-import { Select, Textarea } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import {
   importListeningPartBCFromUpload,
   replaceListeningStructure,
@@ -41,8 +41,16 @@ export interface ListeningPartAiExtractionProps {
 
 const MCQ_LETTERS = ['A', 'B', 'C'] as const;
 const MCQ3_OPTIONS = ['Option A', 'Option B', 'Option C'];
-const LETTER_OPTIONS = MCQ_LETTERS.map((letter, idx) => ({ value: letter, label: `${letter}. ${MCQ3_OPTIONS[idx]}` }));
+const SEE_PDF_SENTINEL = 'See PDF';
 const PDF_ACCEPT = 'application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp';
+
+function isSentinelStem(stem: string | undefined): boolean {
+  return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
+}
+function isPlaceholderOption(text: string | undefined, index: number): boolean {
+  const trimmed = (text ?? '').trim();
+  return trimmed.length === 0 || trimmed.toLowerCase() === MCQ3_OPTIONS[index].toLowerCase();
+}
 
 const PART_RANGE: Record<ListeningExtractionPart, [number, number]> = { B: [25, 30], C: [31, 42] };
 
@@ -64,6 +72,8 @@ function correctLetterOf(q: ListeningAuthoredQuestion): string {
 
 interface Row {
   number: number;
+  stem: string;
+  options: string[];
   correctAnswer: string;
   rationale: string;
 }
@@ -100,8 +110,21 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
       for (let n = lo; n <= hi; n += 1) {
         const ai = byNum.get(n);
         const existing = allQuestions.find((q) => q.number === n) ?? null;
+        // Seed stem + options from the AI extraction first, then any real existing
+        // text (never a placeholder), else blank for the reviewer to fill.
+        const seedStem = ai?.stem?.trim()
+          ? ai.stem.trim()
+          : existing && !isSentinelStem(existing.stem) ? (existing.stem ?? '') : '';
+        const aiOptions = [ai?.optionA, ai?.optionB, ai?.optionC];
+        const seedOptions = MCQ_LETTERS.map((_, i) => {
+          if (aiOptions[i]?.trim()) return aiOptions[i]!.trim();
+          const opt = existing?.options?.[i];
+          return isPlaceholderOption(opt, i) ? '' : (opt ?? '');
+        });
         seeded.push({
           number: n,
+          stem: seedStem,
+          options: seedOptions,
           correctAnswer: ai?.correctAnswer ?? (existing ? correctLetterOf(existing) : ''),
           rationale: ai?.rationale ?? existing?.explanation ?? '',
         });
@@ -124,6 +147,14 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
     setRows((prev) => (prev ? prev.map((row, i) => (i === index ? { ...row, ...patch } : row)) : prev));
   }, []);
 
+  const patchOption = useCallback((index: number, optionIndex: number, value: string) => {
+    setRows((prev) => (prev
+      ? prev.map((row, i) => (i === index
+          ? { ...row, options: row.options.map((opt, oi) => (oi === optionIndex ? value : opt)) }
+          : row))
+      : prev));
+  }, []);
+
   const onSaveAll = useCallback(async () => {
     if (!rows) return;
     const missing = rows.find((r) => !r.correctAnswer);
@@ -141,8 +172,8 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
           number: row.number,
           partCode: subSectionFor(part, row.number),
           type: 'multiple_choice_3',
-          stem: 'See PDF',
-          options: [...MCQ3_OPTIONS],
+          stem: row.stem.trim() || SEE_PDF_SENTINEL,
+          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() || MCQ3_OPTIONS[i]),
           correctAnswer: row.correctAnswer,
           acceptedAnswers: [],
           explanation: row.rationale.trim() ? row.rationale.trim() : null,
@@ -178,8 +209,8 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
             AI extraction (OCR) — Part {part}
           </CardTitle>
           <CardDescription>
-            Upload the Part {part} question paper{part === 'C' ? 's (C1 + C2)' : ''} and the answer-key PDF. The AI fills the
-            correct option and drafts the rationale for every question (Q{lo}–Q{hi}) — proofread, then Save once.
+            Upload the Part {part} question paper{part === 'C' ? 's (C1 + C2)' : ''} and the answer-key PDF. The AI reads the
+            question text, the three options and the correct answer for every question (Q{lo}–Q{hi}) — proofread, then Save once.
           </CardDescription>
         </div>
       </CardHeader>
@@ -255,12 +286,35 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
                     <div className="min-w-0 flex-1">
                       <Select
                         aria-label={`Correct answer for question ${row.number}`}
-                        placeholder="Select answer"
-                        options={LETTER_OPTIONS}
+                        placeholder="Mark correct option"
+                        options={MCQ_LETTERS.map((letter, i) => ({
+                          value: letter,
+                          label: row.options[i]?.trim() ? `${letter}. ${row.options[i].trim()}` : `Option ${letter}`,
+                        }))}
                         value={row.correctAnswer}
                         onChange={(e) => patchRow(index, { correctAnswer: e.target.value })}
                       />
                     </div>
+                  </div>
+                  <Textarea
+                    aria-label={`Question ${row.number} stem`}
+                    value={row.stem}
+                    onChange={(e) => patchRow(index, { stem: e.target.value })}
+                    rows={2}
+                    placeholder="Question text — shown as the heading on the learner card"
+                  />
+                  <div className="grid gap-2">
+                    {MCQ_LETTERS.map((letter, i) => (
+                      <div key={letter} className="flex items-center gap-2">
+                        <span className="w-5 shrink-0 text-center text-xs font-black text-admin-fg-muted">{letter}</span>
+                        <Input
+                          aria-label={`Question ${row.number} option ${letter}`}
+                          value={row.options[i] ?? ''}
+                          onChange={(e) => patchOption(index, i, e.target.value)}
+                          placeholder={`Option ${letter} text`}
+                        />
+                      </div>
+                    ))}
                   </div>
                   <Textarea
                     aria-label={`Rationale for question ${row.number} (optional)`}

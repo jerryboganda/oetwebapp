@@ -31,7 +31,16 @@ namespace OetLearner.Api.Services.Listening;
 // replaceListeningStructure path (which carries its own publish/attempt guards).
 // ═════════════════════════════════════════════════════════════════════════════
 
-public sealed record ListeningPartBCAnswer(int Number, string CorrectAnswer, string? Rationale);
+public sealed record ListeningPartBCAnswer(
+    int Number,
+    string CorrectAnswer,
+    string? Rationale,
+    // Real inline question text extracted from the question paper (optional — weak
+    // OCR may leave these null; the admin fills any gaps in the review UI).
+    string? Stem = null,
+    string? OptionA = null,
+    string? OptionB = null,
+    string? OptionC = null);
 
 public sealed record ListeningPartBCImportResult(
     string Part,
@@ -161,7 +170,14 @@ public sealed class ListeningPartBCExtractionService(
                 continue;
             }
             var rationale = string.IsNullOrWhiteSpace(a.Rationale) ? null : Truncate(a.Rationale.Trim(), 1024);
-            byNumber[a.Number] = new ListeningPartBCAnswer(a.Number, letter, rationale);
+            // Stem + option texts are best-effort: carry them when present, never
+            // hard-fail on a missing one (the letter is the machine-gradable payload).
+            byNumber[a.Number] = new ListeningPartBCAnswer(
+                a.Number, letter, rationale,
+                Stem: CleanText(a.Stem, 2048),
+                OptionA: CleanText(a.OptionA, 1024),
+                OptionB: CleanText(a.OptionB, 1024),
+                OptionC: CleanText(a.OptionC, 1024));
         }
 
         for (var n = lo; n <= hi; n++)
@@ -175,7 +191,12 @@ public sealed class ListeningPartBCExtractionService(
     }
 
     private sealed record BcToolOutput(List<BcToolAnswer>? Answers);
-    private sealed record BcToolAnswer(int Number, string? CorrectAnswer, string? Rationale);
+    private sealed record BcToolAnswer(
+        int Number, string? CorrectAnswer, string? Rationale,
+        string? Stem, string? OptionA, string? OptionB, string? OptionC);
+
+    private static string? CleanText(string? value, int max)
+        => string.IsNullOrWhiteSpace(value) ? null : Truncate(value.Trim(), max);
 
     // ── Claude call (forced tool, no temperature for Opus 4.7/4.8) ──────────────
 
@@ -215,7 +236,9 @@ public sealed class ListeningPartBCExtractionService(
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
-            ["max_tokens"] = 4000,
+            // Widened output (stem + 3 option texts + rationale per question, up to 12
+            // questions for Part C) needs more headroom than the letter-only key.
+            ["max_tokens"] = 8000,
             ["system"] = new object[]
             {
                 new Dictionary<string, object?>
@@ -341,6 +364,10 @@ ANSWER KEY (the official correct option per question). You are told which PART t
 
 For EVERY question in the requested part's range, emit one entry with:
   - number: the printed question number.
+  - stem: the full question text ("stem") EXACTLY as printed on the QUESTION PAPER — the
+    prompt the candidate answers. Do NOT include the A/B/C options inside the stem.
+  - optionA / optionB / optionC: the full text of options A, B and C EXACTLY as printed,
+    WITHOUT the leading "A."/"B."/"C." label.
   - correctAnswer: the correct option LETTER — exactly one of "A", "B", or "C" — taken
     from the ANSWER KEY (cross-check it against the question paper).
   - rationale: ONE concise sentence (< 240 chars) explaining why that option is correct,
@@ -352,6 +379,9 @@ HARD REQUIREMENTS:
   - correctAnswer MUST be a single uppercase letter: A, B, or C.
   - Provide EVERY question in the range. If the answer key is unclear for one, use your
     best reading of the question paper and still choose a letter.
+  - Transcribe stem + optionA/B/C VERBATIM from the QUESTION PAPER. If the OCR is unclear,
+    transcribe your best reading — never invent content. Omit a field only if it is truly
+    illegible (the reviewer will fill it in).
   - Do not fabricate. Base each rationale on the actual printed options.
 """;
 
@@ -365,6 +395,10 @@ HARD REQUIREMENTS:
         "type": "object",
         "properties": {
           "number": { "type": "integer" },
+          "stem": { "type": "string" },
+          "optionA": { "type": "string" },
+          "optionB": { "type": "string" },
+          "optionC": { "type": "string" },
           "correctAnswer": { "type": "string", "enum": ["A", "B", "C"] },
           "rationale": { "type": "string" }
         },
