@@ -1402,6 +1402,55 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminVocabulary_CustomRecallSetTag_IsFilterableAndCountedCorrectly()
+    {
+        // RecallSetCodes.Normalise() only recognises the 3 canonical codes
+        // (old/2023-2025/2026), but admins can create ARBITRARY custom
+        // recall-set tags via /v1/admin/recall-set-tags. Filtering the
+        // vocabulary list by a custom code, or reading the recall-sets
+        // summary, must not silently ignore/zero-out that code — regression
+        // for a bug where custom-tagged terms became unfilterable (the
+        // filter silently returned everything, unscoped) and permanently
+        // showed a (0) count in the admin UI even though the terms were
+        // fully present and correctly tagged.
+        var customCode = $"custom-{Guid.NewGuid():N}"[..20];
+        var createTag = await _client.PostAsJsonAsync("/v1/admin/recall-set-tags", new
+        {
+            code = customCode,
+            displayName = "Custom Test Batch",
+        });
+        createTag.EnsureSuccessStatusCode();
+
+        var term = $"custom-recall-term-{Guid.NewGuid():N}";
+        var row = $"{term},\"Def\",\"Example.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=1;row=1\"\n";
+        var csv = VocabularyImportCsvHeader + row;
+        var batchId = $"custom-recall-{Guid.NewGuid():N}"[..32];
+        using (var dry = CsvContent(csv, "custom-recall.csv"))
+            (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode={customCode}&importBatchId={Uri.EscapeDataString(batchId)}", dry)).EnsureSuccessStatusCode();
+        using (var commit = CsvContent(csv, "custom-recall.csv"))
+            (await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode={customCode}&importBatchId={Uri.EscapeDataString(batchId)}", commit)).EnsureSuccessStatusCode();
+
+        // Filtering the vocabulary list by the custom code must scope down to
+        // exactly this term — not silently return every term, unfiltered.
+        var filtered = await _client.GetAsync($"/v1/admin/vocabulary/items?recallSet={customCode}&pageSize=200");
+        filtered.EnsureSuccessStatusCode();
+        using var filteredJson = JsonDocument.Parse(await filtered.Content.ReadAsStringAsync());
+        Assert.Equal(1, filteredJson.RootElement.GetProperty("total").GetInt32());
+        var onlyTerm = filteredJson.RootElement.GetProperty("items").EnumerateArray().Single();
+        Assert.Equal(term, onlyTerm.GetProperty("term").GetString());
+
+        // The recall-sets summary must report a real (non-zero) count for the
+        // custom tag rather than omitting it or showing it stuck at 0.
+        var sets = await _client.GetAsync("/v1/admin/vocabulary/recall-sets");
+        sets.EnsureSuccessStatusCode();
+        using var setsJson = JsonDocument.Parse(await sets.Content.ReadAsStringAsync());
+        var customSet = setsJson.RootElement.GetProperty("sets").EnumerateArray()
+            .FirstOrDefault(s => s.GetProperty("code").GetString() == customCode);
+        Assert.True(customSet.ValueKind != JsonValueKind.Undefined, "custom recall-set tag missing from summary");
+        Assert.Equal(1, customSet.GetProperty("draft").GetInt32());
+    }
+
+    [Fact]
     public async Task AdminVocabularyImport_PreviewAndDryRun_BlockSameFileDuplicatesAndOverLimitFields()
     {
         var duplicateTerm = $"duplicate-recall-{Guid.NewGuid():N}";

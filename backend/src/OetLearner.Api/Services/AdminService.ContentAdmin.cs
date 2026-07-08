@@ -175,10 +175,14 @@ public partial class AdminService
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(v => v.Term.Contains(search) || v.Definition.Contains(search));
 
-        var normalisedSet = OetLearner.Api.Domain.RecallSetCodes.Normalise(recallSet);
-        if (normalisedSet is not null)
+        // Accept ANY recall-set code here, not just the 3 canonical
+        // RecallSetCodes values — admins can create custom recall-set tags
+        // (RecallSetTagsEndpoints), and restricting this filter to the
+        // canonical set silently no-ops (returns everything, unfiltered) for
+        // any custom code, which looks exactly like "the filter is broken".
+        if (!string.IsNullOrWhiteSpace(recallSet))
         {
-            var needle = $"\"{normalisedSet}\"";
+            var needle = $"\"{recallSet.Trim().ToLowerInvariant()}\"";
             query = query.Where(v => v.RecallSetCodesJson.Contains(needle));
         }
 
@@ -445,8 +449,13 @@ public partial class AdminService
                 var list = System.Text.Json.JsonSerializer.Deserialize<List<string>>(row.RecallSetCodesJson) ?? new List<string>();
                 foreach (var raw in list)
                 {
-                    var c = OetLearner.Api.Domain.RecallSetCodes.Normalise(raw);
-                    if (c is null) continue;
+                    // Normalise case only — do NOT restrict to the 3 canonical
+                    // RecallSetCodes values here. Admins can create arbitrary
+                    // custom recall-set tags (RecallSetTagsEndpoints), and this
+                    // summary must count those too or their terms silently show
+                    // a permanent (0) count and look deleted/missing.
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    var c = raw.Trim().ToLowerInvariant();
                     (int active, int draft, int archived) t = counts.TryGetValue(c, out var current)
                         ? current
                         : (0, 0, 0);
