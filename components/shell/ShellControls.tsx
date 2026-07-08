@@ -8,10 +8,11 @@ import { useAppVersionGate } from '@/app/providers/AppVersionGateProvider';
 import { UpdateDialog } from './UpdateDialog';
 
 /**
- * Top-right control cluster shown only inside the desktop/mobile shells (never
- * on the website). "Reload" hard-reloads (Ctrl+F5: drop caches, re-fetch fresh
- * settings from the server); "Check for updates" opens the animated UpdateDialog.
- * Hidden while the forced-update overlay is up (it covers the screen).
+ * Compact control cluster pinned to the TOP-CENTER, shown only inside the
+ * desktop/mobile shells (never on the website). Styled in the platform's
+ * lavender/violet brand theme. "Reload" hard-reloads (Ctrl+F5: drop caches,
+ * re-fetch fresh settings from the server); "Check for updates" opens the
+ * animated UpdateDialog. Hidden while the forced-update overlay is up.
  */
 export function ShellControls() {
   // Detect the runtime only after mount: the server always renders as the
@@ -27,17 +28,14 @@ export function ShellControls() {
   return (
     <>
       <div
-        className="fixed z-[60] flex items-center gap-0.5 rounded-full border border-border bg-surface/90 p-1 shadow-lg backdrop-blur"
-        style={{
-          top: 'max(0.5rem, env(safe-area-inset-top))',
-          right: 'max(0.5rem, env(safe-area-inset-right))',
-        }}
+        className="fixed left-1/2 z-[60] flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-primary/20 bg-lavender/70 px-1 py-0.5 shadow-md shadow-primary/10 backdrop-blur dark:border-white/15 dark:bg-white/10"
+        style={{ top: 'max(0.375rem, env(safe-area-inset-top))' }}
       >
         <IconButton label="Reload (fetch latest from server)" onClick={() => void hardReload()}>
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
         </IconButton>
         <IconButton label="Check for updates" onClick={() => setUpdateOpen(true)}>
-          <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+          <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden="true" />
         </IconButton>
       </div>
       <UpdateDialog open={updateOpen} onClose={() => setUpdateOpen(false)} />
@@ -52,7 +50,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-lavender/40 hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-95 motion-reduce:active:scale-100 dark:hover:bg-white/10"
+      className="flex h-7 w-7 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-95 motion-reduce:active:scale-100 dark:text-violet-200 dark:hover:bg-white/15"
     >
       {children}
     </button>

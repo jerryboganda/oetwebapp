@@ -104,10 +104,10 @@ export function AppProviders({
                 {children}
               </TourProvider>
               {/*
-                Shell-only update UI (returns null on the website): the top-right
-                Reload + Check-for-updates cluster and the non-dismissible
-                forced-update overlay. Mounted here so they inherit Theme +
-                Tooltip context.
+                Shell-only update UI (returns null on the website): the
+                top-center Reload + Check-for-updates cluster and the
+                non-dismissible forced-update overlay. Mounted here so they
+                inherit Theme + Tooltip context.
               */}
               <ShellControls />
               <ForcedUpdateOverlay />
