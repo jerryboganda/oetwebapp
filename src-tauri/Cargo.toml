@@ -1,6 +1,6 @@
 [package]
 name = "oet-desktop"
-version = "0.5.0"
+version = "0.5.1"
 description = "OET with Dr Hesham desktop shell (Tauri 2, remote-only thin client)"
 edition = "2021"
 

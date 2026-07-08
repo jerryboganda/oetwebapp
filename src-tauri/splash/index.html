@@ -3,53 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#7c3aed">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#eef4ff">
 <title>OET with Dr Hesham</title>
 <style>
+  /* Palette + treatment mirror the live web app's branded entry screen
+     (components/auth/auth-screen-shell.module.scss): a soft cool-lavender
+     gradient, faint pink/blue/violet radial glows, floating pastel shapes,
+     a near-white card and deep-indigo text. This is a brand splash, so it
+     holds the light identity intentionally regardless of OS theme — exactly
+     as the login page does. */
   :root {
+    --bg: linear-gradient(135deg, #eef4ff 0%, #f6f3ff 48%, #eef9ff 100%);
+    --card: rgba(255, 255, 255, 0.92);
+    --card-border: rgba(118, 132, 255, 0.16);
+    --card-shadow: 0 28px 80px rgba(88, 87, 161, 0.16);
+
+    --text: #1e245c;
+    --muted: #66708f;
+
     --violet: #7c3aed;
     --violet-dark: #6d28d9;
-    --blue: #4f46e5;
-    --blue-2: #6366f1;
+    --periwinkle: #7b79ff;
     --pink: #ec4899;
-    --pink-2: #f0abfc;
+    --lavender: #d7d0ff;
 
-    --bg: #f7f5ef;
-    --text: #1c1917;
-    --muted: #57534e;
+    --track: rgba(123, 121, 255, 0.16);
 
-    --card-bg: rgba(255, 255, 255, 0.6);
-    --card-border: rgba(28, 25, 23, 0.09);
-    --card-shadow: rgba(28, 25, 23, 0.16);
-    --offline-text: #b91c1c;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #07111d;
-      --text: #e7e5e4;
-      --muted: #a8a29e;
-
-      --card-bg: rgba(16, 24, 39, 0.55);
-      --card-border: rgba(255, 255, 255, 0.09);
-      --card-shadow: rgba(0, 0, 0, 0.5);
-      --offline-text: #f87171;
-    }
+    --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   * { box-sizing: border-box; }
 
-  html, body {
-    height: 100%;
-    margin: 0;
-  }
+  html, body { height: 100%; margin: 0; }
 
   body {
     min-height: 100vh;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
     user-select: none;
@@ -64,40 +56,101 @@
     overflow: hidden;
   }
 
-  .bg-glow {
+  /* Faint corner glows — identical hues/positions to the auth page. */
+  .scene::before {
+    content: "";
     position: absolute;
-    width: 60vmax;
-    height: 60vmax;
-    border-radius: 50%;
-    filter: blur(90px);
+    inset: 0;
+    background:
+      radial-gradient(circle at 18% 20%, rgba(255, 170, 212, 0.20), transparent 26%),
+      radial-gradient(circle at 82% 16%, rgba(160, 171, 255, 0.18), transparent 22%),
+      radial-gradient(circle at 52% 86%, rgba(199, 179, 255, 0.22), transparent 24%);
+    pointer-events: none;
+  }
+
+  /* Soft floating pastel shapes, echoing the login-page decoration. */
+  .shape {
+    position: absolute;
     pointer-events: none;
     will-change: transform;
   }
 
-  .bg-glow--a {
-    top: -12%;
-    left: -12%;
-    background: radial-gradient(circle, var(--violet) 0%, transparent 70%);
-    opacity: 0.16;
-    animation: driftA 24s ease-in-out infinite;
+  .blob {
+    filter: blur(2px);
+    opacity: 0.75;
   }
 
-  .bg-glow--b {
-    bottom: -16%;
-    right: -12%;
-    background: radial-gradient(circle, var(--pink) 0%, transparent 70%);
-    opacity: 0.13;
-    animation: driftB 28s ease-in-out infinite;
+  .blob-1 {
+    top: 18%;
+    left: 12%;
+    width: 150px;
+    height: 200px;
+    background: rgba(201, 211, 255, 0.38);
+    border-radius: 34% 66% 42% 58% / 26% 42% 58% 74%;
+    animation: float1 16s var(--ease-spring) infinite;
   }
 
-  @keyframes driftA {
+  .blob-2 {
+    bottom: 14%;
+    right: 11%;
+    width: 176px;
+    height: 148px;
+    background: rgba(230, 190, 235, 0.34);
+    border-radius: 52% 48% 64% 36% / 42% 54% 46% 58%;
+    animation: float2 19s var(--ease-spring) infinite;
+  }
+
+  .blob-3 {
+    bottom: 20%;
+    left: 20%;
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 194, 224, 0.26);
+    border-radius: 50%;
+    animation: float3 22s var(--ease-spring) infinite;
+  }
+
+  .tri {
+    width: 0;
+    height: 0;
+    border-left: 15px solid transparent;
+    border-right: 15px solid transparent;
+    border-bottom: 28px solid rgba(248, 171, 226, 0.55);
+    opacity: 0.8;
+  }
+
+  .tri-1 { top: 24%; right: 22%; animation: drift1 14s var(--ease-spring) infinite; }
+  .tri-2 { bottom: 26%; left: 30%; transform: rotate(-18deg); animation: drift2 17s var(--ease-spring) infinite; }
+
+  .dot {
+    top: 30%;
+    left: 28%;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(160, 171, 255, 0.4);
+    animation: drift1 20s var(--ease-spring) infinite;
+  }
+
+  @keyframes float1 {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(14px, -18px) rotate(6deg); }
+  }
+  @keyframes float2 {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(-16px, 12px) rotate(-5deg); }
+  }
+  @keyframes float3 {
     0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(6%, 5%) scale(1.1); }
+    50% { transform: translate(10px, 14px) scale(1.08); }
   }
-
-  @keyframes driftB {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-5%, -6%) scale(1.08); }
+  @keyframes drift1 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-12px, 16px); }
+  }
+  @keyframes drift2 {
+    0%, 100% { transform: translate(0, 0) rotate(-18deg); }
+    50% { transform: translate(14px, -12px) rotate(-24deg); }
   }
 
   .state {
@@ -106,154 +159,136 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    padding: 24px;
   }
 
   /* Author-origin `.state{display:flex}` ties the UA `[hidden]{display:none}`
      rule on specificity; author beats user-agent at a tie, so without this the
-     hidden attribute is silently ignored and both states render at once. */
-  .state[hidden] {
-    display: none;
+     hidden attribute would be silently ignored and both states would show. */
+  .state[hidden] { display: none; }
+
+  /* ── Loading state ── */
+  .brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: rise 0.8s var(--ease-spring) both;
   }
 
-  .card-frame {
-    position: relative;
-    border-radius: 28px;
-    animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  .card-frame::before {
-    content: "";
-    position: absolute;
-    inset: -1.5px;
-    border-radius: 29.5px;
-    background: conic-gradient(from 0deg, var(--violet), var(--blue-2), var(--pink), var(--blue), var(--violet));
-    animation: spin 10s linear infinite;
-    z-index: 0;
-    will-change: transform;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes cardIn {
-    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px) scale(0.97); }
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
 
-  .card {
+  .logo-wrap {
     position: relative;
-    z-index: 1;
-    width: 440px;
-    max-width: 90vw;
-    padding: 56px 48px 44px;
-    border-radius: 28px;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    backdrop-filter: blur(22px) saturate(140%);
-    -webkit-backdrop-filter: blur(22px) saturate(140%);
-    box-shadow: 0 24px 60px -20px var(--card-shadow), 0 2px 8px rgba(0, 0, 0, 0.04);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-
-  .mark {
-    position: relative;
-    width: 108px;
-    height: 90px;
-    margin-bottom: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-bottom: 40px;
   }
 
-  .mark-glow {
+  /* Gentle aura behind the mark, in brand periwinkle/violet. */
+  .logo-wrap::before {
+    content: "";
     position: absolute;
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(124, 58, 237, 0.35), rgba(99, 102, 241, 0.18) 45%, transparent 72%);
-    animation: glowPulse 3.4s ease-in-out infinite;
-    will-change: transform, opacity;
+    width: 118%;
+    height: 150%;
+    left: -9%;
+    top: -25%;
+    background: radial-gradient(ellipse at center, rgba(123, 121, 255, 0.16), rgba(236, 72, 153, 0.06) 45%, transparent 70%);
+    animation: aura 4.5s ease-in-out infinite;
     z-index: 0;
   }
 
-  @keyframes glowPulse {
-    0%, 100% { transform: scale(0.88); opacity: 0.55; }
-    50% { transform: scale(1.12); opacity: 1; }
+  @keyframes aura {
+    0%, 100% { opacity: 0.6; transform: scale(0.96); }
+    50% { opacity: 1; transform: scale(1.04); }
   }
 
-  .mark-svg {
+  .logo {
     position: relative;
     z-index: 1;
-    width: 108px;
-    height: 90px;
+    width: 372px;
+    max-width: 74vw;
+    height: auto;
     display: block;
-    filter: drop-shadow(0 6px 16px rgba(124, 58, 237, 0.25));
-    /* Belt-and-suspenders: the source lockup PNG has faint anti-aliased
-       fringing right at the edge of the icon crop (adjacent to baked-in
-       text elsewhere in the source canvas). Clip a couple px off the two
-       edges nearest that text so no sub-pixel bleed can ever show. */
-    clip-path: inset(2% 4% 2% 2%);
+    filter: drop-shadow(0 10px 26px rgba(88, 87, 161, 0.18));
   }
 
-  .wordmark {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 30px;
+  /* Slim, premium indeterminate progress bar — brand gradient sweeping
+     across a soft lavender track. Replaces the generic spinner. */
+  .progress {
+    position: relative;
+    width: 232px;
+    max-width: 60vw;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--track);
+    overflow: hidden;
   }
 
-  .wordmark-main {
-    font-size: 30px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: var(--text);
+  .progress::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 42%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--violet), var(--periwinkle) 55%, var(--pink));
+    animation: sweep 1.5s var(--ease-spring) infinite;
+    will-change: transform;
   }
 
-  .wordmark-sub {
-    font-size: 14px;
-    font-weight: 400;
-    letter-spacing: 0.02em;
-    color: var(--muted);
+  @keyframes sweep {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(360%); }
   }
 
   .status {
-    margin: 0 0 22px;
+    margin: 18px 0 0;
     font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
     color: var(--muted);
     min-height: 18px;
   }
 
-  .loader {
+  /* ── Offline state ── */
+  .card {
+    position: relative;
+    width: 420px;
+    max-width: 90vw;
+    padding: 44px 40px 36px;
+    border-radius: 24px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    animation: rise 0.6s var(--ease-spring) both;
   }
 
-  .dot {
-    width: 7px;
-    height: 7px;
+  .offline-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 62px;
+    height: 62px;
+    margin-bottom: 20px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--violet), var(--blue-2));
-    animation: dotWave 1.3s ease-in-out infinite;
-    will-change: transform, opacity;
+    background: rgba(123, 121, 255, 0.1);
   }
 
-  .dot:nth-child(2) { animation-delay: 0.15s; }
-  .dot:nth-child(3) { animation-delay: 0.3s; }
-
-  @keyframes dotWave {
-    0%, 60%, 100% { transform: translateY(0) scale(0.8); opacity: 0.45; }
-    30% { transform: translateY(-6px) scale(1); opacity: 1; }
-  }
-
-  .offline-icon {
-    width: 40px;
-    height: 40px;
-    margin-bottom: 18px;
+  .offline-badge svg {
+    width: 30px;
+    height: 30px;
     color: var(--violet);
     fill: none;
     stroke: currentColor;
@@ -265,21 +300,23 @@
   .offline-title {
     margin: 0 0 10px;
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     color: var(--text);
   }
 
   .offline-body {
-    margin: 0 0 8px;
+    margin: 0 0 6px;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.55;
     color: var(--muted);
   }
 
   .offline-detail {
-    margin: 0 0 24px;
+    margin: 0 0 26px;
     font-size: 13px;
-    color: var(--offline-text);
+    line-height: 1.5;
+    color: #b4235a;
     min-height: 16px;
   }
 
@@ -287,48 +324,47 @@
     appearance: none;
     border: none;
     cursor: pointer;
-    padding: 12px 32px;
+    padding: 12px 34px;
     border-radius: 999px;
     font-size: 14px;
     font-weight: 600;
     font-family: inherit;
     color: #fff;
-    background: linear-gradient(135deg, var(--violet), var(--blue));
-    box-shadow: 0 10px 24px -8px rgba(124, 58, 237, 0.5);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    background: linear-gradient(135deg, var(--violet), var(--periwinkle));
+    box-shadow: 0 12px 26px -10px rgba(124, 58, 237, 0.55);
+    transition: transform 0.18s var(--ease-spring), box-shadow 0.18s var(--ease-spring), filter 0.18s var(--ease-spring);
   }
 
   .retry-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--violet-dark), var(--blue));
+    filter: brightness(1.05);
     transform: translateY(-1px);
-    box-shadow: 0 14px 28px -8px rgba(124, 58, 237, 0.6);
+    box-shadow: 0 16px 30px -10px rgba(124, 58, 237, 0.62);
   }
 
   .retry-btn:active:not(:disabled) { transform: translateY(0); }
 
-  .retry-btn:disabled {
-    opacity: 0.6;
-    cursor: default;
-    transform: none;
-  }
+  .retry-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
 
   .retry-btn:focus-visible {
-    outline: 2px solid var(--blue-2);
+    outline: 2px solid var(--periwinkle);
     outline-offset: 3px;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .bg-glow,
-    .card-frame::before,
-    .mark-glow,
-    .dot {
+    .shape,
+    .logo-wrap::before,
+    .progress::before {
       animation: none !important;
     }
-    .card-frame {
-      animation: fadeOnly 0.5s ease both !important;
+    .brand, .card { animation: fadeOnly 0.5s ease both !important; }
+    .logo-wrap::before { opacity: 0.8; }
+    /* Keep the loader legible without motion: a static centered fill. */
+    .progress::before {
+      position: static;
+      width: 100%;
+      transform: none;
+      opacity: 0.9;
     }
-    .mark-glow { opacity: 0.65; transform: scale(1); }
-    .dot { opacity: 0.8; }
   }
 
   @keyframes fadeOnly {
@@ -339,43 +375,34 @@
 </head>
 <body>
   <div class="scene">
-    <div class="bg-glow bg-glow--a" aria-hidden="true"></div>
-    <div class="bg-glow bg-glow--b" aria-hidden="true"></div>
+    <div class="shape blob blob-1" aria-hidden="true"></div>
+    <div class="shape blob blob-2" aria-hidden="true"></div>
+    <div class="shape blob blob-3" aria-hidden="true"></div>
+    <div class="shape tri tri-1" aria-hidden="true"></div>
+    <div class="shape tri tri-2" aria-hidden="true"></div>
+    <div class="shape dot" aria-hidden="true"></div>
 
     <div id="loading" class="state">
-      <div class="card-frame">
-        <div class="card">
-          <div class="mark">
-            <div class="mark-glow" aria-hidden="true"></div>
-            <svg class="mark-svg" viewBox="0 0 102 110" role="img" aria-label="OET with Dr Hesham logo">
-              <image href="assets/brand-mark.png" x="-8" y="-40" width="400" height="200" />
-            </svg>
-          </div>
-          <div class="wordmark">
-            <span class="wordmark-main">OET</span>
-            <span class="wordmark-sub">with Dr Hesham</span>
-          </div>
-          <p id="status" class="status" role="status" aria-live="polite">Connecting&hellip;</p>
-          <div class="loader" aria-hidden="true">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
-          </div>
+      <div class="brand">
+        <div class="logo-wrap">
+          <img class="logo" src="assets/brand-mark.png" alt="OET with Dr Ahmed Hesham" width="400" height="200" />
         </div>
+        <div class="progress" aria-hidden="true"></div>
+        <p id="status" class="status" role="status" aria-live="polite">Connecting&hellip;</p>
       </div>
     </div>
 
     <div id="offline" class="state" hidden role="alert">
-      <div class="card-frame">
-        <div class="card">
-          <svg class="offline-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <div class="card">
+        <div class="offline-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
             <path d="M3 3l18 18M8.5 8.5a11 11 0 0113.6 1.9M5.1 11.1A15.9 15.9 0 0112 8c1.7 0 3.3.3 4.8.9M12 19h.01M9.2 15.2a5.5 5.5 0 015.6 0" />
           </svg>
-          <h1 class="offline-title">You're offline</h1>
-          <p class="offline-body">OET with Dr Hesham needs an internet connection. Check your network and try again.</p>
-          <p id="offline-detail" class="offline-detail" aria-live="polite"></p>
-          <button id="retry" type="button" class="retry-btn">Retry</button>
         </div>
+        <h1 class="offline-title">You're offline</h1>
+        <p class="offline-body">OET with Dr Hesham needs an internet connection. Check your network and try again.</p>
+        <p id="offline-detail" class="offline-detail" aria-live="polite"></p>
+        <button id="retry" type="button" class="retry-btn">Retry</button>
       </div>
     </div>
   </div>
