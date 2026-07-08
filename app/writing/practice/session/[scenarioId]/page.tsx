@@ -187,14 +187,9 @@ export default function WritingPracticeSessionPage() {
     return () => window.clearTimeout(timer);
   }, [pdfHighlights, scenarioId, phase]);
 
-  const canSubmit = phase === 'writing' && wordCount >= 50 && !submitting;
+  const canSubmit = phase === 'writing' && !submitting;
 
-  const helperText =
-    phase !== 'writing'
-      ? t('writing.practice.session.helper.tooShort', { remaining: 50 })
-      : wordCount < 50
-        ? t('writing.practice.session.helper.tooShort', { remaining: 50 - wordCount })
-        : t('writing.practice.session.helper.ready');
+  const helperText = t('writing.practice.session.helper.ready');
 
   // Shared submit path. `auto` = true when fired by the writing-timer expiry.
   const finalizeSubmit = useCallback(

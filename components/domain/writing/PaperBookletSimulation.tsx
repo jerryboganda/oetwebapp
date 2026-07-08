@@ -82,8 +82,6 @@ export interface PaperBookletSimulationProps {
   submitted?: boolean;
   /** True while the submit request is in flight. */
   submitting?: boolean;
-  /** Min words before submit is allowed (mirrors mock session = 100). */
-  minWords?: number;
   /** Where the locked post-submit booklet links the learner. */
   resultsHref: string;
   onContentChange: (text: string, wordCount: number) => void;
@@ -150,7 +148,6 @@ export function PaperBookletSimulation({
   error = null,
   submitted = false,
   submitting = false,
-  minWords = 100,
   resultsHref,
   onContentChange,
   onSubmit,
@@ -285,14 +282,13 @@ export function PaperBookletSimulation({
     onSubmit();
   }, [emit, onSubmit]);
 
-  const canSubmit = phase === 'writing' && !submitted && !submitting && wordCount >= minWords;
+  const canSubmit = phase === 'writing' && !submitted && !submitting;
 
   const helperText = useMemo(() => {
     if (submitted) return t('writing.paper.helper.submitted');
     if (phase !== 'writing') return t('writing.paper.helper.reading');
-    if (wordCount < minWords) return t('writing.paper.helper.tooShort', { min: minWords });
     return t('writing.paper.helper.ready');
-  }, [submitted, phase, wordCount, minWords, t]);
+  }, [submitted, phase, t]);
 
   // Show the real exam question-paper PDF for the case-notes page when one is
   // available; otherwise no case-notes page is rendered.

@@ -360,10 +360,6 @@ public sealed class WritingMockService(
         {
             throw ApiException.Validation("writing_mock_not_in_writing_phase", "Mock writing window has not started.");
         }
-        if (request.WordCount < 100)
-        {
-            throw ApiException.Validation("writing_mock_word_count_too_low", "Mock submission must contain at least 100 words.");
-        }
         var writingStartedAt = session.ReadingPhaseEndedAt ?? session.StartedAt.AddSeconds(ReadingPhaseSeconds);
         var now = clock.GetUtcNow();
         if (now > writingStartedAt.AddSeconds(WritingPhaseSeconds))

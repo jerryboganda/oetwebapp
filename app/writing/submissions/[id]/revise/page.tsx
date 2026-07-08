@@ -59,13 +59,11 @@ export default function WritingReviseSubmissionPage() {
     }));
   }, [grade]);
 
-  const canSubmit = wordCount >= 50 && !submitting && content !== original?.letterContent;
+  const canSubmit = !submitting && content !== original?.letterContent;
 
-  const helperText = wordCount < 50
-    ? t('writing.submissions.revise.helper.tooShort')
-    : content === original?.letterContent
-      ? t('writing.submissions.revise.helper.noChanges')
-      : t('writing.submissions.revise.helper.ready');
+  const helperText = content === original?.letterContent
+    ? t('writing.submissions.revise.helper.noChanges')
+    : t('writing.submissions.revise.helper.ready');
 
   const onSubmit = useCallback(async () => {
     if (!canSubmit || !original) return;

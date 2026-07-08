@@ -230,12 +230,11 @@ function WritingMockSessionInner() {
     [phase, emitEvent],
   );
 
-  const canSubmit = phase === 'writing' && wordCount >= 100 && !submitting;
+  const canSubmit = phase === 'writing' && !submitting;
   const helperText = useMemo(() => {
     if (phase !== 'writing') return t('writing.mocks.session.helper.notStarted');
-    if (wordCount < 100) return t('writing.mocks.session.helper.tooShort');
     return t('writing.mocks.session.helper.ready');
-  }, [phase, wordCount, t]);
+  }, [phase, t]);
 
   // Shared submit path. `auto` = true when fired by the writing-timer expiry.
   const finalizeSubmit = useCallback(

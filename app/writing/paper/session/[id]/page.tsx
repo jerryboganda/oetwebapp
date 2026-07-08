@@ -35,8 +35,6 @@ import {
   type WritingTaskDto,
 } from '@/lib/writing/types';
 
-const MIN_WORDS = 100;
-
 /**
  * Build booklet content from the richest source available. The enriched
  * authored task gives structured case-note sections, recipient, fixed
@@ -355,11 +353,8 @@ export default function WritingPaperSessionPage() {
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const doSubmit = useCallback(
-    async (submitText: string, submitWords: number, opts: { auto?: boolean } = {}) => {
+    async (submitText: string, submitWords: number) => {
       if (submitted || submitting) return;
-      // Manual submit requires the minimum; auto-submit on expiry sends whatever
-      // the candidate produced (even if short) so nothing is lost.
-      if (!opts.auto && submitWords < MIN_WORDS) return;
       setSubmitting(true);
       setError(null);
       const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
@@ -403,7 +398,7 @@ export default function WritingPaperSessionPage() {
   const handleWritingExpired = useCallback(() => {
     if (submitted || expiredRef.current) return;
     expiredRef.current = true;
-    void doSubmit(textRef.current, wordCountRef.current, { auto: true });
+    void doSubmit(textRef.current, wordCountRef.current);
   }, [submitted, doSubmit]);
 
   // Deadline-anchored seconds. Both hooks run unconditionally (rules of hooks);
@@ -435,7 +430,6 @@ export default function WritingPaperSessionPage() {
         error={error}
         submitted={submitted}
         submitting={submitting}
-        minWords={MIN_WORDS}
         resultsHref={resultsHref}
         onContentChange={handleContentChange}
         onSubmit={handleSubmit}

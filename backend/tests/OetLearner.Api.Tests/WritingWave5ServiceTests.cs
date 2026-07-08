@@ -97,30 +97,6 @@ public class WritingWave5ServiceTests
     }
 
     [Fact]
-    public async Task SubmitMockAsync_RejectsShortSubmissionBeforeCreatingSubmission()
-    {
-        var db = BuildDb();
-        var clock = new FixedClock();
-        var mockId = await SeedPublishedMockAsync(db, clock);
-        var pipeline = new StubSubmissionPipeline(db);
-        var service = BuildMockService(db, clock, pipeline);
-        var started = await service.StartMockAsync(UserId, new WritingMockStartRequest(mockId), CancellationToken.None);
-        await MoveSessionToWritingWindowAsync(db, started.Id, clock);
-        await service.BeginMockWritingAsync(UserId, started.Id, CancellationToken.None);
-
-        var ex = await Assert.ThrowsAsync<ApiException>(() => service.SubmitMockAsync(
-            UserId,
-            started.Id,
-            new WritingMockSubmitRequest("Dear Doctor, this is too short.", 6, 60),
-            CancellationToken.None));
-
-        Assert.Equal("writing_mock_word_count_too_low", ex.ErrorCode);
-        Assert.Equal(0, pipeline.CreateCalls);
-
-        await db.DisposeAsync();
-    }
-
-    [Fact]
     public async Task SubmitMockAsync_ReturnsExistingSubmittedResultWithoutCreatingDuplicate()
     {
         var db = BuildDb();

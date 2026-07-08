@@ -269,7 +269,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
     private static (bool Passed, string? Reason, string? Message) PreflightChecks(WritingSubmission submission)
     {
-        if (submission.WordCount < 100) return (false, "writing_submission_too_short", "Letter is too short to grade (minimum 100 words).");
         if (submission.WordCount > 400) return (false, "writing_submission_too_long", "Letter exceeds the 400-word ceiling for OET writing.");
         if (string.IsNullOrWhiteSpace(submission.LetterContent)) return (false, "writing_submission_empty", "Letter content is required.");
         return (true, null, null);

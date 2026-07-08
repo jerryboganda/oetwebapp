@@ -48,8 +48,8 @@ export type WritingProfileFormValues = z.infer<typeof writingProfileSchema>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const writingDiagnosticSubmitSchema = z.object({
-  letterContent: z.string().min(50, 'Letter is too short to grade').max(10000),
-  wordCount: z.number().int().min(50).max(2000),
+  letterContent: z.string().min(1, 'Letter content is required').max(10000),
+  wordCount: z.number().int().min(0).max(2000),
   timeSpentSeconds: z.number().int().min(60).max(60 * 90),
 });
 
@@ -62,8 +62,8 @@ export type WritingDiagnosticSubmitValues = z.infer<typeof writingDiagnosticSubm
 export const writingSubmissionSchema = z.object({
   scenarioId: z.string().min(1),
   mode: writingEditorModeEnum,
-  letterContent: z.string().min(50, 'Letter is too short to grade').max(10000),
-  wordCount: z.number().int().min(50).max(2000),
+  letterContent: z.string().min(1, 'Letter content is required').max(10000),
+  wordCount: z.number().int().min(0).max(2000),
   timeSpentSeconds: z.number().int().min(0).max(60 * 90),
   inputSource: z.enum(['editor', 'paper-ocr', 'voice-draft']).optional(),
 });
@@ -88,8 +88,8 @@ export type WritingDrillResponseValues = z.infer<typeof writingDrillResponseSche
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const writingMockSubmissionSchema = z.object({
-  letterContent: z.string().min(50).max(10000),
-  wordCount: z.number().int().min(50).max(2000),
+  letterContent: z.string().min(1).max(10000),
+  wordCount: z.number().int().min(0).max(2000),
   timeSpentSeconds: z.number().int().min(60).max(60 * 90),
 });
 
