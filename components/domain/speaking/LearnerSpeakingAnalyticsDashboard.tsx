@@ -438,7 +438,7 @@ export function LearnerSpeakingAnalyticsDashboard({
               <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <span>
                 Book a tutor-led{' '}
-                <Link href="/speaking/mocks" className="font-semibold text-primary underline">
+                <Link href="/mocks?subtest=speaking" className="font-semibold text-primary underline">
                   recorded mock
                 </Link>{' '}
                 when you feel ready.
