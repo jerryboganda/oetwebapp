@@ -6,7 +6,7 @@ import { Save, Sparkles, Pencil } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
-import { Select, Textarea } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   replaceListeningStructure,
@@ -44,6 +44,10 @@ export interface ListeningAnswerSheetBuilderProps {
 interface BuilderRow {
   id: string | null;
   number: number;
+  /** The question stem, shown inline on the learner card. Blank → "See PDF". */
+  stem: string;
+  /** The three option texts (A/B/C). Blank slot → "Option {A|B|C}". */
+  options: string[];
   /** Letter of the correct option: 'A' | 'B' | 'C' (empty until chosen). */
   correctAnswer: string;
   /** Optional admin rationale → stored as `explanation`; learner-visible on review. */
@@ -60,13 +64,21 @@ const SUB_SECTION_NUMBER_RANGES: Record<ListeningSubSectionCode, [number, number
 };
 
 const MCQ_LETTERS = ['A', 'B', 'C'] as const;
-// Placeholder option texts — identical to Reading's builder. The real option
-// text is on the PDF; we only persist which letter is correct.
+// Fallback placeholders used ONLY when a field is left blank. Authors now type
+// the real stem + option prose, which renders inline on the learner card.
 const MCQ3_OPTIONS = ['Option A', 'Option B', 'Option C'];
-const LETTER_OPTIONS = MCQ_LETTERS.map((letter, idx) => ({
-  value: letter,
-  label: `${letter}. ${MCQ3_OPTIONS[idx]}`,
-}));
+const SEE_PDF_SENTINEL = 'See PDF';
+
+// A field is a "placeholder" when it is blank or still the generic
+// "See PDF" / "Option A/B/C" text. We seed real authored prose into the editor
+// and only fall back to the sentinel/placeholder when a field is left blank.
+function isSentinelStem(stem: string | undefined): boolean {
+  return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
+}
+function isPlaceholderOption(text: string | undefined, index: number): boolean {
+  const trimmed = (text ?? '').trim();
+  return trimmed.length === 0 || trimmed.toLowerCase() === MCQ3_OPTIONS[index].toLowerCase();
+}
 
 function rangeFor(section: ListeningSubSectionCode): number[] {
   const [lo, hi] = SUB_SECTION_NUMBER_RANGES[section];
@@ -97,9 +109,18 @@ function buildRows(
 ): BuilderRow[] {
   return rangeFor(section).map((number) => {
     const existing = sectionQuestions.find((q) => q.number === number);
+    // Seed real authored text so re-saving never clobbers content typed here or
+    // in the advanced editor; a sentinel/placeholder seeds as blank.
+    const seededStem = existing && !isSentinelStem(existing.stem) ? (existing.stem ?? '') : '';
+    const seededOptions = MCQ_LETTERS.map((_, i) => {
+      const opt = existing?.options?.[i];
+      return isPlaceholderOption(opt, i) ? '' : (opt ?? '');
+    });
     return {
       id: existing?.id ?? null,
       number,
+      stem: seededStem,
+      options: seededOptions,
       correctAnswer: existing ? correctLetterOf(existing) : '',
       rationale: existing?.explanation ?? '',
     };
@@ -161,6 +182,14 @@ export function ListeningAnswerSheetBuilder({
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }, []);
 
+  const patchOption = useCallback((index: number, optionIndex: number, value: string) => {
+    setRows((prev) => prev.map((row, i) => (
+      i === index
+        ? { ...row, options: row.options.map((opt, oi) => (oi === optionIndex ? value : opt)) }
+        : row
+    )));
+  }, []);
+
   async function handleSaveAll() {
     const invalid = rows.find((row) => !row.correctAnswer);
     if (invalid) {
@@ -180,8 +209,8 @@ export function ListeningAnswerSheetBuilder({
           number: row.number,
           partCode: activeSection as ListeningAuthoredQuestion['partCode'],
           type: 'multiple_choice_3',
-          stem: 'See PDF',
-          options: [...MCQ3_OPTIONS],
+          stem: row.stem.trim() || SEE_PDF_SENTINEL,
+          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() || MCQ3_OPTIONS[i]),
           correctAnswer: row.correctAnswer,
           acceptedAnswers: [],
           explanation: row.rationale.trim() ? row.rationale.trim() : null,
@@ -212,7 +241,7 @@ export function ListeningAnswerSheetBuilder({
         <div className="min-w-0">
           <CardTitle className="text-sm">Answer sheet — Part {partCode} {activeSection}</CardTitle>
           <CardDescription>
-            Read the question on the PDF, then record the correct option for each item.
+            Type each question&apos;s stem and three options, then mark the correct one. They render inline on the learner card. Leave a field blank to keep the PDF-backed placeholder.
           </CardDescription>
         </div>
         {shown && !blocked ? (
@@ -250,8 +279,11 @@ export function ListeningAnswerSheetBuilder({
                     <div className="flex-1 min-w-0">
                       <Select
                         aria-label={`Correct answer for question ${row.number}`}
-                        placeholder="Select answer"
-                        options={LETTER_OPTIONS}
+                        placeholder="Mark correct option"
+                        options={MCQ_LETTERS.map((letter, i) => ({
+                          value: letter,
+                          label: row.options[i]?.trim() ? `${letter}. ${row.options[i].trim()}` : `Option ${letter}`,
+                        }))}
                         value={row.correctAnswer}
                         onChange={(e) => patchRow(index, { correctAnswer: e.target.value })}
                       />
@@ -266,6 +298,26 @@ export function ListeningAnswerSheetBuilder({
                         Edit details
                       </Button>
                     ) : null}
+                  </div>
+                  <Textarea
+                    aria-label={`Question ${row.number} stem`}
+                    value={row.stem}
+                    onChange={(e) => patchRow(index, { stem: e.target.value })}
+                    rows={2}
+                    placeholder="Question text — shown as the heading on the learner card"
+                  />
+                  <div className="grid gap-2">
+                    {MCQ_LETTERS.map((letter, i) => (
+                      <div key={letter} className="flex items-center gap-2">
+                        <span className="w-5 shrink-0 text-center text-xs font-black text-admin-fg-muted">{letter}</span>
+                        <Input
+                          aria-label={`Question ${row.number} option ${letter}`}
+                          value={row.options[i] ?? ''}
+                          onChange={(e) => patchOption(index, i, e.target.value)}
+                          placeholder={`Option ${letter} text`}
+                        />
+                      </div>
+                    ))}
                   </div>
                   <Textarea
                     aria-label={`Rationale for question ${row.number} (optional)`}
