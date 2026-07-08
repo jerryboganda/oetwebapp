@@ -1762,6 +1762,7 @@ function PlayerContent() {
                                       partLabel={LISTENING_SECTION_LABEL[section]}
                                       prompt={question.text}
                                       options={question.options}
+                                      optionKeys={question.optionKeys}
                                       value={answers[question.id] ?? ''}
                                       onChange={(value) => handleAnswerChange(question.id, value)}
                                       annotation={annotations.state.byQuestion[question.id] ?? {}}

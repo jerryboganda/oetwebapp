@@ -130,6 +130,12 @@ export interface ListeningSessionQuestionDto {
   text: string;
   type: string;
   options: string[];
+  /**
+   * Positional option keys (A/B/C) parallel to `options`. The player submits the
+   * KEY, not the display text, so option prose is grading-neutral. Absent on
+   * cached/legacy sessions — consumers fall back to the derived letter.
+   */
+  optionKeys?: string[];
   points: number;
 }
 
