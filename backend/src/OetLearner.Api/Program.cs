@@ -17,6 +17,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Endpoints;
 using OetLearner.Api.Hubs;
+using OetLearner.Api.Middleware;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.LiveClasses;
@@ -1998,6 +1999,9 @@ if (corsOrigins.Length > 0)
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
+// Forced-update enforcement: reject out-of-date desktop/mobile shells with 426.
+// Inert until an admin enables it; header-gated so the website is never affected.
+app.UseClientVersionGate();
 // Enable native WebSocket upgrades for the Writing Coach panel fallback
 // (/ws/writing/coach/{sessionId}). SignalR has its own internal websocket
 // handling; this only affects raw WS endpoints mapped via app.Map.

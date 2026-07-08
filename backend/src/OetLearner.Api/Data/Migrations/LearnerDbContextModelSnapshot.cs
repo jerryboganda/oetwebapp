@@ -8572,6 +8572,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("DesktopForceUpdate")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("EnforceClientVersionGate")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("DesktopLatestVersion")
                         .IsRequired()
                         .HasMaxLength(32)

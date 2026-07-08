@@ -12,6 +12,8 @@ export interface DesktopRuntimeInfo {
   isPackaged: boolean;
   activeBackendUrl: string | null;
   ignoredPackagedLoopbackApiTarget: string | null;
+  /** Shell version (CARGO_PKG_VERSION). Optional: shells < 0.6.0 omit it. */
+  appVersion?: string;
   windowState: DesktopWindowStateSnapshot;
 }
 

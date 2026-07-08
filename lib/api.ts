@@ -10,6 +10,7 @@ import {
 } from './domain/format';
 import { env } from './env';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
+import { getClientIdentitySnapshot } from './client-version';
 import type {
   ExamFamilyCode,
   UserProfile,
@@ -396,6 +397,17 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     }
   }
 
+  // Identify the app shell (desktop/mobile) so the backend can enforce the
+  // forced-update gate. Only shells send these headers — a plain web browser
+  // never does, so the website is structurally exempt from the 426 gate.
+  const identity = getClientIdentitySnapshot();
+  if (identity && identity.platform !== 'web') {
+    headers.set('X-Client-Platform', identity.platform);
+    if (identity.version) {
+      headers.set('X-App-Version', identity.version);
+    }
+  }
+
   try {
     const token = await ensureFreshAccessToken();
     if (token) {
@@ -512,6 +524,13 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
           message = error.message ?? error.title ?? message;
           retryable = error.retryable ?? isRetryable(response.status);
           fieldErrors = Array.isArray(error.fieldErrors) ? error.fieldErrors : [];
+
+          // Forced-update gate: the backend rejects out-of-date shells with 426.
+          // Broadcast so the AppVersionGateProvider can raise the blocking
+          // overlay mid-session, then fall through to throw as a normal ApiError.
+          if (response.status === 426 && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('oet:upgrade-required', { detail: error }));
+          }
         } catch (err) {
           if (response.status === 401) {
             code = 'not_authenticated';
@@ -9660,6 +9679,7 @@ export async function updateAdminConversationSettings(body: Record<string, unkno
 }
 
 export interface AdminLaunchReadinessSettings {
+  enforceClientVersionGate: boolean;
   mobileMinSupportedVersion: string;
   mobileLatestVersion: string;
   mobileForceUpdate: boolean;
@@ -9712,6 +9732,25 @@ export async function updateAdminLaunchReadinessSettings(
     method: 'PUT',
     body: JSON.stringify(body),
   });
+}
+
+/** Public server-driven release policy for a given shell platform. */
+export interface AppReleasePolicy {
+  platform: string;
+  minVersion: string;
+  latestVersion: string;
+  forceUpdate: boolean;
+  storeUrl: string | null;
+  updateFeedUrl: string | null;
+  channel: string | null;
+}
+
+/**
+ * Reads the anonymous release policy the forced-update gate uses on boot.
+ * `platform` is 'android' | 'ios' | 'desktop' (or a synonym the backend maps).
+ */
+export async function fetchAppReleasePolicy(platform: string): Promise<AppReleasePolicy> {
+  return apiRequest<AppReleasePolicy>(`/v1/app-release?platform=${encodeURIComponent(platform)}`);
 }
 
 export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string; modelVariant?: string; instructions?: string }) {

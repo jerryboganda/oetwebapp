@@ -76,8 +76,142 @@ pub fn runtime_info(app: AppHandle, state: State<'_, RuntimeState>) -> Value {
         "isPackaged": !tauri::is_dev(),
         "activeBackendUrl": *state.active_backend_url.lock().unwrap(),
         "ignoredPackagedLoopbackApiTarget": Value::Null,
+        // Surfaced so the web app can read the installed shell version and drive
+        // the forced-update gate (client-version.ts) without a privileged call.
+        "appVersion": env!("CARGO_PKG_VERSION"),
         "windowState": window_state_snapshot(&app),
     })
+}
+
+// ── updater + hard reload ───────────────────────────────────────────
+
+// Pushes an updater lifecycle event into the page as a CustomEvent (same
+// pattern as emit_window_state) so the remote origin needs no extra capability.
+// `detail` carries { phase, progress?, version?, currentVersion?, notes?, error? }.
+fn emit_update_event(app: &AppHandle, detail: &Value) {
+    if let Some(win) = app.get_webview_window("main") {
+        if let Ok(detail_str) = serde_json::to_string(detail) {
+            let _ = win.eval(format!(
+                "window.dispatchEvent(new CustomEvent('desktop:update-progress', {{ detail: {detail_str} }}))"
+            ));
+        }
+    }
+}
+
+fn build_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    // Mirror the startup check: OET_UPDATER_URL overrides the endpoint for tests.
+    let builder = match std::env::var("OET_UPDATER_URL") {
+        Ok(url) => {
+            let parsed = url
+                .parse()
+                .map_err(|e| format!("invalid OET_UPDATER_URL: {e}"))?;
+            app.updater_builder()
+                .endpoints(vec![parsed])
+                .map_err(|e| e.to_string())?
+        }
+        Err(_) => app.updater_builder(),
+    };
+    builder.build().map_err(|e| e.to_string())
+}
+
+/// Checks for an available update WITHOUT installing. Returns
+/// `{ available, version?, currentVersion, notes? }`.
+#[tauri::command]
+pub async fn updater_check(app: AppHandle) -> Result<Value, String> {
+    let updater = build_updater(&app)?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(json!({
+            "available": true,
+            "version": update.version,
+            "currentVersion": update.current_version,
+            "notes": update.body,
+        })),
+        Ok(None) => Ok(json!({
+            "available": false,
+            "currentVersion": env!("CARGO_PKG_VERSION"),
+        })),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Downloads, verifies (minisign), and stages the update. Emits
+/// `desktop:update-progress` events (downloading → installing → ready|error).
+/// Does NOT relaunch — the page calls `app_relaunch` afterward.
+#[tauri::command]
+pub async fn updater_install(app: AppHandle) -> Result<Value, String> {
+    let updater = build_updater(&app)?;
+    let update = match updater.check().await {
+        Ok(Some(update)) => update,
+        Ok(None) => return Ok(json!({ "ok": false, "error": "No update available." })),
+        Err(e) => return Err(e.to_string()),
+    };
+
+    let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let app_progress = app.clone();
+    let app_finish = app.clone();
+    let dl = downloaded.clone();
+
+    let result = update
+        .download_and_install(
+            move |chunk_len, content_len| {
+                let received = dl.fetch_add(chunk_len as u64, std::sync::atomic::Ordering::Relaxed)
+                    + chunk_len as u64;
+                let progress = match content_len {
+                    Some(total) if total > 0 => {
+                        ((received as f64 / total as f64) * 100.0).min(100.0) as u64
+                    }
+                    _ => 0,
+                };
+                emit_update_event(
+                    &app_progress,
+                    &json!({ "phase": "downloading", "progress": progress }),
+                );
+            },
+            move || {
+                emit_update_event(&app_finish, &json!({ "phase": "installing" }));
+            },
+        )
+        .await;
+
+    match result {
+        Ok(()) => {
+            emit_update_event(&app, &json!({ "phase": "ready" }));
+            Ok(json!({ "ok": true }))
+        }
+        Err(e) => {
+            emit_update_event(&app, &json!({ "phase": "error", "error": e.to_string() }));
+            Err(e.to_string())
+        }
+    }
+}
+
+/// Relaunches the app into the freshly installed version. Split from
+/// `updater_install` so the page controls the restart moment.
+#[tauri::command]
+pub fn app_relaunch(app: AppHandle) {
+    app.restart();
+}
+
+/// Ctrl+F5 equivalent: clears the WebView's browsing data (cache/storage) then
+/// re-navigates to the trusted remote origin, so everything is re-fetched fresh.
+#[tauri::command]
+pub fn hard_reload(app: AppHandle, state: State<'_, RuntimeState>) -> Result<(), String> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window unavailable".to_string())?;
+    win.clear_all_browsing_data().map_err(|e| e.to_string())?;
+    let base = state
+        .renderer_url
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or_else(|| "remote url unavailable".to_string())?;
+    let url = base
+        .parse::<tauri::Url>()
+        .map_err(|e| format!("invalid remote url: {e}"))?;
+    win.navigate(url).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ── open external ───────────────────────────────────────────────────

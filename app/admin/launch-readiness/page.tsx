@@ -32,6 +32,14 @@ const sections: Array<{
   fields: Array<{ key: LaunchField; label: string; kind?: 'text' | 'url' | 'version' | 'status' | 'textarea' | 'checkbox' }>;
 }> = [
   {
+    title: 'Forced-update enforcement',
+    description:
+      'MASTER SWITCH. When enabled, the API rejects any out-of-date desktop/mobile shell with 426 Upgrade Required — the old app literally stops working until the user updates. The website (plain browser) is never affected, and the version-check + login endpoints stay reachable. Leave OFF until a newer installable build is published, otherwise current users can be locked out. Set the per-platform minimum versions and force flags below.',
+    fields: [
+      { key: 'enforceClientVersionGate', label: 'Enforce client version gate (block outdated shells with 426)', kind: 'checkbox' },
+    ],
+  },
+  {
     title: 'Mobile release policy',
     description: 'Server-driven version gates and public store links used by native clients.',
     fields: [
@@ -174,6 +182,12 @@ export default function AdminLaunchReadinessPage() {
         kpis={
           settings ? (
             <KpiStrip>
+              <KpiTile
+                label="Version gate"
+                value={value('enforceClientVersionGate') ? 'Enforcing' : 'Off'}
+                tone={value('enforceClientVersionGate') ? 'warning' : 'default'}
+                icon={<ShieldAlert className="h-4 w-4" aria-hidden="true" />}
+              />
               <KpiTile
                 label="Evidence gates approved"
                 value={`${completedCount}/7`}

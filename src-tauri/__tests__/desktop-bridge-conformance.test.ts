@@ -20,6 +20,8 @@ const EXPECTED_SHAPE: Record<string, string[] | null> = {
   print: ['printPage'],
   attestation: ['signVideoChallenge'],
   speakingAudio: ['start', 'stop', 'getBlob', 'discard', 'getPlatform'],
+  updater: ['check', 'install', 'relaunch', 'onProgress'],
+  reload: ['hard'],
 };
 
 type AnyWindow = Window & { desktopBridge?: any; __TAURI_INTERNALS__?: any; __OET_DESKTOP__?: any };

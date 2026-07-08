@@ -29,7 +29,11 @@ internal sealed class FakeLaunchReadinessService(AdminLaunchReadinessSettingsRes
     public Task<PublicAppReleaseSettingsResponse> GetPublicReleasePolicyAsync(string? platform, CancellationToken ct)
         => throw new NotSupportedException();
 
+    public Task<ClientGateDecision> EvaluateClientAsync(string? platform, string? clientVersion, CancellationToken ct)
+        => Task.FromResult(new ClientGateDecision(false, "0.0.0", null, null));
+
     private static AdminLaunchReadinessSettingsResponse ApprovedSettings() => new(
+        EnforceClientVersionGate: false,
         MobileMinSupportedVersion: "1.0.0",
         MobileLatestVersion: "1.0.0",
         MobileForceUpdate: false,

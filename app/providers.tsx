@@ -12,7 +12,10 @@ import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { TourProvider } from '@/components/onboarding/tour-provider';
 import { LearnerPasteGuard } from '@/components/system/LearnerPasteGuard';
+import { ShellControls } from '@/components/shell/ShellControls';
+import { ForcedUpdateOverlay } from '@/components/shell/ForcedUpdateOverlay';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
+import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
 
 function isWritingMessageKey(key: string) {
   return key === 'writing' || key.startsWith('writing.');
@@ -70,6 +73,14 @@ export function AppProviders({
         via useRuntimeConfig(), with NEXT_PUBLIC_* fallbacks for first paint.
       */}
       <RuntimeConfigProvider>
+      {/*
+        AppVersionGateProvider wraps the whole tree (outside AuthProvider) so the
+        forced-update gate can block even unauthenticated/expired sessions. It
+        renders no UI itself — ShellControls + ForcedUpdateOverlay are mounted
+        deeper (below) where Theme/Tooltip context is available, and consume the
+        gate via useAppVersionGate().
+      */}
+      <AppVersionGateProvider>
       <ThemeProvider nonce={nonce}>
         {/*
           TooltipProvider must wrap every admin (and learner) consumer of the
@@ -93,6 +104,14 @@ export function AppProviders({
                 {children}
               </TourProvider>
               {/*
+                Shell-only update UI (returns null on the website): the top-right
+                Reload + Check-for-updates cluster and the non-dismissible
+                forced-update overlay. Mounted here so they inherit Theme +
+                Tooltip context.
+              */}
+              <ShellControls />
+              <ForcedUpdateOverlay />
+              {/*
                 Global sonner toaster — rendered once at the root so any
                 `toast()` call anywhere in the tree surfaces in the same anchor.
                 Theme is read from next-themes inside the component.
@@ -102,6 +121,7 @@ export function AppProviders({
           </QueryProvider>
         </TooltipProvider>
       </ThemeProvider>
+      </AppVersionGateProvider>
       </RuntimeConfigProvider>
     </NextIntlClientProvider>
   );

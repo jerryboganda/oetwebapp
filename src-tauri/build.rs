@@ -23,6 +23,10 @@ fn main() {
             "speaking_audio_stop",
             "speaking_audio_get_blob",
             "speaking_audio_discard",
+            "updater_check",
+            "updater_install",
+            "app_relaunch",
+            "hard_reload",
         ]),
     ))
     .expect("failed to run tauri-build")

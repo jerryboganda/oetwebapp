@@ -13,6 +13,15 @@ public class LaunchReadinessSettings
     [MaxLength(32)]
     public string Id { get; set; } = "global";
 
+    /// <summary>
+    /// Master switch for the server-side client-version gate. When true, API
+    /// requests from a shell client (carrying X-Client-Platform + X-App-Version)
+    /// whose version is below the platform minimum — or when that platform's
+    /// ForceUpdate flag is set — are rejected with 426 Upgrade Required. Defaults
+    /// to false so the gate is inert until an admin explicitly turns it on.
+    /// </summary>
+    public bool EnforceClientVersionGate { get; set; }
+
     [MaxLength(32)] public string MobileMinSupportedVersion { get; set; } = "1.0.0";
     [MaxLength(32)] public string MobileLatestVersion { get; set; } = "1.0.0";
     public bool MobileForceUpdate { get; set; }

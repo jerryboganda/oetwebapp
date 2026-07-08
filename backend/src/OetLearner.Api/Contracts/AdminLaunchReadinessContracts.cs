@@ -1,6 +1,7 @@
 namespace OetLearner.Api.Contracts;
 
 public sealed record AdminLaunchReadinessSettingsResponse(
+    bool EnforceClientVersionGate,
     string MobileMinSupportedVersion,
     string MobileLatestVersion,
     bool MobileForceUpdate,
@@ -42,6 +43,7 @@ public sealed record AdminLaunchReadinessSettingsResponse(
     string? UpdatedByAdminName);
 
 public sealed record AdminLaunchReadinessSettingsRequest(
+    bool? EnforceClientVersionGate,
     string? MobileMinSupportedVersion,
     string? MobileLatestVersion,
     bool? MobileForceUpdate,
@@ -87,3 +89,14 @@ public sealed record PublicAppReleaseSettingsResponse(
     string? StoreUrl,
     string? UpdateFeedUrl,
     string? Channel);
+
+/// <summary>
+/// Decision returned by the client-version gate for a single request. When
+/// <see cref="Blocked"/> is true the request should be short-circuited with
+/// 426 Upgrade Required.
+/// </summary>
+public sealed record ClientGateDecision(
+    bool Blocked,
+    string MinVersion,
+    string? StoreUrl,
+    string? UpdateFeedUrl);

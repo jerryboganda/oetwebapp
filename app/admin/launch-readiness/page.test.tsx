@@ -15,6 +15,7 @@ vi.mock('@/lib/api', () => ({
 import LaunchReadinessPage from './page';
 
 const baseSettings: AdminLaunchReadinessSettings = {
+  enforceClientVersionGate: false,
   mobileMinSupportedVersion: '1.0.0',
   mobileLatestVersion: '1.1.0',
   mobileForceUpdate: false,

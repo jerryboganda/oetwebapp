@@ -56,6 +56,9 @@ importers:
       '@capacitor/status-bar':
         specifier: ^7.0.0
         version: 7.0.6(@capacitor/core@7.6.5)
+      '@capawesome/capacitor-app-update':
+        specifier: ^7.2.0
+        version: 7.2.0(@capacitor/core@7.6.5)
       '@google/genai':
         specifier: ^1.17.0
         version: 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
@@ -565,6 +568,11 @@ packages:
 
   '@capacitor/synapse@1.0.4':
     resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
+
+  '@capawesome/capacitor-app-update@7.2.0':
+    resolution: {integrity: sha512-fwPxR9tV5qecn3FSgwS5wBwlHDV9JND5dnY1iqIYnqRG2s/Oq0h32u4hV6+/zpDARJFMZycb3pddEfwLwhglEg==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@csstools/color-helpers@6.0.2':
     resolution: {integrity: sha512-LMGQLS9EuADloEFkcTBR3BwV/CGHV7zyDxVRtVDTwdI2Ca4it0CCVTT9wCkxSgokjE5Ho41hEPgb8OEUwoXr6Q==}
@@ -6416,6 +6424,10 @@ snapshots:
       '@capacitor/core': 7.6.5
 
   '@capacitor/synapse@1.0.4': {}
+
+  '@capawesome/capacitor-app-update@7.2.0(@capacitor/core@7.6.5)':
+    dependencies:
+      '@capacitor/core': 7.6.5
 
   '@csstools/color-helpers@6.0.2': {}
 

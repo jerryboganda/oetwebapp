@@ -15,6 +15,15 @@ public interface ILaunchReadinessService
         AdminLaunchReadinessSettingsRequest request,
         CancellationToken ct);
     Task<PublicAppReleaseSettingsResponse> GetPublicReleasePolicyAsync(string? platform, CancellationToken ct);
+
+    /// <summary>
+    /// Decides whether a shell client on <paramref name="clientVersion"/> is
+    /// blocked for <paramref name="platform"/>. Returns not-blocked when the
+    /// master gate flag is off. A missing/malformed <paramref name="clientVersion"/>
+    /// can only be blocked by an explicit ForceUpdate — never by the min-version
+    /// comparison — so a garbled header can never brick a client.
+    /// </summary>
+    Task<ClientGateDecision> EvaluateClientAsync(string? platform, string? clientVersion, CancellationToken ct);
 }
 
 public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadinessService
@@ -60,6 +69,7 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
             ResourceId = row.Id,
             Details = JsonSupport.Serialize(new
             {
+                row.EnforceClientVersionGate,
                 row.MobileMinSupportedVersion,
                 row.MobileLatestVersion,
                 row.MobileForceUpdate,
@@ -91,6 +101,49 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
             "desktop" or "windows" or "mac" or "macos" or "linux" => new(normalized, row.DesktopMinSupportedVersion, row.DesktopLatestVersion, row.DesktopForceUpdate, null, row.DesktopUpdateFeedUrl, row.DesktopUpdateChannel),
             _ => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, null, null, null),
         };
+    }
+
+    public async Task<ClientGateDecision> EvaluateClientAsync(string? platform, string? clientVersion, CancellationToken ct)
+    {
+        var row = await GetOrCreateAsync(ct);
+        if (!row.EnforceClientVersionGate)
+            return new ClientGateDecision(false, "0.0.0", null, null);
+
+        var policy = await GetPublicReleasePolicyAsync(platform, ct);
+
+        var trimmed = clientVersion?.Trim();
+        var hasValidVersion = !string.IsNullOrWhiteSpace(trimmed) && VersionPattern.IsMatch(trimmed);
+        var blocked = policy.ForceUpdate
+            || (hasValidVersion && CompareVersions(trimmed!, policy.MinVersion) < 0);
+
+        return new ClientGateDecision(blocked, policy.MinVersion, policy.StoreUrl, policy.UpdateFeedUrl);
+    }
+
+    /// <summary>
+    /// Numeric dotted-version compare (e.g. "1.2.3" vs "1.10.0"). Ignores any
+    /// pre-release/build suffix after '-' or '+'. Missing components count as 0.
+    /// Returns &lt;0 when <paramref name="a"/> precedes <paramref name="b"/>.
+    /// </summary>
+    private static int CompareVersions(string a, string b)
+    {
+        static int[] Parse(string v)
+        {
+            var core = v.Split('-', '+')[0];
+            return core.Split('.')
+                .Select(p => int.TryParse(p, out var n) ? n : 0)
+                .ToArray();
+        }
+
+        var pa = Parse(a);
+        var pb = Parse(b);
+        var max = Math.Max(pa.Length, pb.Length);
+        for (var i = 0; i < max; i++)
+        {
+            var x = i < pa.Length ? pa[i] : 0;
+            var y = i < pb.Length ? pb[i] : 0;
+            if (x != y) return x < y ? -1 : 1;
+        }
+        return 0;
     }
 
     private async Task<LaunchReadinessSettings> GetOrCreateAsync(CancellationToken ct)
@@ -165,6 +218,7 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
 
     private static void Apply(AdminLaunchReadinessSettingsRequest r, LaunchReadinessSettings row)
     {
+        if (r.EnforceClientVersionGate.HasValue) row.EnforceClientVersionGate = r.EnforceClientVersionGate.Value;
         if (r.MobileMinSupportedVersion is not null) row.MobileMinSupportedVersion = Clean(r.MobileMinSupportedVersion) ?? "1.0.0";
         if (r.MobileLatestVersion is not null) row.MobileLatestVersion = Clean(r.MobileLatestVersion) ?? "1.0.0";
         if (r.MobileForceUpdate.HasValue) row.MobileForceUpdate = r.MobileForceUpdate.Value;
@@ -210,6 +264,7 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
     }
 
     private static AdminLaunchReadinessSettingsResponse ToResponse(LaunchReadinessSettings r) => new(
+        r.EnforceClientVersionGate,
         r.MobileMinSupportedVersion,
         r.MobileLatestVersion,
         r.MobileForceUpdate,

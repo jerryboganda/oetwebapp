@@ -131,6 +131,21 @@ jobs:
             fs.writeFileSync(p, JSON.stringify(conf, null, 2) + '\n');
           "
 
+      - name: Stamp Cargo.toml version
+        shell: bash
+        run: |
+          # Keep the crate version in lockstep with tauri.conf.json so
+          # env!("CARGO_PKG_VERSION") (used by runtime_info + updater_check)
+          # reports the shipped version. Only the [package] version is touched;
+          # dependency lines are keyed by crate name, not a bare `version =`.
+          node -e "
+            const fs = require('fs');
+            const p = 'src-tauri/Cargo.toml';
+            let toml = fs.readFileSync(p, 'utf8');
+            toml = toml.replace(/^version = \"[^\"]*\"/m, 'version = \"${{ steps.version.outputs.version }}\"');
+            fs.writeFileSync(p, toml);
+          "
+
       - name: Validate updater signing configuration
         if: inputs.allow_unsigned != true
         shell: bash
@@ -198,7 +213,7 @@ jobs:
           found=0
           while IFS= read -r f; do
             cp "$f" dist/tauri-desktop/ && found=1
-          done < <(find src-tauri/target/release/bundle -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.sig' \))
+          done < <(find src-tauri/target/release/bundle -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.sig' -o -name '*.app.tar.gz' \))
           if [ "$found" -eq 0 ]; then
             echo "No bundle artifacts found for checksum generation." >&2; exit 1
           fi
@@ -256,18 +271,32 @@ jobs:
             echo "Missing Windows installer (.exe) or signature (.sig) in artifacts." >&2
             exit 1
           fi
+          base_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           # GitHub release assets replace spaces with dots in the asset name.
           asset_name=$(basename "$exe" | tr ' ' '.')
+          win_sig=$(cat "$sig")
+          platforms="    \"windows-x86_64\": {\n      \"signature\": \"${win_sig}\",\n      \"url\": \"${base_url}/${asset_name}\"\n    }"
+
+          # macOS updater bundle is best-effort: the mac leg is built unsigned/
+          # un-notarized and may be absent. Only add darwin-aarch64 when both the
+          # updater tarball and its signature exist, so Windows releases never break.
+          mac_tar=$(find artifacts -name '*.app.tar.gz' | head -1 || true)
+          mac_sig_file=$(find artifacts -name '*.app.tar.gz.sig' | head -1 || true)
+          if [ -n "$mac_tar" ] && [ -n "$mac_sig_file" ]; then
+            mac_asset=$(basename "$mac_tar" | tr ' ' '.')
+            mac_sig=$(cat "$mac_sig_file")
+            platforms="${platforms},\n    \"darwin-aarch64\": {\n      \"signature\": \"${mac_sig}\",\n      \"url\": \"${base_url}/${mac_asset}\"\n    }"
+          else
+            echo "No macOS updater artifact (*.app.tar.gz[.sig]) — omitting darwin-aarch64 from latest.json."
+          fi
+
           {
             echo '{'
             echo "  \"version\": \"${{ steps.version.outputs.version }}\","
-            echo "  \"notes\": \"OET Prep desktop ${{ steps.version.outputs.version }}\","
+            echo "  \"notes\": \"OET with Dr Hesham desktop ${{ steps.version.outputs.version }}\","
             echo "  \"pub_date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
             echo '  "platforms": {'
-            echo '    "windows-x86_64": {'
-            echo "      \"signature\": \"$(cat "$sig")\","
-            echo "      \"url\": \"https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${asset_name}\""
-            echo '    }'
+            printf '%b\n' "$platforms"
             echo '  }'
             echo '}'
           } > latest.json
@@ -282,6 +311,8 @@ jobs:
             artifacts/**/*-setup.exe
             artifacts/**/*-setup.exe.sig
             artifacts/**/*.dmg
+            artifacts/**/*.app.tar.gz
+            artifacts/**/*.app.tar.gz.sig
             latest.json
           body: |
             Internal-testing build of the OET Prep desktop shell (Tauri 2).

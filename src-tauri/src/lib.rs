@@ -155,6 +155,10 @@ pub fn run() {
             commands::speaking_audio_stop,
             commands::speaking_audio_get_blob,
             commands::speaking_audio_discard,
+            commands::updater_check,
+            commands::updater_install,
+            commands::app_relaunch,
+            commands::hard_reload,
         ])
         .on_window_event(|window, event| {
             if matches!(
@@ -315,17 +319,22 @@ pub fn run() {
                                     Err(e) => eprintln!("[oet-desktop] UPDATER-TEST: FAIL download/verify error: {e}"),
                                 }
                             } else {
-                                match update
-                                    .download_and_install(
-                                        |received, total| {
-                                            eprintln!("[oet-desktop] update download: {received}/{total:?}")
-                                        },
-                                        || eprintln!("[oet-desktop] update download finished"),
-                                    )
-                                    .await
-                                {
-                                    Ok(()) => eprintln!("[oet-desktop] update installed; restart to apply"),
-                                    Err(e) => eprintln!("[oet-desktop] update install error: {e}"),
+                                // Prompt-first (no silent install): signal the page that an
+                                // update exists. The in-app UI (Check-for-updates dialog and,
+                                // when the server gate forces it, the forced-update overlay)
+                                // drives the actual download+install via the updater_* commands.
+                                if let Some(win) = handle.get_webview_window("main") {
+                                    let detail = serde_json::json!({
+                                        "phase": "available",
+                                        "version": update.version,
+                                        "currentVersion": update.current_version,
+                                        "notes": update.body,
+                                    });
+                                    if let Ok(detail_str) = serde_json::to_string(&detail) {
+                                        let _ = win.eval(format!(
+                                            "window.dispatchEvent(new CustomEvent('desktop:update-available', {{ detail: {detail_str} }}))"
+                                        ));
+                                    }
                                 }
                             }
                         }

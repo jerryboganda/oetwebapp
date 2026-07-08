@@ -56,6 +56,27 @@
         return () => window.removeEventListener('desktop:window-state-changed', handler);
       },
     },
+    updater: {
+      // Manual update flow. check() reports availability without installing;
+      // install() downloads + verifies + stages (progress via onProgress);
+      // relaunch() restarts into the new version.
+      check: () => invoke('updater_check'),
+      install: () => invoke('updater_install'),
+      relaunch: () => invoke('app_relaunch'),
+      onProgress: (listener) => {
+        const handler = (event) => listener(event.detail);
+        window.addEventListener('desktop:update-progress', handler);
+        window.addEventListener('desktop:update-available', handler);
+        return () => {
+          window.removeEventListener('desktop:update-progress', handler);
+          window.removeEventListener('desktop:update-available', handler);
+        };
+      },
+    },
+    reload: {
+      // Ctrl+F5 equivalent: native clear browsing data + re-navigate to origin.
+      hard: () => invoke('hard_reload'),
+    },
     secureSecrets: {
       get: (namespace, key) => invoke('secret_get', { namespace, key }),
       set: (namespace, key, value) => invoke('secret_set', { namespace, key, value }),

@@ -51,7 +51,7 @@ export async function getAppVersion(): Promise<AppVersionInfo | null> {
 
 // ── Version Comparison ──────────────────────────────────────────
 
-function compareVersions(current: string, latest: string): number {
+export function compareVersions(current: string, latest: string): number {
   const currentParts = current.split('.').map(Number);
   const latestParts = latest.split('.').map(Number);
   const maxLength = Math.max(currentParts.length, latestParts.length);

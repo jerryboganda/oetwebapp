@@ -18,6 +18,8 @@ declare global {
         isPackaged: boolean;
         activeBackendUrl: string | null;
         ignoredPackagedLoopbackApiTarget: string | null;
+        /** Shell version (CARGO_PKG_VERSION). Optional: shells < 0.6.0 omit it. */
+        appVersion?: string;
         windowState?: {
           isFocused: boolean;
           isVisible: boolean;
@@ -67,6 +69,46 @@ declare global {
     };
     print: {
       printPage: (options?: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
+    };
+    /**
+     * Manual updater controls (desktop shell >= 0.6.0). Optional because older
+     * shells lack them — feature-detect before calling. `check` reports whether
+     * a newer signed build is available without installing; `install` downloads
+     * + verifies + stages it (progress arrives via `onProgress`); `relaunch`
+     * restarts into the freshly installed version.
+     */
+    updater?: {
+      check: () => Promise<{
+        available: boolean;
+        version?: string;
+        currentVersion: string;
+        notes?: string | null;
+      }>;
+      install: () => Promise<{ ok: boolean; error?: string }>;
+      relaunch: () => Promise<void>;
+      /**
+       * Subscribe to updater lifecycle events pushed from the Rust side:
+       * `{ phase: 'available'|'downloading'|'installing'|'ready'|'error',
+       *    version?, currentVersion?, progress?, notes?, error? }`.
+       */
+      onProgress: (
+        listener: (event: {
+          phase: 'available' | 'downloading' | 'installing' | 'ready' | 'error';
+          version?: string;
+          currentVersion?: string;
+          progress?: number;
+          notes?: string | null;
+          error?: string;
+        }) => void,
+      ) => () => void;
+    };
+    /**
+     * Hard reload (desktop shell >= 0.6.0). Clears the native WebView browsing
+     * data (cache/storage) and re-navigates to the trusted remote origin —
+     * the Ctrl+F5 equivalent. Optional; feature-detect before calling.
+     */
+    reload?: {
+      hard: () => Promise<void>;
     };
     /**
      * Native HMAC signer for app-only video playback (desktop shell >= 0.4.0).
