@@ -12,6 +12,11 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { startSpeakingSelfPracticeSession } from '@/lib/api';
+import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+} from '@/components/domain/InsufficientCreditsModal';
 
 export interface SpeakingSelfPracticeButtonProps {
   taskId: string;
@@ -27,6 +32,7 @@ export function SpeakingSelfPracticeButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
 
   const onClick = useCallback(async () => {
     if (!taskId || busy) return;
@@ -36,6 +42,15 @@ export function SpeakingSelfPracticeButton({
       const result = await startSpeakingSelfPracticeSession(taskId);
       router.push(result.redirectPath);
     } catch (err) {
+      // A 402 here means the SpeakingOnlyCredits/FlexibleCredits wallet is
+      // out of credits (debited at session-start, before the AI patient
+      // conversation is created) — show the shared blocking modal instead
+      // of the generic inline error.
+      if (isInsufficientCreditsError(err)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+        setBusy(false);
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Could not start AI patient session.';
       setError(message);
       setBusy(false);
@@ -52,6 +67,11 @@ export function SpeakingSelfPracticeButton({
           {error}
         </p>
       ) : null}
+      <InsufficientCreditsModal
+        open={insufficientCreditsMessage !== null}
+        message={insufficientCreditsMessage ?? ''}
+        onClose={() => setInsufficientCreditsMessage(null)}
+      />
     </div>
   );
 }

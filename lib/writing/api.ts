@@ -459,6 +459,16 @@ export const getWritingScenario = (scenarioId: string) =>
     path('/v1/writing/scenarios/{id}', { id: scenarioId }),
   );
 
+/**
+ * Gate for AI-graded practice/paper sessions: throws (402, insufficient
+ * credits) before any task content is shown. Do NOT call this from a mock
+ * session — mocks are human-graded and never touch the AI credit pool.
+ */
+export const checkWritingScenarioEligibility = (scenarioId: string) =>
+  apiClient.get<void>(
+    path('/v1/writing/scenarios/{id}/eligibility', { id: scenarioId }),
+  );
+
 export const getRandomWritingScenario = (query: { profession?: WritingProfession; letterType?: WritingLetterType } = {}) =>
   apiClient.get<WritingScenarioDto>(
     `/v1/writing/scenarios/random${qs(query as Record<string, string | undefined>)}`,

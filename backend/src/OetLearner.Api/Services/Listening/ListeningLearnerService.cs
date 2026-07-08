@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Recalls;
 
@@ -11,7 +12,8 @@ namespace OetLearner.Api.Services.Listening;
 public sealed class ListeningLearnerService(
     LearnerDbContext db,
     IContentEntitlementService entitlements,
-    IRecallsAutoSeed? autoSeed = null)
+    IRecallsAutoSeed? autoSeed = null,
+    IAiPackageCreditService? aiPackageCreditService = null)
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
@@ -496,9 +498,26 @@ public sealed class ListeningLearnerService(
             }
         }
 
+        var genericAttemptId = $"la-{Guid.NewGuid():N}";
+
+        // Listening test-credit allowance (legacy / JSON-backed paper path).
+        // Runs last, after every other gate above has passed (mutation
+        // allowed, entitlement, questions-authored, in-progress dedupe), so a
+        // credit is only ever consumed for an attempt that is actually about
+        // to be created. Mirrors ReadingAttemptService.StartInModeAsync's
+        // Gate 6 placement and StartRelationalAttemptAsync below — this is a
+        // separate entity-creation code path (JSON-backed papers resolve
+        // here instead of the relational ListeningAttempt path), so it needs
+        // its own gate to avoid being bypassed.
+        if (aiPackageCreditService is not null)
+        {
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, "listening", genericAttemptId, ct);
+            creditResult.EnsureDebited();
+        }
+
         var attempt = new Attempt
         {
-            Id = $"la-{Guid.NewGuid():N}",
+            Id = genericAttemptId,
             UserId = userId,
             ContentId = source.Id,
             SubtestCode = Subtest,
@@ -1084,9 +1103,23 @@ public sealed class ListeningLearnerService(
                 "This Listening paper has no audio asset configured. Cannot start exam-mode attempt.");
         }
 
+        var relationalAttemptId = $"lat-{Guid.NewGuid():N}";
+
+        // Listening test-credit allowance. Runs last, after every other gate
+        // has passed (entitlement, sound-check, audio-asset existence), so a
+        // credit is only ever consumed for an attempt that is actually about
+        // to be created. Applies uniformly to every mode reaching this
+        // relational path (Exam, Home, Practice, Paper, Diagnostic) — mirrors
+        // ReadingAttemptService.StartInModeAsync's Gate 6 placement.
+        if (aiPackageCreditService is not null)
+        {
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, "listening", relationalAttemptId, ct);
+            creditResult.EnsureDebited();
+        }
+
         var attempt = new ListeningAttempt
         {
-            Id = $"lat-{Guid.NewGuid():N}",
+            Id = relationalAttemptId,
             UserId = userId,
             PaperId = source.Id,
             StartedAt = now,

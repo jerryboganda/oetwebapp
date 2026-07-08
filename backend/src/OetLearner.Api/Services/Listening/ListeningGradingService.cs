@@ -371,8 +371,30 @@ public sealed class ListeningGradingService
             {
                 var selected = TryReadString(ans.UserAnswerJson);
                 if (string.IsNullOrEmpty(selected)) return (false, null, null);
-                var opt = q.Options.FirstOrDefault(o =>
+
+                var ordered = q.Options.OrderBy(o => o.DisplayOrder).ToList();
+
+                // Canonical forward path: the learner submits the option KEY
+                // (the positional letter A/B/C). Match it directly — this is
+                // independent of the option display text, so real option prose
+                // can never change a score.
+                var opt = ordered.FirstOrDefault(o =>
                     string.Equals(o.OptionKey, selected, StringComparison.OrdinalIgnoreCase));
+
+                // Legacy / in-flight answers may carry the option TEXT or a bare
+                // numeric INDEX (older clients submitted the displayed option
+                // text). Resolve those to a stable option position so historical
+                // attempts keep grading correctly after the text becomes real prose.
+                if (opt is null)
+                {
+                    var resolvedId = ListeningOptionIdHelper.ResolveLegacyAnswer(
+                        selected, q.Id, ordered.Select(o => o.Text).ToList());
+                    var index = resolvedId is null
+                        ? null
+                        : ListeningOptionIdHelper.ExtractOptionIndex(resolvedId);
+                    if (index is int i && i >= 0 && i < ordered.Count) opt = ordered[i];
+                }
+
                 if (opt is null) return (false, null, null);
                 return (opt.IsCorrect, opt.IsCorrect ? null : opt.DistractorCategory, null);
             }

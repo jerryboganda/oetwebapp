@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Reading;
@@ -141,7 +142,8 @@ public sealed class ReadingAttemptService(
     IReadingPolicyService policyService,
     IReadingGradingService grader,
     IContentEntitlementService entitlements,
-    ILogger<ReadingAttemptService> logger) : IReadingAttemptService
+    ILogger<ReadingAttemptService> logger,
+    IAiPackageCreditService? aiPackageCreditService = null) : IReadingAttemptService
 {
     public const int PartABreakMaxSeconds = 600;
     private const int MaxIdempotencyRecordKeyLength = 128;
@@ -252,6 +254,21 @@ public sealed class ReadingAttemptService(
         // regardless of structural publish-readiness. Re-enable by restoring
         // the ReadingStructureService.ValidatePaperAsync IsPublishReady check.
 
+        var attemptId = Guid.NewGuid().ToString("N");
+
+        // Gate 6: reading test-credit allowance. Runs last, after every other
+        // gate has passed, so a credit is only ever consumed for an attempt
+        // that is actually about to be created. Accounts that have never
+        // purchased a Reading package bypass harmlessly (unmetered — access
+        // is already governed by Gate 0's subscription check above); accounts
+        // with a purchased allowance are debited exactly one test per attempt
+        // of any mode (Exam, Learning, Drill, MiniTest, ErrorBank).
+        if (aiPackageCreditService is not null)
+        {
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, "reading", attemptId, ct);
+            creditResult.EnsureDebited();
+        }
+
         var maxRaw = ReadingStructureService.CanonicalMaxRawScore;
 
         // Timer budget. Exam = canonical Part A + Part B+C. Learning =
@@ -287,7 +304,7 @@ public sealed class ReadingAttemptService(
         var rulebookVersion = await ResolveReadingRulebookVersionAsync(ct);
         var attempt = new ReadingAttempt
         {
-            Id = Guid.NewGuid().ToString("N"),
+            Id = attemptId,
             UserId = userId,
             PaperId = paperId,
             StartedAt = now,

@@ -35,6 +35,7 @@ import {
   type ListeningFsmState,
 } from '@/lib/listening/transitions';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
+import { InsufficientCreditsModal, isInsufficientCreditsError, readInsufficientCreditsMessage } from '@/components/domain/InsufficientCreditsModal';
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
@@ -238,6 +239,7 @@ function PlayerContent() {
   const [loadingTask, setLoadingTask] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [integrityWarning, setIntegrityWarning] = useState<string | null>(null);
   const [audioResumeWarning, setAudioResumeWarning] = useState<string | null>(null);
@@ -335,6 +337,14 @@ function PlayerContent() {
           setContentLockedMessage(
             readContentLockedMessage(err, 'This listening paper requires an active subscription.'),
           );
+          return;
+        }
+        // C2 — same 402 upsell pattern, but for a numeric test-credit
+        // shortfall (ListeningTestsRemaining) rather than a subscription-tier
+        // lock. Checked as a distinct branch so it never gets masked by the
+        // content-locked check above or the generic fallback below.
+        if (isInsufficientCreditsError(err)) {
+          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
           return;
         }
         setLoadError(err instanceof Error ? err.message : 'Could not load this Listening task.');
@@ -600,6 +610,10 @@ function PlayerContent() {
     } catch (err) {
       if (isContentLockedError(err)) {
         setContentLockedMessage(readContentLockedMessage(err));
+        return;
+      }
+      if (isInsufficientCreditsError(err)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
         return;
       }
       setStartError(err instanceof Error ? err.message : 'Could not start this Listening attempt.');
@@ -1309,6 +1323,11 @@ function PlayerContent() {
   return (
     <ListeningPlayerSkinShell mode={presentationMode}>
     <AppShell pageTitle={session.paper.title} distractionFree>
+      <InsufficientCreditsModal
+        open={insufficientCreditsMessage !== null}
+        message={insufficientCreditsMessage ?? ''}
+        onClose={() => setInsufficientCreditsMessage(null)}
+      />
       {shouldMountAudio ? (
         <audio
           key={usingPerSectionAudio ? `${audioRetryKey}-${currentSection ?? ''}` : audioRetryKey}

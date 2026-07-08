@@ -483,6 +483,16 @@ function mapErrorCodeToUserMessage(code: string, fallback: string): string {
     case 'validation_error': return 'Please check your input and try again.';
     case 'rate_limited': return 'Too many requests. Please wait a moment and try again.';
     case 'internal_server_error': return 'Something went wrong. Please try again later.';
+    case 'no_reading_tests':
+    case 'no_listening_tests':
+    case 'no_ai_package_credits':
+    case 'ai_credits_insufficient':
+    case 'ai_package_expired':
+    case 'no_mock_exams':
+    case 'no_credits':
+    case 'insufficient_review_credits':
+    case 'speaking_exam_insufficient_credits':
+      return fallback || 'You do not have enough credits to start this. Purchase a package to continue.';
     default: return fallback;
   }
 }

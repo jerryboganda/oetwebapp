@@ -17,6 +17,12 @@ import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+} from '@/components/domain/InsufficientCreditsModal';
+import {
+  checkWritingScenarioEligibility,
   createWritingSubmission,
   getWritingDraftV2,
   getWritingHighlights,
@@ -48,6 +54,7 @@ export default function WritingPracticeSessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [noCreditsOpen, setNoCreditsOpen] = useState(false);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
   // Latest content for auto-submit (timer expiry reads the current letter).
@@ -118,15 +125,21 @@ export default function WritingPracticeSessionPage() {
   }, [scenarioId, scenario?.id]);
 
   // ── Scenario + draft load ───────────────────────────────────────────────────
+  // Eligibility is checked FIRST, before any task content is fetched — a
+  // learner without enough AI grading credits never sees the case notes or
+  // starts the reading/writing clock.
   useEffect(() => {
     if (!scenarioId) return;
     let cancelled = false;
-    void Promise.all([
-      getWritingScenario(scenarioId),
-      getWritingDraftV2(scenarioId, mode).catch(() => null),
-      // Saved Case Notes highlights persist per (user, scenario) across attempts.
-      getWritingHighlights(scenarioId).catch(() => null),
-    ])
+    void checkWritingScenarioEligibility(scenarioId)
+      .then(() =>
+        Promise.all([
+          getWritingScenario(scenarioId),
+          getWritingDraftV2(scenarioId, mode).catch(() => null),
+          // Saved Case Notes highlights persist per (user, scenario) across attempts.
+          getWritingHighlights(scenarioId).catch(() => null),
+        ]),
+      )
       .then(([sc, draft, hl]) => {
         if (cancelled) return;
         setScenario(sc);
@@ -145,6 +158,10 @@ export default function WritingPracticeSessionPage() {
       })
       .catch((err) => {
         if (cancelled) return;
+        if (isInsufficientCreditsError(err)) {
+          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+          return;
+        }
         setError(err instanceof Error ? err.message : t('writing.practice.session.error.load'));
       });
     return () => {
@@ -260,6 +277,18 @@ export default function WritingPracticeSessionPage() {
   }, [phase, submitting, finalizeSubmit]);
 
   const readingActive = phase === 'reading';
+
+  if (insufficientCreditsMessage) {
+    return (
+      <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
+        <InsufficientCreditsModal
+          open
+          message={insufficientCreditsMessage}
+          onClose={() => router.push('/writing')}
+        />
+      </LearnerDashboardShell>
+    );
+  }
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>

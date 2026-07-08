@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
@@ -56,6 +57,22 @@ public static class WritingScenarioEndpoints
             return scenario is null ? Results.NotFound() : Results.Ok(scenario);
         })
         .WithName("GetWritingScenario");
+
+        // Gate for AI-graded practice/paper sessions (NOT mock sessions —
+        // mocks never touch the AI grading credit pool, see WritingMockService).
+        // Read-only: does not consume a credit. The real debit still happens
+        // once, at submit, via AiPackageCreditService.DeductGradingCreditAsync.
+        group.MapGet("/{id:guid}/eligibility", async (
+            Guid id,
+            HttpContext http,
+            IAiPackageCreditService aiPackageCreditService,
+            CancellationToken ct) =>
+        {
+            var result = await aiPackageCreditService.CheckGradingCreditAsync(http.WritingV2UserId(), "writing", ct);
+            result.EnsureDebited();
+            return Results.Ok();
+        })
+        .WithName("CheckWritingScenarioEligibility");
 
         return app;
     }
