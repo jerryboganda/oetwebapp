@@ -160,7 +160,10 @@ public sealed record ListeningExtractPatch(
     // normalized PDF-overlay blank placements (JSON). Patched together with the
     // method when the operator authors via the PDF-overlay editor.
     string? AuthoringMethod = null,
-    string? PartAOverlayBlanksJson = null);
+    string? PartAOverlayBlanksJson = null,
+    // Part B/C printed scenario/intro line ("You hear a nurse briefing…"), shown
+    // once per extract on the learner card so the question-paper PDF can be dropped.
+    string? ContextIntro = null);
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
 /// correct answer + accepted synonyms, so it MUST NOT be returned by any
@@ -217,7 +220,10 @@ public sealed record ListeningAuthoredExtract(
     // Phase 6: Part A authoring method ("wysiwyg" default | "pdf_overlay") and,
     // for pdf_overlay, the normalized blank placements over the question-paper PDF.
     string? AuthoringMethod = null,
-    string? PartAOverlayBlanksJson = null);
+    string? PartAOverlayBlanksJson = null,
+    // Part B/C printed scenario/intro line ("You hear a nurse briefing…"), shown
+    // once per extract on the learner card so the question-paper PDF can be dropped.
+    string? ContextIntro = null);
 
 public sealed record ListeningAuthoredSpeaker(
     string Id,
@@ -1102,7 +1108,8 @@ public sealed class ListeningAuthoringService(
             TimeLimitSeconds: ReadInt("timeLimitSeconds"),
             NotesBodyMarkdown: Read("notesBody"),
             AuthoringMethod: Read("authoringMethod"),
-            PartAOverlayBlanksJson: Read("partAOverlayBlanksJson"));
+            PartAOverlayBlanksJson: Read("partAOverlayBlanksJson"),
+            ContextIntro: Read("contextIntro"));
     }
 
     private static ListeningAuthoredExtract NormalizeExtractForStorage(ListeningAuthoredExtract e)
@@ -1145,6 +1152,10 @@ public sealed class ListeningAuthoringService(
             ? e.PartAOverlayBlanksJson
             : null;
 
+        // ContextIntro is the Part B/C scenario line — persisted for ALL parts
+        // that carry one (NOT gated Part-A-only like notesBody). Blank → null.
+        var contextIntro = string.IsNullOrWhiteSpace(e.ContextIntro) ? null : e.ContextIntro.Trim();
+
         return new ListeningAuthoredExtract(
             PartCode: partCode,
             DisplayOrder: displayOrder,
@@ -1157,7 +1168,8 @@ public sealed class ListeningAuthoringService(
             TimeLimitSeconds: timeLimitSeconds,
             NotesBodyMarkdown: notesBody,
             AuthoringMethod: authoringMethod,
-            PartAOverlayBlanksJson: overlayBlanks);
+            PartAOverlayBlanksJson: overlayBlanks,
+            ContextIntro: contextIntro);
     }
 
     /// <summary>True for the two Part A consultation sub-sections (A1/A2) — the
@@ -1674,6 +1686,7 @@ public sealed class ListeningAuthoringService(
             NotesBodyMarkdown = p.NotesBodyMarkdown ?? existing.NotesBodyMarkdown,
             AuthoringMethod = p.AuthoringMethod ?? existing.AuthoringMethod,
             PartAOverlayBlanksJson = p.PartAOverlayBlanksJson ?? existing.PartAOverlayBlanksJson,
+            ContextIntro = p.ContextIntro ?? existing.ContextIntro,
         };
 
     private static void ApplyPatchToRelational(

@@ -235,6 +235,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 AudioStartMs = meta?.AudioStartMs,
                 AudioEndMs = meta?.AudioEndMs,
                 NotesBodyMarkdown = notesBody,
+                // Part B/C scenario line — carried for every part that authored one
+                // (unlike notesBody, which is Part-A-only above).
+                ContextIntro = meta?.ContextIntro,
                 ReplayInLearningOnly = true,
                 TranscriptSegmentsJson = JsonSerializer.Serialize(partSegments),
                 CreatedAt = now,
@@ -468,7 +471,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 AudioEndMs: GetInt(item, "audioEndMs"),
                 Speakers: speakers,
                 TimeLimitSeconds: GetInt(item, "timeLimitSeconds"),
-                NotesBody: GetString(item, "notesBody")));
+                NotesBody: GetString(item, "notesBody"),
+                ContextIntro: GetString(item, "contextIntro")));
         }
         return output;
     }
@@ -754,7 +758,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         int? AudioEndMs,
         IReadOnlyList<JsonElement> Speakers,
         int? TimeLimitSeconds = null,
-        string? NotesBody = null);
+        string? NotesBody = null,
+        string? ContextIntro = null);
 
     private sealed record AuthoredSegment(
         int StartMs,

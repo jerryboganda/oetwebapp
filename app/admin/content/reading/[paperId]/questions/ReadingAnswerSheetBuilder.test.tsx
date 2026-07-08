@@ -48,7 +48,9 @@ async function fillAllAnswers(user: ReturnType<typeof userEvent.setup>) {
   for (const select of screen.queryAllByRole('combobox')) {
     await user.selectOptions(select, 'A');
   }
-  for (const input of screen.queryAllByRole('textbox')) {
+  // Only the correct-answer text inputs (Part A short-answer / sentence). The new
+  // MCQ stem / option-text inputs are left blank so they fall back to placeholders.
+  for (const input of screen.queryAllByRole('textbox', { name: /^correct answer for question/i })) {
     await user.type(input, 'answer');
   }
 }
@@ -254,6 +256,74 @@ describe('ReadingAnswerSheetBuilder', () => {
 
     expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({
       explanationMarkdown: null,
+    }));
+  });
+
+  it('saves typed stem + option texts inline for a Part B MCQ (no See PDF placeholder)', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReadingAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activePart={partBC('B', [section('B3', 3)])}
+        activeSection={section('B3', 3)}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/question 3 stem/i), 'What is the main finding?');
+    await user.type(screen.getByLabelText(/question 3 option a/i), 'Raised blood pressure');
+    await user.type(screen.getByLabelText(/question 3 option b/i), 'Low sodium');
+    await user.type(screen.getByLabelText(/question 3 option c/i), 'Normal results');
+    await user.selectOptions(screen.getByRole('combobox'), 'A');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({
+      stem: 'What is the main finding?',
+      optionsJson: '["Raised blood pressure","Low sodium","Normal results"]',
+      correctAnswerJson: '"A"',
+    }));
+  });
+
+  it('preserves real authored stem + options on re-save (no clobber back to See PDF)', async () => {
+    const user = userEvent.setup();
+    const existing: ReadingQuestionAdminDto = {
+      id: 'q-b3-real',
+      readingPartId: 'part-b',
+      readingSectionId: 'sec-b3',
+      readingTextId: null,
+      displayOrder: 3,
+      points: 1,
+      questionType: 'MultipleChoice3',
+      stem: 'What is the main finding?',
+      optionsJson: '["Raised blood pressure","Low sodium","Normal results"]',
+      correctAnswerJson: '"B"',
+      acceptedSynonymsJson: null,
+      caseSensitive: false,
+      explanationMarkdown: null,
+      skillTag: null,
+    };
+    render(
+      <ReadingAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activePart={partBC('B', [section('B3', 3, [existing])])}
+        activeSection={section('B3', 3, [existing])}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    // Seeded from the existing question — save without touching any field.
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({
+      id: 'q-b3-real',
+      stem: 'What is the main finding?',
+      optionsJson: '["Raised blood pressure","Low sodium","Normal results"]',
+      correctAnswerJson: '"B"',
     }));
   });
 

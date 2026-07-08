@@ -157,6 +157,11 @@ export interface ListeningAuthoredExtract {
   authoringMethod?: string | null;
   /** Part A 'pdf_overlay' blank placements (JSON array of normalized boxes). */
   partAOverlayBlanksJson?: string | null;
+  /**
+   * Part B/C printed scenario/intro line ("You hear a nurse briefing…"), shown
+   * once per extract on the learner card so the question-paper PDF can be dropped.
+   */
+  contextIntro?: string | null;
 }
 
 export interface ListeningAuthoredExtractList {
@@ -294,6 +299,8 @@ export interface ListeningExtractPatchBody {
   authoringMethod?: string | null;
   /** Part A 'pdf_overlay' blank placements (JSON array of normalized boxes). */
   partAOverlayBlanksJson?: string | null;
+  /** Part B/C scenario/intro line. `null` clears it; absent leaves it unchanged. */
+  contextIntro?: string | null;
 }
 
 export const patchListeningExtract = (
@@ -353,6 +360,49 @@ export async function setListeningSubSectionTimer(
       audioStartMs: null,
       audioEndMs: null,
       timeLimitSeconds,
+    },
+  ];
+  return replaceListeningExtracts(paperId, next);
+}
+
+/**
+ * Set (or clear) the Part B/C scenario/intro line for a single sub-section's
+ * extract ("You hear a charge nurse briefing…"). Upserts the extract row exactly
+ * like {@link setListeningSubSectionTimer} so a paper that has not been through
+ * extract authoring still records the context. Pass empty/null to clear it.
+ * Returns the re-read extract list so callers can refresh in one round-trip.
+ */
+export async function setListeningExtractContext(
+  paperId: string,
+  code: ListeningSubSectionCode,
+  contextIntro: string | null,
+): Promise<ListeningAuthoredExtractList> {
+  const value = contextIntro && contextIntro.trim() ? contextIntro.trim() : null;
+  const current = await getListeningExtracts(paperId);
+  const existing = current.extracts.find(
+    (e) => String(e.partCode).toUpperCase() === code,
+  );
+  if (existing) {
+    return patchListeningExtract(paperId, code, { contextIntro: value });
+  }
+
+  const kind: ListeningExtractKind = code.startsWith('B')
+    ? 'workplace'
+    : code.startsWith('C')
+      ? 'presentation'
+      : 'consultation';
+  const next: ListeningAuthoredExtract[] = [
+    ...current.extracts,
+    {
+      partCode: code,
+      displayOrder: current.extracts.length,
+      kind,
+      title: `${code} extract`,
+      accentCode: null,
+      speakers: [],
+      audioStartMs: null,
+      audioEndMs: null,
+      contextIntro: value,
     },
   ];
   return replaceListeningExtracts(paperId, next);
@@ -445,6 +495,12 @@ export interface ListeningPartBCAnswer {
   correctAnswer: string;
   /** AI-drafted "why correct" rationale (learner-visible on review), or null. */
   rationale: string | null;
+  /** Question stem transcribed from the paper (null when OCR left it blank). */
+  stem?: string | null;
+  /** Option A/B/C text transcribed from the paper (null when unclear). */
+  optionA?: string | null;
+  optionB?: string | null;
+  optionC?: string | null;
 }
 
 export interface ListeningPartBCImportResult {

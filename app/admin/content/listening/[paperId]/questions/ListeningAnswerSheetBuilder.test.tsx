@@ -2,12 +2,20 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ListeningAuthoredQuestion } from '@/lib/listening-authoring-api';
 
-const { mockReplaceListeningStructure } = vi.hoisted(() => ({
+const {
+  mockReplaceListeningStructure,
+  mockGetListeningExtracts,
+  mockSetListeningExtractContext,
+} = vi.hoisted(() => ({
   mockReplaceListeningStructure: vi.fn(),
+  mockGetListeningExtracts: vi.fn(),
+  mockSetListeningExtractContext: vi.fn(),
 }));
 
 vi.mock('@/lib/listening-authoring-api', () => ({
   replaceListeningStructure: mockReplaceListeningStructure,
+  getListeningExtracts: mockGetListeningExtracts,
+  setListeningExtractContext: mockSetListeningExtractContext,
 }));
 
 import { ListeningAnswerSheetBuilder } from './ListeningAnswerSheetBuilder';
@@ -44,6 +52,8 @@ beforeEach(() => {
   mockReplaceListeningStructure.mockImplementation((_paperId: string, questions: ListeningAuthoredQuestion[]) =>
     Promise.resolve({ questions, counts: { partACount: 0, partBCount: 0, partCCount: 0, totalItems: questions.length } }),
   );
+  mockGetListeningExtracts.mockResolvedValue({ extracts: [] });
+  mockSetListeningExtractContext.mockResolvedValue({ extracts: [] });
 });
 
 describe('ListeningAnswerSheetBuilder', () => {
@@ -205,5 +215,87 @@ describe('ListeningAnswerSheetBuilder', () => {
 
     expect(screen.getByText(/advanced editor/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save all/i })).not.toBeInTheDocument();
+  });
+
+  it('saves the typed stem and option texts inline (no See PDF placeholder)', async () => {
+    const user = userEvent.setup();
+    render(
+      <ListeningAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activeSection="B3"
+        allQuestions={[]}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/question 27 stem/i), 'What does the nurse advise about the dose?');
+    await user.type(screen.getByLabelText(/question 27 option a/i), 'Increase the dose');
+    await user.type(screen.getByLabelText(/question 27 option b/i), 'Reduce the dose');
+    await user.type(screen.getByLabelText(/question 27 option c/i), 'Keep the dose unchanged');
+    await user.selectOptions(screen.getByRole('combobox'), 'B');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(savedQuestions()[0]).toMatchObject({
+      number: 27,
+      stem: 'What does the nurse advise about the dose?',
+      options: ['Increase the dose', 'Reduce the dose', 'Keep the dose unchanged'],
+      correctAnswer: 'B',
+    });
+  });
+
+  it('persists the per-extract scenario/context line for the section', async () => {
+    const user = userEvent.setup();
+    render(
+      <ListeningAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activeSection="B3"
+        allQuestions={[]}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/scenario or context/i), 'You hear a charge nurse briefing a colleague.');
+    await user.selectOptions(screen.getByRole('combobox'), 'A');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockSetListeningExtractContext).toHaveBeenCalledWith(
+      'paper-1',
+      'B3',
+      'You hear a charge nurse briefing a colleague.',
+    );
+  });
+
+  it('preserves real authored stem + options on re-save (no clobber back to See PDF)', async () => {
+    const user = userEvent.setup();
+    const existing: ListeningAuthoredQuestion = {
+      ...mcq(27, 'B3', 'B'),
+      stem: 'What does the nurse advise?',
+      options: ['Increase fluids', 'Reduce the dose', 'Refer on'],
+    };
+    render(
+      <ListeningAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activeSection="B3"
+        allQuestions={[existing]}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    // Seeded from the existing question — save without touching any field.
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(savedQuestions()[0]).toMatchObject({
+      stem: 'What does the nurse advise?',
+      options: ['Increase fluids', 'Reduce the dose', 'Refer on'],
+      correctAnswer: 'B',
+    });
   });
 });

@@ -259,6 +259,15 @@ public class ListeningExtract
     /// in <c>lib/listening-part-a-notes.ts</c>. Plain text column, never LINQ-queried.</summary>
     public string? NotesBodyMarkdown { get; set; }
 
+    /// <summary>OET Listening Part B/C — the printed scenario/intro line shown above
+    /// the question(s) for this extract, e.g. "You hear a charge nurse briefing a
+    /// colleague about a patient." Rendered once per extract on the learner card so
+    /// the question-paper PDF can be dropped once the questions are authored inline.
+    /// Null for Part A (which uses <see cref="NotesBodyMarkdown"/>) and for extracts
+    /// without an authored context line. Plain text column, never LINQ-queried.</summary>
+    [MaxLength(2048)]
+    public string? ContextIntro { get; set; }
+
     /// <summary>
     /// OET Listening Part A authoring method for this extract:
     ///   "wysiwyg"     — the note is authored as <see cref="NotesBodyMarkdown"/>

@@ -1875,6 +1875,8 @@ public sealed class ListeningLearnerService(
                 var notesBody = isPartA ? ReadString(seg.GetValueOrDefault("notesBody")) : null;
                 var authoringMethod = isPartA ? ReadString(seg.GetValueOrDefault("authoringMethod")) : null;
                 var overlayBlanks = isPartA ? ReadString(seg.GetValueOrDefault("partAOverlayBlanksJson")) : null;
+                // Part B/C scenario line — not gated Part-A-only (unlike notesBody).
+                var contextIntro = ReadString(seg.GetValueOrDefault("contextIntro"));
                 // JSON-path papers have no TTS extract sha here, so only uploaded
                 // per-part Audio assets resolve; else null.
                 var audioUrl = audioByPart.GetValueOrDefault(partCode.Trim().ToUpperInvariant());
@@ -1891,7 +1893,8 @@ public sealed class ListeningLearnerService(
                     TimeLimitSeconds: timeLimitSeconds,
                     NotesBody: notesBody,
                     AuthoringMethod: authoringMethod,
-                    PartAOverlayBlanksJson: overlayBlanks));
+                    PartAOverlayBlanksJson: overlayBlanks,
+                    ContextIntro: contextIntro));
             }
             return output
                 .OrderBy(e => PartCodeOrder(e.PartCode))
@@ -2051,7 +2054,8 @@ public sealed class ListeningLearnerService(
             TimeLimitSeconds: timeLimitSeconds,
             NotesBody: extract.NotesBodyMarkdown,
             AuthoringMethod: extract.AuthoringMethod,
-            PartAOverlayBlanksJson: extract.PartAOverlayBlanksJson);
+            PartAOverlayBlanksJson: extract.PartAOverlayBlanksJson,
+            ContextIntro: extract.ContextIntro);
 
     /// <summary>Resolve the per-sub-section audio URL. Priority: an uploaded
     /// primary <see cref="ContentPaperAsset"/> of role Audio for this part code
@@ -2490,13 +2494,46 @@ public sealed class ListeningLearnerService(
                 ?? [];
             if (!string.IsNullOrWhiteSpace(correct)) accepted.Insert(0, correct);
 
+            var type = ReadString(question.GetValueOrDefault("type")) ?? ReadString(question.GetValueOrDefault("questionType")) ?? "short_answer";
+            var options = ReadStringList(question.GetValueOrDefault("options")) ?? [];
+
+            // MCQ (Part B/C): grade by option LETTER *or* TEXT interchangeably. The
+            // correct answer may be stored as a letter (fast builder) or as the
+            // option text (advanced editor), and the learner may submit either.
+            // Add the correct option's letter AND text to the accepted set so the
+            // option's display prose is grading-neutral (replacing "Option A/B/C"
+            // with real text can never change a score).
+            var normalizedType = type.Trim().ToLowerInvariant();
+            var isMcq = normalizedType is "multiple_choice_3" or "multiple_choice_4" or "mcq" or "mcq3" or "mcq4";
+            if (isMcq && options.Count > 0 && !string.IsNullOrWhiteSpace(correct))
+            {
+                var trimmedCorrect = correct.Trim();
+                var correctIndex = -1;
+                if (trimmedCorrect.Length == 1 && char.IsLetter(trimmedCorrect[0]))
+                {
+                    var candidate = char.ToUpperInvariant(trimmedCorrect[0]) - 'A';
+                    if (candidate >= 0 && candidate < options.Count) correctIndex = candidate;
+                }
+                if (correctIndex < 0)
+                {
+                    correctIndex = options.FindIndex(o => string.Equals(o?.Trim(), trimmedCorrect, StringComparison.OrdinalIgnoreCase));
+                }
+                if (correctIndex >= 0 && correctIndex < options.Count)
+                {
+                    var letter = ((char)('A' + correctIndex)).ToString();
+                    if (!accepted.Contains(letter, StringComparer.OrdinalIgnoreCase)) accepted.Add(letter);
+                    var text = options[correctIndex];
+                    if (!string.IsNullOrWhiteSpace(text) && !accepted.Contains(text, StringComparer.OrdinalIgnoreCase)) accepted.Add(text);
+                }
+            }
+
             yield return new ListeningQuestion(
                 Id: id,
                 Number: number,
                 PartCode: ReadString(question.GetValueOrDefault("partCode")) ?? ReadString(question.GetValueOrDefault("part")) ?? "A",
                 Text: ReadString(question.GetValueOrDefault("text")) ?? ReadString(question.GetValueOrDefault("stem")) ?? string.Empty,
-                Type: ReadString(question.GetValueOrDefault("type")) ?? ReadString(question.GetValueOrDefault("questionType")) ?? "short_answer",
-                Options: ReadStringList(question.GetValueOrDefault("options")) ?? [],
+                Type: type,
+                Options: options,
                 CorrectAnswer: correct,
                 AcceptedAnswers: accepted.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                 Explanation: ReadString(question.GetValueOrDefault("explanation")) ?? ReadString(question.GetValueOrDefault("explanationMarkdown")),
@@ -2531,6 +2568,10 @@ public sealed class ListeningLearnerService(
         // shape. Options are only non-empty for MCQ items.
         type = LearnerWireType(q.Type),
         options = q.Options,
+        // Positional option keys (A/B/C). The learner card submits the KEY, not
+        // the display text, so replacing "Option A/B/C" with real prose is
+        // grading-neutral. Empty for non-MCQ (free-text) items.
+        optionKeys = q.Options.Select((_, index) => ((char)('A' + index)).ToString()).ToList(),
         q.Points
     };
 
@@ -2593,6 +2634,8 @@ public sealed class ListeningLearnerService(
             // Phase 6: Part A authoring method + PDF-overlay blank placements.
             authoringMethod = e.AuthoringMethod,
             partAOverlayBlanksJson = e.PartAOverlayBlanksJson,
+            // Part B/C scenario line, rendered once per extract on the learner card.
+            contextIntro = e.ContextIntro,
         }).ToList()
     };
 
@@ -3402,7 +3445,10 @@ public sealed class ListeningLearnerService(
         // and, for pdf_overlay, the normalized blank placements over the
         // question-paper PDF (the player renders inputs at these coordinates).
         string? AuthoringMethod = null,
-        string? PartAOverlayBlanksJson = null);
+        string? PartAOverlayBlanksJson = null,
+        // Part B/C printed scenario/intro line, rendered once per extract above
+        // the question cards so the question-paper PDF can be dropped.
+        string? ContextIntro = null);
 
     private sealed record ListeningSpeakerDto(
         string Id,

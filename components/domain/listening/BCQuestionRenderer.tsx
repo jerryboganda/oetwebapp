@@ -11,6 +11,13 @@ export interface BCQuestionRendererProps {
   partLabel: string;
   prompt: string;
   options: string[];
+  /**
+   * Positional option keys (A/B/C) parallel to `options`. The selected `value`
+   * and `onChange` payload are the KEY, not the display text, so authoring real
+   * option prose never changes a score. Falls back to the derived letter when a
+   * (cached) session DTO predates this field.
+   */
+  optionKeys?: string[];
   value: string;
   onChange: (value: string) => void;
   locked?: boolean;
@@ -31,6 +38,7 @@ export function BCQuestionRenderer({
   partLabel,
   prompt,
   options,
+  optionKeys,
   value,
   onChange,
   locked = false,
@@ -100,11 +108,15 @@ export function BCQuestionRenderer({
     setStruckOptionsForOption(option);
   };
 
+  // The learner submits the option KEY (the positional letter A/B/C supplied by
+  // the backend), never the display text — so grading is unaffected by option
+  // prose. Falls back to the derived letter when a cached DTO lacks optionKeys.
+  const keyFor = (index: number) => optionKeys?.[index] ?? String.fromCharCode(65 + index);
+
   const selectAndFocusOption = (index: number) => {
     if (locked || options.length === 0) return;
     const nextIndex = (index + options.length) % options.length;
-    const nextOption = options[nextIndex];
-    onChange(nextOption);
+    onChange(keyFor(nextIndex));
     optionRefs.current[nextIndex]?.focus();
   };
 
@@ -201,7 +213,8 @@ export function BCQuestionRenderer({
 
       <div role="radiogroup" aria-labelledby={headingId} aria-describedby={statusId} className="space-y-3">
         {options.map((option, index) => {
-          const isSelected = value === option;
+          const optionKey = keyFor(index);
+          const isSelected = value === optionKey;
           const isStruck = struckOptions.has(option);
           const optionLabel = String.fromCharCode(65 + index);
           return (
@@ -215,7 +228,7 @@ export function BCQuestionRenderer({
                 ref={(element) => {
                   optionRefs.current[index] = element;
                 }}
-                onClick={() => !locked && onChange(option)}
+                onClick={() => !locked && onChange(optionKey)}
                 onKeyDown={(event) => handleOptionKeyDown(event, index)}
                 onContextMenu={(event) => {
                   event.preventDefault();
