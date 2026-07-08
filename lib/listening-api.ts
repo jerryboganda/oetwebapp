@@ -197,6 +197,12 @@ export interface ListeningExtractMetadataDto {
    * `[{page,xPct,yPct,wPct,hPct,gapOrdinal}]` over the question-paper PDF.
    */
   partAOverlayBlanksJson?: string | null;
+  /**
+   * Part B/C printed scenario/intro line ("You hear a nurse briefing…"), rendered
+   * once per extract above the question cards so the question-paper PDF can be
+   * dropped once the questions are authored inline. Null/absent when unauthored.
+   */
+  contextIntro?: string | null;
 }
 
 export interface ListeningSessionDto {

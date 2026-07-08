@@ -1842,6 +1842,8 @@ public sealed class ListeningLearnerService(
                 var notesBody = isPartA ? ReadString(seg.GetValueOrDefault("notesBody")) : null;
                 var authoringMethod = isPartA ? ReadString(seg.GetValueOrDefault("authoringMethod")) : null;
                 var overlayBlanks = isPartA ? ReadString(seg.GetValueOrDefault("partAOverlayBlanksJson")) : null;
+                // Part B/C scenario line — not gated Part-A-only (unlike notesBody).
+                var contextIntro = ReadString(seg.GetValueOrDefault("contextIntro"));
                 // JSON-path papers have no TTS extract sha here, so only uploaded
                 // per-part Audio assets resolve; else null.
                 var audioUrl = audioByPart.GetValueOrDefault(partCode.Trim().ToUpperInvariant());
@@ -1858,7 +1860,8 @@ public sealed class ListeningLearnerService(
                     TimeLimitSeconds: timeLimitSeconds,
                     NotesBody: notesBody,
                     AuthoringMethod: authoringMethod,
-                    PartAOverlayBlanksJson: overlayBlanks));
+                    PartAOverlayBlanksJson: overlayBlanks,
+                    ContextIntro: contextIntro));
             }
             return output
                 .OrderBy(e => PartCodeOrder(e.PartCode))
@@ -2018,7 +2021,8 @@ public sealed class ListeningLearnerService(
             TimeLimitSeconds: timeLimitSeconds,
             NotesBody: extract.NotesBodyMarkdown,
             AuthoringMethod: extract.AuthoringMethod,
-            PartAOverlayBlanksJson: extract.PartAOverlayBlanksJson);
+            PartAOverlayBlanksJson: extract.PartAOverlayBlanksJson,
+            ContextIntro: extract.ContextIntro);
 
     /// <summary>Resolve the per-sub-section audio URL. Priority: an uploaded
     /// primary <see cref="ContentPaperAsset"/> of role Audio for this part code
@@ -2597,6 +2601,8 @@ public sealed class ListeningLearnerService(
             // Phase 6: Part A authoring method + PDF-overlay blank placements.
             authoringMethod = e.AuthoringMethod,
             partAOverlayBlanksJson = e.PartAOverlayBlanksJson,
+            // Part B/C scenario line, rendered once per extract on the learner card.
+            contextIntro = e.ContextIntro,
         }).ToList()
     };
 
@@ -3406,7 +3412,10 @@ public sealed class ListeningLearnerService(
         // and, for pdf_overlay, the normalized blank placements over the
         // question-paper PDF (the player renders inputs at these coordinates).
         string? AuthoringMethod = null,
-        string? PartAOverlayBlanksJson = null);
+        string? PartAOverlayBlanksJson = null,
+        // Part B/C printed scenario/intro line, rendered once per extract above
+        // the question cards so the question-paper PDF can be dropped.
+        string? ContextIntro = null);
 
     private sealed record ListeningSpeakerDto(
         string Id,

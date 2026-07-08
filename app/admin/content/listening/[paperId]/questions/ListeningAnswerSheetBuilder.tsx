@@ -9,7 +9,9 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import {
+  getListeningExtracts,
   replaceListeningStructure,
+  setListeningExtractContext,
   type ListeningAuthoredQuestion,
   type ListeningSubSectionCode,
 } from '@/lib/listening-authoring-api';
@@ -156,6 +158,26 @@ export function ListeningAnswerSheetBuilder({
   const [rows, setRows] = useState<BuilderRow[]>([]);
   const [shown, setShown] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Optional per-extract scenario/intro line ("You hear a nurse briefing…"),
+  // rendered once per extract on the learner card. Seeded from the extract row.
+  const [context, setContext] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setContext('');
+    void getListeningExtracts(paperId)
+      .then((res) => {
+        if (cancelled) return;
+        const extract = res.extracts.find((e) => normalizeCode(String(e.partCode)) === activeSection);
+        setContext(extract?.contextIntro ?? '');
+      })
+      .catch(() => {
+        // Context is optional; a load failure must not block answer authoring.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId, activeSection]);
 
   useEffect(() => {
     if (blocked) {
@@ -226,6 +248,12 @@ export function ListeningAnswerSheetBuilder({
       const next = [...others, ...built].sort((a, b) => a.number - b.number);
 
       const result = await replaceListeningStructure(paperId, next);
+      // Persist the optional per-extract scenario/intro line alongside the answers.
+      try {
+        await setListeningExtractContext(paperId, activeSection, context);
+      } catch {
+        // Context is optional; its save failure must not lose the answer save.
+      }
       onNotify('success', `Saved ${rows.length} answer${rows.length === 1 ? '' : 's'}.`);
       await onSaved(result.questions);
     } catch (err: unknown) {
@@ -265,7 +293,16 @@ export function ListeningAnswerSheetBuilder({
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            <Textarea
+              aria-label={`Scenario or context for Part ${partCode} ${activeSection}`}
+              label="Scenario / context (optional)"
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              rows={2}
+              placeholder="e.g. You hear a charge nurse briefing a colleague about a patient. Shown once above the question(s)."
+            />
+            <div className="space-y-2">
             {rows.map((row, index) => {
               const existing = row.id ? sectionQuestions.find((q) => q.id === row.id) ?? null : null;
               return (
@@ -329,6 +366,7 @@ export function ListeningAnswerSheetBuilder({
                 </div>
               );
             })}
+            </div>
           </div>
         )}
       </CardContent>

@@ -91,6 +91,21 @@ function formatQuestionNumberList(numbers: number[]) {
   return numbers.map((number) => `Q${number}`).join(', ');
 }
 
+// A Part B/C question card is "authored inline" when its stem is real prose (not
+// the "See PDF" sentinel) AND every option is real prose (not the generic
+// "Option A/B/C" placeholder). Once every MCQ question in a section is inline, the
+// question-paper PDF is redundant and is hidden for that section (Part A unaffected).
+function listeningQuestionIsInlineAuthored(question: { text: string; options: string[] }): boolean {
+  const stem = question.text.trim().toLowerCase();
+  const stemOk = stem.length > 0 && stem !== 'see pdf';
+  const optionsOk = question.options.length > 0
+    && question.options.every((option, index) => {
+      const normalized = option.trim().toLowerCase();
+      return normalized.length > 0 && normalized !== `option ${String.fromCharCode(97 + index)}`;
+    });
+  return stemOk && optionsOk;
+}
+
 function derivePlayerMode({
   rawMode,
   mockMode,
@@ -786,6 +801,13 @@ function PlayerContent() {
   const currentSectionHasNotes =
     (currentSection === 'A1' || currentSection === 'A2')
     && extracts.some((e) => e.partCode === currentSection && (e.notesBody?.trim().length ?? 0) > 0);
+  // Drop the question-paper PDF for a Part B/C section once every MCQ question in
+  // it is authored inline (stem + options). A section with any placeholder question
+  // keeps the PDF as a fallback. Part A (notes / PDF-overlay) is never gated here.
+  const currentSectionMcqs = (currentSection ? sectionGroups?.[currentSection] ?? [] : [])
+    .filter((question) => question.options.length > 0);
+  const currentSectionInlineBcReady =
+    currentSectionMcqs.length > 0 && currentSectionMcqs.every(listeningQuestionIsInlineAuthored);
   // Per-section audio: each section plays its OWN uploaded file (Part B plays one
   // shared file across B1..B6). Resolved by section code (A1, A2, B, C1, C2).
   // Falls back to the legacy combined paper audio (+ cue windows) for papers that
@@ -1670,12 +1692,12 @@ function PlayerContent() {
                     <>
                       <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
 
-                      {currentQuestionPaperUrl ? (
+                      {currentQuestionPaperUrl && !currentSectionInlineBcReady ? (
                         <ListeningQuestionPaperViewer
                           url={currentQuestionPaperUrl}
                           partLabel={currentSection}
                         />
-                      ) : currentSectionHasNotes ? null : (
+                      ) : (currentSectionHasNotes || currentSectionInlineBcReady) ? null : (
                         <div
                           data-testid="listening-question-paper-empty"
                           className="rounded-2xl border border-dashed border-border bg-surface px-4 py-5 text-center text-sm text-muted"
@@ -1737,6 +1759,10 @@ function PlayerContent() {
                               }
 
                               // Legacy Part A (no notesBody) or Part B/C → per-question renderer.
+                              // Track the last rendered extract context so a Part C
+                              // presentation shows its scenario line once (above its
+                              // first card) while Part B shows each clip's own line.
+                              let lastContext: string | null = null;
                               return questions.map((question) => {
                                 const canEdit = true;
                                 if (question.options.length === 0) {
@@ -1755,8 +1781,21 @@ function PlayerContent() {
                                   );
                                 }
 
+                                const questionExtract = extracts.find((e) => e.partCode === question.partCode);
+                                const contextIntro = questionExtract?.contextIntro?.trim() || null;
+                                const showContext = Boolean(contextIntro) && contextIntro !== lastContext;
+                                if (contextIntro) lastContext = contextIntro;
+
                                 return (
                                   <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                                    {showContext ? (
+                                      <p
+                                        data-testid="listening-extract-context"
+                                        className="mb-3 rounded-2xl border border-border bg-background-light px-4 py-3 text-sm font-medium leading-relaxed text-navy"
+                                      >
+                                        {contextIntro}
+                                      </p>
+                                    ) : null}
                                     <BCQuestionRenderer
                                       questionNumber={question.number}
                                       partLabel={LISTENING_SECTION_LABEL[section]}

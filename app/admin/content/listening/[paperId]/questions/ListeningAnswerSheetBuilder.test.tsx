@@ -2,12 +2,20 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ListeningAuthoredQuestion } from '@/lib/listening-authoring-api';
 
-const { mockReplaceListeningStructure } = vi.hoisted(() => ({
+const {
+  mockReplaceListeningStructure,
+  mockGetListeningExtracts,
+  mockSetListeningExtractContext,
+} = vi.hoisted(() => ({
   mockReplaceListeningStructure: vi.fn(),
+  mockGetListeningExtracts: vi.fn(),
+  mockSetListeningExtractContext: vi.fn(),
 }));
 
 vi.mock('@/lib/listening-authoring-api', () => ({
   replaceListeningStructure: mockReplaceListeningStructure,
+  getListeningExtracts: mockGetListeningExtracts,
+  setListeningExtractContext: mockSetListeningExtractContext,
 }));
 
 import { ListeningAnswerSheetBuilder } from './ListeningAnswerSheetBuilder';
@@ -44,6 +52,8 @@ beforeEach(() => {
   mockReplaceListeningStructure.mockImplementation((_paperId: string, questions: ListeningAuthoredQuestion[]) =>
     Promise.resolve({ questions, counts: { partACount: 0, partBCount: 0, partCCount: 0, totalItems: questions.length } }),
   );
+  mockGetListeningExtracts.mockResolvedValue({ extracts: [] });
+  mockSetListeningExtractContext.mockResolvedValue({ extracts: [] });
 });
 
 describe('ListeningAnswerSheetBuilder', () => {
@@ -234,6 +244,31 @@ describe('ListeningAnswerSheetBuilder', () => {
       options: ['Increase the dose', 'Reduce the dose', 'Keep the dose unchanged'],
       correctAnswer: 'B',
     });
+  });
+
+  it('persists the per-extract scenario/context line for the section', async () => {
+    const user = userEvent.setup();
+    render(
+      <ListeningAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activeSection="B3"
+        allQuestions={[]}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/scenario or context/i), 'You hear a charge nurse briefing a colleague.');
+    await user.selectOptions(screen.getByRole('combobox'), 'A');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockSetListeningExtractContext).toHaveBeenCalledWith(
+      'paper-1',
+      'B3',
+      'You hear a charge nurse briefing a colleague.',
+    );
   });
 
   it('preserves real authored stem + options on re-save (no clobber back to See PDF)', async () => {
