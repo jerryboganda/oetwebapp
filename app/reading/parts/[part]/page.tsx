@@ -16,6 +16,11 @@ import {
   type ReadingHomePaperDto,
 } from '@/lib/reading-authoring-api';
 import { readErrorMessage } from '@/lib/read-error-message';
+import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+} from '@/components/domain/InsufficientCreditsModal';
 
 // Per the 2026-05-27 OET sample-test alignment, `/reading/parts/[part]` is
 // a thin candidate dispatcher: it lists the published Reading papers that
@@ -73,6 +78,7 @@ export default function ReadingPartPracticePage() {
   const [loading, setLoading] = useState(true);
   const [startingPaperId, setStartingPaperId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!part) return;
@@ -106,11 +112,16 @@ export default function ReadingPartPracticePage() {
     if (!part) return;
     setStartingPaperId(paper.id);
     setError(null);
+    setInsufficientCreditsMessage(null);
     try {
       const started = await startReadingPartPracticeAttempt(paper.id, part);
       router.push(started.playerRoute);
     } catch (caught) {
-      setError(readErrorMessage(caught, `Could not start Part ${part} practice.`));
+      if (isInsufficientCreditsError(caught)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(caught));
+      } else {
+        setError(readErrorMessage(caught, `Could not start Part ${part} practice.`));
+      }
     } finally {
       setStartingPaperId(null);
     }
@@ -118,6 +129,11 @@ export default function ReadingPartPracticePage() {
 
   return (
     <LearnerDashboardShell pageTitle={meta.title}>
+      <InsufficientCreditsModal
+        open={insufficientCreditsMessage !== null}
+        message={insufficientCreditsMessage ?? ''}
+        onClose={() => setInsufficientCreditsMessage(null)}
+      />
       <main className="space-y-5 sm:space-y-8" data-testid={`reading-part-${part}-dispatcher`}>
         <Link
           href="/reading"

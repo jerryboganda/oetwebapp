@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services;
 
@@ -44,6 +45,23 @@ public partial class LearnerService
             TaskTypeCode: "oet-roleplay",
             Profession: content.ProfessionId,
             Difficulty: content.Difficulty);
+
+        // Credit gate: a live AI conversation has no separate "submit for
+        // grading" moment (unlike Writing), so the SpeakingOnlyCredits /
+        // FlexibleCredits wallet is debited here, at session-start, mirroring
+        // how Reading/Listening consume a credit at attempt-start. Accounts
+        // that have never purchased an AI package bypass harmlessly inside
+        // DeductGradingCreditAsync (unmetered, consistent with every other
+        // module's gate). ConversationService.CreateSessionAsync generates
+        // its own session id internally, so a separate reference id is
+        // minted here (same convention as ReadingAttemptService's
+        // pre-generated attemptId).
+        if (aiPackageCreditService is not null)
+        {
+            var creditReferenceId = Guid.NewGuid().ToString("N");
+            var creditResult = await aiPackageCreditService.DeductGradingCreditAsync(userId, "speaking", creditReferenceId, ct);
+            creditResult.EnsureDebited();
+        }
 
         var sessionPayload = await conversation.CreateSessionAsync(userId, request, ct);
 

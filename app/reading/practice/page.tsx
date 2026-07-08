@@ -60,6 +60,11 @@ import {
   type ReadingHomePaperDto,
   type ReadingPathwaySnapshot,
 } from '@/lib/reading-authoring-api';
+import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+} from '@/components/domain/InsufficientCreditsModal';
 
 /**
  * Fallback mini-test duration (minutes), used until the reading pathway API
@@ -92,6 +97,7 @@ export default function ReadingPracticePage() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [drillPaperId, setDrillPaperId] = useState<string | null>(null);
   const [drillSelectError, setDrillSelectError] = useState<string | null>(null);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   const accessiblePapers = useMemo(() => papersWithAccess(home?.papers ?? []), [home?.papers]);
 
   // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
@@ -146,8 +152,12 @@ export default function ReadingPracticePage() {
         const started = await startReadingLearningAttempt(paper.id);
         router.push(started.playerRoute);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Could not start learning mode.';
-        setErrorMsg(message);
+        if (isInsufficientCreditsError(err)) {
+          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+        } else {
+          const message = err instanceof Error ? err.message : 'Could not start learning mode.';
+          setErrorMsg(message);
+        }
       } finally {
         setStartingPaperId(null);
       }
@@ -168,7 +178,11 @@ export default function ReadingPracticePage() {
         const started = await startReadingDrill(paperId, drillCode);
         router.push(started.playerRoute);
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : 'Could not start drill.');
+        if (isInsufficientCreditsError(err)) {
+          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+        } else {
+          setErrorMsg(err instanceof Error ? err.message : 'Could not start drill.');
+        }
       } finally {
         setBusyKey(null);
       }
@@ -185,7 +199,11 @@ export default function ReadingPracticePage() {
         const started = await startReadingMiniTest(paperId, minutes);
         router.push(started.playerRoute);
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : 'Could not start mini-test.');
+        if (isInsufficientCreditsError(err)) {
+          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+        } else {
+          setErrorMsg(err instanceof Error ? err.message : 'Could not start mini-test.');
+        }
       } finally {
         setBusyKey(null);
       }
@@ -200,7 +218,11 @@ export default function ReadingPracticePage() {
       const started = await startReadingErrorBankRetest({ partCode: focusPart ?? undefined, limit: 10 });
       router.push(started.playerRoute);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Could not start retest.');
+      if (isInsufficientCreditsError(err)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : 'Could not start retest.');
+      }
     } finally {
       setBusyKey(null);
     }
@@ -255,7 +277,11 @@ export default function ReadingPracticePage() {
       // Fallback: route-only navigation if the structured launcher could not run.
       if (nextAction.route) router.push(nextAction.route);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Could not start the recommended step.');
+      if (isInsufficientCreditsError(err)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : 'Could not start the recommended step.');
+      }
     } finally {
       setBusyKey(null);
     }
@@ -340,6 +366,11 @@ export default function ReadingPracticePage() {
 
   return (
     <LearnerDashboardShell>
+      <InsufficientCreditsModal
+        open={insufficientCreditsMessage !== null}
+        message={insufficientCreditsMessage ?? ''}
+        onClose={() => setInsufficientCreditsMessage(null)}
+      />
       <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Reading"

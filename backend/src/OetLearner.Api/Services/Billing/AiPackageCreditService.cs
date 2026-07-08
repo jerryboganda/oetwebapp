@@ -12,6 +12,15 @@ public interface IAiPackageCreditService
     Task<AiPackageCreditSnapshot> GetSnapshotAsync(string userId, int transactionLimit, CancellationToken ct);
     Task<AiPackageCreditSnapshot> GrantPackageAsync(string userId, BillingAddOn addOn, int quantity, string stripeSessionId, string? quoteId, CancellationToken ct);
     Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct);
+
+    /// <summary>
+    /// Read-only mirror of <see cref="DeductGradingCreditAsync"/> — reports
+    /// whether a grading debit would succeed right now, without consuming a
+    /// credit or writing a ledger transaction. Used to gate entry into an
+    /// AI-graded practice session at attempt-start time; the actual credit is
+    /// still consumed once, at submit, via <see cref="DeductGradingCreditAsync"/>.
+    /// </summary>
+    Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct);
     Task<AiPackageDebitResult> DeductObjectivePracticeAsync(string userId, string subtest, string referenceId, CancellationToken ct);
     Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct);
     Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct);
@@ -197,6 +206,37 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
         return new(true, null, null, referenceId);
+    }
+
+    public async Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
+    {
+        var normalized = NormalizeSubtest(subtest);
+        if (normalized is not ("writing" or "speaking"))
+        {
+            return new(false, "unsupported_subtest", "Only Writing and Speaking consume AI grading credits.", null);
+        }
+
+        var account = await GetOrCreateAccountAsync(userId, ct);
+        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+        await db.SaveChangesAsync(ct);
+
+        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
+        {
+            return new(true, null, null, null);
+        }
+
+        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
+        {
+            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+        }
+
+        var hasCredit = (normalized == "writing" && account.WritingOnlyCredits > 0)
+            || (normalized == "speaking" && account.SpeakingOnlyCredits > 0)
+            || account.FlexibleCredits > 0;
+
+        return hasCredit
+            ? new(true, null, null, null)
+            : new(false, "no_ai_package_credits", NoCreditsMessage, null);
     }
 
     public async Task<AiPackageDebitResult> DeductObjectivePracticeAsync(string userId, string subtest, string referenceId, CancellationToken ct)
