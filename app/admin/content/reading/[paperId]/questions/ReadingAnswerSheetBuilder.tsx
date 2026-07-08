@@ -39,6 +39,8 @@ interface BuilderRow {
   publicNumber: number;
   questionType: ReadingQuestionType;
   kind: BuilderRowKind;
+  /** MCQ (Part B/C) only — the question stem shown inline on the learner card. */
+  stem: string;
   options: string[];
   correctAnswer: string;
   /** Optional admin rationale, saved as explanationMarkdown; shown to the
@@ -66,6 +68,18 @@ const TYPE_LABEL: Partial<Record<ReadingQuestionType, string>> = {
 const PART_A_TEXT_OPTIONS = ['Text A', 'Text B', 'Text C', 'Text D'];
 const MCQ3_OPTIONS = ['Option A', 'Option B', 'Option C'];
 const MCQ4_OPTIONS = ['Option A', 'Option B', 'Option C', 'Option D'];
+const SEE_PDF_SENTINEL = 'See PDF';
+
+// Placeholder detection for the Part B/C MCQ inline-text feature: authors type
+// the real stem + option prose, which renders inline on the learner card. A
+// sentinel stem / generic "Option A-D" is treated as "not authored yet".
+function isSentinelReadingStem(stem: string | undefined): boolean {
+  return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
+}
+function isGenericMcqOption(text: string | undefined, index: number): boolean {
+  const t = (text ?? '').trim().toLowerCase();
+  return t.length === 0 || t === `option ${String.fromCharCode(97 + index)}`;
+}
 
 // Which question types the builder owns for each part. Anything else in a
 // section means it was authored with the advanced editor and the builder
@@ -116,7 +130,7 @@ function templateSlots(partCode: ReadingPartCode, activeSection: ReadingSectionA
   }));
 }
 
-function parseExisting(question: ReadingQuestionAdminDto): { options: string[]; correctAnswer: string; rationale: string } {
+function parseExisting(question: ReadingQuestionAdminDto): { stem: string; options: string[]; correctAnswer: string; rationale: string } {
   let options: string[] = [];
   try {
     const parsed = JSON.parse(question.optionsJson);
@@ -129,7 +143,7 @@ function parseExisting(question: ReadingQuestionAdminDto): { options: string[]; 
     correctAnswer = typeof parsed === 'string' ? parsed : '';
   } catch { /* keep empty */ }
 
-  return { options, correctAnswer, rationale: question.explanationMarkdown ?? '' };
+  return { stem: question.stem ?? '', options, correctAnswer, rationale: question.explanationMarkdown ?? '' };
 }
 
 function buildRows(
@@ -142,13 +156,22 @@ function buildRows(
       (q) => q.displayOrder === slot.internalDisplayOrder && q.questionType === slot.questionType,
     );
     const seeded = existing ? parseExisting(existing) : null;
+    const isMcq = slot.kind === 'mcq';
+    const baseOptions = seeded && seeded.options.length > 0 ? seeded.options : slot.options;
+    // For MCQ (Part B/C), blank the generic "Option A-D" placeholders so the author
+    // sees empty fields to type into; Part A matching options (Text A-D) are kept.
+    const seededOptions = isMcq
+      ? baseOptions.map((opt, i) => (isGenericMcqOption(opt, i) ? '' : opt))
+      : baseOptions;
+    const seededStem = isMcq && seeded && !isSentinelReadingStem(seeded.stem) ? seeded.stem : '';
     return {
       id: existing?.id ?? null,
       internalDisplayOrder: slot.internalDisplayOrder,
       publicNumber: readingPublicDisplayNumber(partCode, slot.internalDisplayOrder),
       questionType: slot.questionType,
       kind: slot.kind,
-      options: seeded && seeded.options.length > 0 ? seeded.options : slot.options,
+      stem: seededStem,
+      options: seededOptions,
       correctAnswer: seeded?.correctAnswer ?? '',
       rationale: seeded?.rationale ?? '',
     };
@@ -232,9 +255,14 @@ export function ReadingAnswerSheetBuilder({
           displayOrder: row.internalDisplayOrder,
           points: 1,
           questionType: row.questionType,
-          stem: 'See PDF',
+          stem: row.kind === 'mcq' ? (row.stem.trim() || SEE_PDF_SENTINEL) : SEE_PDF_SENTINEL,
           caseSensitive: false,
-          optionsJson: JSON.stringify(row.options),
+          optionsJson: JSON.stringify(
+            row.kind === 'mcq'
+              ? row.options.map((opt, i) => opt.trim()
+                || (row.questionType === 'MultipleChoice4' ? MCQ4_OPTIONS : MCQ3_OPTIONS)[i])
+              : row.options,
+          ),
           correctAnswerJson: JSON.stringify(row.correctAnswer),
           acceptedSynonymsJson: null,
           explanationMarkdown: row.rationale.trim() || null,
@@ -263,7 +291,9 @@ export function ReadingAnswerSheetBuilder({
         <div className="min-w-0">
           <CardTitle className="text-sm">Answer sheet — Part {partCode}{sectionLabel}</CardTitle>
           <CardDescription>
-            Read the question on the PDF, then record the machine-gradable answer for each item.
+            {partCode === 'A'
+              ? 'Read the question on the PDF, then record the machine-gradable answer for each item.'
+              : 'Type each question’s stem and options, then mark the correct one — they render inline on the learner card. Leave a field blank to keep the PDF-backed placeholder.'}
           </CardDescription>
         </div>
         {shown && !blocked && !needsSection ? (
@@ -293,7 +323,7 @@ export function ReadingAnswerSheetBuilder({
             {rows.map((row, index) => {
               const letterOptions = row.options.map((opt, idx) => ({
                 value: MCQ_LETTERS[idx],
-                label: `${MCQ_LETTERS[idx]}. ${opt}`,
+                label: opt.trim() ? `${MCQ_LETTERS[idx]}. ${opt.trim()}` : `Option ${MCQ_LETTERS[idx]}`,
               }));
               const existing = row.id ? scopeQuestions.find((q) => q.id === row.id) ?? null : null;
               return (
@@ -333,6 +363,30 @@ export function ReadingAnswerSheetBuilder({
                       </Button>
                     ) : null}
                   </div>
+                  {row.kind === 'mcq' ? (
+                    <>
+                      <Textarea
+                        aria-label={`Question ${row.publicNumber} stem`}
+                        value={row.stem}
+                        onChange={(e) => patchRow(index, { stem: e.target.value })}
+                        rows={2}
+                        placeholder="Question text — shown as the heading on the learner card"
+                      />
+                      <div className="grid gap-2">
+                        {row.options.map((opt, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="w-5 shrink-0 text-center text-xs font-black text-admin-fg-muted">{MCQ_LETTERS[i]}</span>
+                            <Input
+                              aria-label={`Question ${row.publicNumber} option ${MCQ_LETTERS[i]}`}
+                              value={opt}
+                              onChange={(e) => patchRow(index, { options: row.options.map((o, oi) => (oi === i ? e.target.value : o)) })}
+                              placeholder={`Option ${MCQ_LETTERS[i]} text`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
                   <Textarea
                     aria-label={`Rationale for question ${row.publicNumber} (optional)`}
                     value={row.rationale}
