@@ -41,6 +41,9 @@ public sealed class BillingOptions
 
     /// <summary>Checkout.com (MENA premium cards) configuration. Inactive when SecretKey unset.</summary>
     public CheckoutComOptions CheckoutCom { get; set; } = new();
+
+    /// <summary>EasyKash (Egypt hosted Direct-Pay) configuration. Inactive when ApiKey/HmacSecret unset.</summary>
+    public EasyKashOptions EasyKash { get; set; } = new();
 }
 
 public sealed class WalletBillingOptions

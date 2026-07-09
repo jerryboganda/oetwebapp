@@ -95,6 +95,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyBunnyStream(row, request.BunnyStream, provider, changedKeys);
                     ApplyPaymob(row, request.Paymob, provider, changedKeys);
                     ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
+                    ApplyEasyKash(row, request.EasyKash, provider, changedKeys);
                     ApplySoketi(row, request.Soketi, provider, changedKeys);
                     ApplyDataRetention(row, request.DataRetention, changedKeys);
                     ApplyExpertAutoAssignment(row, request.ExpertAutoAssignment, changedKeys);
@@ -408,6 +409,19 @@ public static class AdminRuntimeSettingsEndpoints
                 successUrl = settings.PayTabs.SuccessUrl,
                 cancelUrl = settings.PayTabs.CancelUrl,
                 isConfigured = settings.PayTabs.IsConfigured,
+            },
+            easyKash = new
+            {
+                apiBaseUrl = settings.EasyKash.ApiBaseUrl,
+                apiKey = MaskPlainSecret(settings.EasyKash.ApiKey),
+                hmacSecret = MaskPlainSecret(settings.EasyKash.HmacSecret),
+                paymentOptionsCsv = settings.EasyKash.PaymentOptions.Count > 0
+                    ? string.Join(",", settings.EasyKash.PaymentOptions)
+                    : null,
+                currencyMode = settings.EasyKash.CurrencyMode,
+                successUrl = settings.EasyKash.SuccessUrl,
+                cancelUrl = settings.EasyKash.CancelUrl,
+                isConfigured = settings.EasyKash.IsConfigured,
             },
             soketi = new
             {
@@ -1105,6 +1119,19 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.CancelUrl, v => row.PayTabsCancelUrl = v, "payTabs.cancelUrl", changed)) { }
     }
 
+    private static void ApplyEasyKash(RuntimeSettingsRow row, RuntimeSettingsEasyKashUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.ApiBaseUrl, v => row.EasyKashApiBaseUrl = v, "easyKash.apiBaseUrl", changed)) { }
+        if (TrySetSecret(d.ApiKey, p, v => row.EasyKashApiKeyEncrypted = v, "easyKash.apiKey", changed)) { }
+        if (TrySetSecret(d.HmacSecret, p, v => row.EasyKashHmacSecretEncrypted = v, "easyKash.hmacSecret", changed)) { }
+        if (TrySetPlain(d.PaymentOptionsCsv, v => row.EasyKashPaymentOptionsCsv = v, "easyKash.paymentOptionsCsv", changed)) { }
+        if (TrySetPlain(d.CurrencyMode, v => row.EasyKashCurrencyMode = v, "easyKash.currencyMode", changed)) { }
+        if (TrySetPlain(d.SuccessUrl, v => row.EasyKashSuccessUrl = v, "easyKash.successUrl", changed)) { }
+        if (TrySetPlain(d.CancelUrl, v => row.EasyKashCancelUrl = v, "easyKash.cancelUrl", changed)) { }
+    }
+
     private static void ApplySoketi(RuntimeSettingsRow row, RuntimeSettingsSoketiUpdate? d,
         IRuntimeSettingsProvider p, List<string> changed)
     {
@@ -1580,7 +1607,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
+        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "easykash" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner"
             : normalized == "bunny-stream" ? "bunnystream" : null;
@@ -1650,6 +1677,7 @@ public static class AdminRuntimeSettingsEndpoints
             "bunnystream" => await TestBunnyStreamAsync(settings.BunnyStream, settings.VideoAttestation, httpClientFactory, sectionId, testedAt, ct),
             "paymob" => await TestPaymobAsync(settings.Paymob, httpClientFactory, sectionId, testedAt, ct),
             "paytabs" => await TestPayTabsAsync(settings.PayTabs, httpClientFactory, sectionId, testedAt, ct),
+            "easykash" => TestEasyKash(settings.EasyKash, sectionId, testedAt),
             "soketi" => await TestSoketiAsync(settings.Soketi, httpClientFactory, sectionId, testedAt, ct),
             "dataretention" => Ok(sectionId, $"Retention windows resolved (audit {settings.DataRetention.AuditEvents.TotalDays:0}d, webhooks {settings.DataRetention.PaymentWebhookEvents.TotalDays:0}d). Sweep every {settings.DataRetention.SweepInterval.TotalHours:0}h, batch {settings.DataRetention.BatchSize}.", testedAt),
             "expertautoassignment" => settings.ExpertAutoAssignment.Enabled
@@ -1826,6 +1854,21 @@ public static class AdminRuntimeSettingsEndpoints
         });
     }
 
+    // EasyKash's only API creates a real hosted payment, so "test" validates
+    // configuration completeness rather than issuing a live request.
+    private static RuntimeSettingsIntegrationTestResponse TestEasyKash(
+        EasyKashSettings s, string sectionId, DateTimeOffset testedAt)
+    {
+        if (string.IsNullOrWhiteSpace(s.ApiKey))
+            return Failed(sectionId, "Configure the EasyKash API key.", testedAt);
+        if (string.IsNullOrWhiteSpace(s.HmacSecret))
+            return Failed(sectionId, "Add the EasyKash HMAC secret. EasyKash generates it after you save the Callback URL + payment methods in their dashboard.", testedAt);
+        var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(s.ApiBaseUrl);
+        if (unsafeReason is not null) return Failed(sectionId, unsafeReason, testedAt);
+        var mode = s.ConvertToEgp ? "convert to EGP" : "charge quote currency";
+        return Ok(sectionId, $"EasyKash is configured ({mode}). No live payment was created — run a real checkout to fully verify.", testedAt);
+    }
+
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestPayTabsAsync(
         PayTabsSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
     {
@@ -1981,6 +2024,7 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsBunnyStreamUpdate? BunnyStream { get; set; }
     public RuntimeSettingsPaymobUpdate? Paymob { get; set; }
     public RuntimeSettingsPayTabsUpdate? PayTabs { get; set; }
+    public RuntimeSettingsEasyKashUpdate? EasyKash { get; set; }
     public RuntimeSettingsSoketiUpdate? Soketi { get; set; }
     public RuntimeSettingsDataRetentionUpdate? DataRetention { get; set; }
     public RuntimeSettingsExpertAutoAssignmentUpdate? ExpertAutoAssignment { get; set; }
@@ -2155,6 +2199,20 @@ public sealed class RuntimeSettingsPaymobUpdate
     /// <summary>JSON map of method → integration id, e.g. {"card":123}.</summary>
     public string? IntegrationIdsJson { get; set; }
     public JsonElement? IframeId { get; set; }
+    public string? SuccessUrl { get; set; }
+    public string? CancelUrl { get; set; }
+}
+
+/// <summary>EasyKash payment gateway overrides.</summary>
+public sealed class RuntimeSettingsEasyKashUpdate
+{
+    public string? ApiBaseUrl { get; set; }
+    public string? ApiKey { get; set; }
+    public string? HmacSecret { get; set; }
+    /// <summary>CSV of EasyKash payment-method ids to offer (e.g. "2,4,5"). Empty = all dashboard-enabled.</summary>
+    public string? PaymentOptionsCsv { get; set; }
+    /// <summary>"passthrough" (charge quote currency) or "egp" (FX-convert to EGP).</summary>
+    public string? CurrencyMode { get; set; }
     public string? SuccessUrl { get; set; }
     public string? CancelUrl { get; set; }
 }

@@ -330,6 +330,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var checkoutCom = ResolveCheckoutCom(r, billing.CheckoutCom);
         var paymob = ResolvePaymob(r, billing.Paymob);
         var payTabs = ResolvePayTabs(r, billing.PayTabs);
+        var easyKash = ResolveEasyKash(r, billing.EasyKash);
         var soketi = ResolveSoketi(r, _soketi.Value);
         var dataRetention = ResolveDataRetention(r, _dataRetention.Value);
         var expertAutoAssignment = ResolveExpertAutoAssignment(r, _expertAutoAssignment.Value);
@@ -387,6 +388,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         {
             BunnyStream = bunnyStream,
             VideoAttestation = videoAttestation,
+            EasyKash = easyKash,
         };
     }
 
@@ -475,6 +477,34 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             WebhookSecret: Unprotect(r.PayTabsWebhookSecretEncrypted) ?? NullIfEmpty(env.WebhookSecret),
             SuccessUrl: Coalesce(r.PayTabsSuccessUrl, env.SuccessUrl),
             CancelUrl: Coalesce(r.PayTabsCancelUrl, env.CancelUrl));
+
+    private EasyKashSettings ResolveEasyKash(RuntimeSettingsRow r, EasyKashOptions env)
+    {
+        // Payment-option ids: DB CSV override → env array. Non-numeric entries are dropped.
+        IReadOnlyList<int> paymentOptions = env.PaymentOptions;
+        if (!string.IsNullOrWhiteSpace(r.EasyKashPaymentOptionsCsv))
+        {
+            var parsed = r.EasyKashPaymentOptionsCsv!
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => int.TryParse(s, out var n) ? n : (int?)null)
+                .Where(n => n.HasValue)
+                .Select(n => n!.Value)
+                .ToArray();
+            if (parsed.Length > 0) paymentOptions = parsed;
+        }
+
+        var currencyMode = Coalesce(r.EasyKashCurrencyMode, env.CurrencyMode, "passthrough")!.Trim().ToLowerInvariant();
+        if (currencyMode is not ("passthrough" or "egp")) currencyMode = "passthrough";
+
+        return new EasyKashSettings(
+            ApiBaseUrl: Coalesce(r.EasyKashApiBaseUrl, env.ApiBaseUrl, "https://back.easykash.net")!,
+            ApiKey: Unprotect(r.EasyKashApiKeyEncrypted) ?? NullIfEmpty(env.ApiKey),
+            HmacSecret: Unprotect(r.EasyKashHmacSecretEncrypted) ?? NullIfEmpty(env.HmacSecret),
+            PaymentOptions: paymentOptions,
+            CurrencyMode: currencyMode,
+            SuccessUrl: Coalesce(r.EasyKashSuccessUrl, env.SuccessUrl),
+            CancelUrl: Coalesce(r.EasyKashCancelUrl, env.CancelUrl));
+    }
 
     private SoketiSettings ResolveSoketi(RuntimeSettingsRow r, SoketiOptions env)
         => new(

@@ -525,6 +525,8 @@ function methodBrand(method: PaymentMethodOption): { title: string; subtitle: st
       return { title: 'Stripe', subtitle: 'Credit or debit card — Visa, Mastercard, Amex' };
     case 'checkoutcom':
       return { title: 'Checkout.com', subtitle: 'Credit or debit card' };
+    case 'easykash':
+      return { title: 'EasyKash', subtitle: 'Cards, wallets, Fawry & instalments' };
     case 'paymob':
       return { title: 'Paymob', subtitle: 'Card & local wallets' };
     case 'paytabs':

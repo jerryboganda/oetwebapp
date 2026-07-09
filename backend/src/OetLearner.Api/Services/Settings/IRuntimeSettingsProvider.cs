@@ -88,6 +88,11 @@ public sealed record EffectiveSettings(
     // provider sets them via object initializer in Merge.
     public BunnyStreamSettings BunnyStream { get; init; } = BunnyStreamSettings.Unconfigured;
     public VideoAttestationSettings VideoAttestation { get; init; } = VideoAttestationSettings.Unconfigured;
+
+    // EasyKash (Egypt hosted Direct-Pay). Init-only property (like BunnyStream)
+    // so the existing EffectiveSettings construction sites keep compiling; the
+    // provider sets it via object initializer in Merge.
+    public EasyKashSettings EasyKash { get; init; } = EasyKashSettings.Unconfigured;
 }
 
 /// <summary>
@@ -373,6 +378,31 @@ public sealed record PayTabsSettings(
     string? CancelUrl)
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ServerKey) && !string.IsNullOrWhiteSpace(ProfileId);
+}
+
+/// <summary>
+/// EasyKash payment gateway settings (DB-over-env merged). Secrets decrypted.
+/// <see cref="IsConfigured"/> requires BOTH the API key and the HMAC secret —
+/// the HMAC secret only exists after the merchant saves the Callback URL +
+/// payment methods in the EasyKash dashboard, so the gateway stays hidden at
+/// checkout until it can both create AND verify a payment.
+/// </summary>
+public sealed record EasyKashSettings(
+    string ApiBaseUrl,
+    string? ApiKey,
+    string? HmacSecret,
+    IReadOnlyList<int> PaymentOptions,
+    string CurrencyMode,
+    string? SuccessUrl,
+    string? CancelUrl)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(HmacSecret);
+
+    /// <summary>True when the admin wants amounts converted to EGP before charging.</summary>
+    public bool ConvertToEgp => string.Equals(CurrencyMode, "egp", StringComparison.OrdinalIgnoreCase);
+
+    public static EasyKashSettings Unconfigured { get; } =
+        new("https://back.easykash.net", null, null, System.Array.Empty<int>(), "passthrough", null, null);
 }
 
 /// <summary>Soketi realtime websocket push settings (DB-over-env merged).</summary>

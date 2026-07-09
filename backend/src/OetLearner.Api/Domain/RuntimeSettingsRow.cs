@@ -225,6 +225,17 @@ public class RuntimeSettingsRow
     [MaxLength(1024)] public string? PayTabsSuccessUrl { get; set; }
     [MaxLength(1024)] public string? PayTabsCancelUrl { get; set; }
 
+    // ── EasyKash (Egypt hosted Direct-Pay) ─────────────────────────
+    [MaxLength(512)] public string? EasyKashApiBaseUrl { get; set; }
+    public string? EasyKashApiKeyEncrypted { get; set; }
+    public string? EasyKashHmacSecretEncrypted { get; set; }
+    /// <summary>CSV of EasyKash payment-method ids to offer (e.g. "2,4,5"). Empty = all dashboard-enabled.</summary>
+    [MaxLength(256)] public string? EasyKashPaymentOptionsCsv { get; set; }
+    /// <summary>"passthrough" (charge quote currency) or "egp" (FX-convert to EGP).</summary>
+    [MaxLength(32)] public string? EasyKashCurrencyMode { get; set; }
+    [MaxLength(1024)] public string? EasyKashSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? EasyKashCancelUrl { get; set; }
+
     // ── Soketi (realtime websocket push) ───────────────────────────
     [MaxLength(256)] public string? SoketiHost { get; set; }
     public int? SoketiPort { get; set; }
