@@ -70,7 +70,7 @@ public static class WritingScenarioEndpoints
         {
             var result = await aiPackageCreditService.CheckGradingCreditAsync(http.WritingV2UserId(), "writing", ct);
             result.EnsureDebited();
-            return Results.Ok();
+            return Results.NoContent();
         })
         .WithName("CheckWritingScenarioEligibility");
 
