@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Clock, Mic, Star, Users, Video } from 'lucide-react';
+import { ArrowRight, Clock, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -54,6 +54,13 @@ export default function SpeakingHome() {
   const credits = home?.reviewCredits?.available ?? 0;
   const featuredTasks = home?.featuredTasks ?? [];
   const recommended = home?.recommendedRolePlay ?? null;
+
+  // Resume an in-progress role play — kept because it's necessary for progress
+  // (backend surfaces pastAttempts[].state='in_progress'/'draft').
+  const resumeAttempt = (home?.pastAttempts ?? []).find((attempt) => {
+    const state = attempt?.state?.toLowerCase() ?? '';
+    return state === 'in_progress' || state === 'in-progress' || state === 'draft';
+  }) ?? null;
 
   // Practice speaking cards available on the platform (AI Assessment). The
   // recommended role play leads, then the rest of the featured library —
@@ -131,6 +138,28 @@ export default function SpeakingHome() {
             <LearnerSurfaceCard card={tutorCard} />
           </MotionSection>
         </section>
+
+        {/* Resume in-progress role play — necessary for progress; backend
+            surfaces pastAttempts[].state='in_progress'. */}
+        {resumeAttempt ? (
+          <MotionSection>
+            <LearnerSurfaceCard card={{
+              kind: 'task',
+              sourceType: 'backend_task',
+              accent: 'indigo',
+              eyebrow: 'Resume Attempt',
+              eyebrowIcon: RefreshCw,
+              title: 'Continue your in-progress role play',
+              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
+              metaItems: [
+                { icon: Clock, label: 'Paused' },
+                { icon: RefreshCw, label: 'In progress' },
+              ],
+              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
+              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
+            }} />
+          </MotionSection>
+        ) : null}
 
         {/* Practice speaking cards available on the platform (AI Assessment). */}
         <section>
