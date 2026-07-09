@@ -436,21 +436,24 @@ export default function RecallsWordsPage() {
                   </button>
                   {/* Free Preview Recalls — the admin-flagged free subset, fully
                       usable (view + audio + drill) on ANY plan. Emerald accent so
-                      it reads as "the free set", distinct from the violet chips. */}
-                  <button
-                    type="button"
-                    aria-pressed={freePreviewOnly}
-                    onClick={handleFreePreviewChange}
-                    title="Recalls marked Free by the team — fully usable on any plan"
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      freePreviewOnly
-                        ? 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-600 dark:bg-emerald-600'
-                        : 'border-emerald-500/40 text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
-                    }`}
-                  >
-                    <Sparkles size={12} aria-hidden="true" className={freePreviewOnly ? 'fill-current' : undefined} />
-                    Free Preview Recalls{freePreviewCount > 0 ? ` (${freePreviewCount})` : ''}
-                  </button>
+                      it reads as "the free set", distinct from the violet chips.
+                      Only shown when the team has actually marked terms as free. */}
+                  {freePreviewCount > 0 && (
+                    <button
+                      type="button"
+                      aria-pressed={freePreviewOnly}
+                      onClick={handleFreePreviewChange}
+                      title="Recalls marked Free by the team — fully usable on any plan"
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        freePreviewOnly
+                          ? 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-600 dark:bg-emerald-600'
+                          : 'border-emerald-500/40 text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+                      }`}
+                    >
+                      <Sparkles size={12} aria-hidden="true" className={freePreviewOnly ? 'fill-current' : undefined} />
+                      Free Preview Recalls ({freePreviewCount})
+                    </button>
+                  )}
                   {recallSets.map((s) => (
                     <button
                       key={s.code}
