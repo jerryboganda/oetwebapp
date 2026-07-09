@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { ChevronDown, Heart, Lock, Star, Volume2 } from 'lucide-react';
+import { ChevronDown, Heart, Lock, Sparkles, Star, Volume2 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -96,6 +96,10 @@ export default function RecallsWordsPage() {
   const [catalogPageSize, setCatalogPageSize] = useState(24);
   const [recallSets, setRecallSets] = useState<RecallSetSummary[]>([]);
   const [selectedRecallSet, setSelectedRecallSet] = useState('');
+  // "Free Preview Recalls" filter — shows only admin-flagged free-preview terms.
+  // Fully usable by every logged-in learner regardless of subscription.
+  const [freePreviewOnly, setFreePreviewOnly] = useState(false);
+  const [freePreviewCount, setFreePreviewCount] = useState(0);
   // When active, the catalog shows only the learner's favourited words (sourced
   // from the per-user `starred` library bucket) instead of the full catalog.
   const [favouritesOnly, setFavouritesOnly] = useState(false);
@@ -144,7 +148,10 @@ export default function RecallsWordsPage() {
       });
 
     fetchVocabularyRecallSets({ examTypeCode: 'oet' })
-      .then((data) => setRecallSets(data.sets ?? []))
+      .then((data) => {
+        setRecallSets(data.sets ?? []);
+        setFreePreviewCount(data.freePreviewCount ?? 0);
+      })
       .catch(() => {
         // Non-fatal: recall set filter will simply not render.
       });
@@ -224,7 +231,8 @@ export default function RecallsWordsPage() {
     fetchVocabularyTerms({
       examTypeCode: 'oet',
       category: selectedCategory === 'all' ? undefined : selectedCategory,
-      recallSet: selectedRecallSet || undefined,
+      recallSet: freePreviewOnly ? undefined : selectedRecallSet || undefined,
+      freePreviewOnly: freePreviewOnly || undefined,
       page: catalogPage,
       pageSize: catalogPageSize,
     })
@@ -247,7 +255,7 @@ export default function RecallsWordsPage() {
     return () => {
       active = false;
     };
-  }, [favouritesOnly, selectedCategory, selectedRecallSet, catalogPage, catalogPageSize]);
+  }, [favouritesOnly, selectedCategory, selectedRecallSet, freePreviewOnly, catalogPage, catalogPageSize]);
 
   function handleFavouritesToggle() {
     setCatalogLoading(true);
@@ -265,10 +273,22 @@ export default function RecallsWordsPage() {
   }
 
   function handleRecallSetChange(nextSet: string) {
-    if (nextSet === selectedRecallSet) return;
+    // Selecting a recall set (incl. "All") always clears the free-preview filter,
+    // so clicking "All" while free-preview is active still resets the view.
+    if (nextSet === selectedRecallSet && !freePreviewOnly) return;
     setCatalogLoading(true);
     setCatalogError(null);
+    setFreePreviewOnly(false);
     setSelectedRecallSet(nextSet);
+    setCatalogPage(1);
+  }
+
+  function handleFreePreviewChange() {
+    if (freePreviewOnly) return;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setFreePreviewOnly(true);
+    setSelectedRecallSet('');
     setCatalogPage(1);
   }
 
@@ -398,22 +418,42 @@ export default function RecallsWordsPage() {
                 Favourites only
               </button>
             </fieldset>
-            {!favouritesOnly && recallSets.length > 0 && (
+            {!favouritesOnly && (recallSets.length > 0 || freePreviewCount > 0) && (
               <fieldset>
                 <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recall set</legend>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    aria-pressed={selectedRecallSet === ''}
+                    aria-pressed={selectedRecallSet === '' && !freePreviewOnly}
                     onClick={() => handleRecallSetChange('')}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      selectedRecallSet === ''
+                      selectedRecallSet === '' && !freePreviewOnly
                         ? 'border-primary bg-primary text-white dark:bg-violet-700'
                         : 'border-border text-muted hover:border-primary hover:text-primary'
                     }`}
                   >
                     All
                   </button>
+                  {/* Free Preview Recalls — the admin-flagged free subset, fully
+                      usable (view + audio + drill) on ANY plan. Emerald accent so
+                      it reads as "the free set", distinct from the violet chips.
+                      Only shown when the team has actually marked terms as free. */}
+                  {freePreviewCount > 0 && (
+                    <button
+                      type="button"
+                      aria-pressed={freePreviewOnly}
+                      onClick={handleFreePreviewChange}
+                      title="Recalls marked Free by the team — fully usable on any plan"
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        freePreviewOnly
+                          ? 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-600 dark:bg-emerald-600'
+                          : 'border-emerald-500/40 text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+                      }`}
+                    >
+                      <Sparkles size={12} aria-hidden="true" className={freePreviewOnly ? 'fill-current' : undefined} />
+                      Free Preview Recalls ({freePreviewCount})
+                    </button>
+                  )}
                   {recallSets.map((s) => (
                     <button
                       key={s.code}
@@ -586,7 +626,9 @@ export default function RecallsWordsPage() {
             <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">
               {favouritesOnly
                 ? 'No favourites yet — tap the heart on any word to save it here.'
-                : 'No active terms match this category yet.'}
+                : freePreviewOnly
+                  ? 'No free preview recalls are available yet — check back soon.'
+                  : 'No active terms match this category yet.'}
             </div>
           )}
         </section>

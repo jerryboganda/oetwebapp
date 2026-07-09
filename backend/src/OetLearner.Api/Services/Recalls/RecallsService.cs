@@ -74,21 +74,33 @@ public sealed class RecallsService(
     }
 
     /// <summary>
-    /// Mixed queue of vocab cards + review items, ordered by due date with
-    /// starred items prioritised when due.
+    /// True when the term is an active, admin-curated free-preview recall word.
+    /// Free / unsubscribed learners are allowed full functionality (incl. audio)
+    /// on these terms; everything else stays paywalled.
     /// </summary>
-    public async Task<List<RecallsQueueItem>> GetQueueAsync(string userId, int limit, CancellationToken ct)
+    public Task<bool> IsFreePreviewTermAsync(string termId, CancellationToken ct)
+        => db.VocabularyTerms.AsNoTracking()
+            .AnyAsync(t => t.Id == termId && t.Status == "active" && t.IsFreePreview, ct);
+
+    /// <summary>
+    /// Mixed queue of vocab cards + review items, ordered by due date with
+    /// starred items prioritised when due. Non-premium learners see only
+    /// free-preview vocab cards (locked content never leaks into the queue).
+    /// </summary>
+    public async Task<List<RecallsQueueItem>> GetQueueAsync(string userId, int limit, bool isPremium, CancellationToken ct)
     {
         if (limit <= 0) limit = 20;
         if (limit > 100) limit = 100;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var vocabCards = await db.LearnerVocabularies
+        var vocabQuery = db.LearnerVocabularies
             .Where(lv => lv.UserId == userId && lv.NextReviewDate <= today)
-            .OrderByDescending(lv => lv.Starred)
-            .ThenBy(lv => lv.NextReviewDate)
+            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t });
+        if (!isPremium) vocabQuery = vocabQuery.Where(x => x.t.IsFreePreview);
+        var vocabCards = await vocabQuery
+            .OrderByDescending(x => x.lv.Starred)
+            .ThenBy(x => x.lv.NextReviewDate)
             .Take(limit)
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
             .ToListAsync(ct);
 
         var reviewItems = await db.ReviewItems
@@ -131,7 +143,7 @@ public sealed class RecallsService(
             .ToList();
     }
 
-    public async Task<object> StarAsync(string userId, RecallsStarRequest request, CancellationToken ct)
+    public async Task<object> StarAsync(string userId, RecallsStarRequest request, bool isPremium, CancellationToken ct)
     {
         ValidateReason(request.Reason);
         var changed = 0;
@@ -161,6 +173,14 @@ public sealed class RecallsService(
                 {
                     // Nothing to unfavourite — no card exists. No-op.
                     return new { changed = 0, starred = false };
+                }
+                // Favouriting seeds a personal card. Free learners may only seed
+                // cards for curated free-preview terms — mirrors AddToMyVocabularyAsync
+                // so the /star path can't pull a locked term into a free user's list.
+                if (!isPremium && !term.IsFreePreview)
+                {
+                    throw ApiException.PaymentRequired("RECALL_PREVIEW_LOCKED",
+                        "Subscribe to unlock the full Recall Vocabulary Bank.");
                 }
                 card = new LearnerVocabulary
                 {
@@ -280,11 +300,15 @@ public sealed class RecallsService(
     /// term metadata and per-card filters.
     /// </summary>
     public async Task<RecallsLibraryResponse> GetLibraryAsync(
-        string userId, string? bucket, string? topic, CancellationToken ct)
+        string userId, string? bucket, string? topic, bool isPremium, CancellationToken ct)
     {
         var q = db.LearnerVocabularies
             .Where(lv => lv.UserId == userId)
             .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t });
+
+        // Non-premium learners only ever see their free-preview cards — locked
+        // term content must never surface in the library buckets.
+        if (!isPremium) q = q.Where(x => x.t.IsFreePreview);
 
         if (!string.IsNullOrWhiteSpace(topic))
             q = q.Where(x => x.t.Category == topic);

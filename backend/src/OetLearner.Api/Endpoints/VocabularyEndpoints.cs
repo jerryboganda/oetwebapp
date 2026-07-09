@@ -21,6 +21,7 @@ public static class VocabularyEndpoints
             [FromQuery] string? profession,
             [FromQuery] string? search,
             [FromQuery] string? recallSet,
+            [FromQuery] bool freePreviewOnly,
             [FromQuery] int page,
             [FromQuery] int pageSize,
             VocabularyService svc,
@@ -33,7 +34,8 @@ public static class VocabularyEndpoints
                 pageSize <= 0 ? 20 : Math.Min(pageSize, 100),
                 ct,
                 recallSet,
-                await http.IsPremiumAsync(entitlements, ct))));
+                await http.IsPremiumAsync(entitlements, ct),
+                freePreviewOnly)));
 
         // Recall-set registry (year/source dimension). Public to authenticated
         // learners so the browse + recalls UI can render filter chips.

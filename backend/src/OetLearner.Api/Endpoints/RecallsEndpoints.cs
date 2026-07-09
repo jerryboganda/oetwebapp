@@ -19,31 +19,28 @@ public static class RecallsEndpoints
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
         var recalls = v1.MapGroup("/recalls");
 
-        recalls.MapGet("/today", async (HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.GetTodayAsync(http.UserId(), ct));
-        });
+        // Free-preview access: the recalls snapshot / queue / favourites are open
+        // to every logged-in learner. Content is scoped to free-preview terms for
+        // non-premium learners inside RecallsService (locked content never leaks),
+        // so no subscription gate is applied here. See docs/RECALLS-MODULE-PLAN.md.
+        recalls.MapGet("/today", async (HttpContext http, RecallsService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetTodayAsync(http.UserId(), ct)));
 
         recalls.MapGet("/queue", async (
             HttpContext http,
             [FromQuery] int limit,
             IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.GetQueueAsync(http.UserId(), limit, ct));
-        });
+            Results.Ok(await svc.GetQueueAsync(
+                http.UserId(), limit, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
         recalls.MapPost("/star", async (
             HttpContext http,
             RecallsStarRequest request,
             IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.StarAsync(http.UserId(), request, ct));
-        });
+            Results.Ok(await svc.StarAsync(
+                http.UserId(), request, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
         recalls.MapGet("/audio/{termId}", async (
             HttpContext http,
@@ -54,9 +51,10 @@ public static class RecallsEndpoints
             IEffectiveEntitlementResolver entitlements,
             CancellationToken ct) =>
         {
-            // PRD Phase 2 §2 + §3 (Backend Auth Gating): click-to-hear pronunciation
-            // is a paid-tier feature. Free / anonymous-tier learners must be turned
-            // away with 402 Payment Required so the frontend can prompt for upgrade.
+            // Click-to-hear pronunciation is a paid-tier feature EXCEPT on curated
+            // free-preview terms, which every logged-in learner may use in full.
+            // Gate order: admin bypass → eligible subscription → free-preview term;
+            // otherwise 402 so the frontend can prompt for upgrade.
             var userId = http.UserId();
             http.Response.Headers.CacheControl = "private, no-store";
             http.Response.Headers.Vary = "Authorization";
@@ -64,7 +62,8 @@ public static class RecallsEndpoints
             if (!isAdmin)
             {
                 var snapshot = await entitlements.ResolveAsync(userId, ct);
-                if (!snapshot.HasEligibleSubscription || snapshot.IsFrozen)
+                var eligible = snapshot.HasEligibleSubscription && !snapshot.IsFrozen;
+                if (!eligible && !await svc.IsFreePreviewTermAsync(termId, ct))
                 {
                     return Results.Json(
                         new
@@ -89,10 +88,8 @@ public static class RecallsEndpoints
             [FromQuery] string? topic,
             IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.GetLibraryAsync(http.UserId(), bucket, topic, ct));
-        });
+            Results.Ok(await svc.GetLibraryAsync(
+                http.UserId(), bucket, topic, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
         recalls.MapGet("/report/week", async (
             HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
@@ -182,6 +179,20 @@ public static class RecallsEndpoints
         }).WithAdminWrite("AdminAiConfig");
 
         return app;
+    }
+
+    /// <summary>
+    /// Authoritative premium check for content scoping: admins and learners with an
+    /// eligible, non-frozen subscription are "premium" (see full content); everyone
+    /// else is scoped to free-preview terms. Mirrors the audio endpoint's own gate.
+    /// (VocabularyEndpoints' IsPremiumAsync is file-scoped, hence this local twin.)
+    /// </summary>
+    static async Task<bool> ResolveIsPremiumAsync(
+        HttpContext http, IEffectiveEntitlementResolver entitlements, CancellationToken ct)
+    {
+        if (http.User.IsInRole("admin")) return true;
+        var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
+        return snapshot.HasEligibleSubscription && !snapshot.IsFrozen;
     }
 
     /// <summary>

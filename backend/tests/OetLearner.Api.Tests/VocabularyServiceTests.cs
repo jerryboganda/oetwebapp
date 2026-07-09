@@ -101,6 +101,33 @@ public class VocabularyServiceTests
     }
 
     [Fact]
+    public async Task GetTerms_freePreviewOnly_returns_only_preview_terms()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 2, isFreePreview: true);   // vt-001, vt-002
+        await SeedAsync(db, 3, isFreePreview: false);  // vt-003..005
+
+        var page = await svc.GetTermsAsync("oet", null, null, null, 1, 20, default, freePreviewOnly: true);
+
+        Assert.Equal(2, page.Total);
+        Assert.All(page.Terms, t => Assert.True(t.IsFreePreview));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GetRecallSets_reports_free_preview_count()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 2, isFreePreview: true);
+        await SeedAsync(db, 3, isFreePreview: false);
+
+        var res = await svc.GetRecallSetsAsync("oet", null, default);
+
+        Assert.Equal(2, res.FreePreviewCount);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task AddToMyVocabulary_enforces_free_tier_cap_for_non_premium()
     {
         var (db, svc) = Build();
