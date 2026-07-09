@@ -17,7 +17,7 @@
  * version, so a bump purges all stale `oet-v*` caches on the next SW activation.
  */
 
-const CACHE_VERSION = 'oet-v3';
+const CACHE_VERSION = 'oet-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGES_CACHE = `${CACHE_VERSION}-pages`;
 const API_CACHE = `${CACHE_VERSION}-api`;

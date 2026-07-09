@@ -15,27 +15,46 @@ import { Loader2, GraduationCap, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createSpeakingExam } from '@/lib/api/speaking-exams';
 import { ApiError } from '@/lib/api';
+import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+  creditPurchaseHrefForError,
+} from '@/components/domain/InsufficientCreditsModal';
 
 export default function SpeakingExamLauncherPage() {
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creditMessage, setCreditMessage] = useState<string | null>(null);
+  const [creditHref, setCreditHref] = useState('/ai-packages');
 
   const startAiExam = useCallback(async () => {
     if (starting) return;
     setStarting(true);
     setError(null);
+    setCreditMessage(null);
     try {
       const exam = await createSpeakingExam({ mode: 'ai' });
       router.push(`/speaking/exam/${exam.examId}`);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.userMessage
-          : err instanceof Error
-            ? err.message
-            : 'Could not start the exam.',
-      );
+      // No AI credits: the wallet can't fund the exam (backend pre-flight throws
+      // 402 `speaking_exam_insufficient_credits` BEFORE the exam is created, so
+      // the candidate is never stranded mid-exam). Surface the shared blocking
+      // modal with a direct path to the AI Credits storefront — matching Writing
+      // — instead of a generic inline error line.
+      if (isInsufficientCreditsError(err)) {
+        setCreditMessage(readInsufficientCreditsMessage(err));
+        setCreditHref(creditPurchaseHrefForError(err));
+      } else {
+        setError(
+          err instanceof ApiError
+            ? err.userMessage
+            : err instanceof Error
+              ? err.message
+              : 'Could not start the exam.',
+        );
+      }
       setStarting(false);
     }
   }, [router, starting]);
@@ -87,6 +106,14 @@ export default function SpeakingExamLauncherPage() {
         </Link>
         .
       </p>
+
+      <InsufficientCreditsModal
+        open={creditMessage !== null}
+        message={creditMessage ?? ''}
+        onClose={() => setCreditMessage(null)}
+        ctaHref={creditHref}
+        ctaLabel="Buy AI Credits"
+      />
     </div>
   );
 }
