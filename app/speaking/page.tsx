@@ -18,7 +18,9 @@ import {
   fetchSpeakingHome,
   fetchSubmissions,
   fetchMockReports,
+  fetchMyEntitlementSnapshot,
   learnerListSpeakingSharedResources,
+  type MyEntitlementSnapshot,
   type SpeakingHome,
   type SpeakingSharedResourceLearnerDto,
 } from '@/lib/api';
@@ -53,6 +55,7 @@ export default function SpeakingHome() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [sharedResources, setSharedResources] = useState<SpeakingSharedResourceLearnerDto[]>([]);
+  const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
   const [busyResourceId, setBusyResourceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,12 +69,21 @@ export default function SpeakingHome() {
   useEffect(() => {
     if (authLoading || needsProfession) return;
     trackSpeaking('module_entry', { from: 'speaking_home' });
-    Promise.all([fetchSpeakingHome(), fetchSubmissions(), fetchMockReports(), learnerListSpeakingSharedResources()])
-      .then(([speakingHome, allSubmissions, reports, resources]) => {
+    Promise.all([
+      fetchSpeakingHome(),
+      fetchSubmissions(),
+      fetchMockReports(),
+      learnerListSpeakingSharedResources(),
+      // Resilient: a snapshot failure must only hide the gated Rulebook card,
+      // never break the whole Speaking hub.
+      fetchMyEntitlementSnapshot().catch(() => null),
+    ])
+      .then(([speakingHome, allSubmissions, reports, resources, entitlementSnapshot]) => {
         setHome(speakingHome);
         setSubmissions(allSubmissions.filter((sub) => sub.subTest === 'Speaking'));
         setMockReports(Array.isArray(reports) ? reports : []);
         setSharedResources(Array.isArray(resources) ? resources : []);
+        setEntitlement(entitlementSnapshot);
       })
       .catch(() => setError('Failed to load speaking tasks. Please try again.'))
       .finally(() => setLoading(false));
@@ -104,6 +116,13 @@ export default function SpeakingHome() {
       </LearnerDashboardShell>
     );
   }
+
+  // Speaking Rulebook access — owner rule 2026-07-10: the rulebook is only for
+  // doctors registered in a Full Course or any Speaking Course. Both grant the
+  // "Speaking" dashboard module (SpeakingSession for speaking-only bundles), so
+  // we reuse the same enabledModules signal the dashboard uses to gate tasks.
+  const enabledModules = new Set((entitlement?.enabledModules ?? []).map((module) => module.toLowerCase()));
+  const canSeeSpeakingRulebook = enabledModules.has('speaking') || enabledModules.has('speakingsession');
 
   const recommended = home?.recommendedRolePlay;
   const featuredTasks = home?.featuredTasks ?? [];
@@ -246,33 +265,30 @@ export default function SpeakingHome() {
           </MotionSection>
         ) : null}
 
-        {/* Rulebook entry point — parity with Writing / Reading / Selection. */}
-        <MotionSection delayIndex={1}>
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_navigation',
-              accent: 'indigo',
-              eyebrow: 'Rulebook',
-              eyebrowIcon: BookOpen,
-              title: 'Know exactly how your speaking is judged',
-              description: 'See the criteria your role-play feedback is built on, from conversational flow to the protocol for breaking bad news.',
-              metaItems: [
-                { icon: FileText, label: 'Speaking criteria' },
-                { icon: Heart, label: 'Breaking bad news' },
-              ],
-              primaryAction: {
-                label: 'Open Speaking Rules',
-                href: '/speaking/rulebook',
-              },
-              secondaryAction: {
-                label: 'Breaking Bad News',
-                href: '/speaking/rulebook/RULE_44',
-                variant: 'secondary',
-              },
-            }}
-          />
-        </MotionSection>
+        {/* Rulebook entry point — gated to Full Course / Speaking Course holders
+            (owner rule 2026-07-10). Breaking Bad News shortcut removed. */}
+        {canSeeSpeakingRulebook ? (
+          <MotionSection delayIndex={1}>
+            <LearnerSurfaceCard
+              card={{
+                kind: 'navigation',
+                sourceType: 'frontend_navigation',
+                accent: 'indigo',
+                eyebrow: 'Rulebook',
+                eyebrowIcon: BookOpen,
+                title: 'Know exactly how your speaking is judged',
+                description: 'See the criteria your role-play feedback is built on, from conversational flow to how each speaking sub-skill is scored.',
+                metaItems: [
+                  { icon: FileText, label: 'Speaking criteria' },
+                ],
+                primaryAction: {
+                  label: 'Open Speaking Rules',
+                  href: '/speaking/rulebook',
+                },
+              }}
+            />
+          </MotionSection>
+        ) : null}
 
         {sharedResources.length > 0 ? (
           <MotionSection delayIndex={2}>
