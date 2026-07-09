@@ -520,7 +520,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
           return undefined as T;
         }
 
-        return response.json() as Promise<T>;
+        return (await response.json()) as T;
       }
 
       if (!response.ok) {
@@ -573,7 +573,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
         return undefined as T;
       }
 
-      return response.json() as Promise<T>;
+      return (await response.json()) as T;
     } catch (err) {
       if (err instanceof ApiError) {
         throw err;
