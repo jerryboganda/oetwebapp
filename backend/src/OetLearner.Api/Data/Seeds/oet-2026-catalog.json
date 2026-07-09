@@ -634,7 +634,7 @@
       "extensionAllowed": false,
       "recallUpdatesEnabled": true,
       "displayOrder": 700,
-      "dashboardModules": ["TutorBook", "AudioScripts", "Updates"],
+      "dashboardModules": ["TutorBook", "AudioScripts", "Updates", "Recalls"],
       "comparisonFeatures": [
         "Listening: new recalls, full audio scripts, answers, clear justifications",
         "Reading: recall-based topics, vocab trends, strategies for Parts A, B, C",
