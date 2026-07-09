@@ -345,44 +345,39 @@ builder.Services.AddRateLimiter(options =>
     });
 
     // ─── Writing Module V2 rate-limit policies (spec §27.21) ──────────────
-    // The free vs paid distinction is driven by entitlement claims; learners
-    // who lack a paid entitlement get the "-free" budget. Endpoints attach
-    // the free policy; the WritingEntitlementService bumps qualifying users
-    // to the paid bucket via an HttpContext.Items signal set in middleware.
+    // The free vs paid distinction is driven by the `subscription_tier` JWT
+    // claim (see the "writing-submissions" policy below): paid learners get the
+    // higher budget, everyone else the free budget. Endpoints attach one policy;
+    // the limiter itself picks the bucket per-request from the claim.
     static string ResolveWritingUserKey(HttpContext httpContext)
         => httpContext.User.Identity?.IsAuthenticated == true
             ? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous"
             : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
-    var writingSubmissionsFreeHour = builder.Environment.IsDevelopment() ? 100 : 1;
+    // Writing submissions (and human-graded mocks) share one daily budget that
+    // scales with the learner's plan: paid subscribers get a much higher cap than
+    // free users. The plan is read from the `subscription_tier` JWT claim
+    // (AuthTokenService) so the limiter needs no DB hit; an absent/empty/"free"
+    // tier falls through to the free bucket (safe default). Previously the
+    // endpoints were pinned to a free-only policy with NO paid bump ever wired up,
+    // so paying users were wrongly throttled to the free daily cap and hit
+    // "Too many requests" after only a handful of submissions.
     var writingSubmissionsFreeDay = builder.Environment.IsDevelopment() ? 500 : 5;
-    options.AddPolicy("writing-submissions-free", httpContext =>
-    {
-        var key = ResolveWritingUserKey(httpContext);
-        // Two-window guard: hourly OR daily quotas — both must allow. The
-        // hourly window is the tighter rejection; daily is enforced via a
-        // partition-keyed sliding window matched on the user id.
-        return RateLimitPartition.GetSlidingWindowLimiter($"writing-sub-free-{key}", _ => new SlidingWindowRateLimiterOptions
-        {
-            PermitLimit = writingSubmissionsFreeDay,
-            Window = TimeSpan.FromDays(1),
-            SegmentsPerWindow = 24,
-            QueueLimit = 0,
-        });
-    });
-
-    var writingSubmissionsPaidHour = builder.Environment.IsDevelopment() ? 300 : 5;
     var writingSubmissionsPaidDay = builder.Environment.IsDevelopment() ? 3000 : 30;
-    options.AddPolicy("writing-submissions-paid", httpContext =>
+    options.AddPolicy("writing-submissions", httpContext =>
     {
         var key = ResolveWritingUserKey(httpContext);
-        return RateLimitPartition.GetSlidingWindowLimiter($"writing-sub-paid-{key}", _ => new SlidingWindowRateLimiterOptions
-        {
-            PermitLimit = writingSubmissionsPaidDay,
-            Window = TimeSpan.FromDays(1),
-            SegmentsPerWindow = 24,
-            QueueLimit = 0,
-        });
+        var tier = httpContext.User.FindFirst("subscription_tier")?.Value?.ToLowerInvariant();
+        var isPaid = tier is "paid" or "premium" or "pro" or "sponsor" or "trial";
+        var permit = isPaid ? writingSubmissionsPaidDay : writingSubmissionsFreeDay;
+        return RateLimitPartition.GetSlidingWindowLimiter(
+            $"writing-sub-{(isPaid ? "paid" : "free")}-{key}", _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = permit,
+                Window = TimeSpan.FromDays(1),
+                SegmentsPerWindow = 24,
+                QueueLimit = 0,
+            });
     });
 
     // Coach: 1 hint per 30 seconds per session. Partition key includes the

@@ -20,7 +20,7 @@ public static class WritingSubmissionEndpoints
             var submission = await service.CreateSubmissionAsync(http.WritingV2UserId(), request, ct);
             return Results.Created($"/v1/writing/submissions/{submission.Id}", submission);
         })
-        .RequireRateLimiting("writing-submissions-free")
+        .RequireRateLimiting("writing-submissions")
         .WithName("CreateWritingSubmission");
 
         group.MapGet("/{id:guid}", async (
@@ -96,7 +96,7 @@ public static class WritingSubmissionEndpoints
             var revision = await service.ReviseSubmissionAsync(http.WritingV2UserId(), id, request, ct);
             return revision is null ? Results.NotFound() : Results.Created($"/v1/writing/submissions/{revision.Id}", revision);
         })
-        .RequireRateLimiting("writing-submissions-free")
+        .RequireRateLimiting("writing-submissions")
         .WithName("ReviseWritingSubmission");
 
         group.MapPost("/{id:guid}/appeal", async (

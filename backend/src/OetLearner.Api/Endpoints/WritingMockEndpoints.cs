@@ -27,7 +27,7 @@ public static class WritingMockEndpoints
             var session = await service.StartMockAsync(http.WritingV2UserId(), request, ct);
             return Results.Created($"/v1/writing/mocks/sessions/{session.Id}", session);
         })
-        .RequireRateLimiting("writing-submissions-free")
+        .RequireRateLimiting("writing-submissions")
         .WithName("StartWritingMock");
 
         group.MapGet("/sessions/{id:guid}", async (
@@ -63,7 +63,7 @@ public static class WritingMockEndpoints
             var submission = await service.SubmitMockAsync(http.WritingV2UserId(), id, request, ct);
             return submission is null ? Results.NotFound() : Results.Accepted($"/v1/writing/mocks/sessions/{id}/results", submission);
         })
-        .RequireRateLimiting("writing-submissions-free")
+        .RequireRateLimiting("writing-submissions")
         .WithName("SubmitWritingMock");
 
         group.MapGet("/sessions/{id:guid}/results", async (
