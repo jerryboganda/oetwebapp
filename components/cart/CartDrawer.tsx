@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ShoppingBag, X } from 'lucide-react';
@@ -27,6 +28,11 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
   const items = useCartItems();
   const removeItem = useCartStore((state) => state.removeItem);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -44,12 +50,12 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
     router.push(buildCheckoutReviewHref(items));
   }, [items, onClose, router]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const currency = items[0]?.currency ?? 'GBP';
   const subtotal = items.reduce((sum, item) => sum + item.price, 0);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title">
       <button
         type="button"
@@ -131,6 +137,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
           </Button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
