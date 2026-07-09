@@ -54,9 +54,30 @@ export WEB_IMAGE API_IMAGE
 compose() { ACTIVE_SLOT="$1" docker compose --env-file .env.production -f docker-compose.production.yml "${@:2}"; }
 
 # --- pull the freshly-built images (no build here) ---
+# ghcr.io pulls over the shared VPS link intermittently drop mid-transfer with
+# "read tcp ... connection reset by peer". The build+push jobs already succeeded,
+# so the image IS in the registry — a reset is transient. Retry with backoff
+# instead of failing the whole deploy (this step was flaking ~4 of 5 deploys and
+# needed a manual `gh run rerun --failed` each time).
+pull_with_retry() {
+  local image="$1" attempts="${2:-5}" delay=5 i
+  for i in $(seq 1 "$attempts"); do
+    if docker pull "$image"; then
+      return 0
+    fi
+    if [ "$i" -lt "$attempts" ]; then
+      echo "  [pull] attempt $i/$attempts failed for $image; retrying in ${delay}s..." >&2
+      sleep "$delay"
+      delay=$(( delay < 30 ? delay * 2 : 30 ))
+    fi
+  done
+  echo "  [pull] FAILED to pull $image after $attempts attempts" >&2
+  return 1
+}
+
 echo "--- pulling images ---"
-docker pull "$WEB_IMAGE"
-docker pull "$API_IMAGE"
+pull_with_retry "$WEB_IMAGE"
+pull_with_retry "$API_IMAGE"
 
 # --- start the target slot from the new images ---
 echo "--- starting target slot ($target_slot) ---"
