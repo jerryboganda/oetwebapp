@@ -213,6 +213,16 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       cancelUrl: 'https://example.com/paytabs/cancel',
       isConfigured: true,
     },
+    easyKash: {
+      apiBaseUrl: 'https://back.easykash.net',
+      apiKey: '********',
+      hmacSecret: '********',
+      paymentOptionsCsv: '',
+      currencyMode: 'passthrough',
+      successUrl: '',
+      cancelUrl: '',
+      isConfigured: true,
+    },
     soketi: {
       host: 'soketi',
       port: 6001,

@@ -31,15 +31,17 @@ public sealed class EasyKashGateway : IPaymentGateway
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
     private readonly IRuntimeSettingsProvider _runtimeSettings;
-    private readonly IFxRateService _fx;
-    private readonly ILogger<EasyKashGateway> _logger;
+    private readonly IFxRateService? _fx;
+    private readonly ILogger<EasyKashGateway>? _logger;
 
+    // fx + logger are optional so lightweight tests can construct the gateway with
+    // just (http, billing, runtimeSettings); DI always supplies the real services.
     public EasyKashGateway(
         HttpClient http,
         IOptions<BillingOptions> billing,
         IRuntimeSettingsProvider runtimeSettings,
-        IFxRateService fx,
-        ILogger<EasyKashGateway> logger)
+        IFxRateService? fx = null,
+        ILogger<EasyKashGateway>? logger = null)
     {
         _http = http;
         _billing = billing;
@@ -69,7 +71,7 @@ public sealed class EasyKashGateway : IPaymentGateway
         // Currency mode: charge the quote currency as-is, or FX-convert to EGP.
         decimal amount = request.Amount;
         string currency = request.Currency.ToUpperInvariant();
-        if (opts.ConvertToEgp && currency != "EGP")
+        if (opts.ConvertToEgp && _fx is not null && currency != "EGP")
         {
             amount = Math.Round(await _fx.ConvertAsync(request.Amount, currency, "EGP", ct), 2, MidpointRounding.AwayFromZero);
             currency = "EGP";
@@ -110,7 +112,7 @@ public sealed class EasyKashGateway : IPaymentGateway
         if (!resp.IsSuccessStatusCode)
         {
             var errBody = await resp.Content.ReadAsStringAsync(ct);
-            _logger.LogWarning("EasyKash pay request failed with status {Status}", (int)resp.StatusCode);
+            _logger?.LogWarning("EasyKash pay request failed with status {Status}", (int)resp.StatusCode);
             throw new PaymentGatewayApiException("easykash", (int)resp.StatusCode,
                 $"EasyKash pay request failed: {(int)resp.StatusCode} {Truncate(errBody, 500)}");
         }
