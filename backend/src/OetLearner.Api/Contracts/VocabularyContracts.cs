@@ -71,7 +71,13 @@ public sealed record RecallSetSummaryResponse(
 public sealed record RecallSetsListResponse(
     string ExamTypeCode,
     string? ProfessionId,
-    IReadOnlyList<RecallSetSummaryResponse> Sets
+    IReadOnlyList<RecallSetSummaryResponse> Sets,
+    /// <summary>
+    /// Count of active terms flagged <c>IsFreePreview</c> for this exam/profession.
+    /// Powers the "Free Preview Recalls" filter chip badge. Independent of the
+    /// requesting learner's subscription.
+    /// </summary>
+    int FreePreviewCount = 0
 );
 
 public sealed record VocabularyTermSummary(

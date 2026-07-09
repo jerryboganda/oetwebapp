@@ -32,6 +32,39 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Audio_streams_for_free_learner_on_free_preview_term()
+    {
+        // Free-preview terms are fully usable by every logged-in learner, incl.
+        // click-to-hear audio — the whole point of the "Free Preview Recalls" set.
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        var termId = await SeedVocabularyCardAsync(learnerId, isFreePreview: true);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, payload);
+        Assert.Equal("audio/wav", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Audio_returns_402_for_free_learner_on_non_preview_term()
+    {
+        // A real, non-preview recall term stays paywalled for a free learner.
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        var termId = await SeedVocabularyCardAsync(learnerId, isFreePreview: false);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, response.StatusCode);
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.Contains("subscription_required", payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Audio_passes_entitlement_gate_for_active_subscriber()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
@@ -317,16 +350,18 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         await db.SaveChangesAsync();
     }
 
-    private async Task<string> SeedVocabularyCardAsync(string learnerId, string recallSetCodesJson = "[\"2026\"]")
+    private async Task<string> SeedVocabularyCardAsync(
+        string learnerId, string recallSetCodesJson = "[\"2026\"]", bool isFreePreview = false)
     {
-        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId, recallSetCodesJson);
+        var (termId, _) = await SeedVocabularyCardWithMediaAsync(learnerId, recallSetCodesJson, isFreePreview: isFreePreview);
         return termId;
     }
 
     private async Task<(string TermId, string MediaAssetId)> SeedVocabularyCardWithMediaAsync(
         string learnerId,
         string recallSetCodesJson = "[\"2026\"]",
-        MediaAssetStatus mediaStatus = MediaAssetStatus.Ready)
+        MediaAssetStatus mediaStatus = MediaAssetStatus.Ready,
+        bool isFreePreview = false)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -376,6 +411,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
             RecallSetCodesJson = recallSetCodesJson,
             AudioSlowUrl = slowStorageKey,
             AudioSentenceUrl = sentenceStorageKey,
+            IsFreePreview = isFreePreview,
             Status = "active",
             CreatedAt = now,
             UpdatedAt = now

@@ -31,13 +31,20 @@ public class VocabularyService(
         int pageSize,
         CancellationToken ct,
         string? recallSet = null,
-        bool isPremium = true)
+        bool isPremium = true,
+        bool freePreviewOnly = false)
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrEmpty(category)) query = query.Where(t => t.Category == category);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
+
+        // Free-preview filter — the "Free Preview Recalls" chip. Returns only the
+        // admin-curated preview subset (accessible in full to every logged-in
+        // learner regardless of subscription; see Map(isLocked) below, which never
+        // locks a preview term). Uses IX_VocabularyTerms_ExamTypeCode_Status_IsFreePreview.
+        if (freePreviewOnly) query = query.Where(t => t.IsFreePreview);
         if (!string.IsNullOrEmpty(search))
         {
             var s = search.Trim();
@@ -86,6 +93,10 @@ public class VocabularyService(
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(t => t.ProfessionId == profession);
+
+        // Count of curated free-preview terms — powers the "Free Preview Recalls"
+        // chip badge. Computed over the same active/exam/profession scope.
+        var freePreviewCount = await query.CountAsync(t => t.IsFreePreview, ct);
 
         // Pull only the JSON column for cheap in-memory tally.
         var rawCodes = await query
@@ -143,7 +154,7 @@ public class VocabularyService(
                     TermCount: counts.TryGetValue(m.Code, out var n) ? n : 0));
         }
 
-        return new RecallSetsListResponse(resolvedExam, profession, sets.ToList());
+        return new RecallSetsListResponse(resolvedExam, profession, sets.ToList(), freePreviewCount);
     }
 
     public async Task<VocabularyTermResponse> GetTermAsync(string termId, CancellationToken ct, bool isPremium = true)

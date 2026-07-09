@@ -159,4 +159,21 @@ describe('Recalls words page audio playback', () => {
     await screen.findByText('dyspnoea');
     expect(screen.queryByTitle(/across recall exams/)).not.toBeInTheDocument();
   });
+
+  it('renders the Free Preview Recalls chip with a count and filters when selected', async () => {
+    mockFetchVocabularyRecallSets.mockResolvedValue({ sets: [], freePreviewCount: 12 });
+    const user = userEvent.setup();
+    render(<RecallsWordsPage />);
+
+    const chip = await screen.findByRole('button', { name: /Free Preview Recalls \(12\)/ });
+    expect(chip).toBeInTheDocument();
+
+    await user.click(chip);
+
+    await waitFor(() => {
+      expect(mockFetchVocabularyTerms).toHaveBeenCalledWith(
+        expect.objectContaining({ freePreviewOnly: true }),
+      );
+    });
+  });
 });
