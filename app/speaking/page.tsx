@@ -1,49 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Award, BookOpen, Clock, Download, FileText, Heart, Mic, RefreshCw, Star, Volume2 } from 'lucide-react';
+import { ArrowRight, Clock, Mic, Star, Users, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import {
-  downloadSpeakingSharedResourceMedia,
-  fetchSpeakingHome,
-  fetchSubmissions,
-  fetchMockReports,
-  fetchMyEntitlementSnapshot,
-  learnerListSpeakingSharedResources,
-  type MyEntitlementSnapshot,
-  type SpeakingHome,
-  type SpeakingSharedResourceLearnerDto,
-} from '@/lib/api';
-import type { Submission, MockReport } from '@/lib/mock-data';
+import { fetchSpeakingHome, type SpeakingHome, type SpeakingTask } from '@/lib/api';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
-import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
-
-interface SpeakingLatestEvaluationDto {
-  evaluationId?: string | null;
-  scoreRange?: string | null;
-  confidenceLabel?: string | null;
-  strengths?: string[];
-  issues?: string[];
-}
-
-const evidenceDateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-});
 
 const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
@@ -52,11 +25,6 @@ export default function SpeakingHome() {
   const { user, loading: authLoading } = useAuth();
   const needsProfession = !authLoading && user?.role === 'learner' && !user?.activeProfessionId;
   const [home, setHome] = useState<SpeakingHome | null>(null);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [mockReports, setMockReports] = useState<MockReport[]>([]);
-  const [sharedResources, setSharedResources] = useState<SpeakingSharedResourceLearnerDto[]>([]);
-  const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
-  const [busyResourceId, setBusyResourceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,45 +37,11 @@ export default function SpeakingHome() {
   useEffect(() => {
     if (authLoading || needsProfession) return;
     trackSpeaking('module_entry', { from: 'speaking_home' });
-    Promise.all([
-      fetchSpeakingHome(),
-      fetchSubmissions(),
-      fetchMockReports(),
-      learnerListSpeakingSharedResources(),
-      // Resilient: a snapshot failure must only hide the gated Rulebook card,
-      // never break the whole Speaking hub.
-      fetchMyEntitlementSnapshot().catch(() => null),
-    ])
-      .then(([speakingHome, allSubmissions, reports, resources, entitlementSnapshot]) => {
-        setHome(speakingHome);
-        setSubmissions(allSubmissions.filter((sub) => sub.subTest === 'Speaking'));
-        setMockReports(Array.isArray(reports) ? reports : []);
-        setSharedResources(Array.isArray(resources) ? resources : []);
-        setEntitlement(entitlementSnapshot);
-      })
+    fetchSpeakingHome()
+      .then((speakingHome) => setHome(speakingHome))
       .catch(() => setError('Failed to load speaking tasks. Please try again.'))
       .finally(() => setLoading(false));
   }, [authLoading, needsProfession]);
-
-  const resumeAttempt = useMemo(() => {
-    return (home?.pastAttempts ?? []).find((attempt) => {
-      const state = attempt?.state?.toLowerCase() ?? '';
-      return state === 'in_progress' || state === 'in-progress' || state === 'draft';
-    }) ?? null;
-  }, [home]);
-
-  const latestEvaluation = useMemo<SpeakingLatestEvaluationDto | null>(() => {
-    const raw = home?.latestEvaluation;
-    if (!raw || typeof raw !== 'object') return null;
-    const record = raw as Record<string, unknown>;
-    return {
-      evaluationId: typeof record.evaluationId === 'string' ? record.evaluationId : null,
-      scoreRange: typeof record.scoreRange === 'string' ? record.scoreRange : null,
-      confidenceLabel: typeof record.confidenceLabel === 'string' ? record.confidenceLabel : null,
-      strengths: Array.isArray(record.strengths) ? record.strengths.filter((s): s is string => typeof s === 'string') : [],
-      issues: Array.isArray(record.issues) ? record.issues.filter((s): s is string => typeof s === 'string') : [],
-    };
-  }, [home]);
 
   if (loading) {
     return (
@@ -117,494 +51,161 @@ export default function SpeakingHome() {
     );
   }
 
-  // Speaking Rulebook access — owner rule 2026-07-10: the rulebook is only for
-  // doctors registered in a Full Course or any Speaking Course. Both grant the
-  // "Speaking" dashboard module (SpeakingSession for speaking-only bundles), so
-  // we reuse the same enabledModules signal the dashboard uses to gate tasks.
-  const enabledModules = new Set((entitlement?.enabledModules ?? []).map((module) => module.toLowerCase()));
-  const canSeeSpeakingRulebook = enabledModules.has('speaking') || enabledModules.has('speakingsession');
-
-  const recommended = home?.recommendedRolePlay;
-  const featuredTasks = home?.featuredTasks ?? [];
-  const drillGroups = home?.drillGroups ?? [];
-  const supportEntries = home?.supportEntries ?? [];
   const credits = home?.reviewCredits?.available ?? 0;
-  const recommendedId = recommended?.id;
-  const scenarioTasks = featuredTasks
-    .filter((task) => task.id !== recommendedId)
-    .slice(0, 3);
-  const evidenceItems = submissions.slice(0, 3);
-  const primaryDrillRoute = drillGroups[0]?.items?.[0]?.route ?? '/speaking/selection';
-  const recommendedRoleLabel = createLearnerMetaLabel(
-    recommended?.profession ?? recommended?.scenarioType,
-    'Clinical role play',
-  );
-  const recommendedDurationLabel = createLearnerMetaLabel(
-    recommended?.duration,
-    '20 mins',
-  );
+  const featuredTasks = home?.featuredTasks ?? [];
+  const recommended = home?.recommendedRolePlay ?? null;
 
-  async function downloadSharedResource(resource: SpeakingSharedResourceLearnerDto) {
-    if (!resource.media?.id) return;
-    setBusyResourceId(resource.id);
-    try {
-      const blob = await downloadSpeakingSharedResourceMedia(resource.media.id);
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = resource.media.originalFilename || `${resource.title}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      setError('Failed to download speaking resource. Please try again.');
-    } finally {
-      setBusyResourceId(null);
+  // Practice speaking cards available on the platform (AI Assessment). The
+  // recommended role play leads, then the rest of the featured library —
+  // deduped by id so nothing shows twice.
+  const practiceCards: SpeakingTask[] = (() => {
+    const seen = new Set<string>();
+    const list: SpeakingTask[] = [];
+    if (recommended?.id) {
+      list.push(recommended);
+      seen.add(recommended.id);
     }
-  }
+    for (const task of featuredTasks) {
+      if (task?.id && !seen.has(task.id)) {
+        list.push(task);
+        seen.add(task.id);
+      }
+    }
+    return list;
+  })();
 
-  const recommendedCard = recommended ? ({
+  const examCard: LearnerSurfaceCardModel = {
     kind: 'task',
-    sourceType: 'backend_summary',
-    accent: 'purple',
-    eyebrow: 'Recommended Next',
-    eyebrowIcon: Star,
-    title: recommended.title,
-    description: `Start with the role play that best matches ${recommended.criteriaFocus || 'your current speaking priorities'}, then use the result to decide whether drills or review matter next.`,
+    sourceType: 'backend_task',
+    accent: 'indigo',
+    eyebrow: 'AI Assessment',
+    eyebrowIcon: Mic,
+    title: 'Take a full two-card Speaking exam',
+    description: 'A short unscored intro, then Card A and Card B — 3 minutes to prepare and 5 minutes to speak on each. The AI plays the patient and marks your result.',
     metaItems: [
-      { icon: Mic, label: recommendedRoleLabel },
-      { icon: Clock, label: recommendedDurationLabel },
+      { icon: Mic, label: 'Card A + Card B' },
+      { icon: Star, label: '2 AI credits' },
     ],
-    primaryAction: {
-      label: 'Start Role Play',
-      href: `/speaking/check?taskId=${recommended.id}`,
-    },
-  } satisfies LearnerSurfaceCardModel) : null;
+    primaryAction: { label: 'Start Speaking Exam', href: '/speaking/exam' },
+  };
 
-  const drillFocusCard: LearnerSurfaceCardModel = {
-    kind: 'insight',
-    sourceType: 'backend_summary',
-    accent: 'amber',
-    eyebrow: 'Drill Support',
-    eyebrowIcon: Volume2,
-    title: 'Use drill support before the next role play',
-    description: 'Open one drill path to tighten the issues most likely to weaken your next speaking attempt, then return to a full scenario.',
+  const tutorCard: LearnerSurfaceCardModel = {
+    kind: 'task',
+    sourceType: 'frontend_navigation',
+    accent: 'emerald',
+    eyebrow: 'Live Tutor',
+    eyebrowIcon: Video,
+    title: 'Book a tutor as your patient',
+    description: 'Prefer a human examiner? Book a 1-on-1 live speaking session with an OET tutor who plays the patient and gives you personalised feedback.',
     metaItems: [
-      { icon: Mic, label: 'Role-play support' },
-      { icon: Volume2, label: `${drillGroups.length || 0} groups ready` },
+      { icon: Users, label: 'Live 1-on-1' },
+      { icon: Clock, label: 'Scheduled session' },
     ],
-    primaryAction: {
-      label: 'Open Drill Group',
-      href: primaryDrillRoute,
-    },
-    secondaryAction: {
-      label: 'View Role-Play Library',
-      href: '/speaking/selection',
-      variant: 'secondary',
-    },
+    primaryAction: { label: 'Book a Tutor', href: '/private-speaking' },
   };
 
   return (
     <LearnerDashboardShell pageTitle="Speaking">
       <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Current Focus"
+          eyebrow="Speaking"
           icon={Mic}
           accent="purple"
-          title="Keep the next speaking move and recent evidence in view"
-          description="Choose your next role play, drill targeted weaknesses, and review recent recordings before requesting tutor feedback."
+          title="Get assessed by AI or book a live tutor"
+          description="Take a full two-card Speaking exam marked by AI, practise any role-play card on the platform, or book a tutor to play your patient."
           highlights={[
-            { icon: Star, label: 'Review credits', value: `${credits} available` },
-            { icon: Mic, label: 'Role plays', value: featuredTasks.length > 0 ? `${featuredTasks.length} ready` : 'Browse library' },
-            { icon: Volume2, label: 'Drill groups', value: drillGroups.length > 0 ? `${drillGroups.length} available` : 'No drills yet' },
+            { icon: Star, label: 'AI credits', value: `${credits} available` },
+            { icon: Mic, label: 'Practice cards', value: practiceCards.length > 0 ? `${practiceCards.length} ready` : 'Browse library' },
+            { icon: Video, label: 'Live tutoring', value: '1-on-1 booking' },
           ]}
         />
 
-        <LearnerSkillSwitcher compact />
-
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {/* Two-card Speaking exam (2026-06-11 rebuild): Intro → Card A → Card B. */}
-        <MotionSection>
-          <LearnerSurfaceCard card={{
-            kind: 'task',
-            sourceType: 'backend_task',
-            accent: 'indigo',
-            eyebrow: 'Speaking Exam',
-            eyebrowIcon: Mic,
-            title: 'Take a full two-card Speaking exam',
-            description: 'A short unscored intro, then Card A and Card B — 3 minutes to prepare and 5 minutes to speak on each. The AI plays the patient and marks your result (2 AI credits), or book a tutor as the patient.',
-            metaItems: [
-              { icon: Mic, label: 'Card A + Card B' },
-              { icon: Star, label: '2 AI credits' },
-            ],
-            primaryAction: { label: 'Start Speaking Exam', href: '/speaking/exam' },
-            secondaryAction: { label: 'Book a Tutor', href: '/speaking', variant: 'secondary' },
-          }} />
-        </MotionSection>
-
-        {/* Resume in-progress speaking attempt — backend surfaces pastAttempts[].state='in_progress'. */}
-        {resumeAttempt ? (
+        {/* AI Speaking exam + live tutor — the two ways to get assessed. */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <MotionSection>
-            <LearnerSurfaceCard card={{
-              kind: 'task',
-              sourceType: 'backend_task',
-              accent: 'indigo',
-              eyebrow: 'Resume Attempt',
-              eyebrowIcon: RefreshCw,
-              title: 'Continue your in-progress role play',
-              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
-              metaItems: [
-                { icon: Clock, label: 'Paused' },
-                { icon: RefreshCw, label: 'In progress' },
-              ],
-              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
-              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
-            }} />
+            <LearnerSurfaceCard card={examCard} />
           </MotionSection>
-        ) : null}
-
-        {/* Rulebook entry point — gated to Full Course / Speaking Course holders
-            (owner rule 2026-07-10). Breaking Bad News shortcut removed. */}
-        {canSeeSpeakingRulebook ? (
           <MotionSection delayIndex={1}>
-            <LearnerSurfaceCard
-              card={{
-                kind: 'navigation',
-                sourceType: 'frontend_navigation',
-                accent: 'indigo',
-                eyebrow: 'Rulebook',
-                eyebrowIcon: BookOpen,
-                title: 'Know exactly how your speaking is judged',
-                description: 'See the criteria your role-play feedback is built on, from conversational flow to how each speaking sub-skill is scored.',
-                metaItems: [
-                  { icon: FileText, label: 'Speaking criteria' },
-                ],
-                primaryAction: {
-                  label: 'Open Speaking Rules',
-                  href: '/speaking/rulebook',
-                },
-              }}
-            />
+            <LearnerSurfaceCard card={tutorCard} />
           </MotionSection>
-        ) : null}
+        </section>
 
-        {sharedResources.length > 0 ? (
-          <MotionSection delayIndex={2}>
-            <LearnerSurfaceSectionHeader
-              eyebrow="Shared Resources"
-              title="Download the current speaking PDFs"
-              description="Warm-up questions and assessment criteria stay attached here across all speaking cards."
-              className="mb-4"
-            />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {sharedResources.map((resource) => (
-                <Card key={resource.id} className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <Badge variant="outline" size="sm">
-                        {resource.kind === 'WarmUpQuestions' ? 'Warm-up' : 'Assessment criteria'}
-                      </Badge>
-                      <h3 className="mt-2 text-sm font-bold text-navy">{resource.title}</h3>
-                      <p className="mt-1 text-xs text-muted">
-                        {resource.media?.sizeBytes ? `${(resource.media.sizeBytes / 1024 / 1024).toFixed(2)} MB` : 'PDF'}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void downloadSharedResource(resource)}
-                      disabled={busyResourceId === resource.id || !resource.media}
-                    >
-                      <Download className="mr-1 h-4 w-4" />
-                      {busyResourceId === resource.id ? 'Downloading...' : 'Download'}
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </MotionSection>
-        ) : null}
-
-        {recommendedCard ? (
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2" data-tour="speaking-hub">
-            <MotionSection>
-              <LearnerSurfaceCard card={recommendedCard} />
-            </MotionSection>
-            <MotionSection delayIndex={1}>
-              <LearnerSurfaceCard card={drillFocusCard}>
-                <div className="space-y-2.5">
-                  {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
-                    <div
-                      key={issue}
-                      className="rounded-2xl border border-warning/30 bg-warning/5 px-3 py-2 text-sm font-bold text-navy shadow-sm"
-                    >
-                      {issue}
-                    </div>
-                  ))}
-                </div>
-              </LearnerSurfaceCard>
-            </MotionSection>
-          </section>
-        ) : null}
-
-        {/* Latest Result — surfaces home.latestEvaluation rubric summary from the backend. */}
-        {latestEvaluation && latestEvaluation.scoreRange ? (
-          <MotionSection delayIndex={2}>
-            <LearnerSurfaceSectionHeader
-              eyebrow="Latest Result"
-              title="Read your most recent rubric-graded speaking evaluation"
-              description="Open the full card to see strengths, issues, and the detailed feedback breakdown."
-              className="mb-4"
-            />
-            <LearnerSurfaceCard card={{
-              kind: 'evidence',
-              sourceType: 'backend_summary',
-              accent: 'emerald',
-              eyebrow: 'Rubric Summary',
-              eyebrowIcon: Award,
-              title: latestEvaluation.scoreRange ?? 'Rubric-graded',
-              description: 'Your role play was graded against the OET Speaking criteria. Open the result to see the full breakdown and rulebook audit.',
-              metaItems: [
-                ...(latestEvaluation.confidenceLabel ? [{ label: latestEvaluation.confidenceLabel }] : []),
-                ...((latestEvaluation.strengths ?? []).slice(0, 1).map((s) => ({ label: `Strength: ${s}` }))),
-                ...((latestEvaluation.issues ?? []).slice(0, 1).map((s) => ({ label: `Issue: ${s}` }))),
-              ],
-              primaryAction: latestEvaluation.evaluationId
-                ? { label: 'Open Result', href: `/speaking/results/${latestEvaluation.evaluationId}` }
-                : { label: 'View Submissions', href: '/submissions' },
-            }} />
-          </MotionSection>
-        ) : null}
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="space-y-6 lg:col-span-8">
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow="More Role Plays"
-                title="Keep role plays visible after the next recommendation"
-                description="Each scenario shows the profession, timing, and a quick-start link."
-                action={<Link href="/speaking/selection" className="text-sm font-bold text-primary hover:underline">View Full Library</Link>}
-                className="mb-4"
-              />
-
-              {scenarioTasks.length === 0 ? (
-                <LearnerEmptyState
-                  compact
-                  icon={Mic}
-                  title="No extra role plays yet"
-                  description="Use the library to browse more speaking scenarios once they are available, or start with the recommended speaking path above."
-                  primaryAction={{ label: 'Open Speaking Library', href: '/speaking/selection' }}
-                  secondaryAction={{ label: 'Track Progress', href: '/progress' }}
-                />
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {scenarioTasks.map((task, index) => {
-                    const taskId = task.id;
-                    const durationLabel = createLearnerMetaLabel(task.duration, '20 mins');
-                    const scenarioLabel = createLearnerMetaLabel(task.scenarioType || task.profession, 'Speaking scenario');
-                    const focusLabel = createLearnerMetaLabel(task.criteriaFocus, 'speaking control');
-
-                    return (
-                      <MotionItem
-                        key={taskId}
-                        delayIndex={index}
-                      >
-                        <Card className="border-border/70">
-                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-start gap-3">
-                              <Mic className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="muted" size="sm">Speaking</Badge>
-                                  {task.difficulty ? (
-                                    <Badge
-                                      variant={String(task.difficulty).toLowerCase() === 'hard' ? 'danger' : String(task.difficulty).toLowerCase() === 'medium' ? 'warning' : 'success'}
-                                      size="sm"
-                                    >
-                                      {task.difficulty}
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                                <h3 className="mt-2 text-base font-bold text-navy">{task.title}</h3>
-                                <p className="mt-1 text-sm text-muted">Focus: {focusLabel}</p>
-                                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                                  <span>{scenarioLabel}</span>
-                                  <span>{durationLabel}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <Link
-                              href={`/speaking/check?taskId=${taskId}`}
-                              className={primaryLinkClasses}
-                              onClick={() => {
-                                analytics.track('task_started', { taskId, subtest: 'speaking' });
-                              }}
-                            >
-                              Start Role Play
-                              <ArrowRight className="h-4 w-4" />
-                            </Link>
-                          </div>
-                        </Card>
-                      </MotionItem>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow="Drill Groups"
-                title="Fix one speaking behavior before you return to a full scenario"
-                description="Each drill targets a specific speaking weakness so you know exactly why it's worth your time."
-                className="mb-4"
-              />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {drillGroups.slice(0, 2).map((group, index) => {
-                  const drillCard: LearnerSurfaceCardModel = {
-                    kind: 'navigation',
-                    sourceType: 'backend_summary',
-                    accent: index === 0 ? 'amber' : 'rose',
-                    eyebrow: 'Drill Group',
-                    eyebrowIcon: index === 0 ? Volume2 : Heart,
-                    title: group.title,
-                    description: 'Open a focused support path, then return to the next role play with one weaker behavior already tightened.',
-                    metaItems: [
-                      { icon: FileText, label: (() => { const count = (group.items ?? []).length || 1; return `${count} ${count === 1 ? 'exercise' : 'exercises'}`; })() },
-                      { icon: Volume2, label: 'Speaking support' },
-                    ],
-                    primaryAction: {
-                      label: 'Open Drill Group',
-                      href: group.items?.[0]?.route ?? '/speaking/selection',
-                    },
-                  };
-
-                  return <LearnerSurfaceCard key={group.id ?? group.title} card={drillCard} />;
-                })}
-              </div>
-            </section>
-
-            {supportEntries.length > 0 ? (
-              <section>
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Support Paths"
-                  title="Use the right speaking support for the job"
-                  description="Interactive AI practice, pronunciation training, and private tutoring are available in their own dedicated sections."
-                  className="mb-4"
-                />
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {supportEntries.map((entry) => (
-                    <Link
-                      key={entry.id}
-                      href={entry.route}
-                      className="rounded-2xl border border-border/80 bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:bg-primary/5"
-                    >
-                      <p className="text-sm font-bold text-navy">{entry.title}</p>
-                      <p className="mt-2 text-xs leading-relaxed text-muted">{entry.description}</p>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-          </div>
-
-          <div className="space-y-5 lg:col-span-4">
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow="Evidence"
-                title="Recent Speaking Evidence"
-                description="Review your latest attempts to decide your next step: another role play, a focused drill, or tutor feedback."
-                action={<Link href="/submissions" className="text-sm font-bold text-primary hover:underline">View Full History</Link>}
-                className="mb-4"
-              />
-
-              {evidenceItems.length === 0 ? (
-                <LearnerEmptyState
-                  compact
-                  icon={Mic}
-                  title="No speaking attempts yet"
-                  description="Start a role play to build the first piece of speaking evidence."
-                  primaryAction={{ label: 'Open Speaking Library', href: '/speaking/selection' }}
-                  secondaryAction={{ label: 'Start AI Conversation', href: '/conversation' }}
-                />
-              ) : (
-                <Card className="p-5">
-                  <div className="space-y-3">
-                    {evidenceItems.map((sub) => {
-                      const parsedAttemptDate = new Date(sub.attemptDate);
-                      const attemptDateLabel = Number.isNaN(parsedAttemptDate.getTime())
-                        ? sub.attemptDate
-                        : evidenceDateFormatter.format(parsedAttemptDate);
-                      const evidenceLabel = sub.scoreEstimate?.trim() || (sub.reviewStatus === 'reviewed' ? 'Reviewed' : 'In progress');
-
-                      return (
-                        <Link
-                          key={sub.id}
-                          href={`/speaking/results/${sub.evaluationId ?? sub.id}`}
-                           className="block rounded-2xl border border-border px-4 py-3 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:bg-background-light"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <h3 className="truncate text-sm font-bold text-navy">{sub.taskName}</h3>
-                              <p className="mt-1 text-xs text-muted">{attemptDateLabel}</p>
-                            </div>
-                            <Badge variant="muted" size="sm" className="shrink-0">
-                              {evidenceLabel}
-                            </Badge>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </Card>
-              )}
-            </section>
-          </div>
-        </div>
-
-        {/* Recent Mock Reports — cross-module evidence parity with Writing / Reading / Listening. */}
-        <MotionSection delayIndex={3}>
+        {/* Practice speaking cards available on the platform (AI Assessment). */}
+        <section>
           <LearnerSurfaceSectionHeader
-            eyebrow="Recent Mock Reports"
-            title="Track speaking impact inside full mocks"
-            description="See whether your role-play and drill gains hold up under real exam pressure."
-            action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
+            eyebrow="AI Assessment"
+            title="Practise any speaking card on the platform"
+            description="Each role play is marked by AI against the OET Speaking criteria. Pick a card to start, or open the full library."
+            action={<Link href="/speaking/selection" className="text-sm font-bold text-primary hover:underline">View Full Library</Link>}
             className="mb-4"
           />
-          {mockReports.length > 0 ? (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {mockReports.slice(0, 2).map((report, index) => (
-                <MotionItem key={report.id} delayIndex={index}>
-                  <LearnerSurfaceCard card={{
-                    kind: 'evidence',
-                    sourceType: 'backend_summary',
-                    accent: 'slate',
-                    eyebrow: 'Mock Evidence',
-                    eyebrowIcon: FileText,
-                    title: report.title,
-                    description: report.summary,
-                    metaItems: [
-                      { icon: Clock, label: report.date },
-                      { icon: Award, label: report.overallScore },
-                    ],
-                    primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}` },
-                  }} />
-                </MotionItem>
-              ))}
-            </div>
-          ) : (
+
+          {practiceCards.length === 0 ? (
             <LearnerEmptyState
               compact
-              icon={Award}
-              title="No speaking mock evidence yet"
-              description="Complete a mock to see whether your speaking gains transfer under full exam pressure."
-              primaryAction={{ label: 'Open Mock Center', href: '/mocks' }}
-              secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+              icon={Mic}
+              title="No practice cards yet"
+              description="Browse the full library to find speaking role plays once they are available on the platform."
+              primaryAction={{ label: 'Open Speaking Library', href: '/speaking/selection' }}
             />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {practiceCards.map((task, index) => {
+                const taskId = task.id;
+                const durationLabel = createLearnerMetaLabel(task.duration, '20 mins');
+                const scenarioLabel = createLearnerMetaLabel(task.scenarioType || task.profession, 'Speaking scenario');
+                const focusLabel = createLearnerMetaLabel(task.criteriaFocus, 'speaking control');
+                const isRecommended = index === 0 && recommended?.id === taskId;
+
+                return (
+                  <MotionItem key={taskId} delayIndex={index}>
+                    <Card className="border-border/70">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <Mic className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="muted" size="sm">Speaking</Badge>
+                              {isRecommended ? (
+                                <Badge variant="success" size="sm">Recommended</Badge>
+                              ) : null}
+                              {task.difficulty ? (
+                                <Badge
+                                  variant={String(task.difficulty).toLowerCase() === 'hard' ? 'danger' : String(task.difficulty).toLowerCase() === 'medium' ? 'warning' : 'success'}
+                                  size="sm"
+                                >
+                                  {task.difficulty}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <h3 className="mt-2 text-base font-bold text-navy">{task.title}</h3>
+                            <p className="mt-1 text-sm text-muted">Focus: {focusLabel}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                              <span>{scenarioLabel}</span>
+                              <span>{durationLabel}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Link
+                          href={`/speaking/check?taskId=${taskId}`}
+                          className={primaryLinkClasses}
+                          onClick={() => {
+                            analytics.track('task_started', { taskId, subtest: 'speaking' });
+                          }}
+                        >
+                          Start Role Play
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </div>
+                    </Card>
+                  </MotionItem>
+                );
+              })}
+            </div>
           )}
-        </MotionSection>
+        </section>
       </div>
     </LearnerDashboardShell>
   );

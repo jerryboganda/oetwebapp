@@ -156,13 +156,28 @@ describe('Speaking page', () => {
     mockLearnerListSpeakingSharedResources.mockResolvedValue([]);
   });
 
-  it('shows dashboard-style speaking focus and readable speaking evidence dates', async () => {
+  it('shows only the AI exam, tutor booking, and practice cards (everything else removed)', async () => {
     render(<SpeakingPage />);
 
-    expect(await screen.findByText('Keep the next speaking move and recent evidence in view')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
-    expect(screen.getByText('Recent Speaking Evidence')).toBeInTheDocument();
-    expect(screen.getByText(/Mar\s+24,\s+2026/i)).toBeInTheDocument();
-    expect(screen.queryByText('2026-03-24T18:03:24.830217+00:00')).not.toBeInTheDocument();
+    // The three surfaces the owner wants kept.
+    expect(await screen.findByText('Get assessed by AI or book a live tutor')).toBeInTheDocument();
+    expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
+    expect(screen.getByText('Book a Tutor')).toBeInTheDocument();
+    expect(screen.getByText('Practise any speaking card on the platform')).toBeInTheDocument();
+    expect(screen.getByText('Patient Handover - Post-Op Recovery')).toBeInTheDocument();
+
+    // Everything else must be gone.
+    expect(screen.queryByText('Recent Speaking Evidence')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recent Mock Reports')).not.toBeInTheDocument();
+    expect(screen.queryByText('Drill Groups')).not.toBeInTheDocument();
+    expect(screen.queryByText('Open Speaking Rules')).not.toBeInTheDocument();
+    expect(screen.queryByText('Breaking Bad News')).not.toBeInTheDocument();
+  });
+
+  it('links Book a Tutor to the private-speaking booking page', async () => {
+    render(<SpeakingPage />);
+
+    const tutorLink = (await screen.findByText('Book a Tutor')).closest('a');
+    expect(tutorLink).toHaveAttribute('href', '/private-speaking');
   });
 });
