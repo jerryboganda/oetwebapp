@@ -18861,6 +18861,32 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int?>("DataRetentionSweepIntervalHours")
                         .HasColumnType("integer");
 
+                    b.Property<string>("EasyKashApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("EasyKashApiKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EasyKashCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("EasyKashCurrencyMode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("EasyKashHmacSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EasyKashPaymentOptionsCsv")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("EasyKashSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<int?>("ExpertAutoAssignmentBatchSize")
                         .HasColumnType("integer");
 

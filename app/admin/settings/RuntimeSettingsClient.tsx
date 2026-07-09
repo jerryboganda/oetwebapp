@@ -213,6 +213,17 @@ export interface PaymobSettings {
   isConfigured?: boolean | null;
 }
 
+export interface EasyKashSettings {
+  apiBaseUrl: string;
+  apiKey: string;
+  hmacSecret: string;
+  paymentOptionsCsv: string;
+  currencyMode: string;
+  successUrl: string;
+  cancelUrl: string;
+  isConfigured?: boolean | null;
+}
+
 export interface PayTabsSettings {
   apiBaseUrl: string;
   serverKey: string;
@@ -421,6 +432,7 @@ export interface RuntimeSettingsResponse {
   bunnyStream: BunnyStreamSettings;
   paymob: PaymobSettings;
   payTabs: PayTabsSettings;
+  easyKash: EasyKashSettings;
   soketi: SoketiSettings;
   dataRetention: DataRetentionSettings;
   expertAutoAssignment: ExpertAutoAssignmentSettings;
@@ -450,7 +462,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush';
+type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush';
 
 // The object-valued payload keys (every UI section maps to one of these; the "paypal"
 // UI section writes into "billing"). Excludes the scalar audit fields so updateField can
@@ -467,7 +479,9 @@ interface FieldDef<TSection> {
   label: string;
   hint?: string;
   secret?: boolean;
-  type?: 'text' | 'number' | 'url' | 'checkbox';
+  type?: 'text' | 'number' | 'url' | 'checkbox' | 'select';
+  /** Options for a 'select' field. */
+  options?: { value: string; label: string }[];
   placeholder?: string;
 }
 
@@ -649,6 +663,25 @@ const PAYMOB_FIELDS: FieldDef<PaymobSettings>[] = [
   { key: 'integrationIdsJson', label: 'Integration IDs (JSON)', hint: 'Method→id map, e.g. {"card":123,"fawry":456}.' },
   { key: 'iframeId', label: 'Iframe ID', type: 'number', hint: 'Hosted iframe id for the redirect URL.' },
   { key: 'successUrl', label: 'Success URL', type: 'url' },
+  { key: 'cancelUrl', label: 'Cancel URL', type: 'url' },
+];
+
+const EASYKASH_FIELDS: FieldDef<EasyKashSettings>[] = [
+  { key: 'apiBaseUrl', label: 'API Base URL', type: 'url', hint: 'Default: https://back.easykash.net.' },
+  { key: 'apiKey', label: 'API Key', secret: true, hint: 'EasyKash API key — sent in the authorization header (from EasyKash Integration Settings).' },
+  { key: 'hmacSecret', label: 'HMAC Secret', secret: true, hint: 'Verifies the SHA-512 callback signature. EasyKash generates it after you save the Callback URL + payment methods in their dashboard.' },
+  {
+    key: 'currencyMode',
+    label: 'Currency Mode',
+    type: 'select',
+    options: [
+      { value: 'passthrough', label: 'Charge quote currency (e.g. GBP)' },
+      { value: 'egp', label: 'Convert to EGP' },
+    ],
+    hint: 'Passthrough charges the displayed price as-is; EGP converts via the live FX rate (unlocks Fawry / wallets / instalments on the EasyKash page).',
+  },
+  { key: 'paymentOptionsCsv', label: 'Payment Method IDs (CSV)', hint: 'Optional, e.g. "2,4,5" (2=card, 4=wallet, 5=Fawry). Empty = all methods enabled in the EasyKash dashboard.' },
+  { key: 'successUrl', label: 'Success URL', type: 'url', hint: 'Optional buyer-return URL override.' },
   { key: 'cancelUrl', label: 'Cancel URL', type: 'url' },
 ];
 
@@ -859,6 +892,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'checkoutCom', title: 'Payments: Checkout.com', description: 'Premium MENA + global cards (3DS2, Apple/Google Pay, mada). Keys override env config; webhook verification uses the same key.' },
   { id: 'bunnyStream', title: 'Video Library: Bunny Stream', description: 'Bunny Stream hosting for the Video Library — library credentials, CDN token-auth key, webhook secret, and the app-only playback attestation keys. Test does a non-destructive Bunny API probe. Videos play only in the desktop/mobile apps; leave disabled to keep the whole feature dormant.' },
   { id: 'paymob', title: 'Payments: Paymob', description: 'Egypt — cards, Meeza, Fawry, wallets. Keys override env config; webhook verification uses the same HMAC secret.' },
+  { id: 'easyKash', title: 'Payments: EasyKash', description: 'Egypt hosted Direct-Pay — cards, wallets, Fawry, instalments. Appears at checkout (under Pay globally, below PayPal) only once BOTH the API key and HMAC secret are set. Set the EasyKash dashboard Callback URL to /v1/payment/webhooks/easykash. Currency mode toggles GBP passthrough vs FX-convert to EGP.' },
   { id: 'payTabs', title: 'Payments: PayTabs', description: 'Gulf + Egypt — cards, mada, KNET, Apple Pay. Keys override env config; webhook verification uses the same key.' },
   { id: 'soketi', title: 'Realtime: Soketi', description: 'Server-side websocket push. The browser client key comes from NEXT_PUBLIC_* env — changes here affect server dispatch only.' },
   { id: 'dataRetention', title: 'Data Retention', description: 'Retention windows for high-volume event tables (analytics, audit, payment webhooks, notification attempts) and the sweeper cadence.' },
@@ -1043,6 +1077,16 @@ function emptyResponse(): RuntimeSettingsResponse {
       hmacSecret: '',
       integrationIdsJson: '',
       iframeId: null,
+      successUrl: '',
+      cancelUrl: '',
+      isConfigured: false,
+    },
+    easyKash: {
+      apiBaseUrl: '',
+      apiKey: '',
+      hmacSecret: '',
+      paymentOptionsCsv: '',
+      currencyMode: 'passthrough',
       successUrl: '',
       cancelUrl: '',
       isConfigured: false,
@@ -1253,6 +1297,7 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     },
     paymob: { ...empty.paymob, ...data.paymob },
     payTabs: { ...empty.payTabs, ...data.payTabs },
+    easyKash: { ...empty.easyKash, ...data.easyKash },
     soketi: { ...empty.soketi, ...data.soketi },
     dataRetention: { ...empty.dataRetention, ...data.dataRetention },
     expertAutoAssignment: { ...empty.expertAutoAssignment, ...data.expertAutoAssignment },
@@ -1344,6 +1389,11 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       ...data.paymob,
       apiKey: maskUnexpectedSecret(data.paymob.apiKey),
       hmacSecret: maskUnexpectedSecret(data.paymob.hmacSecret),
+    },
+    easyKash: {
+      ...data.easyKash,
+      apiKey: maskUnexpectedSecret(data.easyKash.apiKey),
+      hmacSecret: maskUnexpectedSecret(data.easyKash.hmacSecret),
     },
     payTabs: {
       ...data.payTabs,
@@ -1485,14 +1535,37 @@ function SecretField({ label, hint, serverValue, draftValue, onChange }: SecretF
 interface PlainFieldProps {
   label: string;
   hint?: string;
-  type?: 'text' | 'number' | 'url' | 'checkbox';
+  type?: 'text' | 'number' | 'url' | 'checkbox' | 'select';
+  options?: { value: string; label: string }[];
   value: string | number | boolean | null | undefined;
   onChange: (next: string | boolean) => void;
 }
 
-function PlainField({ label, hint, type = 'text', value, onChange }: PlainFieldProps) {
+function PlainField({ label, hint, type = 'text', options, value, onChange }: PlainFieldProps) {
   const reactId = useId();
   const inputId = `plain-${reactId}`;
+  if (type === 'select') {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-admin-fg-strong">
+          {label}
+        </label>
+        <select
+          id={inputId}
+          value={value === null || value === undefined ? '' : String(value)}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-3 text-sm text-admin-fg-default shadow-sm transition-[border-color,box-shadow] focus:border-[var(--admin-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
+        >
+          {(options ?? []).map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {hint ? <p className="text-xs leading-5 text-admin-fg-muted">{hint}</p> : null}
+      </div>
+    );
+  }
   if (type === 'checkbox') {
     return (
       <div className="flex flex-col gap-1.5">
@@ -1681,6 +1754,7 @@ export function RuntimeSettingsClient() {
     bunnyStream: false,
     paymob: false,
     payTabs: false,
+    easyKash: false,
     soketi: false,
     dataRetention: false,
     expertAutoAssignment: false,
@@ -2350,6 +2424,40 @@ export function RuntimeSettingsClient() {
                       onChange={(next) =>
                         updateField(
                           'paymob',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'easyKash' &&
+                EASYKASH_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.easyKash[field.key] ?? '')}
+                      draftValue={String(draft.easyKash[field.key] ?? '')}
+                      onChange={(next) => updateField('easyKash', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      options={field.options}
+                      value={draft.easyKash[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'easyKash',
                           field.key,
                           (field.type === 'number'
                             ? parseNullableNumberInput(String(next))

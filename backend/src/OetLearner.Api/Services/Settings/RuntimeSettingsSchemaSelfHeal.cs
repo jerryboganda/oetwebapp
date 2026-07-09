@@ -56,6 +56,14 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PayTabsWebhookSecretE
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PayTabsSuccessUrl"" character varying(1024);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PayTabsCancelUrl"" character varying(1024);
 
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashHmacSecretEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashPaymentOptionsCsv"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashCurrencyMode"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashSuccessUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""EasyKashCancelUrl"" character varying(1024);
+
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiHost"" character varying(256);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiPort"" integer;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiAppId"" character varying(128);

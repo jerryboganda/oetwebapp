@@ -9101,6 +9101,9 @@ public partial class LearnerService(
     public Task<object> HandlePayTabsWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
         => HandlePaymentWebhookAsync("paytabs", payload, headers, ct);
 
+    public Task<object> HandleEasyKashWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync("easykash", payload, headers, ct);
+
     public static bool IsRejectedWebhookOutcome(object outcome)
         => outcome.GetType().GetProperty("received")?.GetValue(outcome) is false;
 

@@ -366,6 +366,7 @@ public static class LearnerEndpoints
             {
                 ("stripe", "Credit or debit card", "credit-card", "redirect", stripeOk),
                 ("paypal", "PayPal", "paypal", "embedded", paypalOk),
+                ("easykash", "EasyKash", "wallet", "redirect", effective.EasyKash.IsConfigured),
                 ("checkoutcom", "Card (Checkout.com)", "credit-card", "redirect", effective.CheckoutCom.IsConfigured),
                 ("paymob", "Paymob (cards & wallets)", "wallet", "redirect", effective.Paymob.IsConfigured),
                 ("paytabs", "PayTabs", "credit-card", "redirect", effective.PayTabs.IsConfigured),
@@ -460,6 +461,63 @@ public static class LearnerEndpoints
             HandleGatewayWebhook(http, service.HandlePaymobWebhookAsync, ct));
         webhooks.MapPost("/paytabs", (HttpContext http, LearnerService service, CancellationToken ct) =>
             HandleGatewayWebhook(http, service.HandlePayTabsWebhookAsync, ct));
+
+        // EasyKash callback. Unlike the other gateways, EasyKash's server-to-server
+        // callback is delivered as a GET (fields as query params) per EasyKash's
+        // integration guidance — but we also accept POST (JSON or form) defensively.
+        // Either way we normalise the EasyKash fields into a canonical JSON object
+        // and run the same verify → idempotent-fulfil contract.
+        async Task<IResult> HandleEasyKashCallback(HttpContext http, LearnerService service, CancellationToken ct)
+        {
+            var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var kv in http.Request.Query)
+            {
+                fields[kv.Key] = kv.Value.ToString();
+            }
+
+            if (HttpMethods.IsPost(http.Request.Method))
+            {
+                if (http.Request.HasFormContentType)
+                {
+                    var form = await http.Request.ReadFormAsync(ct);
+                    foreach (var kv in form) fields[kv.Key] = kv.Value.ToString();
+                }
+                else
+                {
+                    var body = await new StreamReader(http.Request.Body).ReadToEndAsync(ct);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        try
+                        {
+                            using var bodyDoc = JsonDocument.Parse(body);
+                            if (bodyDoc.RootElement.ValueKind == JsonValueKind.Object)
+                            {
+                                foreach (var p in bodyDoc.RootElement.EnumerateObject())
+                                {
+                                    fields[p.Name] = p.Value.ValueKind == JsonValueKind.String
+                                        ? p.Value.GetString() ?? string.Empty
+                                        : p.Value.GetRawText();
+                                }
+                            }
+                        }
+                        catch (JsonException) { /* keep whatever the query string provided */ }
+                    }
+                }
+            }
+
+            var payloadJson = JsonSerializer.Serialize(fields);
+            var headers = http.Request.Headers.ToDictionary(
+                header => header.Key,
+                header => header.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase);
+            var outcome = await service.HandleEasyKashWebhookAsync(payloadJson, headers, ct);
+            return LearnerService.IsRejectedWebhookOutcome(outcome)
+                ? Results.StatusCode(StatusCodes.Status400BadRequest)
+                : Results.Ok(outcome);
+        }
+
+        webhooks.MapMethods("/easykash", new[] { "GET", "POST" }, (HttpContext http, LearnerService service, CancellationToken ct)
+            => HandleEasyKashCallback(http, service, ct));
 
         // Exam family reference
         v1.MapGet("/reference/exam-families", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetExamFamiliesAsync(ct)));

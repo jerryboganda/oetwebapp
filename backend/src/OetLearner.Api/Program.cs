@@ -951,6 +951,7 @@ builder.Services.AddHttpClient<PayPalGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PayTabsGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PaymobGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.EasyKashGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<IPaymentGatewayProvider>(sp => sp.GetRequiredService<PaymentGatewayService>());
 // Phase 1-10 international expansion services.

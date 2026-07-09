@@ -1117,7 +1117,8 @@ public sealed class PaymentGatewayService : IPaymentGatewayProvider
         PayPalGateway paypal,
         OetLearner.Api.Services.Billing.Gateways.PayTabsGateway payTabs,
         OetLearner.Api.Services.Billing.Gateways.PaymobGateway paymob,
-        OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway checkoutCom)
+        OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway checkoutCom,
+        OetLearner.Api.Services.Billing.Gateways.EasyKashGateway easyKash)
     {
         _gateways = new Dictionary<string, IPaymentGateway>(StringComparer.OrdinalIgnoreCase)
         {
@@ -1126,6 +1127,7 @@ public sealed class PaymentGatewayService : IPaymentGatewayProvider
             ["paytabs"] = payTabs,
             ["paymob"] = paymob,
             ["checkoutcom"] = checkoutCom,
+            ["easykash"] = easyKash,
         };
     }
 
