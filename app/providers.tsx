@@ -14,6 +14,7 @@ import { TourProvider } from '@/components/onboarding/tour-provider';
 import { LearnerPasteGuard } from '@/components/system/LearnerPasteGuard';
 import { ShellControls } from '@/components/shell/ShellControls';
 import { ForcedUpdateOverlay } from '@/components/shell/ForcedUpdateOverlay';
+import { DesktopAutoUpdater } from '@/components/shell/DesktopAutoUpdater';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
 
@@ -110,6 +111,7 @@ export function AppProviders({
                 inherit Theme + Tooltip context.
               */}
               <ShellControls />
+              <DesktopAutoUpdater />
               <ForcedUpdateOverlay />
               {/*
                 Global sonner toaster — rendered once at the root so any

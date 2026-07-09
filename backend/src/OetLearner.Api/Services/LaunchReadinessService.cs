@@ -94,13 +94,26 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
     {
         var row = await GetOrCreateAsync(ct);
         var normalized = string.IsNullOrWhiteSpace(platform) ? "mobile" : platform.Trim().ToLowerInvariant();
-        return normalized switch
+        var policy = normalized switch
         {
-            "ios" => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.IosAppStoreUrl, null, null),
+            "ios" => new PublicAppReleaseSettingsResponse(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.IosAppStoreUrl, null, null),
             "android" => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, row.AndroidPlayStoreUrl, null, null),
             "desktop" or "windows" or "mac" or "macos" or "linux" => new(normalized, row.DesktopMinSupportedVersion, row.DesktopLatestVersion, row.DesktopForceUpdate, null, row.DesktopUpdateFeedUrl, row.DesktopUpdateChannel),
             _ => new(normalized, row.MobileMinSupportedVersion, row.MobileLatestVersion, row.MobileForceUpdate, null, null, null),
         };
+
+        // The forced-update gate is OFF by default. While off, NEVER report a
+        // minimum floor or a forced flag to clients — otherwise the client-side
+        // overlay would block anyone below the (default 1.0.0) minimum even
+        // though enforcement is disabled. The app still auto-updates on its own;
+        // the min-version / force values only reach clients once an admin
+        // explicitly enables the gate. This keeps "gate off" genuinely inert.
+        if (!row.EnforceClientVersionGate)
+        {
+            policy = policy with { MinVersion = "0.0.0", ForceUpdate = false };
+        }
+
+        return policy;
     }
 
     public async Task<ClientGateDecision> EvaluateClientAsync(string? platform, string? clientVersion, CancellationToken ct)

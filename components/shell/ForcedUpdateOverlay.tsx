@@ -26,6 +26,9 @@ export function ForcedUpdateOverlay() {
   const { blocked } = useAppVersionGate();
   const [runtime] = useState(() => (typeof window === 'undefined' ? 'web' : getAppRuntimeKind()));
   const [state, setState] = useState<UpdateState>({ phase: 'idle' });
+  // Safety valve: if the required update can't be obtained (already on the newest
+  // build), the user may continue — you can't force a version that doesn't exist.
+  const [dismissed, setDismissed] = useState(false);
   const startedRef = useRef(false);
   const unsubRef = useRef<(() => void) | undefined>(undefined);
 
@@ -49,7 +52,7 @@ export function ForcedUpdateOverlay() {
     };
   }, [blocked, runtime, startDesktopInstall]);
 
-  if (!blocked) return null;
+  if (!blocked || dismissed) return null;
 
   return (
     <div
@@ -92,6 +95,19 @@ export function ForcedUpdateOverlay() {
     }
 
     if (state.phase === 'error') {
+      // No newer build exists to update to — don't trap the user in a retry loop.
+      const noUpdate = (state.error ?? '').toLowerCase().includes('no update');
+      if (noUpdate) {
+        return (
+          <Panel
+            icon={<CheckCircle2 className="h-9 w-9 text-emerald-500" />}
+            title="You're on the latest version"
+            subtitle="A newer version isn't available yet, so there's nothing to install. You can keep using the app."
+          >
+            <Button variant="primary" fullWidth onClick={() => setDismissed(true)}>Continue</Button>
+          </Panel>
+        );
+      }
       return (
         <Panel icon={<AlertTriangle className="h-9 w-9 text-danger" />} title="Update failed" subtitle={state.error}>
           <Button
