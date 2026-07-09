@@ -32,7 +32,7 @@ public static class RecallsEndpoints
             IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetQueueAsync(
-                http.UserId(), limit, await http.IsPremiumAsync(entitlements, ct), ct)));
+                http.UserId(), limit, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
         recalls.MapPost("/star", async (
             HttpContext http,
@@ -40,7 +40,7 @@ public static class RecallsEndpoints
             IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
             Results.Ok(await svc.StarAsync(
-                http.UserId(), request, await http.IsPremiumAsync(entitlements, ct), ct)));
+                http.UserId(), request, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
         recalls.MapGet("/audio/{termId}", async (
             HttpContext http,
@@ -89,7 +89,7 @@ public static class RecallsEndpoints
             IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetLibraryAsync(
-                http.UserId(), bucket, topic, await http.IsPremiumAsync(entitlements, ct), ct)));
+                http.UserId(), bucket, topic, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
         recalls.MapGet("/report/week", async (
             HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
@@ -179,6 +179,20 @@ public static class RecallsEndpoints
         }).WithAdminWrite("AdminAiConfig");
 
         return app;
+    }
+
+    /// <summary>
+    /// Authoritative premium check for content scoping: admins and learners with an
+    /// eligible, non-frozen subscription are "premium" (see full content); everyone
+    /// else is scoped to free-preview terms. Mirrors the audio endpoint's own gate.
+    /// (VocabularyEndpoints' IsPremiumAsync is file-scoped, hence this local twin.)
+    /// </summary>
+    static async Task<bool> ResolveIsPremiumAsync(
+        HttpContext http, IEffectiveEntitlementResolver entitlements, CancellationToken ct)
+    {
+        if (http.User.IsInRole("admin")) return true;
+        var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
+        return snapshot.HasEligibleSubscription && !snapshot.IsFrozen;
     }
 
     /// <summary>
