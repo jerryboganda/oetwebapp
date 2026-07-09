@@ -21,7 +21,10 @@ public static class VocabularyEndpoints
             [FromQuery] string? profession,
             [FromQuery] string? search,
             [FromQuery] string? recallSet,
-            [FromQuery] bool freePreviewOnly,
+            // Nullable on purpose: a non-nullable value-type query param is REQUIRED
+            // in minimal APIs (missing → 400). Callers omit this unless the "Free
+            // Preview Recalls" filter is active, so it must be optional. Null → false.
+            [FromQuery] bool? freePreviewOnly,
             [FromQuery] int page,
             [FromQuery] int pageSize,
             VocabularyService svc,
@@ -35,7 +38,7 @@ public static class VocabularyEndpoints
                 ct,
                 recallSet,
                 await http.IsPremiumAsync(entitlements, ct),
-                freePreviewOnly)));
+                freePreviewOnly == true)));
 
         // Recall-set registry (year/source dimension). Public to authenticated
         // learners so the browse + recalls UI can render filter chips.
