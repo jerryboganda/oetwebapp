@@ -124,6 +124,13 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- Brand assets rendered into generated PDFs (invoice header logo). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\oet-with-dr-hesham-logo.png">
+      <LogicalName>OetBrand\oet-with-dr-hesham-logo.png</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <!--
     Recalls Content Pack v1 (2026-05-05). Versioned vocabulary JSON files loaded
     by RecallsContentSeeder at boot. Copied to publish output so the seeder finds

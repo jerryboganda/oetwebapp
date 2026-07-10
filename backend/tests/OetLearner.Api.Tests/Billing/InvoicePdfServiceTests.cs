@@ -38,7 +38,17 @@ public sealed class InvoicePdfServiceTests
     public void Generate_FilenameUsesInvoiceNumberAndPdfExtension()
     {
         var artifact = new InvoicePdfService().Generate(SampleModel());
-        Assert.Equal("INV-0042.pdf", artifact.Filename);
+        Assert.Equal("INV-00042.pdf", artifact.Filename);
+    }
+
+    [Fact]
+    public void BrandLogo_IsEmbeddedInApiAssembly()
+    {
+        // The invoice header renders the brand logo from an embedded resource; a
+        // missing resource silently degrades to the text wordmark, so guard the
+        // csproj wiring here.
+        var names = typeof(InvoicePdfService).Assembly.GetManifestResourceNames();
+        Assert.Contains(names, n => n.EndsWith("oet-with-dr-hesham-logo.png", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
