@@ -14,6 +14,14 @@ public interface IAiPackageCreditService
     Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct);
 
     /// <summary>
+    /// Consume <paramref name="quantity"/> grading credits in one atomic,
+    /// all-or-nothing debit (dedicated subtest pool first, then flexible).
+    /// Used where a single exam costs more than one credit — e.g. a Writing
+    /// exam costs <see cref="AiGradingCreditCost.WritingExam"/>.
+    /// </summary>
+    Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, int quantity, CancellationToken ct);
+
+    /// <summary>
     /// Read-only mirror of <see cref="DeductGradingCreditAsync"/> — reports
     /// whether a grading debit would succeed right now, without consuming a
     /// credit or writing a ledger transaction. Used to gate entry into an
@@ -21,6 +29,12 @@ public interface IAiPackageCreditService
     /// still consumed once, at submit, via <see cref="DeductGradingCreditAsync"/>.
     /// </summary>
     Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct);
+
+    /// <summary>
+    /// Read-only mirror that verifies at least <paramref name="quantity"/>
+    /// grading credits are available (used to gate multi-credit exams at start).
+    /// </summary>
+    Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, int quantity, CancellationToken ct);
     Task<AiPackageDebitResult> DeductObjectivePracticeAsync(string userId, string subtest, string referenceId, CancellationToken ct);
     Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct);
     Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct);
@@ -139,8 +153,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         return await ProjectSnapshotAsync(userId, 20, ct);
     }
 
-    public async Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
+    public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
+        => DeductGradingCreditAsync(userId, subtest, referenceId, 1, ct);
+
+    public async Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, int quantity, CancellationToken ct)
     {
+        quantity = Math.Max(1, quantity);
         var normalized = NormalizeSubtest(subtest);
         if (normalized is not ("writing" or "speaking"))
         {
@@ -165,28 +183,35 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
         }
 
-        var writingDelta = 0;
-        var speakingDelta = 0;
-        var flexibleDelta = 0;
-        if (normalized == "writing" && account.WritingOnlyCredits > 0)
-        {
-            account.WritingOnlyCredits--;
-            writingDelta = -1;
-        }
-        else if (normalized == "speaking" && account.SpeakingOnlyCredits > 0)
-        {
-            account.SpeakingOnlyCredits--;
-            speakingDelta = -1;
-        }
-        else if (account.FlexibleCredits > 0)
-        {
-            account.FlexibleCredits--;
-            flexibleDelta = -1;
-        }
-        else
+        // The dedicated subtest pool (Writing-only / Speaking-only) is drawn
+        // down first, then the flexible pool covers the remainder. All-or-
+        // nothing: if the combined balance cannot fund the full quantity we
+        // debit nothing and report insufficient credits, so a multi-credit
+        // exam (e.g. a 2-credit Writing letter) never leaves a learner
+        // half-charged. Debiting quantity units in one ledger row keeps the
+        // charge atomic and refundable in a single RefundAsync call.
+        var dedicated = normalized == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
+        if (dedicated + account.FlexibleCredits < quantity)
         {
             return new(false, "no_ai_package_credits", NoCreditsMessage, null);
         }
+
+        var fromDedicated = Math.Min(dedicated, quantity);
+        var fromFlexible = quantity - fromDedicated;
+        var writingDelta = 0;
+        var speakingDelta = 0;
+        if (normalized == "writing")
+        {
+            account.WritingOnlyCredits -= fromDedicated;
+            writingDelta = -fromDedicated;
+        }
+        else
+        {
+            account.SpeakingOnlyCredits -= fromDedicated;
+            speakingDelta = -fromDedicated;
+        }
+        account.FlexibleCredits -= fromFlexible;
+        var flexibleDelta = -fromFlexible;
 
         account.UpdatedAt = DateTimeOffset.UtcNow;
         AddTransaction(account, new AiPackageCreditTransaction
@@ -199,7 +224,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             Reason = AiPackageCreditReason.GradingDeduct,
             ReferenceId = referenceId,
             JobId = referenceId,
-            Description = $"{normalized} AI grading credit deducted",
+            Description = quantity == 1
+                ? $"{normalized} AI grading credit deducted"
+                : $"{normalized} AI grading credits deducted ({quantity})",
             CreatedAt = DateTimeOffset.UtcNow
         });
 
@@ -208,8 +235,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         return new(true, null, null, referenceId);
     }
 
-    public async Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
+    public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
+        => CheckGradingCreditAsync(userId, subtest, 1, ct);
+
+    public async Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, int quantity, CancellationToken ct)
     {
+        quantity = Math.Max(1, quantity);
         var normalized = NormalizeSubtest(subtest);
         if (normalized is not ("writing" or "speaking"))
         {
@@ -230,9 +261,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
         }
 
-        var hasCredit = (normalized == "writing" && account.WritingOnlyCredits > 0)
-            || (normalized == "speaking" && account.SpeakingOnlyCredits > 0)
-            || account.FlexibleCredits > 0;
+        // Mirror DeductGradingCreditAsync's pool sizing so the start-of-exam
+        // gate blocks a learner who cannot cover the full quantity (e.g. a
+        // 2-credit Writing exam) rather than letting them start and fail at
+        // submit.
+        var dedicated = normalized == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
+        var hasCredit = dedicated + account.FlexibleCredits >= quantity;
 
         return hasCredit
             ? new(true, null, null, null)

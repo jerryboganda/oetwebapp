@@ -68,7 +68,11 @@ public static class WritingScenarioEndpoints
             IAiPackageCreditService aiPackageCreditService,
             CancellationToken ct) =>
         {
-            var result = await aiPackageCreditService.CheckGradingCreditAsync(http.WritingV2UserId(), "writing", ct);
+            // A Writing exam costs two credits (AiGradingCreditCost.WritingExam),
+            // so the start gate must confirm both are available — otherwise a
+            // learner with exactly one credit passes here and fails at submit.
+            var result = await aiPackageCreditService.CheckGradingCreditAsync(
+                http.WritingV2UserId(), "writing", AiGradingCreditCost.WritingExam, ct);
             result.EnsureDebited();
             return Results.NoContent();
         })
