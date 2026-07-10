@@ -16,6 +16,7 @@ export { ReviewRequestDrawer } from './review-request-drawer';
 export { AudioPlayerWaveform } from './audio-player-waveform';
 export { RulebookFindingsPanel } from './rulebook-findings-panel';
 export { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from './learner-surface';
+export { CreditUsageInfoCard } from './credit-usage-info-card';
 export { AchievementToast } from './achievement-toast';
 export { ExamTypeBadge } from './exam-type-badge';
 export { OetStatementOfResultsCard, type OetStatementOfResults, type OetStatementOfResultsProps } from './OetStatementOfResultsCard';

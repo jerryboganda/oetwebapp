@@ -15,7 +15,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { InlineAlert } from '@/components/ui/alert';
@@ -239,6 +239,8 @@ export default function ListeningHome() {
               Practice by Part, or attempt the full exam
             </h2>
           </div>
+
+          <CreditUsageInfoCard module="listening" className="mb-4" />
 
           <ul
             className="grid grid-cols-1 gap-4 sm:grid-cols-2"

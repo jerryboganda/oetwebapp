@@ -27,7 +27,7 @@ import {
 } from '@/lib/reading-authoring-api';
 import { listMyReadingAssignments, type ReadingAssignmentDto } from '@/lib/reading-tutor-api';
 import { readErrorMessage } from '@/lib/read-error-message';
-import { LearnerPageHero } from '@/components/domain';
+import { CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { useReadingProfile } from '@/hooks/useReadingProfile';
@@ -220,6 +220,8 @@ export default function ReadingHome() {
               Practice by Part, or attempt the full exam
             </h2>
           </div>
+
+          <CreditUsageInfoCard module="reading" className="mb-4" />
 
           {loading ? (
             <LearnerSkeleton variant="card-grid" />
