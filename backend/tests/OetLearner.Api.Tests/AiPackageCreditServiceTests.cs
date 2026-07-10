@@ -106,6 +106,82 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
+    public async Task WritingExam_DeductsTwoCredits_FromWritingPoolFirst()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_starter", 30, 3, """{"package_type":"writing","writing_only_credits":3}"""), 1, "cs_writing", null, CancellationToken.None);
+
+        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-2credit", 2, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(debit.Debited);
+        Assert.Equal(1, snapshot.WritingOnlyCredits); // 3 - 2
+        Assert.Equal(0, snapshot.FlexibleCredits);
+    }
+
+    [Fact]
+    public async Task WritingExam_SpillsFromWritingThenFlexible()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_quick_check", 30, 5, """{"package_type":"full","flexible_credits":5}"""), 1, "cs_full", null, CancellationToken.None);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing", null, CancellationToken.None);
+
+        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-spill", 2, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(debit.Debited);
+        Assert.Equal(0, snapshot.WritingOnlyCredits); // dedicated pool drained first
+        Assert.Equal(4, snapshot.FlexibleCredits);    // then 1 from flexible
+    }
+
+    [Fact]
+    public async Task WritingExam_AllOrNothing_WhenOnlyOneCreditAvailable()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing", null, CancellationToken.None);
+
+        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-short", 2, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.False(debit.Debited);
+        Assert.Equal("no_ai_package_credits", debit.ErrorCode);
+        Assert.Equal(1, snapshot.WritingOnlyCredits); // untouched — no partial debit
+    }
+
+    [Fact]
+    public async Task CheckGradingCredit_WithQuantityTwo_RequiresTwoCredits()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing_1", null, CancellationToken.None);
+
+        var withOne = await service.CheckGradingCreditAsync("learner-1", "writing", 2, CancellationToken.None);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing_2", null, CancellationToken.None);
+        var withTwo = await service.CheckGradingCreditAsync("learner-1", "writing", 2, CancellationToken.None);
+
+        Assert.False(withOne.Debited);
+        Assert.True(withTwo.Debited);
+    }
+
+    [Fact]
+    public async Task RefundGradingCredit_RestoresBothCreditsOfATwoCreditExam()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_starter", 30, 3, """{"package_type":"writing","writing_only_credits":3}"""), 1, "cs_writing", null, CancellationToken.None);
+
+        await service.DeductGradingCreditAsync("learner-1", "writing", "we-refundable", 2, CancellationToken.None);
+        var refunded = await service.RefundAsync("learner-1", "we-refundable", "refund:we-refundable", "grading failed", CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(refunded);
+        Assert.Equal(3, snapshot.WritingOnlyCredits); // 3 - 2 + 2
+    }
+
+    [Fact]
     public async Task ObjectiveAndMockAllowances_DeductFinitePoolsWithoutUsingAiCredits()
     {
         await using var db = NewContext();

@@ -1867,7 +1867,10 @@ public partial class LearnerService(
         var evaluationId = $"we-{Guid.NewGuid():N}";
         if (aiPackageCreditService is not null)
         {
-            var debit = await aiPackageCreditService.DeductGradingCreditAsync(userId, "writing", evaluationId, cancellationToken);
+            // A Writing exam (one letter — no parts) costs two grading credits,
+            // taken atomically in one debit so a failed grade refunds both.
+            var debit = await aiPackageCreditService.DeductGradingCreditAsync(
+                userId, "writing", evaluationId, AiGradingCreditCost.WritingExam, cancellationToken);
             if (!debit.Debited)
             {
                 throw ApiException.PaymentRequired(

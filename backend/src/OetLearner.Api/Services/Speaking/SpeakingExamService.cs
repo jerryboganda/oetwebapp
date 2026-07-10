@@ -97,7 +97,7 @@ public sealed class SpeakingExamService(
                 if (hasPackageWallet && available < 2)
                 {
                     throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
-                        "A Speaking exam needs 2 AI credits (one per card), or 1 Full Mock Exam credit. Purchase a package to continue.");
+                        "A Speaking exam needs 2 AI credits, or 1 Full Mock Exam credit. Purchase a package to continue.");
                 }
             }
         }
