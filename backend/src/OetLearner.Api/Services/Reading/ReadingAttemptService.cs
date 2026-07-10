@@ -26,7 +26,13 @@ namespace OetLearner.Api.Services.Reading;
 
 public interface IReadingAttemptService
 {
-    Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct);
+    /// <summary>
+    /// Start a full-paper Exam attempt. <paramref name="isMockSection"/> is set
+    /// when this attempt is the Reading section of a mock — the mock is already
+    /// billed once via <c>DeductMockAsync</c>, so the per-paper objective-practice
+    /// credit is skipped to avoid double-charging.
+    /// </summary>
+    Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct, bool isMockSection = false);
 
     /// <summary>
     /// Phase 3: start an attempt in a non-exam mode (Learning / Drill /
@@ -34,13 +40,17 @@ public interface IReadingAttemptService
     /// verbatim on the attempt and must be valid JSON when provided.
     /// Caller is responsible for any question-subset prerequisites; this
     /// service only enforces the per-mode lifecycle rules.
+    /// When <paramref name="billObjectivePractice"/> is false the per-paper
+    /// objective-practice credit is not consumed (used for mock sections, which
+    /// bill a mock credit instead).
     /// </summary>
     Task<ReadingAttemptStarted> StartInModeAsync(
         string userId,
         string paperId,
         ReadingAttemptMode mode,
         string? scopeJson,
-        CancellationToken ct);
+        CancellationToken ct,
+        bool billObjectivePractice = true);
 
     Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct);
 
@@ -150,15 +160,16 @@ public sealed class ReadingAttemptService(
     private const string ReadingExamModeRulebookProfession = "_exam-mode";
     private const string FallbackReadingRulebookVersion = "1.0.0";
 
-    public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
-        => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct);
+    public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct, bool isMockSection = false)
+        => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct, billObjectivePractice: !isMockSection);
 
     public async Task<ReadingAttemptStarted> StartInModeAsync(
         string userId,
         string paperId,
         ReadingAttemptMode mode,
         string? scopeJson,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool billObjectivePractice = true)
     {
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId required");
 
@@ -260,12 +271,18 @@ public sealed class ReadingAttemptService(
         // gate has passed, so a credit is only ever consumed for an attempt
         // that is actually about to be created. Accounts that have never
         // purchased a Reading package bypass harmlessly (unmetered — access
-        // is already governed by Gate 0's subscription check above); accounts
-        // with a purchased allowance are debited exactly one test per attempt
-        // of any mode (Exam, Learning, Drill, MiniTest, ErrorBank).
-        if (aiPackageCreditService is not null)
+        // is already governed by Gate 0's subscription check above). The paper
+        // (sample) is the billing unit: the reference is per-(user, paper), so
+        // the first attempt on any part or the full paper debits exactly one
+        // test and every other part / re-attempt of that same paper is free.
+        // Skipped for mock sections (billObjectivePractice == false), which are
+        // billed once via the mock credit instead.
+        if (billObjectivePractice && aiPackageCreditService is not null)
         {
-            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, "reading", attemptId, ct);
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
+                userId, "reading",
+                CreditGateExtensions.ObjectivePaperReference("reading", userId, paperId),
+                ct);
             creditResult.EnsureDebited();
         }
 

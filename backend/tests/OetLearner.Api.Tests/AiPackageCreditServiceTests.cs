@@ -125,6 +125,77 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
+    public async Task ObjectivePractice_SamePaperReference_UnlocksPaperOnceAndReEntryIsFree()
+    {
+        // Paper is the billing unit: the first attempt on any part or the full
+        // paper debits one test; every other part and every re-attempt of that
+        // same paper reuses the per-(user, paper) reference and is free.
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_reading_starter", 30, 0, """{"package_type":"reading","reading_tests":5}"""), 1, "cs_reading", null, CancellationToken.None);
+
+        var paperRef = CreditGateExtensions.ObjectivePaperReference("reading", "learner-1", "rp-1");
+        var first = await service.DeductObjectivePracticeAsync("learner-1", "reading", paperRef, CancellationToken.None);
+        var secondPartSamePaper = await service.DeductObjectivePracticeAsync("learner-1", "reading", paperRef, CancellationToken.None);
+        var reAttemptSamePaper = await service.DeductObjectivePracticeAsync("learner-1", "reading", paperRef, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(first.Debited);
+        Assert.True(secondPartSamePaper.Debited); // allowed, not blocked
+        Assert.True(reAttemptSamePaper.Debited);
+        Assert.Equal(4, snapshot.ReadingTestsRemaining); // only ONE credit consumed for the paper
+    }
+
+    [Fact]
+    public async Task ObjectivePractice_DifferentPapers_EachConsumeOneCredit()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_reading_starter", 30, 0, """{"package_type":"reading","reading_tests":5}"""), 1, "cs_reading", null, CancellationToken.None);
+
+        await service.DeductObjectivePracticeAsync("learner-1", "reading", CreditGateExtensions.ObjectivePaperReference("reading", "learner-1", "rp-1"), CancellationToken.None);
+        await service.DeductObjectivePracticeAsync("learner-1", "reading", CreditGateExtensions.ObjectivePaperReference("reading", "learner-1", "rp-2"), CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.Equal(3, snapshot.ReadingTestsRemaining); // two distinct papers => two credits
+    }
+
+    [Fact]
+    public async Task ObjectivePractice_Reading_DeductsFromReadingPoolNotAiCredits()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_reading_starter", 30, 0, """{"package_type":"reading","reading_tests":5}"""), 1, "cs_reading", null, CancellationToken.None);
+
+        var debit = await service.DeductObjectivePracticeAsync("learner-1", "reading", CreditGateExtensions.ObjectivePaperReference("reading", "learner-1", "rp-1"), CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(debit.Debited);
+        Assert.Equal(4, snapshot.ReadingTestsRemaining);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+    }
+
+    [Fact]
+    public async Task ObjectivePractice_WhenExhausted_BlocksNewPaperButAllowsAlreadyUnlockedPaper()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_reading_single", 30, 0, """{"package_type":"reading","reading_tests":1}"""), 1, "cs_reading", null, CancellationToken.None);
+
+        var paperARef = CreditGateExtensions.ObjectivePaperReference("reading", "learner-1", "rp-A");
+        var paperBRef = CreditGateExtensions.ObjectivePaperReference("reading", "learner-1", "rp-B");
+
+        var unlockA = await service.DeductObjectivePracticeAsync("learner-1", "reading", paperARef, CancellationToken.None); // consumes the only credit
+        var reEntryA = await service.DeductObjectivePracticeAsync("learner-1", "reading", paperARef, CancellationToken.None); // already unlocked => free
+        var newPaperB = await service.DeductObjectivePracticeAsync("learner-1", "reading", paperBRef, CancellationToken.None); // no credits left => blocked
+
+        Assert.True(unlockA.Debited);
+        Assert.True(reEntryA.Debited);
+        Assert.False(newPaperB.Debited);
+        Assert.Equal("no_reading_tests", newPaperB.ErrorCode);
+    }
+
+    [Fact]
     public async Task RecordExamOutcome_WhenPassed_ExpiresAllActiveBalances()
     {
         await using var db = NewContext();

@@ -461,7 +461,7 @@ public sealed class ListeningLearnerService(
     public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, string? pathwayStage, CancellationToken ct)
         => await StartAttemptAsync(userId, paperId, mode, pathwayStage, forceNewAttempt: false, ct);
 
-    public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, string? pathwayStage, bool forceNewAttempt, CancellationToken ct)
+    public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, string? pathwayStage, bool forceNewAttempt, CancellationToken ct, bool billObjectivePractice = true)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
@@ -479,7 +479,7 @@ public sealed class ListeningLearnerService(
         var normalizedPathwayStage = NormalizePathwayStage(pathwayStage);
         if (source.UsesRelationalStructure)
         {
-            return await StartRelationalAttemptAsync(userId, source, normalizedMode, normalizedPathwayStage, forceNewAttempt, ct);
+            return await StartRelationalAttemptAsync(userId, source, normalizedMode, normalizedPathwayStage, forceNewAttempt, ct, billObjectivePractice);
         }
 
         if (!forceNewAttempt)
@@ -508,10 +508,16 @@ public sealed class ListeningLearnerService(
         // Gate 6 placement and StartRelationalAttemptAsync below — this is a
         // separate entity-creation code path (JSON-backed papers resolve
         // here instead of the relational ListeningAttempt path), so it needs
-        // its own gate to avoid being bypassed.
-        if (aiPackageCreditService is not null)
+        // its own gate to avoid being bypassed. The paper (sample) is the
+        // billing unit: the reference is per-(user, paper), so any part / mode
+        // and any re-attempt of the same paper share one credit. Skipped for
+        // mock sections (billObjectivePractice == false).
+        if (billObjectivePractice && aiPackageCreditService is not null)
         {
-            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, "listening", genericAttemptId, ct);
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
+                userId, "listening",
+                CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
+                ct);
             creditResult.EnsureDebited();
         }
 
@@ -1055,7 +1061,7 @@ public sealed class ListeningLearnerService(
         return JsonSerializer.Serialize(entries);
     }
 
-    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, bool forceNewAttempt, CancellationToken ct)
+    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, bool forceNewAttempt, CancellationToken ct, bool billObjectivePractice = true)
     {
         var relationalMode = ToRelationalMode(normalizedMode);
         if (!forceNewAttempt)
@@ -1110,10 +1116,16 @@ public sealed class ListeningLearnerService(
         // credit is only ever consumed for an attempt that is actually about
         // to be created. Applies uniformly to every mode reaching this
         // relational path (Exam, Home, Practice, Paper, Diagnostic) — mirrors
-        // ReadingAttemptService.StartInModeAsync's Gate 6 placement.
-        if (aiPackageCreditService is not null)
+        // ReadingAttemptService.StartInModeAsync's Gate 6 placement. The paper
+        // (sample) is the billing unit: the reference is per-(user, paper), so
+        // any part / mode and any re-attempt of the same paper share one credit.
+        // Skipped for mock sections (billObjectivePractice == false).
+        if (billObjectivePractice && aiPackageCreditService is not null)
         {
-            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, "listening", relationalAttemptId, ct);
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
+                userId, "listening",
+                CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
+                ct);
             creditResult.EnsureDebited();
         }
 

@@ -14,4 +14,16 @@ public static class CreditGateExtensions
             result.ErrorCode ?? "no_credits",
             result.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
     }
+
+    /// <summary>
+    /// Deterministic per-(learner, subtest, paper) reference for Reading /
+    /// Listening objective-practice debits. The paper (sample) is the billing
+    /// unit: the first attempt on any part or the full paper consumes one test
+    /// credit, and every other part / re-attempt of that same paper dedupes to
+    /// this reference and is free. Encodes the userId because
+    /// <see cref="IAiPackageCreditService.DeductObjectivePracticeAsync"/>
+    /// checks reference idempotency globally (not per-user).
+    /// </summary>
+    public static string ObjectivePaperReference(string subtest, string userId, string paperId)
+        => $"objective:{subtest.Trim().ToLowerInvariant()}:{userId}:{paperId}";
 }

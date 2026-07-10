@@ -206,7 +206,11 @@ public static class ListeningLearnerEndpoints
                 request.Mode,
                 request.PathwayStage,
                 forceNewAttempt: hasMockBinding,
-                ct: ct);
+                ct: ct,
+                // Mock sections are billed once via the mock credit — skip the
+                // per-paper Listening objective-practice debit so they don't
+                // double-charge the learner's Listening test allowance.
+                billObjectivePractice: !hasMockBinding);
             await mockService.BindSectionContentAttemptIfRequestedAsync(
                 userId,
                 request.MockAttemptId,
