@@ -259,7 +259,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.ObjectivePracticeDeduct, ct))
         {
-            return new(false, "already_debited", "This practice attempt has already consumed allowance.", referenceId);
+            // Paper is the billing unit: this learner has already unlocked this
+            // paper (referenceId is per-(user, subtest, paper) via
+            // CreditGateExtensions.ObjectivePaperReference), so every other part
+            // and every re-attempt of the same paper is free — allow, do not
+            // charge again and do not block.
+            return new(true, null, null, referenceId);
         }
 
         if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))

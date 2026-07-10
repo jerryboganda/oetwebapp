@@ -337,14 +337,17 @@ public static class ReadingLearnerEndpoints
                 ?? throw new InvalidOperationException("auth required");
             try
             {
-                await mockService.ValidateSectionContentAttemptBindingTargetIfRequestedAsync(
+                var hasMockBinding = await mockService.ValidateSectionContentAttemptBindingTargetIfRequestedAsync(
                     userId,
                     mockAttemptId,
                     mockSectionId,
                     "reading",
                     paperId,
                     ct);
-                var started = await svc.StartAsync(userId, paperId, ct);
+                // Mock sections are billed once via the mock credit — skip the
+                // per-paper Reading objective-practice debit so they don't
+                // double-charge the learner's Reading test allowance.
+                var started = await svc.StartAsync(userId, paperId, ct, isMockSection: hasMockBinding);
                 await mockService.BindSectionContentAttemptIfRequestedAsync(
                     userId,
                     mockAttemptId,
