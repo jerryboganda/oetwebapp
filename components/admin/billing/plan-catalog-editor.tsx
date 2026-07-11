@@ -35,10 +35,23 @@ interface AdminPlanRow {
   activeSubscribers?: number;
   includedSubtests?: string[];
   dashboardModules?: string[];
+  profession?: string;
   entitlements?: Record<string, unknown> | null;
 }
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
+
+// Discipline the plan is allocated to. 'all' = shows under every discipline tab in the storefront.
+// Mirrors the canonical taxonomy in lib/catalog-presentation.ts (professionLabels) and the
+// PROFESSION_ORDER list in subscriptions-catalog.tsx.
+const PROFESSION_OPTIONS = [
+  { value: 'all', label: 'All disciplines' },
+  { value: 'medicine', label: 'Medicine' },
+  { value: 'nursing', label: 'Nursing' },
+  { value: 'pharmacy', label: 'Pharmacy' },
+  { value: 'physiotherapy', label: 'Physiotherapy' },
+  { value: 'allied_health', label: 'Allied health professions' },
+];
 
 // Admin-togglable "student subscription modules". Keys are the canonical PascalCase strings stored
 // in DashboardModulesJson (see backend ModuleKeys / hooks/use-enabled-modules MODULE_KEYS). Toggling
@@ -87,6 +100,7 @@ interface FormState {
   status: string;
   subtests: string[];
   modules: string[];
+  profession: string;
   invoiceDownloads: boolean;
   entitlements: Record<string, unknown>;
 }
@@ -96,7 +110,7 @@ function emptyForm(): FormState {
     id: null, code: '', name: '', description: '', price: '', currency: 'GBP',
     interval: 'month', durationMonths: '1', includedCredits: '0', trialDays: '0',
     displayOrder: '0', isVisible: true, isRenewable: true, status: 'active',
-    subtests: [], modules: [...DEFAULT_NEW_PLAN_MODULES], invoiceDownloads: false, entitlements: {},
+    subtests: [], modules: [...DEFAULT_NEW_PLAN_MODULES], profession: 'all', invoiceDownloads: false, entitlements: {},
   };
 }
 
@@ -119,6 +133,7 @@ function toForm(row: AdminPlanRow): FormState {
     status: (row.status || 'active').toLowerCase(),
     subtests: Array.isArray(row.includedSubtests) ? row.includedSubtests : [],
     modules: Array.isArray(row.dashboardModules) ? row.dashboardModules : [],
+    profession: (row.profession && row.profession.trim()) || 'all',
     invoiceDownloads: ent.invoiceDownloadsAvailable === true,
     entitlements: ent,
   };
@@ -213,6 +228,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       isVisible: form.isVisible,
       isRenewable: form.isRenewable,
       status: form.status,
+      profession: form.profession,
       includedSubtestsJson: JSON.stringify(form.subtests),
       dashboardModulesJson: JSON.stringify(form.modules),
       entitlementsJson: JSON.stringify(entitlements),
@@ -350,6 +366,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
             <Input label="Trial days" inputMode="numeric" value={form.trialDays} onChange={(e) => setField('trialDays', e.target.value)} />
             <Input label="Display order" inputMode="numeric" value={form.displayOrder} onChange={(e) => setField('displayOrder', e.target.value)} />
             <Select label="Status" value={form.status} onChange={(e) => setField('status', e.target.value)} options={STATUS_OPTIONS} />
+            <Select label="Profession" value={form.profession} onChange={(e) => setField('profession', e.target.value)} options={PROFESSION_OPTIONS} hint="Discipline tab this plan appears under. “All disciplines” shows it under every tab." />
           </div>
 
           <div className="rounded-2xl border border-border bg-background-light/50 p-4">

@@ -88,7 +88,10 @@ export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
   const filteredPlans = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return plans.filter((plan) => {
-      const professionMatch = activeProfession === 'all' || plan.profession === activeProfession;
+      // A plan allocated to 'all' disciplines shows under every discipline tab (matches the
+      // storefront's "apply for all professions" semantics, mirroring subscriptions-catalog).
+      const professionMatch =
+        activeProfession === 'all' || plan.profession === activeProfession || plan.profession === 'all';
       const queryMatch =
         needle.length === 0 ||
         plan.name.toLowerCase().includes(needle) ||
