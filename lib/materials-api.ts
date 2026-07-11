@@ -41,7 +41,7 @@ export interface MaterialFileDto {
   folderId?: string | null;
   mediaAssetId: string;
   subtestCode: string;
-  kind: 'pdf' | 'audio';
+  kind: 'pdf' | 'audio' | 'video' | 'image' | 'document';
   title: string;
   description?: string | null;
   sortOrder: number;
@@ -69,7 +69,7 @@ export interface LearnerMaterialFileDto {
   title: string;
   description?: string | null;
   subtestCode: string;
-  kind: 'pdf' | 'audio';
+  kind: 'pdf' | 'audio' | 'video' | 'image' | 'document';
   sortOrder: number;
   mediaAssetId: string;
   downloadUrl: string;

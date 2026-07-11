@@ -14,14 +14,26 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 public static class MaterialsAdminEndpoints
 {
-    private const int MaxFolderDepth = 5;
+    private const int MaxFolderDepth = 8;
 
-    // File-type rules: subtest → allowed MediaAsset formats (lowercase)
-    private static readonly HashSet<string> AudioFormats =
-        new(StringComparer.OrdinalIgnoreCase) { "mp3", "m4a", "wav", "ogg" };
-
-    private static readonly HashSet<string> PdfOnlySubtests =
-        new(StringComparer.OrdinalIgnoreCase) { "reading", "writing", "speaking" };
+    // Format → material "kind" map. Every recognised format is allowed for every
+    // subtest — the Materials library is a general download store (owner directive
+    // 2026-07-11: "all file types should be uploadable"). Unknown formats are still
+    // rejected here, and the upload pipeline has already magic-byte-validated every
+    // byte before it became a MediaAsset (see UploadSecurity.MagicByteValidator).
+    private static readonly Dictionary<string, string> FormatKinds =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["pdf"] = "pdf",
+            ["doc"] = "document", ["docx"] = "document", ["txt"] = "document",
+            ["csv"] = "document", ["rtf"] = "document",
+            ["xls"] = "document", ["xlsx"] = "document",
+            ["ppt"] = "document", ["pptx"] = "document",
+            ["jpg"] = "image", ["jpeg"] = "image", ["png"] = "image",
+            ["gif"] = "image", ["webp"] = "image",
+            ["mp3"] = "audio", ["m4a"] = "audio", ["wav"] = "audio", ["ogg"] = "audio",
+            ["mp4"] = "video", ["webm"] = "video", ["mov"] = "video",
+        };
 
     public static IEndpointRouteBuilder MapMaterialsAdminEndpoints(this IEndpointRouteBuilder app)
     {
@@ -352,10 +364,9 @@ public static class MaterialsAdminEndpoints
                 return Results.BadRequest(new
                 {
                     code = "material_file_type_invalid",
-                    message = $"Subtest '{subtestNorm}' does not allow format '{asset.Format}'. " +
-                              (PdfOnlySubtests.Contains(subtestNorm)
-                                  ? "Only PDF is allowed."
-                                  : "Listening allows PDF and audio (mp3, m4a, wav, ogg)."),
+                    message = $"Unsupported file format '{asset.Format}'. Allowed: PDF, documents " +
+                              "(doc, docx, txt, csv, rtf, xls, xlsx, ppt, pptx), images (jpg, png, gif, webp), " +
+                              "audio (mp3, m4a, wav, ogg) and video (mp4, webm, mov).",
                 });
 
             if (dto.FolderId != null)
@@ -511,23 +522,16 @@ public static class MaterialsAdminEndpoints
         Enum.TryParse(raw, ignoreCase: true, out status) && Enum.IsDefined(status);
 
     /// <summary>
-    /// Validates the MediaAsset format against the subtest rule and returns
-    /// the derived Kind ("pdf" or "audio"), or null if invalid.
+    /// Maps the MediaAsset format to its material "kind"
+    /// ("pdf" | "document" | "image" | "audio" | "video"), or null for an
+    /// unrecognised format. All recognised kinds are allowed for every subtest;
+    /// <paramref name="subtestNorm"/> is retained for future per-subtest rules.
     /// </summary>
     private static string? DeriveKindAndValidate(MediaAsset asset, string subtestNorm)
     {
+        _ = subtestNorm;
         var fmt = (asset.Format ?? string.Empty).Trim().ToLowerInvariant();
-
-        if (fmt == "pdf") return "pdf";
-
-        if (AudioFormats.Contains(fmt))
-        {
-            // Audio only allowed for listening
-            if (subtestNorm == "listening") return "audio";
-            return null;
-        }
-
-        return null; // unknown format
+        return FormatKinds.TryGetValue(fmt, out var kind) ? kind : null;
     }
 
     private static async Task DeleteFolderRecursiveAsync(LearnerDbContext db, string folderId, CancellationToken ct)
