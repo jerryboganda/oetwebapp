@@ -31,6 +31,18 @@ public sealed class MaterialAccessService(
     {
         var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
+        // Admin-togglable module gate (owner directive 2026-07-11). Materials is gated like the
+        // other subscription modules: admins always see the tree; every other learner needs an
+        // eligible subscription whose plan has the "MaterialsLibrary" module enabled. Fail-open
+        // module semantics (see EffectiveEntitlementSnapshot.IsModuleEnabled) mean legacy plans
+        // with no module list keep working until an admin explicitly disables Materials.
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (!IsAdmin(principal)
+            && (!entitlement.HasEligibleSubscription || !entitlement.IsModuleEnabled(ModuleKeys.MaterialsLibrary)))
+        {
+            return Array.Empty<object>();
+        }
+
         var allFolders = await db.MaterialFolders
             .AsNoTracking()
             .Include(f => f.Audiences)
@@ -45,7 +57,7 @@ public sealed class MaterialAccessService(
             .OrderBy(f => f.SortOrder)
             .ToListAsync(ct);
 
-        var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
+        var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(entitlement, userId, ct);
 
         var folderDict = allFolders.ToDictionary(f => f.Id);
         var visibleFolderIds = new HashSet<string>();
@@ -76,6 +88,15 @@ public sealed class MaterialAccessService(
     /// </summary>
     public async Task<bool> CanCandidateAccessMaterialFileAsync(string userId, string mediaAssetId, CancellationToken ct)
     {
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+
+        // Admin-togglable module gate (fail-open): a plan that explicitly disables the
+        // "MaterialsLibrary" module withholds all materials downloads. No new subscription
+        // requirement is imposed here (unlike the visible tree) so admin/preview media paths and
+        // legacy audience-based access are preserved; the empty-tree gate already hides materials
+        // from ineligible learners.
+        if (!entitlement.IsModuleEnabled(ModuleKeys.MaterialsLibrary)) return false;
+
         var files = await db.MaterialFiles
             .AsNoTracking()
             .Where(f => f.MediaAssetId == mediaAssetId && f.Status == ContentStatus.Published)
@@ -103,7 +124,7 @@ public sealed class MaterialAccessService(
             .ToListAsync(ct);
 
         var folderDict = allFolders.ToDictionary(f => f.Id);
-        var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
+        var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(entitlement, userId, ct);
 
         return folders.Any(folder =>
             IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds));
@@ -193,10 +214,8 @@ public sealed class MaterialAccessService(
     }
 
     private async Task<(string? planId, string? planCode, string? planDatabaseId, HashSet<string> cohortIds, HashSet<string> sponsorIds)>
-        ResolveMembershipsAsync(string userId, CancellationToken ct)
+        ResolveMembershipsAsync(EffectiveEntitlementSnapshot entitlement, string userId, CancellationToken ct)
     {
-        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
-
         // Resolve the BillingPlan.Id for the user's plan.
         // The entitlement snapshot carries subscription.PlanId which is typically
         // the plan's Code (e.g. "premium-yearly"), but the admin audience picker

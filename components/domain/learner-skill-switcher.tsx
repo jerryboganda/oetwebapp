@@ -1,17 +1,19 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BookOpen, FilePenLine, FileQuestion, Headphones, Repeat2, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEnabledModules } from '@/hooks/use-enabled-modules';
 
 const learnerSkillModules = [
   { href: '/reading', label: 'Reading', shortLabel: 'Reading', icon: BookOpen, description: 'Parts A, B, and C' },
   { href: '/listening', label: 'Listening', shortLabel: 'Listening', icon: Headphones, description: 'Audio, notes, and review' },
   { href: '/writing', label: 'Writing', shortLabel: 'Writing', icon: FilePenLine, description: 'Letters and case notes' },
   { href: '/speaking', label: 'Speaking', shortLabel: 'Speaking', icon: Mic, description: 'Roleplay and fluency' },
-  { href: '/mocks', label: 'Mocks', shortLabel: 'Mocks', icon: FileQuestion, description: 'Timed transfer practice' },
-  { href: '/recalls', label: 'Recalls', shortLabel: 'Recalls', icon: Repeat2, description: 'Vocabulary and review' },
+  { href: '/mocks', label: 'Mocks', shortLabel: 'Mocks', icon: FileQuestion, description: 'Timed transfer practice', moduleKey: 'Mocks' },
+  { href: '/recalls', label: 'Recalls', shortLabel: 'Recalls', icon: Repeat2, description: 'Vocabulary and review', moduleKey: 'Recalls' },
 ] as const;
 
 function isActive(pathname: string | null, href: string) {
@@ -29,7 +31,13 @@ export function LearnerSkillSwitcher({
   title?: string;
 }) {
   const pathname = usePathname();
-  const modules = learnerSkillModules;
+  const { isModuleEnabled, modules: enabledModules } = useEnabledModules(true);
+  const enabledModulesKey = enabledModules.join('|');
+  const modules = useMemo(
+    () => learnerSkillModules.filter((module) => isModuleEnabled('moduleKey' in module ? module.moduleKey : undefined)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [enabledModulesKey],
+  );
 
   return (
     <nav

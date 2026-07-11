@@ -60,7 +60,11 @@ public sealed record VideoAccessContext(
     bool Expired,
     bool PlanGrantsPremium,
     bool AddOnGrantsPremium,
-    string? CurrentTier);
+    string? CurrentTier,
+    // Whether the plan's admin-togglable "VideoLibrary" module is enabled (fail-open when the
+    // plan carries no module list). Disabling it withholds the plan/free-tier grants but never
+    // confiscates a separately-purchased Video Library add-on (AddOnGrantsPremium still wins).
+    bool ModuleEnabled = true);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier)
@@ -132,13 +136,18 @@ public sealed class VideoEntitlementService(
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
         var bundle = ParseVideoLibraryBundle(planJson);
         var addOnGrants = !bundle.GrantsPremium && await AnyActiveAddOnGrantsVideoLibraryAsync(userId, ct);
+        // Admin-togglable module gate. When disabled the plan no longer grants the Video Library
+        // (nor free-tier viewing) — but a live add-on the learner paid for still does.
+        var moduleEnabled = entitlement.IsModuleEnabled(ModuleKeys.VideoLibrary);
+        var planGrantsPremium = bundle.GrantsPremium && moduleEnabled;
 
         return new VideoAccessContext(
             IsAdmin: false, Authenticated: true,
             HasEligibleSubscription: true, Frozen: false, Expired: false,
-            PlanGrantsPremium: bundle.GrantsPremium,
+            PlanGrantsPremium: planGrantsPremium,
             AddOnGrantsPremium: addOnGrants,
-            CurrentTier: entitlement.IsTrial ? "trial" : bundle.GrantsPremium || addOnGrants ? "premium" : "free");
+            CurrentTier: entitlement.IsTrial ? "trial" : planGrantsPremium || addOnGrants ? "premium" : "free",
+            ModuleEnabled: moduleEnabled);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -150,9 +159,16 @@ public sealed class VideoEntitlementService(
 
         if (string.Equals(video.AccessTier, "free", StringComparison.OrdinalIgnoreCase))
         {
-            return context.Authenticated
-                ? new VideoEntitlementResult(true, "free_tier", context.CurrentTier ?? "free")
-                : new VideoEntitlementResult(false, "no_active_subscription", null);
+            if (!context.Authenticated)
+            {
+                return new VideoEntitlementResult(false, "no_active_subscription", null);
+            }
+            // The plan explicitly disabled the Video Library module and no add-on re-grants it.
+            if (!context.ModuleEnabled && !context.AddOnGrantsPremium)
+            {
+                return new VideoEntitlementResult(false, "plan_does_not_grant", context.CurrentTier);
+            }
+            return new VideoEntitlementResult(true, "free_tier", context.CurrentTier ?? "free");
         }
 
         if (!context.Authenticated)

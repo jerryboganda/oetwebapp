@@ -211,6 +211,10 @@ public sealed class MockEntitlementService(
         CancellationToken ct)
     {
         if (!resolved.HasEligibleSubscription) return false;
+        // Admin-togglable module gate: a plan with the Mocks module disabled no longer confers
+        // unlimited mocks. Separately-purchased mock credit packs are unaffected (they are
+        // consumed via the per-type ledger, not this subscription path).
+        if (!resolved.IsModuleEnabled(OetLearner.Api.Services.Entitlements.ModuleKeys.Mocks)) return false;
         if (string.IsNullOrWhiteSpace(resolved.PlanId)) return false;
 
         var entitlementsJson = await db.BillingPlans.AsNoTracking()

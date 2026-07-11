@@ -11,6 +11,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
+import { useEnabledModules } from '@/hooks/use-enabled-modules';
 import {
   LayoutDashboard,
   FilePenLine,
@@ -43,6 +44,11 @@ export interface NavItem {
   matchPrefix?: string;
   exact?: boolean;
   featureFlag?: string;
+  /**
+   * Canonical PascalCase module key (see hooks/use-enabled-modules MODULE_KEYS). When set, the item
+   * is hidden for learners whose plan has that admin-togglable module disabled. Fail-open otherwise.
+   */
+  moduleKey?: string;
 }
 
 export interface NavGroup {
@@ -83,10 +89,10 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/reading', label: 'Reading', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
   { href: '/writing', label: 'Writing', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
   { href: '/speaking', label: 'Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
-  { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
-  { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
-  { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
-  { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library' },
+  { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks', moduleKey: 'Mocks' },
+  { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls', moduleKey: 'Recalls' },
+  { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials', moduleKey: 'MaterialsLibrary' },
+  { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library', moduleKey: 'VideoLibrary' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/subscriptions', label: 'Subscriptions & Packages', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/subscriptions' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
@@ -239,13 +245,21 @@ export function Sidebar({
     [resolvedItems],
   );
   const learnerFeatureFlags = useFeatureFlagMap(navFeatureKeys, isLearnerWorkspace);
+  const { isModuleEnabled, modules: enabledModules } = useEnabledModules(isLearnerWorkspace);
+  const enabledModulesKey = enabledModules.join('|');
   const visibleLearnNavItems = useMemo(
-    () => learnNavItems.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)),
-    [isLearnerWorkspace, learnerFeatureFlags],
+    () => learnNavItems.filter(
+      (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace) && isModuleEnabled(item.moduleKey),
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLearnerWorkspace, learnerFeatureFlags, enabledModulesKey],
   );
   const visibleMainItems = useMemo(
-    () => resolvedItems.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)),
-    [isLearnerWorkspace, learnerFeatureFlags, resolvedItems],
+    () => resolvedItems.filter(
+      (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace) && isModuleEnabled(item.moduleKey),
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLearnerWorkspace, learnerFeatureFlags, resolvedItems, enabledModulesKey],
   );
 
   const handleSignOut = async () => {
@@ -356,6 +370,22 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
   const pathname = usePathname();
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const bottomNavMotion = getSurfaceMotion('overlay', reducedMotion);
+  // Only fetch the module list when this nav actually carries module-gated items (learner bottom
+  // nav). The admin/tutor bottom nav has none, so this stays a no-op fetch there.
+  const hasModuleItems = items.some((item) => Boolean(item.moduleKey));
+  const { isModuleEnabled, modules: enabledModules } = useEnabledModules(hasModuleItems);
+  const enabledModulesKey = enabledModules.join('|');
+  const visibleItems = useMemo(
+    () => items.filter((item) => isModuleEnabled(item.moduleKey)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, enabledModulesKey],
+  );
+  // Keep the column count in step with the visible items so hiding a module leaves no empty cells.
+  // Literal class strings so Tailwind's scanner keeps them.
+  const gridColsClass =
+    { 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5', 6: 'grid-cols-6', 7: 'grid-cols-7' }[
+      Math.min(7, Math.max(3, visibleItems.length))
+    ] ?? 'grid-cols-7';
 
   return (
     <motion.nav
@@ -364,8 +394,8 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
       layout={!reducedMotion}
       {...bottomNavMotion}
     >
-      <ul className="grid grid-cols-7 gap-1">
-        {items.map((item, index) => {
+      <ul className={cn('grid gap-1', gridColsClass)}>
+        {visibleItems.map((item, index) => {
           const active = isActive(pathname, item);
           return (
             <li key={`${index}:${item.href}`}>
