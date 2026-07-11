@@ -127,9 +127,42 @@ public sealed class MagicByteValidator : IUploadContentValidator
                 : new(false, "image/webp", "webp", $"Declared .{ext} but file is WebP.");
         }
 
-        // ZIP (also used by DOCX, XLSX, PPTX, JAR, ...)
+        // ZIP container — also the on-disk wrapper for OOXML office files
+        // (DOCX/XLSX/PPTX) and JARs. A raw .zip is accepted as-is; OOXML files are
+        // accepted under their real extension. Their magic is identical to a plain
+        // ZIP, so the declared extension is the only signal — safe here because every
+        // genuinely-different binary format above has already been positively
+        // identified and would not reach this branch.
         if (header[0] == 0x50 && header[1] == 0x4B && (header[2] == 0x03 || header[2] == 0x05 || header[2] == 0x07))
-            return ext == "zip" ? new(true, "application/zip", "zip", null) : new(false, "application/zip", "zip", $"Declared .{ext} but file is a ZIP container.");
+        {
+            return ext switch
+            {
+                "zip" => new(true, "application/zip", "zip", null),
+                "docx" => new(true, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx", null),
+                "xlsx" => new(true, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx", null),
+                "pptx" => new(true, "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx", null),
+                _ => new(false, "application/zip", "zip", $"Declared .{ext} but file is a ZIP container."),
+            };
+        }
+
+        // Legacy MS Office (OLE Compound File): DOC/XLS/PPT.
+        if (read >= 8
+            && header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0
+            && header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1)
+        {
+            return ext is "doc" or "xls" or "ppt"
+                ? new(true, "application/msword", ext, null)
+                : new(false, "application/x-ole-storage", ext, $"Declared .{ext} but file is a legacy MS Office (OLE) document.");
+        }
+
+        // RTF: "{\rtf"
+        if (read >= 5
+            && header[0] == 0x7B && header[1] == 0x5C && header[2] == 0x72 && header[3] == 0x74 && header[4] == 0x66)
+        {
+            return ext == "rtf"
+                ? new(true, "application/rtf", "rtf", null)
+                : new(false, "application/rtf", "rtf", $"Declared .{ext} but file is RTF.");
+        }
 
         // Caption tracks (Video Library) are plain text with no magic bytes.
         // Only sniffed when the DECLARED extension is vtt/srt — every binary
@@ -159,6 +192,23 @@ public sealed class MagicByteValidator : IUploadContentValidator
             return i < read && header[i] is >= (byte)'0' and <= (byte)'9'
                 ? new(true, "application/x-subrip", "srt", null)
                 : new(false, null, null, "Declared .srt but file does not look like a SubRip track.");
+        }
+
+        // Plain-text documents (Materials library). No binary magic exists, so we
+        // accept when the declared extension is a known text type AND the sampled
+        // header carries no NUL byte (a cheap "not a binary file" guard). Every
+        // binary format above is already positively identified, so a binary cannot
+        // be smuggled through here by declaring a .txt/.csv extension.
+        if (ext is "txt" or "csv")
+        {
+            var hasNul = false;
+            for (var i = 0; i < read; i++)
+            {
+                if (header[i] == 0x00) { hasNul = true; break; }
+            }
+            return hasNul
+                ? new(false, null, null, $"Declared .{ext} but file contains binary data.")
+                : new(true, ext == "csv" ? "text/csv" : "text/plain", ext, null);
         }
 
         return new(false, null, null, "Unrecognised file format.");

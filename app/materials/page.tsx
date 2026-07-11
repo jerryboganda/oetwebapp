@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { FolderOpen, FileText, Music, Download, ChevronDown, ChevronRight, BookOpen, Headphones, FilePenLine, Mic } from 'lucide-react';
+import { FolderOpen, FileText, Music, Image as ImageIcon, Video, File as FileIcon, Download, ChevronDown, ChevronRight, BookOpen, Headphones, FilePenLine, Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,8 +65,10 @@ function MaterialFileRow({ file }: { file: LearnerMaterialFileDto }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-surface/70 px-4 py-3 hover:border-primary/30 hover:bg-primary/3 transition-colors">
       <span className="shrink-0 text-muted">
-        {file.kind === 'audio'
-          ? <Music className="w-5 h-5 text-blue-500" />
+        {file.kind === 'audio' ? <Music className="w-5 h-5 text-blue-500" />
+          : file.kind === 'video' ? <Video className="w-5 h-5 text-fuchsia-500" />
+          : file.kind === 'image' ? <ImageIcon className="w-5 h-5 text-emerald-500" />
+          : file.kind === 'document' ? <FileIcon className="w-5 h-5 text-amber-500" />
           : <FileText className="w-5 h-5 text-red-400" />}
       </span>
 

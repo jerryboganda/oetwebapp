@@ -15,7 +15,7 @@ public sealed class MaterialAccessService(
     LearnerDbContext db,
     IEffectiveEntitlementResolver entitlementResolver)
 {
-    private const int MaxFolderDepth = 5;
+    private const int MaxFolderDepth = 8;
 
     public bool IsAdmin(ClaimsPrincipal principal)
     {

@@ -8,6 +8,9 @@ import {
   FolderPlus,
   FileText,
   Music,
+  Image as ImageIcon,
+  Video,
+  File as FileIcon,
   Plus,
   Pencil,
   Trash2,
@@ -495,8 +498,10 @@ export default function AdminMaterialsPage() {
       let mediaAssetId = editingFile?.mediaAssetId ?? '';
 
       if (uploadFile) {
-        const isAudio = /\.(mp3|m4a|wav|ogg)$/i.test(uploadFile.name);
-        const role: PaperAssetRole = isAudio ? 'Audio' : 'Supplementary';
+        // Audio and video use the larger media size slot (150 MB); everything else
+        // (PDF, docs, images) uses the Supplementary slot (25 MB).
+        const isMedia = /\.(mp3|m4a|wav|ogg|mp4|webm|mov)$/i.test(uploadFile.name);
+        const role: PaperAssetRole = isMedia ? 'Audio' : 'Supplementary';
         const result = await uploadFileChunked(uploadFile, role, setUploadProgress);
         mediaAssetId = result.mediaAssetId;
       }
@@ -693,9 +698,7 @@ export default function AdminMaterialsPage() {
                   <CardContent className="p-3">
                     <div className="flex items-start gap-3">
                       <span className="mt-0.5 shrink-0 text-muted">
-                        {file.kind === 'audio'
-                          ? <Music className="w-5 h-5 text-blue-500" />
-                          : <FileText className="w-5 h-5 text-red-400" />}
+                        <MaterialKindIcon kind={file.kind} />
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -847,12 +850,12 @@ export default function AdminMaterialsPage() {
           />
           <div>
             <label className="block text-xs font-semibold text-admin-fg-muted mb-1.5">
-              {editingFile ? 'Replace file (leave blank to keep current)' : 'File (PDF or audio)'}
+              {editingFile ? 'Replace file (leave blank to keep current)' : 'File'}
             </label>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.mp3,.m4a,.wav,.ogg"
+              accept=".pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov"
               onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
               className="block w-full text-sm text-admin-fg file:mr-3 file:rounded-md file:border-0 file:bg-admin-hover file:px-3 file:py-1.5 file:text-xs file:font-semibold"
             />
@@ -1016,6 +1019,23 @@ function FolderTreeNode({
       )}
     </div>
   );
+}
+
+/** Icon for a material file kind (pdf | audio | video | image | document). */
+function MaterialKindIcon({ kind }: { kind: MaterialFileDto['kind'] }) {
+  switch (kind) {
+    case 'audio':
+      return <Music className="w-5 h-5 text-blue-500" />;
+    case 'video':
+      return <Video className="w-5 h-5 text-fuchsia-500" />;
+    case 'image':
+      return <ImageIcon className="w-5 h-5 text-emerald-500" />;
+    case 'document':
+      return <FileIcon className="w-5 h-5 text-amber-500" />;
+    case 'pdf':
+    default:
+      return <FileText className="w-5 h-5 text-red-400" />;
+  }
 }
 
 function formatBytes(bytes?: number | null): string {
