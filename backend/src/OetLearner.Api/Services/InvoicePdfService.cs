@@ -225,7 +225,7 @@ public sealed partial class InvoicePdfService : IInvoicePdfService
                     {
                         t.Span("OET with Dr Ahmed Hesham").FontSize(9).SemiBold().FontColor(BrandPurpleDeep);
                         t.Span("  •  ").FontSize(9).FontColor(InkGrey);
-                        t.Span("The Tutor Academy").FontSize(9).SemiBold().FontColor(BrandPurpleDeep);
+                        t.Span("Tutor Commerce Academy").FontSize(9).SemiBold().FontColor(BrandPurpleDeep);
                     });
                     col.Item().PaddingTop(3).AlignCenter()
                         .Text("This receipt was generated electronically and is valid without a signature.")
