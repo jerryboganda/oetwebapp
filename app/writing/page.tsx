@@ -14,6 +14,7 @@ import {
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { CreditsGuideButton } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { analytics } from '@/lib/analytics';
 
@@ -95,6 +96,10 @@ export default function WritingHome() {
             { icon: Library, label: t('writing.hub.highlights.practice'), value: t('writing.hub.highlights.practiceValue') },
           ]}
         />
+
+        <div className="flex justify-end">
+          <CreditsGuideButton />
+        </div>
 
         <LearnerSkillSwitcher compact />
 

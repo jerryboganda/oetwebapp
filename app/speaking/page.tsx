@@ -13,7 +13,7 @@ import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, type SpeakingHome, type SpeakingTask } from '@/lib/api';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
@@ -126,6 +126,10 @@ export default function SpeakingHome() {
             { icon: Video, label: 'Live tutoring', value: '1-on-1 booking' },
           ]}
         />
+
+        <div className="flex justify-end">
+          <CreditsGuideButton />
+        </div>
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
