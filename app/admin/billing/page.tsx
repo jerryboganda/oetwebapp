@@ -3289,6 +3289,8 @@ export default function BillingPage() {
                   { value: 'medicine', label: 'Medicine' },
                   { value: 'nursing', label: 'Nursing' },
                   { value: 'pharmacy', label: 'Pharmacy' },
+                  { value: 'physiotherapy', label: 'Physiotherapy' },
+                  { value: 'allied_health', label: 'Allied health professions' },
                 ]}
               />
             </div>
