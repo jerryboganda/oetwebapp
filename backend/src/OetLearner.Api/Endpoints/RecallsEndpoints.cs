@@ -62,7 +62,8 @@ public static class RecallsEndpoints
             if (!isAdmin)
             {
                 var snapshot = await entitlements.ResolveAsync(userId, ct);
-                var eligible = snapshot.HasEligibleSubscription && !snapshot.IsFrozen;
+                var eligible = snapshot.HasEligibleSubscription && !snapshot.IsFrozen
+                    && snapshot.IsModuleEnabled(ModuleKeys.Recalls);
                 if (!eligible && !await svc.IsFreePreviewTermAsync(termId, ct))
                 {
                     return Results.Json(
@@ -192,7 +193,8 @@ public static class RecallsEndpoints
     {
         if (http.User.IsInRole("admin")) return true;
         var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
-        return snapshot.HasEligibleSubscription && !snapshot.IsFrozen;
+        return snapshot.HasEligibleSubscription && !snapshot.IsFrozen
+            && snapshot.IsModuleEnabled(ModuleKeys.Recalls);
     }
 
     /// <summary>
@@ -206,7 +208,8 @@ public static class RecallsEndpoints
     {
         if (http.User.IsInRole("admin")) return null;
         var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
-        if (snapshot.HasEligibleSubscription && !snapshot.IsFrozen) return null;
+        if (snapshot.HasEligibleSubscription && !snapshot.IsFrozen
+            && snapshot.IsModuleEnabled(ModuleKeys.Recalls)) return null;
         return Results.Json(
             new
             {

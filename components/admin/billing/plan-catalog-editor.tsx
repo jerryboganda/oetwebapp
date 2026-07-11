@@ -34,10 +34,30 @@ interface AdminPlanRow {
   status?: string;
   activeSubscribers?: number;
   includedSubtests?: string[];
+  dashboardModules?: string[];
   entitlements?: Record<string, unknown> | null;
 }
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
+
+// Admin-togglable "student subscription modules". Keys are the canonical PascalCase strings stored
+// in DashboardModulesJson (see backend ModuleKeys / hooks/use-enabled-modules MODULE_KEYS). Toggling
+// these now gates BOTH the learner nav/tiles and real backend access.
+const MODULE_TOGGLES = [
+  { key: 'Recalls', label: 'Recalls' },
+  { key: 'MaterialsLibrary', label: 'Materials' },
+  { key: 'VideoLibrary', label: 'Videos' },
+  { key: 'Mocks', label: 'Mocks' },
+] as const;
+const MODULE_STATUS_OPTIONS = [
+  { value: 'enabled', label: 'Enabled' },
+  { value: 'disabled', label: 'Disabled' },
+];
+const DEFAULT_NEW_PLAN_MODULES = MODULE_TOGGLES.map((m) => m.key);
+
+function planHasModule(modules: string[], key: string): boolean {
+  return modules.some((m) => m.toLowerCase() === key.toLowerCase());
+}
 const INTERVAL_OPTIONS = [
   { value: 'month', label: 'Monthly' },
   { value: 'year', label: 'Yearly' },
@@ -66,6 +86,7 @@ interface FormState {
   isRenewable: boolean;
   status: string;
   subtests: string[];
+  modules: string[];
   invoiceDownloads: boolean;
   entitlements: Record<string, unknown>;
 }
@@ -75,7 +96,7 @@ function emptyForm(): FormState {
     id: null, code: '', name: '', description: '', price: '', currency: 'GBP',
     interval: 'month', durationMonths: '1', includedCredits: '0', trialDays: '0',
     displayOrder: '0', isVisible: true, isRenewable: true, status: 'active',
-    subtests: [], invoiceDownloads: false, entitlements: {},
+    subtests: [], modules: [...DEFAULT_NEW_PLAN_MODULES], invoiceDownloads: false, entitlements: {},
   };
 }
 
@@ -97,6 +118,7 @@ function toForm(row: AdminPlanRow): FormState {
     isRenewable: row.isRenewable ?? true,
     status: (row.status || 'active').toLowerCase(),
     subtests: Array.isArray(row.includedSubtests) ? row.includedSubtests : [],
+    modules: Array.isArray(row.dashboardModules) ? row.dashboardModules : [],
     invoiceDownloads: ent.invoiceDownloadsAvailable === true,
     entitlements: ent,
   };
@@ -156,6 +178,15 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
     }));
   }, []);
 
+  // Add/remove a single canonical module key while preserving every OTHER key already on the plan
+  // (subtests, TutorBook, etc.), so saving never drops modules the dropdowns don't manage.
+  const setModuleEnabled = useCallback((key: string, enabled: boolean) => {
+    setForm((prev) => {
+      const without = prev.modules.filter((m) => m.toLowerCase() !== key.toLowerCase());
+      return { ...prev, modules: enabled ? [...without, key] : without };
+    });
+  }, []);
+
   const openCreate = useCallback(() => { setForm(emptyForm()); setFeedback(null); setModalOpen(true); }, []);
   const openEdit = useCallback((row: AdminPlanRow) => { setForm(toForm(row)); setFeedback(null); setModalOpen(true); }, []);
 
@@ -183,6 +214,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       isRenewable: form.isRenewable,
       status: form.status,
       includedSubtestsJson: JSON.stringify(form.subtests),
+      dashboardModulesJson: JSON.stringify(form.modules),
       entitlementsJson: JSON.stringify(entitlements),
     };
 
@@ -325,6 +357,22 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
             <div className="grid gap-3 sm:grid-cols-4">
               {SUBTESTS.map((subtest) => (
                 <Checkbox key={subtest} label={subtest[0].toUpperCase() + subtest.slice(1)} checked={form.subtests.includes(subtest)} onChange={() => toggleSubtest(subtest)} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background-light/50 p-4">
+            <p className="mb-1 text-sm font-semibold text-navy">Student subscription modules</p>
+            <p className="mb-3 text-xs text-muted">Enable or disable these modules for learners on this plan. Disabling hides the module from the learner’s dashboard &amp; navigation and blocks access on the server.</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {MODULE_TOGGLES.map((module) => (
+                <Select
+                  key={module.key}
+                  label={module.label}
+                  value={planHasModule(form.modules, module.key) ? 'enabled' : 'disabled'}
+                  onChange={(e) => setModuleEnabled(module.key, e.target.value === 'enabled')}
+                  options={MODULE_STATUS_OPTIONS}
+                />
               ))}
             </div>
           </div>

@@ -47,6 +47,26 @@ public sealed record EffectiveEntitlementSnapshot(
     public bool BasicEnglishUnlocked { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
     public string? ProductCategory { get; init; }
+
+    /// <summary>
+    /// Whether an admin-togglable subscription module (see <see cref="ModuleKeys"/>) is enabled
+    /// for this snapshot. FAIL-OPEN by design: when the plan carries no explicit module list
+    /// (legacy plans, malformed JSON, non-subscribers whose list is empty) every module reads
+    /// as enabled, so this check can only ever RESTRICT — it never elevates access beyond the
+    /// module's own subscription/credit gate, and never locks out a plan that simply predates
+    /// the module list. A module is blocked only when the list is present and non-empty AND does
+    /// not contain the key (case-insensitive). Owner directive 2026-07-11: existing plans are
+    /// back-filled with all four keys ON, so this only bites once an admin explicitly disables one.
+    /// </summary>
+    public bool IsModuleEnabled(string moduleKey)
+    {
+        if (EnabledModules is null || EnabledModules.Count == 0) return true;
+        foreach (var enabled in EnabledModules)
+        {
+            if (string.Equals(enabled, moduleKey, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
 }
 
 public sealed class EffectiveEntitlementResolver(
