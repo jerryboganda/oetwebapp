@@ -27,7 +27,7 @@ import {
 } from '@/lib/reading-authoring-api';
 import { listMyReadingAssignments, type ReadingAssignmentDto } from '@/lib/reading-tutor-api';
 import { readErrorMessage } from '@/lib/read-error-message';
-import { CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
+import { CreditsGuideButton, CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { useReadingProfile } from '@/hooks/useReadingProfile';
@@ -193,6 +193,10 @@ export default function ReadingHome() {
           description="Practice each part separately or attempt the full reading exam under official timing."
           highlights={heroHighlights}
         />
+
+        <div className="flex justify-end">
+          <CreditsGuideButton />
+        </div>
 
         <LearnerSkillSwitcher compact />
 

@@ -15,7 +15,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
-import { CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
+import { CreditsGuideButton, CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { InlineAlert } from '@/components/ui/alert';
@@ -212,6 +212,10 @@ export default function ListeningHome() {
           description="Practice each part separately or attempt the full listening exam under official timing."
           highlights={heroHighlights}
         />
+
+        <div className="flex justify-end">
+          <CreditsGuideButton />
+        </div>
 
         <LearnerSkillSwitcher compact />
 
