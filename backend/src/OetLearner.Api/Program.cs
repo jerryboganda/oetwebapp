@@ -232,11 +232,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddRateLimiter(options =>
 {
-    // The desktop smoke suite reuses seeded accounts across many browser projects in parallel.
-    // Keep production protections tight, but give development/test runs enough headroom to avoid
-    // false-positive 429s from shared-session traffic bursts.
-    var perUserPermitLimit = builder.Environment.IsDevelopment() ? 5000 : 100;
-    var perUserWritePermitLimit = builder.Environment.IsDevelopment() ? 300 : 30;
+    // Per-user request ceilings (fixed 1-minute window). Raised well above the
+    // old prod values (100 read / 30 write) so admins can run legitimate bulk
+    // content operations (e.g. uploading the full Materials library) without
+    // being throttled. Auth brute-force is protected separately by the dedicated
+    // "AuthBruteforce" limiter, so this does not weaken login protection.
+    var perUserPermitLimit = builder.Environment.IsDevelopment() ? 5000 : 5000;
+    var perUserWritePermitLimit = builder.Environment.IsDevelopment() ? 5000 : 5000;
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, ct) =>
     {
