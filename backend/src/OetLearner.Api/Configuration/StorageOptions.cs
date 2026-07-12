@@ -44,11 +44,11 @@ public sealed class StorageOptions
 
 public sealed class ContentUploadOptions
 {
-    /// <summary>Max bytes accepted for audio assets (Listening MP3).</summary>
-    public long MaxAudioBytes { get; set; } = 150L * 1024 * 1024;        // 150 MB
+    /// <summary>Max bytes accepted for audio assets (Listening MP3/WAV).</summary>
+    public long MaxAudioBytes { get; set; } = 350L * 1024 * 1024;        // 350 MB
 
-    /// <summary>Max bytes accepted for PDF assets.</summary>
-    public long MaxPdfBytes { get; set; } = 25L * 1024 * 1024;           // 25 MB
+    /// <summary>Max bytes accepted for PDF/document assets.</summary>
+    public long MaxPdfBytes { get; set; } = 250L * 1024 * 1024;          // 250 MB
 
     /// <summary>Max bytes accepted for image assets (thumbnails, stamps).</summary>
     public long MaxImageBytes { get; set; } = 5L * 1024 * 1024;          // 5 MB
