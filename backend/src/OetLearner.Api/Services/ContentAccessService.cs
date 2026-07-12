@@ -106,6 +106,16 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
             .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(ct);
 
+        var programIds = programs.Select(p => p.Id).ToList();
+        var trackCounts = programIds.Count == 0
+            ? new Dictionary<string, int>()
+            : await db.ContentTracks
+                .AsNoTracking()
+                .Where(t => programIds.Contains(t.ProgramId))
+                .GroupBy(t => t.ProgramId)
+                .Select(group => new { ProgramId = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(item => item.ProgramId, item => item.Count, ct);
+
         // Check which programs the user has access to via package rules
         var packageRules = hasSubscription
             ? await db.PackageContentRules
@@ -132,7 +142,7 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
             p.InstructionLanguage, p.ProgramType, p.ThumbnailUrl,
             p.DisplayOrder, p.EstimatedDurationMinutes,
             isAccessible = accessibleProgramIds.Contains(p.Id),
-            trackCount = db.ContentTracks.Count(t => t.ProgramId == p.Id)
+            trackCount = trackCounts.GetValueOrDefault(p.Id)
         }).ToList();
 
         return new { items = result, total, page, pageSize };
