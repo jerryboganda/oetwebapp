@@ -34,13 +34,14 @@ interface LivePrice {
   profession?: string;
 }
 
-const PROFESSION_ORDER = ['all', 'medicine', 'nursing', 'pharmacy', 'physiotherapy', 'allied_health'];
+const PROFESSION_ORDER = ['all', 'medicine', 'nursing', 'pharmacy', 'physiotherapy', 'radiography', 'allied_health'];
 const PROFESSION_LABEL: Record<string, string> = {
   all: 'All disciplines',
   medicine: 'Medicine',
   nursing: 'Nursing',
   pharmacy: 'Pharmacy',
   physiotherapy: 'Physiotherapy',
+  radiography: 'Radiography',
   allied_health: 'Allied health',
 };
 

@@ -61,6 +61,13 @@ export const professions: Profession[] = [
     description: "Physiotherapists and physical therapy candidates.",
   },
   {
+    id: "radiography",
+    label: "Radiography",
+    countryTargets: [...TARGET_COUNTRY_OPTIONS],
+    examTypeIds: ["oet"],
+    description: "Radiographers and medical imaging candidates.",
+  },
+  {
     id: "other-allied-health",
     label: "Other Allied health profession",
     countryTargets: [...TARGET_COUNTRY_OPTIONS],

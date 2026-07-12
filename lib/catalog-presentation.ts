@@ -187,6 +187,7 @@ export const DEFAULT_CATALOG_STOREFRONT: CatalogStorefrontConfig = {
     nursing: 'Nursing',
     pharmacy: 'Pharmacy',
     physiotherapy: 'Physiotherapy',
+    radiography: 'Radiography',
     allied_health: 'Allied health professions',
   },
   legend: [
