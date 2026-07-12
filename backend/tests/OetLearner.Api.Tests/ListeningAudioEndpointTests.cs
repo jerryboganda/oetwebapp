@@ -1,5 +1,7 @@
 using System.Net;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -60,6 +62,34 @@ public class ListeningAudioEndpointTests : IClassFixture<TestWebApplicationFacto
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task CandidateProbe_UsesCombinedReadWithoutExists_AndContinuesOnMissing()
+    {
+        var sha = new string('c', 64);
+        var bytes = new byte[] { 9, 8, 7 };
+        var expectedWavKey = ContentAddressed.PublishedKey("listening/tts", sha, "wav");
+        var expectedMp3Key = ContentAddressed.PublishedKey("listening/tts", sha, "mp3");
+        var storage = new CandidateProbeStorage(expectedMp3Key, bytes);
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IFileStorage>();
+                services.AddSingleton<IFileStorage>(storage);
+            });
+        });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/v1/listening/audio/{sha}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("audio/mpeg", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(bytes, await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal([expectedWavKey, expectedMp3Key], storage.OpenedKeys);
+        Assert.Equal(0, storage.ExistsCalls);
+        Assert.Equal(0, storage.LegacyOpenReadCalls);
+    }
+
     [Theory]
     [InlineData("not-a-hash.wav")]
     [InlineData("abc.wav")]
@@ -71,5 +101,45 @@ public class ListeningAudioEndpointTests : IClassFixture<TestWebApplicationFacto
         var response = await anonymousClient.GetAsync($"/v1/listening/audio/{fileName}");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private sealed class CandidateProbeStorage(string successKey, byte[] bytes) : IFileStorage
+    {
+        public List<string> OpenedKeys { get; } = [];
+        public int ExistsCalls { get; private set; }
+        public int LegacyOpenReadCalls { get; private set; }
+
+        public Task<FileStorageReadResult> OpenReadWithMetadataAsync(string key, CancellationToken ct)
+        {
+            OpenedKeys.Add(key);
+            if (!string.Equals(key, successKey, StringComparison.Ordinal))
+            {
+                throw new FileNotFoundException("Candidate does not exist.", key);
+            }
+
+            Stream stream = new MemoryStream(bytes, writable: false);
+            return Task.FromResult(new FileStorageReadResult(stream, bytes.LongLength));
+        }
+
+        public Task<Stream> OpenReadAsync(string key, CancellationToken ct)
+        {
+            LegacyOpenReadCalls++;
+            throw new InvalidOperationException("Legacy open must not be used by the listening audio endpoint.");
+        }
+
+        public bool Exists(string key)
+        {
+            ExistsCalls++;
+            throw new InvalidOperationException("Exists must not be used by the listening audio endpoint.");
+        }
+
+        public Task<long> WriteAsync(string key, Stream source, CancellationToken ct) => throw new NotSupportedException();
+        public Task<Stream> OpenWriteAsync(string key, CancellationToken ct) => throw new NotSupportedException();
+        public bool Delete(string key) => throw new NotSupportedException();
+        public long Length(string key) => throw new NotSupportedException();
+        public void Move(string sourceKey, string destKey, bool overwrite) => throw new NotSupportedException();
+        public int DeletePrefix(string prefix) => throw new NotSupportedException();
+        public string? TryResolveLocalPath(string key) => null;
+        public Uri? ResolveReadUrl(string key, TimeSpan ttl) => null;
     }
 }

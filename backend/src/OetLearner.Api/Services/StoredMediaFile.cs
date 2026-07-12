@@ -72,16 +72,18 @@ public static class FileStorageMediaExtensions
         string? fallbackContentType,
         CancellationToken ct)
     {
-        if (!storage.Exists(storageKey))
-        {
-            throw ApiException.NotFound("audio_not_found", "The requested audio file was not found.");
-        }
-
-        var stream = await storage.OpenReadAsync(storageKey, ct);
         var contentType = string.IsNullOrWhiteSpace(fallbackContentType)
             ? MediaStoragePolicy.GuessContentTypeFromKey(storageKey)
             : MediaStoragePolicy.NormalizeContentType(fallbackContentType);
 
-        return new StoredMediaFile(stream, contentType, storage.Length(storageKey));
+        try
+        {
+            var result = await storage.OpenReadWithMetadataAsync(storageKey, ct);
+            return new StoredMediaFile(result.Stream, contentType, result.Length);
+        }
+        catch (FileNotFoundException)
+        {
+            throw ApiException.NotFound("audio_not_found", "The requested audio file was not found.");
+        }
     }
 }

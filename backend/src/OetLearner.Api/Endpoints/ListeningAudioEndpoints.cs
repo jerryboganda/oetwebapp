@@ -55,10 +55,15 @@ public static class ListeningAudioEndpoints
                 foreach (var ext in CandidateExtensions)
                 {
                     var key = ContentAddressed.PublishedKey(TtsRootKey, sha, ext);
-                    if (!storage.Exists(key)) continue;
-
-                    var stream = await storage.OpenReadAsync(key, ct);
-                    return Results.Stream(stream, MimeFor(ext), enableRangeProcessing: true);
+                    try
+                    {
+                        var result = await storage.OpenReadWithMetadataAsync(key, ct);
+                        return Results.Stream(result.Stream, MimeFor(ext), enableRangeProcessing: true);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        // Missing candidates are expected while probing extensions.
+                    }
                 }
 
                 return Results.NotFound();
