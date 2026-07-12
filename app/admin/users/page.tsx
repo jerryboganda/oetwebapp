@@ -19,6 +19,8 @@ import {
   UserX,
 } from 'lucide-react';
 import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AddUserModal } from '@/components/admin/user-access/add-user-modal';
+import type { CreateAdminUserResult } from '@/lib/user-access';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
@@ -133,6 +135,7 @@ export default function UsersPage() {
   const [inviteForm, setInviteForm] = useState<InviteFormState>(defaultInviteForm);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const { options: professionOptions } = useProfessions();
@@ -376,6 +379,17 @@ export default function UsersPage() {
     }
   }
 
+  async function handleUserCreated(result: CreateAdminUserResult) {
+    await reloadUsers();
+    setIsAddUserOpen(false);
+    const successMsg = result.temporaryPassword
+      ? `Account created for ${result.email}. Temporary password: ${result.temporaryPassword}`
+      : result.invitation
+        ? `Account created. Invitation sent to ${result.email}, expires ${new Date(result.invitation.expiresAt).toLocaleString()}.`
+        : `Account created for ${result.email}.`;
+    setToast({ variant: 'success', message: successMsg });
+  }
+
   if (!isAuthenticated || role !== 'admin') return null;
 
   const summaryCards: Array<{ label: string; value: number; icon: ReactNode; tone: KpiTone }> = [
@@ -411,6 +425,9 @@ export default function UsersPage() {
               startIcon={<MailPlus className="h-4 w-4" />}
             >
               Invite User
+            </Button>
+            <Button variant="outline" onClick={() => setIsAddUserOpen(true)} startIcon={<Plus className="h-4 w-4" />}>
+              Add User
             </Button>
           </>
         }
@@ -536,6 +553,12 @@ export default function UsersPage() {
           </div>
         </div>
       </Modal>
+
+      <AddUserModal
+        open={isAddUserOpen}
+        onClose={() => setIsAddUserOpen(false)}
+        onCreated={handleUserCreated}
+      />
     </AdminRouteWorkspace>
   );
 }

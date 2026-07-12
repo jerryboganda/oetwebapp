@@ -60,6 +60,18 @@ public sealed record EffectiveEntitlementSnapshot(
     /// </summary>
     public bool IsModuleEnabled(string moduleKey)
     {
+        // Per-user explicit DISABLE always wins, and is checked BEFORE the
+        // fail-open empty-list branch. This is what lets an admin disable the
+        // last remaining module for a single learner without the empty
+        // EnabledModules list silently re-enabling everything.
+        if (DisabledModules is { Count: > 0 })
+        {
+            foreach (var disabled in DisabledModules)
+            {
+                if (string.Equals(disabled, moduleKey, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+        }
+
         if (EnabledModules is null || EnabledModules.Count == 0) return true;
         foreach (var enabled in EnabledModules)
         {
@@ -67,6 +79,13 @@ public sealed record EffectiveEntitlementSnapshot(
         }
         return false;
     }
+
+    /// <summary>
+    /// Per-user explicit deny-set (from <see cref="Domain.UserModuleOverride"/> rows with
+    /// Enabled=false). Subtracted first in <see cref="IsModuleEnabled"/> so a disable survives the
+    /// fail-open empty-list contract. Empty for every user without overrides.
+    /// </summary>
+    public IReadOnlyList<string> DisabledModules { get; init; } = Array.Empty<string>();
 }
 
 public sealed class EffectiveEntitlementResolver(
@@ -81,7 +100,8 @@ public sealed class EffectiveEntitlementResolver(
         }
 
         var trace = new List<string>();
-        var subscription = await ResolveLatestSubscriptionAsync(userId, ct);
+        var subscriptions = await LoadOrderedSubscriptionsAsync(userId, ct);
+        var subscription = subscriptions.Count > 0 ? subscriptions[0] : null;
         var isFrozen = await ResolveIsFrozenAsync(userId, ct);
 
         if (subscription is null)
@@ -275,7 +295,197 @@ public sealed class EffectiveEntitlementResolver(
             };
         }
 
+        // ── Multi-package aggregation (admin can allocate ≥1 packages) ───────
+        // Owner directive 2026-07-12: a learner may hold MULTIPLE full course
+        // packages at once (e.g. two professions). Union the entitlements of
+        // every currently-effective COURSE subscription onto the snapshot.
+        //
+        // "Course subscription" = eligible status + resolvable plan + not expired
+        // AND the plan grants at least one eligibility module (see
+        // IsCourseEligiblePlan). That module test is what keeps this ADDITIVE and
+        // safe: a permanent Tutor-Book / add-on overlay sub (modules TutorBook /
+        // AudioScripts / Updates only) is NOT course-eligible, so it never flips
+        // HasEligibleSubscription — the existing latest-sub + permanent-Tutor-Book
+        // semantics (and every existing resolver test) are preserved unchanged.
+        //
+        // For a single-package learner the effective set is exactly their own
+        // row, so this re-derives the identical snapshot (union / sum / max over
+        // one element). It only changes behaviour once a learner has 2+ effective
+        // course subs — which only the new admin allocation flow can create.
+        var effectivePackages = new List<EffectivePackage>();
+        foreach (var candidate in subscriptions)
+        {
+            var pkg = await TryResolveEffectivePackageAsync(candidate, ct);
+            if (pkg is not null && IsCourseEligiblePlan(pkg.Modules))
+            {
+                effectivePackages.Add(pkg);
+            }
+        }
+
+        if (effectivePackages.Count > 0)
+        {
+            // subscriptions is ordered latest-first, so effectivePackages inherits
+            // that order — the first entry is the newest effective course sub.
+            var primaryPkg = effectivePackages[0];
+            var primarySub = primaryPkg.Sub;
+            var aggAddOns = new List<string>();
+            foreach (var pkg in effectivePackages)
+            {
+                aggAddOns.AddRange(await ResolveActiveAddOnCodesAsync(pkg.Sub.Id, ct));
+            }
+
+            // Expiry: a null (permanent) member wins; otherwise the furthest date.
+            DateTimeOffset? aggregatedExpiry = effectivePackages.Any(p => p.Sub.ExpiresAt is null)
+                ? null
+                : effectivePackages.Max(p => p.Sub.ExpiresAt);
+
+            var aiQuota = AiQuotaPlanMappingResolver.Resolve(primaryPkg.Plan);
+            var aggIsTrial = primarySub.Status == SubscriptionStatus.Trial;
+
+            if (effectivePackages.Count > 1)
+            {
+                trace.Add($"packages.{effectivePackages.Count}");
+            }
+
+            snapshot = snapshot with
+            {
+                HasEligibleSubscription = true,
+                IsTrial = aggIsTrial,
+                Tier = aggIsTrial ? "trial" : "paid",
+                SubscriptionId = primarySub.Id,
+                SubscriptionStatus = primarySub.Status,
+                PlanId = primarySub.PlanId,
+                PlanVersionId = primarySub.PlanVersionId,
+                PlanCode = AiQuotaPlanMappingResolver.NormalizeCode(primaryPkg.Plan.Code),
+                AiQuotaPlanCode = aiQuota?.Code,
+                AiQuotaPlanCodeSource = aiQuota?.Source,
+                ActiveAddOnCodes = aggAddOns
+                    .Where(code => !string.IsNullOrWhiteSpace(code))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                EnabledModules = snapshot.EnabledModules
+                    .Concat(effectivePackages.SelectMany(p => p.Modules))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                WritingAddonsEnabled = effectivePackages.Any(p => p.Plan.WritingAddonsEnabled),
+                SpeakingAddonsEnabled = effectivePackages.Any(p => p.Plan.SpeakingAddonsEnabled),
+                SpeakingPracticeAccessEnabled = effectivePackages.Any(p => p.Plan.SpeakingPracticeAccessEnabled),
+                TutorBookDiscountEnabled = effectivePackages.Any(p => p.Plan.TutorBookDiscountEnabled),
+                WritingAssessmentsRemaining = effectivePackages.Sum(p => p.Sub.WritingAssessmentsRemaining),
+                SpeakingSessionsRemaining = effectivePackages.Sum(p => p.Sub.SpeakingSessionsRemaining),
+                AiCreditsRemaining = effectivePackages.Sum(p => p.Sub.AiCreditsRemaining),
+                TutorBookUnlocked = snapshot.TutorBookUnlocked || effectivePackages.Any(p => p.Sub.TutorBookUnlocked),
+                BasicEnglishUnlocked = effectivePackages.Any(p => p.Sub.BasicEnglishUnlocked),
+                ExpiresAt = aggregatedExpiry,
+                ProductCategory = string.IsNullOrEmpty(primaryPkg.Plan.ProductCategory)
+                    ? snapshot.ProductCategory
+                    : primaryPkg.Plan.ProductCategory,
+            };
+        }
+
+        // ── Per-user module overrides (admin per-learner enable/disable) ─────
+        // Applied LAST so an admin override is authoritative over both the plan
+        // list and the aggregation. Enable => add to the enabled set; disable =>
+        // remove from the enabled set AND record in the deny-set so IsModuleEnabled
+        // returns false even if the enabled list is now empty (fail-open guard).
+        var moduleOverrides = await db.UserModuleOverrides.AsNoTracking()
+            .Where(o => o.UserId == userId)
+            .ToListAsync(ct);
+        if (moduleOverrides.Count > 0)
+        {
+            var enabledSet = snapshot.EnabledModules.ToList();
+            var disabledSet = new List<string>();
+            foreach (var ov in moduleOverrides)
+            {
+                if (string.IsNullOrWhiteSpace(ov.ModuleKey)) continue;
+                if (ov.Enabled)
+                {
+                    disabledSet.RemoveAll(m => string.Equals(m, ov.ModuleKey, StringComparison.OrdinalIgnoreCase));
+                    if (!enabledSet.Any(m => string.Equals(m, ov.ModuleKey, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        enabledSet.Add(ov.ModuleKey);
+                    }
+                }
+                else
+                {
+                    enabledSet.RemoveAll(m => string.Equals(m, ov.ModuleKey, StringComparison.OrdinalIgnoreCase));
+                    if (!disabledSet.Any(m => string.Equals(m, ov.ModuleKey, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        disabledSet.Add(ov.ModuleKey);
+                    }
+                }
+            }
+
+            trace.Add($"module_overrides.{moduleOverrides.Count}");
+            snapshot = snapshot with
+            {
+                EnabledModules = enabledSet.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                DisabledModules = disabledSet.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            };
+        }
+
         return snapshot;
+    }
+
+    /// <summary>The module keys whose presence marks a plan as a real course/access
+    /// package (as opposed to a permanent Tutor-Book / add-on overlay whose modules
+    /// are TutorBook / AudioScripts / Updates only). A plan is course-eligible — and
+    /// therefore contributes to multi-package eligibility aggregation — when its
+    /// dashboard-module list intersects this set. Covers both the four admin
+    /// dashboard keys and the per-skill keys real and seeded plans use.</summary>
+    private static readonly HashSet<string> EligibilityModules = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ModuleKeys.Recalls, ModuleKeys.MaterialsLibrary, ModuleKeys.VideoLibrary, ModuleKeys.Mocks,
+        "Reading", "Listening", "Writing", "Speaking",
+    };
+
+    private static bool IsCourseEligiblePlan(IReadOnlyList<string> modules)
+    {
+        foreach (var module in modules)
+        {
+            if (EligibilityModules.Contains(module)) return true;
+        }
+        return false;
+    }
+
+    private sealed record EffectivePackage(Subscription Sub, BillingPlan Plan, IReadOnlyList<string> Modules);
+
+    /// <summary>
+    /// Returns the resolved plan + parsed modules for a subscription that is
+    /// INDIVIDUALLY effective right now — mirroring the same eligibility, fail-low
+    /// and expiry checks the primary path applies — or null if it is not effective.
+    /// Used by the multi-package aggregation to union across a learner's packages.
+    /// </summary>
+    private async Task<EffectivePackage?> TryResolveEffectivePackageAsync(Subscription sub, CancellationToken ct)
+    {
+        if (sub.Status is not (SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested))
+        {
+            return null;
+        }
+        if (string.IsNullOrWhiteSpace(sub.PlanId)) return null;
+
+        var plan = await ResolveBillingPlanAsync(sub.PlanId, ct);
+        if (plan is null) return null;
+
+        if (!string.IsNullOrWhiteSpace(plan.EntitlementsJson) && !IsValidJsonObject(plan.EntitlementsJson))
+        {
+            return null;
+        }
+        if (!string.IsNullOrWhiteSpace(sub.PlanVersionId))
+        {
+            var versionExists = await db.BillingPlanVersions.AsNoTracking()
+                .AnyAsync(v => v.Id == sub.PlanVersionId, ct);
+            if (!versionExists) return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var expired = sub.Status != SubscriptionStatus.Frozen
+            && sub.ExpiresAt is { } exp
+            && exp <= now;
+        if (expired) return null;
+
+        return new EffectivePackage(sub, plan, ParseDashboardModules(plan.DashboardModulesJson));
     }
 
     private static IReadOnlyList<string> ParseDashboardModules(string json)
@@ -331,7 +541,7 @@ public sealed class EffectiveEntitlementResolver(
         IsFrozen: false,
         Trace: new[] { trace });
 
-    private async Task<Subscription?> ResolveLatestSubscriptionAsync(string userId, CancellationToken ct)
+    private async Task<IReadOnlyList<Subscription>> LoadOrderedSubscriptionsAsync(string userId, CancellationToken ct)
     {
         var subscriptions = await db.Subscriptions.AsNoTracking()
             .Where(subscription => subscription.UserId == userId)
@@ -341,7 +551,7 @@ public sealed class EffectiveEntitlementResolver(
             .OrderByDescending(subscription => subscription.ChangedAt)
             .ThenByDescending(subscription => subscription.StartedAt)
             .ThenByDescending(subscription => subscription.Id, StringComparer.Ordinal)
-            .FirstOrDefault();
+            .ToList();
     }
 
     private async Task<BillingPlan?> ResolveBillingPlanAsync(string planIdOrCode, CancellationToken ct)

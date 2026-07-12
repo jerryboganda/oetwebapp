@@ -28,6 +28,7 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { ManageAccessPanel } from '@/components/admin/user-access/manage-access-panel';
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
@@ -44,7 +45,16 @@ import {
   updateAdminUserStatus,
   type AdminUserProfileUpdatePayload,
 } from '@/lib/api';
+import {
+  fetchUserAccess,
+  grantUserAddon,
+  grantUserPackage,
+  putUserAccessScope,
+  removeUserPackage,
+  type UserAccess,
+} from '@/lib/user-access';
 import { getAdminUserDetailData } from '@/lib/admin';
+import { readErrorMessage } from '@/lib/read-error-message';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type {
@@ -185,6 +195,9 @@ export default function UserDetailPage() {
   const [isPasswordSaving, setIsPasswordSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ password: '', confirmPassword: '' });
   const [passwordErrors, setPasswordErrors] = useState<PasswordFormErrors>({});
+  const [access, setAccess] = useState<UserAccess | null>(null);
+  const [originalAccess, setOriginalAccess] = useState<UserAccess | null>(null);
+  const [isSavingAccess, setIsSavingAccess] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -209,6 +222,26 @@ export default function UserDetailPage() {
           }
         } else {
           setAdminPermissions(null);
+        }
+
+        // Learners get the interactive access & allocation editor.
+        if (detail.role === 'learner') {
+          try {
+            const userAccess = await fetchUserAccess(detail.id);
+            if (!cancelled) {
+              setAccess(userAccess);
+              setOriginalAccess(userAccess);
+            }
+          } catch (accessError) {
+            console.error(accessError);
+            if (!cancelled) {
+              setAccess(null);
+              setOriginalAccess(null);
+            }
+          }
+        } else {
+          setAccess(null);
+          setOriginalAccess(null);
         }
       } catch (error) {
         console.error(error);
@@ -333,6 +366,55 @@ export default function UserDetailPage() {
       setToast({ variant: 'error', message: 'Unable to resend the invitation.' });
     } finally {
       setIsMutating(false);
+    }
+  }
+
+  async function handleSaveAccess() {
+    if (!user || !access) return;
+    setIsSavingAccess(true);
+    try {
+      // Persist any locally drafted packages, then remove any that were
+      // dropped from the original server-fetched list.
+      for (const sub of access.subscriptions) {
+        if (sub.isPending) {
+          await grantUserPackage(user.id, {
+            planCode: sub.planCode,
+            expiresAt: sub.expiresAt,
+            makePrimary: sub.isPrimary,
+            grantIncludedCredits: sub.grantIncludedCredits,
+          });
+        }
+      }
+      const remainingIds = new Set(access.subscriptions.filter((sub) => !sub.isPending).map((sub) => sub.id));
+      for (const originalSub of originalAccess?.subscriptions ?? []) {
+        if (!remainingIds.has(originalSub.id)) {
+          await removeUserPackage(user.id, originalSub.id);
+        }
+      }
+
+      // Add-ons have no removal endpoint — only newly drafted ones are sent.
+      for (const addOn of access.addOns) {
+        if (addOn.isPending) {
+          await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
+        }
+      }
+
+      const saved = await putUserAccessScope(user.id, {
+        modules: access.moduleOverrides,
+        materialFolderIds: access.materialFolderIds,
+        recallSetCodes: access.recallSetCodes,
+        accessExpiresAt: access.accessExpiresAt,
+        clearAccessExpiry: !access.accessExpiresAt,
+      });
+
+      setAccess(saved);
+      setOriginalAccess(saved);
+      setToast({ variant: 'success', message: `Access updated for ${user.email}.` });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to update access for this learner.') });
+    } finally {
+      setIsSavingAccess(false);
     }
   }
 
@@ -997,6 +1079,31 @@ export default function UserDetailPage() {
                 ) : user.role === 'learner' ? (
                   <SettingsSection title="Subscription" description="No active subscription found for this learner.">
                     <p className="text-sm text-admin-text-muted">This learner has not subscribed to a paid plan yet.</p>
+                  </SettingsSection>
+                ) : null}
+
+                {user.role === 'learner' ? (
+                  <SettingsSection
+                    title="Access & Allocation"
+                    description="Packages, add-ons, module access, and content scope for this learner."
+                    actions={
+                      access ? (
+                        <Button size="sm" onClick={handleSaveAccess} loading={isSavingAccess}>
+                          Save Access
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    {access ? (
+                      <ManageAccessPanel
+                        userId={user.id}
+                        value={access}
+                        onChange={setAccess}
+                        disabled={isSavingAccess}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted">Unable to load access details for this learner.</p>
+                    )}
                   </SettingsSection>
                 ) : null}
 

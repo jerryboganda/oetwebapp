@@ -266,6 +266,56 @@ public record AdminUserProfileUpdateRequest(
     string[]? Specialties,
     string? Reason);
 
+/// <summary>
+/// Admin manual "Add User" — create a learner (or expert/admin) directly. When
+/// <paramref name="Password"/> is set the account is created ready-to-use with that
+/// password and no email challenge; otherwise (or when <paramref name="SendInvite"/>
+/// is true) the existing invite/OTP email flow runs. Phone is persisted to the
+/// learner registration profile.
+/// </summary>
+public record AdminUserCreateRequest(
+    string Name,
+    string Email,
+    string Role,
+    string? ProfessionId,
+    string? MobileNumber,
+    string? Password,
+    bool SendInvite);
+
+// ── Per-user access allocation (Add-User feature) ──
+
+/// <summary>Grant one package (billing plan) to a user as a new subscription row.
+/// Multiple packages per user are allowed. <paramref name="ExpiresAt"/> overrides the
+/// plan's access-duration expiry when provided. <paramref name="MakePrimary"/> points the
+/// learner's CurrentPlanId at this package.</summary>
+public record AdminUserAccessPackageRequest(
+    string PlanCode,
+    DateTimeOffset? ExpiresAt,
+    bool MakePrimary,
+    bool GrantIncludedCredits);
+
+/// <summary>Grant an add-on to a user, applied to a target subscription (defaults to the
+/// user's primary/latest). Idempotent per (user, addon, subscription).</summary>
+public record AdminUserAccessAddonRequest(
+    string AddonCode,
+    string? SubscriptionId,
+    int Quantity);
+
+/// <summary>A single per-user module override (see ModuleKeys).</summary>
+public record AdminModuleOverrideDto(string ModuleKey, bool Enabled);
+
+/// <summary>Declarative overwrite of a user's per-user scope: module overrides, the
+/// Materials folder allow-list, the Recall-set allow-list, and the master access-expiry
+/// login gate. Each list REPLACES the existing rows. Set <paramref name="ClearAccessExpiry"/>
+/// to remove the master expiry; otherwise <paramref name="AccessExpiresAt"/> (when provided)
+/// sets it.</summary>
+public record AdminUserAccessScopeRequest(
+    List<AdminModuleOverrideDto>? Modules,
+    List<string>? MaterialFolderIds,
+    List<string>? RecallSetCodes,
+    DateTimeOffset? AccessExpiresAt,
+    bool ClearAccessExpiry);
+
 // ── Billing ──
 
 public record AdminBillingPlanCreateRequest(

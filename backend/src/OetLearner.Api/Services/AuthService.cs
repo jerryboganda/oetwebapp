@@ -1471,6 +1471,17 @@ public sealed class AuthService(
                 throw ApiException.Forbidden("account_suspended", "This account is suspended.");
             }
 
+            // Admin-set master access expiry (see LearnerUser.AccessExpiresAt). When
+            // elapsed, refuse login AND token refresh (this gate runs on both) with a
+            // 403 + snake_case code the sign-in form maps to the "renew" popup. A 403
+            // is required: the client remaps a 400 auth error to invalid_credentials.
+            if (learner.AccessExpiresAt is { } accessExpiry && accessExpiry <= timeProvider.GetUtcNow())
+            {
+                throw ApiException.Forbidden(
+                    "subscription_expired",
+                    "Your Subscription has expired. Please Renew Your subscription");
+            }
+
             return;
         }
 
