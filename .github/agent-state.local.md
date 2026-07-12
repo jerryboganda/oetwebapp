@@ -1,33 +1,37 @@
-# Agent State - Writing I18n Standalone Bundle Fix
+# Agent State - Learner Performance Hotspots
 
-Last updated: 2026-06-14
+Last updated: 2026-07-13
 
 ## Goal
 
-Prevent the Writing module from rendering raw `writing.*` keys or `Writing copy unavailable` in the Next standalone production bundle.
+Remove the highest-confidence learner-path performance costs without changing product behavior.
 
 ## Implemented
 
-- Replaced runtime dynamic JSON imports in `i18n.ts` with static imports for `messages/en/writing.json` and `messages/ar/writing.json`.
-- Kept English as the baseline bundle and overlays Arabic messages on top so missing Arabic copy falls back to readable English.
-- Kept the Writing provider fallback guard in place, but production should no longer hit it because Writing messages are now bundled into the server artifact.
-- Extended `tests/unit/i18n-writing-messages.test.ts` with a standalone-build regression assertion that rejects dynamic `import(\`./messages/...json\`)` loading.
+- Native-only Capacitor plugins now load after browser, desktop, and native guards instead of entering
+  the initial web dependency graph.
+- Local and S3 storage expose a combined asynchronous read with stream length; S3 uses one GET and
+  keeps the response alive until ASP.NET disposes the stream.
+- Stored media and Listening audio no longer call synchronous storage metadata methods on request
+  paths, and only confirmed missing objects map to not-found or the next candidate extension.
+- Program browsing now loads all track counts for the current page with one grouped EF Core query.
+- Added focused frontend, storage, endpoint, and relational query-count regression tests.
 
 ## Validation
 
-- `pnpm exec vitest run tests/unit/i18n-writing-messages.test.ts --reporter=dot`: passed, 3 tests.
-- `pnpm exec tsc --noEmit`: passed.
-- `pnpm exec eslint i18n.ts app/providers.tsx tests/unit/i18n-writing-messages.test.ts`: passed.
-- `pnpm run build`: passed.
-- Standalone artifact check: `.next/standalone/messages/en/writing.json` contains `writing.hub.hero.title` with `Practise OET Writing your way`.
-- Production deploy: GitHub Actions `Build & Deploy (web + API)` run `27509057100` passed for commit `bdfd09d77`.
-- Production health: `https://app.oetwithdrhesham.co.uk/api/health` returned HTTP 200 with `{"status":"ok","service":"oet-web"}`.
+- `pnpm test -- lib/__tests__/mobile-runtime.test.ts`: passed, 3 tests.
+- Focused storage/listening backend tests: passed, 14 tests.
+- `ContentAccessServiceTests`: passed, 3 tests.
+- `git diff --check`: passed.
+- Independent diff review: no blocking findings.
 
-## Not Run / Blocked
+## Blockers
 
-- Authenticated production `/writing` DOM verification could not be completed from Codex because Chrome is not exposing a local CDP endpoint and unauthenticated curl correctly redirects `/writing` to `/sign-in?next=%2Fwriting`.
-- Full `pnpm run check:encoding` was not rerun in this follow-up; this change touched only TypeScript source/test files, not translation JSON content.
+- None.
+- Bundle chunk composition and production S3 behavior remain CI/live verification concerns because
+  production builds run in GitHub Actions and local tests use Local/in-memory storage.
 
 ## Next Step
 
-Open production in an authenticated browser and verify `/writing` renders `Practise OET Writing your way` and does not contain `writing.hub.` or `Writing copy unavailable`.
+After the Ship-It deployment, verify learner media playback and record the production web chunk
+delta; then profile SignalR reconnects before considering the deferred shared learner layout.
