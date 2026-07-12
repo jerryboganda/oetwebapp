@@ -62,9 +62,29 @@ public sealed class MaterialAccessService(
         var folderDict = allFolders.ToDictionary(f => f.Id);
         var visibleFolderIds = new HashSet<string>();
 
+        // Discipline (profession) filtering — owner directive 2026-07-12. The Materials tree
+        // encodes discipline as folder names (Speaking/Medicine, Writing/Nursing, …) with no
+        // structured column, so we match those names against the learner's ActiveProfessionId:
+        // a learner sees only their own discipline's folders, while Reading/Listening and every
+        // non-discipline folder stay visible to all. Admins and learners with no profession are
+        // unfiltered (fail-open).
+        HashSet<string> disciplineUniverse;
+        HashSet<string> learnerDisciplines;
+        if (IsAdmin(principal))
+        {
+            // Admins see every discipline — leave both sets empty so IsDisciplineVisible is a no-op.
+            disciplineUniverse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            learnerDisciplines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            (disciplineUniverse, learnerDisciplines) = await ResolveDisciplineFilterAsync(userId, ct);
+        }
+
         foreach (var folder in allFolders)
         {
-            if (IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds))
+            if (IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
+                && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines))
                 visibleFolderIds.Add(folder.Id);
         }
 
@@ -125,9 +145,13 @@ public sealed class MaterialAccessService(
 
         var folderDict = allFolders.ToDictionary(f => f.Id);
         var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(entitlement, userId, ct);
+        // Mirror the tree's discipline gate so a learner cannot download another discipline's
+        // file by guessing its mediaAssetId (defence in depth alongside GetVisibleTreeAsync).
+        var (disciplineUniverse, learnerDisciplines) = await ResolveDisciplineFilterAsync(userId, ct);
 
         return folders.Any(folder =>
-            IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds));
+            IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
+            && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines));
     }
 
     private bool IsFolderVisible(
@@ -251,6 +275,87 @@ public sealed class MaterialAccessService(
             new HashSet<string>(cohortIds),
             new HashSet<string>(sponsorIds)
         );
+    }
+
+    /// <summary>
+    /// Resolves the name-based discipline filter for a learner. Returns:
+    ///   <c>universe</c> — every profession's Id and Label (from the <c>Professions</c> reference
+    ///     table); the set of folder names that count as a "discipline folder";
+    ///   <c>learner</c> — the Id and Label of the learner's own <c>ActiveProfessionId</c>, or an
+    ///     empty set when the learner has no/unknown profession (caller treats empty as unfiltered).
+    /// The Materials tree encodes discipline as folder names (Speaking/Medicine, Writing/Nursing …)
+    /// with no structured column, so matching is by name (owner directive 2026-07-12).
+    /// </summary>
+    private async Task<(HashSet<string> universe, HashSet<string> learner)> ResolveDisciplineFilterAsync(
+        string userId, CancellationToken ct)
+    {
+        var professions = await db.Professions
+            .AsNoTracking()
+            .Select(p => new { p.Id, p.Label })
+            .ToListAsync(ct);
+
+        var universe = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in professions)
+        {
+            if (!string.IsNullOrWhiteSpace(p.Id)) universe.Add(p.Id.Trim());
+            if (!string.IsNullOrWhiteSpace(p.Label)) universe.Add(p.Label.Trim());
+        }
+
+        var active = (await db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct))?.Trim();
+
+        var learner = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(active))
+        {
+            var row = professions.FirstOrDefault(p =>
+                string.Equals(p.Id, active, StringComparison.OrdinalIgnoreCase));
+            if (row is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(row.Id)) learner.Add(row.Id.Trim());
+                if (!string.IsNullOrWhiteSpace(row.Label)) learner.Add(row.Label.Trim());
+            }
+            else
+            {
+                // Profession set but absent from the reference table — still match by its raw id.
+                learner.Add(active);
+            }
+        }
+
+        return (universe, learner);
+    }
+
+    /// <summary>
+    /// Name-based discipline gate. A folder (or any of its ancestors) whose name is a known
+    /// discipline that is NOT the learner's own is hidden; non-discipline folders (Reading,
+    /// Listening, subtest parents, source folders …) are always visible. An empty
+    /// <paramref name="learnerDisciplines"/> (admin, or learner with no profession) disables the
+    /// filter (fail-open). Walking ancestors ensures a non-discipline child under an excluded
+    /// discipline parent is also dropped.
+    /// </summary>
+    private static bool IsDisciplineVisible(
+        MaterialFolder folder,
+        Dictionary<string, MaterialFolder> allFolders,
+        HashSet<string> disciplineUniverse,
+        HashSet<string> learnerDisciplines)
+    {
+        if (learnerDisciplines.Count == 0) return true;
+
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            var name = current.Name?.Trim() ?? string.Empty;
+            if (disciplineUniverse.Contains(name) && !learnerDisciplines.Contains(name))
+                return false;
+
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+
+        return true;
     }
 
     private static object BuildFolderNode(

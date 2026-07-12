@@ -50,6 +50,7 @@ const PROFESSION_OPTIONS = [
   { value: 'nursing', label: 'Nursing' },
   { value: 'pharmacy', label: 'Pharmacy' },
   { value: 'physiotherapy', label: 'Physiotherapy' },
+  { value: 'radiography', label: 'Radiography' },
   { value: 'allied_health', label: 'Allied health professions' },
 ];
 

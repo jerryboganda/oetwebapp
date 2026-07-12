@@ -937,7 +937,8 @@ public static partial class SeedData
             new ProfessionReference { Id = "dentistry", Code = "dentistry", Label = "Dentistry", Status = "active", SortOrder = 3 },
             new ProfessionReference { Id = "pharmacy", Code = "pharmacy", Label = "Pharmacy", Status = "active", SortOrder = 4 },
             new ProfessionReference { Id = "physiotherapy", Code = "physiotherapy", Label = "Physiotherapy", Status = "active", SortOrder = 5 },
-            new ProfessionReference { Id = "academic-english", Code = "academic-english", Label = "Academic / General English", Status = "active", SortOrder = 6 }
+            new ProfessionReference { Id = "radiography", Code = "radiography", Label = "Radiography", Status = "active", SortOrder = 6 },
+            new ProfessionReference { Id = "academic-english", Code = "academic-english", Label = "Academic / General English", Status = "active", SortOrder = 7 }
         );
 
         db.Subtests.AddRange(
@@ -2191,12 +2192,22 @@ public static partial class SeedData
             },
             new SignupProfessionCatalog
             {
+                Id = "radiography",
+                Label = "Radiography",
+                CountryTargetsJson = "[]",
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Radiographers and medical imaging candidates.",
+                SortOrder = 6,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
                 Id = "other-allied-health",
                 Label = "Other Allied health profession",
                 CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
-                Description = "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, radiography, etc.).",
-                SortOrder = 6,
+                Description = "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, etc.).",
+                SortOrder = 7,
                 IsActive = true
             },
             new SignupProfessionCatalog
@@ -2206,7 +2217,7 @@ public static partial class SeedData
                 CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "ielts" }),
                 Description = "General academic and migration IELTS candidates.",
-                SortOrder = 7,
+                SortOrder = 8,
                 IsActive = true
             });
 
