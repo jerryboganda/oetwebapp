@@ -10,6 +10,7 @@ import {
   Receipt,
   ShieldCheck,
   Snowflake,
+  Stethoscope,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -26,6 +27,7 @@ import {
   fetchBillingContent,
 } from '@/lib/api';
 import { makeBillingCopy } from '@/lib/billing-copy-defaults';
+import { DEFAULT_CATALOG_STOREFRONT, professionLabel } from '@/lib/catalog-presentation';
 import { formatBillingInterval, formatSubscriptionStatus } from '@/lib/domain/format';
 import type { BillingData } from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
@@ -233,7 +235,7 @@ export default function BillingPage() {
             { icon: ShieldCheck, label: copy('billing.hero.highlight.currentPlan'), value: data.currentPlan },
             { icon: CheckCircle2, label: 'Status', value: formatSubscriptionStatus(data.status) },
             { icon: Calendar, label: 'Subscription ends', value: formatOptionalDate(data.nextRenewal) },
-            { icon: Receipt, label: copy('billing.overview.invoiceAccess'), value: invoiceDownloadsAvailable ? copy('billing.overview.invoiceAccessAvailable') : copy('billing.overview.invoiceAccessUnavailable') },
+            { icon: Stethoscope, label: 'Profession', value: professionLabel(DEFAULT_CATALOG_STOREFRONT, data.profession) },
           ]}
         />
 

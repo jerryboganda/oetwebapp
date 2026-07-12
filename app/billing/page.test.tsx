@@ -45,6 +45,7 @@ const baseBilling = {
   currentPlanCode: 'full',
   planName: 'Full Condensed Recorded OET Course — Medicine',
   planDescription: 'The flagship recorded course.',
+  profession: 'medicine',
   reviewCredits: 0,
   nextRenewal: '2026-12-20',
   price: '$100',
