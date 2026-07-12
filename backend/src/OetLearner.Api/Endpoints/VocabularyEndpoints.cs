@@ -38,7 +38,8 @@ public static class VocabularyEndpoints
                 ct,
                 recallSet,
                 await http.IsPremiumAsync(entitlements, ct),
-                freePreviewOnly == true)));
+                freePreviewOnly == true,
+                userId: http.UserId())));
 
         // Recall-set registry (year/source dimension). Public to authenticated
         // learners so the browse + recalls UI can render filter chips.

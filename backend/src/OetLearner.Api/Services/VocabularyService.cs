@@ -32,7 +32,8 @@ public class VocabularyService(
         CancellationToken ct,
         string? recallSet = null,
         bool isPremium = true,
-        bool freePreviewOnly = false)
+        bool freePreviewOnly = false,
+        string? userId = null)
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
@@ -63,17 +64,59 @@ public class VocabularyService(
             query = query.Where(t => t.RecallSetCodesJson.Contains(needle));
         }
 
+        // Per-user Recall-set allow-list (Phase E — restriction-within-plan, owner
+        // directive). A learner with ANY UserRecallSetAccess rows is restricted to
+        // terms whose RecallSetCodesJson intersects those set codes; no rows ==
+        // unchanged (all sets the module already grants). The intersection is
+        // computed in-memory after materialising — matching how the rest of this
+        // file parses RecallSetCodesJson (see ParseStringArray) — rather than as a
+        // DB-level predicate, since a multi-code JSON-array membership test
+        // doesn't translate cleanly across providers (same EF-InMemory-safety
+        // rationale as GetCategoriesAsync's two-step query below).
+        var allowedRecallSets = await ResolveAllowedRecallSetsAsync(userId, ct);
 
-
-        var total = await query.CountAsync(ct);
-        var items = await query.OrderBy(t => t.Term)
-            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        int total;
+        List<VocabularyTerm> items;
+        if (allowedRecallSets.Count > 0)
+        {
+            var candidates = await query.OrderBy(t => t.Term).ToListAsync(ct);
+            var restricted = candidates
+                .Where(t => ParseStringArray(t.RecallSetCodesJson).Any(allowedRecallSets.Contains))
+                .ToList();
+            total = restricted.Count;
+            items = restricted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        }
+        else
+        {
+            total = await query.CountAsync(ct);
+            items = await query.OrderBy(t => t.Term)
+                .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        }
 
         // Free learners only get full content for curated free-preview terms.
         // All other terms are returned locked (content redacted) so the UI can
         // render a blurred placeholder + subscribe prompt without leaking data.
         var mapped = items.Select(t => Map(t, isLocked: !isPremium && !t.IsFreePreview)).ToList();
         return new VocabularyTermsPageResponse(total, page, pageSize, mapped, mapped);
+    }
+
+    /// <summary>
+    /// Resolves a learner's per-user Recall-set allow-list (Phase E). Returns an
+    /// empty set when <paramref name="userId"/> is null/blank or the learner has
+    /// no <see cref="UserRecallSetAccess"/> rows — callers treat an empty result
+    /// as "unrestricted, inherit whatever the module already grants".
+    /// </summary>
+    private async Task<HashSet<string>> ResolveAllowedRecallSetsAsync(string? userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var codes = await db.UserRecallSetAccesses
+            .AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .Select(x => x.RecallSetCode)
+            .ToListAsync(ct);
+
+        return new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

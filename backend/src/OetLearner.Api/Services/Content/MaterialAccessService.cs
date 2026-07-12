@@ -62,6 +62,27 @@ public sealed class MaterialAccessService(
         var folderDict = allFolders.ToDictionary(f => f.Id);
         var visibleFolderIds = new HashSet<string>();
 
+        // Per-user Materials folder allow-list (Phase E — restriction-within-plan,
+        // owner directive). A learner with ANY UserMaterialFolderAccess rows is
+        // restricted to those folders — plus ANCESTORS (so the tree stays
+        // navigable down to a granted folder) and DESCENDANTS (so content under a
+        // granted folder is included). No rows == unchanged. Admins bypass,
+        // mirroring every other gate in this service.
+        HashSet<string>? navigableFolderScope = null;
+        HashSet<string>? contentFolderScope = null;
+        if (!IsAdmin(principal))
+        {
+            var allowedFolderIds = await db.UserMaterialFolderAccesses
+                .AsNoTracking()
+                .Where(x => x.UserId == userId)
+                .Select(x => x.FolderId)
+                .ToListAsync(ct);
+            if (allowedFolderIds.Count > 0)
+            {
+                (navigableFolderScope, contentFolderScope) = ComputeUserFolderScope(allowedFolderIds, folderDict);
+            }
+        }
+
         // Discipline (profession) filtering — owner directive 2026-07-12. The Materials tree
         // encodes discipline as folder names (Speaking/Medicine, Writing/Nursing, …) with no
         // structured column, so we match those names against the learner's ActiveProfessionId:
@@ -84,13 +105,18 @@ public sealed class MaterialAccessService(
         foreach (var folder in allFolders)
         {
             if (IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
-                && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines))
+                && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines)
+                && (navigableFolderScope is null || navigableFolderScope.Contains(folder.Id)))
                 visibleFolderIds.Add(folder.Id);
         }
 
-        // Root-level files (FolderId == null) are always visible
+        // Root-level files (FolderId == null) are always visible — UNLESS a per-user
+        // folder allow-list restriction is active, in which case they aren't under
+        // any granted folder and are hidden.
         var visibleFiles = allFiles
-            .Where(f => f.FolderId == null || visibleFolderIds.Contains(f.FolderId))
+            .Where(f => contentFolderScope is null
+                ? (f.FolderId == null || visibleFolderIds.Contains(f.FolderId))
+                : (f.FolderId != null && visibleFolderIds.Contains(f.FolderId) && contentFolderScope.Contains(f.FolderId)))
             .ToList();
 
         var rootFolders = allFolders
@@ -124,8 +150,39 @@ public sealed class MaterialAccessService(
 
         if (files.Count == 0) return false;
 
-        // Root-level files are accessible to all authenticated candidates
-        if (files.Any(f => f.FolderId == null)) return true;
+        // Per-user Materials folder allow-list (Phase E — restriction-within-plan).
+        // A learner with ANY UserMaterialFolderAccess rows is restricted to those
+        // folders and their descendants; admins bypass (mirrors the IsAdmin
+        // short-circuit used by GetVisibleTreeAsync — this overload only receives
+        // a userId, so the role is looked up directly).
+        var allowedFolderIds = await db.UserMaterialFolderAccesses
+            .AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .Select(x => x.FolderId)
+            .ToListAsync(ct);
+
+        var hasFolderRestriction = false;
+        if (allowedFolderIds.Count > 0)
+        {
+            var role = await db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.Role)
+                .FirstOrDefaultAsync(ct);
+            hasFolderRestriction = !string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (hasFolderRestriction)
+        {
+            // Root-level files aren't under any granted folder — hide them outright.
+            files = files.Where(f => f.FolderId != null).ToList();
+            if (files.Count == 0) return false;
+        }
+        else if (files.Any(f => f.FolderId == null))
+        {
+            // Root-level files are accessible to all authenticated candidates.
+            return true;
+        }
 
         var folderIds = files.Select(f => f.FolderId!).Distinct().ToList();
         var folders = await db.MaterialFolders
@@ -149,9 +206,16 @@ public sealed class MaterialAccessService(
         // file by guessing its mediaAssetId (defence in depth alongside GetVisibleTreeAsync).
         var (disciplineUniverse, learnerDisciplines) = await ResolveDisciplineFilterAsync(userId, ct);
 
+        HashSet<string>? contentFolderScope = null;
+        if (hasFolderRestriction)
+        {
+            (_, contentFolderScope) = ComputeUserFolderScope(allowedFolderIds, folderDict);
+        }
+
         return folders.Any(folder =>
             IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
-            && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines));
+            && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines)
+            && (contentFolderScope is null || contentFolderScope.Contains(folder.Id)));
     }
 
     private bool IsFolderVisible(
@@ -356,6 +420,73 @@ public sealed class MaterialAccessService(
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Computes the per-user Materials folder allow-list scope from a learner's
+    /// granted <see cref="UserMaterialFolderAccess"/> folder ids (Phase E —
+    /// restriction-within-plan). Walks the adjacency list
+    /// (<see cref="MaterialFolder.ParentFolderId"/>) to return two sets:
+    ///   <c>navigable</c> — granted folders + their ANCESTORS (so the tree stays
+    ///     navigable down to a granted folder) + their DESCENDANTS. Gates folder
+    ///     visibility (<see cref="GetVisibleTreeAsync"/>).
+    ///   <c>content</c> — granted folders + their DESCENDANTS only (NOT
+    ///     ancestors — an ancestor is navigation-only and must not expose its own
+    ///     files unless independently granted). Gates file visibility/download
+    ///     in both <see cref="GetVisibleTreeAsync"/> and
+    ///     <see cref="CanCandidateAccessMaterialFileAsync"/>.
+    /// </summary>
+    private static (HashSet<string> navigable, HashSet<string> content) ComputeUserFolderScope(
+        IReadOnlyCollection<string> allowedFolderIds,
+        Dictionary<string, MaterialFolder> allFolders)
+    {
+        var navigable = new HashSet<string>(allowedFolderIds);
+        var content = new HashSet<string>(allowedFolderIds);
+
+        // Ancestors — navigation only.
+        foreach (var id in allowedFolderIds)
+        {
+            if (!allFolders.TryGetValue(id, out var folder)) continue;
+            var current = folder;
+            var guard = 0;
+            while (current.ParentFolderId is not null && guard++ < 64)
+            {
+                if (!allFolders.TryGetValue(current.ParentFolderId, out var parent)) break;
+                navigable.Add(parent.Id);
+                current = parent;
+            }
+        }
+
+        // Descendants — navigation + content. Build a children-by-parent lookup
+        // once, then breadth-first walk down from every granted folder.
+        var childrenByParent = new Dictionary<string, List<MaterialFolder>>();
+        foreach (var folder in allFolders.Values)
+        {
+            if (folder.ParentFolderId is null) continue;
+            if (!childrenByParent.TryGetValue(folder.ParentFolderId, out var siblings))
+            {
+                siblings = new List<MaterialFolder>();
+                childrenByParent[folder.ParentFolderId] = siblings;
+            }
+            siblings.Add(folder);
+        }
+
+        var queue = new Queue<string>(allowedFolderIds);
+        var visited = new HashSet<string>(allowedFolderIds);
+        while (queue.Count > 0)
+        {
+            var id = queue.Dequeue();
+            if (!childrenByParent.TryGetValue(id, out var children)) continue;
+            foreach (var child in children)
+            {
+                if (!visited.Add(child.Id)) continue;
+                navigable.Add(child.Id);
+                content.Add(child.Id);
+                queue.Enqueue(child.Id);
+            }
+        }
+
+        return (navigable, content);
     }
 
     private static object BuildFolderNode(

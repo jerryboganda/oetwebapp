@@ -14,6 +14,7 @@ import { readErrorMessage } from '@/lib/read-error-message';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { PasswordField } from '@/components/auth/password-field';
+import { ExpiredSubscriptionModal } from '@/components/auth/expired-subscription-modal';
 import { useAuth } from '@/contexts/auth-context';
 import { buildExternalAuthStartHref } from '@/lib/auth-client';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
@@ -65,6 +66,7 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(resolveExternalErrorMessage(externalError));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExpiredSubscriptionModalOpen, setIsExpiredSubscriptionModalOpen] = useState(false);
   const [desktopRuntimeInfo, setDesktopRuntimeInfo] = useState<Awaited<ReturnType<NonNullable<typeof window.desktopBridge>['runtime']['info']>> | null>(null);
   const emailHintId = 'sign-in-email-hint';
   const errorMessageId = 'sign-in-error';
@@ -138,6 +140,11 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         }
 
         router.replace(`/verify-email?${query.toString()}`);
+        return;
+      }
+
+      if (readErrorCode(authError) === 'subscription_expired') {
+        setIsExpiredSubscriptionModalOpen(true);
         return;
       }
 
@@ -260,6 +267,11 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
           {isSubmitting ? 'Signing In…' : 'Sign In'}
         </button>
       </form>
+
+      <ExpiredSubscriptionModal
+        open={isExpiredSubscriptionModalOpen}
+        onClose={() => setIsExpiredSubscriptionModalOpen(false)}
+      />
     </AuthScreenShell>
   );
 }
