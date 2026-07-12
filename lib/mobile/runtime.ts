@@ -1,11 +1,43 @@
 'use client';
 
 import { Capacitor } from '@capacitor/core';
-import { App } from '@capacitor/app';
-import { Keyboard } from '@capacitor/keyboard';
-import { Network } from '@capacitor/network';
-import { SplashScreen } from '@capacitor/splash-screen';
-import { StatusBar, Style } from '@capacitor/status-bar';
+
+type AppModule = typeof import('@capacitor/app');
+type KeyboardModule = typeof import('@capacitor/keyboard');
+type NetworkModule = typeof import('@capacitor/network');
+type SplashScreenModule = typeof import('@capacitor/splash-screen');
+type StatusBarModule = typeof import('@capacitor/status-bar');
+
+let appModulePromise: Promise<AppModule> | null = null;
+let keyboardModulePromise: Promise<KeyboardModule> | null = null;
+let networkModulePromise: Promise<NetworkModule> | null = null;
+let splashScreenModulePromise: Promise<SplashScreenModule> | null = null;
+let statusBarModulePromise: Promise<StatusBarModule> | null = null;
+
+function loadAppModule(): Promise<AppModule> {
+  appModulePromise ??= import('@capacitor/app');
+  return appModulePromise;
+}
+
+function loadKeyboardModule(): Promise<KeyboardModule> {
+  keyboardModulePromise ??= import('@capacitor/keyboard');
+  return keyboardModulePromise;
+}
+
+function loadNetworkModule(): Promise<NetworkModule> {
+  networkModulePromise ??= import('@capacitor/network');
+  return networkModulePromise;
+}
+
+function loadSplashScreenModule(): Promise<SplashScreenModule> {
+  splashScreenModulePromise ??= import('@capacitor/splash-screen');
+  return splashScreenModulePromise;
+}
+
+function loadStatusBarModule(): Promise<StatusBarModule> {
+  statusBarModulePromise ??= import('@capacitor/status-bar');
+  return statusBarModulePromise;
+}
 
 export interface MobileRuntimeHandlers {
   onResume?: () => void;
@@ -53,6 +85,14 @@ async function syncNativeChrome() {
     return;
   }
 
+  let statusBarModule: StatusBarModule;
+  try {
+    statusBarModule = await loadStatusBarModule();
+  } catch {
+    return;
+  }
+
+  const { StatusBar, Style } = statusBarModule;
   const isDark = getPreferredColorScheme() === 'dark';
 
   document.documentElement.dataset.colorScheme = isDark ? 'dark' : 'light';
@@ -131,6 +171,7 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   cleanup.push(() => colorSchemeQuery.removeEventListener('change', colorSchemeListener));
 
   try {
+    const { Keyboard } = await loadKeyboardModule();
     const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', (event) => {
       document.documentElement.dataset.keyboardVisible = 'true';
       document.documentElement.style.setProperty('--app-keyboard-offset', `${event.keyboardHeight}px`);
@@ -150,12 +191,16 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   }
 
   try {
-    await Promise.allSettled([syncNativeChrome(), SplashScreen.hide()]);
+    await Promise.allSettled([
+      syncNativeChrome(),
+      loadSplashScreenModule().then(({ SplashScreen }) => SplashScreen.hide()),
+    ]);
   } catch {
     // Ignore shell setup failures in unsupported environments.
   }
 
   try {
+    const { Network } = await loadNetworkModule();
     const networkStatus = await Network.getStatus();
     syncOnlineState(networkStatus.connected, handlers.onNetworkChange);
 
@@ -174,7 +219,10 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     cleanup.push(() => window.removeEventListener('offline', offlineHandler));
   }
 
+  const currentAppModulePromise = loadAppModule();
+
   try {
+    const { App } = await currentAppModulePromise;
     const appStateListener = await App.addListener('appStateChange', (state) => {
       document.documentElement.dataset.appActive = state.isActive ? 'true' : 'false';
       document.documentElement.dataset.windowFocused = state.isActive ? 'true' : 'false';
@@ -195,6 +243,7 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   }
 
   try {
+    const { App } = await currentAppModulePromise;
     const backButtonListener = await App.addListener('backButton', async ({ canGoBack }) => {
       if (canGoBack && window.history.length > 1) {
         window.history.back();

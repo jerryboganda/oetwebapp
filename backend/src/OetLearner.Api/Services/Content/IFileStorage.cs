@@ -5,6 +5,8 @@ using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Content;
 
+public sealed record FileStorageReadResult(Stream Stream, long Length);
+
 // ═════════════════════════════════════════════════════════════════════════════
 // IFileStorage — thin abstraction in front of disk storage. Slice 2.
 //
@@ -20,6 +22,30 @@ public interface IFileStorage
 {
     Task<long> WriteAsync(string key, Stream source, CancellationToken ct);
     Task<Stream> OpenReadAsync(string key, CancellationToken ct);
+
+    /// <summary>
+    /// Opens a readable stream and returns metadata obtained by the same storage
+    /// operation. Providers on remote hot paths must override this method.
+    /// </summary>
+    async Task<FileStorageReadResult> OpenReadWithMetadataAsync(string key, CancellationToken ct)
+    {
+        var stream = await OpenReadAsync(key, ct);
+        try
+        {
+            if (!stream.CanSeek)
+            {
+                throw new NotSupportedException(
+                    "This storage provider must implement OpenReadWithMetadataAsync for non-seekable streams.");
+            }
+
+            return new FileStorageReadResult(stream, stream.Length);
+        }
+        catch
+        {
+            await stream.DisposeAsync();
+            throw;
+        }
+    }
 
     /// <summary>Open a write stream. Caller is responsible for disposal.
     /// Concrete implementations ensure parent directories exist.</summary>
@@ -75,10 +101,15 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
 
     public Task<Stream> OpenReadAsync(string key, CancellationToken ct)
     {
-        var fullPath = ResolvePath(key);
-        Stream s = new FileStream(fullPath, FileMode.Open, FileAccess.Read,
-            FileShare.Read, 81920, useAsync: true);
-        return Task.FromResult(s);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult<Stream>(OpenLocalReadStream(key));
+    }
+
+    public Task<FileStorageReadResult> OpenReadWithMetadataAsync(string key, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var stream = OpenLocalReadStream(key);
+        return Task.FromResult(new FileStorageReadResult(stream, stream.Length));
     }
 
     public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
@@ -146,6 +177,20 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
         // because the auth check runs on every request.
         if (string.IsNullOrWhiteSpace(key)) return null;
         return new Uri($"/media/file/{Uri.EscapeDataString(key)}", UriKind.Relative);
+    }
+
+    private FileStream OpenLocalReadStream(string key)
+    {
+        var fullPath = ResolvePath(key);
+        try
+        {
+            return new FileStream(fullPath, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 81920, useAsync: true);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new FileNotFoundException($"Storage object '{key}' was not found.", key, ex);
+        }
     }
 
     private string ResolvePath(string key)
