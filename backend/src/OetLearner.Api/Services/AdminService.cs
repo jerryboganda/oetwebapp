@@ -3091,6 +3091,215 @@ public partial class AdminService(
         };
     }
 
+    // ── Manual "Add User" (create with password OR invite) ───────────────────
+
+    /// <summary>
+    /// Admin manual user creation. When a password is supplied the account is created
+    /// ready-to-use (hashed, email pre-verified, no OTP email); otherwise the invite/OTP
+    /// email flow runs exactly like <see cref="InviteUserAsync"/>. Phone number, when
+    /// provided for a learner, is persisted to the registration profile. Allocation of
+    /// packages/modules/expiry is done separately by the access-allocation endpoints.
+    /// </summary>
+    public async Task<object> CreateUserAsync(
+        string adminId,
+        string adminName,
+        AdminUserCreateRequest request,
+        CancellationToken ct)
+    {
+        var role = (request.Role ?? string.Empty).Trim().ToLowerInvariant();
+        if (role is not (ApplicationUserRoles.Learner or ApplicationUserRoles.Expert or ApplicationUserRoles.Admin))
+        {
+            throw ApiException.Validation("invalid_role", "Role must be learner, expert, or admin.");
+        }
+
+        var email = AuthEmailAddress.TrimAndValidateOrThrow(request.Email);
+        var normalizedEmail = email.ToUpperInvariant();
+        if (await db.ApplicationUserAccounts.AnyAsync(a => a.NormalizedEmail == normalizedEmail, ct))
+        {
+            throw ApiException.Conflict("email_already_exists", "An account with this email already exists.");
+        }
+
+        var professionId = string.IsNullOrWhiteSpace(request.ProfessionId)
+            ? null
+            : request.ProfessionId.Trim();
+        if (role is ApplicationUserRoles.Learner or ApplicationUserRoles.Expert)
+        {
+            if (string.IsNullOrWhiteSpace(professionId))
+            {
+                throw ApiException.Validation("profession_required", "A profession is required for learner and expert accounts.");
+            }
+
+            var professionExists = await db.Professions.AsNoTracking().AnyAsync(
+                p => p.Id == professionId && p.Status == ActiveUserStatus,
+                ct);
+            if (!professionExists)
+            {
+                throw ApiException.Validation("invalid_profession", "The selected profession is not active or does not exist.");
+            }
+        }
+        else if (professionId is not null)
+        {
+            throw ApiException.Validation("profession_not_allowed", "Admin accounts cannot be assigned a profession.");
+        }
+
+        var usePassword = !string.IsNullOrWhiteSpace(request.Password);
+        if (usePassword && request.Password!.Trim().Length < 8)
+        {
+            throw ApiException.Validation("weak_password", "Password must be at least 8 characters.");
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(request.Name) ? email : request.Name.Trim();
+        var now = timeProvider.GetUtcNow();
+        var authAccountId = GenerateAccountId(role);
+        var initialPassword = usePassword ? request.Password!.Trim() : $"Tmp!{Guid.NewGuid():N}";
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+
+        var authAccount = new ApplicationUserAccount
+        {
+            Id = authAccountId,
+            Email = email,
+            NormalizedEmail = normalizedEmail,
+            PasswordHash = string.Empty,
+            Role = role,
+            EmailVerifiedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        authAccount.PasswordHash = passwordHasher.HashPassword(authAccount, initialPassword);
+        db.ApplicationUserAccounts.Add(authAccount);
+
+        string userId;
+        switch (role)
+        {
+            case ApplicationUserRoles.Learner:
+                userId = GenerateDomainId("usr");
+                db.Users.Add(new LearnerUser
+                {
+                    Id = userId,
+                    AuthAccountId = authAccountId,
+                    Role = ApplicationUserRoles.Learner,
+                    DisplayName = displayName,
+                    Email = email,
+                    Timezone = "UTC",
+                    Locale = "en-AU",
+                    ActiveProfessionId = professionId,
+                    CreatedAt = now,
+                    LastActiveAt = now,
+                    AccountStatus = "active"
+                });
+                db.Wallets.Add(new Wallet
+                {
+                    Id = GenerateDomainId("wallet"),
+                    UserId = userId,
+                    CreditBalance = 0,
+                    LedgerSummaryJson = "[]",
+                    LastUpdatedAt = now
+                });
+                break;
+            case ApplicationUserRoles.Expert:
+                userId = GenerateDomainId("expert");
+                db.ExpertUsers.Add(new ExpertUser
+                {
+                    Id = userId,
+                    AuthAccountId = authAccountId,
+                    Role = ApplicationUserRoles.Expert,
+                    DisplayName = displayName,
+                    Email = email,
+                    SpecialtiesJson = JsonSupport.Serialize(new[] { professionId! }),
+                    Timezone = "UTC",
+                    IsActive = true,
+                    CreatedAt = now
+                });
+                break;
+            default:
+                userId = authAccountId;
+                break;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // Invite/OTP email only when NOT setting a password directly. Own 10s deadline
+        // so a slow provider never blocks the response (admin gets the temp password back).
+        OtpChallengeResponse? inviteChallenge = null;
+        if (!usePassword)
+        {
+            using var emailCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            emailCts.CancelAfter(TimeSpan.FromSeconds(10));
+            try
+            {
+                inviteChallenge = await emailOtpService.RequestPasswordResetOtpAsync(email, emailCts.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        await LogAuditAsync(adminId, adminName, "Created User", "User", userId,
+            $"Created {role}: {email} ({(usePassword ? "password set" : "invite email")})", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        // Persist phone (and split name) into the learner registration profile via the
+        // existing profile updater, which create-fills required defaults. Best-effort:
+        // a profile failure must not undo an otherwise-created account.
+        if (role == ApplicationUserRoles.Learner && !string.IsNullOrWhiteSpace(request.MobileNumber))
+        {
+            var (firstName, lastName) = SplitDisplayName(displayName);
+            try
+            {
+                await UpdateUserProfileAsync(adminId, adminName, userId, new AdminUserProfileUpdateRequest(
+                    DisplayName: null,
+                    FirstName: firstName,
+                    LastName: lastName,
+                    MobileNumber: request.MobileNumber!.Trim(),
+                    ProfessionId: professionId,
+                    ExamTypeId: null,
+                    CountryTarget: null,
+                    Timezone: null,
+                    Locale: null,
+                    MarketingOptIn: null,
+                    AgreeToTerms: null,
+                    AgreeToPrivacy: null,
+                    Specialties: null,
+                    Reason: "admin_add_user"), ct);
+            }
+            catch (Exception)
+            {
+                // Non-fatal: account exists; admin can edit the profile afterwards.
+            }
+        }
+
+        return new
+        {
+            id = userId,
+            email,
+            role,
+            temporaryPassword = (!usePassword && inviteChallenge is null) ? initialPassword : (string?)null,
+            invitation = inviteChallenge is null ? null : new
+            {
+                purpose = inviteChallenge.Purpose,
+                deliveryChannel = inviteChallenge.DeliveryChannel,
+                destinationHint = inviteChallenge.DestinationHint,
+                expiresAt = inviteChallenge.ExpiresAt,
+                retryAfterSeconds = inviteChallenge.RetryAfterSeconds
+            }
+        };
+    }
+
+    private static (string FirstName, string? LastName) SplitDisplayName(string displayName)
+    {
+        var trimmed = displayName.Trim();
+        var spaceIndex = trimmed.IndexOf(' ');
+        if (spaceIndex <= 0)
+        {
+            return (trimmed, null);
+        }
+        return (trimmed[..spaceIndex].Trim(), trimmed[(spaceIndex + 1)..].Trim());
+    }
+
     // ── Bulk User Import ─────────────────────────────────
 
     private const int MaxImportFileBytes = 5 * 1024 * 1024; // 5 MB

@@ -45,6 +45,14 @@ public class LearnerUser
     [MaxLength(32)]
     public string AccountStatus { get; set; } = "active";
 
+    // ── Admin-set master access expiry ──
+    // When set and elapsed, login (and token refresh) is refused with
+    // ApiException.Forbidden("subscription_expired", …) — see
+    // AuthService.EnsureAccountCanAuthenticateAsync. Null == never expires.
+    // Written by the admin allocation flow (UserAccessAllocationService),
+    // defaulting to the latest allocated package expiry but admin-overridable.
+    public DateTimeOffset? AccessExpiresAt { get; set; }
+
     // ── Engagement tracking ──
     public int CurrentStreak { get; set; }
     public int LongestStreak { get; set; }

@@ -1327,6 +1327,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Recall Set Tags table (partial; see LearnerDbContext.RecallSetTags.cs).
         OnModelCreatingRecallSetTags(modelBuilder);
 
+        // Per-user access overrides: module toggles + Materials-folder and
+        // Recall-set allow-lists (partial; see LearnerDbContext.UserAccess.cs).
+        OnModelCreatingUserAccess(modelBuilder);
+
         // Billing region pricing + gateway routing (partial; see LearnerDbContext.BillingRegion.cs).
         OnModelCreatingBillingRegion(modelBuilder);
 
@@ -1468,6 +1472,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.RecallSetTags.cs (partial).
     /// </summary>
     partial void OnModelCreatingRecallSetTags(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.UserAccess.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingUserAccess(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.BillingRegion.cs (partial).

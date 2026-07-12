@@ -273,6 +273,41 @@ public static class AdminEndpoints
             => Results.Ok(await service.InviteUserAsync(http.AdminId(), http.AdminName(), request, ct)))
             .WithAdminWrite("AdminUsersWrite");
 
+        // Manual "Add User": create a learner directly (password OR invite email).
+        admin.MapPost("/users", async (HttpContext http, AdminUserCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateUserAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
+        // ── Per-user access allocation (packages / add-ons / scope + master expiry) ──
+        admin.MapGet("/users/{userId}/access", async (string userId,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.GetAccessAsync(userId, ct)))
+            .WithAdminRead("AdminUsersRead");
+
+        admin.MapPost("/users/{userId}/access/packages", async (string userId, HttpContext http,
+            AdminUserAccessPackageRequest request,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.GrantPackageAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
+        admin.MapDelete("/users/{userId}/access/packages/{subscriptionId}", async (string userId, string subscriptionId,
+            HttpContext http,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.RemovePackageAsync(http.AdminId(), http.AdminName(), userId, subscriptionId, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
+        admin.MapPost("/users/{userId}/access/addons", async (string userId, HttpContext http,
+            AdminUserAccessAddonRequest request,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.GrantAddonAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
+        admin.MapPut("/users/{userId}/access/scope", async (string userId, HttpContext http,
+            AdminUserAccessScopeRequest request,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.PutScopeAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
         admin.MapPost("/users/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct)
             => Results.Ok(await service.BulkImportUsersAsync(http.AdminId(), http.AdminName(), file, ct)))
             .RequireRateLimiting("PerUserWrite")

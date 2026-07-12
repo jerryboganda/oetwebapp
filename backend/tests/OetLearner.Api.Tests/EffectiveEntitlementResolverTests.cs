@@ -406,4 +406,216 @@ public class EffectiveEntitlementResolverTests
         Assert.DoesNotContain("TutorBook", snapshot.EnabledModules);
         Assert.DoesNotContain("AudioScripts", snapshot.EnabledModules);
     }
+
+    // ── Multi-package aggregation (admin allocates ≥1 packages) ──────────────
+
+    [Fact]
+    public async Task ResolveAsync_MultipleActiveCoursePackages_UnionsModulesSumsCountersMaxExpiry()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var expNear = now.AddDays(30);
+        var expFar = now.AddDays(60);
+        db.BillingPlans.AddRange(
+            new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DashboardModulesJson = "[\"Recalls\",\"MaterialsLibrary\"]" },
+            new BillingPlan { Id = "plan-physio", Code = "physio", Name = "Physio", DashboardModulesJson = "[\"VideoLibrary\",\"Mocks\"]" });
+        db.Subscriptions.AddRange(
+            new Subscription
+            {
+                Id = "sub-med",
+                UserId = "learner-multi",
+                PlanId = "plan-med",
+                Status = SubscriptionStatus.Active,
+                StartedAt = now.AddDays(-2),
+                ChangedAt = now.AddDays(-1),
+                ExpiresAt = expNear,
+                WritingAssessmentsRemaining = 2,
+                AiCreditsRemaining = 10,
+            },
+            new Subscription
+            {
+                Id = "sub-physio",
+                UserId = "learner-multi",
+                PlanId = "plan-physio",
+                Status = SubscriptionStatus.Active,
+                StartedAt = now.AddDays(-1),
+                ChangedAt = now, // latest
+                ExpiresAt = expFar,
+                WritingAssessmentsRemaining = 3,
+                AiCreditsRemaining = 5,
+            });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-multi", default);
+
+        Assert.True(snapshot.HasEligibleSubscription);
+        Assert.Contains("Recalls", snapshot.EnabledModules);
+        Assert.Contains("MaterialsLibrary", snapshot.EnabledModules);
+        Assert.Contains("VideoLibrary", snapshot.EnabledModules);
+        Assert.Contains("Mocks", snapshot.EnabledModules);
+        Assert.Equal(5, snapshot.WritingAssessmentsRemaining); // 2 + 3
+        Assert.Equal(15, snapshot.AiCreditsRemaining);         // 10 + 5
+        Assert.Equal(expFar, snapshot.ExpiresAt);              // max of the two
+        Assert.Contains("packages.2", snapshot.Trace);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ExpiredLatestCourse_ButOlderCourseStillActive_RescuesEligibility()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.AddRange(
+            new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DashboardModulesJson = "[\"Recalls\"]" },
+            new BillingPlan { Id = "plan-physio", Code = "physio", Name = "Physio", DashboardModulesJson = "[\"Mocks\"]" });
+        db.Subscriptions.AddRange(
+            new Subscription
+            {
+                Id = "sub-med-active",
+                UserId = "learner-stagger",
+                PlanId = "plan-med",
+                Status = SubscriptionStatus.Active,
+                StartedAt = now.AddDays(-5),
+                ChangedAt = now.AddDays(-5),
+                ExpiresAt = now.AddDays(30), // still active
+            },
+            new Subscription
+            {
+                Id = "sub-physio-expired",
+                UserId = "learner-stagger",
+                PlanId = "plan-physio",
+                Status = SubscriptionStatus.Active,
+                StartedAt = now.AddDays(-1),
+                ChangedAt = now, // latest by ChangedAt, but expired
+                ExpiresAt = now.AddDays(-1),
+            });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-stagger", default);
+
+        // The latest sub is expired, but the older active course rescues access.
+        Assert.True(snapshot.HasEligibleSubscription);
+        Assert.Contains("Recalls", snapshot.EnabledModules);
+        Assert.DoesNotContain("Mocks", snapshot.EnabledModules); // expired package excluded
+    }
+
+    // ── Per-user module overrides ────────────────────────────────────────────
+
+    [Fact]
+    public async Task ResolveAsync_PerUserDisableOverride_BlocksModuleEvenThoughPlanEnablesIt()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-course",
+            Code = "full",
+            Name = "Full",
+            DashboardModulesJson = "[\"Recalls\",\"MaterialsLibrary\",\"VideoLibrary\",\"Mocks\"]",
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-active",
+            UserId = "learner-ovr",
+            PlanId = "plan-course",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-5),
+            ChangedAt = now.AddDays(-5),
+            ExpiresAt = now.AddDays(30),
+        });
+        db.UserModuleOverrides.Add(new UserModuleOverride
+        {
+            Id = "umo-1",
+            UserId = "learner-ovr",
+            ModuleKey = "Mocks",
+            Enabled = false,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-ovr", default);
+
+        Assert.False(snapshot.IsModuleEnabled("Mocks"));
+        Assert.True(snapshot.IsModuleEnabled("Recalls"));
+        Assert.Contains("Mocks", snapshot.DisabledModules);
+        Assert.DoesNotContain("Mocks", snapshot.EnabledModules);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_PerUserDisable_SurvivesFailOpenWhenEnabledListEmpties()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-single",
+            Code = "single",
+            Name = "Single",
+            DashboardModulesJson = "[\"Mocks\"]", // only one module
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-single",
+            UserId = "learner-single",
+            PlanId = "plan-single",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-5),
+            ChangedAt = now.AddDays(-5),
+            ExpiresAt = now.AddDays(30),
+        });
+        db.UserModuleOverrides.Add(new UserModuleOverride
+        {
+            Id = "umo-2",
+            UserId = "learner-single",
+            ModuleKey = "Mocks",
+            Enabled = false,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-single", default);
+
+        // Disabling the only module must NOT re-open everything via fail-open.
+        Assert.False(snapshot.IsModuleEnabled("Mocks"));
+        // An unrelated module the plan never listed stays fail-open (unchanged behaviour).
+        Assert.True(snapshot.IsModuleEnabled("Recalls"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_PerUserEnableOverride_AddsModuleNotInPlan()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-course",
+            Code = "full",
+            Name = "Full",
+            DashboardModulesJson = "[\"Recalls\"]",
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-active",
+            UserId = "learner-en",
+            PlanId = "plan-course",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-5),
+            ChangedAt = now.AddDays(-5),
+            ExpiresAt = now.AddDays(30),
+        });
+        db.UserModuleOverrides.Add(new UserModuleOverride
+        {
+            Id = "umo-3",
+            UserId = "learner-en",
+            ModuleKey = "VideoLibrary",
+            Enabled = true,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-en", default);
+
+        Assert.Contains("Recalls", snapshot.EnabledModules);
+        Assert.Contains("VideoLibrary", snapshot.EnabledModules);
+        Assert.True(snapshot.IsModuleEnabled("VideoLibrary"));
+    }
 }
