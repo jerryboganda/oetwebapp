@@ -63,6 +63,7 @@ function defaultBillingData() {
     currentPlanCode: 'pro',
     planName: 'Pro',
     planDescription: 'Current learner plan.',
+    profession: 'medicine',
     reviewCredits: 3,
     nextRenewal: '2026-06-27',
     price: '$49',

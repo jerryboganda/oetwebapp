@@ -119,6 +119,8 @@ export interface BillingData {
   currentPlanCode: string;
   planName: string;
   planDescription: string;
+  /** Discipline the active plan is allocated to (e.g. 'medicine', 'nursing', 'all'). */
+  profession: string;
   price: string;
   interval: string;
   status: string;

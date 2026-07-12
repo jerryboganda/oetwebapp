@@ -4191,6 +4191,7 @@ export async function fetchBilling(): Promise<BillingData> {
     currentPlanCode: summary.planCode ?? summary.planId,
     planName: summary.planName ?? titleCase(summary.planId),
     planDescription: summary.planDescription ?? '',
+    profession: summary.profession ?? 'all',
     price: formatCurrency(summary.price?.amount ?? 0, summary.price?.currency ?? 'GBP'),
     interval: summary.price.interval,
     // Keep the raw status token ("active" | "frozen" | "past_due" | ...). The UI
