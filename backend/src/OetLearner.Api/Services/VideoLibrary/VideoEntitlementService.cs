@@ -14,13 +14,21 @@ namespace OetLearner.Api.Services.VideoLibrary;
 //   Video-level tier comes from LibraryVideo.AccessTier ("free" | "premium").
 //   • "free"    → any authenticated learner may watch.
 //   • "premium" → requires either
-//       (a) plan EntitlementsJson node  "video_library": { "tier": "premium" }, or
-//       (b) an active add-on whose GrantEntitlementsJson has "videoLibrary": true
+//       (a) the plan EXPLICITLY enabling the admin "VideoLibrary" module
+//           (DashboardModulesJson contains "VideoLibrary" → the "Videos"
+//           Enable/Disable toggle in the admin Edit-plan dialog), matching how
+//           Recalls / MaterialsLibrary / Mocks gate — this is the primary path
+//           for every real plan; or
+//       (b) a legacy plan EntitlementsJson node "video_library": { "tier":
+//           "premium" } (still honoured, and still able to scope by subtest); or
+//       (c) an active add-on whose GrantEntitlementsJson has "videoLibrary": true
 //           (snake_case "video_library": true also accepted).
 //
-//   Deliberately NO legacy-plan default: a plan without the video_library node
-//   grants NOTHING here (unlike ContentEntitlementService's legacy premium
-//   fallback) — the Video Library launches as an explicit entitlement.
+//   Owner directive 2026-07-13: the "Videos" module toggle IS the grant. Before
+//   this, premium videos required node (b) which NO admin UI ever wrote and NO
+//   seeded plan carried, so enabling "Videos" in admin never actually unlocked
+//   playback. A plan that neither enables the module nor carries the node (nor
+//   an add-on) still grants NOTHING — a bare eligible subscription is not enough.
 //
 // Denial signal
 // ─────────────
@@ -154,7 +162,18 @@ public sealed class VideoEntitlementService(
         // Admin-togglable module gate. When disabled the plan no longer grants the Video Library
         // (nor free-tier viewing) — but a live add-on the learner paid for still does.
         var moduleEnabled = entitlement.IsModuleEnabled(ModuleKeys.VideoLibrary);
-        var planGrantsPremium = bundle.GrantsPremium && moduleEnabled;
+        // Is the VideoLibrary module EXPLICITLY enabled on the plan (i.e. the admin "Videos" toggle
+        // is on / the key is present in DashboardModulesJson)? This — not a separate entitlement
+        // node — is the primary grant for every real plan, mirroring Recalls/Materials/Mocks. We
+        // require the module to be EXPLICITLY listed rather than relying on IsModuleEnabled's
+        // fail-open (empty-list ⇒ enabled) contract, so a plan that carries no module list at all
+        // still grants nothing here (preserving "a bare eligible subscription is not enough").
+        var moduleExplicitlyEnabled = entitlement.EnabledModules
+            .Any(m => string.Equals(m, ModuleKeys.VideoLibrary, StringComparison.OrdinalIgnoreCase));
+        // Grant premium when the module is enabled (not per-user/per-plan disabled) AND either the
+        // plan explicitly turns the module on OR carries a legacy video_library:{tier:premium} node.
+        // The moduleEnabled prefix keeps a per-user/per-plan DISABLE authoritative over both paths.
+        var planGrantsPremium = moduleEnabled && (bundle.GrantsPremium || moduleExplicitlyEnabled);
 
         // Resolve add-on grants even when the plan already grants premium, so their subtest scope
         // is UNIONed in (a Writing-only plan + a Listening add-on ⇒ both modules unlock).

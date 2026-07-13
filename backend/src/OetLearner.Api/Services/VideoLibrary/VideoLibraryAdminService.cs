@@ -480,6 +480,7 @@ public sealed class VideoLibraryAdminService(
             .ToListAsync(ct);
 
         var hasCustomThumbnail = !string.IsNullOrWhiteSpace(video.CustomThumbnailMediaAssetId);
+        var bunny = (await settingsProvider.GetAsync(ct)).BunnyStream;
         return new AdminVideoDetailDto(
             VideoId: video.Id,
             Title: video.Title,
@@ -499,9 +500,7 @@ public sealed class VideoLibraryAdminService(
             DurationSeconds: video.DurationSeconds,
             Width: video.Width,
             Height: video.Height,
-            ThumbnailUrl: hasCustomThumbnail
-                ? $"/v1/media/{video.CustomThumbnailMediaAssetId}/content"
-                : video.BunnyThumbnailUrl,
+            ThumbnailUrl: VideoThumbnailUrl.Resolve(video, bunny),
             ThumbnailMode: hasCustomThumbnail ? "custom" : "auto",
             CustomThumbnailAssetId: video.CustomThumbnailMediaAssetId,
             Captions: captions,
