@@ -425,6 +425,43 @@ public sealed class BunnyStreamClient(
         => $"https://{cdnHostname}/{bunnyVideoId}/playlist.m3u8"
            + $"?token={token}&expires={expiresUnix}&token_path={Uri.EscapeDataString(tokenPath)}";
 
+    /// <summary>
+    /// Append a <b>file-scoped</b> Bunny CDN token to an auto-generated thumbnail
+    /// URL (e.g. <c>https://{host}/{videoId}/thumbnail.jpg</c>) so a plain
+    /// <c>&lt;img&gt;</c> can load it from the token-authed pull zone.
+    /// <para>
+    /// Unlike <see cref="ComputeCdnToken"/> (directory auth over <c>/{videoId}/</c>,
+    /// which also authorizes <c>playlist.m3u8</c>), this signs the <b>exact file
+    /// path</b> with Bunny's basic URL-token form — <c>base64url_nopad( sha256(
+    /// tokenAuthKey + signedPath + expires ) )</c>, no <c>token_path</c> parameter —
+    /// so the token cannot be replayed to stream the video and bypass playback
+    /// attestation. Pinned by <c>BunnyStreamClientTests</c>.
+    /// </para>
+    /// </summary>
+    public static string SignThumbnailUrl(string thumbnailUrl, long expiresUnix, string tokenAuthKey)
+    {
+        var uri = new Uri(thumbnailUrl);
+        var token = ComputeFileToken(tokenAuthKey, uri.AbsolutePath, expiresUnix);
+        var separator = string.IsNullOrEmpty(uri.Query) ? '?' : '&';
+        return $"{thumbnailUrl}{separator}token={token}&expires={expiresUnix}";
+    }
+
+    /// <summary>
+    /// Bunny CDN <i>basic</i> (exact-path) token: Base64Url(no padding) of the RAW
+    /// SHA-256 of <c>tokenAuthKey + signedPath + expiresUnix</c>, where
+    /// <c>signedPath</c> is the URL path of the protected file. No
+    /// <c>token_path</c> parameter data (that is the directory-auth variant).
+    /// </summary>
+    public static string ComputeFileToken(string tokenAuthKey, string signedPath, long expiresUnix)
+    {
+        var payload = $"{tokenAuthKey}{signedPath}{expiresUnix}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToBase64String(hash)
+            .Replace("+", "-", StringComparison.Ordinal)
+            .Replace("/", "_", StringComparison.Ordinal)
+            .TrimEnd('=');
+    }
+
     // ── Internals ──────────────────────────────────────────────────────────
 
     private async Task<BunnyStreamSettings> RequireConfiguredAsync(CancellationToken ct)
