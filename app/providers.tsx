@@ -11,8 +11,6 @@ import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthenticatedNotificationCenter } from '@/components/providers/authenticated-notification-center';
 import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
-import { TourProvider } from '@/components/onboarding/tour-provider';
-import { LearnerPasteGuard } from '@/components/system/LearnerPasteGuard';
 import { ShellControls } from '@/components/shell/ShellControls';
 import { ForcedUpdateOverlay } from '@/components/shell/ForcedUpdateOverlay';
 import { DesktopAutoUpdater } from '@/components/shell/DesktopAutoUpdater';
@@ -94,34 +92,26 @@ export function AppProviders({
         <TooltipProvider delayDuration={800} skipDelayDuration={500}>
           <QueryProvider>
             <AuthProvider>
+              <RuntimeLifecycleBridge />
+              <MobileRuntimeBridge />
               <AuthenticatedNotificationCenter>
-                {/*
-                  Disables copy/paste/cut/drag across the entire learner app.
-                  Self-disables on /admin + auth routes via an internal path
-                  check, so mounting once at the root is correct.
-                */}
-                <LearnerPasteGuard />
-                <RuntimeLifecycleBridge />
-                <MobileRuntimeBridge />
-                <TourProvider>
-                  {children}
-                </TourProvider>
-                {/*
-                  Shell-only update UI (returns null on the website): the
-                  top-center Reload + Check-for-updates cluster and the
-                  non-dismissible forced-update overlay. Mounted here so they
-                  inherit Theme + Tooltip context.
-                */}
-                <ShellControls />
-                <DesktopAutoUpdater />
-                <ForcedUpdateOverlay />
-                {/*
-                  Global sonner toaster — rendered once at the root so any
-                  `toast()` call anywhere in the tree surfaces in the same anchor.
-                  Theme is read from next-themes inside the component.
-                */}
-                <Toaster />
+                {children}
               </AuthenticatedNotificationCenter>
+              {/*
+                Shell-only update UI (returns null on the website): the
+                top-center Reload + Check-for-updates cluster and the
+                non-dismissible forced-update overlay. Mounted here so they
+                inherit Theme + Tooltip context.
+              */}
+              <ShellControls />
+              <DesktopAutoUpdater />
+              <ForcedUpdateOverlay />
+              {/*
+                Global sonner toaster — rendered once at the root so any
+                `toast()` call anywhere in the tree surfaces in the same anchor.
+                Theme is read from next-themes inside the component.
+              */}
+              <Toaster />
             </AuthProvider>
           </QueryProvider>
         </TooltipProvider>

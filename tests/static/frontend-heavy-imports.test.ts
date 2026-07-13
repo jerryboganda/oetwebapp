@@ -1,8 +1,13 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 function source(relativePath: string) {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
+}
+
+function optionalSource(relativePath: string) {
+  const absolutePath = path.join(process.cwd(), relativePath);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, 'utf8') : '';
 }
 
 describe('frontend heavy import boundaries', () => {
@@ -54,5 +59,22 @@ describe('frontend heavy import boundaries', () => {
     expect(progressPage).toContain("@/components/charts/dynamic-recharts");
     expect(progressPage).not.toMatch(/from\s+['"]recharts['"]/);
     expect(authFiles).not.toContain('@tabler/icons-react');
+  });
+
+  it('keeps authenticated workspace providers out of the auth route client graph', () => {
+    const coreProviders = source('app/providers.tsx');
+    const authenticatedBoundary = source('components/providers/authenticated-notification-center.tsx');
+    const workspaceProviders = optionalSource('components/providers/authenticated-workspace-providers.tsx');
+
+    expect(coreProviders).not.toContain('@/components/onboarding/tour-provider');
+    expect(coreProviders).not.toContain('@/components/system/LearnerPasteGuard');
+
+    expect(authenticatedBoundary).toContain("import('./authenticated-workspace-providers')");
+    expect(authenticatedBoundary).toContain('ssr: false');
+
+    expect(workspaceProviders).toContain('@/contexts/notification-center-context');
+    expect(workspaceProviders).toContain('NotificationCenterProvider');
+    expect(workspaceProviders).toContain('@/components/onboarding/tour-provider');
+    expect(workspaceProviders).toContain('@/components/system/LearnerPasteGuard');
   });
 });

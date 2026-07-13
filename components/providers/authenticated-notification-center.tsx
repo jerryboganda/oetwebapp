@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 
-const DynamicNotificationCenterProvider = dynamic<{ children: ReactNode }>(
-  () => import('@/contexts/notification-center-context').then((module) => module.NotificationCenterProvider),
+const DynamicWorkspaceProviders = dynamic<{ children: ReactNode }>(
+  () => import('./authenticated-workspace-providers').then((module) => module.AuthenticatedWorkspaceProviders),
   { ssr: false },
 );
 
@@ -31,8 +31,8 @@ function isAuthRoute(pathname: string | null): boolean {
 }
 
 /**
- * Keeps notification state above page-local shells while avoiding the
- * notification/SignalR chunk until an authenticated workspace is rendered.
+ * Keeps authenticated workspace providers above page-local shells while avoiding
+ * notification/SignalR and product-tour chunks on public/auth routes.
  */
 export function AuthenticatedNotificationCenter({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -43,8 +43,8 @@ export function AuthenticatedNotificationCenter({ children }: { children: ReactN
   }
 
   return (
-    <DynamicNotificationCenterProvider>
+    <DynamicWorkspaceProviders>
       {children}
-    </DynamicNotificationCenterProvider>
+    </DynamicWorkspaceProviders>
   );
 }

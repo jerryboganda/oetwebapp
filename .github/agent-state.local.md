@@ -1,83 +1,59 @@
-# Agent State - Full Platform Performance Optimization
+# Agent State - Learner Performance Hotspots
 
 Last updated: 2026-07-14
 
 ## Goal
 
-Ship the evidence-backed frontend, backend, API, worker, storage, and database performance fixes,
-then hand the measurement-gated follow-up work to ChatGPT Codex.
+Finish the measurement-gated follow-up to the full-platform performance pass without changing
+search semantics, worker concurrency, or ingestion architecture unless production evidence warrants it.
 
-## Implemented
+## Implemented This Run
 
-- Frontend: persistent authenticated notification/SignalR lifecycle, identity-safe feature-flag
-  single-flight caching, TanStack Query caching for repeated learner reads, bounded leaderboard
-  rendering, and lazy heavy imports for flags/select, Wavesurfer, SignalR, and charts.
-- API/auth: one-command JWT validation with role/status fail-closed semantics, duplicate AuthService
-  query removal, bounded request-scoped entitlement resolution, batched content hierarchy/access,
-  and media authorization reduced from 13 commands to 3 on common paper assets.
-- Learner/domain reads: bounded/projection/aggregate fixes across LearnerService, Vocabulary, Recalls,
-  Engagement, campaigns, Marketplace, Sponsor, AI usage, billing metrics, pronunciation, mocks,
-  adaptive selection, spaced repetition, gamification, and learner trends.
-- Workers: SQL-side filtering/limits/aggregates/deletes, constant-query staleness/backfill, async
-  chunk stitching, reduced TTS/recording buffers, and bounded bulk/folder import work.
-- Runtime/providers: runtime-settings single-flight snapshots, async capability checks, and removal
-  of request-path sync-over-async calls.
-- Storage: async-first Local/S3 operations, multipart/streaming S3 writes, batched prefix deletes,
-  preserved one-GET media reads, and no blocking S3 SDK waits or whole-file S3 memory buffers.
-- Delivery/data: safe Nginx JSON/text compression, persisted hosted-checkout URL for zero-provider
-  replay calls, concurrent ContentItems browse/provenance indexes, PostgreSQL atomic SKIP LOCKED job
-  claiming with SQLite fallback, and O(N) Speaking card sampling.
+- Moved NotificationCenter, SignalR, product-tour code/styles, and LearnerPasteGuard behind the
+  persistent authenticated workspace boundary. Auth/public routes retain runtime/mobile bridges,
+  shell update controls, and the global toaster.
+- Added static regression coverage that prevents the heavy workspace providers from returning to
+  the root auth client graph.
+- Added opt-in real-PostgreSQL tests for UTC date aggregates, ILIKE wildcard escaping, concurrent
+  content-index execution/reentrancy, and atomic `SKIP LOCKED` job claiming.
+- Added an isolated PostgreSQL 17 service to backend QA shards so provider tests execute in CI;
+  local runs skip them when `OET_TEST_POSTGRES_CONNECTION` is absent.
 
-## Measured Improvements
+## Production Evidence
 
-- Content hierarchy: 25 rules, 78 -> 2 database commands.
-- Media authorization: common paper asset, 13 -> 3 commands; denied asset, 14 -> 2.
-- JWT validation: 2 -> 1 command.
-- Entitlements: constant 5-6 commands for 1 or 16 subscriptions; repeat in one request adds 0.
-- Recalls today: 9 -> at most 3 commands.
-- AI usage learner summary: 4 -> 1 aggregate; admin summary bounded to 5 queries/top 25.
-- Billing metric upsert reads: 12 -> 1.
-- S3 media read remains one GET; S3 sync waits and file-sized in-memory writes are zero.
+- Baseline deployment `9429af5c` completed successfully in Build & Deploy run `29279971902`;
+  app, API, readiness, database, migrations, jobs, and storage checks were healthy on the green slot.
+- `/sign-in` was 28 JS responses, 1,715,708 decoded bytes / 472,526 transferred bytes and 58,232
+  transferred CSS bytes. The tour chunk alone was 60,064 decoded / 19,501 transferred bytes plus
+  2,914 transferred CSS bytes, which justified the authenticated workspace split.
+- ContentItems contains only 49 rows. PostgreSQL organically used the new provenance index; browse
+  scans correctly remained sequential at this size, while a forced plan proved the browse index is
+  usable. ILIKE search completed in 0.385 ms, so pg_trgm/FTS remains unjustified.
+- AnalyticsEvents has 1,705 live rows, 0 dead rows, 76 events in 24h, and a 10-events/minute peak;
+  bounded buffering is unjustified. `pg_stat_statements` is not installed.
+- Background jobs had 0 ready, 9 delayed, 0 processing; 24h completion p50 1.775s, p95 3.928s,
+  max 28.376s, and 0 recent failures. Additional worker parallelism is unjustified.
 
 ## Validation
 
-- `pnpm exec tsc --noEmit`: passed.
-- Focused frontend performance tests: 77 passed; the two incomplete feature-nav mock failures were
-  fixed and the affected file then passed 5/5.
-- API project build: passed after fixing the ConversationOptions namespace regression.
-- Final focused S3/schema/checkout/Speaking gate: 37/37 passed.
-- Earlier focused backend waves passed their content/media/auth/entitlement/domain/learner/
-  vocabulary/worker test filters.
-- Independent learner-runtime review: no blockers.
-- Independent worker-runtime review: cold-start Speaking runtime-settings issue fixed by awaiting
-  runtime settings during startup before request routing.
+- `pnpm exec vitest run tests/static/frontend-heavy-imports.test.ts components/providers/__tests__/authenticated-notification-center.test.tsx --reporter=dot`: passed, 2 files / 6 tests.
 - `git diff --check`: passed.
+- Targeted .NET compilation was attempted twice but the current API project exceeded the local
+  two-minute and five-minute caps without emitting a compiler error. A no-dependency attempt used
+  a stale API binary and surfaced unrelated existing test-suite interface errors, so it is not valid
+  evidence for or against this change. Provider execution is delegated to the new CI PostgreSQL job.
 
-## Remaining Measurement-Gated Work For Codex
+## Blockers / Remaining Risk
 
-1. Measure production `/sign-in` bundle after deployment. If it still ships the authenticated provider
-   tree, design a CSP-safe `(auth)`/workspace provider split; do not weaken nonce or auth behavior.
-2. Profile authenticated learner navigation. Only pursue route-group file moves if the persistent
-   notification provider does not remove reconnect/refetch churn.
-3. Capture PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` for ContentItems search. DetailJson full-text/tsvector
-   work requires product-approved search semantics; do not add an unhelpful title-only index.
-4. Consider buffered analytics ingestion only with bounded channel capacity, shutdown draining,
-   idempotency, and failure observability.
-5. Consider parallel background-job execution only after two-replica idempotency/capacity tests.
-6. Add production-PostgreSQL translation/integration coverage for date aggregates, ILIKE queries,
-   concurrent indexes, and SKIP LOCKED; current focused relational coverage is primarily SQLite plus
-   Npgsql SQL-shape checks.
-7. Exercise authenticated production media, Vocabulary/Recalls, checkout replay, and notification
-   navigation flows after deployment.
-
-## Known Non-Blocking Risks
-
-- Existing package advisories remain for Microsoft.OpenApi 2.4.1 and SQLitePCLRaw.lib.e_sqlite3
-  2.1.11; dependency remediation was outside this performance task.
-- Public provider-tree/force-dynamic changes, DetailJson FTS, analytics buffering, and worker
-  parallelism were intentionally not implemented without measurement and safety prerequisites.
+- Authenticated production learner/media/checkout/notification smoke cannot run on this host:
+  the protected synthetic credentials are not present in host environment variables or the browser
+  vault, and repo policy forbids reading the VPS credential file.
+- Authenticated navigation profiling remains blocked for the same reason. The provider boundary
+  stays mounted above page-local shells, so learner navigation should preserve NotificationCenter
+  and SignalR state; production confirmation still requires an approved synthetic profile.
 
 ## Next Step
 
-ChatGPT Codex should start from deployed `main`, read this file plus `AGENTS.md`, verify production
-health and the Build & Deploy run, then execute the seven measurement-gated items above in order.
+After the focused commit reaches production, measure `/sign-in` again to confirm the tour and
+notification chunks are absent. Then run the authenticated smoke/profile only when a synthetic
+production browser profile or host-provided smoke credentials are available.
