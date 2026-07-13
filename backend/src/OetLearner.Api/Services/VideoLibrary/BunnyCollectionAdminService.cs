@@ -100,6 +100,7 @@ public sealed class BunnyCollectionAdminService(
         string collectionId, int page, int itemsPerPage, string? search, CancellationToken ct)
     {
         var result = await bunny.ListCollectionVideosAsync(collectionId, page, itemsPerPage, search, orderBy: "date", ct);
+        var bunnySettings = (await settingsProvider.GetAsync(ct)).BunnyStream;
 
         // Annotation join: which of these Bunny videos already exist in the catalog?
         var guids = result.Items.Select(i => i.VideoId).Where(g => !string.IsNullOrWhiteSpace(g)).ToList();
@@ -125,7 +126,7 @@ public sealed class BunnyCollectionAdminService(
                 EncodeProgress: i.EncodeProgress,
                 DurationSeconds: i.LengthSeconds,
                 StorageSizeBytes: i.StorageSizeBytes,
-                ThumbnailUrl: i.ThumbnailUrl,
+                ThumbnailUrl: VideoThumbnailUrl.SignBunny(i.ThumbnailUrl, bunnySettings),
                 Width: i.Width,
                 Height: i.Height,
                 IsImported: link is not null,

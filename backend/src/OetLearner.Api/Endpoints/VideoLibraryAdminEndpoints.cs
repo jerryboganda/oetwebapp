@@ -102,6 +102,10 @@ public static class VideoLibraryAdminEndpoints
                 .GroupBy(n => n.VideoId, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(n => n.Title).Distinct().ToList(), StringComparer.Ordinal);
 
+            var bunny = (await http.RequestServices
+                .GetRequiredService<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider>()
+                .GetAsync(ct)).BunnyStream;
+
             http.Response.Headers["X-Total-Count"] = total.ToString();
             return Results.Ok(items.Select(v => new AdminVideoSummaryDto(
                 VideoId: v.Id,
@@ -111,9 +115,7 @@ public static class VideoLibraryAdminEndpoints
                 AccessTier: v.AccessTier,
                 CategoryNames: namesByVideo.TryGetValue(v.Id, out var n) ? n : [],
                 DurationSeconds: v.DurationSeconds,
-                ThumbnailUrl: !string.IsNullOrWhiteSpace(v.CustomThumbnailMediaAssetId)
-                    ? $"/v1/media/{v.CustomThumbnailMediaAssetId}/content"
-                    : v.BunnyThumbnailUrl,
+                ThumbnailUrl: VideoThumbnailUrl.Resolve(v, bunny),
                 IsFeatured: v.IsFeatured,
                 ViewCount: v.ViewCount,
                 UpdatedAt: v.UpdatedAt,

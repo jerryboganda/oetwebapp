@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.VideoLibrary;
 
@@ -67,7 +68,8 @@ public sealed record VideoProgressUpdateResultDto(
 /// </summary>
 public sealed class VideoLibraryLearnerService(
     LearnerDbContext db,
-    IVideoEntitlementService entitlements)
+    IVideoEntitlementService entitlements,
+    IRuntimeSettingsProvider settingsProvider)
 {
     private const string FeatureFlagKey = "video_library";
     private const double CompletionThreshold = 0.9;
@@ -98,10 +100,11 @@ public sealed class VideoLibraryLearnerService(
         var context = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
         var progressByVideo = await LoadProgressAsync(userId, videoIds, ct);
         var bookmarked = await LoadBookmarksAsync(userId, videoIds, ct);
+        var bunny = (await settingsProvider.GetAsync(ct)).BunnyStream;
 
         var summariesById = videos.ToDictionary(
             v => v.Id,
-            v => ToSummary(v, context, progressByVideo, bookmarked, membershipsByVideo),
+            v => ToSummary(v, context, progressByVideo, bookmarked, membershipsByVideo, bunny),
             StringComparer.Ordinal);
 
         var featured = videos
@@ -166,7 +169,8 @@ public sealed class VideoLibraryLearnerService(
         var context = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
         var progress = await LoadProgressAsync(userId, [videoId], ct);
         var bookmarks = await LoadBookmarksAsync(userId, [videoId], ct);
-        var summary = ToSummary(video, context, progress, bookmarks, membershipsByVideo);
+        var bunny = (await settingsProvider.GetAsync(ct)).BunnyStream;
+        var summary = ToSummary(video, context, progress, bookmarks, membershipsByVideo, bunny);
 
         var captions = await db.VideoCaptionTracks.AsNoTracking()
             .Where(c => c.VideoId == videoId)
@@ -368,7 +372,8 @@ public sealed class VideoLibraryLearnerService(
         VideoAccessContext context,
         IReadOnlyDictionary<string, LearnerVideoLibraryProgress> progressByVideo,
         IReadOnlySet<string> bookmarked,
-        IReadOnlyDictionary<string, List<VideoCategoryItem>> membershipsByVideo)
+        IReadOnlyDictionary<string, List<VideoCategoryItem>> membershipsByVideo,
+        BunnyStreamSettings bunny)
     {
         var entitlement = entitlements.Evaluate(context, video);
         var progress = progressByVideo.TryGetValue(video.Id, out var p)
@@ -383,7 +388,7 @@ public sealed class VideoLibraryLearnerService(
             Title: video.Title,
             Description: video.Description,
             DurationSeconds: video.DurationSeconds,
-            ThumbnailUrl: ResolveThumbnailUrl(video),
+            ThumbnailUrl: VideoThumbnailUrl.Resolve(video, bunny),
             AccessTier: video.AccessTier,
             IsAccessible: entitlement.Allowed,
             RequiresUpgrade: !entitlement.Allowed,
@@ -441,11 +446,6 @@ public sealed class VideoLibraryLearnerService(
             index > 0 ? ordered[index - 1] : null,
             index >= 0 && index < ordered.Count - 1 ? ordered[index + 1] : null);
     }
-
-    private static string? ResolveThumbnailUrl(LibraryVideo video)
-        => !string.IsNullOrWhiteSpace(video.CustomThumbnailMediaAssetId)
-            ? $"/v1/media/{video.CustomThumbnailMediaAssetId}/content"
-            : video.BunnyThumbnailUrl;
 
     private static IReadOnlyList<string> SplitTags(string? tagsCsv)
         => string.IsNullOrWhiteSpace(tagsCsv)

@@ -88,6 +88,106 @@ public class BunnyStreamClientTests
     }
 
     [Fact]
+    public void ThumbnailToken_MatchesPinnedVector()
+    {
+        // base64url-nopad(raw sha256("token-auth-key" + "/video-guid-1/thumbnail.jpg"
+        //   + "1700000000")) — Bunny's basic (exact-path) URL token: file-scoped,
+        //   NO token_path parameter. Computed independently via node:crypto.
+        var token = BunnyStreamClient.ComputeFileToken(
+            "token-auth-key", "/video-guid-1/thumbnail.jpg", 1700000000);
+
+        Assert.Equal("CqWtgOdmU3o2siHbMAtLjIWbAQ5sO3pcXAn2PhJRTJY", token);
+    }
+
+    [Fact]
+    public void SignThumbnailUrl_AppendsFileScopedTokenAndExpires()
+    {
+        var url = BunnyStreamClient.SignThumbnailUrl(
+            "https://vz-test.b-cdn.net/video-guid-1/thumbnail.jpg", 1700000000, "token-auth-key");
+
+        Assert.StartsWith(
+            "https://vz-test.b-cdn.net/video-guid-1/thumbnail.jpg?token=", url, StringComparison.Ordinal);
+        Assert.Contains("token=CqWtgOdmU3o2siHbMAtLjIWbAQ5sO3pcXAn2PhJRTJY", url, StringComparison.Ordinal);
+        Assert.Contains("expires=1700000000", url, StringComparison.Ordinal);
+        // File-scoped: must NOT carry token_path (that would authorize the whole
+        // /{videoId}/ directory incl. playlist.m3u8 → playback-attestation bypass).
+        Assert.DoesNotContain("token_path", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThumbnailToken_DiffersFromDirectoryPlaybackToken()
+    {
+        // Guards the security property: the thumbnail (file) token and the playback
+        // (directory) token for the same video must NOT be interchangeable.
+        var fileToken = BunnyStreamClient.ComputeFileToken(
+            "token-auth-key", "/video-guid-1/thumbnail.jpg", 1700000000);
+        var dirToken = BunnyStreamClient.ComputeCdnToken(
+            "token-auth-key", "/video-guid-1/", 1700000000);
+
+        Assert.NotEqual(dirToken, fileToken);
+    }
+
+    [Fact]
+    public void VideoThumbnailUrl_SignsBunnyUrl_WhenTokenAuthConfigured()
+    {
+        var bunny = new BunnyStreamSettings(
+            Enabled: true, LibraryId: "123456", ApiKey: "k", CdnHostname: "vz-test.b-cdn.net",
+            TokenAuthKey: "token-auth-key", WebhookSecret: null, CollectionId: null,
+            PlaybackTokenTtlSeconds: 14400);
+        var video = new LibraryVideo
+        {
+            Id = "v1",
+            Title = "T",
+            BunnyVideoId = "video-guid-1",
+            BunnyThumbnailUrl = "https://vz-test.b-cdn.net/video-guid-1/thumbnail.jpg",
+        };
+
+        var url = VideoThumbnailUrl.Resolve(video, bunny);
+
+        Assert.NotNull(url);
+        Assert.Contains("token=", url, StringComparison.Ordinal);
+        Assert.Contains("expires=", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VideoThumbnailUrl_ReturnsRaw_WhenTokenAuthMissing()
+    {
+        // Feature dormant / open pull zone → no key to sign with; serve unchanged.
+        var video = new LibraryVideo
+        {
+            Id = "v1",
+            Title = "T",
+            BunnyVideoId = "video-guid-1",
+            BunnyThumbnailUrl = "https://vz-test.b-cdn.net/video-guid-1/thumbnail.jpg",
+        };
+
+        var url = VideoThumbnailUrl.Resolve(video, BunnyStreamSettings.Unconfigured);
+
+        Assert.Equal("https://vz-test.b-cdn.net/video-guid-1/thumbnail.jpg", url);
+    }
+
+    [Fact]
+    public void VideoThumbnailUrl_PrefersCustomAsset_OverBunny()
+    {
+        var bunny = new BunnyStreamSettings(
+            Enabled: true, LibraryId: "123456", ApiKey: "k", CdnHostname: "vz-test.b-cdn.net",
+            TokenAuthKey: "token-auth-key", WebhookSecret: null, CollectionId: null,
+            PlaybackTokenTtlSeconds: 14400);
+        var video = new LibraryVideo
+        {
+            Id = "v1",
+            Title = "T",
+            BunnyVideoId = "video-guid-1",
+            BunnyThumbnailUrl = "https://vz-test.b-cdn.net/video-guid-1/thumbnail.jpg",
+            CustomThumbnailMediaAssetId = "asset-9",
+        };
+
+        var url = VideoThumbnailUrl.Resolve(video, bunny);
+
+        Assert.Equal("/v1/media/asset-9/content", url);
+    }
+
+    [Fact]
     public void AttestationSignature_MatchesPinnedVector()
     {
         // HMAC-SHA256 keyed with the LITERAL UTF-8 bytes of "aabbccdd" (NOT
