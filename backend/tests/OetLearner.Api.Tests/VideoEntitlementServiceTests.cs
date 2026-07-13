@@ -19,11 +19,12 @@ public class VideoEntitlementServiceTests
     private static VideoEntitlementService CreateService(LearnerDbContext db)
         => new(db, new EffectiveEntitlementResolver(db));
 
-    private static LibraryVideo Video(string accessTier = "premium") => new()
+    private static LibraryVideo Video(string accessTier = "premium", string? subtestCode = null) => new()
     {
         Id = $"vid-{Guid.NewGuid():N}",
         Title = "Test video",
         AccessTier = accessTier,
+        SubtestCode = subtestCode,
         Status = ContentStatus.Published,
         DurationSeconds = 600,
         CreatedAt = DateTimeOffset.UtcNow,
@@ -222,6 +223,114 @@ public class VideoEntitlementServiceTests
 
         Assert.True(result.Allowed);
         Assert.Equal("admin", result.Reason);
+    }
+
+    // ── Per-subtest (per-module) package gating ─────────────────────────────
+
+    [Theory]
+    [InlineData("writing", true, "plan_grants_video_library")]
+    [InlineData("listening", false, "plan_does_not_grant_subtest")]
+    public async Task PremiumVideo_PlanGrantsOnlyWritingSubtest_GatesByModule(
+        string subtest, bool allowed, string reason)
+    {
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", """{"video_library":{"tier":"premium","subtests":["writing"]}}""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: subtest), default);
+
+        Assert.Equal(allowed, result.Allowed);
+        Assert.Equal(reason, result.Reason);
+    }
+
+    [Fact]
+    public async Task PremiumVideo_PlanGrantsPremiumWithNoSubtestList_UnlocksAllModules()
+    {
+        // Backward compatibility: absent subtests list = all modules (today's behaviour).
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", """{"video_library":{"tier":"premium"}}""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        foreach (var subtest in new[] { "listening", "reading", "writing", "speaking" })
+        {
+            var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: subtest), default);
+            Assert.True(result.Allowed, $"expected {subtest} to unlock");
+        }
+    }
+
+    [Fact]
+    public async Task PremiumVideo_SubtestRestrictedPlan_VideoWithNoSubtestCode_FailsOpen()
+    {
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", """{"video_library":{"tier":"premium","subtests":["writing"]}}""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: null), default);
+
+        Assert.True(result.Allowed);
+    }
+
+    [Theory]
+    [InlineData("listening", true)]
+    [InlineData("writing", false)]
+    public async Task PremiumVideo_AddOnScopedToListening_GatesByModule(string subtest, bool allowed)
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedSubscription(db, "learner-1", "{}");
+        await db.SaveChangesAsync();
+        var subscriptionId = db.Subscriptions.Single(s => s.UserId == "learner-1").Id;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon-listening",
+            Code = "video-listening-addon",
+            Name = "Listening videos",
+            GrantEntitlementsJson = """{"videoLibrary":true,"videoLibrarySubtests":["listening"]}""",
+        });
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = $"item-{Guid.NewGuid():N}",
+            SubscriptionId = subscriptionId,
+            ItemCode = "video-listening-addon",
+            Quantity = 1,
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now.AddDays(-1),
+        });
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: subtest), default);
+
+        Assert.Equal(allowed, result.Allowed);
+    }
+
+    [Theory]
+    [InlineData("""{"video_library":{"tier":"premium"}}""", 0)]
+    [InlineData("""{"video_library":{"tier":"premium","subtests":["writing"]}}""", 1)]
+    [InlineData("""{"video_library":{"tier":"premium","subtests":["Writing","LISTENING"]}}""", 2)]
+    [InlineData("""{"video_library":{"tier":"premium","modules":["reading"]}}""", 1)]
+    public void ParseVideoLibraryBundle_ReadsSubtestScope(string json, int expectedCount)
+    {
+        var bundle = VideoEntitlementService.ParseVideoLibraryBundle(json);
+        Assert.Equal(expectedCount, bundle.Subtests.Count);
+        Assert.Equal(expectedCount > 0, bundle.RestrictsSubtests);
+        // Normalised to lowercase.
+        Assert.All(bundle.Subtests, s => Assert.Equal(s.ToLowerInvariant(), s));
+    }
+
+    [Theory]
+    [InlineData("""{"videoLibrary":true}""", true, true)]
+    [InlineData("""{"videoLibrary":true,"videoLibrarySubtests":["writing"]}""", true, false)]
+    [InlineData("""{"video_library":true,"video_library_subtests":["reading"]}""", true, false)]
+    [InlineData("""{"videoLibrary":false}""", false, false)]
+    public void ParseAddOnVideoGrant_ReadsSubtestScope(string json, bool grants, bool allSubtests)
+    {
+        var grant = VideoEntitlementService.ParseAddOnVideoGrant(json);
+        Assert.Equal(grants, grant.Grants);
+        Assert.Equal(allSubtests, grant.AllSubtests);
     }
 
     // ── ParseVideoLibraryBundle ─────────────────────────────────────────────

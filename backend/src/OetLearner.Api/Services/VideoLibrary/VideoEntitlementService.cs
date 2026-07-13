@@ -64,12 +64,28 @@ public sealed record VideoAccessContext(
     // Whether the plan's admin-togglable "VideoLibrary" module is enabled (fail-open when the
     // plan carries no module list). Disabling it withholds the plan/free-tier grants but never
     // confiscates a separately-purchased Video Library add-on (AddOnGrantsPremium still wins).
-    bool ModuleEnabled = true);
+    bool ModuleEnabled = true,
+    // Per-subtest (OET module: listening|reading|writing|speaking) scoping of the premium grant.
+    // AllSubtestsGranted = true  → the grant covers every module (the default / backward-compatible
+    // behaviour when no plan or add-on lists specific subtests). When false, only videos whose
+    // SubtestCode ∈ GrantedSubtests unlock; a video with no SubtestCode is not subtest-restricted
+    // (fails open under any premium grant). Admin and free-tier paths ignore this entirely.
+    bool AllSubtestsGranted = true,
+    IReadOnlySet<string>? GrantedSubtests = null);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
-public sealed record VideoLibraryBundle(bool HasNode, string Tier)
+public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
 {
     public bool GrantsPremium => HasNode && string.Equals(Tier, "premium", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Non-empty = the grant is limited to these OET modules; empty = all modules.</summary>
+    public bool RestrictsSubtests => Subtests.Count > 0;
+}
+
+/// <summary>Aggregated Video Library grant from a learner's active add-ons.</summary>
+public sealed record AddOnVideoGrant(bool Grants, bool AllSubtests, IReadOnlyCollection<string> Subtests)
+{
+    public static readonly AddOnVideoGrant None = new(false, false, Array.Empty<string>());
 }
 
 public sealed class VideoEntitlementService(
@@ -135,11 +151,23 @@ public sealed class VideoEntitlementService(
 
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
         var bundle = ParseVideoLibraryBundle(planJson);
-        var addOnGrants = !bundle.GrantsPremium && await AnyActiveAddOnGrantsVideoLibraryAsync(userId, ct);
         // Admin-togglable module gate. When disabled the plan no longer grants the Video Library
         // (nor free-tier viewing) — but a live add-on the learner paid for still does.
         var moduleEnabled = entitlement.IsModuleEnabled(ModuleKeys.VideoLibrary);
         var planGrantsPremium = bundle.GrantsPremium && moduleEnabled;
+
+        // Resolve add-on grants even when the plan already grants premium, so their subtest scope
+        // is UNIONed in (a Writing-only plan + a Listening add-on ⇒ both modules unlock).
+        var addOn = await ResolveAddOnVideoGrantAsync(userId, ct);
+        var addOnGrants = addOn.Grants;
+
+        // Union the per-subtest scope across the plan and every active add-on. If ANY grant is
+        // unrestricted, the learner gets all modules; otherwise only the union of listed subtests.
+        var allSubtestsGranted = (planGrantsPremium && !bundle.RestrictsSubtests)
+            || (addOnGrants && addOn.AllSubtests);
+        var grantedSubtests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (planGrantsPremium && bundle.RestrictsSubtests) grantedSubtests.UnionWith(bundle.Subtests);
+        if (addOnGrants && !addOn.AllSubtests) grantedSubtests.UnionWith(addOn.Subtests);
 
         return new VideoAccessContext(
             IsAdmin: false, Authenticated: true,
@@ -147,7 +175,9 @@ public sealed class VideoEntitlementService(
             PlanGrantsPremium: planGrantsPremium,
             AddOnGrantsPremium: addOnGrants,
             CurrentTier: entitlement.IsTrial ? "trial" : planGrantsPremium || addOnGrants ? "premium" : "free",
-            ModuleEnabled: moduleEnabled);
+            ModuleEnabled: moduleEnabled,
+            AllSubtestsGranted: allSubtestsGranted,
+            GrantedSubtests: grantedSubtests);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -183,14 +213,23 @@ public sealed class VideoEntitlementService(
             return new VideoEntitlementResult(false, "no_active_subscription", "free");
         }
 
-        if (context.PlanGrantsPremium)
+        if (context.PlanGrantsPremium || context.AddOnGrantsPremium)
         {
-            return new VideoEntitlementResult(true, "plan_grants_video_library", context.CurrentTier);
-        }
+            // Per-subtest scoping: when the grant is limited to specific OET modules, a video whose
+            // SubtestCode falls outside that set stays locked. A video with no SubtestCode is not
+            // subtest-restricted and unlocks under any premium grant (fail-open).
+            if (!context.AllSubtestsGranted
+                && !string.IsNullOrWhiteSpace(video.SubtestCode)
+                && (context.GrantedSubtests is null
+                    || !context.GrantedSubtests.Contains(video.SubtestCode.Trim())))
+            {
+                return new VideoEntitlementResult(false, "plan_does_not_grant_subtest", context.CurrentTier);
+            }
 
-        if (context.AddOnGrantsPremium)
-        {
-            return new VideoEntitlementResult(true, "addon_grants_video_library", context.CurrentTier);
+            return new VideoEntitlementResult(
+                true,
+                context.PlanGrantsPremium ? "plan_grants_video_library" : "addon_grants_video_library",
+                context.CurrentTier);
         }
 
         return new VideoEntitlementResult(false, "plan_does_not_grant", context.CurrentTier);
@@ -206,9 +245,10 @@ public sealed class VideoEntitlementService(
     /// </summary>
     public static VideoLibraryBundle ParseVideoLibraryBundle(string? entitlementsJson)
     {
+        var empty = new VideoLibraryBundle(false, "none", Array.Empty<string>());
         if (string.IsNullOrWhiteSpace(entitlementsJson))
         {
-            return new VideoLibraryBundle(false, "none");
+            return empty;
         }
 
         try
@@ -216,18 +256,18 @@ public sealed class VideoEntitlementService(
             using var doc = JsonDocument.Parse(entitlementsJson);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                return new VideoLibraryBundle(false, "none");
+                return empty;
             }
 
             if (!doc.RootElement.TryGetProperty("video_library", out var node)
                 && !doc.RootElement.TryGetProperty("videoLibrary", out node))
             {
-                return new VideoLibraryBundle(false, "none");
+                return empty;
             }
 
             if (node.ValueKind != JsonValueKind.Object)
             {
-                return new VideoLibraryBundle(false, "none");
+                return empty;
             }
 
             var tier = "free";
@@ -236,12 +276,39 @@ public sealed class VideoEntitlementService(
                 var raw = t.GetString();
                 if (!string.IsNullOrWhiteSpace(raw)) tier = raw.Trim().ToLowerInvariant();
             }
-            return new VideoLibraryBundle(true, tier);
+            return new VideoLibraryBundle(true, tier, ReadSubtestList(node));
         }
         catch (JsonException)
         {
-            return new VideoLibraryBundle(false, "none");
+            return empty;
         }
+    }
+
+    /// <summary>
+    /// Read an optional per-module scope array from an entitlement node. Accepts either
+    /// "subtests" (canonical) or "modules" (alias), each a JSON array of OET module codes
+    /// (listening|reading|writing|speaking). Absent/empty/malformed ⇒ empty list ⇒ "all modules".
+    /// </summary>
+    private static IReadOnlyList<string> ReadSubtestList(JsonElement node)
+    {
+        if (!node.TryGetProperty("subtests", out var arr) && !node.TryGetProperty("modules", out arr))
+        {
+            return Array.Empty<string>();
+        }
+        if (arr.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+        var list = new List<string>();
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                var s = el.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) list.Add(s.Trim().ToLowerInvariant());
+            }
+        }
+        return list;
     }
 
     private async Task<string?> ResolvePlanEntitlementsJsonAsync(
@@ -267,11 +334,12 @@ public sealed class VideoEntitlementService(
     }
 
     /// <summary>
-    /// True when any active add-on on a live subscription grants the Video
-    /// Library ("videoLibrary": true or "video_library": true). Mirrors the
-    /// active-item join used by MockEntitlementService.
+    /// Aggregate the Video Library grant across every active add-on on the learner's live
+    /// subscriptions. Mirrors the active-item join used by MockEntitlementService. Returns whether
+    /// any add-on grants the library, and the union of their per-subtest scope (any unrestricted
+    /// add-on ⇒ all modules).
     /// </summary>
-    private async Task<bool> AnyActiveAddOnGrantsVideoLibraryAsync(string userId, CancellationToken ct)
+    private async Task<AddOnVideoGrant> ResolveAddOnVideoGrantAsync(string userId, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var subscriptionIds = await db.Subscriptions.AsNoTracking()
@@ -279,7 +347,7 @@ public sealed class VideoEntitlementService(
                 && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
             .Select(s => s.Id)
             .ToListAsync(ct);
-        if (subscriptionIds.Count == 0) return false;
+        if (subscriptionIds.Count == 0) return AddOnVideoGrant.None;
 
         var grantJsons = await (
             from item in db.SubscriptionItems.AsNoTracking()
@@ -290,28 +358,61 @@ public sealed class VideoEntitlementService(
                 && (item.EndsAt == null || item.EndsAt > now)
             select addOn.GrantEntitlementsJson).ToListAsync(ct);
 
+        var grants = false;
+        var allSubtests = false;
+        var subtests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var json in grantJsons)
         {
-            if (GrantsVideoLibrary(json)) return true;
+            var g = ParseAddOnVideoGrant(json);
+            if (!g.Grants) continue;
+            grants = true;
+            if (g.AllSubtests) allSubtests = true;
+            else subtests.UnionWith(g.Subtests);
         }
-        return false;
+        return new AddOnVideoGrant(grants, allSubtests, subtests);
     }
 
     /// <summary>Accepts "videoLibrary": true (canonical add-on key) or "video_library": true.</summary>
     public static bool GrantsVideoLibrary(string? grantEntitlementsJson)
+        => ParseAddOnVideoGrant(grantEntitlementsJson).Grants;
+
+    /// <summary>
+    /// Parse a single add-on's grant JSON. Grants the library when "videoLibrary"/"video_library"
+    /// is truthy; an optional "videoLibrarySubtests"/"video_library_subtests" array narrows the
+    /// grant to those OET modules (absent/empty ⇒ all modules).
+    /// </summary>
+    public static AddOnVideoGrant ParseAddOnVideoGrant(string? grantEntitlementsJson)
     {
-        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return false;
+        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return AddOnVideoGrant.None;
         try
         {
             using var doc = JsonDocument.Parse(grantEntitlementsJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
-            if (doc.RootElement.TryGetProperty("videoLibrary", out var camel) && IsTruthy(camel)) return true;
-            if (doc.RootElement.TryGetProperty("video_library", out var snake) && IsTruthy(snake)) return true;
-            return false;
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return AddOnVideoGrant.None;
+            var root = doc.RootElement;
+            var grants = (root.TryGetProperty("videoLibrary", out var camel) && IsTruthy(camel))
+                || (root.TryGetProperty("video_library", out var snake) && IsTruthy(snake));
+            if (!grants) return AddOnVideoGrant.None;
+
+            JsonElement arr = default;
+            var hasArr = (root.TryGetProperty("videoLibrarySubtests", out arr) && arr.ValueKind == JsonValueKind.Array)
+                || (root.TryGetProperty("video_library_subtests", out arr) && arr.ValueKind == JsonValueKind.Array);
+            var subtests = new List<string>();
+            if (hasArr)
+            {
+                foreach (var el in arr.EnumerateArray())
+                {
+                    if (el.ValueKind == JsonValueKind.String)
+                    {
+                        var s = el.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) subtests.Add(s.Trim().ToLowerInvariant());
+                    }
+                }
+            }
+            return new AddOnVideoGrant(true, subtests.Count == 0, subtests);
         }
         catch (JsonException)
         {
-            return false;
+            return AddOnVideoGrant.None;
         }
     }
 
