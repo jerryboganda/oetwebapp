@@ -469,6 +469,18 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });
+        modelBuilder.Entity<ContentItem>()
+            .HasIndex(x => new { x.SubtestCode, x.Title })
+            .HasDatabaseName("IX_ContentItems_Published_Subtest_Title")
+            .HasFilter("\"Status\" = 4 AND \"FreshnessConfidence\" <> 'superseded'");
+        modelBuilder.Entity<ContentItem>()
+            .HasIndex(x => new { x.SourceProvenance, x.CreatedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("IX_ContentItems_Published_Provenance_Created")
+            .HasFilter("\"Status\" = 4");
+        modelBuilder.Entity<CheckoutSession>()
+            .Property(x => x.HostedCheckoutUrl)
+            .HasMaxLength(2048);
         modelBuilder.Entity<Attempt>().HasIndex(x => new { x.UserId, x.SubtestCode, x.State });
         modelBuilder.Entity<Attempt>().HasIndex(x => x.ContentId);
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.AttemptId, x.State });

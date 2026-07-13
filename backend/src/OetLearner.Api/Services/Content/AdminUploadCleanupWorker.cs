@@ -43,18 +43,16 @@ public sealed class AdminUploadCleanupWorker(
         var candidates = await db.AdminUploadSessions
             .Where(x => x.State != AdminUploadState.Completed
                 && x.State != AdminUploadState.Aborted
-                && x.State != AdminUploadState.Expired)
+                && x.State != AdminUploadState.Expired
+                && x.ExpiresAt <= now)
             .ToListAsync(ct);
-        var expired = candidates
-            .Where(x => x.ExpiresAt <= now)
-            .ToList();
 
-        foreach (var s in expired)
+        foreach (var s in candidates)
         {
             try
             {
-                storage.DeletePrefix(ContentAddressed.StagingSessionPrefix(
-                    opts.StagingSubpath, s.AdminUserId, s.Id));
+                await storage.DeletePrefixAsync(ContentAddressed.StagingSessionPrefix(
+                    opts.StagingSubpath, s.AdminUserId, s.Id), ct);
             }
             catch (Exception ex)
             {
@@ -63,11 +61,11 @@ public sealed class AdminUploadCleanupWorker(
             s.State = AdminUploadState.Expired;
         }
 
-        if (expired.Count > 0)
+        if (candidates.Count > 0)
         {
             await db.SaveChangesAsync(ct);
-            logger.LogInformation("Expired {Count} admin upload sessions.", expired.Count);
+            logger.LogInformation("Expired {Count} admin upload sessions.", candidates.Count);
         }
-        return expired.Count;
+        return candidates.Count;
     }
 }

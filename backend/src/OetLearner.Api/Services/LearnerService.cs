@@ -84,10 +84,67 @@ public partial class LearnerService(
     private const int PaymentIdempotencyKeyMaxLength = 38;
     private const int WritingRevisionContentMaxLength = 30000;
     private const int WritingRevisionIdempotencyKeyMaxLength = 64;
+    private const int ProgressHistoryLimit = 52;
     private static readonly TimeSpan PaymentWebhookProcessingLease = TimeSpan.FromMinutes(5);
     private static readonly Regex PaymentIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
     private static readonly Regex WritingRevisionIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
     private readonly StorageOptions storageSettings = storageOptions?.Value ?? new StorageOptions();
+
+    private sealed record LearnerProfileState(
+        LearnerUser User,
+        LearnerGoal Goal,
+        LearnerSettings Settings,
+        Wallet Wallet);
+
+    private sealed record DashboardPlanState(
+        StudyPlan Plan,
+        List<StudyPlanItem> Items);
+
+    private sealed record DashboardEvidenceRow(
+        int PendingReviews,
+        string? EvaluationId,
+        string? AttemptId,
+        string? SubtestCode,
+        string? ScoreRange,
+        string? CriterionScoresJson);
+
+    private sealed record ProgressEvaluationRow(
+        string SubtestCode,
+        string ScoreRange,
+        string CriterionScoresJson,
+        DateTimeOffset? GeneratedAt);
+
+    private sealed record ProgressTotalsRow(
+        string AccountStatus,
+        int CompletedAttempts,
+        int CompletedEvaluations);
+
+    private sealed record ProgressReviewAggregateRow(
+        int TotalRequests,
+        int CompletedRequests,
+        int CreditsConsumed);
+
+    private sealed record ProgressReviewTurnaroundRow(
+        DateTimeOffset CreatedAt,
+        DateTimeOffset CompletedAt);
+
+    private sealed record ComparisonAttemptRow(
+        string Id,
+        string ContentId,
+        string SubtestCode,
+        string? ComparisonGroupId,
+        string? ParentAttemptId);
+
+    private sealed record ComparisonEvaluationRow(
+        string Id,
+        string AttemptId,
+        string ScoreRange);
+
+    private sealed record WritingHomeEvaluationRow(
+        Evaluation Evaluation,
+        Attempt Attempt,
+        ContentItem Content,
+        bool IsLatest);
 
     private static List<DiagnosticSubtestStatus> ActiveDiagnosticSubtests(List<DiagnosticSubtestStatus> subtests)
         => subtests
@@ -96,51 +153,22 @@ public partial class LearnerService(
 
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureLearnerProfileAsync(userId, cancellationToken);
-        var user = await EnsureUserAsync(userId, cancellationToken);
-        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
-
-        return new
-        {
-            userId = user.Id,
-            role = user.Role,
-            displayName = user.DisplayName,
-            email = user.Email,
-            timezone = user.Timezone,
-            locale = user.Locale,
-            createdAt = user.CreatedAt,
-            lastActiveAt = user.LastActiveAt,
-            currentPlanId = user.CurrentPlanId,
-            activeProfessionId = user.ActiveProfessionId,
-            freeze = await GetFreezeStatusAsync(userId, cancellationToken),
-            goals = new
-            {
-                examFamilyCode = goal.ExamFamilyCode,
-                professionId = goal.ProfessionId,
-                targetExamDate = goal.TargetExamDate,
-                targetScoresBySubtest = new
-                {
-                    writing = goal.TargetWritingScore,
-                    speaking = goal.TargetSpeakingScore,
-                    reading = goal.TargetReadingScore,
-                    listening = goal.TargetListeningScore
-                }
-            }
-        };
+        var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
+        var freeze = await GetFreezeStatusForLoadedUserAsync(profile.User, cancellationToken);
+        return BuildMeDto(profile.User, profile.Goal, freeze);
     }
 
     public async Task<object> GetBootstrapAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureLearnerProfileAsync(userId, cancellationToken);
-        var user = await EnsureUserAsync(userId, cancellationToken);
-        var onboarding = await GetOnboardingStateAsync(userId, cancellationToken);
-        var goals = await GetGoalsAsync(userId, cancellationToken);
-        var readiness = await GetReadinessAsync(userId, cancellationToken);
-        var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
+        var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
+        var onboarding = BuildOnboardingStateDto(profile.User);
+        var goals = GoalDto(profile.Goal);
+        var readiness = await GetReadinessForLoadedProfileAsync(profile, cancellationToken);
+        var freeze = await GetFreezeStatusForLoadedUserAsync(profile.User, cancellationToken);
 
         return new
         {
-            user = await GetMeAsync(userId, cancellationToken),
+            user = BuildMeDto(profile.User, profile.Goal, freeze),
             onboarding,
             goals,
             readiness,
@@ -164,9 +192,37 @@ public partial class LearnerService(
                 studyPlan = "/study-plan",
                 goals = "/goals"
             },
-            lastUpdatedAt = user.LastActiveAt
+            lastUpdatedAt = profile.User.LastActiveAt
         };
     }
+
+    private static object BuildMeDto(LearnerUser user, LearnerGoal goal, object freeze) => new
+    {
+        userId = user.Id,
+        role = user.Role,
+        displayName = user.DisplayName,
+        email = user.Email,
+        timezone = user.Timezone,
+        locale = user.Locale,
+        createdAt = user.CreatedAt,
+        lastActiveAt = user.LastActiveAt,
+        currentPlanId = user.CurrentPlanId,
+        activeProfessionId = user.ActiveProfessionId,
+        freeze,
+        goals = new
+        {
+            examFamilyCode = goal.ExamFamilyCode,
+            professionId = goal.ProfessionId,
+            targetExamDate = goal.TargetExamDate,
+            targetScoresBySubtest = new
+            {
+                writing = goal.TargetWritingScore,
+                speaking = goal.TargetSpeakingScore,
+                reading = goal.TargetReadingScore,
+                listening = goal.TargetListeningScore
+            }
+        }
+    };
 
     public async Task<IEnumerable<object>> GetProfessionsAsync(CancellationToken cancellationToken) =>
         await db.Professions
@@ -239,18 +295,20 @@ public partial class LearnerService(
     public async Task<object> GetOnboardingStateAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await EnsureUserAsync(userId, cancellationToken);
-        return new
-        {
-            completed = user.OnboardingCompleted,
-            currentStep = user.OnboardingCurrentStep,
-            stepCount = user.OnboardingStepCount,
-            canSkip = false,
-            startedAt = user.OnboardingStartedAt,
-            completedAt = user.OnboardingCompletedAt,
-            checkpoint = user.OnboardingCompleted ? "goals" : "welcome",
-            resumeRoute = user.OnboardingCompleted ? "/dashboard" : "/onboarding"
-        };
+        return BuildOnboardingStateDto(user);
     }
+
+    private static object BuildOnboardingStateDto(LearnerUser user) => new
+    {
+        completed = user.OnboardingCompleted,
+        currentStep = user.OnboardingCurrentStep,
+        stepCount = user.OnboardingStepCount,
+        canSkip = false,
+        startedAt = user.OnboardingStartedAt,
+        completedAt = user.OnboardingCompletedAt,
+        checkpoint = user.OnboardingCompleted ? "goals" : "welcome",
+        resumeRoute = user.OnboardingCompleted ? "/dashboard" : "/onboarding"
+    };
 
     public async Task<object> StartOnboardingAsync(string userId, CancellationToken cancellationToken)
     {
@@ -687,24 +745,13 @@ public partial class LearnerService(
 
     public async Task<object> GetDashboardAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureLearnerProfileAsync(userId, cancellationToken);
-        await EnsureUserAsync(userId, cancellationToken);
-        var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
-        var readiness = await GetReadinessAsync(userId, cancellationToken);
-        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
-        await GetStudyPlanAsync(userId, cancellationToken);
-        var activePlan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
-        var attemptIds = await db.Attempts.Where(x => x.UserId == userId).Select(x => x.Id).ToListAsync(cancellationToken);
-        var latestEvaluation = await GetLatestEvaluationForAttemptsAsync(attemptIds, cancellationToken);
-        var latestAttempt = latestEvaluation is null
-            ? null
-            : await db.Attempts.FirstAsync(x => x.Id == latestEvaluation.AttemptId, cancellationToken);
-        var pendingReviews = await db.ReviewRequests
-            .Where(x => attemptIds.Contains(x.AttemptId) && (x.State == ReviewRequestState.Submitted || x.State == ReviewRequestState.Queued || x.State == ReviewRequestState.InReview))
-            .CountAsync(cancellationToken);
-        var planItems = await db.StudyPlanItems
-            .Where(x => x.StudyPlanId == activePlan.Id)
-            .ToListAsync(cancellationToken);
+        var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
+        var freeze = await GetFreezeStatusForLoadedUserAsync(profile.User, cancellationToken);
+        var readiness = await GetReadinessForLoadedProfileAsync(profile, cancellationToken);
+        var dashboardPlan = await GetDashboardPlanAsync(profile, cancellationToken);
+        var activePlan = dashboardPlan.Plan;
+        var planItems = dashboardPlan.Items;
+        var evidence = await GetDashboardEvidenceAsync(userId, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var todaysTasks = planItems
             .Where(x => string.Equals(x.Section, "today", StringComparison.OrdinalIgnoreCase) || x.DueDate <= today)
@@ -726,7 +773,6 @@ public partial class LearnerService(
             .Where(x => string.Equals(x.ItemType, "mock", StringComparison.OrdinalIgnoreCase))
             .OrderBy(x => x.DueDate)
             .FirstOrDefault();
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
         var primaryActions = new List<object>
         {
             new { id = "resume-study-plan", label = "Resume Study Plan", route = "/study-plan" }
@@ -735,9 +781,9 @@ public partial class LearnerService(
         {
             primaryActions.Add(new { id = "start-next-task", label = "Start Next Task", route = StudyPlanRouteForItem(nextPlanItem) });
         }
-        if (latestEvaluation is not null)
+        if (evidence.EvaluationId is not null)
         {
-            primaryActions.Add(new { id = "view-latest-feedback", label = "View Latest Feedback", route = AttemptFeedbackRoute(latestEvaluation.SubtestCode, latestEvaluation.Id) });
+            primaryActions.Add(new { id = "view-latest-feedback", label = "View Latest Feedback", route = AttemptFeedbackRoute(evidence.SubtestCode!, evidence.EvaluationId) });
         }
 
         return new
@@ -745,33 +791,127 @@ public partial class LearnerService(
             cards = new
             {
                 readiness,
-                examDate = new { value = goal.TargetExamDate, route = "/goals" },
+                examDate = new { value = profile.Goal.TargetExamDate, route = "/goals" },
                 todaysTasks = todaysTasks.Select(StudyPlanItemDto),
-                latestEvaluatedSubmission = latestEvaluation is null || latestAttempt is null
+                latestEvaluatedSubmission = evidence.EvaluationId is null || evidence.AttemptId is null
                     ? null
-                    : new { evaluationId = latestEvaluation.Id, attemptId = latestAttempt.Id, subtest = latestEvaluation.SubtestCode, scoreRange = latestEvaluation.ScoreRange, route = AttemptFeedbackRoute(latestEvaluation.SubtestCode, latestEvaluation.Id) },
-                weakCriteria = latestEvaluation is null
+                    : new { evaluationId = evidence.EvaluationId, attemptId = evidence.AttemptId, subtest = evidence.SubtestCode, scoreRange = evidence.ScoreRange, route = AttemptFeedbackRoute(evidence.SubtestCode!, evidence.EvaluationId) },
+                weakCriteria = evidence.EvaluationId is null
                     ? new List<Dictionary<string, object?>>()
-                    : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, []),
-                momentum = new { streakDays = user?.CurrentStreak ?? 0, completionRate, dueItems = dueItems.Count, completedDueItems },
+                    : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evidence.CriterionScoresJson, []),
+                momentum = new { streakDays = profile.User.CurrentStreak, completionRate, dueItems = dueItems.Count, completedDueItems },
                 nextMockRecommendation = nextMockItem is null
                     ? null
                     : new { title = nextMockItem.Title, route = StudyPlanRouteForItem(nextMockItem), rationale = nextMockItem.Rationale },
-                pendingExpertReviews = new { count = pendingReviews, route = "/reviews" }
+                pendingExpertReviews = new { count = evidence.PendingReviews, route = "/reviews" }
             },
-            engagement = user is not null ? new
+            engagement = new
             {
-                currentStreak = user.CurrentStreak,
-                longestStreak = user.LongestStreak,
-                lastPracticeDate = user.LastPracticeDate,
-                totalPracticeMinutes = user.TotalPracticeMinutes,
-                totalPracticeSessions = user.TotalPracticeSessions
-            } : null,
+                currentStreak = profile.User.CurrentStreak,
+                longestStreak = profile.User.LongestStreak,
+                lastPracticeDate = profile.User.LastPracticeDate,
+                totalPracticeMinutes = profile.User.TotalPracticeMinutes,
+                totalPracticeSessions = profile.User.TotalPracticeSessions
+            },
             freeze,
             primaryActions,
-            partialData = latestEvaluation is null,
+            partialData = evidence.EvaluationId is null,
             lastUpdatedAt = DateTimeOffset.UtcNow
         };
+    }
+
+    private async Task<DashboardPlanState> GetDashboardPlanAsync(
+        LearnerProfileState profile,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<StudyPlan> latestPlanQuery = IsSqliteProvider(db)
+            ? db.StudyPlans.FromSqlInterpolated($@"
+                SELECT *
+                FROM ""StudyPlans""
+                WHERE ""UserId"" = {profile.User.Id}
+                ORDER BY ""GeneratedAt"" DESC
+                LIMIT 1")
+            : db.StudyPlans
+                .Where(x => x.UserId == profile.User.Id)
+                .OrderByDescending(x => x.GeneratedAt)
+                .Take(1);
+
+        var rows = await (
+                from loadedPlan in latestPlanQuery.AsNoTracking()
+                join item in db.StudyPlanItems.AsNoTracking()
+                    on loadedPlan.Id equals item.StudyPlanId into items
+                from item in items.DefaultIfEmpty()
+                select new { Plan = loadedPlan, Item = item })
+            .ToListAsync(cancellationToken);
+
+        StudyPlan plan;
+        List<StudyPlanItem> planItems;
+        var changed = false;
+        if (rows.Count == 0)
+        {
+            plan = CreateDefaultStudyPlan(profile.User.Id, profile.Goal, DateTimeOffset.UtcNow);
+            planItems = CreateDefaultStudyPlanItems(plan.Id).ToList();
+            db.StudyPlans.Add(plan);
+            db.StudyPlanItems.AddRange(planItems);
+            changed = true;
+        }
+        else
+        {
+            plan = rows[0].Plan;
+            planItems = rows
+                .Where(x => x.Item is not null)
+                .Select(x => x.Item!)
+                .ToList();
+        }
+
+        if (!string.Equals(profile.User.CurrentPlanId, plan.Id, StringComparison.Ordinal))
+        {
+            profile.User.CurrentPlanId = plan.Id;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return new DashboardPlanState(plan, planItems);
+    }
+
+    private async Task<DashboardEvidenceRow> GetDashboardEvidenceAsync(
+        string userId,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<Evaluation> latestEvaluationQuery = IsSqliteProvider(db)
+            ? db.Evaluations.FromSqlInterpolated($@"
+                SELECT evaluation.*
+                FROM ""Evaluations"" AS evaluation
+                INNER JOIN ""Attempts"" AS attempt ON attempt.""Id"" = evaluation.""AttemptId""
+                WHERE attempt.""UserId"" = {userId}
+                ORDER BY evaluation.""GeneratedAt"" DESC
+                LIMIT 1")
+            : db.Evaluations
+                .Where(evaluation => db.Attempts.Any(attempt =>
+                    attempt.Id == evaluation.AttemptId && attempt.UserId == userId))
+                .OrderByDescending(evaluation => evaluation.GeneratedAt)
+                .Take(1);
+
+        return await (
+                from owner in db.Users.AsNoTracking().Where(x => x.Id == userId)
+                from evaluation in latestEvaluationQuery.AsNoTracking().DefaultIfEmpty()
+                select new DashboardEvidenceRow(
+                    db.ReviewRequests.Count(review =>
+                        (review.State == ReviewRequestState.Submitted
+                         || review.State == ReviewRequestState.Queued
+                         || review.State == ReviewRequestState.InReview)
+                        && db.Attempts.Any(attempt =>
+                            attempt.Id == review.AttemptId && attempt.UserId == owner.Id)),
+                    evaluation == null ? null : evaluation.Id,
+                    evaluation == null ? null : evaluation.AttemptId,
+                    evaluation == null ? null : evaluation.SubtestCode,
+                    evaluation == null ? null : evaluation.ScoreRange,
+                    evaluation == null ? null : evaluation.CriterionScoresJson))
+            .SingleAsync(cancellationToken);
     }
 
     public async Task<object> GetStudyPlanAsync(string userId, CancellationToken cancellationToken)
@@ -1023,48 +1163,112 @@ public partial class LearnerService(
 
     public async Task<object> GetReadinessAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureLearnerProfileAsync(userId, cancellationToken);
-        await EnsureUserAsync(userId, cancellationToken);
-        var snapshot = await GetLatestReadinessSnapshotAsync(userId, cancellationToken);
+        var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
+        return await GetReadinessForLoadedProfileAsync(profile, cancellationToken);
+    }
+
+    private async Task<object> GetReadinessForLoadedProfileAsync(
+        LearnerProfileState profile,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await GetLatestReadinessSnapshotAsync(profile, cancellationToken);
         var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(snapshot.PayloadJson, new Dictionary<string, object?>());
         payload["snapshotId"] = snapshot.Id;
         payload["computedAt"] = snapshot.ComputedAt;
         payload["snapshotVersion"] = snapshot.Version;
-        await RecordEventAsync(userId, "readiness_viewed", new { userId, snapshotId = snapshot.Id, computedAt = snapshot.ComputedAt }, cancellationToken);
+        await RecordEventAsync(profile.User.Id, "readiness_viewed", new { userId = profile.User.Id, snapshotId = snapshot.Id, computedAt = snapshot.ComputedAt }, cancellationToken);
         return payload;
     }
 
     public async Task<object> GetProgressAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
-        var submissions = await db.Attempts.Where(x => x.UserId == userId && x.State == AttemptState.Completed).ToListAsync(cancellationToken);
-        var attemptIds = submissions.Select(x => x.Id).ToList();
-        var evaluations = (await db.Evaluations
-                .Where(x => x.State == AsyncState.Completed && attemptIds.Contains(x.AttemptId))
-                .ToListAsync(cancellationToken))
-            .OrderBy(x => x.GeneratedAt)
+        var totals = await db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new ProgressTotalsRow(
+                user.AccountStatus,
+                db.Attempts.Count(attempt =>
+                    attempt.UserId == user.Id && attempt.State == AttemptState.Completed),
+                db.Evaluations.Count(evaluation =>
+                    evaluation.State == AsyncState.Completed
+                    && db.Attempts.Any(attempt =>
+                        attempt.Id == evaluation.AttemptId
+                        && attempt.UserId == user.Id
+                        && attempt.State == AttemptState.Completed))))
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw ApiException.Forbidden("learner_profile_not_found", "Learner profile not found.");
+
+        if (!string.Equals(totals.AccountStatus, "active", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Forbidden("account_suspended", "This learner account is not available.");
+        }
+
+        var recentEvaluations = await db.Evaluations
+            .AsNoTracking()
+            .Where(evaluation =>
+                evaluation.State == AsyncState.Completed
+                && db.Attempts.Any(attempt =>
+                    attempt.Id == evaluation.AttemptId
+                    && attempt.UserId == userId
+                    && attempt.State == AttemptState.Completed))
+            .OrderByDescending(evaluation => evaluation.GeneratedAt)
+            .ThenByDescending(evaluation => evaluation.Id)
+            .Take(ProgressHistoryLimit)
+            .Select(evaluation => new ProgressEvaluationRow(
+                evaluation.SubtestCode,
+                evaluation.ScoreRange,
+                evaluation.CriterionScoresJson,
+                evaluation.GeneratedAt))
+            .ToListAsync(cancellationToken);
+
+        var evaluations = recentEvaluations
+            .OrderBy(evaluation => evaluation.GeneratedAt)
             .ToList();
-        var criterionTrend = evaluations
-            .SelectMany(evaluation =>
-                JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, [])
-                    .Select(criterion => new
-                    {
-                        criterionCode = criterion.GetValueOrDefault("criterionCode")?.ToString(),
-                        criterionLabel = CriterionLabelFromCode(criterion.GetValueOrDefault("criterionCode")?.ToString()),
-                        score = ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString()),
-                        generatedAt = evaluation.GeneratedAt,
-                        subtest = evaluation.SubtestCode
-                    }))
+        var parsedEvaluations = evaluations
+            .Select(evaluation => new
+            {
+                Evaluation = evaluation,
+                Criteria = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, [])
+            })
             .ToList();
-        var reviews = (await db.ReviewRequests
-                .Where(x => attemptIds.Contains(x.AttemptId))
-                .ToListAsync(cancellationToken))
-            .OrderBy(x => x.CreatedAt)
+        var criterionTrend = parsedEvaluations
+            .SelectMany(parsed => parsed.Criteria.Select(criterion =>
+            {
+                var criterionCode = criterion.GetValueOrDefault("criterionCode")?.ToString();
+                return new
+                {
+                    criterionCode,
+                    criterionLabel = CriterionLabelFromCode(criterionCode),
+                    score = ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString()),
+                    generatedAt = parsed.Evaluation.GeneratedAt,
+                    subtest = parsed.Evaluation.SubtestCode
+                };
+            }))
             .ToList();
-        var completedReviews = reviews.Where(x => x.CompletedAt.HasValue).ToList();
-        var averageTurnaroundHours = completedReviews.Count == 0
+
+        var reviewQuery = db.ReviewRequests
+            .AsNoTracking()
+            .Where(review => db.Attempts.Any(attempt =>
+                attempt.Id == review.AttemptId
+                && attempt.UserId == userId
+                && attempt.State == AttemptState.Completed));
+        var reviewUsage = await reviewQuery
+            .GroupBy(_ => 1)
+            .Select(group => new ProgressReviewAggregateRow(
+                group.Count(),
+                group.Count(review => review.CompletedAt.HasValue),
+                group.Count(review => review.PaymentSource.ToLower() == "credits")))
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? new ProgressReviewAggregateRow(0, 0, 0);
+        var completedReviewTurnarounds = await reviewQuery
+            .Where(review => review.CompletedAt.HasValue)
+            .Select(review => new ProgressReviewTurnaroundRow(
+                review.CreatedAt,
+                review.CompletedAt!.Value))
+            .ToListAsync(cancellationToken);
+        var averageTurnaroundHours = completedReviewTurnarounds.Count == 0
             ? (double?)null
-            : Math.Round(completedReviews.Average(x => (x.CompletedAt!.Value - x.CreatedAt).TotalHours), 1);
+            : Math.Round(completedReviewTurnarounds.Average(x => (x.CompletedAt - x.CreatedAt).TotalHours), 1);
 
         return new
         {
@@ -1091,12 +1295,12 @@ public partial class LearnerService(
             },
             reviewUsage = new
             {
-                totalRequests = reviews.Count,
-                completedRequests = completedReviews.Count,
+                totalRequests = reviewUsage.TotalRequests,
+                completedRequests = reviewUsage.CompletedRequests,
                 averageTurnaroundHours,
-                creditsConsumed = reviews.Count(x => string.Equals(x.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase))
+                creditsConsumed = reviewUsage.CreditsConsumed
             },
-            totals = new { completedAttempts = submissions.Count, completedEvaluations = evaluations.Count },
+            totals = new { completedAttempts = totals.CompletedAttempts, completedEvaluations = totals.CompletedEvaluations },
             freshness = new
             {
                 generatedAt = DateTimeOffset.UtcNow,
@@ -1353,31 +1557,48 @@ public partial class LearnerService(
     public async Task<object> CompareSubmissionsAsync(string userId, string? leftId, string? rightId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var attempts = await db.Attempts
-            .Where(x => x.UserId == userId)
-            .OrderByDescending(x => x.SubmittedAt)
-            .ToListAsync(cancellationToken);
-        var left = leftId is not null ? await GetAttemptOwnedByUserAsync(userId, leftId, cancellationToken) : attempts.ElementAtOrDefault(0);
-        Attempt? right = null;
+        var left = leftId is not null
+            ? await GetComparisonAttemptOwnedByUserAsync(userId, leftId, cancellationToken)
+            : await db.Attempts
+                .AsNoTracking()
+                .Where(attempt => attempt.UserId == userId)
+                .OrderByDescending(attempt => attempt.SubmittedAt)
+                .Select(attempt => new ComparisonAttemptRow(
+                    attempt.Id,
+                    attempt.ContentId,
+                    attempt.SubtestCode,
+                    attempt.ComparisonGroupId,
+                    attempt.ParentAttemptId))
+                .FirstOrDefaultAsync(cancellationToken);
+        ComparisonAttemptRow? right = null;
         if (rightId is not null)
         {
-            right = await GetAttemptOwnedByUserAsync(userId, rightId, cancellationToken);
+            right = await GetComparisonAttemptOwnedByUserAsync(userId, rightId, cancellationToken);
         }
         else if (left is not null)
         {
-            right = attempts
-                .Where(candidate => candidate.Id != left.Id)
+            var comparisonGroupId = string.IsNullOrWhiteSpace(left.ComparisonGroupId)
+                ? null
+                : left.ComparisonGroupId;
+            var parentAttemptId = string.IsNullOrWhiteSpace(left.ParentAttemptId)
+                ? null
+                : left.ParentAttemptId;
+            right = await db.Attempts
+                .AsNoTracking()
+                .Where(candidate => candidate.UserId == userId && candidate.Id != left.Id)
                 .Where(candidate =>
-                    (!string.IsNullOrWhiteSpace(left.ComparisonGroupId) && string.Equals(candidate.ComparisonGroupId, left.ComparisonGroupId, StringComparison.Ordinal))
+                    (comparisonGroupId != null && candidate.ComparisonGroupId == comparisonGroupId)
                     || (candidate.SubtestCode == left.SubtestCode && candidate.ContentId == left.ContentId)
-                    || (!string.IsNullOrWhiteSpace(left.ParentAttemptId) && candidate.Id == left.ParentAttemptId)
-                    || (!string.IsNullOrWhiteSpace(candidate.ParentAttemptId) && candidate.ParentAttemptId == left.Id))
+                    || (parentAttemptId != null && candidate.Id == parentAttemptId)
+                    || (candidate.ParentAttemptId != null && candidate.ParentAttemptId == left.Id))
                 .OrderByDescending(candidate => candidate.SubmittedAt ?? candidate.StartedAt)
-                .FirstOrDefault();
-        }
-        else
-        {
-            right = attempts.Skip(1).FirstOrDefault();
+                .Select(candidate => new ComparisonAttemptRow(
+                    candidate.Id,
+                    candidate.ContentId,
+                    candidate.SubtestCode,
+                    candidate.ComparisonGroupId,
+                    candidate.ParentAttemptId))
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         if (left is null || right is null)
@@ -1385,8 +1606,17 @@ public partial class LearnerService(
             return new { canCompare = false, reason = "Need at least two submissions to compare." };
         }
 
-        var leftEval = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == left.Id, cancellationToken);
-        var rightEval = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == right.Id, cancellationToken);
+        var comparisonAttemptIds = new[] { left.Id, right.Id };
+        var evaluations = await db.Evaluations
+            .AsNoTracking()
+            .Where(evaluation => comparisonAttemptIds.Contains(evaluation.AttemptId))
+            .Select(evaluation => new ComparisonEvaluationRow(
+                evaluation.Id,
+                evaluation.AttemptId,
+                evaluation.ScoreRange))
+            .ToListAsync(cancellationToken);
+        var leftEval = evaluations.FirstOrDefault(evaluation => evaluation.AttemptId == left.Id);
+        var rightEval = evaluations.FirstOrDefault(evaluation => evaluation.AttemptId == right.Id);
 
         return new
         {
@@ -1398,32 +1628,68 @@ public partial class LearnerService(
         };
     }
 
+    private async Task<ComparisonAttemptRow> GetComparisonAttemptOwnedByUserAsync(
+        string userId,
+        string attemptId,
+        CancellationToken cancellationToken)
+        => await db.Attempts
+               .AsNoTracking()
+               .Where(attempt => attempt.Id == attemptId && attempt.UserId == userId)
+               .Select(attempt => new ComparisonAttemptRow(
+                   attempt.Id,
+                   attempt.ContentId,
+                   attempt.SubtestCode,
+                   attempt.ComparisonGroupId,
+                   attempt.ParentAttemptId))
+               .FirstOrDefaultAsync(cancellationToken)
+           ?? throw ApiException.NotFound("attempt_not_found", "Attempt not found.");
+
     public async Task<object> GetWritingHomeAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureLearnerProfileAsync(userId, cancellationToken);
-        var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
-        var examFamilyLabel = FormatExamFamilyLabel(goal.ExamFamilyCode);
+        var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
+        var examFamilyLabel = FormatExamFamilyLabel(profile.Goal.ExamFamilyCode);
         var tasks = await GetTasksBySubtestAsync("writing", cancellationToken);
-        var attemptIds = await db.Attempts.Where(x => x.UserId == userId && x.SubtestCode == "writing").Select(x => x.Id).ToListAsync(cancellationToken);
-        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var attempts = (await db.Attempts
+        var attempts = await db.Attempts
+            .AsNoTracking()
             .Where(x => x.UserId == userId && x.SubtestCode == "writing")
-            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
             .Take(4)
-            .ToList();
-        var draftAttempt = (await db.Attempts
+            .ToListAsync(cancellationToken);
+        var draftAttempt = await db.Attempts
+            .AsNoTracking()
             .Where(x => x.UserId == userId && x.SubtestCode == "writing" && x.State == AttemptState.InProgress)
-            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.LastClientSyncAt ?? x.StartedAt)
-            .FirstOrDefault();
-        var latestEvaluation = (await db.Evaluations
-            .Where(x => x.SubtestCode == "writing" && attemptIds.Contains(x.AttemptId))
-            .ToListAsync(cancellationToken))
-            .OrderByDescending(x => x.GeneratedAt)
-            .FirstOrDefault();
-        var criterionDrillLibrary = latestEvaluation is not null
-            ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, [])
+            .FirstOrDefaultAsync(cancellationToken);
+        var recentAttemptIds = attempts.Select(attempt => attempt.Id).ToArray();
+        var latestEvaluationIdQuery = db.Evaluations
+            .Where(evaluation =>
+                evaluation.SubtestCode == "writing"
+                && db.Attempts.Any(attempt =>
+                    attempt.Id == evaluation.AttemptId
+                    && attempt.UserId == userId
+                    && attempt.SubtestCode == "writing"))
+            .OrderByDescending(evaluation => evaluation.GeneratedAt)
+            .Select(evaluation => evaluation.Id)
+            .Take(1);
+        var evaluationRows = await (
+                from evaluation in db.Evaluations.AsNoTracking()
+                join attempt in db.Attempts.AsNoTracking()
+                    on evaluation.AttemptId equals attempt.Id
+                join content in db.ContentItems.AsNoTracking()
+                    on attempt.ContentId equals content.Id
+                where attempt.UserId == userId
+                      && attempt.SubtestCode == "writing"
+                      && (recentAttemptIds.Contains(evaluation.AttemptId)
+                          || latestEvaluationIdQuery.Contains(evaluation.Id))
+                select new WritingHomeEvaluationRow(
+                    evaluation,
+                    attempt,
+                    content,
+                    latestEvaluationIdQuery.Contains(evaluation.Id)))
+            .ToListAsync(cancellationToken);
+        var latestEvaluationRow = evaluationRows.FirstOrDefault(row => row.IsLatest);
+        var criterionDrillLibrary = latestEvaluationRow is not null
+            ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluationRow.Evaluation.CriterionScoresJson, [])
                 .OrderBy(x => ParseCriterionScore(x.GetValueOrDefault("scoreRange")?.ToString()))
                 .Take(3)
                 .Select(x => new
@@ -1437,14 +1703,33 @@ public partial class LearnerService(
             : tasks.Take(3).Select(task => task).ToList();
         var practiceLibrary = tasks.Take(4).ToList();
         var recommendedTask = practiceLibrary.FirstOrDefault();
-        var evaluations = (await db.Evaluations
-            .Where(x => attemptIds.Contains(x.AttemptId))
-            .ToListAsync(cancellationToken))
-            .OrderByDescending(x => x.GeneratedAt)
-            .ToList();
-        var evaluationByAttemptId = evaluations
-            .GroupBy(x => x.AttemptId)
-            .ToDictionary(group => group.Key, group => group.First());
+        var evaluationByAttemptId = evaluationRows
+            .Where(row => recentAttemptIds.Contains(row.Evaluation.AttemptId))
+            .GroupBy(row => row.Evaluation.AttemptId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(row => row.Evaluation.GeneratedAt)
+                    .First()
+                    .Evaluation);
+        object? latestEvaluationSummary = null;
+        if (latestEvaluationRow is not null)
+        {
+            await RecordEventAsync(
+                userId,
+                "evaluation_viewed",
+                new
+                {
+                    evaluationId = latestEvaluationRow.Evaluation.Id,
+                    attemptId = latestEvaluationRow.Attempt.Id,
+                    subtest = latestEvaluationRow.Evaluation.SubtestCode
+                },
+                cancellationToken);
+            latestEvaluationSummary = BuildWritingEvaluationSummaryDto(
+                latestEvaluationRow.Evaluation,
+                latestEvaluationRow.Attempt,
+                latestEvaluationRow.Content);
+        }
 
         return new
         {
@@ -1465,7 +1750,7 @@ public partial class LearnerService(
             }),
             reviewCredits = new
             {
-                available = wallet.CreditBalance,
+                available = profile.Wallet.CreditBalance,
                 route = "/reviews",
                 billingRoute = "/billing"
             },
@@ -1476,7 +1761,7 @@ public partial class LearnerService(
                 rationale = $"Use a full mock to confirm whether your {examFamilyLabel} writing gains are transferring under timed conditions."
             },
             featuredTasks = tasks.Take(3),
-            latestEvaluation = latestEvaluation is null ? null : await GetWritingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
+            latestEvaluation = latestEvaluationSummary,
             actions = new[]
             {
                 new { label = "Browse Writing Tasks", route = "/writing/tasks" },
@@ -2221,10 +2506,17 @@ public partial class LearnerService(
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
+        return BuildWritingEvaluationSummaryDto(evaluation, attempt, content);
+    }
+
+    private static object BuildWritingEvaluationSummaryDto(
+        Evaluation evaluation,
+        Attempt attempt,
+        ContentItem content)
+    {
         var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
         var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
-        await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
-
         return new
         {
             evaluationId = evaluation.Id,
@@ -2723,7 +3015,8 @@ public partial class LearnerService(
                 "Confirm recording consent before uploading speaking audio.",
                 [new ApiFieldError("consent", "required", "Accept the speaking recording consent before submitting audio.")]);
         }
-        if (upload.State != UploadState.Uploaded || !fileStorage.Exists(upload.StorageKey))
+        if (upload.State != UploadState.Uploaded
+            || !await fileStorage.ExistsAsync(upload.StorageKey, cancellationToken))
         {
             throw ApiException.Validation(
                 "upload_binary_missing",
@@ -2732,7 +3025,7 @@ public partial class LearnerService(
         }
 
         var resolvedContentType = string.IsNullOrWhiteSpace(request.ContentType) ? null : request.ContentType;
-        var storedLength = fileStorage.Length(upload.StorageKey);
+        var storedLength = await fileStorage.LengthAsync(upload.StorageKey, cancellationToken);
         attempt.AudioUploadState = UploadState.Uploaded;
         attempt.AudioObjectKey = upload.StorageKey;
         attempt.AudioMetadataJson = JsonSupport.Serialize(new
@@ -2788,12 +3081,12 @@ public partial class LearnerService(
                 return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
             }
 
-            EnsureSpeakingAudioReadyForSubmission(attempt);
+            await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
 
             return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
         }
 
-        EnsureSpeakingAudioReadyForSubmission(attempt);
+        await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
 
         return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
     }
@@ -3066,7 +3359,7 @@ public partial class LearnerService(
         }
         catch
         {
-            fileStorage.Delete(storageKey);
+            await fileStorage.DeleteAsync(storageKey, cancellationToken);
             throw;
         }
 
@@ -5032,6 +5325,305 @@ public partial class LearnerService(
         return user;
     }
 
+    private async Task<LearnerProfileState> EnsureLearnerProfileStateAsync(
+        string userId,
+        CancellationToken cancellationToken)
+    {
+        var loaded = await (
+                from user in db.Users
+                where user.Id == userId
+                join registration in db.LearnerRegistrationProfiles
+                    on user.Id equals registration.LearnerUserId into registrations
+                from registration in registrations.DefaultIfEmpty()
+                join loadedGoal in db.Goals
+                    on user.Id equals loadedGoal.UserId into goals
+                from loadedGoal in goals.DefaultIfEmpty()
+                join loadedSettings in db.Settings
+                    on user.Id equals loadedSettings.UserId into settingsRows
+                from loadedSettings in settingsRows.DefaultIfEmpty()
+                join loadedWallet in db.Wallets
+                    on user.Id equals loadedWallet.UserId into wallets
+                from loadedWallet in wallets.DefaultIfEmpty()
+                select new
+                {
+                    User = user,
+                    RegisteredTargetCountry = registration == null ? null : registration.CountryTarget,
+                    Goal = loadedGoal,
+                    Settings = loadedSettings,
+                    Wallet = loadedWallet
+                })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (loaded is null)
+        {
+            throw ApiException.Forbidden("learner_profile_not_found", "Learner profile not found.");
+        }
+
+        if (!string.Equals(loaded.User.AccountStatus, "active", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Forbidden("account_suspended", "This learner account is not available.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var registeredTargetCountry = TargetCountryOptions.TryCanonicalize(
+            loaded.RegisteredTargetCountry,
+            out var canonicalRegisteredTargetCountry)
+            ? canonicalRegisteredTargetCountry
+            : "Australia";
+        var changed = false;
+        var goal = loaded.Goal;
+        if (goal is null)
+        {
+            goal = CreateDefaultGoal(
+                loaded.User.Id,
+                loaded.User.ActiveProfessionId,
+                registeredTargetCountry,
+                now);
+            db.Goals.Add(goal);
+            changed = true;
+        }
+        else if (ShouldRestoreRegisteredTargetCountry(goal, registeredTargetCountry))
+        {
+            goal.TargetCountry = registeredTargetCountry;
+            goal.UpdatedAt = now;
+            changed = true;
+        }
+        else if (TargetCountryOptions.TryCanonicalize(goal.TargetCountry, out var canonicalGoalTargetCountry)
+                 && !string.Equals(goal.TargetCountry, canonicalGoalTargetCountry, StringComparison.Ordinal))
+        {
+            goal.TargetCountry = canonicalGoalTargetCountry;
+            goal.UpdatedAt = now;
+            changed = true;
+        }
+
+        var settings = loaded.Settings;
+        if (settings is null)
+        {
+            settings = CreateDefaultSettings(loaded.User, goal);
+            db.Settings.Add(settings);
+            changed = true;
+        }
+
+        var wallet = loaded.Wallet;
+        if (wallet is null)
+        {
+            wallet = CreateDefaultWallet(loaded.User.Id, now);
+            db.Wallets.Add(wallet);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                foreach (var entry in db.ChangeTracker.Entries().Where(entry => entry.State == EntityState.Added).ToList())
+                {
+                    entry.State = EntityState.Detached;
+                }
+
+                var persistedGoal = await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+                var persistedSettings = await db.Settings.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+                var persistedWallet = await db.Wallets.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+                if (persistedGoal is null || persistedSettings is null || persistedWallet is null)
+                {
+                    throw;
+                }
+
+                goal = persistedGoal;
+                settings = persistedSettings;
+                wallet = persistedWallet;
+            }
+        }
+
+        return new LearnerProfileState(loaded.User, goal, settings, wallet);
+    }
+
+    private async Task<object> GetFreezeStatusForLoadedUserAsync(
+        LearnerUser user,
+        CancellationToken cancellationToken)
+    {
+        var state = await (
+                from owner in db.Users.AsNoTracking().Where(x => x.Id == user.Id)
+                from loadedPolicy in db.AccountFreezePolicies
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.Version)
+                    .Take(1)
+                    .DefaultIfEmpty()
+                from currentFreeze in db.AccountFreezeRecords
+                    .AsNoTracking()
+                    .Where(x => x.UserId == owner.Id && x.IsCurrent)
+                    .Take(1)
+                    .DefaultIfEmpty()
+                from entitlement in db.AccountFreezeEntitlements
+                    .AsNoTracking()
+                    .Where(x => x.UserId == owner.Id)
+                    .Take(1)
+                    .DefaultIfEmpty()
+                from subscription in db.Subscriptions
+                    .AsNoTracking()
+                    .Where(x => x.UserId == owner.Id)
+                    .Take(1)
+                    .DefaultIfEmpty()
+                select new
+                {
+                    Policy = loadedPolicy,
+                    CurrentFreeze = currentFreeze,
+                    Entitlement = entitlement,
+                    Subscription = subscription
+                })
+            .SingleAsync(cancellationToken);
+        var policy = state.Policy ?? CreateDefaultFreezeReadPolicy();
+        var currentPlan = state.Subscription is null
+            ? null
+            : await db.BillingPlans
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    plan => plan.Code == state.Subscription.PlanId,
+                    cancellationToken);
+        var eligibility = BuildFreezeEligibilityFromLoadedState(
+            policy,
+            state.CurrentFreeze,
+            state.Entitlement,
+            state.Subscription,
+            currentPlan);
+        var history = await db.AccountFreezeRecords
+            .AsNoTracking()
+            .Where(record => record.UserId == user.Id)
+            .OrderByDescending(record => record.RequestedAt)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+
+        return new
+        {
+            userId = user.Id,
+            policy = MapFreezePolicy(policy),
+            currentFreeze = state.CurrentFreeze is null ? null : MapFreezeRecord(state.CurrentFreeze),
+            entitlement = state.Entitlement is null ? null : new
+            {
+                state.Entitlement.Id,
+                state.Entitlement.UserId,
+                state.Entitlement.FreezeRecordId,
+                state.Entitlement.ConsumedAt,
+                state.Entitlement.ResetAt,
+                state.Entitlement.ResetByAdminId,
+                state.Entitlement.ResetByAdminName,
+                state.Entitlement.ResetReason,
+                used = state.Entitlement.ConsumedAt is not null && state.Entitlement.ResetAt is null
+            },
+            eligibility,
+            history = history.Select(MapFreezeRecord).ToList()
+        };
+    }
+
+    private static AccountFreezePolicy CreateDefaultFreezeReadPolicy() => new()
+    {
+        Id = "global",
+        IsEnabled = true,
+        SelfServiceEnabled = true,
+        ApprovalMode = FreezeApprovalMode.AutoApprove,
+        MinDurationDays = 1,
+        MaxDurationDays = 365,
+        AllowScheduling = true,
+        AccessMode = FreezeAccessMode.ReadOnly,
+        EntitlementPauseMode = FreezeEntitlementPauseMode.InternalClock,
+        RequireReason = true,
+        RequireInternalNotes = false,
+        AllowActivePaid = true,
+        AllowGracePeriod = true,
+        AllowTrial = false,
+        AllowComplimentary = false,
+        AllowCancelled = false,
+        AllowExpired = false,
+        AllowReviewOnly = false,
+        AllowPastDue = true,
+        AllowSuspended = false,
+        PolicyNotes = "Default freeze policy",
+        EligibilityReasonCodesJson = "[]",
+        UpdatedAt = DateTimeOffset.UtcNow,
+        Version = 1
+    };
+
+    private static FreezeEligibilityResult BuildFreezeEligibilityFromLoadedState(
+        AccountFreezePolicy policy,
+        AccountFreezeRecord? currentFreeze,
+        AccountFreezeEntitlement? entitlement,
+        Subscription? subscription,
+        BillingPlan? currentPlan)
+    {
+        if (subscription is null)
+        {
+            return new FreezeEligibilityResult(
+                false,
+                false,
+                false,
+                policy.MaxDurationDays,
+                policy.MinDurationDays,
+                "unknown",
+                ["subscription_missing"],
+                policy.Version);
+        }
+
+        var reasonCodes = new List<string>();
+        if (!policy.IsEnabled) reasonCodes.Add("policy_disabled");
+        if (!policy.SelfServiceEnabled) reasonCodes.Add("self_service_disabled");
+        if (currentFreeze is not null
+            && currentFreeze.Status is FreezeStatus.Active or FreezeStatus.PendingApproval or FreezeStatus.Scheduled)
+        {
+            reasonCodes.Add("current_freeze_exists");
+        }
+        if (entitlement is not null && entitlement.ConsumedAt is not null && entitlement.ResetAt is null)
+        {
+            reasonCodes.Add("self_service_entitlement_used");
+        }
+
+        if (subscription.Status == SubscriptionStatus.Active && !policy.AllowActivePaid)
+        {
+            reasonCodes.Add("active_paid_excluded");
+        }
+        else if (subscription.Status == SubscriptionStatus.PastDue && !policy.AllowPastDue && !policy.AllowGracePeriod)
+        {
+            reasonCodes.Add("past_due_excluded");
+        }
+        else if (subscription.Status == SubscriptionStatus.Trial && !policy.AllowTrial)
+        {
+            reasonCodes.Add("trial_excluded");
+        }
+        else if (subscription.Status == SubscriptionStatus.Cancelled && !policy.AllowCancelled)
+        {
+            reasonCodes.Add("cancelled_excluded");
+        }
+        else if (subscription.Status == SubscriptionStatus.Expired && !policy.AllowExpired)
+        {
+            reasonCodes.Add("expired_excluded");
+        }
+        else if (subscription.Status == SubscriptionStatus.Suspended && !policy.AllowSuspended)
+        {
+            reasonCodes.Add("suspended_excluded");
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentPlan?.Code)
+            && currentPlan.Code.Contains("complimentary", StringComparison.OrdinalIgnoreCase)
+            && !policy.AllowComplimentary)
+        {
+            reasonCodes.Add("complimentary_excluded");
+        }
+
+        var eligible = reasonCodes.Count == 0;
+        return new FreezeEligibilityResult(
+            eligible,
+            eligible,
+            policy.AllowScheduling,
+            policy.MaxDurationDays,
+            policy.MinDurationDays,
+            ToSubscriptionState(subscription.Status),
+            reasonCodes,
+            policy.Version);
+    }
+
     private async Task<LearnerUser> EnsureLearnerProfileAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await EnsureUserAsync(userId, cancellationToken);
@@ -5505,7 +6097,9 @@ public partial class LearnerService(
         }
     }
 
-    private void EnsureSpeakingAudioReadyForSubmission(Attempt attempt)
+    private async Task EnsureSpeakingAudioReadyForSubmissionAsync(
+        Attempt attempt,
+        CancellationToken cancellationToken)
     {
         if (attempt.AudioUploadState != UploadState.Uploaded || string.IsNullOrWhiteSpace(attempt.AudioObjectKey))
         {
@@ -5515,7 +6109,8 @@ public partial class LearnerService(
                 [new ApiFieldError("audio", "required", "Complete the audio upload before submission.")]);
         }
 
-        if (!fileStorage.Exists(attempt.AudioObjectKey) || fileStorage.Length(attempt.AudioObjectKey) <= 0)
+        if (!await fileStorage.ExistsAsync(attempt.AudioObjectKey, cancellationToken)
+            || await fileStorage.LengthAsync(attempt.AudioObjectKey, cancellationToken) <= 0)
         {
             throw ApiException.Validation(
                 "speaking_audio_not_ready",
@@ -5801,7 +6396,11 @@ public partial class LearnerService(
 
     private async Task<List<object>> GetTasksBySubtestAsync(string subtest, CancellationToken cancellationToken)
     {
-        var items = await db.ContentItems.Where(x => x.SubtestCode == subtest && x.Status == ContentStatus.Published).OrderBy(x => x.Title).ToListAsync(cancellationToken);
+        var items = await db.ContentItems
+            .AsNoTracking()
+            .Where(x => x.SubtestCode == subtest && x.Status == ContentStatus.Published)
+            .OrderBy(x => x.Title)
+            .ToListAsync(cancellationToken);
         if (string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
         {
             return items.Select(item => (object)BuildLearnerSpeakingTaskPayload(item)).ToList();
@@ -6174,37 +6773,30 @@ public partial class LearnerService(
         return createdPlan;
     }
 
-    private async Task<ReadinessSnapshot> GetLatestReadinessSnapshotAsync(string userId, CancellationToken cancellationToken)
+    private async Task<ReadinessSnapshot> GetLatestReadinessSnapshotAsync(
+        LearnerProfileState profile,
+        CancellationToken cancellationToken)
     {
-        await EnsureLearnerProfileAsync(userId, cancellationToken);
-
         // Prefer the unified ReadinessComputationService so callers always see
         // a computed snapshot (not the legacy default stub). Falls back to
         // direct DB read when DI isn't wired (e.g. legacy tests).
         if (readinessComputation is not null)
         {
-            return await readinessComputation.GetOrComputeAsync(userId, cancellationToken);
+            return await readinessComputation.GetOrComputeAsync(profile.User.Id, cancellationToken);
         }
 
-        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var query = db.ReadinessSnapshots.Where(x => x.UserId == userId);
-        ReadinessSnapshot? snapshot;
-        if (!db.Database.IsSqlite())
-        {
-            snapshot = await query.OrderByDescending(x => x.ComputedAt).FirstOrDefaultAsync(cancellationToken);
-        }
-        else
-        {
-            var snapshots = await query.ToListAsync(cancellationToken);
-            snapshot = snapshots.OrderByDescending(x => x.ComputedAt).FirstOrDefault();
-        }
+        var snapshot = await db.ReadinessSnapshots
+            .AsNoTracking()
+            .Where(x => x.UserId == profile.User.Id)
+            .OrderByDescending(x => x.ComputedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (snapshot is not null)
         {
             return snapshot;
         }
 
-        snapshot = CreateDefaultReadinessSnapshot(userId, goal, DateTimeOffset.UtcNow);
+        snapshot = CreateDefaultReadinessSnapshot(profile.User.Id, profile.Goal, DateTimeOffset.UtcNow);
         db.ReadinessSnapshots.Add(snapshot);
         await db.SaveChangesAsync(cancellationToken);
         return snapshot;
@@ -12361,8 +12953,10 @@ public partial class LearnerService(
 
         // Get user's weakest areas to weight task selection
         var recentEvals = await db.Evaluations
+            .AsNoTracking()
             .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && a.UserId == userId)
                 && e.GeneratedAt >= DateTimeOffset.UtcNow.AddDays(-30))
+            .Select(e => new { e.SubtestCode, e.ScoreRange })
             .ToListAsync(ct);
 
         var subtestScores = recentEvals
@@ -12383,6 +12977,14 @@ public partial class LearnerService(
         var orderedSubtests = subtests
             .OrderBy(s => subtestScores.GetValueOrDefault(s, 300.0))
             .ToList();
+        var availableContentCounts = await db.ContentItems
+            .AsNoTracking()
+            .Where(content =>
+                subtests.Contains(content.SubtestCode)
+                && content.Status == ContentStatus.Published)
+            .GroupBy(content => content.SubtestCode)
+            .Select(group => new { Subtest = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.Subtest, row => row.Count, ct);
 
         int taskIndex = 0;
         while (allocatedMinutes < targetMinutes)
@@ -12400,11 +13002,19 @@ public partial class LearnerService(
             if (allocatedMinutes + taskDuration > targetMinutes + 3) break;
 
             // Get adaptive content for this subtest
-            var content = await db.ContentItems
-                .Where(c => c.SubtestCode == subtest && c.Status == ContentStatus.Published)
-                .OrderBy(c => Guid.NewGuid())
-                .Select(c => new { c.Id, c.Title, c.SubtestCode, c.EstimatedDurationMinutes, c.Difficulty })
-                .FirstOrDefaultAsync(ct);
+            var contentCount = availableContentCounts.GetValueOrDefault(subtest);
+            var randomOffset = contentCount > 0
+                ? RandomNumberGenerator.GetInt32(contentCount)
+                : 0;
+            var content = contentCount == 0
+                ? null
+                : await db.ContentItems
+                    .AsNoTracking()
+                    .Where(c => c.SubtestCode == subtest && c.Status == ContentStatus.Published)
+                    .OrderBy(c => c.Id)
+                    .Skip(randomOffset)
+                    .Select(c => new { c.Id, c.Title, c.SubtestCode, c.EstimatedDurationMinutes, c.Difficulty })
+                    .FirstOrDefaultAsync(ct);
 
             if (content is not null)
             {

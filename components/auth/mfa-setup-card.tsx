@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { IconArrowRight, IconDeviceMobile, IconKey, IconShieldLock } from '@tabler/icons-react';
+import { ArrowRight, KeyRound, ShieldCheck, Smartphone } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import type { AuthenticatorSetup } from '@/lib/types/auth';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
@@ -98,13 +98,13 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
           <div className={styles.summaryList}>
             <div className={styles.summaryItem}>
               <span className={styles.summaryIcon}>
-                <IconDeviceMobile size={16} />
+                <Smartphone size={16} />
               </span>
               <p>Use Google Authenticator, Microsoft Authenticator, 1Password, or any TOTP-compatible app.</p>
             </div>
             <div className={styles.summaryItem}>
               <span className={styles.summaryIcon}>
-                <IconShieldLock size={16} />
+                <ShieldCheck size={16} />
               </span>
               <p>After pairing the app, enter the current 6-digit code to finish setup and add stronger protection to your privileged access.</p>
             </div>
@@ -185,7 +185,7 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
 
           <button type="submit" className={`${styles.submit} ${styles.passwordFlowSubmit}`.trim()} disabled={!setup || isConfirming}>
             <span>{isConfirming ? 'Finishing setup...' : 'Finish MFA Setup'}</span>
-            {!isConfirming ? <IconArrowRight size={18} /> : null}
+            {!isConfirming ? <ArrowRight size={18} /> : null}
           </button>
 
           <div className={styles.actionsRow}>
@@ -204,7 +204,7 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
             <div className={styles.summaryList}>
               <div className={styles.summaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconKey size={16} />
+                  <KeyRound size={16} />
                 </span>
                 <p>The platform will route you into the correct post-auth destination using the same role-aware logic as sign-in.</p>
               </div>

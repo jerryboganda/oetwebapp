@@ -18,6 +18,27 @@ namespace OetLearner.Api.Services.Settings;
 /// </summary>
 public interface IRuntimeSettingsProvider
 {
+    /// <summary>
+    /// Last successfully resolved DB-over-env snapshot. Synchronous consumers
+    /// may inspect this value, but must never trigger I/O while doing so.
+    /// Implementations that do not maintain a snapshot may return <c>null</c>.
+    /// </summary>
+    RuntimeSettingsSnapshot? CurrentSnapshot => null;
+
+    /// <summary>
+    /// Return the merged settings and the raw row from the same load. The
+    /// production provider overrides this with its cached single-flight load.
+    /// The default only returns an already-published atomic snapshot.
+    /// </summary>
+    Task<RuntimeSettingsSnapshot> GetSnapshotAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return CurrentSnapshot is { } snapshot
+            ? Task.FromResult(snapshot)
+            : Task.FromException<RuntimeSettingsSnapshot>(
+                new InvalidOperationException("This runtime settings provider does not expose an atomic snapshot."));
+    }
+
     /// <summary>Return the merged (env + DB-override) effective settings.</summary>
     Task<EffectiveSettings> GetAsync(CancellationToken ct = default);
 
@@ -37,6 +58,14 @@ public interface IRuntimeSettingsProvider
     /// <summary>Decrypt a previously-protected secret. Returns null on null/empty or failure.</summary>
     string? Unprotect(string? cipher);
 }
+
+/// <summary>
+/// Atomically published runtime-settings view. <see cref="Effective"/> and
+/// <see cref="Raw"/> always originate from the same database load.
+/// </summary>
+public sealed record RuntimeSettingsSnapshot(
+    EffectiveSettings Effective,
+    RuntimeSettingsRow Raw);
 
 /// <summary>
 /// The merged effective view of all runtime infrastructure settings.

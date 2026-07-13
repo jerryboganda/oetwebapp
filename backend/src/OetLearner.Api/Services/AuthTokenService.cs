@@ -55,10 +55,10 @@ public sealed class AuthTokenService(
     public IssuedAuthSession IssueSession(AuthenticatedSessionSubject subject, Guid? sessionId = null)
     {
         var now = timeProvider.GetUtcNow();
-        // Token lifetimes are DB-overridable (Wave 4). The merged effective view
-        // is cached for 30s in the provider, so the sync resolve here is cheap;
-        // signing keys / issuer / audience stay env-only (trust anchors). Falls
-        // back to the IOptions env lifetimes when no provider/override is set.
+        // Token lifetimes are DB-overridable (Wave 4). Token issuance is a
+        // synchronous CPU-only operation, so it reads the provider's atomic
+        // last-known snapshot and never performs database I/O here. Signing
+        // keys / issuer / audience stay env-only (trust anchors).
         var (accessLifetime, refreshLifetime) = ResolveTokenLifetimes();
         var accessTokenExpiresAt = now.Add(accessLifetime);
         var refreshTokenExpiresAt = now.Add(refreshLifetime);
@@ -140,10 +140,10 @@ public sealed class AuthTokenService(
         if (_runtimeSettings is null)
             return (_options.AccessTokenLifetime, _options.RefreshTokenLifetime);
 
-        // Accepted sync-on-hot-path pattern (see Wave 2 Platform consumers): the
-        // provider's effective view is memory-cached for 30s, so this does not hit
-        // the DB on every login. The resolver already coalesces null DB → env.
-        var effective = _runtimeSettings.GetAsync(CancellationToken.None).GetAwaiter().GetResult().AuthTokens;
+        var effective = _runtimeSettings.CurrentSnapshot?.Effective.AuthTokens;
+        if (effective is null)
+            return (_options.AccessTokenLifetime, _options.RefreshTokenLifetime);
+
         var access = effective.AccessTokenLifetime > TimeSpan.Zero ? effective.AccessTokenLifetime : _options.AccessTokenLifetime;
         var refresh = effective.RefreshTokenLifetime > TimeSpan.Zero ? effective.RefreshTokenLifetime : _options.RefreshTokenLifetime;
         return (access, refresh);

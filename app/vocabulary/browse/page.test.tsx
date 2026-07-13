@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const {
   mockFetchVocabularyTerms,
@@ -63,6 +64,17 @@ vi.mock('@/lib/api', () => ({
 import BrowseVocabularyPage from './page';
 
 describe('Vocabulary browse page', () => {
+  function renderBrowse() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <BrowseVocabularyPage />
+      </QueryClientProvider>,
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchVocabularyCategories.mockResolvedValue({
@@ -99,13 +111,13 @@ describe('Vocabulary browse page', () => {
   });
 
   it('renders the hero and filter controls', async () => {
-    render(<BrowseVocabularyPage />);
+    renderBrowse();
     expect(await screen.findByText('Browse Vocabulary')).toBeInTheDocument();
     expect(await screen.findByPlaceholderText('Search terms...')).toBeInTheDocument();
   });
 
   it('loads terms and renders them', async () => {
-    render(<BrowseVocabularyPage />);
+    renderBrowse();
     expect(await screen.findByText('dyspnoea')).toBeInTheDocument();
     expect(await screen.findByText('hypertension')).toBeInTheDocument();
   });
@@ -113,7 +125,7 @@ describe('Vocabulary browse page', () => {
   it('calls addToMyVocabulary with browse source when the add button is clicked', async () => {
     mockAddToMyVocabulary.mockResolvedValue({ added: true });
     const user = userEvent.setup();
-    render(<BrowseVocabularyPage />);
+    renderBrowse();
     const addBtns = await screen.findAllByTitle('Add to my list');
     await user.click(addBtns[0]);
     await waitFor(() => {
@@ -123,13 +135,13 @@ describe('Vocabulary browse page', () => {
   });
 
   it('fires vocab_browse_viewed analytics on mount', async () => {
-    render(<BrowseVocabularyPage />);
+    renderBrowse();
     await screen.findByText('Browse Vocabulary');
     expect(mockTrack).toHaveBeenCalledWith('vocab_browse_viewed');
   });
 
   it('loads categories from the server and renders them', async () => {
-    render(<BrowseVocabularyPage />);
+    renderBrowse();
     await screen.findByText('dyspnoea');
     // Find the category select — it should contain at least one of our categories.
     const selectOptions = await screen.findAllByRole('option');

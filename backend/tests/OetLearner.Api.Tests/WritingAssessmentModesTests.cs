@@ -148,7 +148,9 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
-            Assert.True(storage.Delete("test/voice-missing-voice-file.webm"));
+            Assert.True(await storage.DeleteAsync(
+                "test/voice-missing-voice-file.webm",
+                CancellationToken.None));
         }
 
         using var expert = _factory.CreateAuthenticatedClient(SeedData.ExpertEmail, SeedData.LocalSeedPassword, expectedRole: "expert");

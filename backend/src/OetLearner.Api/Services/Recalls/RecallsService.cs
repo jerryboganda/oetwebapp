@@ -24,30 +24,52 @@ public sealed class RecallsService(
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var vocabDueToday = await db.LearnerVocabularies
-            .CountAsync(lv => lv.UserId == userId && lv.NextReviewDate <= today, ct);
-        var vocabMastered = await db.LearnerVocabularies
-            .CountAsync(lv => lv.UserId == userId && lv.Mastery == "mastered", ct);
-        var vocabTotal = await db.LearnerVocabularies
-            .CountAsync(lv => lv.UserId == userId, ct);
-        var vocabStarred = await db.LearnerVocabularies
-            .CountAsync(lv => lv.UserId == userId && lv.Starred, ct);
+        var vocab = await db.LearnerVocabularies
+            .AsNoTracking()
+            .Where(lv => lv.UserId == userId)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                DueToday = g.Count(lv => lv.NextReviewDate <= today),
+                Mastered = g.Count(lv => lv.Mastery == "mastered"),
+                Total = g.Count(),
+                Starred = g.Count(lv => lv.Starred),
+            })
+            .SingleOrDefaultAsync(ct);
 
-        var reviewDueToday = await db.ReviewItems
-            .CountAsync(r => r.UserId == userId && r.Status == "active" && r.DueDate == today, ct);
-        var reviewMastered = await db.ReviewItems
-            .CountAsync(r => r.UserId == userId && r.Status == "mastered", ct);
-        var reviewTotal = await db.ReviewItems
-            .CountAsync(r => r.UserId == userId && r.Status == "active", ct);
-        var reviewStarred = await db.ReviewItems
-            .CountAsync(r => r.UserId == userId && r.Starred, ct);
+        var reviews = await db.ReviewItems
+            .AsNoTracking()
+            .Where(r => r.UserId == userId)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                DueToday = g.Count(r => r.Status == "active" && r.DueDate == today),
+                Mastered = g.Count(r => r.Status == "mastered"),
+                Total = g.Count(r => r.Status == "active"),
+                Starred = g.Count(r => r.Starred),
+            })
+            .SingleOrDefaultAsync(ct);
+
+        var vocabDueToday = vocab?.DueToday ?? 0;
+        var vocabMastered = vocab?.Mastered ?? 0;
+        var vocabTotal = vocab?.Total ?? 0;
+        var vocabStarred = vocab?.Starred ?? 0;
+        var reviewDueToday = reviews?.DueToday ?? 0;
+        var reviewMastered = reviews?.Mastered ?? 0;
+        var reviewTotal = reviews?.Total ?? 0;
+        var reviewStarred = reviews?.Starred ?? 0;
 
         // Top weak categories by error rate (last 30 reviews).
         var recent = await db.LearnerVocabularies
+            .AsNoTracking()
             .Where(lv => lv.UserId == userId && lv.LastReviewedAt != null)
             .OrderByDescending(lv => lv.LastReviewedAt)
             .Take(50)
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t.Category })
+            .Join(
+                db.VocabularyTerms.AsNoTracking(),
+                lv => lv.TermId,
+                t => t.Id,
+                (lv, t) => new { lv.ReviewCount, lv.CorrectCount, t.Category })
             .ToListAsync(ct);
 
         var weakTopics = recent
@@ -55,7 +77,7 @@ public sealed class RecallsService(
             .Select(g => new RecallsWeakTopic(
                 g.Key,
                 g.Count(),
-                g.Count(x => x.lv.ReviewCount > 0 && x.lv.CorrectCount * 1.0 / x.lv.ReviewCount < 0.7)))
+                g.Count(x => x.ReviewCount > 0 && x.CorrectCount * 1.0 / x.ReviewCount < 0.7)))
             .OrderByDescending(t => t.WeakCount)
             .Take(5)
             .ToList();
@@ -245,7 +267,8 @@ public sealed class RecallsService(
         {
             var asset = await db.MediaAssets.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == term.AudioMediaAssetId, ct);
-            if (asset is { Status: MediaAssetStatus.Ready } && storage.Exists(asset.StoragePath))
+            if (asset is { Status: MediaAssetStatus.Ready }
+                && await storage.ExistsAsync(asset.StoragePath, ct))
             {
                 return new RecallsAudioResponse(asset.StoragePath, term.AudioProvider ?? "stored", ContentTypeFor(asset.StoragePath));
             }
@@ -265,7 +288,7 @@ public sealed class RecallsService(
         {
             var asset = await db.MediaAssets.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.StoragePath == existingKey && m.Status == MediaAssetStatus.Ready, ct);
-            if (asset is not null && storage.Exists(asset.StoragePath))
+            if (asset is not null && await storage.ExistsAsync(asset.StoragePath, ct))
             {
                 return new RecallsAudioResponse(asset.StoragePath, term.AudioProvider ?? "stored", ContentTypeFor(asset.StoragePath));
             }

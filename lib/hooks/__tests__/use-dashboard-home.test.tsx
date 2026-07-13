@@ -1,4 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { AuthContext, type AuthContextValue } from '@/contexts/auth-context';
 
@@ -83,6 +84,25 @@ describe('useDashboardHome', () => {
     };
   }
 
+  function createQueryClient() {
+    return new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+  }
+
+  function createWrapper(authValue: () => AuthContextValue, client: QueryClient) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>
+          <AuthContext.Provider value={authValue()}>{children}</AuthContext.Provider>
+        </QueryClientProvider>
+      );
+    };
+  }
+
   it('loads learner dashboard data and exposes the resolved payload', async () => {
     mockFetchStudyPlan.mockResolvedValue([{ id: 'task-1', title: 'Task', duration: '20 mins', subTest: 'Writing', section: 'today', status: 'pending' }]);
     mockFetchReadiness.mockResolvedValue({ subTests: [{ id: 'writing', name: 'Writing', readiness: 60, target: 70 }], blockers: [], weakestLink: 'Conciseness', weeksRemaining: 6, overallRisk: 'Moderate', evidence: { recentTrend: 'Improving' } });
@@ -90,9 +110,7 @@ describe('useDashboardHome', () => {
     mockFetchDashboardHome.mockResolvedValue({ cards: { pendingExpertReviews: { count: 1 } } });
     mockFetchEngagement.mockResolvedValue({ currentStreak: 7, longestStreak: 14, totalPracticeMinutes: 1860, totalPracticeSessions: 42, weeklyActivity: [] });
 
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <AuthContext.Provider value={createAuthValue()}>{children}</AuthContext.Provider>
-    );
+    const wrapper = createWrapper(() => createAuthValue(), createQueryClient());
 
     const { result } = renderHook(() => useDashboardHome(), { wrapper });
 
@@ -114,15 +132,14 @@ describe('useDashboardHome', () => {
     mockFetchDashboardHome.mockRejectedValue(new MockApiError(401, 'not_authenticated', 'Please sign in again.', false));
     mockFetchEngagement.mockRejectedValue(new Error('should not matter'));
 
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <AuthContext.Provider value={createAuthValue()}>{children}</AuthContext.Provider>
-    );
+    const wrapper = createWrapper(() => createAuthValue(), createQueryClient());
 
-    renderHook(() => useDashboardHome(), { wrapper });
+    const { result } = renderHook(() => useDashboardHome(), { wrapper });
 
     await waitFor(() => {
       expect(mockSignOut).toHaveBeenCalledTimes(1);
     });
+    expect(result.current.status).toBe('loading');
   });
 
   it('keeps the workspace available when one dashboard request fails', async () => {
@@ -132,17 +149,57 @@ describe('useDashboardHome', () => {
     mockFetchDashboardHome.mockRejectedValue(new Error('summary temporarily unavailable'));
     mockFetchEngagement.mockResolvedValue({ currentStreak: 7, longestStreak: 14, totalPracticeMinutes: 1860, totalPracticeSessions: 42, weeklyActivity: [] });
 
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <AuthContext.Provider value={createAuthValue()}>{children}</AuthContext.Provider>
-    );
+    const wrapper = createWrapper(() => createAuthValue(), createQueryClient());
 
     const { result } = renderHook(() => useDashboardHome(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.status).toBe('partial');
-    });
+    }, { timeout: 2_500 });
 
     expect(result.current.error).toBe('summary temporarily unavailable');
     expect(result.current.data.tasks).toHaveLength(1);
+  });
+
+  it('reuses fresh dashboard data when the hook remounts', async () => {
+    mockFetchStudyPlan.mockResolvedValue([]);
+    mockFetchReadiness.mockResolvedValue({ subTests: [], blockers: [] });
+    mockFetchUserProfile.mockResolvedValue({ id: 'user-1' });
+    mockFetchDashboardHome.mockResolvedValue({ cards: {} });
+    mockFetchEngagement.mockResolvedValue({ weeklyActivity: [] });
+    const client = createQueryClient();
+    const wrapper = createWrapper(() => createAuthValue(), client);
+
+    const first = renderHook(() => useDashboardHome(), { wrapper });
+    await waitFor(() => expect(first.result.current.status).toBe('success'));
+    first.unmount();
+
+    const second = renderHook(() => useDashboardHome(), { wrapper });
+    await waitFor(() => expect(second.result.current.status).toBe('success'));
+
+    expect(mockFetchDashboardHome).toHaveBeenCalledTimes(1);
+    expect(mockFetchStudyPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches under a new user-specific query key', async () => {
+    let authValue = createAuthValue();
+    mockFetchStudyPlan.mockResolvedValue([]);
+    mockFetchReadiness.mockResolvedValue({ subTests: [], blockers: [] });
+    mockFetchUserProfile.mockImplementation(async () => ({ id: authValue.user?.userId }));
+    mockFetchDashboardHome.mockResolvedValue({ cards: {} });
+    mockFetchEngagement.mockResolvedValue({ weeklyActivity: [] });
+    const client = createQueryClient();
+    const wrapper = createWrapper(() => authValue, client);
+    const { result, rerender } = renderHook(() => useDashboardHome(), { wrapper });
+    await waitFor(() => expect(result.current.data.profile?.id).toBe('user-1'));
+
+    authValue = createAuthValue({
+      user: { ...authValue.user!, userId: 'user-2', email: 'other@oet-prep.dev' },
+    });
+    rerender();
+
+    await waitFor(() => expect(result.current.data.profile?.id).toBe('user-2'));
+    expect(mockFetchDashboardHome).toHaveBeenCalledTimes(2);
+    expect(mockFetchUserProfile).toHaveBeenCalledTimes(2);
   });
 });

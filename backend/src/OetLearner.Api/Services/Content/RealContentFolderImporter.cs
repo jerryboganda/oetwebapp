@@ -71,7 +71,7 @@ public sealed class RealContentFolderImporter
         // First pass: catalog every file by normalized path
         var entries = zip.Entries
             .Where(e => !string.IsNullOrEmpty(e.Name) && e.Length > 0)
-            .Select(e => new { Entry = e, NormPath = NormalizePath(e.FullName) })
+            .Select(e => new { Entry = e, NormPath = NormalizeAndValidateEntryPath(e) })
             .ToList();
 
         if (entries.Count > MaxEntryCount)
@@ -88,6 +88,28 @@ public sealed class RealContentFolderImporter
         if (entries.Any(e => e.Entry.Length > MaxEntryBytes))
         {
             throw new InvalidOperationException($"ZIP contains a file larger than {MaxEntryBytes} bytes.");
+        }
+
+        foreach (var item in entries)
+        {
+            var entry = item.Entry;
+            if (IsUnixSymlink(entry))
+            {
+                throw new InvalidOperationException(
+                    $"ZIP entry {item.NormPath} is a symbolic link, which is not allowed.");
+            }
+            if (entry.CompressedLength <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"ZIP entry {item.NormPath} has an invalid compressed length.");
+            }
+
+            var compressionRatio = (double)entry.Length / entry.CompressedLength;
+            if (compressionRatio > _opts.ContentUpload.MaxZipCompressionRatio)
+            {
+                throw new InvalidOperationException(
+                    $"ZIP entry {item.NormPath} exceeds the allowed compression ratio.");
+            }
         }
 
         // Group by top-level segment
@@ -149,28 +171,32 @@ public sealed class RealContentFolderImporter
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        foreach (var sourcePath in sourcePaths)
+        try
         {
-            if (!entryByPath.TryGetValue(sourcePath, out var entry))
+            foreach (var sourcePath in sourcePaths)
             {
-                issues.Add($"Missing source entry for proposal: {sourcePath}");
-                continue;
-            }
+                if (!entryByPath.TryGetValue(sourcePath, out var entry))
+                {
+                    issues.Add($"Missing source entry for proposal: {sourcePath}");
+                    continue;
+                }
 
-            var key = $"{stagingPrefix}/{Guid.NewGuid():N}{Path.GetExtension(sourcePath)}";
-            var entryValidationError = await ValidateEntryBeforeStagingAsync(entry, sourcePath, ct);
-            if (entryValidationError is not null)
-            {
-                issues.Add(entryValidationError);
-                continue;
-            }
+                var key = $"{stagingPrefix}/{Guid.NewGuid():N}{Path.GetExtension(sourcePath)}";
+                var entryValidationError = await ValidateAndStageEntryAsync(
+                    entry, sourcePath, key, ct);
+                if (entryValidationError is not null)
+                {
+                    issues.Add(entryValidationError);
+                    continue;
+                }
 
-            await using (var entryStream = entry.Open())
-            await using (var destStream = await _storage.OpenWriteAsync(key, ct))
-            {
-                await entryStream.CopyToAsync(destStream, ct);
+                stagedByPath[sourcePath] = key;
             }
-            stagedByPath[sourcePath] = key;
+        }
+        catch
+        {
+            await _storage.DeletePrefixAsync(stagingPrefix, CancellationToken.None);
+            throw;
         }
 
         foreach (var p in proposals)
@@ -584,6 +610,39 @@ public sealed class RealContentFolderImporter
         return IsKnownImportRoot(nextSegment) ? remainder : normalized;
     }
 
+    private static string NormalizeAndValidateEntryPath(ZipArchiveEntry entry)
+    {
+        var raw = entry.FullName.Replace('\\', '/');
+        if (raw.StartsWith("/", StringComparison.Ordinal)
+            || Regex.IsMatch(raw, "^[a-zA-Z]:", RegexOptions.CultureInvariant)
+            || raw.Contains('\0'))
+        {
+            throw new InvalidOperationException(
+                $"ZIP entry path is rooted or invalid: {entry.FullName}");
+        }
+
+        var segments = raw.Split('/');
+        if (segments.Any(segment =>
+                string.IsNullOrWhiteSpace(segment)
+                || segment is "." or ".."))
+        {
+            throw new InvalidOperationException(
+                $"ZIP entry path contains an unsafe segment: {entry.FullName}");
+        }
+
+        var normalized = NormalizePath(raw);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException(
+                $"ZIP entry path is empty after normalization: {entry.FullName}");
+        }
+
+        return normalized;
+    }
+
+    private static bool IsUnixSymlink(ZipArchiveEntry entry)
+        => ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000;
+
     private static bool IsKnownImportRoot(string segment)
     {
         var lower = segment.ToLowerInvariant();
@@ -596,49 +655,183 @@ public sealed class RealContentFolderImporter
             || lower.Contains("table format");
     }
 
-    private async Task<string?> ValidateEntryBeforeStagingAsync(ZipArchiveEntry entry, string sourcePath, CancellationToken ct)
+    private async Task<string?> ValidateAndStageEntryAsync(
+        ZipArchiveEntry entry,
+        string sourcePath,
+        string stagingKey,
+        CancellationToken ct)
     {
         var ext = (Path.GetExtension(sourcePath)?.TrimStart('.') ?? string.Empty).ToLowerInvariant();
         var fileName = Path.GetFileName(sourcePath);
+        string? rejection = null;
 
-        if (ext == "txt")
+        try
         {
-            if (entry.Length > MaxTextEntryBytes)
+            await using var entryStream = entry.Open();
+            await using var destination = await _storage.OpenWriteAsync(stagingKey, ct);
+            var maxBytes = ext == "txt" ? MaxTextEntryBytes : MaxEntryBytes;
+            var stagingStream = new StagingReadStream(
+                entryStream, destination, maxBytes, sourcePath);
+
+            if (ext == "txt")
             {
-                return $"Text file too large: {sourcePath}";
+                if (entry.Length > MaxTextEntryBytes)
+                {
+                    rejection = $"Text file too large: {sourcePath}";
+                }
+                else
+                {
+                    using var reader = new StreamReader(
+                        stagingStream,
+                        new UTF8Encoding(
+                            encoderShouldEmitUTF8Identifier: false,
+                            throwOnInvalidBytes: true),
+                        detectEncodingFromByteOrderMarks: true,
+                        bufferSize: 4096,
+                        leaveOpen: true);
+                    var chars = new char[4096];
+                    while (await reader.ReadAsync(chars.AsMemory(), ct) > 0)
+                    {
+                        // Reading to EOF validates incrementally without
+                        // materializing the complete text file.
+                    }
+                }
+            }
+            else
+            {
+                var validation = await _validator.ValidateAsync(
+                    stagingStream, ext, ct);
+                if (!validation.Accepted)
+                {
+                    rejection =
+                        $"{sourcePath}: {validation.Reason ?? $"invalid .{ext} file content"}";
+                }
             }
 
-            try
+            if (rejection is null)
             {
-                await using var textStream = entry.Open();
-                using var reader = new StreamReader(
-                    textStream,
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
-                    detectEncodingFromByteOrderMarks: true);
-                _ = await reader.ReadToEndAsync(ct);
+                await stagingStream.DrainAsync(ct);
+                stagingStream.EnsureLength(entry.Length);
             }
-            catch (DecoderFallbackException)
-            {
-                return $"Text file is not valid UTF-8: {sourcePath}";
-            }
-
-            await using var scanText = entry.Open();
-            var textScan = await _scanner.ScanAsync(scanText, fileName, ct);
-            return textScan.clean ? null : $"{sourcePath}: {textScan.reason ?? "file failed security scanning"}";
+        }
+        catch (DecoderFallbackException)
+        {
+            rejection = $"Text file is not valid UTF-8: {sourcePath}";
+        }
+        catch
+        {
+            await _storage.DeleteAsync(stagingKey, CancellationToken.None);
+            throw;
         }
 
-        await using (var validationStream = entry.Open())
+        if (rejection is not null)
         {
-            var validation = await _validator.ValidateAsync(validationStream, ext, ct);
-            if (!validation.Accepted)
+            await _storage.DeleteAsync(stagingKey, ct);
+            return rejection;
+        }
+
+        try
+        {
+            await using var scanStream = await _storage.OpenReadAsync(stagingKey, ct);
+            var scan = await _scanner.ScanAsync(scanStream, fileName, ct);
+            if (!scan.clean)
             {
-                return $"{sourcePath}: {validation.Reason ?? $"invalid .{ext} file content"}";
+                await _storage.DeleteAsync(stagingKey, ct);
+                return $"{sourcePath}: {scan.reason ?? "file failed security scanning"}";
+            }
+        }
+        catch
+        {
+            await _storage.DeleteAsync(stagingKey, CancellationToken.None);
+            throw;
+        }
+
+        return null;
+    }
+
+    private sealed class StagingReadStream(
+        Stream source,
+        Stream destination,
+        long maxBytes,
+        string sourcePath) : Stream
+    {
+        public long BytesRead { get; private set; }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => BytesRead;
+            set => throw new NotSupportedException();
+        }
+
+        public async Task DrainAsync(CancellationToken ct)
+        {
+            var buffer = new byte[81920];
+            while (await ReadAsync(buffer.AsMemory(), ct) > 0)
+            {
             }
         }
 
-        await using var scanStream = entry.Open();
-        var scan = await _scanner.ScanAsync(scanStream, fileName, ct);
-        return scan.clean ? null : $"{sourcePath}: {scan.reason ?? "file failed security scanning"}";
+        public void EnsureLength(long expectedLength)
+        {
+            if (BytesRead != expectedLength)
+            {
+                throw new InvalidOperationException(
+                    $"ZIP entry {sourcePath} expanded to {BytesRead} bytes instead of its declared {expectedLength} bytes.");
+            }
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = source.Read(buffer, offset, count);
+            if (read > 0)
+            {
+                CountRead(read);
+                destination.Write(buffer, offset, read);
+            }
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            var read = await source.ReadAsync(buffer, cancellationToken);
+            if (read > 0)
+            {
+                CountRead(read);
+                await destination.WriteAsync(buffer[..read], cancellationToken);
+            }
+            return read;
+        }
+
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+            => ReadAsync(
+                buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        private void CountRead(int read)
+        {
+            BytesRead += read;
+            if (BytesRead > maxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"ZIP entry {sourcePath} exceeds the {maxBytes} byte limit.");
+            }
+        }
+
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
     }
 
     private static string? SecondSegment(string p)
@@ -746,39 +939,41 @@ public sealed class RealContentFolderImporter
     private async Task<(string mediaId, long bytes, string sha)> EnsureMediaAssetAsync(string adminId, RealContentProposal p, string sourceKey, CancellationToken ct)
     {
         var ext = (Path.GetExtension(p.SourcePath)?.TrimStart('.') ?? "").ToLowerInvariant();
-        // Load the staged bytes into an in-memory buffer and immediately dispose the
-        // source stream so the underlying file is no longer locked when we later call
-        // _storage.Move (on Windows, Move requires no open handles on the source file).
-        await using var buffer = new MemoryStream();
-        {
-            await using var staged = await _storage.OpenReadAsync(sourceKey, ct);
-            await staged.CopyToAsync(buffer, ct);
-        }
-        buffer.Position = 0;
 
-        var validation = await _validator.ValidateAsync(buffer, ext, ct);
-        if (!validation.Accepted)
+        await using (var validationStream = await _storage.OpenReadAsync(sourceKey, ct))
         {
-            throw new InvalidOperationException(validation.Reason ?? $"Invalid imported .{ext} file content.");
+            var validation = await _validator.ValidateAsync(validationStream, ext, ct);
+            if (!validation.Accepted)
+            {
+                throw new InvalidOperationException(
+                    validation.Reason ?? $"Invalid imported .{ext} file content.");
+            }
         }
 
-        buffer.Position = 0;
-        var scan = await _scanner.ScanAsync(buffer, Path.GetFileName(p.SourcePath), ct);
-        if (!scan.clean)
+        await using (var scanStream = await _storage.OpenReadAsync(sourceKey, ct))
         {
-            throw new InvalidOperationException(scan.reason ?? "Imported file failed security scanning.");
+            var scan = await _scanner.ScanAsync(
+                scanStream, Path.GetFileName(p.SourcePath), ct);
+            if (!scan.clean)
+            {
+                throw new InvalidOperationException(
+                    scan.reason ?? "Imported file failed security scanning.");
+            }
         }
 
-        // Re-hash the staged file after validation/scanning.
         long bytes;
         string sha;
-        buffer.Position = 0;
-        (bytes, sha) = await StreamingSha256.ComputeAsync(new[] { buffer }, null, ct);
+        await using (var hashStream = await _storage.OpenReadAsync(sourceKey, ct))
+        {
+            (bytes, sha) = await StreamingSha256.ComputeAsync(
+                new[] { hashStream }, null, ct);
+        }
+
         var publishedKey = ContentAddressed.PublishedKey(_opts.ContentUpload.PublishedSubpath, sha, ext);
-        if (!_storage.Exists(publishedKey))
-            _storage.Move(sourceKey, publishedKey, overwrite: false);
+        if (!await _storage.ExistsAsync(publishedKey, ct))
+            await _storage.MoveAsync(sourceKey, publishedKey, overwrite: false, ct);
         else
-            _storage.Delete(sourceKey);
+            await _storage.DeleteAsync(sourceKey, ct);
 
         var existing = await _db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha && m.Format == ext, ct);
         if (existing is not null) return (existing.Id, bytes, sha);

@@ -519,23 +519,40 @@ internal sealed class MemoryFileStorage : IFileStorage
     public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
         => Task.FromResult<Stream>(new MemoryStream());
 
-    public bool Exists(string key) => _files.ContainsKey(key);
-    public bool Delete(string key) => _files.Remove(key);
-    public long Length(string key) => _files.TryGetValue(key, out var data) ? data.LongLength : 0;
-
-    public void Move(string sourceKey, string destKey, bool overwrite)
+    public Task<bool> ExistsAsync(string key, CancellationToken ct)
     {
-        if (!_files.TryGetValue(sourceKey, out var data)) return;
-        if (!overwrite && _files.ContainsKey(destKey)) return;
-        _files[destKey] = data;
-        _files.Remove(sourceKey);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_files.ContainsKey(key));
     }
 
-    public int DeletePrefix(string prefix)
+    public Task<bool> DeleteAsync(string key, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_files.Remove(key));
+    }
+
+    public Task<long> LengthAsync(string key, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_files.TryGetValue(key, out var data) ? data.LongLength : 0);
+    }
+
+    public Task MoveAsync(string sourceKey, string destKey, bool overwrite, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!_files.TryGetValue(sourceKey, out var data)) return Task.CompletedTask;
+        if (!overwrite && _files.ContainsKey(destKey)) return Task.CompletedTask;
+        _files[destKey] = data;
+        _files.Remove(sourceKey);
+        return Task.CompletedTask;
+    }
+
+    public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
         var keys = _files.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToList();
         foreach (var key in keys) _files.Remove(key);
-        return keys.Count;
+        return Task.FromResult(keys.Count);
     }
 
     public string? TryResolveLocalPath(string key) => null;

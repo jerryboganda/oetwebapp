@@ -234,7 +234,7 @@ public sealed class VocabularyAudioWorker(
             && !string.IsNullOrWhiteSpace(term.AudioMediaAssetId)
             && !string.IsNullOrWhiteSpace(term.AudioUrl)
             && IsStoredAudioKey(term.AudioUrl)
-            && storage.Exists(term.AudioUrl)
+            && await storage.ExistsAsync(term.AudioUrl, ct)
             && CanReuseExistingAudio(term, job, isRecallAudioJob))
         {
             term.AudioBatchId = job.BatchId;
@@ -331,7 +331,7 @@ public sealed class VocabularyAudioWorker(
             // Deterministic per (recallCode, term, voice, model). ElevenLabs TTS
             // is non-deterministic, so keying on the audio byte-sha spawned a NEW
             // object on every regeneration — accumulating orphans and making
-            // storage.Exists() flap, which drove an endless re-generation loop.
+            // storage existence-check flap, which drove an endless re-generation loop.
             // Keying on the logical identity means a regen with the same
             // voice/model OVERWRITES the same object (idempotent, zero orphans).
             var identity = AudioIdentityHash(recallCode, job.TermId, job.Voice, job.ModelVariant);
@@ -344,7 +344,7 @@ public sealed class VocabularyAudioWorker(
 
         // ForceRegenerate must refresh the bytes even when the stable-identity key
         // already exists; otherwise write only when absent.
-        if (job.ForceRegenerate || !storage.Exists(key))
+        if (job.ForceRegenerate || !await storage.ExistsAsync(key, ct))
         {
             await using var ms = new MemoryStream(audio);
             await storage.WriteAsync(key, ms, ct).ConfigureAwait(false);
@@ -415,7 +415,7 @@ public sealed class VocabularyAudioWorker(
 
         if (await IsBatchCancelledAsync(db, job.BatchId, ct).ConfigureAwait(false))
         {
-            storage.Delete(key);
+            await storage.DeleteAsync(key, ct);
             logger.LogInformation("Vocab audio job {TermId} generated audio was discarded because batch {BatchId} was cancelled", job.TermId, job.BatchId);
             return;
         }
@@ -497,7 +497,7 @@ public sealed class VocabularyAudioWorker(
             }),
         });
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        try { storage.Delete(storagePath); }
+        try { await storage.DeleteAsync(storagePath, ct); }
         catch (Exception ex) { logger.LogWarning(ex, "Vocab audio orphan-sweep: storage delete failed for {Path}", storagePath); }
     }
 

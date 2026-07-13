@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using System.Globalization;
 
 namespace OetLearner.Api.Services;
 
@@ -52,31 +53,38 @@ public class LearnerActionsService(LearnerDbContext db)
         var now = DateTimeOffset.UtcNow;
         var blockers = new List<LearnerReadinessBlockerResponse>();
 
-        var completedAttempts = await db.Attempts
-            .AsNoTracking()
-            .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
-            .OrderByDescending(a => a.CompletedAt)
-            .ToListAsync(ct);
-
-        var bySubtest = completedAttempts
-            .GroupBy(a => a.SubtestCode)
-            .ToDictionary(g => g.Key, g => g.Count());
-
         var allSubtests = new[] { "reading", "listening", "writing", "speaking" };
+        var bySubtest = await db.Attempts
+            .AsNoTracking()
+            .Where(a =>
+                a.UserId == userId &&
+                a.State == AttemptState.Completed &&
+                allSubtests.Contains(a.SubtestCode))
+            .GroupBy(a => a.SubtestCode)
+            .Select(group => new
+            {
+                SubtestCode = group.Key,
+                AttemptCount = group.Count()
+            })
+            .ToListAsync(ct);
+        var attemptCounts = bySubtest.ToDictionary(
+            row => row.SubtestCode,
+            row => row.AttemptCount,
+            StringComparer.Ordinal);
         foreach (var subtest in allSubtests)
         {
-            if (!bySubtest.ContainsKey(subtest))
+            if (!attemptCounts.TryGetValue(subtest, out var attemptCount))
             {
                 blockers.Add(new LearnerReadinessBlockerResponse(
                     subtest, "overall", 0, 350, 350,
                     $"You haven't practiced {subtest} yet — start your first session",
                     $"/{subtest}"));
             }
-            else if (bySubtest[subtest] < 3)
+            else if (attemptCount < 3)
             {
                 blockers.Add(new LearnerReadinessBlockerResponse(
                     subtest, "overall", 250, 350, 100,
-                    $"Only {bySubtest[subtest]} attempts in {subtest} — more practice needed",
+                    $"Only {attemptCount} attempts in {subtest} — more practice needed",
                     $"/{subtest}"));
             }
         }
@@ -94,25 +102,39 @@ public class LearnerActionsService(LearnerDbContext db)
         var now = DateTimeOffset.UtcNow;
         var cutoff = now.AddMonths(-3);
 
-        var completedAttempts = await db.Attempts
+        var dailyAttempts = await db.Attempts
             .AsNoTracking()
-            .Where(a => a.UserId == userId && a.State == AttemptState.Completed && a.CompletedAt >= cutoff)
-            .OrderBy(a => a.CompletedAt)
+            .Where(a =>
+                a.UserId == userId &&
+                a.State == AttemptState.Completed &&
+                a.CompletedAt != null &&
+                a.CompletedAt >= cutoff)
+            .GroupBy(a => a.CompletedAt!.Value.Date)
+            .Select(group => new
+            {
+                Day = group.Key,
+                AttemptCount = group.Count()
+            })
+            .OrderBy(row => row.Day)
             .ToListAsync(ct);
 
         var points = new List<LearnerProgressTrendPointResponse>();
-
-        if (completedAttempts.Count > 0)
-        {
-            var weekGroups = completedAttempts
-                .GroupBy(a => a.CompletedAt?.ToString("yyyy-'W'ww") ?? "unknown")
-                .OrderBy(g => g.Key);
-
-            foreach (var week in weekGroups)
+        var weekGroups = dailyAttempts
+            .GroupBy(row => new
             {
-                points.Add(new LearnerProgressTrendPointResponse(
-                    week.Key, week.Count(), week.Count()));
-            }
+                Year = ISOWeek.GetYear(row.Day),
+                Week = ISOWeek.GetWeekOfYear(row.Day)
+            })
+            .OrderBy(group => group.Key.Year)
+            .ThenBy(group => group.Key.Week);
+
+        foreach (var week in weekGroups)
+        {
+            var attemptCount = week.Sum(row => row.AttemptCount);
+            points.Add(new LearnerProgressTrendPointResponse(
+                $"{week.Key.Year}-W{week.Key.Week:D2}",
+                attemptCount,
+                attemptCount));
         }
 
         double? projected = null;

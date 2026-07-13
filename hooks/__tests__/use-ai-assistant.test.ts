@@ -18,7 +18,7 @@ vi.mock('@microsoft/signalr', () => ({
 }));
 
 vi.mock('@/lib/ai-assistant/signalr', () => ({
-  createAssistantConnection: vi.fn(() => mockConnection),
+  createAssistantConnection: vi.fn(async () => mockConnection),
   registerHubCallbacks: vi.fn((_conn, _callbacks) => vi.fn()),
   invokeStartTurn: vi.fn().mockResolvedValue(undefined),
   invokeCancelTurn: vi.fn().mockResolvedValue(undefined),
@@ -47,7 +47,11 @@ vi.mock('@/lib/ai-assistant/api', () => ({
 }));
 
 // Import the mocked module to access registerHubCallbacks
-import { registerHubCallbacks, invokeCancelTurn } from '@/lib/ai-assistant/signalr';
+import {
+  createAssistantConnection,
+  registerHubCallbacks,
+  invokeCancelTurn,
+} from '@/lib/ai-assistant/signalr';
 
 describe('useAiAssistant hook', () => {
   beforeEach(() => {
@@ -96,6 +100,51 @@ describe('useAiAssistant hook', () => {
       // Hook sets 'disconnected' and generic error message on failure
       expect(result.current.connectionState).toBe('disconnected');
       expect(result.current.error).toBe('Failed to connect to AI assistant');
+    });
+
+    it('sets error state when the dynamically loaded connection factory fails', async () => {
+      vi.mocked(createAssistantConnection).mockRejectedValueOnce(new Error('Chunk load failed'));
+
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connectionState).toBe('disconnected');
+        expect(result.current.error).toBe('Failed to connect to AI assistant');
+      });
+    });
+
+    it('stops a stale connection when a newer connect attempt supersedes it', async () => {
+      const staleConnection = {
+        ...mockConnection,
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveStaleConnection: (() => void) | undefined;
+      const staleConnectionPromise = new Promise<
+        Awaited<ReturnType<typeof createAssistantConnection>>
+      >((resolve) => {
+        resolveStaleConnection = () => resolve(staleConnection as never);
+      });
+
+      vi.mocked(createAssistantConnection)
+        .mockImplementationOnce(() => staleConnectionPromise)
+        .mockResolvedValueOnce(mockConnection as never);
+
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      await act(async () => {
+        resolveStaleConnection?.();
+      });
+
+      expect(staleConnection.stop).toHaveBeenCalledOnce();
+      expect(result.current.connectionState).toBe('connected');
     });
 
     it('disconnects and resets state', async () => {

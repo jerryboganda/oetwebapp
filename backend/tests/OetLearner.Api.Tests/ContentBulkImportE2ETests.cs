@@ -287,7 +287,9 @@ public class ContentBulkImportE2ETests
         Assert.All(audioRows, m => Assert.Equal(64, m.Sha256?.Length ?? 0));
 
         // Staging is cleaned
-        Assert.False(storage.Exists($"uploads/staging/bulk/admin-1/{session.SessionId}/__source.zip"));
+        Assert.False(await storage.ExistsAsync(
+            $"uploads/staging/bulk/admin-1/{session.SessionId}/__source.zip",
+            CancellationToken.None));
 
         var s4Db = papers.First(p => p.Title.Contains("Card 4"));
         Assert.Contains(s4Db.Assets, a => a.Role == PaperAssetRole.RoleCard && a.IsPrimary);

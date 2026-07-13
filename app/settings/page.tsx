@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useContext, useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   ChevronRight,
@@ -19,8 +20,10 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
+import { AuthContext } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchFreezeStatus, fetchSettingsData, fetchUserProfile, updateSettingsSection } from '@/lib/api';
+import { queryKeys } from '@/lib/query/hooks';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -82,66 +85,82 @@ const settingsGroups: SettingGroup[] = [
 
 export default function Settings() {
   const router = useRouter();
-  const [toggles, setToggles] = useState<Record<string, boolean>>({
-    'low-bandwidth': false,
+  const authContext = useContext(AuthContext);
+  const queryClient = useQueryClient();
+  const queryUserId = authContext?.user?.userId ?? 'current';
+  const queriesEnabled = authContext ? !authContext.loading && authContext.isAuthenticated : true;
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.settings.home(queryUserId),
+    queryFn: fetchSettingsData,
+    staleTime: 60_000,
+    enabled: queriesEnabled,
   });
-  const [profileName, setProfileName] = useState('');
-  const [profileEmail, setProfileEmail] = useState('');
-  const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const profileQuery = useQuery({
+    queryKey: queryKeys.profile.self(queryUserId),
+    queryFn: fetchUserProfile,
+    staleTime: 60_000,
+    enabled: queriesEnabled,
+  });
+  const freezeQuery = useQuery({
+    queryKey: queryKeys.settings.freeze(queryUserId),
+    queryFn: fetchFreezeStatus,
+    staleTime: 30_000,
+    retry: false,
+    enabled: queriesEnabled,
+  });
+  const [toggleOverride, setToggleOverride] = useState<{ userId: string; value: boolean } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const settingsMutation = useMutation({
+    mutationFn: ({ lowBandwidthMode }: { userId: string; lowBandwidthMode: boolean }) =>
+      updateSettingsSection('audio', { lowBandwidthMode }),
+    onSuccess: async (_, { userId, lowBandwidthMode }) => {
+      queryClient.setQueryData(
+        queryKeys.settings.home(userId),
+        (current: Awaited<ReturnType<typeof fetchSettingsData>> | undefined) => current
+          ? { ...current, audio: { ...current.audio, lowBandwidthMode } }
+          : current,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings.home(userId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings.section(userId, 'audio') }),
+      ]);
+      setToggleOverride(null);
+    },
+  });
+  const serverLowBandwidth = Boolean(settingsQuery.data?.audio?.lowBandwidthMode ?? false);
+  const lowBandwidthEnabled = toggleOverride?.userId === queryUserId
+    ? toggleOverride.value
+    : serverLowBandwidth;
+  const toggles: Record<string, boolean> = { 'low-bandwidth': lowBandwidthEnabled };
+  const profileName = profileQuery.data?.displayName ?? '';
+  const profileEmail = profileQuery.data?.email ?? '';
+  const freezeState = (freezeQuery.data ?? null) as LearnerFreezeStatus | null;
+  const loading = queriesEnabled && (settingsQuery.isPending || profileQuery.isPending || freezeQuery.isPending);
+  const queryError = settingsQuery.error ?? profileQuery.error;
+  const error = actionError ?? (queryError instanceof Error ? queryError.message : queryError ? 'Failed to load settings.' : null);
 
   useEffect(() => {
     analytics.track('content_view', { page: 'settings' });
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const [settings, profile, freeze] = await Promise.all([
-          fetchSettingsData(),
-          fetchUserProfile(),
-          fetchFreezeStatus().catch(() => null),
-        ]);
-        if (cancelled) return;
-        setToggles({
-          'low-bandwidth': Boolean(settings.audio?.lowBandwidthMode ?? false),
-        });
-        setProfileName(profile.displayName);
-        setProfileEmail(profile.email);
-        setFreezeState(freeze as LearnerFreezeStatus | null);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load settings.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const handleToggle = async (id: string) => {
     if (freezeState?.currentFreeze) {
-      setError('Settings are read-only while your account is frozen.');
+      setActionError('Settings are read-only while your account is frozen.');
       return;
     }
     const nextValue = !toggles[id];
-    setToggles((prev) => ({ ...prev, [id]: nextValue }));
+    setToggleOverride({ userId: queryUserId, value: nextValue });
     setSavingId(id);
+    setActionError(null);
     try {
       if (id === 'low-bandwidth') {
-        await updateSettingsSection('audio', { lowBandwidthMode: nextValue });
+        await settingsMutation.mutateAsync({ userId: queryUserId, lowBandwidthMode: nextValue });
       }
       analytics.track('content_view', { page: 'settings', setting: id, value: String(nextValue) });
     } catch (err) {
-      setToggles((prev) => ({ ...prev, [id]: !nextValue }));
-      setError(err instanceof Error ? err.message : 'Failed to save setting.');
+      setToggleOverride({ userId: queryUserId, value: !nextValue });
+      setActionError(err instanceof Error ? err.message : 'Failed to save setting.');
     } finally {
       setSavingId(null);
     }
@@ -149,7 +168,7 @@ export default function Settings() {
 
   const handleOpen = (id: string) => {
     if (freezeState?.currentFreeze) {
-      setError('Settings are read-only while your account is frozen.');
+      setActionError('Settings are read-only while your account is frozen.');
       return;
     }
     const target = id === 'goals' ? '/settings/goals' : `/settings/${id}`;

@@ -4,6 +4,8 @@ public interface IConversationTtsProvider
 {
     string Name { get; }
     bool IsConfigured { get; }
+    Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => Task.FromResult(IsConfigured);
     Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct);
 }
 

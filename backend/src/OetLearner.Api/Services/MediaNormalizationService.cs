@@ -124,26 +124,27 @@ public class MediaNormalizationService(LearnerDbContext db)
     /// </summary>
     public async Task<MediaAuditResult> AuditMediaAssetsAsync(CancellationToken ct)
     {
-        var assets = await db.MediaAssets.ToListAsync(ct);
+        var result = await db.MediaAssets
+            .AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(assets => new MediaAuditResult
+            {
+                TotalAssets = assets.Count(),
+                Ready = assets.Count(a => a.Status == MediaAssetStatus.Ready),
+                Processing = assets.Count(a => a.Status == MediaAssetStatus.Processing),
+                Failed = assets.Count(a => a.Status == MediaAssetStatus.Failed),
+                MissingThumbnails = assets.Count(a =>
+                    a.Status == MediaAssetStatus.Ready
+                    && a.MimeType.StartsWith("video/")
+                    && (a.ThumbnailPath == null || a.ThumbnailPath == "")),
+                MissingTranscripts = assets.Count(a =>
+                    a.Status == MediaAssetStatus.Ready
+                    && (a.MimeType.StartsWith("video/") || a.MimeType.StartsWith("audio/"))
+                    && (a.TranscriptPath == null || a.TranscriptPath == ""))
+            })
+            .SingleOrDefaultAsync(ct);
 
-        var needsProcessing = assets.Count(a => a.Status == MediaAssetStatus.Processing);
-        var failed = assets.Count(a => a.Status == MediaAssetStatus.Failed);
-        var ready = assets.Count(a => a.Status == MediaAssetStatus.Ready);
-        var missingThumbnails = assets.Count(a => a.Status == MediaAssetStatus.Ready
-            && a.MimeType.StartsWith("video/") && string.IsNullOrEmpty(a.ThumbnailPath));
-        var missingTranscripts = assets.Count(a => a.Status == MediaAssetStatus.Ready
-            && (a.MimeType.StartsWith("video/") || a.MimeType.StartsWith("audio/"))
-            && string.IsNullOrEmpty(a.TranscriptPath));
-
-        return new MediaAuditResult
-        {
-            TotalAssets = assets.Count,
-            Ready = ready,
-            Processing = needsProcessing,
-            Failed = failed,
-            MissingThumbnails = missingThumbnails,
-            MissingTranscripts = missingTranscripts
-        };
+        return result ?? new MediaAuditResult();
     }
 }
 

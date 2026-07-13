@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { IconArrowRight } from '@tabler/icons-react';
+import { ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
@@ -93,7 +93,7 @@ export default function MfaRecoveryPage() {
           disabled={!pendingMfaChallenge || isSubmitting || recoveryCode.trim().length === 0}
         >
           <span>{isSubmitting ? 'Verifying recovery code...' : 'Use Recovery Code'}</span>
-          {!isSubmitting ? <IconArrowRight size={18} /> : null}
+          {!isSubmitting ? <ArrowRight size={18} /> : null}
         </button>
       </form>
     </AuthScreenShell>

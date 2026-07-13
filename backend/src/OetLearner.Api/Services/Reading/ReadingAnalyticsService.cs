@@ -149,6 +149,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             .Where(q => partIds.Contains(q.ReadingPartId))
             .ToListAsync(ct);
         var partCodeById = parts.ToDictionary(p => p.Id, p => p.PartCode.ToString());
+        var questionById = questions.ToDictionary(q => q.Id, StringComparer.Ordinal);
 
         // Per-question stats
         var answers = await db.ReadingAnswers.AsNoTracking()
@@ -205,7 +206,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             .Select(g => new ReadingDistractorHistogramRow(
                 g.Key.ReadingQuestionId,
                 g.Key.Category,
-                ResolveOptionKey(questions.FirstOrDefault(q => q.Id == g.Key.ReadingQuestionId), g.Key.Category),
+                ResolveOptionKey(questionById.GetValueOrDefault(g.Key.ReadingQuestionId), g.Key.Category),
                 g.Count()))
             .OrderByDescending(r => r.SelectedCount)
             .Take(50)

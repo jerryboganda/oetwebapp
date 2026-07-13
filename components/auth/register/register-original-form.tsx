@@ -2,21 +2,19 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  IconBrandFacebook,
-  IconBrandGoogle,
-  IconBrandLinkedin,
-  IconBriefcase,
-  IconMail,
-  IconMapPin,
-} from '@tabler/icons-react';
+  BriefcaseBusiness,
+  Facebook,
+  Linkedin,
+  LogIn,
+  Mail,
+  MapPin,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
-import CountryCodeSelect, {
-  countryOptions,
-} from '@/components/auth/country-code-select';
+import CountryCodeSelect from '@/components/auth/lazy-country-code-select';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { PasswordField } from '@/components/auth/password-field';
@@ -29,6 +27,7 @@ import {
 } from '@/lib/auth/schemas';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { readErrorMessage } from '@/lib/read-error-message';
+import { COUNTRY_OPTIONS } from '@/lib/countries';
 
 const stepMeta = [
   { title: 'Personal', caption: 'Name, email, mobile' },
@@ -70,11 +69,11 @@ export function RegisterForm() {
               : 'Sign up with LinkedIn',
         icon:
           provider === 'facebook' ? (
-            <IconBrandFacebook size={18} />
+            <Facebook size={18} />
           ) : provider === 'google' ? (
-            <IconBrandGoogle size={18} />
+            <LogIn size={18} />
           ) : (
-            <IconBrandLinkedin size={18} />
+            <Linkedin size={18} />
           ),
       })),
     [externalAuthProviders, nextPath],
@@ -118,7 +117,7 @@ export function RegisterForm() {
 
   useEffect(() => {
     const dialCode =
-      countryOptions.find((item) => item.value === selectedCountryCode)?.dialCode ?? '';
+      COUNTRY_OPTIONS.find((item) => item.value === selectedCountryCode)?.dialCode ?? '';
 
     form.setValue('mobileNumber', `${dialCode}${mobileLocalNumber}`.trim(), {
       shouldDirty: true,
@@ -464,7 +463,7 @@ export function RegisterForm() {
               <div className={styles.summaryList}>
                 <div className={styles.summaryItem}>
                   <span className={styles.summaryIcon}>
-                    <IconMail size={14} />
+                    <Mail size={14} />
                   </span>
                   <p>
                     {form.getValues('firstName')} {form.getValues('lastName')} · {form.getValues('email')}
@@ -472,7 +471,7 @@ export function RegisterForm() {
                 </div>
                 <div className={styles.summaryItem}>
                   <span className={styles.summaryIcon}>
-                    <IconBriefcase size={14} />
+                    <BriefcaseBusiness size={14} />
                   </span>
                   <p>
                     {examTypes.find((item) => item.id === selectedExamTypeId)?.label ?? 'Exam'} ·{' '}
@@ -481,7 +480,7 @@ export function RegisterForm() {
                 </div>
                 <div className={styles.summaryItem}>
                   <span className={styles.summaryIcon}>
-                    <IconMapPin size={14} />
+                    <MapPin size={14} />
                   </span>
                   <p>{form.getValues('countryTarget') || 'Target country not selected'}</p>
                 </div>

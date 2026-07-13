@@ -8,6 +8,12 @@ namespace OetLearner.Api.Services.Billing;
 
 public sealed class CheckoutService : ICheckoutService
 {
+    // SQLite is used by the desktop runtime and focused tests. It has no
+    // cross-process advisory locks, so serialize its short checkout-create path
+    // in-process. PostgreSQL uses a transaction-scoped advisory lock below,
+    // which also coordinates separate API instances.
+    private static readonly SemaphoreSlim NonPostgresCheckoutGate = new(1, 1);
+
     private readonly LearnerDbContext _db;
     private readonly IStripeService _stripe;
     private readonly ICartService _cartService;
@@ -32,109 +38,151 @@ public sealed class CheckoutService : ICheckoutService
         string userId, string email, string cartId, string? successUrl = null, string? cancelUrl = null, CancellationToken ct = default)
     {
         var idempotencyKey = $"checkout_{userId}_{cartId}";
+        var isPostgres = _db.Database.IsNpgsql();
 
-        // Return existing pending session if idempotency key already exists
-        var existing = await _db.CheckoutSessions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey, ct);
+        if (!isPostgres)
+            await NonPostgresCheckoutGate.WaitAsync(ct);
 
-        if (existing is not null && existing.Status == "pending"
-            && existing.StripeSessionId is not null)
+        await using var transaction = isPostgres
+            ? await _db.Database.BeginTransactionAsync(ct)
+            : null;
+
+        try
         {
-            // Re-retrieve the Stripe URL from Stripe since we don't persist it locally
-            var stripeSession = await _stripe.RetrieveCheckoutSessionAsync(existing.StripeSessionId, ct);
-            var url = stripeSession.Url ?? string.Empty;
-            return new CheckoutSessionDto(
-                existing.Id,
-                existing.StripeSessionId!,
-                url,
-                existing.Status,
-                existing.TotalAmount,
-                existing.Currency);
-        }
-
-        // Load cart with items and prices (owner-scoped to the checkout caller)
-        var cart = await _cartService.GetCartByIdAsync(cartId, userId, ct)
-            ?? throw ApiException.NotFound("cart_not_found", "Cart not found.");
-
-        if (cart.Items.Count == 0)
-            throw ApiException.Validation("cart_empty", "Cart is empty.");
-
-        // Determine checkout mode: "subscription" if any item has a recurring interval
-        var mode = cart.Items.Any(i => i.Interval is not null) ? "subscription" : "payment";
-
-        // Build line items
-        var lineItems = cart.Items
-            .Select(i => new CheckoutLineItem(i.BillingPriceId.ToString(), i.Quantity))
-            .ToList();
-
-        // Map BillingPriceId → StripePriceId
-        var priceIds = cart.Items.Select(i => i.BillingPriceId).ToList();
-        var billingPrices = await _db.BillingPrices
-            .Where(p => priceIds.Contains(p.Id))
-            .AsNoTracking()
-            .ToListAsync(ct);
-
-        var stripeLineItems = cart.Items
-            .Select(i =>
+            if (isPostgres)
             {
-                var bp = billingPrices.FirstOrDefault(p => p.Id == i.BillingPriceId)
-                    ?? throw new InvalidOperationException($"BillingPrice '{i.BillingPriceId}' not found.");
-                if (string.IsNullOrEmpty(bp.StripePriceId))
-                    throw new InvalidOperationException($"BillingPrice '{i.BillingPriceId}' has no StripePriceId.");
-                return new CheckoutLineItem(bp.StripePriceId, i.Quantity);
-            })
-            .ToList();
+                // Serialize this idempotency key before reading or calling Stripe.
+                // The lock is released with the transaction, including exceptions.
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtextextended({idempotencyKey}, 0));",
+                    ct);
+            }
 
-        // Resolve Stripe customer
-        var stripeCustomerId = await _stripe.EnsureCustomerAsync(userId, email, ct);
+            // Keep the row tracked: a legacy row without a stored URL is backfilled
+            // in this same transaction while the idempotency lock is held.
+            var existing = await _db.CheckoutSessions
+                .FirstOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey, ct);
 
-        var resolvedSuccessUrl = EnsureStripeSessionPlaceholder(successUrl)
-            ?? EnsureStripeSessionPlaceholder(_billingOptions.Stripe.SuccessUrl)
-            ?? $"{_billingOptions.CheckoutBaseUrl}/checkout/success";
-        var resolvedCancelUrl = cancelUrl
-            ?? _billingOptions.Stripe.CancelUrl
-            ?? $"{_billingOptions.CheckoutBaseUrl}/checkout/cancel";
+            if (existing is not null && existing.Status == "pending"
+                && existing.StripeSessionId is not null)
+            {
+                var url = existing.HostedCheckoutUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    // One provider read for pre-column rows, then all later replays
+                    // use the persisted URL without touching Stripe.
+                    var stripeSession = await _stripe.RetrieveCheckoutSessionAsync(existing.StripeSessionId, ct);
+                    url = stripeSession.Url;
+                    if (string.IsNullOrWhiteSpace(url))
+                        throw new InvalidOperationException("Stripe checkout session did not include a hosted URL.");
 
-        var request = new CreateCheckoutSessionRequest(
-            StripeCustomerId: stripeCustomerId,
-            UserId: userId,
-            UserEmail: email,
-            LineItems: stripeLineItems,
-            Mode: mode,
-            SuccessUrl: resolvedSuccessUrl,
-            CancelUrl: resolvedCancelUrl,
-            IdempotencyKey: idempotencyKey,
-            Currency: cart.Currency.ToLowerInvariant());
+                    existing.HostedCheckoutUrl = url;
+                    existing.UpdatedAt = DateTimeOffset.UtcNow;
+                    await _db.SaveChangesAsync(ct);
+                }
 
-        var (sessionId, sessionUrl) = await _stripe.CreateCheckoutSessionAsync(request, ct);
+                if (transaction is not null)
+                    await transaction.CommitAsync(ct);
 
-        var now = DateTimeOffset.UtcNow;
-        var checkoutSession = new CheckoutSession
+                return new CheckoutSessionDto(
+                    existing.Id,
+                    existing.StripeSessionId,
+                    url,
+                    existing.Status,
+                    existing.TotalAmount,
+                    existing.Currency);
+            }
+
+            // Load cart with items and prices (owner-scoped to the checkout caller)
+            var cart = await _cartService.GetCartByIdAsync(cartId, userId, ct)
+                ?? throw ApiException.NotFound("cart_not_found", "Cart not found.");
+
+            if (cart.Items.Count == 0)
+                throw ApiException.Validation("cart_empty", "Cart is empty.");
+
+            // Determine checkout mode: "subscription" if any item has a recurring interval
+            var mode = cart.Items.Any(i => i.Interval is not null) ? "subscription" : "payment";
+
+            // Map BillingPriceId → StripePriceId
+            var priceIds = cart.Items.Select(i => i.BillingPriceId).ToList();
+            var billingPrices = await _db.BillingPrices
+                .Where(p => priceIds.Contains(p.Id))
+                .AsNoTracking()
+                .ToListAsync(ct);
+
+            var stripeLineItems = cart.Items
+                .Select(i =>
+                {
+                    var bp = billingPrices.FirstOrDefault(p => p.Id == i.BillingPriceId)
+                        ?? throw new InvalidOperationException($"BillingPrice '{i.BillingPriceId}' not found.");
+                    if (string.IsNullOrEmpty(bp.StripePriceId))
+                        throw new InvalidOperationException($"BillingPrice '{i.BillingPriceId}' has no StripePriceId.");
+                    return new CheckoutLineItem(bp.StripePriceId, i.Quantity);
+                })
+                .ToList();
+
+            // Resolve Stripe customer only after replay detection and while the
+            // idempotency lock is held, so concurrent callers make one provider call.
+            var stripeCustomerId = await _stripe.EnsureCustomerAsync(userId, email, ct);
+
+            var resolvedSuccessUrl = EnsureStripeSessionPlaceholder(successUrl)
+                ?? EnsureStripeSessionPlaceholder(_billingOptions.Stripe.SuccessUrl)
+                ?? $"{_billingOptions.CheckoutBaseUrl}/checkout/success";
+            var resolvedCancelUrl = cancelUrl
+                ?? _billingOptions.Stripe.CancelUrl
+                ?? $"{_billingOptions.CheckoutBaseUrl}/checkout/cancel";
+
+            var request = new CreateCheckoutSessionRequest(
+                StripeCustomerId: stripeCustomerId,
+                UserId: userId,
+                UserEmail: email,
+                LineItems: stripeLineItems,
+                Mode: mode,
+                SuccessUrl: resolvedSuccessUrl,
+                CancelUrl: resolvedCancelUrl,
+                IdempotencyKey: idempotencyKey,
+                Currency: cart.Currency.ToLowerInvariant());
+
+            var (sessionId, sessionUrl) = await _stripe.CreateCheckoutSessionAsync(request, ct);
+            if (string.IsNullOrWhiteSpace(sessionUrl))
+                throw new InvalidOperationException("Stripe checkout session did not include a hosted URL.");
+
+            var now = DateTimeOffset.UtcNow;
+            var checkoutSession = new CheckoutSession
+            {
+                Id = Guid.NewGuid(),
+                CartId = Guid.TryParse(cartId, out var cid) ? cid : (Guid?)null,
+                UserId = userId,
+                StripeSessionId = sessionId,
+                HostedCheckoutUrl = sessionUrl,
+                IdempotencyKey = idempotencyKey,
+                Status = "pending",
+                TotalAmount = cart.Total,
+                Currency = cart.Currency.ToUpperInvariant(),
+                CreatedAt = now,
+                UpdatedAt = now,
+                ExpiresAt = now.AddHours(24)
+            };
+
+            // Session id and hosted URL are written by the same SaveChanges call.
+            _db.CheckoutSessions.Add(checkoutSession);
+            await _db.SaveChangesAsync(ct);
+            if (transaction is not null)
+                await transaction.CommitAsync(ct);
+
+            return new CheckoutSessionDto(
+                checkoutSession.Id,
+                sessionId,
+                sessionUrl,
+                checkoutSession.Status,
+                checkoutSession.TotalAmount,
+                checkoutSession.Currency);
+        }
+        finally
         {
-            Id = Guid.NewGuid(),
-            CartId = Guid.TryParse(cartId, out var cid) ? cid : (Guid?)null,
-            UserId = userId,
-            StripeSessionId = sessionId,
-            IdempotencyKey = idempotencyKey,
-            Status = "pending",
-            TotalAmount = cart.Total,
-            Currency = cart.Currency.ToUpperInvariant(),
-            CreatedAt = now,
-            UpdatedAt = now,
-            ExpiresAt = now.AddHours(24)
-        };
-
-        _db.CheckoutSessions.Add(checkoutSession);
-        await _db.SaveChangesAsync(ct);
-
-        return new CheckoutSessionDto(
-            checkoutSession.Id,
-            sessionId,
-            sessionUrl,
-            checkoutSession.Status,
-            checkoutSession.TotalAmount,
-            checkoutSession.Currency);
+            if (!isPostgres)
+                NonPostgresCheckoutGate.Release();
+        }
     }
 
     public async Task<PayPalCartOrderDto> CreatePayPalCartOrderAsync(

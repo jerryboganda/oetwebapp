@@ -305,7 +305,7 @@ public sealed class AuthService(
             throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
         }
 
-        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
 
         if ((string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
                 || string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
@@ -327,7 +327,7 @@ public sealed class AuthService(
         account.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
 
-        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         return await CreateSessionFromSubjectAsync(account, subject, cancellationToken);
     }
 
@@ -340,7 +340,7 @@ public sealed class AuthService(
             .SingleOrDefaultAsync(x => x.Id == accountId, cancellationToken)
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
-        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
 
         var now = timeProvider.GetUtcNow();
         if (markEmailVerified && account.EmailVerifiedAt is null)
@@ -351,7 +351,7 @@ public sealed class AuthService(
         account.LastLoginAt = now;
         account.UpdatedAt = now;
 
-        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return session;
@@ -414,8 +414,8 @@ public sealed class AuthService(
         refreshToken.RevokedAt = now;
 
         var account = refreshToken.ApplicationUserAccount;
-        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
-        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         var session = await CreateSessionCoreAsync(account, subject, cancellationToken, refreshToken.FamilyId);
 
         await db.SaveChangesAsync(cancellationToken);
@@ -488,7 +488,7 @@ public sealed class AuthService(
         ClaimsPrincipal principal,
         CancellationToken cancellationToken = default)
     {
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
         var now = timeProvider.GetUtcNow();
         var secretKey = AuthenticatorTotp.GenerateSecretKey();
         var recoveryCodes = AuthenticatorTotp.GenerateRecoveryCodes();
@@ -541,7 +541,7 @@ public sealed class AuthService(
             throw ApiException.Validation("authenticator_code_required", "Authenticator code is required.");
         }
 
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var (account, authenticatedLearner) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
         var secretKey = ReadAuthenticatorSecretOrThrow(account);
         if (!AuthenticatorTotp.VerifyCode(secretKey, request.Code, timeProvider.GetUtcNow(), AllowedAuthenticatorDriftWindows))
         {
@@ -553,7 +553,7 @@ public sealed class AuthService(
         account.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
 
-        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         return BuildCurrentUserResponse(subject);
     }
 
@@ -566,7 +566,7 @@ public sealed class AuthService(
             throw ApiException.Validation("authenticator_code_required", "Authenticator code is required.");
         }
 
-        var account = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
+        var (account, authenticatedLearner) = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
         // H2 (security): cap MFA attempts per account per challenge window.
         EnsureMfaAttemptsAvailable(account.Id);
         var secretKey = ReadAuthenticatorSecretOrThrow(account);
@@ -577,7 +577,7 @@ public sealed class AuthService(
         }
 
         ResetMfaAttempts(account.Id);
-        return await CompleteMfaSignInAsync(account, cancellationToken);
+        return await CompleteMfaSignInAsync(account, authenticatedLearner, cancellationToken);
     }
 
     public async Task<AuthSessionResponse> CompleteRecoveryChallengeAsync(
@@ -589,7 +589,7 @@ public sealed class AuthService(
             throw ApiException.Validation("mfa_recovery_code_required", "Recovery code is required.");
         }
 
-        var account = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
+        var (account, authenticatedLearner) = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
         // H2 (security): same attempt cap covers recovery-code attempts.
         EnsureMfaAttemptsAvailable(account.Id);
         var codeHash = AuthenticatorTotp.HashRecoveryCode(request.RecoveryCode);
@@ -608,7 +608,7 @@ public sealed class AuthService(
 
         recoveryCode.RedeemedAt = timeProvider.GetUtcNow();
         ResetMfaAttempts(account.Id);
-        return await CompleteMfaSignInAsync(account, cancellationToken);
+        return await CompleteMfaSignInAsync(account, authenticatedLearner, cancellationToken);
     }
 
     // H2 helpers (security): per-account sliding counter of invalid MFA
@@ -667,8 +667,8 @@ public sealed class AuthService(
 
     public async Task<CurrentUserResponse> GetCurrentUserAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
     {
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
-        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var (account, authenticatedLearner) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
 
         return BuildCurrentUserResponse(subject);
     }
@@ -680,7 +680,7 @@ public sealed class AuthService(
             throw ApiException.Validation("password_required", "Password is required to confirm account deletion.");
         }
 
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
 
         var verificationResult = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password);
         if (verificationResult == PasswordVerificationResult.Failed)
@@ -722,7 +722,7 @@ public sealed class AuthService(
 
     public async Task<ActiveSessionListResponse> GetActiveSessionsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
     {
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
         var now = timeProvider.GetUtcNow();
 
         var currentSessionId = Guid.TryParse(
@@ -750,7 +750,7 @@ public sealed class AuthService(
 
     public async Task RevokeSessionAsync(ClaimsPrincipal principal, Guid sessionId, CancellationToken cancellationToken = default)
     {
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
 
         var currentSessionId = Guid.TryParse(
             principal.FindFirstValue(AuthTokenService.SessionIdClaimType), out var sid)
@@ -776,7 +776,7 @@ public sealed class AuthService(
 
     public async Task<int> RevokeAllOtherSessionsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
     {
-        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
         var now = timeProvider.GetUtcNow();
 
         var currentSessionId = Guid.TryParse(
@@ -1011,13 +1011,17 @@ public sealed class AuthService(
             BuildCurrentUserResponse(subject));
     }
 
-    private async Task<AuthenticatedSessionSubject> ResolveSubjectAsync(ApplicationUserAccount account, CancellationToken cancellationToken)
+    private async Task<AuthenticatedSessionSubject> ResolveSubjectAsync(
+        ApplicationUserAccount account,
+        CancellationToken cancellationToken,
+        LearnerUser? authenticatedLearner = null)
     {
         if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
         {
-            var learner = await db.Users
-                .AsNoTracking()
-                .SingleAsync(x => x.AuthAccountId == account.Id, cancellationToken);
+            var learner = authenticatedLearner
+                ?? await db.Users
+                    .AsNoTracking()
+                    .SingleAsync(x => x.AuthAccountId == account.Id, cancellationToken);
 
             string? professionLabel = null;
             if (!string.IsNullOrWhiteSpace(learner.ActiveProfessionId))
@@ -1133,16 +1137,17 @@ public sealed class AuthService(
             .SingleAsync(x => x.Id == routeUserId, cancellationToken);
     }
 
-    private async Task<ApplicationUserAccount> ResolveTrackedAccountFromPrincipalAsync(
+    private async Task<(ApplicationUserAccount Account, LearnerUser? AuthenticatedLearner)> ResolveTrackedAccountFromPrincipalAsync(
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
         var account = await ResolveAccountFromPrincipalAsync(principal, cancellationToken);
-        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
-        return await db.ApplicationUserAccounts.SingleAsync(x => x.Id == account.Id, cancellationToken);
+        var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var trackedAccount = await db.ApplicationUserAccounts.SingleAsync(x => x.Id == account.Id, cancellationToken);
+        return (trackedAccount, authenticatedLearner);
     }
 
-    private async Task<ApplicationUserAccount> ResolveTrackedMfaAccountAsync(
+    private async Task<(ApplicationUserAccount Account, LearnerUser? AuthenticatedLearner)> ResolveTrackedMfaAccountAsync(
         string email,
         string? challengeToken,
         CancellationToken cancellationToken)
@@ -1164,20 +1169,21 @@ public sealed class AuthService(
             throw ApiException.Forbidden("mfa_not_configured", "Authenticator-based MFA is not configured for this account.");
         }
 
-        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
 
-        return account;
+        return (account, authenticatedLearner);
     }
 
     private async Task<AuthSessionResponse> CompleteMfaSignInAsync(
         ApplicationUserAccount account,
+        LearnerUser? authenticatedLearner,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         account.LastLoginAt = now;
         account.UpdatedAt = now;
 
-        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return session;
@@ -1451,7 +1457,9 @@ public sealed class AuthService(
         return true;
     }
 
-    private async Task EnsureAccountCanAuthenticateAsync(ApplicationUserAccount account, CancellationToken cancellationToken)
+    private async Task<LearnerUser?> EnsureAccountCanAuthenticateAsync(
+        ApplicationUserAccount account,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1482,7 +1490,7 @@ public sealed class AuthService(
                     "Your Subscription has expired. Please Renew Your subscription");
             }
 
-            return;
+            return learner;
         }
 
         if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
@@ -1496,6 +1504,8 @@ public sealed class AuthService(
                 throw ApiException.Forbidden("account_suspended", "This account is suspended.");
             }
         }
+
+        return null;
     }
 
     private static bool TryParseBooleanClaim(ClaimsPrincipal principal, string claimType, out bool value)

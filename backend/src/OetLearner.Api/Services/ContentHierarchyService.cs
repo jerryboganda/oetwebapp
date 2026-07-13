@@ -206,85 +206,190 @@ public class ContentHierarchyService(LearnerDbContext db)
 
     public async Task<HashSet<string>> ResolveAccessibleContentIdsAsync(string userId, CancellationToken ct)
     {
-        // Get user's active subscription → plan → package(s) → rules → content IDs
-        var subscription = await db.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == SubscriptionStatus.Active)
-            .FirstOrDefaultAsync(ct);
+        ct.ThrowIfCancellationRequested();
 
-        if (subscription is null) return [];
-
-        var packages = await db.ContentPackages
-            .Where(p => p.BillingPlanId == subscription.PlanId && p.Status == ContentStatus.Published)
-            .Select(p => p.Id)
-            .ToListAsync(ct);
-
-        if (packages.Count == 0) return [];
-
-        var rules = await db.PackageContentRules
-            .Where(r => packages.Contains(r.PackageId))
-            .ToListAsync(ct);
-
-        var contentIds = new HashSet<string>();
-
-        foreach (var rule in rules)
-        {
-            if (rule.RuleType.StartsWith("include_"))
-            {
-                switch (rule.TargetType)
-                {
-                    case "content_item":
-                        contentIds.Add(rule.TargetId);
-                        break;
-                    case "program":
-                        var programContentIds = await GetContentIdsForProgramAsync(rule.TargetId, ct);
-                        foreach (var id in programContentIds) contentIds.Add(id);
-                        break;
-                    case "track":
-                        var trackContentIds = await GetContentIdsForTrackAsync(rule.TargetId, ct);
-                        foreach (var id in trackContentIds) contentIds.Add(id);
-                        break;
-                    case "module":
-                        var moduleContentIds = await GetContentIdsForModuleAsync(rule.TargetId, ct);
-                        foreach (var id in moduleContentIds) contentIds.Add(id);
-                        break;
-                }
-            }
-        }
-
-        // Remove excluded content
-        foreach (var rule in rules.Where(r => r.RuleType.StartsWith("exclude_")))
-        {
-            if (rule.TargetType == "content_item") contentIds.Remove(rule.TargetId);
-        }
-
-        return contentIds;
-    }
-
-    private async Task<List<string>> GetContentIdsForProgramAsync(string programId, CancellationToken ct)
-    {
-        var trackIds = await db.ContentTracks.Where(t => t.ProgramId == programId).Select(t => t.Id).ToListAsync(ct);
-        return await GetContentIdsForTracksAsync(trackIds, ct);
-    }
-
-    private async Task<List<string>> GetContentIdsForTrackAsync(string trackId, CancellationToken ct)
-        => await GetContentIdsForTracksAsync([trackId], ct);
-
-    private async Task<List<string>> GetContentIdsForTracksAsync(List<string> trackIds, CancellationToken ct)
-    {
-        var moduleIds = await db.ContentModules.Where(m => trackIds.Contains(m.TrackId)).Select(m => m.Id).ToListAsync(ct);
-        return await GetContentIdsForModulesAsync(moduleIds, ct);
-    }
-
-    private async Task<List<string>> GetContentIdsForModuleAsync(string moduleId, CancellationToken ct)
-        => await GetContentIdsForModulesAsync([moduleId], ct);
-
-    private async Task<List<string>> GetContentIdsForModulesAsync(List<string> moduleIds, CancellationToken ct)
-    {
-        return await db.ContentLessons
-            .Where(l => moduleIds.Contains(l.ModuleId) && l.ContentItemId != null)
-            .Select(l => l.ContentItemId!)
+        // Resolve all eligible rules in one command. Joining subscriptions here preserves
+        // the union of every active plan while ensuring only published packages participate.
+        var rules = await (
+                from rule in db.PackageContentRules.AsNoTracking()
+                join package in db.ContentPackages.AsNoTracking()
+                    on rule.PackageId equals package.Id
+                join subscription in db.Subscriptions.AsNoTracking()
+                    on package.BillingPlanId equals subscription.PlanId
+                where subscription.UserId == userId
+                      && subscription.Status == SubscriptionStatus.Active
+                      && package.Status == ContentStatus.Published
+                select new { rule.PackageId, rule.RuleType, rule.TargetType, rule.TargetId })
             .Distinct()
             .ToListAsync(ct);
+
+        if (rules.Count == 0) return [];
+
+        var relevantRules = rules
+            .Where(rule => rule.RuleType.StartsWith("include_", StringComparison.Ordinal)
+                           || rule.RuleType.StartsWith("exclude_", StringComparison.Ordinal))
+            .ToList();
+        var expandedTargets =
+            new Dictionary<(string TargetType, string TargetId), HashSet<string>>();
+
+        static void AddExpandedTarget(
+            Dictionary<(string TargetType, string TargetId), HashSet<string>> targets,
+            string targetType,
+            string targetId,
+            string contentId)
+        {
+            if (!targets.TryGetValue((targetType, targetId), out var contentIds))
+            {
+                contentIds = new HashSet<string>(StringComparer.Ordinal);
+                targets[(targetType, targetId)] = contentIds;
+            }
+
+            contentIds.Add(contentId);
+        }
+
+        ct.ThrowIfCancellationRequested();
+        var itemTargetIds = relevantRules
+            .Where(rule => rule.TargetType == "content_item")
+            .Select(rule => rule.TargetId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (itemTargetIds.Length > 0)
+        {
+            var publishedItemIds = await db.ContentItems
+                .AsNoTracking()
+                .Where(item => itemTargetIds.Contains(item.Id)
+                               && item.Status == ContentStatus.Published
+                               && item.FreshnessConfidence != "superseded")
+                .Select(item => item.Id)
+                .ToListAsync(ct);
+
+            foreach (var contentId in publishedItemIds)
+                AddExpandedTarget(expandedTargets, "content_item", contentId, contentId);
+        }
+
+        ct.ThrowIfCancellationRequested();
+        var moduleTargetIds = relevantRules
+            .Where(rule => rule.TargetType == "module")
+            .Select(rule => rule.TargetId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (moduleTargetIds.Length > 0)
+        {
+            var moduleContent = await (
+                    from module in db.ContentModules.AsNoTracking()
+                    join lesson in db.ContentLessons.AsNoTracking()
+                        on module.Id equals lesson.ModuleId
+                    join item in db.ContentItems.AsNoTracking()
+                        on lesson.ContentItemId equals item.Id
+                    where moduleTargetIds.Contains(module.Id)
+                          && module.Status == ContentStatus.Published
+                          && lesson.Status == ContentStatus.Published
+                          && item.Status == ContentStatus.Published
+                          && item.FreshnessConfidence != "superseded"
+                    select new { TargetId = module.Id, ContentId = item.Id })
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var row in moduleContent)
+                AddExpandedTarget(expandedTargets, "module", row.TargetId, row.ContentId);
+        }
+
+        ct.ThrowIfCancellationRequested();
+        var trackTargetIds = relevantRules
+            .Where(rule => rule.TargetType == "track")
+            .Select(rule => rule.TargetId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (trackTargetIds.Length > 0)
+        {
+            var trackContent = await (
+                    from track in db.ContentTracks.AsNoTracking()
+                    join module in db.ContentModules.AsNoTracking()
+                        on track.Id equals module.TrackId
+                    join lesson in db.ContentLessons.AsNoTracking()
+                        on module.Id equals lesson.ModuleId
+                    join item in db.ContentItems.AsNoTracking()
+                        on lesson.ContentItemId equals item.Id
+                    where trackTargetIds.Contains(track.Id)
+                          && track.Status == ContentStatus.Published
+                          && module.Status == ContentStatus.Published
+                          && lesson.Status == ContentStatus.Published
+                          && item.Status == ContentStatus.Published
+                          && item.FreshnessConfidence != "superseded"
+                    select new { TargetId = track.Id, ContentId = item.Id })
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var row in trackContent)
+                AddExpandedTarget(expandedTargets, "track", row.TargetId, row.ContentId);
+        }
+
+        ct.ThrowIfCancellationRequested();
+        var programTargetIds = relevantRules
+            .Where(rule => rule.TargetType == "program")
+            .Select(rule => rule.TargetId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (programTargetIds.Length > 0)
+        {
+            var programContent = await (
+                    from program in db.ContentPrograms.AsNoTracking()
+                    join track in db.ContentTracks.AsNoTracking()
+                        on program.Id equals track.ProgramId
+                    join module in db.ContentModules.AsNoTracking()
+                        on track.Id equals module.TrackId
+                    join lesson in db.ContentLessons.AsNoTracking()
+                        on module.Id equals lesson.ModuleId
+                    join item in db.ContentItems.AsNoTracking()
+                        on lesson.ContentItemId equals item.Id
+                    where programTargetIds.Contains(program.Id)
+                          && program.Status == ContentStatus.Published
+                          && track.Status == ContentStatus.Published
+                          && module.Status == ContentStatus.Published
+                          && lesson.Status == ContentStatus.Published
+                          && item.Status == ContentStatus.Published
+                          && item.FreshnessConfidence != "superseded"
+                    select new { TargetId = program.Id, ContentId = item.Id })
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var row in programContent)
+                AddExpandedTarget(expandedTargets, "program", row.TargetId, row.ContentId);
+        }
+
+        // Exclusions carve content out of their own package. The learner's effective
+        // entitlement is the union of each active package's resolved content.
+        var accessibleContentIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var packageRules in relevantRules.GroupBy(rule => rule.PackageId))
+        {
+            ct.ThrowIfCancellationRequested();
+            var packageIncludes = new HashSet<string>(StringComparer.Ordinal);
+            var packageExcludes = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var rule in packageRules)
+            {
+                if (!expandedTargets.TryGetValue(
+                        (rule.TargetType, rule.TargetId),
+                        out var targetContentIds))
+                {
+                    continue;
+                }
+
+                if (rule.RuleType.StartsWith("include_", StringComparison.Ordinal))
+                    packageIncludes.UnionWith(targetContentIds);
+                else
+                    packageExcludes.UnionWith(targetContentIds);
+            }
+
+            packageIncludes.ExceptWith(packageExcludes);
+            accessibleContentIds.UnionWith(packageIncludes);
+        }
+
+        return accessibleContentIds;
     }
 
     // ── Import Batches ──

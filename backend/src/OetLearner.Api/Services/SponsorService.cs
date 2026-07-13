@@ -16,108 +16,107 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger,
     /// any completed transaction by a linked learner inside the active
     /// sponsorship window is counted as sponsor-attributable.
     /// </summary>
-    private async Task<SponsorBillingSnapshot> ComputeBillingAsync(string sponsorUserId, CancellationToken ct)
+    private async Task<SponsorBillingSnapshot> ComputeBillingAsync(
+        string sponsorUserId,
+        bool includeInvoices,
+        CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var sponsorships = await db.Sponsorships
-            .AsNoTracking()
-            .Where(s => s.SponsorUserId == sponsorUserId && s.LearnerUserId != null)
-            .Select(s => new { s.Id, s.LearnerUserId, s.LearnerEmail, s.CreatedAt, s.RevokedAt, s.Status })
-            .ToListAsync(ct);
+        var aggregate = await (
+            from sponsorship in db.Sponsorships.AsNoTracking()
+            join transaction in db.PaymentTransactions.AsNoTracking()
+                on sponsorship.LearnerUserId equals transaction.LearnerUserId
+            where sponsorship.SponsorUserId == sponsorUserId
+                && sponsorship.LearnerUserId != null
+                && transaction.Status == "completed"
+                && transaction.CreatedAt >= sponsorship.CreatedAt
+                && transaction.CreatedAt <= (sponsorship.RevokedAt ?? now)
+            select new
+            {
+                transaction.Amount,
+                transaction.Currency,
+                transaction.CreatedAt,
+            })
+            .GroupBy(_ => 1)
+            .Select(group => new SponsorBillingAggregate(
+                group.Sum(row => row.Amount),
+                group.Sum(row => row.CreatedAt >= monthStart ? row.Amount : 0m),
+                group.Select(row => row.Currency).Distinct().Count(),
+                group.Min(row => row.Currency)))
+            .SingleOrDefaultAsync(ct);
 
-        if (sponsorships.Count == 0)
+        if (aggregate is null)
         {
             return new SponsorBillingSnapshot(0m, 0m, null, Array.Empty<SponsorInvoice>());
         }
 
-        var learnerIds = sponsorships
-            .Select(s => s.LearnerUserId!)
-            .Distinct()
-            .ToList();
+        var invoices = includeInvoices
+            ? await (
+                from sponsorship in db.Sponsorships.AsNoTracking()
+                join transaction in db.PaymentTransactions.AsNoTracking()
+                    on sponsorship.LearnerUserId equals transaction.LearnerUserId
+                where sponsorship.SponsorUserId == sponsorUserId
+                    && sponsorship.LearnerUserId != null
+                    && transaction.Status == "completed"
+                    && transaction.CreatedAt >= sponsorship.CreatedAt
+                    && transaction.CreatedAt <= (sponsorship.RevokedAt ?? now)
+                orderby transaction.CreatedAt descending
+                select new SponsorInvoice(
+                    transaction.Id,
+                    sponsorship.Id,
+                    transaction.LearnerUserId,
+                    sponsorship.LearnerEmail,
+                    transaction.Gateway,
+                    transaction.GatewayTransactionId,
+                    transaction.TransactionType,
+                    transaction.ProductType,
+                    transaction.ProductId,
+                    transaction.Amount,
+                    transaction.Currency,
+                    transaction.Status,
+                    transaction.CreatedAt))
+                .Take(50)
+                .ToArrayAsync(ct)
+            : Array.Empty<SponsorInvoice>();
 
-        // Pull only completed transactions for the linked learners. This is
-        // an over-fetch versus the per-sponsorship windows but lets us match
-        // window membership in memory below — typical sponsor cohorts are
-        // small, so the round-trip cost is bounded.
-        var transactions = await db.PaymentTransactions
-            .AsNoTracking()
-            .Where(t => learnerIds.Contains(t.LearnerUserId) && t.Status == "completed")
-            .ToListAsync(ct);
-
-        var invoices = new List<SponsorInvoice>();
-        foreach (var sponsorship in sponsorships)
-        {
-            var windowEnd = sponsorship.RevokedAt ?? now;
-            foreach (var tx in transactions)
-            {
-                if (tx.LearnerUserId != sponsorship.LearnerUserId) continue;
-                if (tx.CreatedAt < sponsorship.CreatedAt) continue;
-                if (tx.CreatedAt > windowEnd) continue;
-                invoices.Add(new SponsorInvoice(
-                    Id: tx.Id,
-                    SponsorshipId: sponsorship.Id,
-                    LearnerUserId: tx.LearnerUserId,
-                    LearnerEmail: sponsorship.LearnerEmail,
-                    Gateway: tx.Gateway,
-                    GatewayTransactionId: tx.GatewayTransactionId,
-                    TransactionType: tx.TransactionType,
-                    ProductType: tx.ProductType,
-                    ProductId: tx.ProductId,
-                    Amount: tx.Amount,
-                    Currency: tx.Currency,
-                    Status: tx.Status,
-                    CreatedAt: tx.CreatedAt));
-            }
-        }
-
-        var totalSpend = invoices.Sum(i => i.Amount);
-        var currentMonthSpend = invoices
-            .Where(i => i.CreatedAt >= monthStart)
-            .Sum(i => i.Amount);
-
-        // Aggregate currency: only meaningful when every invoice shares one.
-        string? aggregateCurrency = null;
-        if (invoices.Count > 0)
-        {
-            var distinctCurrencies = invoices.Select(i => i.Currency).Distinct().ToList();
-            aggregateCurrency = distinctCurrencies.Count == 1 ? distinctCurrencies[0] : null;
-        }
-
-        var orderedInvoices = invoices
-            .OrderByDescending(i => i.CreatedAt)
-            .Take(50)
-            .ToArray();
-
-        return new SponsorBillingSnapshot(totalSpend, currentMonthSpend, aggregateCurrency, orderedInvoices);
+        return new SponsorBillingSnapshot(
+            aggregate.TotalSpend,
+            aggregate.CurrentMonthSpend,
+            aggregate.CurrencyCount == 1 ? aggregate.Currency : null,
+            invoices);
     }
 
     public async Task<object> GetDashboardAsync(string sponsorUserId, CancellationToken ct)
     {
         var sponsor = await db.SponsorAccounts
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.AuthAccountId == sponsorUserId, ct)
+            .Where(s => s.AuthAccountId == sponsorUserId)
+            .Select(s => new SponsorIdentity(s.Name, s.OrganizationName))
+            .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Sponsor account not found.");
 
-        var sponsorships = await db.Sponsorships
+        var sponsorshipCounts = await db.Sponsorships
             .AsNoTracking()
             .Where(s => s.SponsorUserId == sponsorUserId)
-            .ToListAsync(ct);
+            .GroupBy(_ => 1)
+            .Select(group => new SponsorDashboardCounts(
+                group.Count(s => s.Status != "Revoked"),
+                group.Count(s => s.Status == "Active"),
+                group.Count(s => s.Status == "Pending")))
+            .SingleOrDefaultAsync(ct)
+            ?? new SponsorDashboardCounts(0, 0, 0);
 
-        var activeCount = sponsorships.Count(s => s.Status == "Active");
-        var pendingCount = sponsorships.Count(s => s.Status == "Pending");
-        var totalCount = sponsorships.Count(s => s.Status != "Revoked");
-
-        var billing = await ComputeBillingAsync(sponsorUserId, ct);
+        var billing = await ComputeBillingAsync(sponsorUserId, includeInvoices: false, ct);
 
         return new
         {
             sponsorName = sponsor.Name,
             organizationName = sponsor.OrganizationName,
-            learnersSponsored = totalCount,
-            activeSponsorships = activeCount,
-            pendingSponsorships = pendingCount,
+            learnersSponsored = sponsorshipCounts.Total,
+            activeSponsorships = sponsorshipCounts.Active,
+            pendingSponsorships = sponsorshipCounts.Pending,
             totalSpend = billing.TotalSpend,
             currency = billing.Currency,
         };
@@ -212,14 +211,16 @@ public class SponsorService(LearnerDbContext db, ILogger<SponsorService> logger,
     {
         var sponsor = await db.SponsorAccounts
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.AuthAccountId == sponsorUserId, ct)
+            .Where(s => s.AuthAccountId == sponsorUserId)
+            .Select(s => new SponsorIdentity(s.Name, s.OrganizationName))
+            .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Sponsor account not found.");
 
         var totalSponsorships = await db.Sponsorships
             .AsNoTracking()
             .CountAsync(s => s.SponsorUserId == sponsorUserId && s.Status != "Revoked", ct);
 
-        var billing = await ComputeBillingAsync(sponsorUserId, ct);
+        var billing = await ComputeBillingAsync(sponsorUserId, includeInvoices: true, ct);
 
         return new
         {
@@ -240,6 +241,16 @@ internal sealed record SponsorBillingSnapshot(
     decimal CurrentMonthSpend,
     string? Currency,
     IReadOnlyList<SponsorInvoice> Invoices);
+
+internal sealed record SponsorBillingAggregate(
+    decimal TotalSpend,
+    decimal CurrentMonthSpend,
+    int CurrencyCount,
+    string Currency);
+
+internal sealed record SponsorDashboardCounts(int Total, int Active, int Pending);
+
+internal sealed record SponsorIdentity(string Name, string? OrganizationName);
 
 public sealed record SponsorInvoice(
     Guid Id,

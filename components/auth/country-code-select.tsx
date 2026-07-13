@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import Select, {
   components,
   type GroupBase,
@@ -8,7 +8,6 @@ import Select, {
   type SingleValue,
   type SingleValueProps,
 } from "react-select";
-import * as flagComponents from "country-flag-icons/react/1x1";
 import { COUNTRY_OPTIONS, type CountryEntry } from "@/lib/countries";
 
 export type CountryCodeOption = CountryEntry;
@@ -21,6 +20,12 @@ export const countryOptions: ReadonlyArray<CountryCodeOption> = COUNTRY_OPTIONS;
 
 const fallbackCountryOption = countryOptions[0]!;
 
+function countryFlagEmoji(isoCode: string) {
+  return String.fromCodePoint(
+    ...Array.from(isoCode.toUpperCase(), (character) => 127397 + character.charCodeAt(0)),
+  );
+}
+
 function CountryOption({
   option,
   compact = false,
@@ -28,10 +33,6 @@ function CountryOption({
   option: CountryCodeOption;
   compact?: boolean;
 }) {
-  const Flag = (flagComponents as Record<string, React.ComponentType | undefined>)[
-    option.isoCode
-  ];
-
   return (
     <div
       style={{
@@ -50,14 +51,13 @@ function CountryOption({
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
-          background: Flag ? "transparent" : "rgba(123, 121, 255, 0.12)",
-          color: "#3f45a5",
-          fontSize: 10,
-          fontWeight: 700,
+          background: "rgba(123, 121, 255, 0.08)",
+          fontSize: compact ? 16 : 18,
+          lineHeight: 1,
         }}
         aria-hidden="true"
       >
-        {Flag ? <Flag /> : <span>{option.isoCode}</span>}
+        {countryFlagEmoji(option.isoCode)}
       </span>
       <span style={{ fontWeight: 700 }}>{option.dialCode}</span>
       {!compact ? (
@@ -92,7 +92,7 @@ function CustomSingleValue(props: SingleValueProps<CountryCodeOption, false, Gro
   );
 }
 
-interface CountryCodeSelectProps {
+export interface CountryCodeSelectProps {
   value: string;
   onChange: (value: CountryCodeOption) => void;
   inputId?: string;

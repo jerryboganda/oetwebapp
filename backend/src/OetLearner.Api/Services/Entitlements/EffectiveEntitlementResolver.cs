@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,15 @@ namespace OetLearner.Api.Services.Entitlements;
 public interface IEffectiveEntitlementResolver
 {
     Task<EffectiveEntitlementSnapshot> ResolveAsync(string? userId, CancellationToken ct);
+
+    /// <summary>
+    /// Invalidates request-scoped memoized entitlement state after a mutation that
+    /// bypasses this resolver's scoped <see cref="DbContext"/> change tracker.
+    /// Normal tracked saves are observed automatically.
+    /// </summary>
+    void Invalidate(string? userId = null)
+    {
+    }
 }
 
 public sealed record EffectiveEntitlementSnapshot(
@@ -88,10 +98,22 @@ public sealed record EffectiveEntitlementSnapshot(
     public IReadOnlyList<string> DisabledModules { get; init; } = Array.Empty<string>();
 }
 
-public sealed class EffectiveEntitlementResolver(
-    LearnerDbContext db,
-    ILogger<EffectiveEntitlementResolver>? logger = null) : IEffectiveEntitlementResolver
+public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
 {
+    private readonly LearnerDbContext db;
+    private readonly ILogger<EffectiveEntitlementResolver>? logger;
+    private readonly Dictionary<string, EffectiveEntitlementSnapshot> memoizedSnapshots =
+        new(StringComparer.Ordinal);
+    private bool observesDbContextMutations;
+
+    public EffectiveEntitlementResolver(
+        LearnerDbContext db,
+        ILogger<EffectiveEntitlementResolver>? logger = null)
+    {
+        this.db = db;
+        this.logger = logger;
+    }
+
     public async Task<EffectiveEntitlementSnapshot> ResolveAsync(string? userId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId))
@@ -99,10 +121,52 @@ public sealed class EffectiveEntitlementResolver(
             return Empty(userId, "anonymous");
         }
 
+        ct.ThrowIfCancellationRequested();
+        ObserveDbContextMutations();
+
+        // Detect pending tracked changes before consulting the cache. This also
+        // raises StateChanged for snapshot-tracked entities and clears entries.
+        if (db.ChangeTracker.HasChanges())
+        {
+            Invalidate();
+        }
+
+        if (memoizedSnapshots.TryGetValue(userId, out var memoized))
+        {
+            return memoized;
+        }
+
+        var snapshot = await ResolveCoreAsync(userId, ct);
+
+        // Never memoize while a caller has an uncommitted mutation. A successful
+        // SaveChanges later raises SavedChanges and invalidates prior snapshots.
+        if (!db.ChangeTracker.HasChanges())
+        {
+            memoizedSnapshots[userId] = snapshot;
+        }
+
+        return snapshot;
+    }
+
+    public void Invalidate(string? userId = null)
+    {
+        if (userId is null)
+        {
+            memoizedSnapshots.Clear();
+            return;
+        }
+
+        memoizedSnapshots.Remove(userId);
+    }
+
+    private async Task<EffectiveEntitlementSnapshot> ResolveCoreAsync(string userId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
         var trace = new List<string>();
         var subscriptions = await LoadOrderedSubscriptionsAsync(userId, ct);
         var subscription = subscriptions.Count > 0 ? subscriptions[0] : null;
-        var isFrozen = await ResolveIsFrozenAsync(userId, ct);
+        var overlays = await LoadResolverOverlaysAsync(userId, ct);
+        var isFrozen = ResolveIsFrozen(overlays, now);
 
         if (subscription is null)
         {
@@ -125,6 +189,10 @@ public sealed class EffectiveEntitlementResolver(
                 Trace: trace);
         }
 
+        var plans = await LoadBillingPlansAsync(subscriptions, ct);
+        var planVersionIds = await LoadPlanVersionIdsAsync(subscriptions, ct);
+        var activeAddOns = await LoadActiveAddOnCodesAsync(subscriptions, now, ct);
+
         trace.Add($"subscription.latest.{subscription.Status}");
 
         // ── Eligibility gate ────────────────────────────────────────────────
@@ -145,7 +213,7 @@ public sealed class EffectiveEntitlementResolver(
             }
             else
             {
-                plan = await ResolveBillingPlanAsync(subscription.PlanId, ct);
+                plan = ResolveBillingPlan(subscription.PlanId, plans);
                 if (plan is null)
                 {
                     failLowReason = "plan.missing";
@@ -168,8 +236,7 @@ public sealed class EffectiveEntitlementResolver(
                     // row. A dangling pointer = catalog drift = fail-low.
                     else if (!string.IsNullOrWhiteSpace(subscription.PlanVersionId))
                     {
-                        var versionExists = await db.BillingPlanVersions.AsNoTracking()
-                            .AnyAsync(v => v.Id == subscription.PlanVersionId, ct);
+                        var versionExists = planVersionIds.Contains(subscription.PlanVersionId);
                         if (!versionExists)
                         {
                             failLowReason = "plan.version.missing";
@@ -197,7 +264,7 @@ public sealed class EffectiveEntitlementResolver(
         }
 
         var addOnCodes = eligible
-            ? await ResolveActiveAddOnCodesAsync(subscription.Id, ct)
+            ? ResolveActiveAddOnCodes(subscription.Id, activeAddOns)
             : Array.Empty<string>();
         var aiQuotaMapping = eligible ? AiQuotaPlanMappingResolver.Resolve(plan) : null;
 
@@ -255,7 +322,6 @@ public sealed class EffectiveEntitlementResolver(
         // renewal UI. This only ever STRIPS access — fail-low is preserved (a
         // subscription that already failed-low has empty modules and
         // HasEligibleSubscription=false, so this is a no-op for it).
-        var now = DateTimeOffset.UtcNow;
         var isExpired = subscription.Status != SubscriptionStatus.Frozen
             && subscription.ExpiresAt is { } exp
             && exp <= now;
@@ -279,10 +345,9 @@ public sealed class EffectiveEntitlementResolver(
         // NARROW + additive: it never elevates the course, only re-enables the
         // Tutor Book modules the holder paid for. This mirrors the direct gate
         // in TutorBookEndpoints (TutorBookUnlocked && Active/Trial, no expiry).
-        var permanentTutorBook = await db.Subscriptions.AsNoTracking().AnyAsync(s =>
-            s.UserId == userId
-            && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
-            && s.TutorBookUnlocked, ct);
+        var permanentTutorBook = subscriptions.Any(s =>
+            (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+            && s.TutorBookUnlocked);
         if (permanentTutorBook)
         {
             trace.Add("tutorbook.permanent");
@@ -315,7 +380,7 @@ public sealed class EffectiveEntitlementResolver(
         var effectivePackages = new List<EffectivePackage>();
         foreach (var candidate in subscriptions)
         {
-            var pkg = await TryResolveEffectivePackageAsync(candidate, ct);
+            var pkg = TryResolveEffectivePackage(candidate, plans, planVersionIds, now);
             if (pkg is not null && IsCourseEligiblePlan(pkg.Modules))
             {
                 effectivePackages.Add(pkg);
@@ -331,7 +396,7 @@ public sealed class EffectiveEntitlementResolver(
             var aggAddOns = new List<string>();
             foreach (var pkg in effectivePackages)
             {
-                aggAddOns.AddRange(await ResolveActiveAddOnCodesAsync(pkg.Sub.Id, ct));
+                aggAddOns.AddRange(ResolveActiveAddOnCodes(pkg.Sub.Id, activeAddOns));
             }
 
             // Expiry: a null (permanent) member wins; otherwise the furthest date.
@@ -389,9 +454,9 @@ public sealed class EffectiveEntitlementResolver(
         // list and the aggregation. Enable => add to the enabled set; disable =>
         // remove from the enabled set AND record in the deny-set so IsModuleEnabled
         // returns false even if the enabled list is now empty (fail-open guard).
-        var moduleOverrides = await db.UserModuleOverrides.AsNoTracking()
-            .Where(o => o.UserId == userId)
-            .ToListAsync(ct);
+        var moduleOverrides = overlays
+            .Where(overlay => overlay.Kind == ModuleOverlayKind)
+            .ToList();
         if (moduleOverrides.Count > 0)
         {
             var enabledSet = snapshot.EnabledModules.ToList();
@@ -450,6 +515,19 @@ public sealed class EffectiveEntitlementResolver(
     }
 
     private sealed record EffectivePackage(Subscription Sub, BillingPlan Plan, IReadOnlyList<string> Modules);
+    private sealed record BillingPlanLookup(
+        IReadOnlyDictionary<string, BillingPlan> ById,
+        IReadOnlyDictionary<string, BillingPlan> ByCode);
+    private sealed record ResolverOverlayRow(
+        string Kind,
+        string? ModuleKey,
+        bool Enabled,
+        FreezeStatus? FreezeStatus,
+        DateTimeOffset SortAt,
+        DateTimeOffset? ScheduledStartAt);
+
+    private const string FreezeOverlayKind = "freeze";
+    private const string ModuleOverlayKind = "module";
 
     /// <summary>
     /// Returns the resolved plan + parsed modules for a subscription that is
@@ -457,7 +535,11 @@ public sealed class EffectiveEntitlementResolver(
     /// and expiry checks the primary path applies — or null if it is not effective.
     /// Used by the multi-package aggregation to union across a learner's packages.
     /// </summary>
-    private async Task<EffectivePackage?> TryResolveEffectivePackageAsync(Subscription sub, CancellationToken ct)
+    private static EffectivePackage? TryResolveEffectivePackage(
+        Subscription sub,
+        BillingPlanLookup plans,
+        IReadOnlySet<string> planVersionIds,
+        DateTimeOffset now)
     {
         if (sub.Status is not (SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested))
         {
@@ -465,7 +547,7 @@ public sealed class EffectiveEntitlementResolver(
         }
         if (string.IsNullOrWhiteSpace(sub.PlanId)) return null;
 
-        var plan = await ResolveBillingPlanAsync(sub.PlanId, ct);
+        var plan = ResolveBillingPlan(sub.PlanId, plans);
         if (plan is null) return null;
 
         if (!string.IsNullOrWhiteSpace(plan.EntitlementsJson) && !IsValidJsonObject(plan.EntitlementsJson))
@@ -474,12 +556,10 @@ public sealed class EffectiveEntitlementResolver(
         }
         if (!string.IsNullOrWhiteSpace(sub.PlanVersionId))
         {
-            var versionExists = await db.BillingPlanVersions.AsNoTracking()
-                .AnyAsync(v => v.Id == sub.PlanVersionId, ct);
+            var versionExists = planVersionIds.Contains(sub.PlanVersionId);
             if (!versionExists) return null;
         }
 
-        var now = DateTimeOffset.UtcNow;
         var expired = sub.Status != SubscriptionStatus.Frozen
             && sub.ExpiresAt is { } exp
             && exp <= now;
@@ -554,45 +634,286 @@ public sealed class EffectiveEntitlementResolver(
             .ToList();
     }
 
-    private async Task<BillingPlan?> ResolveBillingPlanAsync(string planIdOrCode, CancellationToken ct)
+    private async Task<BillingPlanLookup> LoadBillingPlansAsync(
+        IReadOnlyList<Subscription> subscriptions,
+        CancellationToken ct)
     {
-        var normalizedPlan = planIdOrCode.Trim().ToLowerInvariant();
-        return await db.BillingPlans.AsNoTracking()
-            .FirstOrDefaultAsync(plan => plan.Id.ToLower() == normalizedPlan || plan.Code.ToLower() == normalizedPlan, ct);
+        var identifiers = subscriptions
+            .Select(subscription => subscription.PlanId)
+            .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+            .Select(identifier => identifier.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (identifiers.Length == 0)
+        {
+            return EmptyPlanLookup();
+        }
+
+        // IDs and newly-written codes are canonical. Include the existing code
+        // normalizer's result so the indexed equality query handles canonical
+        // subscriptions without applying LOWER() to either indexed column.
+        var queryIdentifiers = identifiers
+            .SelectMany(identifier => new[]
+            {
+                identifier,
+                AiQuotaPlanMappingResolver.NormalizeCode(identifier)!,
+            })
+            .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var loadedPlans = await db.BillingPlans.AsNoTracking()
+            .Where(plan => queryIdentifiers.Contains(plan.Id) || queryIdentifiers.Contains(plan.Code))
+            .ToListAsync(ct);
+        var lookup = CreatePlanLookup(loadedPlans);
+
+        var unresolved = identifiers
+            .Where(identifier => ResolveBillingPlan(identifier, lookup) is null)
+            .ToArray();
+        if (unresolved.Length == 0)
+        {
+            return lookup;
+        }
+
+        // Legacy rows may contain mixed-case codes. PostgreSQL ILIKE is the
+        // provider-safe fallback and runs once for the entire distinct key set;
+        // non-production providers load once and perform the same comparison in
+        // memory. This preserves legacy case-insensitive resolution without
+        // wrapping indexed columns in LOWER().
+        List<BillingPlan> legacyCandidates;
+        if (string.Equals(
+            db.Database.ProviderName,
+            "Npgsql.EntityFrameworkCore.PostgreSQL",
+            StringComparison.Ordinal))
+        {
+            legacyCandidates = await db.BillingPlans.AsNoTracking()
+                .Where(BuildCaseInsensitivePlanPredicate(unresolved))
+                .ToListAsync(ct);
+        }
+        else
+        {
+            legacyCandidates = await db.BillingPlans.AsNoTracking().ToListAsync(ct);
+        }
+
+        loadedPlans.AddRange(legacyCandidates.Where(candidate =>
+            unresolved.Any(identifier =>
+                string.Equals(candidate.Id, identifier, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.Code, identifier, StringComparison.OrdinalIgnoreCase))));
+        return CreatePlanLookup(loadedPlans);
     }
 
-    private async Task<IReadOnlyList<string>> ResolveActiveAddOnCodesAsync(string subscriptionId, CancellationToken ct)
+    private async Task<HashSet<string>> LoadPlanVersionIdsAsync(
+        IReadOnlyList<Subscription> subscriptions,
+        CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
+        var requestedVersionIds = subscriptions
+            .Select(subscription => subscription.PlanVersionId)
+            .Where(versionId => !string.IsNullOrWhiteSpace(versionId))
+            .Select(versionId => versionId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (requestedVersionIds.Length == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var existingVersionIds = await db.BillingPlanVersions.AsNoTracking()
+            .Where(version => requestedVersionIds.Contains(version.Id))
+            .Select(version => version.Id)
+            .ToListAsync(ct);
+        return existingVersionIds.ToHashSet(StringComparer.Ordinal);
+    }
+
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> LoadActiveAddOnCodesAsync(
+        IReadOnlyList<Subscription> subscriptions,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var subscriptionIds = subscriptions
+            .Select(subscription => subscription.Id)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (subscriptionIds.Length == 0)
+        {
+            return new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        }
+
         var items = await db.SubscriptionItems.AsNoTracking()
-            .Where(item => item.SubscriptionId == subscriptionId
+            .Where(item => subscriptionIds.Contains(item.SubscriptionId)
                 && item.Status == SubscriptionItemStatus.Active
                 && item.StartsAt <= now
                 && (item.EndsAt == null || item.EndsAt > now))
-            .Select(item => item.ItemCode)
+            .Select(item => new { item.SubscriptionId, item.ItemCode })
             .ToListAsync(ct);
 
-        return items
-            .Where(code => !string.IsNullOrWhiteSpace(code))
-            .Select(code => code.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var group in items.GroupBy(item => item.SubscriptionId, StringComparer.Ordinal))
+        {
+            result[group.Key] = group
+                .Select(item => item.ItemCode)
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .Select(code => code.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return result;
+    }
+
+    private async Task<IReadOnlyList<ResolverOverlayRow>> LoadResolverOverlaysAsync(
+        string userId,
+        CancellationToken ct)
+    {
+        var freezes = db.AccountFreezeRecords.AsNoTracking()
+            .Where(record => record.UserId == userId && record.IsCurrent)
+            .Select(record => new
+            {
+                Kind = FreezeOverlayKind,
+                ModuleKey = (string?)null,
+                Enabled = false,
+                FreezeStatus = (FreezeStatus?)record.Status,
+                SortAt = record.RequestedAt,
+                record.ScheduledStartAt,
+            });
+        var moduleOverrides = db.UserModuleOverrides.AsNoTracking()
+            .Where(moduleOverride => moduleOverride.UserId == userId)
+            .Select(moduleOverride => new
+            {
+                Kind = ModuleOverlayKind,
+                ModuleKey = (string?)moduleOverride.ModuleKey,
+                moduleOverride.Enabled,
+                FreezeStatus = (FreezeStatus?)null,
+                SortAt = moduleOverride.UpdatedAt,
+                ScheduledStartAt = (DateTimeOffset?)null,
+            });
+
+        var rows = await freezes.Concat(moduleOverrides).ToListAsync(ct);
+        return rows
+            .Select(row => new ResolverOverlayRow(
+                row.Kind,
+                row.ModuleKey,
+                row.Enabled,
+                row.FreezeStatus,
+                row.SortAt,
+                row.ScheduledStartAt))
             .ToList();
     }
 
-    private async Task<bool> ResolveIsFrozenAsync(string userId, CancellationToken ct)
+    private static bool ResolveIsFrozen(
+        IReadOnlyList<ResolverOverlayRow> overlays,
+        DateTimeOffset now)
     {
-        var records = await db.AccountFreezeRecords.AsNoTracking()
-            .Where(record => record.UserId == userId && record.IsCurrent)
-            .ToListAsync(ct);
-
-        var current = records
-            .OrderByDescending(record => record.RequestedAt)
+        var current = overlays
+            .Where(overlay => overlay.Kind == FreezeOverlayKind)
+            .OrderByDescending(overlay => overlay.SortAt)
             .FirstOrDefault();
 
-        return current?.Status == FreezeStatus.Active
-            || (current?.Status == FreezeStatus.Scheduled
+        return current?.FreezeStatus == FreezeStatus.Active
+            || (current?.FreezeStatus == FreezeStatus.Scheduled
                 && current.ScheduledStartAt is not null
-                && current.ScheduledStartAt <= DateTimeOffset.UtcNow);
+                && current.ScheduledStartAt <= now);
+    }
+
+    private static IReadOnlyList<string> ResolveActiveAddOnCodes(
+        string subscriptionId,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> activeAddOns)
+    {
+        return activeAddOns.TryGetValue(subscriptionId, out var codes)
+            ? codes
+            : Array.Empty<string>();
+    }
+
+    private static BillingPlan? ResolveBillingPlan(string planIdOrCode, BillingPlanLookup plans)
+    {
+        var identifier = planIdOrCode.Trim();
+        return plans.ById.TryGetValue(identifier, out var byId)
+            ? byId
+            : plans.ByCode.TryGetValue(identifier, out var byCode)
+                ? byCode
+                : null;
+    }
+
+    private static BillingPlanLookup CreatePlanLookup(IEnumerable<BillingPlan> plans)
+    {
+        var byId = new Dictionary<string, BillingPlan>(StringComparer.OrdinalIgnoreCase);
+        var byCode = new Dictionary<string, BillingPlan>(StringComparer.OrdinalIgnoreCase);
+        foreach (var plan in plans)
+        {
+            byId.TryAdd(plan.Id.Trim(), plan);
+            byCode.TryAdd(plan.Code.Trim(), plan);
+        }
+
+        return new BillingPlanLookup(byId, byCode);
+    }
+
+    private static BillingPlanLookup EmptyPlanLookup() => new(
+        new Dictionary<string, BillingPlan>(StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, BillingPlan>(StringComparer.OrdinalIgnoreCase));
+
+    private static Expression<Func<BillingPlan, bool>> BuildCaseInsensitivePlanPredicate(
+        IReadOnlyList<string> identifiers)
+    {
+        var plan = Expression.Parameter(typeof(BillingPlan), "plan");
+        var functions = Expression.Property(
+            null,
+            typeof(EF).GetProperty(nameof(EF.Functions))!);
+        var iLike = typeof(NpgsqlDbFunctionsExtensions).GetMethod(
+            nameof(NpgsqlDbFunctionsExtensions.ILike),
+            new[] { typeof(DbFunctions), typeof(string), typeof(string), typeof(string) })!;
+        var escape = Expression.Constant("\\");
+        Expression body = Expression.Constant(false);
+
+        foreach (var identifier in identifiers)
+        {
+            var pattern = Expression.Constant(EscapeLikePattern(identifier));
+            var idMatches = Expression.Call(
+                iLike,
+                functions,
+                Expression.Property(plan, nameof(BillingPlan.Id)),
+                pattern,
+                escape);
+            var codeMatches = Expression.Call(
+                iLike,
+                functions,
+                Expression.Property(plan, nameof(BillingPlan.Code)),
+                pattern,
+                escape);
+            body = Expression.OrElse(body, Expression.OrElse(idMatches, codeMatches));
+        }
+
+        return Expression.Lambda<Func<BillingPlan, bool>>(body, plan);
+    }
+
+    private static string EscapeLikePattern(string value) => value
+        .Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("%", "\\%", StringComparison.Ordinal)
+        .Replace("_", "\\_", StringComparison.Ordinal);
+
+    private void ObserveDbContextMutations()
+    {
+        if (observesDbContextMutations)
+        {
+            return;
+        }
+
+        observesDbContextMutations = true;
+        db.ChangeTracker.Tracked += (_, args) =>
+        {
+            if (args.Entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            {
+                Invalidate();
+            }
+        };
+        db.ChangeTracker.StateChanged += (_, args) =>
+        {
+            if (args.NewState is EntityState.Added or EntityState.Modified or EntityState.Deleted
+                || args.OldState is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            {
+                Invalidate();
+            }
+        };
+        db.SavedChanges += (_, _) => Invalidate();
+        db.SaveChangesFailed += (_, _) => Invalidate();
     }
 }

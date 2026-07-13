@@ -15,9 +15,49 @@ server {
     # Allow large admin asset uploads (chunked, 8 MB/part; full audio up to ~150 MB).
     client_max_body_size 200m;
 
+    # Compress API text responses large enough to benefit. Binary/media/PDF,
+    # octet-stream, and text/event-stream are intentionally absent.
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_min_length 1024;
+    gzip_comp_level 5;
+    gzip_types
+        application/json
+        application/problem+json
+        application/ld+json
+        application/javascript
+        application/xml
+        text/javascript
+        text/xml
+        text/plain
+        text/css;
+
     location / {
         resolver 127.0.0.11 ipv6=off valid=10s;
         set $api_upstream http://learner-api-${ACTIVE_SLOT}:8080;
+
+        # Range and protocol-upgrade responses must remain byte-stable. Auth and
+        # runtime-setting responses may combine secrets with attacker-controlled
+        # input, so exclude them from compression to avoid compression oracles.
+        if ($http_range != "") {
+            gzip off;
+        }
+        if ($http_upgrade != "") {
+            gzip off;
+        }
+        if ($uri ~* "^/hubs/") {
+            gzip off;
+        }
+        if ($uri ~* "^/v1/(?:notifications|conversations|ai-assistant|mocks/live-room|speaking/live-rooms)/hub(?:/|$)") {
+            gzip off;
+        }
+        if ($uri ~* "^/v1/auth(?:/|$)") {
+            gzip off;
+        }
+        if ($uri ~* "^/v1/admin/runtime-settings(?:/|$)") {
+            gzip off;
+        }
 
         proxy_pass $api_upstream;
         proxy_http_version 1.1;
@@ -27,6 +67,9 @@ server {
         proxy_set_header X-Forwarded-Proto $public_forwarded_proto;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
+        # Keep encoding policy at this router so exclusions cannot be bypassed
+        # by a future upstream compression setting.
+        proxy_set_header Accept-Encoding "";
         proxy_read_timeout 300s;
         proxy_send_timeout 300s;
     }

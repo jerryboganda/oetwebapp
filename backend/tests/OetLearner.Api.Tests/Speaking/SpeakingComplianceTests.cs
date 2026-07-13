@@ -122,7 +122,7 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
         var reloaded = await _db.SpeakingRecordings.AsNoTracking()
             .FirstAsync(r => r.Id == recordingId);
         Assert.True(reloaded.IsArchived);
-        Assert.False(_storage.Exists(key));
+        Assert.False(await _storage.ExistsAsync(key, CancellationToken.None));
 
         var audit = await _db.AuditEvents.AsNoTracking()
             .Where(a => a.Action == "SpeakingRecordingExpiredByRetention" && a.ResourceId == recordingId)

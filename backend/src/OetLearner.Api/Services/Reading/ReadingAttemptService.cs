@@ -403,11 +403,11 @@ public sealed class ReadingAttemptService(
         return null;
     }
 
-    public Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct)
-        => db.ReadingAttempts
+    public async Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct)
+        => await db.ReadingAttempts
             .Include(a => a.Answers)
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
-            .ContinueWith(t => t.Result ?? throw new InvalidOperationException("Attempt not found."), ct);
+            ?? throw new InvalidOperationException("Attempt not found.");
 
     /// <summary>Server-side cap on per-save elapsed milliseconds. Defeats
     /// runaway clocks or hostile clients claiming hours per autosave.

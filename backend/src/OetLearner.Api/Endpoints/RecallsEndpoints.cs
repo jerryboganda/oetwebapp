@@ -77,7 +77,7 @@ public static class RecallsEndpoints
             }
 
             var audio = await svc.EnsureAudioAsync(userId, termId, speed ?? "normal", ct);
-            if (!storage.Exists(audio.StorageKey)) return Results.NotFound();
+            if (!await storage.ExistsAsync(audio.StorageKey, ct)) return Results.NotFound();
 
             var stream = await storage.OpenReadAsync(audio.StorageKey, ct);
             return Results.Stream(stream, audio.ContentType, enableRangeProcessing: false);

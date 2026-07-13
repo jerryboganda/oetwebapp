@@ -394,14 +394,14 @@ public sealed class VocabularyAudioWorkerTests
         var dry = await fixture.Regen.CleanupOrphanedAudioAsync(dryRun: true, CancellationToken.None);
         Assert.Equal(1, dry.OrphansFound);
         Assert.Equal(0, dry.Deleted);
-        Assert.True(storage.Exists(orphanKey));
+        Assert.True(await storage.ExistsAsync(orphanKey, CancellationToken.None));
 
         // Real run deletes only the unreferenced file.
         var real = await fixture.Regen.CleanupOrphanedAudioAsync(dryRun: false, CancellationToken.None);
         Assert.Equal(1, real.OrphansFound);
         Assert.Equal(1, real.Deleted);
-        Assert.False(storage.Exists(orphanKey));
-        Assert.True(storage.Exists(keptKey));
+        Assert.False(await storage.ExistsAsync(orphanKey, CancellationToken.None));
+        Assert.True(await storage.ExistsAsync(keptKey, CancellationToken.None));
     }
 
     // ─────────────────────────────────────────────────────────────────────

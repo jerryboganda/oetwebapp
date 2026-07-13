@@ -127,18 +127,38 @@ public class ListeningAudioEndpointTests : IClassFixture<TestWebApplicationFacto
             throw new InvalidOperationException("Legacy open must not be used by the listening audio endpoint.");
         }
 
-        public bool Exists(string key)
+        public Task<bool> ExistsAsync(string key, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             ExistsCalls++;
             throw new InvalidOperationException("Exists must not be used by the listening audio endpoint.");
         }
 
         public Task<long> WriteAsync(string key, Stream source, CancellationToken ct) => throw new NotSupportedException();
         public Task<Stream> OpenWriteAsync(string key, CancellationToken ct) => throw new NotSupportedException();
-        public bool Delete(string key) => throw new NotSupportedException();
-        public long Length(string key) => throw new NotSupportedException();
-        public void Move(string sourceKey, string destKey, bool overwrite) => throw new NotSupportedException();
-        public int DeletePrefix(string prefix) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new NotSupportedException();
+        }
+
+        public Task<long> LengthAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new NotSupportedException();
+        }
+
+        public Task MoveAsync(string sourceKey, string destKey, bool overwrite, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new NotSupportedException();
+        }
+
+        public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new NotSupportedException();
+        }
         public string? TryResolveLocalPath(string key) => null;
         public Uri? ResolveReadUrl(string key, TimeSpan ttl) => null;
     }

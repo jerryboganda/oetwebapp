@@ -488,11 +488,11 @@ public sealed class SpeakingComplianceService(
 
         try
         {
-            if (!storage.Exists(mediaAsset.StoragePath))
+            if (!await storage.ExistsAsync(mediaAsset.StoragePath, ct))
             {
                 return false;
             }
-            return storage.Delete(mediaAsset.StoragePath);
+            return await storage.DeleteAsync(mediaAsset.StoragePath, ct);
         }
         catch (Exception ex)
         {

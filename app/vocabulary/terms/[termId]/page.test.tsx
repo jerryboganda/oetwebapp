@@ -86,13 +86,17 @@ describe('Vocabulary term detail page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchVocabularyTerm.mockResolvedValue(fullTerm);
-    mockFetchMyVocabulary.mockResolvedValue([]);
+    mockFetchMyVocabulary.mockResolvedValue({ total: 0, page: 1, pageSize: 1, items: [] });
   });
 
   it('tracks vocab_term_detail_viewed analytics on mount', async () => {
     render(<VocabularyTermDetailPage />);
     await screen.findByText('Definition');
     expect(mockTrack).toHaveBeenCalledWith('vocab_term_detail_viewed', { termId: 'vt-001' });
+    expect(mockFetchMyVocabulary).toHaveBeenCalledWith(
+      undefined,
+      { page: 1, pageSize: 1, termId: 'vt-001' },
+    );
   });
 
   it('renders term, IPA, definition, example, and synonyms', async () => {
@@ -110,9 +114,14 @@ describe('Vocabulary term detail page', () => {
   });
 
   it('shows mastery details when the term is in the learner list', async () => {
-    mockFetchMyVocabulary.mockResolvedValueOnce([
-      { id: 'lv-1', termId: 'vt-001', term: 'dyspnoea', mastery: 'learning', reviewCount: 3, correctCount: 2, nextReviewDate: '2026-04-25', intervalDays: 6 },
-    ]);
+    mockFetchMyVocabulary.mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      pageSize: 1,
+      items: [
+        { id: 'lv-1', termId: 'vt-001', term: 'dyspnoea', mastery: 'learning', reviewCount: 3, correctCount: 2, nextReviewDate: '2026-04-25', intervalDays: 6 },
+      ],
+    });
     render(<VocabularyTermDetailPage />);
     expect(await screen.findByText('learning')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Remove from my list/i })).toBeInTheDocument();

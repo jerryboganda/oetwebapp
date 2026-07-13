@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -21,6 +22,12 @@ namespace OetLearner.Api.Services.Conversation;
 /// </summary>
 public interface IConversationOptionsProvider
 {
+    /// <summary>
+    /// Last-known options snapshot for synchronous capability checks. Reading
+    /// this property must never perform database or provider I/O.
+    /// </summary>
+    ConversationOptions? Current => null;
+
     Task<ConversationOptions> GetAsync(CancellationToken ct = default);
     void Invalidate();
 }
@@ -34,34 +41,93 @@ public sealed class ConversationOptionsProvider(
     private const string CacheKey = "conversation:effective-options:v1";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
     private readonly IDataProtector _protector = dp.CreateProtector("ConversationOptions.Secret.v1");
+    private readonly ConcurrentDictionary<long, Lazy<Task<ConversationOptions>>> _loads = new();
+    private ConversationOptions _current = Clone(baseOptions.Value);
+    private long _generation;
+
+    public ConversationOptions Current => Volatile.Read(ref _current);
 
     public async Task<ConversationOptions> GetAsync(CancellationToken ct = default)
     {
-        if (cache.TryGetValue<ConversationOptions>(CacheKey, out var cached) && cached is not null)
-            return cached;
+        while (true)
+        {
+            var generation = Volatile.Read(ref _generation);
+            if (TryGetCached(generation, out var cached))
+                return cached;
 
-        var merged = Clone(baseOptions.Value);
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var row = await db.ConversationSettings.AsNoTracking().FirstOrDefaultAsync(r => r.Id == "default", ct);
-        if (row is not null) ApplyOverrides(merged, row);
+            ct.ThrowIfCancellationRequested();
+            var load = _loads.GetOrAdd(
+                generation,
+                key => new Lazy<Task<ConversationOptions>>(
+                    () => LoadOptionsAsync(key),
+                    LazyThreadSafetyMode.ExecutionAndPublication));
 
-        // Phase 6c: registry-first voice credential overrides. After
-        // ConversationSettings DB-row overrides are applied, consult the
-        // unified AiProviders registry for any seeded voice rows that
-        // carry an encrypted API key. When present, those credentials win
-        // — this is the contract that lets admins rotate Azure / Whisper /
-        // ElevenLabs keys from /admin/ai-providers without touching
-        // .env.production. Rows with empty EncryptedApiKey are skipped so
-        // existing options-only deployments keep working unchanged.
-        var registry = scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>();
-        await ApplyRegistryVoiceOverridesAsync(merged, registry, ct);
-
-        cache.Set(CacheKey, merged, CacheTtl);
-        return merged;
+            var options = await load.Value.WaitAsync(ct);
+            if (generation == Volatile.Read(ref _generation))
+                return options;
+        }
     }
 
-    public void Invalidate() => cache.Remove(CacheKey);
+    public void Invalidate()
+    {
+        Interlocked.Increment(ref _generation);
+        cache.Remove(CacheKey);
+    }
+
+    private async Task<ConversationOptions> LoadOptionsAsync(long generation)
+    {
+        try
+        {
+            if (TryGetCached(generation, out var cached))
+                return cached;
+
+            var merged = Clone(baseOptions.Value);
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var row = await db.ConversationSettings.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == "default", CancellationToken.None);
+            if (row is not null) ApplyOverrides(merged, row);
+
+            // Phase 6c: registry-first voice credential overrides. After
+            // ConversationSettings DB-row overrides are applied, consult the
+            // unified AiProviders registry for any seeded voice rows that
+            // carry an encrypted API key. When present, those credentials win.
+            var registry = scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>();
+            await ApplyRegistryVoiceOverridesAsync(merged, registry, CancellationToken.None);
+
+            if (generation == Volatile.Read(ref _generation))
+            {
+                cache.Set(CacheKey, merged, CacheTtl);
+                Volatile.Write(ref _current, merged);
+            }
+
+            return merged;
+        }
+        finally
+        {
+            _loads.TryRemove(generation, out _);
+        }
+    }
+
+    private bool TryGetCached(long generation, out ConversationOptions options)
+    {
+        options = null!;
+        if (generation != Volatile.Read(ref _generation)
+            || !cache.TryGetValue<ConversationOptions>(CacheKey, out var cached)
+            || cached is null
+            || generation != Volatile.Read(ref _generation))
+        {
+            return false;
+        }
+
+        var observed = Volatile.Read(ref _current);
+        Interlocked.CompareExchange(ref _current, cached, observed);
+        if (generation != Volatile.Read(ref _generation))
+            return false;
+
+        options = cached;
+        return true;
+    }
 
     private string? Unprotect(string? cipher)
     {

@@ -27,6 +27,13 @@ public interface IPronunciationAsrProvider
     /// between the requested provider and fallbacks.</summary>
     bool IsConfigured { get; }
 
+    /// <summary>
+    /// Refresh-aware capability check for asynchronous selection paths.
+    /// Implementations backed by runtime data override this method.
+    /// </summary>
+    Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => Task.FromResult(IsConfigured);
+
     Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct);
 }
 

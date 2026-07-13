@@ -1,6 +1,8 @@
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Amazon.S3.Transfer;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 
@@ -30,26 +32,49 @@ namespace OetLearner.Api.Services.Content;
 
 public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
 {
-    private readonly AmazonS3Client _client;
+    private const long MultipartPartSizeBytes = 8L * 1024 * 1024;
+    private readonly IAmazonS3 _client;
     private readonly StorageOptions _options;
+    private readonly bool _ownsClient;
+    private readonly Func<IAmazonS3, string, string, Stream, CancellationToken, Task> _uploadAsync;
+    private readonly Func<string> _tempPathFactory;
 
     public S3CompatibleFileStorage(IOptions<StorageOptions> options)
     {
         _options = options.Value;
+        _client = CreateClient(_options);
+        _ownsClient = true;
+        _uploadAsync = UploadWithTransferUtilityAsync;
+        _tempPathFactory = CreateTempPath;
+    }
 
+    internal S3CompatibleFileStorage(
+        IOptions<StorageOptions> options,
+        IAmazonS3 client,
+        Func<IAmazonS3, string, string, Stream, CancellationToken, Task>? uploadAsync = null,
+        Func<string>? tempPathFactory = null)
+    {
+        _options = options.Value;
+        _client = client;
+        _uploadAsync = uploadAsync ?? UploadWithTransferUtilityAsync;
+        _tempPathFactory = tempPathFactory ?? CreateTempPath;
+    }
+
+    private static AmazonS3Client CreateClient(StorageOptions options)
+    {
         var config = new AmazonS3Config
         {
-            ForcePathStyle = !string.IsNullOrWhiteSpace(_options.EndpointUrl), // needed for DO Spaces / R2
+            ForcePathStyle = !string.IsNullOrWhiteSpace(options.EndpointUrl), // needed for DO Spaces / R2
         };
 
-        if (!string.IsNullOrWhiteSpace(_options.EndpointUrl))
-            config.ServiceURL = _options.EndpointUrl;
+        if (!string.IsNullOrWhiteSpace(options.EndpointUrl))
+            config.ServiceURL = options.EndpointUrl;
         else
-            config.RegionEndpoint = RegionEndpoint.GetBySystemName(_options.AwsRegion);
+            config.RegionEndpoint = RegionEndpoint.GetBySystemName(options.AwsRegion);
 
-        _client = new AmazonS3Client(
-            _options.AccessKeyId ?? throw new InvalidOperationException("Storage:AccessKeyId is required when Provider=s3"),
-            _options.SecretAccessKey ?? throw new InvalidOperationException("Storage:SecretAccessKey is required when Provider=s3"),
+        return new AmazonS3Client(
+            options.AccessKeyId ?? throw new InvalidOperationException("Storage:AccessKeyId is required when Provider=s3"),
+            options.SecretAccessKey ?? throw new InvalidOperationException("Storage:SecretAccessKey is required when Provider=s3"),
             config);
     }
 
@@ -63,29 +88,19 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
     public async Task<long> WriteAsync(string key, Stream source, CancellationToken ct)
     {
         ValidateKey(key);
-        // Buffer into MemoryStream so we can report byte count (S3 SDK needs seekable stream or known length).
-        using var ms = new MemoryStream();
-        await source.CopyToAsync(ms, ct);
-        ms.Position = 0;
+        ct.ThrowIfCancellationRequested();
 
-        var req = new PutObjectRequest
-        {
-            BucketName  = Bucket,
-            Key         = key,
-            InputStream = ms,
-            AutoCloseStream = false,
-        };
-        await _client.PutObjectAsync(req, ct);
-        return ms.Length;
+        var countedSource = new CountingReadStream(source);
+        await _uploadAsync(_client, Bucket, key, countedSource, ct);
+        return countedSource.PayloadLength;
     }
 
-    public async Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
+    public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
     {
-        // S3 doesn't support streaming PUT without known content-length.
-        // Return a MemoryStream that flushes to S3 on dispose via a wrapper.
         ValidateKey(key);
-        var buffer = new S3DeferredWriteStream(this, key);
-        return await Task.FromResult<Stream>(buffer);
+        ct.ThrowIfCancellationRequested();
+        Stream stream = new S3DeferredWriteStream(this, key, _tempPathFactory(), ct);
+        return Task.FromResult(stream);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -133,16 +148,13 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
     // Existence / metadata
     // ─────────────────────────────────────────────────────────────────────────
 
-    public bool Exists(string key)
+    public async Task<bool> ExistsAsync(string key, CancellationToken ct)
     {
         ValidateKey(key);
         try
         {
             var req = new GetObjectMetadataRequest { BucketName = Bucket, Key = key };
-            // Synchronous — only called in non-hot paths (publish gate, import checks).
-#pragma warning disable CA2012
-            _client.GetObjectMetadataAsync(req).GetAwaiter().GetResult();
-#pragma warning restore CA2012
+            await _client.GetObjectMetadataAsync(req, ct);
             return true;
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -151,28 +163,35 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
         }
     }
 
-    public IEnumerable<string> ListKeys(string prefix)
+    public async IAsyncEnumerable<string> ListKeysAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         ValidateKey(prefix);
         var req = new ListObjectsV2Request { BucketName = Bucket, Prefix = prefix };
-        do
+        while (true)
         {
-#pragma warning disable CA2012
-            var page = _client.ListObjectsV2Async(req).GetAwaiter().GetResult();
-#pragma warning restore CA2012
+            var page = await _client.ListObjectsV2Async(req, ct);
             foreach (var obj in page.S3Objects)
+            {
+                ct.ThrowIfCancellationRequested();
                 yield return obj.Key;
-            req.ContinuationToken = page.NextContinuationToken;
-        } while (req.ContinuationToken != null);
+            }
+
+            if (!page.IsTruncated)
+                yield break;
+
+            req.ContinuationToken = GetNextContinuationToken(
+                req.ContinuationToken,
+                page.NextContinuationToken);
+        }
     }
 
-    public long Length(string key)
+    public async Task<long> LengthAsync(string key, CancellationToken ct)
     {
         ValidateKey(key);
         var req = new GetObjectMetadataRequest { BucketName = Bucket, Key = key };
-#pragma warning disable CA2012
-        var meta = _client.GetObjectMetadataAsync(req).GetAwaiter().GetResult();
-#pragma warning restore CA2012
+        var meta = await _client.GetObjectMetadataAsync(req, ct);
         return meta.ContentLength;
     }
 
@@ -180,22 +199,26 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
     // Delete / Move
     // ─────────────────────────────────────────────────────────────────────────
 
-    public bool Delete(string key)
+    public async Task<bool> DeleteAsync(string key, CancellationToken ct)
     {
         ValidateKey(key);
-        if (!Exists(key)) return false;
+        if (!await ExistsAsync(key, ct)) return false;
+
         var req = new DeleteObjectRequest { BucketName = Bucket, Key = key };
-#pragma warning disable CA2012
-        _client.DeleteObjectAsync(req).GetAwaiter().GetResult();
-#pragma warning restore CA2012
+        await _client.DeleteObjectAsync(req, ct);
         return true;
     }
 
-    public void Move(string sourceKey, string destKey, bool overwrite)
+    public async Task MoveAsync(
+        string sourceKey,
+        string destKey,
+        bool overwrite,
+        CancellationToken ct)
     {
         ValidateKey(sourceKey);
         ValidateKey(destKey);
-        if (!overwrite && Exists(destKey)) return;
+        if (!overwrite && await ExistsAsync(destKey, ct)) return;
+
         // S3 copy + delete.
         var copy = new CopyObjectRequest
         {
@@ -204,33 +227,57 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
             DestinationBucket = Bucket,
             DestinationKey    = destKey,
         };
-#pragma warning disable CA2012
-        _client.CopyObjectAsync(copy).GetAwaiter().GetResult();
-#pragma warning restore CA2012
-        Delete(sourceKey);
+        await _client.CopyObjectAsync(copy, ct);
+        await _client.DeleteObjectAsync(
+            new DeleteObjectRequest { BucketName = Bucket, Key = sourceKey },
+            ct);
     }
 
-    public int DeletePrefix(string prefix)
+    public async Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
     {
         ValidateKey(prefix);
-        var list = new ListObjectsV2Request { BucketName = Bucket, Prefix = prefix };
-        var count = 0;
-        do
+        var list = new ListObjectsV2Request
         {
-#pragma warning disable CA2012
-            var page = _client.ListObjectsV2Async(list).GetAwaiter().GetResult();
-#pragma warning restore CA2012
-            foreach (var obj in page.S3Objects)
+            BucketName = Bucket,
+            Prefix = prefix,
+            MaxKeys = 1000,
+        };
+        var count = 0;
+        while (true)
+        {
+            var page = await _client.ListObjectsV2Async(list, ct);
+            for (var offset = 0; offset < page.S3Objects.Count; offset += 1000)
             {
-                var del = new DeleteObjectRequest { BucketName = Bucket, Key = obj.Key };
-#pragma warning disable CA2012
-                _client.DeleteObjectAsync(del).GetAwaiter().GetResult();
-#pragma warning restore CA2012
-                count++;
+                var objects = page.S3Objects
+                    .Skip(offset)
+                    .Take(1000)
+                    .Select(obj => new KeyVersion { Key = obj.Key })
+                    .ToList();
+                var response = await _client.DeleteObjectsAsync(
+                    new DeleteObjectsRequest
+                    {
+                        BucketName = Bucket,
+                        Objects = objects,
+                    },
+                    ct);
+
+                if (response.DeleteErrors.Count > 0)
+                {
+                    var first = response.DeleteErrors[0];
+                    throw new AmazonS3Exception(
+                        $"S3 failed to delete object '{first.Key}' ({first.Code}).");
+                }
+
+                count += objects.Count;
             }
-            list.ContinuationToken = page.NextContinuationToken;
-        } while (list.ContinuationToken != null);
-        return count;
+
+            if (!page.IsTruncated)
+                return count;
+
+            list.ContinuationToken = GetNextContinuationToken(
+                list.ContinuationToken,
+                page.NextContinuationToken);
+        }
     }
 
     public string? TryResolveLocalPath(string key) => null; // S3 has no local path
@@ -239,16 +286,53 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    private static async Task UploadWithTransferUtilityAsync(
+        IAmazonS3 client,
+        string bucket,
+        string key,
+        Stream source,
+        CancellationToken ct)
+    {
+        using var transfer = new TransferUtility(client);
+        var request = new TransferUtilityUploadRequest
+        {
+            BucketName = bucket,
+            Key = key,
+            InputStream = source,
+            PartSize = MultipartPartSizeBytes,
+            AutoCloseStream = false,
+            AutoResetStreamPosition = false,
+        };
+        await transfer.UploadAsync(request, ct);
+    }
+
+    private static string GetNextContinuationToken(string? current, string? next)
+    {
+        if (string.IsNullOrWhiteSpace(next) ||
+            string.Equals(current, next, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "S3 returned a truncated listing without a usable continuation token.");
+        }
+
+        return next;
+    }
+
+    private static string CreateTempPath()
+        => Path.Combine(Path.GetTempPath(), $"oet-s3-{Guid.NewGuid():N}.tmp");
+
     private static void ValidateKey(string key)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("Storage key is required.");
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        _client.Dispose();
-        await ValueTask.CompletedTask;
+        if (_ownsClient)
+            _client.Dispose();
+
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>
@@ -307,34 +391,248 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Deferred-write stream helper (buffers until flushed to S3)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private sealed class S3DeferredWriteStream(S3CompatibleFileStorage owner, string key) : MemoryStream
+    private sealed class CountingReadStream(Stream inner) : Stream
     {
-        private bool _uploaded;
+        private long _bytesRead;
+        private readonly long? _knownPayloadLength = TryGetRemainingLength(inner);
+
+        public long PayloadLength => _knownPayloadLength ?? Interlocked.Read(ref _bytesRead);
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => inner.Length;
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override void Flush() => inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken)
+            => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count)
+            => RecordRead(inner.Read(buffer, offset, count));
+
+        public override int Read(Span<byte> buffer)
+            => RecordRead(inner.Read(buffer));
+
+        public override async Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+            => RecordRead(await inner.ReadAsync(buffer, offset, count, cancellationToken));
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+            => RecordRead(await inner.ReadAsync(buffer, cancellationToken));
+
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && !_uploaded)
-            {
-                _uploaded = true;
-                Position  = 0;
-                owner.WriteAsync(key, this, CancellationToken.None).GetAwaiter().GetResult();
-            }
+            // The caller owns the source stream.
             base.Dispose(disposing);
         }
 
-        public override async ValueTask DisposeAsync()
+        private int RecordRead(int count)
         {
-            if (!_uploaded)
+            Interlocked.Add(ref _bytesRead, count);
+            return count;
+        }
+
+        private static long? TryGetRemainingLength(Stream source)
+        {
+            if (!source.CanSeek)
+                return null;
+
+            try
             {
-                _uploaded = true;
-                Position  = 0;
-                await owner.WriteAsync(key, this, CancellationToken.None);
+                return Math.Max(0, source.Length - source.Position);
             }
-            await base.DisposeAsync();
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Deferred-write stream helper (bounded disk spool; upload on async dispose)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private sealed class S3DeferredWriteStream : Stream
+    {
+        private readonly S3CompatibleFileStorage _owner;
+        private readonly string _key;
+        private readonly string _tempPath;
+        private readonly CancellationToken _ct;
+        private readonly FileStream _inner;
+        private readonly object _disposeGate = new();
+        private Task? _disposeTask;
+        private bool _syncDisposed;
+
+        public S3DeferredWriteStream(
+            S3CompatibleFileStorage owner,
+            string key,
+            string tempPath,
+            CancellationToken ct)
+        {
+            _owner = owner;
+            _key = key;
+            _tempPath = tempPath;
+            _ct = ct;
+            _inner = new FileStream(
+                tempPath,
+                new FileStreamOptions
+                {
+                    Mode = FileMode.CreateNew,
+                    Access = FileAccess.ReadWrite,
+                    Share = FileShare.None,
+                    BufferSize = 81920,
+                    Options = FileOptions.Asynchronous |
+                              FileOptions.SequentialScan |
+                              FileOptions.DeleteOnClose,
+                });
+        }
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => _inner.CanWrite;
+        public override long Length => _inner.Length;
+        public override long Position
+        {
+            get => _inner.Position;
+            set => _inner.Position = value;
+        }
+
+        public override void Flush() => _inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken)
+            => _inner.FlushAsync(cancellationToken);
+        public override int Read(byte[] buffer, int offset, int count)
+            => _inner.Read(buffer, offset, count);
+        public override int Read(Span<byte> buffer) => _inner.Read(buffer);
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+            => _inner.ReadAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+            => _inner.ReadAsync(buffer, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count)
+            => _inner.Write(buffer, offset, count);
+        public override void Write(ReadOnlySpan<byte> buffer) => _inner.Write(buffer);
+        public override Task WriteAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+            => _inner.WriteAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default)
+            => _inner.WriteAsync(buffer, cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!disposing)
+            {
+                base.Dispose(false);
+                return;
+            }
+
+            lock (_disposeGate)
+            {
+                if (_disposeTask is not null)
+                {
+                    if (!_disposeTask.IsCompleted)
+                    {
+                        throw new InvalidOperationException(
+                            "Asynchronous disposal of this S3 write stream is still in progress.");
+                    }
+
+                    return;
+                }
+
+                if (_syncDisposed)
+                    return;
+
+                _syncDisposed = true;
+            }
+
+            try
+            {
+                _inner.Dispose();
+            }
+            finally
+            {
+                TryDeleteTempFile();
+            }
+
+            throw new InvalidOperationException(
+                "S3 write streams must be disposed asynchronously with 'await using'; " +
+                "the synchronous disposal did not upload the object.");
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            lock (_disposeGate)
+            {
+                if (_syncDisposed)
+                {
+                    return new ValueTask(Task.FromException(new InvalidOperationException(
+                        "The S3 write stream was synchronously disposed and cannot be uploaded.")));
+                }
+
+                _disposeTask ??= CommitAndCleanupAsync();
+                return new ValueTask(_disposeTask);
+            }
+        }
+
+        private async Task CommitAndCleanupAsync()
+        {
+            try
+            {
+                await _inner.FlushAsync(_ct);
+                _inner.Position = 0;
+                await _owner.WriteAsync(_key, _inner, _ct);
+            }
+            finally
+            {
+                try
+                {
+                    await _inner.DisposeAsync();
+                }
+                finally
+                {
+                    TryDeleteTempFile();
+                }
+            }
+        }
+
+        private void TryDeleteTempFile()
+        {
+            try
+            {
+                File.Delete(_tempPath);
+            }
+            catch (IOException)
+            {
+                // DeleteOnClose remains the primary cleanup guarantee.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // DeleteOnClose remains the primary cleanup guarantee.
+            }
         }
     }
 }

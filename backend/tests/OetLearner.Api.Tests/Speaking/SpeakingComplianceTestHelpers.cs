@@ -43,34 +43,49 @@ internal sealed class StubFileStorage : IFileStorage
         return Task.FromResult<Stream>(buffer);
     }
 
-    public bool Exists(string key) => _blobs.ContainsKey(key);
-
-    public bool Delete(string key) => _blobs.Remove(key);
-
-    public long Length(string key) => _blobs.TryGetValue(key, out var b) ? b.LongLength : 0L;
-
-    public void Move(string sourceKey, string destKey, bool overwrite)
+    public Task<bool> ExistsAsync(string key, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_blobs.ContainsKey(key));
+    }
+
+    public Task<bool> DeleteAsync(string key, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_blobs.Remove(key));
+    }
+
+    public Task<long> LengthAsync(string key, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_blobs.TryGetValue(key, out var b) ? b.LongLength : 0L);
+    }
+
+    public Task MoveAsync(string sourceKey, string destKey, bool overwrite, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
         if (!_blobs.TryGetValue(sourceKey, out var bytes))
         {
             throw new FileNotFoundException(sourceKey);
         }
         if (_blobs.ContainsKey(destKey) && !overwrite)
         {
-            return;
+            return Task.CompletedTask;
         }
         _blobs[destKey] = bytes;
         _blobs.Remove(sourceKey);
+        return Task.CompletedTask;
     }
 
-    public int DeletePrefix(string prefix)
+    public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var matching = _blobs.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
         foreach (var key in matching)
         {
             _blobs.Remove(key);
         }
-        return matching.Count;
+        return Task.FromResult(matching.Count);
     }
 
     public string? TryResolveLocalPath(string key) => null;

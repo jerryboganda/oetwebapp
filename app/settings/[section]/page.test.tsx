@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const {
   mockPush,
   mockFetchSettingsSection,
@@ -40,6 +41,21 @@ import SettingsSectionPage from './page';
 import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Settings section page', () => {
+  function renderSection(section: string) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return renderWithRouter(
+      <QueryClientProvider client={client}>
+        <SettingsSectionPage />
+      </QueryClientProvider>,
+      {
+        params: { section },
+        router: { push: mockPush },
+      },
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateSettingsSection.mockResolvedValue({});
@@ -55,10 +71,7 @@ describe('Settings section page', () => {
       },
     });
 
-    const { container } = renderWithRouter(<SettingsSectionPage />, {
-      params: { section: 'profile' },
-      router: { push: mockPush },
-    });
+    const { container } = renderSection('profile');
 
     /* Wait for async data to load — the hero description is always rendered */
     expect(await screen.findByText('Review and update your profile settings.')).toBeInTheDocument();
@@ -89,15 +102,12 @@ describe('Settings section page', () => {
       },
     });
 
-    const { container } = renderWithRouter(<SettingsSectionPage />, {
-      params: { section: 'privacy' },
-      router: { push: mockPush },
-    });
+    const { container } = renderSection('privacy');
 
     /* Wait for async data to load */
     expect(await screen.findByText('Review and update your privacy settings.')).toBeInTheDocument();
     /* Helper card content */
-    expect(screen.getByText('Evidence privacy')).toBeInTheDocument();
+    expect(await screen.findByText('Evidence privacy')).toBeInTheDocument();
     expect(screen.getAllByText('Sensitive Data').length).toBeGreaterThan(0);
     /* Field tags */
     expect(screen.getByText('Storage')).toBeInTheDocument();
@@ -128,17 +138,14 @@ describe('Settings section page', () => {
       },
     });
 
-    const { container } = renderWithRouter(<SettingsSectionPage />, {
-      params: { section: 'goals' },
-      router: { push: mockPush },
-    });
+    const { container } = renderSection('goals');
 
     /* Wait for async data to load */
     expect(await screen.findByText('Review and update your goals settings.')).toBeInTheDocument();
     /* Helper card badge */
     expect(screen.getAllByText('Target Scores').length).toBeGreaterThan(0);
     /* Sub-test target score controls */
-    expect(screen.getByLabelText('Writing target score')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Writing target score')).toBeInTheDocument();
     expect(screen.getByLabelText('Speaking target score')).toBeInTheDocument();
     expect(screen.getByLabelText('Reading target score')).toBeInTheDocument();
     expect(screen.getByLabelText('Listening target score')).toBeInTheDocument();

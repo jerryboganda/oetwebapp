@@ -1159,7 +1159,7 @@ public class ReadingAuthoringTests
         Assert.Equal(HttpStatusCode.Conflict, rulebookResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, resultTemplateResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, speakingSharedResponse.StatusCode);
-        Assert.True(storage.Exists("content/paper.pdf"));
+        Assert.True(await storage.ExistsAsync("content/paper.pdf", CancellationToken.None));
     }
 
     [Fact]

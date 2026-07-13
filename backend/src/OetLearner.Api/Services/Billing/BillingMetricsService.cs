@@ -87,11 +87,20 @@ public sealed class BillingMetricsService : IBillingMetricsService
             ("credits_sold", creditsSold),
         };
 
+        var metricCodes = rolled.Select(metric => metric.MetricCode).ToList();
+        var existingMetrics = await _db.BillingMetricDailies
+            .Where(m =>
+                m.MetricDate == date &&
+                m.Region == "GLOBAL" &&
+                metricCodes.Contains(m.MetricCode))
+            .ToListAsync(ct);
+        var existingByCode = existingMetrics
+            .GroupBy(m => m.MetricCode, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
         foreach (var (code, value) in rolled)
         {
-            var existing = await _db.BillingMetricDailies
-                .FirstOrDefaultAsync(m => m.MetricDate == date && m.MetricCode == code && m.Region == "GLOBAL", ct);
-            if (existing is null)
+            if (!existingByCode.TryGetValue(code, out var existing))
             {
                 _db.BillingMetricDailies.Add(new BillingMetricDaily
                 {
@@ -115,14 +124,21 @@ public sealed class BillingMetricsService : IBillingMetricsService
         _logger.LogInformation("Billing metrics rolled up for {Date}.", date);
     }
 
-    public Task<IReadOnlyList<BillingMetricDaily>> ReadAsync(DateOnly from, DateOnly to, string? metricCode, string? region, CancellationToken ct)
-        => _db.BillingMetricDailies
+    public async Task<IReadOnlyList<BillingMetricDaily>> ReadAsync(
+        DateOnly from,
+        DateOnly to,
+        string? metricCode,
+        string? region,
+        CancellationToken ct)
+    {
+        return await _db.BillingMetricDailies
+            .AsNoTracking()
             .Where(m => m.MetricDate >= from && m.MetricDate <= to
                 && (metricCode == null || m.MetricCode == metricCode)
                 && (region == null || m.Region == region))
             .OrderBy(m => m.MetricDate)
-            .ToListAsync(ct)
-            .ContinueWith(t => (IReadOnlyList<BillingMetricDaily>)t.Result, ct);
+            .ToListAsync(ct);
+    }
 }
 
 /// <summary>Background worker — runs the rollup daily.</summary>

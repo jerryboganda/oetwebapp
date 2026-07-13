@@ -11,20 +11,22 @@ public sealed class DeepgramConversationAsrProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<DeepgramConversationAsrProvider> logger) : IConversationAsrProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
-
     public string Name => "deepgram";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().DeepgramApiKey);
+    public bool IsConfigured => IsConfiguredWith(optionsProvider.Current);
+
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => IsConfiguredWith(await optionsProvider.GetAsync(ct));
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
-        if (!IsConfigured) throw new InvalidOperationException("Deepgram not configured.");
+        var options = await optionsProvider.GetAsync(ct);
+        if (!IsConfiguredWith(options)) throw new InvalidOperationException("Deepgram not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationDeepgramClient");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", ReadOptions().DeepgramApiKey);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", options.DeepgramApiKey);
 
-        var lang = string.IsNullOrWhiteSpace(ReadOptions().DeepgramLanguage) ? request.Locale : ReadOptions().DeepgramLanguage;
-        var model = string.IsNullOrWhiteSpace(ReadOptions().DeepgramModel) ? "nova-2" : ReadOptions().DeepgramModel;
+        var lang = string.IsNullOrWhiteSpace(options.DeepgramLanguage) ? request.Locale : options.DeepgramLanguage;
+        var model = string.IsNullOrWhiteSpace(options.DeepgramModel) ? "nova-2" : options.DeepgramModel;
         var diarization = request.EnableDiarization ? "&diarize=true&utterances=true" : "";
         var url = $"https://api.deepgram.com/v1/listen?model={Uri.EscapeDataString(model)}&language={Uri.EscapeDataString(lang)}&smart_format=true&punctuate=true{diarization}";
 
@@ -97,4 +99,7 @@ public sealed class DeepgramConversationAsrProvider(
         }
         return segments;
     }
+
+    private static bool IsConfiguredWith(ConversationOptions? options)
+        => options is not null && !string.IsNullOrWhiteSpace(options.DeepgramApiKey);
 }

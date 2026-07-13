@@ -1,5 +1,8 @@
+using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -7,6 +10,47 @@ namespace OetLearner.Api.Services;
 
 public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<BackgroundJobProcessor> logger) : BackgroundService
 {
+    internal const int JobClaimBatchSize = 50;
+    internal const int SqliteQueuedJobScanLimit = 200;
+    internal static string PostgresClaimQueuedJobsSql => """
+        WITH candidate AS (
+            SELECT "Id"
+            FROM "BackgroundJobs"
+            WHERE "State" = @queuedState
+              AND "AvailableAt" <= @now
+            ORDER BY "AvailableAt", "CreatedAt"
+            LIMIT @batchSize
+            FOR UPDATE SKIP LOCKED
+        ),
+        claimed AS (
+            UPDATE "BackgroundJobs" AS job
+            SET "State" = @processingState,
+                "StatusReasonCode" = @statusReasonCode,
+                "StatusMessage" = @statusMessage,
+                "LastTransitionAt" = @now
+            FROM candidate
+            WHERE job."Id" = candidate."Id"
+            RETURNING
+                job."Id",
+                job."Type",
+                job."State",
+                job."AttemptId",
+                job."ResourceId",
+                job."PayloadJson",
+                job."CreatedAt",
+                job."AvailableAt",
+                job."LastTransitionAt",
+                job."StatusReasonCode",
+                job."StatusMessage",
+                job."Retryable",
+                job."RetryCount",
+                job."RetryAfterMs"
+        )
+        SELECT *
+        FROM claimed
+        ORDER BY "AvailableAt", "CreatedAt";
+        """;
+
     private DateTimeOffset _lastReconciliationAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastAutoAssignAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastSlaCheckAt = DateTimeOffset.MinValue;
@@ -87,37 +131,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var now = DateTimeOffset.UtcNow;
-        var queuedJobQuery = db.BackgroundJobs
-            .Where(x => x.State == AsyncState.Queued);
-
-        var queuedJobs = db.Database.IsSqlite()
-            ? await queuedJobQuery
-                .Take(200)
-                .ToListAsync(cancellationToken)
-            : await queuedJobQuery
-                .OrderBy(x => x.CreatedAt)
-                .Take(50)
-                .ToListAsync(cancellationToken);
-
-        var jobs = queuedJobs
-            .Where(x => x.AvailableAt <= now)
-            .OrderBy(x => x.AvailableAt)
-            .ThenBy(x => x.CreatedAt)
-            .Take(50)
-            .ToList();
-
-        foreach (var job in jobs)
-        {
-            job.State = AsyncState.Processing;
-            job.StatusReasonCode = "processing";
-            job.StatusMessage = "Job is processing.";
-            job.LastTransitionAt = now;
-        }
-
-        if (jobs.Count > 0)
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        var jobs = await ClaimQueuedJobsAsync(db, now, cancellationToken);
 
         foreach (var job in jobs)
         {
@@ -322,6 +336,122 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
     }
 
+    internal static async Task<List<BackgroundJobItem>> ClaimQueuedJobsAsync(
+        LearnerDbContext db,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (db.Database.IsNpgsql())
+        {
+            return await ClaimQueuedJobsPostgresAsync(db, now, cancellationToken);
+        }
+
+        var queuedJobQuery = db.BackgroundJobs
+            .Where(x => x.State == AsyncState.Queued);
+
+        var queuedJobs = db.Database.IsSqlite()
+            ? await queuedJobQuery
+                .Take(SqliteQueuedJobScanLimit)
+                .ToListAsync(cancellationToken)
+            : await queuedJobQuery
+                .OrderBy(x => x.CreatedAt)
+                .Take(JobClaimBatchSize)
+                .ToListAsync(cancellationToken);
+
+        var jobs = queuedJobs
+            .Where(x => x.AvailableAt <= now)
+            .OrderBy(x => x.AvailableAt)
+            .ThenBy(x => x.CreatedAt)
+            .Take(JobClaimBatchSize)
+            .ToList();
+
+        foreach (var job in jobs)
+        {
+            job.State = AsyncState.Processing;
+            job.StatusReasonCode = "processing";
+            job.StatusMessage = "Job is processing.";
+            job.LastTransitionAt = now;
+        }
+
+        if (jobs.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return jobs;
+    }
+
+    private static async Task<List<BackgroundJobItem>> ClaimQueuedJobsPostgresAsync(
+        LearnerDbContext db,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        var openedConnection = connection.State != ConnectionState.Open;
+        if (openedConnection)
+        {
+            await db.Database.OpenConnectionAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = PostgresClaimQueuedJobsSql;
+            command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+            command.Parameters.Add(CreateDbParameter(command, "@queuedState", (int)AsyncState.Queued));
+            command.Parameters.Add(CreateDbParameter(command, "@processingState", (int)AsyncState.Processing));
+            command.Parameters.Add(CreateDbParameter(command, "@statusReasonCode", "processing"));
+            command.Parameters.Add(CreateDbParameter(command, "@statusMessage", "Job is processing."));
+            command.Parameters.Add(CreateDbParameter(command, "@now", now));
+            command.Parameters.Add(CreateDbParameter(command, "@batchSize", JobClaimBatchSize));
+
+            var jobs = new List<BackgroundJobItem>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                jobs.Add(new BackgroundJobItem
+                {
+                    Id = reader.GetString(0),
+                    Type = (JobType)reader.GetInt32(1),
+                    State = (AsyncState)reader.GetInt32(2),
+                    AttemptId = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    ResourceId = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    PayloadJson = reader.GetString(5),
+                    CreatedAt = reader.GetFieldValue<DateTimeOffset>(6),
+                    AvailableAt = reader.GetFieldValue<DateTimeOffset>(7),
+                    LastTransitionAt = reader.GetFieldValue<DateTimeOffset>(8),
+                    StatusReasonCode = reader.GetString(9),
+                    StatusMessage = reader.GetString(10),
+                    Retryable = reader.GetBoolean(11),
+                    RetryCount = reader.GetInt32(12),
+                    RetryAfterMs = reader.IsDBNull(13) ? null : reader.GetInt32(13)
+                });
+            }
+
+            if (jobs.Count > 0)
+            {
+                db.AttachRange(jobs);
+            }
+
+            return jobs;
+        }
+        finally
+        {
+            if (openedConnection && db.Database.CurrentTransaction is null)
+            {
+                await db.Database.CloseConnectionAsync();
+            }
+        }
+    }
+
+    private static DbParameter CreateDbParameter(DbCommand command, string name, object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        return parameter;
+    }
+
     /// <summary>
     /// T5 — enqueue a single <see cref="JobType.PrivateSpeakingNoShowSweep"/> job,
     /// skipping if one is already queued/processing. The BackgroundJobs queue is
@@ -513,7 +643,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         return lastEnqueuedAt.UtcDateTime.Date < now.UtcDateTime.Date;
     }
 
-    private static async Task RunReadinessRolloverAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
+    internal static async Task RunReadinessRolloverAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
     {
         var staleCutoff = DateTimeOffset.UtcNow.AddHours(-24);
         var recentActivityCutoff = DateTimeOffset.UtcNow.AddDays(-7);
@@ -524,37 +654,53 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             .Take(100)
             .ToListAsync(cancellationToken);
 
-        if (staleUserIds.Count == 0) return;
-
-        var activeUserIds = await db.Attempts
-            .Where(a => staleUserIds.Contains(a.UserId) && a.CompletedAt >= recentActivityCutoff)
-            .Select(a => a.UserId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var computation = services.GetRequiredService<OetLearner.Api.Services.Readiness.ReadinessComputationService>();
-        foreach (var userId in activeUserIds)
+        if (staleUserIds.Count > 0)
         {
-            try
+            var activeUserIds = await db.Attempts
+                .Where(a => staleUserIds.Contains(a.UserId) && a.CompletedAt >= recentActivityCutoff)
+                .Select(a => a.UserId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var computation = services.GetRequiredService<OetLearner.Api.Services.Readiness.ReadinessComputationService>();
+            foreach (var userId in activeUserIds)
             {
-                await computation.ComputeAsync(userId, cancellationToken);
-            }
-            catch (Exception)
-            {
-                // swallow per-user failures so rollover continues
+                try
+                {
+                    await computation.ComputeAsync(userId, cancellationToken);
+                }
+                catch (Exception)
+                {
+                    // swallow per-user failures so rollover continues
+                }
             }
         }
 
         // Prune history beyond 26 weeks
         var pruneCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-26 * 7));
-        var oldRows = await db.ReadinessHistories
-            .Where(h => h.WeekStartDate < pruneCutoff)
-            .ToListAsync(cancellationToken);
-        if (oldRows.Count > 0)
+        await PruneReadinessHistoryAsync(db, pruneCutoff, cancellationToken);
+    }
+
+    internal static async Task<int> PruneReadinessHistoryAsync(
+        LearnerDbContext db,
+        DateOnly pruneCutoff,
+        CancellationToken cancellationToken)
+    {
+        var query = db.ReadinessHistories
+            .Where(history => history.WeekStartDate < pruneCutoff);
+
+        if (db.Database.IsRelational())
         {
-            db.ReadinessHistories.RemoveRange(oldRows);
-            await db.SaveChangesAsync(cancellationToken);
+            return await query.ExecuteDeleteAsync(cancellationToken);
         }
+
+        // EF's in-memory provider does not support ExecuteDeleteAsync.
+        var oldRows = await query.ToListAsync(cancellationToken);
+        if (oldRows.Count == 0) return 0;
+
+        db.ReadinessHistories.RemoveRange(oldRows);
+        await db.SaveChangesAsync(cancellationToken);
+        return oldRows.Count;
     }
 
     private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)

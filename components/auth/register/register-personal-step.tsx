@@ -1,5 +1,5 @@
 import type { UseFormReturn } from 'react-hook-form';
-import CountryCodeSelect from '@/components/auth/country-code-select';
+import CountryCodeSelect from '@/components/auth/lazy-country-code-select';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import type { SignupPayloadFormValues } from '@/lib/auth/schemas';
 import { RegisterErrorText } from './register-error-text';

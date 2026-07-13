@@ -15,10 +15,11 @@ public sealed class ElevenLabsConversationRealtimeAsrProvider(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
-
     public string Name => "elevenlabs-stt";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ElevenLabsSttApiKey);
+    public bool IsConfigured => IsConfiguredWith(optionsProvider.Current);
+
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => IsConfiguredWith(await optionsProvider.GetAsync(ct));
 
     public async Task<IConversationRealtimeAsrSession> StartAsync(
         ConversationRealtimeAsrStartRequest request,
@@ -131,6 +132,9 @@ public sealed class ElevenLabsConversationRealtimeAsrProvider(
     private static bool IsApprovedElevenLabsHost(Uri uri)
         => string.Equals(uri.Host, "api.elevenlabs.io", StringComparison.OrdinalIgnoreCase)
            && uri.Scheme is "https" or "wss";
+
+    private static bool IsConfiguredWith(ConversationOptions? options)
+        => options is not null && !string.IsNullOrWhiteSpace(options.ElevenLabsSttApiKey);
 
     private static bool CanUseRealProvider(ConversationOptions options, AdminLaunchReadinessSettingsResponse readiness)
         => options.RealtimeSttAllowRealProvider

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import WaveSurfer from 'wavesurfer.js';
 import { Button } from '@/components/ui/button';
 import { getMicroTap } from '@/lib/motion';
 import { Play, Pause, FastForward } from 'lucide-react';
@@ -18,7 +17,7 @@ interface AudioPlayerWaveformProps {
 
 export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, className }: AudioPlayerWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const waveSurferRef = useRef<WaveSurfer | null>(null);
+  const waveSurferRef = useRef<import('wavesurfer.js').default | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -77,39 +76,66 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
   useEffect(() => {
     if (!containerRef.current || !resolvedAudioUrl) return;
 
-    const ws = WaveSurfer.create({
-      container: containerRef.current,
-      waveColor: '#d8e0e8',
-      progressColor: '#7c3aed',
-      cursorColor: '#6d28d9',
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 2,
-      height: 60,
-      normalize: true,
-    });
+    let cancelled = false;
+    let waveSurfer: import('wavesurfer.js').default | null = null;
 
-    waveSurferRef.current = ws;
+    const initializeWaveform = async () => {
+      try {
+        const { default: WaveSurfer } = await import('wavesurfer.js');
+        if (cancelled || !containerRef.current) return;
 
-    ws.load(resolvedAudioUrl);
+        const ws = WaveSurfer.create({
+          container: containerRef.current,
+          waveColor: '#d8e0e8',
+          progressColor: '#7c3aed',
+          cursorColor: '#6d28d9',
+          barWidth: 2,
+          barGap: 1,
+          barRadius: 2,
+          height: 60,
+          normalize: true,
+        });
 
-    ws.on('ready', () => {
-      setIsReady(true);
-    });
+        waveSurfer = ws;
+        waveSurferRef.current = ws;
 
-    ws.on('error', () => {
-      setLoadError('Audio could not be loaded. Please refresh the workspace and try again.');
-      setIsReady(false);
-    });
+        ws.on('ready', () => {
+          if (!cancelled) setIsReady(true);
+        });
 
-    ws.on('play', () => setIsPlaying(true));
-    ws.on('pause', () => setIsPlaying(false));
-    ws.on('timeupdate', (currentTime) => {
-      handleTimeUpdate(currentTime);
-    });
+        ws.on('error', () => {
+          if (cancelled) return;
+          setLoadError('Audio could not be loaded. Please refresh the workspace and try again.');
+          setIsReady(false);
+        });
+
+        ws.on('play', () => {
+          if (!cancelled) setIsPlaying(true);
+        });
+        ws.on('pause', () => {
+          if (!cancelled) setIsPlaying(false);
+        });
+        ws.on('timeupdate', (currentTime) => {
+          if (!cancelled) handleTimeUpdate(currentTime);
+        });
+
+        await ws.load(resolvedAudioUrl);
+      } catch {
+        if (!cancelled) {
+          setLoadError('Audio could not be loaded. Please refresh the workspace and try again.');
+          setIsReady(false);
+        }
+      }
+    };
+
+    void initializeWaveform();
 
     return () => {
-      ws.destroy();
+      cancelled = true;
+      if (waveSurferRef.current === waveSurfer) {
+        waveSurferRef.current = null;
+      }
+      waveSurfer?.destroy();
     };
   }, [resolvedAudioUrl]);
 

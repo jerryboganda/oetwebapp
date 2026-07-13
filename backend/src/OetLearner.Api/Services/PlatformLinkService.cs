@@ -11,11 +11,11 @@ public sealed class PlatformLinkService(IRuntimeSettingsProvider settingsProvide
     private readonly BillingOptions _billing = billingOptions.Value;
 
     // The public-facing Build* methods are synchronous and called from many
-    // (already-resolved) services; fetch the merged DB-over-env platform view
-    // at call time. The provider caches the effective view for 30s and runs on
-    // ASP.NET Core (no sync context), so a blocking resolve here is safe.
+    // services. Read only the atomic last-known DB-over-env snapshot here;
+    // synchronous URL composition must never trigger database I/O.
     private PlatformSettings Platform()
-        => _settingsProvider.GetAsync(CancellationToken.None).GetAwaiter().GetResult().Platform;
+        => _settingsProvider.CurrentSnapshot?.Effective.Platform
+           ?? throw new InvalidOperationException("Runtime platform settings have not been initialized.");
 
     public string BuildApiUrl(string relativePath)
     {

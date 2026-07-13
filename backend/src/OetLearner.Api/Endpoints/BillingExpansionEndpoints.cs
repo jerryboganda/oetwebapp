@@ -177,7 +177,7 @@ public static class BillingExpansionEndpoints
         {
             return Results.NotFound();
         }
-        if (string.IsNullOrWhiteSpace(proofKey) || !storage.Exists(proofKey))
+        if (string.IsNullOrWhiteSpace(proofKey) || !await storage.ExistsAsync(proofKey, ct))
         {
             return Results.NotFound();
         }

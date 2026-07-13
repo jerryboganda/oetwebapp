@@ -9,7 +9,7 @@ public interface IConversationAudioService
     Task<ConversationAudioRef> WriteAsync(byte[] audio, string mimeType, CancellationToken ct);
     Task<ConversationAudioRef> WriteAsync(Stream audio, string mimeType, CancellationToken ct);
     Task<Stream?> OpenReadAsync(string key, CancellationToken ct);
-    bool Delete(string key);
+    Task<bool> DeleteAsync(string key, CancellationToken ct);
 }
 
 public sealed record ConversationAudioRef(string Key, string Url, string MimeType, long Bytes, string Sha256);
@@ -47,7 +47,7 @@ public sealed class ConversationAudioService(
         buffer.Position = 0;
         var ext = GuessExtension(mimeType);
         var key = $"{Root}/{sha[..2]}/{sha.Substring(2, 2)}/{sha}.{ext}";
-        if (!storage.Exists(key))
+        if (!await storage.ExistsAsync(key, ct))
         {
             await storage.WriteAsync(key, buffer, ct);
             logger.LogDebug("Persisted conversation audio {Key} ({Bytes} bytes)", key, total);
@@ -56,13 +56,14 @@ public sealed class ConversationAudioService(
             $"/v1/conversations/media/{sha}.{ext}", mimeType, total, sha);
     }
 
-    public Task<Stream?> OpenReadAsync(string key, CancellationToken ct)
+    public async Task<Stream?> OpenReadAsync(string key, CancellationToken ct)
     {
-        if (!storage.Exists(key)) return Task.FromResult<Stream?>(null);
-        return storage.OpenReadAsync(key, ct).ContinueWith(t => (Stream?)t.Result, ct);
+        if (!await storage.ExistsAsync(key, ct)) return null;
+        return await storage.OpenReadAsync(key, ct);
     }
 
-    public bool Delete(string key) => storage.Delete(key);
+    public async Task<bool> DeleteAsync(string key, CancellationToken ct)
+        => await storage.DeleteAsync(key, ct);
 
     internal static string GuessExtension(string mime) => mime switch
     {

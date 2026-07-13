@@ -221,7 +221,7 @@ public sealed class MockBookingRecordingService
         var safeMime = NormaliseMimeType(mimeType);
         var ext = GuessExtension(safeMime);
         var key = $"{Root}/{bookingId}/chunks/part-{part:000}-{sha}.{ext}";
-        if (!_storage.Exists(key))
+        if (!await _storage.ExistsAsync(key, ct))
         {
             await _storage.WriteAsync(key, buffer, ct);
         }

@@ -37,49 +37,50 @@ public sealed class ListeningV2BackfillService : BackgroundService
 
         try
         {
-            await using var scope = _scopes.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-            var pathway = scope.ServiceProvider.GetRequiredService<ListeningPathwayProgressService>();
-
-            // Find candidate users: have at least one Listening attempt and
-            // no pathway rows yet.
-            var withAttempts = await db.ListeningAttempts
-                .Select(a => a.UserId)
-                .Distinct()
-                .ToListAsync(stoppingToken);
-            if (withAttempts.Count == 0) return;
-
-            var alreadySeeded = await db.ListeningPathwayProgress
-                .Select(p => p.UserId)
-                .Distinct()
-                .ToListAsync(stoppingToken);
-            var pending = withAttempts.Except(alreadySeeded).ToList();
-            if (pending.Count == 0) return;
-
-            _log.LogInformation(
-                "Listening V2 backfill: seeding pathway for {Count} users.",
-                pending.Count);
-
-            foreach (var userId in pending)
-            {
-                if (stoppingToken.IsCancellationRequested) break;
-                try
-                {
-                    await pathway.RecomputeAsync(userId, stoppingToken);
-                }
-                catch (Exception ex)
-                {
-                    _log.LogWarning(ex,
-                        "Listening V2 backfill failed for user {UserId}.", userId);
-                }
-            }
-
-            _log.LogInformation("Listening V2 backfill complete.");
+            await RunOnceAsync(stoppingToken);
         }
         catch (OperationCanceledException) { /* shutdown */ }
         catch (Exception ex)
         {
             _log.LogError(ex, "Listening V2 backfill threw at top level — skipping.");
         }
+    }
+
+    internal async Task<int> RunOnceAsync(CancellationToken ct)
+    {
+        await using var scope = _scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        // Let the database perform the anti-join so an already-current startup
+        // returns no rows instead of materializing both complete user sets.
+        var pending = await db.ListeningAttempts
+            .Where(attempt => !db.ListeningPathwayProgress
+                .Any(progress => progress.UserId == attempt.UserId))
+            .Select(attempt => attempt.UserId)
+            .Distinct()
+            .ToListAsync(ct);
+        if (pending.Count == 0) return 0;
+
+        _log.LogInformation(
+            "Listening V2 backfill: seeding pathway for {Count} users.",
+            pending.Count);
+
+        var pathway = scope.ServiceProvider.GetRequiredService<ListeningPathwayProgressService>();
+        foreach (var userId in pending)
+        {
+            if (ct.IsCancellationRequested) break;
+            try
+            {
+                await pathway.RecomputeAsync(userId, ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex,
+                    "Listening V2 backfill failed for user {UserId}.", userId);
+            }
+        }
+
+        _log.LogInformation("Listening V2 backfill complete.");
+        return pending.Count;
     }
 }

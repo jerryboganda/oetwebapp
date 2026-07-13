@@ -34,6 +34,7 @@ export default function VocabularyPage() {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const microHover = getMicroHover(reducedMotion);
   const [myList, setMyList] = useState<MyVocabItem[]>([]);
+  const [myListTotal, setMyListTotal] = useState(0);
   const [stats, setStats] = useState<VocabularyStats | null>(null);
   const [dailySet, setDailySet] = useState<VocabularyDailySet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,13 +50,14 @@ export default function VocabularyPage() {
     setLoading(true);
     try {
       const [listR, statsR, dailyR] = await Promise.allSettled([
-        fetchMyVocabulary(),
+        fetchMyVocabulary(undefined, { page: 1, pageSize: 20 }),
         fetchVocabularyStats(),
         fetchVocabularyDailySet(10),
       ]);
       if (listR.status === 'fulfilled') {
-        const items = Array.isArray(listR.value) ? listR.value : ((listR.value as { items?: MyVocabItem[] })?.items ?? []);
+        const items = Array.isArray(listR.value) ? listR.value : listR.value.items;
         setMyList(items as MyVocabItem[]);
+        setMyListTotal(Array.isArray(listR.value) ? items.length : listR.value.total);
       }
       if (statsR.status === 'fulfilled') {
         setStats(statsR.value as VocabularyStats);
@@ -76,6 +78,7 @@ export default function VocabularyPage() {
       await removeFromMyVocabulary(termId);
       analytics.track('vocab_removed', { termId });
       setMyList(prev => prev.filter(i => i.termId !== termId));
+      setMyListTotal(prev => Math.max(0, prev - 1));
       // Refresh stats in the background; keep optimistic UI.
       void fetchVocabularyStats().then(s => setStats(s as VocabularyStats)).catch(() => {});
     } catch {
@@ -238,9 +241,9 @@ export default function VocabularyPage() {
               </button>
             </MotionItem>
           ))}
-          {myList.length > 20 && (
+          {myListTotal > myList.length && (
             <div className="px-4 py-3 text-center text-sm text-muted">
-              +{myList.length - 20} more words in your list
+              +{myListTotal - myList.length} more words in your list
             </div>
           )}
         </div>

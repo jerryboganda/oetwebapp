@@ -68,8 +68,36 @@ public static class VocabularyEndpoints
             Results.Ok(await svc.GetCategoriesAsync(examTypeCode, profession, ct)));
 
         // ── Learner list ─────────────────────────────────────────────────
-        vocab.MapGet("/my-list", async (HttpContext http, [FromQuery] string? mastery, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
-            Results.Ok(await svc.GetMyVocabularyAsync(http.UserId(), mastery, ct, await http.IsPremiumAsync(entitlements, ct))));
+        vocab.MapGet("/my-list", async (
+            HttpContext http,
+            [FromQuery] string? mastery,
+            [FromQuery] string? termId,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
+            VocabularyService svc,
+            IEffectiveEntitlementResolver entitlements,
+            CancellationToken ct) =>
+        {
+            var isPremium = await http.IsPremiumAsync(entitlements, ct);
+
+            // No pagination parameters keeps the original top-level array shape
+            // for external/legacy callers. Supplying either parameter opts into
+            // the version-safe page envelope.
+            if (page is null && pageSize is null)
+            {
+                return Results.Ok(await svc.GetMyVocabularyAsync(
+                    http.UserId(), mastery, ct, isPremium, termId));
+            }
+
+            return Results.Ok(await svc.GetMyVocabularyPageAsync(
+                http.UserId(),
+                mastery,
+                page is > 0 ? page.Value : 1,
+                pageSize is > 0 ? Math.Min(pageSize.Value, 100) : 20,
+                ct,
+                isPremium,
+                termId));
+        });
 
         vocab.MapPost("/my-list/{termId}", async (HttpContext http, string termId, AddToMyVocabularyRequest? body, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
         {

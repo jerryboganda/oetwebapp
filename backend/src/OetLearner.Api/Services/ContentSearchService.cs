@@ -9,19 +9,41 @@ namespace OetLearner.Api.Services;
 /// </summary>
 public class ContentSearchService(LearnerDbContext db)
 {
+    private const int MaxPageSize = 100;
+    private const int MaxRecommendationCount = 100;
+
     /// <summary>
     /// Search content items with multiple filter dimensions.
     /// </summary>
     public async Task<object> SearchContentAsync(ContentSearchQuery query, CancellationToken ct)
     {
+        var page = Math.Max(query.Page, 1);
+        var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
+        var offset = (int)Math.Min((long)(page - 1) * pageSize, int.MaxValue);
+
         var q = db.ContentItems
+            .AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published && c.FreshnessConfidence != "superseded");
 
         if (!string.IsNullOrEmpty(query.Text))
         {
-            var lower = query.Text.ToLower();
-            q = q.Where(c => c.Title.ToLower().Contains(lower)
-                              || c.DetailJson.ToLower().Contains(lower));
+            var text = query.Text;
+            var pattern = ToContainsPattern(text);
+            if (db.Database.IsNpgsql())
+            {
+                q = q.Where(c => EF.Functions.ILike(c.Title, pattern, @"\")
+                                 || EF.Functions.ILike(c.DetailJson, pattern, @"\"));
+            }
+            else if (db.Database.IsInMemory())
+            {
+                q = q.Where(c => c.Title.Contains(text, StringComparison.OrdinalIgnoreCase)
+                                 || c.DetailJson.Contains(text, StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                q = q.Where(c => EF.Functions.Like(c.Title, pattern, @"\")
+                                 || EF.Functions.Like(c.DetailJson, pattern, @"\"));
+            }
         }
         if (!string.IsNullOrEmpty(query.SubtestCode))
             q = q.Where(c => c.SubtestCode == query.SubtestCode);
@@ -47,7 +69,7 @@ public class ContentSearchService(LearnerDbContext db)
 
         var items = await q
             .OrderByDescending(c => c.QualityScore).ThenBy(c => c.Title)
-            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
+            .Skip(offset).Take(pageSize)
             .Select(c => new
             {
                 c.Id, c.Title, c.SubtestCode, c.ContentType, c.ProfessionId,
@@ -58,7 +80,7 @@ public class ContentSearchService(LearnerDbContext db)
             })
             .ToListAsync(ct);
 
-        return new { items, total, page = query.Page, pageSize = query.PageSize };
+        return new { items, total, page, pageSize };
     }
 
     /// <summary>
@@ -67,6 +89,7 @@ public class ContentSearchService(LearnerDbContext db)
     public async Task<object> GetSearchFacetsAsync(CancellationToken ct)
     {
         var published = db.ContentItems
+            .AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published && c.FreshnessConfidence != "superseded");
 
         var subtestFacets = await published
@@ -110,8 +133,11 @@ public class ContentSearchService(LearnerDbContext db)
     /// </summary>
     public async Task<object> GetRecommendationsAsync(string userId, int count, CancellationToken ct)
     {
+        count = Math.Clamp(count, 1, MaxRecommendationCount);
+
         // Get user's attempt history to find gaps
         var recentAttempts = await db.Attempts
+            .AsNoTracking()
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.StartedAt)
             .Take(50)
@@ -130,6 +156,7 @@ public class ContentSearchService(LearnerDbContext db)
 
         // Get content items not yet attempted, prioritizing weakest subtest
         var recommendations = await db.ContentItems
+            .AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published
                         && c.FreshnessConfidence != "superseded"
                         && !attemptedContentIds.Contains(c.Id))
@@ -148,15 +175,18 @@ public class ContentSearchService(LearnerDbContext db)
 
         // Quick-access sections
         var officialSamples = await db.ContentItems
+            .AsNoTracking()
             .Where(c => c.SourceProvenance == "official_sample" && c.Status == ContentStatus.Published)
             .Take(5).Select(c => new { c.Id, c.Title, c.SubtestCode }).ToListAsync(ct);
 
         var recentRecalls = await db.ContentItems
+            .AsNoTracking()
             .Where(c => c.SourceProvenance == "recall" && c.Status == ContentStatus.Published)
             .OrderByDescending(c => c.CreatedAt).Take(5)
             .Select(c => new { c.Id, c.Title, c.SubtestCode }).ToListAsync(ct);
 
         var freeWebinars = await db.FreePreviewAssets
+            .AsNoTracking()
             .Where(a => a.PreviewType == "webinar_replay" && a.Status == ContentStatus.Published)
             .Take(5).Select(a => new { a.Id, a.Title }).ToListAsync(ct);
 
@@ -166,6 +196,15 @@ public class ContentSearchService(LearnerDbContext db)
             weakestSubtest = weakest,
             quickAccess = new { officialSamples, recentRecalls, freeWebinars }
         };
+    }
+
+    private static string ToContainsPattern(string value)
+    {
+        var escaped = value
+            .Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal);
+        return $"%{escaped}%";
     }
 }
 

@@ -24,7 +24,9 @@ public sealed class ExternalIdentityProviderClient(
 
     public Uri BuildAuthorizationUri(string provider, string state, string redirectUri)
     {
-        var configuration = GetProviderConfigurationAsync(provider, CancellationToken.None).GetAwaiter().GetResult();
+        // URI composition is synchronous by interface contract. Runtime
+        // credentials come only from the provider's last-known atomic snapshot.
+        var configuration = ResolveProviderConfiguration(provider, _runtimeSettings?.CurrentSnapshot);
         var parameters = provider switch
         {
             ExternalAuthProviders.Google => new Dictionary<string, string?>
@@ -65,7 +67,10 @@ public sealed class ExternalIdentityProviderClient(
             throw ApiException.Validation("external_auth_code_required", "The external sign-in code is missing.");
         }
 
-        var configuration = await GetProviderConfigurationAsync(provider, cancellationToken);
+        var snapshot = _runtimeSettings is null
+            ? null
+            : await _runtimeSettings.GetSnapshotAsync(cancellationToken);
+        var configuration = ResolveProviderConfiguration(provider, snapshot);
         var tokenPayload = await ExchangeAuthorizationCodeAsync(provider, configuration, code, redirectUri, cancellationToken);
         var accessToken = tokenPayload.GetProperty("access_token").GetString();
         if (string.IsNullOrWhiteSpace(accessToken))
@@ -188,7 +193,9 @@ public sealed class ExternalIdentityProviderClient(
             profile.EmailVerified ?? false);
     }
 
-    private async Task<ExternalAuthProviderOptions> GetProviderConfigurationAsync(string provider, CancellationToken ct)
+    private ExternalAuthProviderOptions ResolveProviderConfiguration(
+        string provider,
+        RuntimeSettingsSnapshot? snapshot)
     {
         if (!ExternalAuthProviders.All.Contains(provider, StringComparer.OrdinalIgnoreCase))
         {
@@ -196,7 +203,7 @@ public sealed class ExternalIdentityProviderClient(
         }
 
         var configuration = _options.GetProvider(provider);
-        if (_runtimeSettings is not null
+        if (snapshot is not null
             && (provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
                 || provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase)
                 || provider.Equals(ExternalAuthProviders.LinkedIn, StringComparison.OrdinalIgnoreCase)))
@@ -204,7 +211,7 @@ public sealed class ExternalIdentityProviderClient(
             // A DB override is "present" when the credentials for that provider
             // have been stored. LinkedIn's ClientId is encrypted at rest (Wave 4),
             // so we probe the *Encrypted column the same way as the secrets.
-            var raw = await _runtimeSettings.GetRawAsync(ct);
+            var raw = snapshot.Raw;
             var hasRuntimeOverride = provider switch
             {
                 _ when provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
@@ -214,7 +221,7 @@ public sealed class ExternalIdentityProviderClient(
                 _ => !string.IsNullOrWhiteSpace(raw.LinkedInClientIdEncrypted) && !string.IsNullOrWhiteSpace(raw.LinkedInClientSecretEncrypted),
             };
             // The per-provider Enabled toggle may itself come from the DB (Wave 4).
-            var effective = (await _runtimeSettings.GetAsync(ct)).OAuth;
+            var effective = snapshot.Effective.OAuth;
             var dbEnabled = provider switch
             {
                 _ when provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase) => effective.GoogleAuthEnabled,

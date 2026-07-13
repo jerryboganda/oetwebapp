@@ -236,10 +236,9 @@ public sealed class ExternalAuthService(
 
     private string ResolvePublicWebBaseUrl()
     {
-        // DB-over-env: read the merged Platform view (admin-configurable) at call
-        // time. The provider caches the effective view for 30s; ASP.NET Core has
-        // no sync context so a blocking resolve from these sync helpers is safe.
-        var configured = _settingsProvider.GetAsync(CancellationToken.None).GetAwaiter().GetResult().Platform.PublicWebBaseUrl;
+        // These URI helpers are synchronous by contract. Use only the atomic
+        // last-known DB-over-env snapshot; never block on settings I/O.
+        var configured = _settingsProvider.CurrentSnapshot?.Effective.Platform.PublicWebBaseUrl;
         if (string.IsNullOrWhiteSpace(configured))
         {
             throw ApiException.Validation(

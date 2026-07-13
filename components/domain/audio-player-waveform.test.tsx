@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerWaveform } from './audio-player-waveform';
 
@@ -88,5 +88,16 @@ describe('AudioPlayerWaveform', () => {
     expect(() =>
       render(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />),
     ).not.toThrow();
+  });
+
+  it('destroys the asynchronously loaded WaveSurfer instance on unmount', async () => {
+    const { unmount } = render(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
+
+    await waitFor(() => expect(createdInstances).toHaveLength(1));
+    const instance = createdInstances[0];
+
+    unmount();
+
+    expect(instance.destroyed).toBe(true);
   });
 });

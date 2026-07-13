@@ -320,7 +320,7 @@ public sealed class WritingOcrService(
                 }
                 return null;
             }
-            if (storage.Exists(url))
+            if (await storage.ExistsAsync(url, ct))
             {
                 return await ReadStorageBytesAsync(url, ct);
             }

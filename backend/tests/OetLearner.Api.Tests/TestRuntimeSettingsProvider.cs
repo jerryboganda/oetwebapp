@@ -9,6 +9,9 @@ namespace OetLearner.Api.Tests;
 
 internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, RuntimeSettingsRow? raw = null) : IRuntimeSettingsProvider
 {
+    public RuntimeSettingsSnapshot CurrentSnapshot { get; } =
+        new(settings, raw ?? new RuntimeSettingsRow { Id = "default" });
+
     /// <summary>
     /// A fully-populated <see cref="EffectiveSettings"/> with every sub-record at
     /// its default. Tests override only what they care about via the record
