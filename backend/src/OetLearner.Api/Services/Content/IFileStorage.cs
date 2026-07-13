@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 
@@ -51,20 +52,26 @@ public interface IFileStorage
     /// Concrete implementations ensure parent directories exist.</summary>
     Task<Stream> OpenWriteAsync(string key, CancellationToken ct);
 
-    bool Exists(string key);
+    Task<bool> ExistsAsync(string key, CancellationToken ct);
 
     /// <summary>
-    /// Enumerate storage keys under the given prefix (recursive), in POSIX-key
-    /// form. Used by maintenance sweeps (e.g. orphaned-audio cleanup). Default
-    /// is empty so the many test doubles need not implement it; the real
-    /// LocalFileStorage / S3 providers override.
+    /// Asynchronously enumerate storage keys under the given prefix (recursive),
+    /// in POSIX-key form. Used by maintenance sweeps (e.g. orphaned-audio
+    /// cleanup). Default is empty so test doubles that do not support listing
+    /// need not implement it; the real LocalFileStorage / S3 providers override.
     /// </summary>
-    IEnumerable<string> ListKeys(string prefix) => Enumerable.Empty<string>();
+    async IAsyncEnumerable<string> ListKeysAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        yield break;
+    }
 
-    bool Delete(string key);
-    long Length(string key);
-    void Move(string sourceKey, string destKey, bool overwrite);
-    int DeletePrefix(string prefix);
+    Task<bool> DeleteAsync(string key, CancellationToken ct);
+    Task<long> LengthAsync(string key, CancellationToken ct);
+    Task MoveAsync(string sourceKey, string destKey, bool overwrite, CancellationToken ct);
+    Task<int> DeletePrefixAsync(string prefix, CancellationToken ct);
     string? TryResolveLocalPath(string key);
 
     /// <summary>
@@ -114,6 +121,7 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
 
     public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var fullPath = ResolvePath(key);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         Stream s = new FileStream(fullPath, FileMode.Create, FileAccess.Write,
@@ -121,50 +129,77 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
         return Task.FromResult(s);
     }
 
-    public bool Exists(string key) => File.Exists(ResolvePath(key));
+    public Task<bool> ExistsAsync(string key, CancellationToken ct)
+    {
+        var fullPath = ResolvePath(key);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(File.Exists(fullPath));
+    }
 
-    public IEnumerable<string> ListKeys(string prefix)
+    public async IAsyncEnumerable<string> ListKeysAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         var dir = ResolvePath(prefix);
-        if (!Directory.Exists(dir)) return [];
+        ct.ThrowIfCancellationRequested();
+        if (!Directory.Exists(dir)) yield break;
+
         var rootPath = Path.GetFullPath(
             Path.IsPathRooted(_options.LocalRootPath)
                 ? _options.LocalRootPath
                 : Path.Combine(environment.ContentRootPath, _options.LocalRootPath));
-        return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
-            .Select(f => Path.GetRelativePath(rootPath, f).Replace('\\', '/'));
+
+        foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return Path.GetRelativePath(rootPath, file).Replace('\\', '/');
+        }
     }
 
-    public bool Delete(string key)
+    public Task<bool> DeleteAsync(string key, CancellationToken ct)
     {
         var fullPath = ResolvePath(key);
-        if (!File.Exists(fullPath)) return false;
+        ct.ThrowIfCancellationRequested();
+        if (!File.Exists(fullPath)) return Task.FromResult(false);
         File.Delete(fullPath);
-        return true;
+        return Task.FromResult(true);
     }
 
-    public long Length(string key) => new FileInfo(ResolvePath(key)).Length;
+    public Task<long> LengthAsync(string key, CancellationToken ct)
+    {
+        var fullPath = ResolvePath(key);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new FileInfo(fullPath).Length);
+    }
 
-    public void Move(string sourceKey, string destKey, bool overwrite)
+    public Task MoveAsync(
+        string sourceKey,
+        string destKey,
+        bool overwrite,
+        CancellationToken ct)
     {
         var src = ResolvePath(sourceKey);
         var dst = ResolvePath(destKey);
+        ct.ThrowIfCancellationRequested();
         Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
         if (File.Exists(dst))
         {
-            if (!overwrite) return;
+            if (!overwrite) return Task.CompletedTask;
             File.Delete(dst);
         }
         File.Move(src, dst);
+        return Task.CompletedTask;
     }
 
-    public int DeletePrefix(string prefix)
+    public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
     {
         var fullPath = ResolvePath(prefix);
-        if (!Directory.Exists(fullPath)) return 0;
+        ct.ThrowIfCancellationRequested();
+        if (!Directory.Exists(fullPath)) return Task.FromResult(0);
         var fileCount = Directory.GetFiles(fullPath, "*", SearchOption.AllDirectories).Length;
+        ct.ThrowIfCancellationRequested();
         Directory.Delete(fullPath, recursive: true);
-        return fileCount;
+        return Task.FromResult(fileCount);
     }
 
     public string? TryResolveLocalPath(string key) => ResolvePath(key);

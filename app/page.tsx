@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import {
@@ -45,20 +46,20 @@ import { AsyncStateWrapper } from '@/components/state';
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
+import { AuthContext } from '@/contexts/auth-context';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import {
   learnerGetScoringPolicy,
   fetchMyAiPackageCredits,
   fetchMyEntitlementSnapshot,
   fetchSubscriptionMe,
-  type ScoringPolicyLearnerDto,
   type MyEntitlementSnapshot,
   type SubscriptionMe,
 } from '@/lib/api';
+import { queryKeys } from '@/lib/query/hooks';
 import { formatMoney } from '@/lib/money';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
-import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Writing: FilePenLine,
@@ -201,15 +202,49 @@ export default function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefersReducedMotion = useReducedMotion();
+  const authContext = useContext(AuthContext);
+  const queryClient = useQueryClient();
   const { data, error, reload, status } = useDashboardHome();
-  const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicyLearnerDto | null>(null);
   const [scoringExpanded, setScoringExpanded] = useState(false);
-  const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
-  const [subscription, setSubscription] = useState<SubscriptionMe | null>(null);
-  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
-  const [subscriptionError, setSubscriptionError] = useState(false);
-  const [aiPackageCredits, setAiPackageCredits] = useState<AiPackageCreditSnapshot | null>(null);
   const purchaseSuccess = searchParams?.get('purchase') === 'success';
+  const queryUserId = authContext?.user?.userId ?? 'current';
+  const supplementalQueriesEnabled = authContext
+    ? !authContext.loading && authContext.isAuthenticated
+    : true;
+  const scoringPolicyQuery = useQuery({
+    queryKey: queryKeys.dashboard.scoringPolicy(queryUserId),
+    queryFn: learnerGetScoringPolicy,
+    staleTime: 60_000,
+    enabled: supplementalQueriesEnabled,
+  });
+  const entitlementQuery = useQuery({
+    queryKey: queryKeys.dashboard.entitlement(queryUserId),
+    queryFn: fetchMyEntitlementSnapshot,
+    staleTime: 30_000,
+    enabled: supplementalQueriesEnabled,
+  });
+  const subscriptionQuery = useQuery({
+    queryKey: queryKeys.dashboard.subscription(queryUserId),
+    queryFn: fetchSubscriptionMe,
+    staleTime: 30_000,
+    enabled: supplementalQueriesEnabled,
+  });
+  const aiPackageCreditsQuery = useQuery({
+    queryKey: queryKeys.dashboard.aiPackageCredits(queryUserId),
+    queryFn: fetchMyAiPackageCredits,
+    staleTime: 30_000,
+    enabled: supplementalQueriesEnabled && purchaseSuccess,
+  });
+  const scoringPolicy = scoringPolicyQuery.data ?? null;
+  const entitlement = entitlementQuery.data ?? null;
+  const subscription = subscriptionQuery.data ?? null;
+  const aiPackageCredits = aiPackageCreditsQuery.data ?? null;
+  const subscriptionLoading = subscriptionQuery.isPending;
+  const subscriptionError = Boolean(subscriptionQuery.error);
+  const supplementalError = scoringPolicyQuery.error
+    ?? entitlementQuery.error
+    ?? subscriptionQuery.error
+    ?? aiPackageCreditsQuery.error;
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
@@ -228,52 +263,13 @@ export default function Dashboard() {
   const readinessUpdatedAt = liveReadiness?.evidence?.lastUpdated ?? loadedAt;
 
   useEffect(() => {
-    let cancelled = false;
-    learnerGetScoringPolicy()
-      .then((policy) => {
-        if (!cancelled) setScoringPolicy(policy);
-      })
-      .catch(() => {
-        if (!cancelled) setScoringPolicy(null);
-      });
-    fetchMyEntitlementSnapshot()
-      .then((snapshot) => {
-        if (!cancelled) setEntitlement(snapshot);
-      })
-      .catch(() => {
-        if (!cancelled) setEntitlement(null);
-      });
-    fetchSubscriptionMe()
-      .then((nextSubscription) => {
-        if (!cancelled) {
-          setSubscription(nextSubscription);
-          setSubscriptionError(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSubscription(null);
-          setSubscriptionError(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSubscriptionLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!purchaseSuccess) return;
-    let cancelled = false;
-    fetchMyAiPackageCredits()
-      .then((snapshot) => {
-        if (!cancelled) setAiPackageCredits(snapshot);
-      })
-      .catch(() => {
-        if (!cancelled) setAiPackageCredits(null);
-      });
-    return () => { cancelled = true; };
-  }, [purchaseSuccess]);
+    if (!purchaseSuccess || !supplementalQueriesEnabled) return;
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.entitlement(queryUserId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.subscription(queryUserId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits(queryUserId) }),
+    ]);
+  }, [purchaseSuccess, queryClient, queryUserId, supplementalQueriesEnabled]);
 
   const dashboardHeroHighlights = [
     {
@@ -373,6 +369,11 @@ export default function Dashboard() {
               AI package purchase received. Current balances: {aiPackageCredits
                 ? `${aiPackageCredits.flexibleCredits} flexible, ${aiPackageCredits.writingOnlyCredits} writing, ${aiPackageCredits.speakingOnlyCredits} speaking, ${aiPackageCredits.mockExamsRemaining} mocks.`
                 : 'refreshing your package balance.'}
+            </InlineAlert>
+          ) : null}
+          {supplementalError ? (
+            <InlineAlert variant="warning">
+              Some scoring, entitlement, or subscription details could not be refreshed. Previously loaded details may be out of date.
             </InlineAlert>
           ) : null}
           <LearnerPageHero

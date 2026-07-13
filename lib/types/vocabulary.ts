@@ -78,6 +78,13 @@ export interface LearnerVocabulary {
   sourceRef: string | null;
 }
 
+export interface MyVocabularyPageResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: LearnerVocabulary[];
+}
+
 export interface VocabularyQuizResult {
   id: string;
   format: string;

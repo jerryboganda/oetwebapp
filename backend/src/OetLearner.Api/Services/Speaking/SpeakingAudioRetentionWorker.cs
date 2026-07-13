@@ -144,9 +144,9 @@ public sealed class SpeakingAudioRetentionWorker(
             var canClearPointer = true;
             try
             {
-                if (storage.Exists(key))
+                if (await storage.ExistsAsync(key, ct))
                 {
-                    storage.Delete(key);
+                    await storage.DeleteAsync(key, ct);
                     deletedBlobs++;
                 }
             }
@@ -252,9 +252,9 @@ public sealed class SpeakingAudioRetentionWorker(
                 if (mediaAsset is not null && !string.IsNullOrWhiteSpace(mediaAsset.StoragePath))
                 {
                     storageKey = mediaAsset.StoragePath;
-                    if (storage.Exists(storageKey))
+                    if (await storage.ExistsAsync(storageKey, ct))
                     {
-                        blobDeleted = storage.Delete(storageKey);
+                        blobDeleted = await storage.DeleteAsync(storageKey, ct);
                     }
                 }
             }

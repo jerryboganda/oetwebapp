@@ -17,7 +17,7 @@ describe('useApiMutation (FE-006)', () => {
     const mutationFn = vi.fn(async (n: number) => n * 2);
 
     const { result } = renderHook(
-      () => useApiMutation(mutationFn, [queryKeys.listening.lessons, queryKeys.dashboard.home]),
+      () => useApiMutation(mutationFn, [queryKeys.listening.lessons, queryKeys.dashboard.home('learner-1')]),
       { wrapper: makeWrapper(client) },
     );
 
@@ -27,7 +27,7 @@ describe('useApiMutation (FE-006)', () => {
 
     expect(mutationFn.mock.calls[0][0]).toBe(21);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.listening.lessons });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.dashboard.home });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.dashboard.home('learner-1') });
   });
 
   it('does not invalidate when the mutation fails', async () => {

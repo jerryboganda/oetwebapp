@@ -93,10 +93,10 @@ public static class RulebookReferencePdfEndpoints
             }
             var publishedKey = ContentAddressed.PublishedKey(
                 storageOptions.Value.ContentUpload.PublishedSubpath, sha, ext);
-            if (!storage.Exists(publishedKey))
-                storage.Move(stagingKey, publishedKey, overwrite: false);
+            if (!await storage.ExistsAsync(publishedKey, ct))
+                await storage.MoveAsync(stagingKey, publishedKey, overwrite: false, ct);
             else
-                storage.Delete(stagingKey);
+                await storage.DeleteAsync(stagingKey, ct);
 
             var existing = await db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha && m.Format == "pdf", ct);
             string mediaId;

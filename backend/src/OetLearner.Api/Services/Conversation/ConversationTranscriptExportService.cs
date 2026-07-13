@@ -41,7 +41,7 @@ public sealed class ConversationTranscriptExportService(IFileStorage storage) : 
             : Encoding.UTF8.GetBytes(text);
         var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         var key = ContentAddressed.PublishedKey(Root, sha, normalized);
-        if (!storage.Exists(key))
+        if (!await storage.ExistsAsync(key, ct))
         {
             await using var ms = new MemoryStream(bytes, writable: false);
             await storage.WriteAsync(key, ms, ct);

@@ -22,13 +22,25 @@ public class SpacedRepetitionService(LearnerDbContext db, ISpacedRepetitionSched
     public async Task<object> GetReviewSummaryAsync(string userId, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var total = await db.ReviewItems.CountAsync(r => r.UserId == userId && r.Status == "active", ct);
-        var due = await db.ReviewItems.CountAsync(r => r.UserId == userId && r.Status == "active" && r.DueDate <= today, ct);
-        var dueToday = await db.ReviewItems.CountAsync(r => r.UserId == userId && r.Status == "active" && r.DueDate == today, ct);
-        var mastered = await db.ReviewItems.CountAsync(r => r.UserId == userId && r.Status == "mastered", ct);
-        var upcoming = await db.ReviewItems.CountAsync(r => r.UserId == userId && r.Status == "active" && r.DueDate > today && r.DueDate <= today.AddDays(7), ct);
+        var upcomingEnd = today.AddDays(7);
+        var summary = await db.ReviewItems
+            .AsNoTracking()
+            .Where(r => r.UserId == userId)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                total = group.Count(r => r.Status == "active"),
+                due = group.Count(r => r.Status == "active" && r.DueDate <= today),
+                dueToday = group.Count(r => r.Status == "active" && r.DueDate == today),
+                mastered = group.Count(r => r.Status == "mastered"),
+                upcoming = group.Count(r =>
+                    r.Status == "active" &&
+                    r.DueDate > today &&
+                    r.DueDate <= upcomingEnd)
+            })
+            .SingleOrDefaultAsync(ct);
 
-        return new { total, due, dueToday, mastered, upcoming };
+        return summary ?? new { total = 0, due = 0, dueToday = 0, mastered = 0, upcoming = 0 };
     }
 
     public async Task<object> CreateReviewItemAsync(string userId, CreateReviewItemRequest request, CancellationToken ct)

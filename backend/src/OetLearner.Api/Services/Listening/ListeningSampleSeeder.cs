@@ -255,7 +255,7 @@ public sealed class ListeningSampleSeeder(
         var ext = info.Extension.TrimStart('.').ToLowerInvariant();
         var storageKey = $"uploads/published/{sha}.{ext}";
 
-        if (!storage.Exists(storageKey))
+        if (!await storage.ExistsAsync(storageKey, ct))
         {
             await using var src = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read,
                 FileShare.Read, 81920, useAsync: true);

@@ -42,12 +42,15 @@ public sealed class WhisperPronunciationAsrProvider(
     public bool IsConfigured =>
         credentialResolver.IsRegistryConfigured("whisper-asr") ||
         (!string.IsNullOrWhiteSpace(_options.WhisperApiKey) && !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl)) ||
-        TryGetAdminConfigured();
+        (runtimeSettings.CurrentSnapshot?.Effective.SpeakingWhisper.IsConfigured ?? false);
 
-    private bool TryGetAdminConfigured()
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
     {
-        try { return runtimeSettings.GetAsync().GetAwaiter().GetResult().SpeakingWhisper.IsConfigured; }
-        catch { return false; }
+        var registry = await credentialResolver.ResolveAsync(WhisperProviderCode, ct);
+        if (registry is not null && !string.IsNullOrWhiteSpace(registry.ApiKey)) return true;
+        if (!string.IsNullOrWhiteSpace(_options.WhisperApiKey)
+            && !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl)) return true;
+        return (await runtimeSettings.GetAsync(ct)).SpeakingWhisper.IsConfigured;
     }
 
     public async Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct)

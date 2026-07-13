@@ -116,6 +116,13 @@ public sealed record MyVocabularyItem(
     string? SourceRef
 );
 
+public sealed record MyVocabularyPageResponse(
+    int Total,
+    int Page,
+    int PageSize,
+    IReadOnlyList<MyVocabularyItem> Items
+);
+
 public sealed record MyVocabularyAddResponse(
     bool Added,
     MyVocabularyItem Item

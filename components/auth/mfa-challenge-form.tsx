@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { IconArrowRight, IconDeviceMobile, IconKey, IconShieldLock } from '@tabler/icons-react';
+import { ArrowRight, KeyRound, ShieldCheck, Smartphone } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from './auth-screen-shell';
@@ -76,13 +76,13 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
             <div className={styles.summaryList}>
               <div className={styles.summaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconDeviceMobile size={16} />
+                  <Smartphone size={16} />
                 </span>
                 <p>Open your authenticator app and enter the current 6-digit code for this account.</p>
               </div>
               <div className={styles.summaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconShieldLock size={16} />
+                  <ShieldCheck size={16} />
                 </span>
                 <p>This step must succeed before the platform restores the session and routes you onward.</p>
               </div>
@@ -106,7 +106,7 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
             disabled={!pendingMfaChallenge || isSubmittingCode}
           >
             <span>{isSubmittingCode ? 'Verifying code...' : 'Verify Code'}</span>
-            {!isSubmittingCode ? <IconArrowRight size={18} /> : null}
+            {!isSubmittingCode ? <ArrowRight size={18} /> : null}
           </button>
 
           <p className={styles.fieldHint} style={{ textAlign: 'center', marginTop: '0.75rem' }}>
@@ -142,7 +142,7 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
               disabled={!pendingMfaChallenge || isSubmittingRecovery || recoveryCode.trim().length === 0}
             >
               <span>{isSubmittingRecovery ? 'Checking recovery code...' : 'Use Recovery Code'}</span>
-              {!isSubmittingRecovery ? <IconKey size={18} /> : null}
+              {!isSubmittingRecovery ? <KeyRound size={18} /> : null}
             </button>
           </form>
         </div>

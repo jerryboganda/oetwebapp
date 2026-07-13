@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { IconUser, IconUserPlus } from "@tabler/icons-react";
+import { User, UserPlus } from "lucide-react";
 import { appendAuthNextParam, AUTH_ROUTES } from "@/lib/auth/routes";
 import styles from "./auth-screen-shell.module.scss";
 
@@ -15,13 +15,13 @@ const switchItems = [
     key: "signIn",
     label: "Login",
     href: AUTH_ROUTES.signIn,
-    icon: IconUser,
+    icon: User,
   },
   {
     key: "signUp",
     label: "Sign Up",
     href: AUTH_ROUTES.signUp,
-    icon: IconUserPlus,
+    icon: UserPlus,
   },
 ] as const;
 

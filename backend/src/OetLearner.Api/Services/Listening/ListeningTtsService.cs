@@ -77,6 +77,7 @@ public sealed class StubListeningTtsSynthesisProvider : IListeningTtsSynthesisPr
 
     public Task<byte[]> SynthesizeAsync(string text, string? speakerHint, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var safeText = text ?? string.Empty;
         var words = safeText.Split([' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Length;
         var ms = Math.Clamp(words * MsPerWord, MinMs, MaxMs);
@@ -93,6 +94,8 @@ public sealed class ListeningTtsService(
     ILogger<ListeningTtsService> logger) : IListeningTtsService
 {
     private const string OutputRootKey = "listening/tts";
+    private const int SilenceBufferSize = 81920;
+    private static readonly byte[] SilenceBuffer = new byte[SilenceBufferSize];
 
     public async Task<ListeningTtsSynthesisResult> SynthesizeAsync(
         string extractId, string adminId, CancellationToken ct)
@@ -142,14 +145,16 @@ public sealed class ListeningTtsService(
 
         WriteWavHeader(stream, sampleRate, pcmBytes);
 
-        var blob = stream.ToArray();
-        var sha = ComputeSha256Hex(blob);
+        var byteLength = stream.Length;
+        stream.Position = 0;
+        var hash = await SHA256.HashDataAsync(stream, ct);
+        var sha = Convert.ToHexString(hash).ToLowerInvariant();
         var key = ContentAddressed.PublishedKey(OutputRootKey, sha, "wav");
 
-        if (!storage.Exists(key))
+        if (!await storage.ExistsAsync(key, ct))
         {
-            using var src = new MemoryStream(blob);
-            await storage.WriteAsync(key, src, ct);
+            stream.Position = 0;
+            await storage.WriteAsync(key, stream, ct);
         }
 
         extract.AudioContentSha = sha;
@@ -171,7 +176,7 @@ public sealed class ListeningTtsService(
                 storageKey = key,
                 sha256 = sha,
                 durationMs = totalDurationMs,
-                bytes = blob.LongLength,
+                bytes = byteLength,
                 segments = segments.Count,
             }),
         });
@@ -182,7 +187,7 @@ public sealed class ListeningTtsService(
             AudioStorageKey: key,
             Sha256: sha,
             TotalDurationMs: totalDurationMs,
-            ByteLength: blob.LongLength,
+            ByteLength: byteLength,
             SegmentCount: segments.Count);
     }
 
@@ -211,20 +216,21 @@ public sealed class ListeningTtsService(
     private static int PcmDurationMs(int byteLength, int sampleRate)
         => byteLength <= 0 ? 0 : (int)((long)byteLength / 2 * 1000 / sampleRate);
 
-    private static async Task<long> AppendSilenceAsync(
+    internal static async Task<long> AppendSilenceAsync(
         Stream destination, int ms, int sampleRate, CancellationToken ct)
     {
-        var byteCount = sampleRate * ms / 1000 * 2;
+        var byteCount = (long)sampleRate * ms / 1000 * 2;
         if (byteCount <= 0) return 0;
-        var silence = new byte[byteCount];
-        await destination.WriteAsync(silence, ct);
-        return byteCount;
-    }
 
-    private static string ComputeSha256Hex(byte[] data)
-    {
-        var hash = SHA256.HashData(data);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        var remaining = byteCount;
+        while (remaining > 0)
+        {
+            var writeLength = (int)Math.Min(remaining, SilenceBuffer.Length);
+            await destination.WriteAsync(SilenceBuffer.AsMemory(0, writeLength), ct);
+            remaining -= writeLength;
+        }
+
+        return byteCount;
     }
 
     // WAV header writers — 16-bit mono PCM. Header is 44 bytes; we reserve

@@ -41,12 +41,60 @@ public sealed class ContentStalenessService(LearnerDbContext db, ILogger<Content
             .Where(c => c.Status == ContentStatus.Published)
             .ToListAsync(ct);
 
-        var results = new List<ContentStalenessAssessment>();
+        if (publishedContent.Count == 0)
+        {
+            logger.LogInformation("Computed staleness for 0 content items");
+            return [];
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var ninetyDaysAgo = now.AddDays(-90);
+        var contentIds = publishedContent.Select(content => content.Id).ToArray();
+        var subtestCodes = publishedContent
+            .Select(content => content.SubtestCode)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var attemptAggregates = await db.Attempts
+            .AsNoTracking()
+            .Where(attempt => contentIds.Contains(attempt.ContentId))
+            .GroupBy(attempt => attempt.ContentId)
+            .Select(group => new
+            {
+                ContentItemId = group.Key,
+                UsageCountLast90Days = group.Count(attempt => attempt.CreatedAt >= ninetyDaysAgo),
+                LastUsage = group.Max(attempt => (DateTimeOffset?)attempt.CreatedAt)
+            })
+            .ToListAsync(ct);
+        var attemptsByContent = attemptAggregates.ToDictionary(
+            aggregate => aggregate.ContentItemId,
+            aggregate => new AttemptUsageAggregate(
+                aggregate.UsageCountLast90Days,
+                aggregate.LastUsage),
+            StringComparer.Ordinal);
+
+        var criteriaRows = await db.Criteria
+            .AsNoTracking()
+            .Where(criterion => subtestCodes.Contains(criterion.SubtestCode))
+            .Select(criterion => new { criterion.SubtestCode, criterion.Code })
+            .ToListAsync(ct);
+        var criteriaBySubtest = criteriaRows
+            .GroupBy(criterion => criterion.SubtestCode, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(criterion => criterion.Code).ToList(),
+                StringComparer.Ordinal);
+
+        var results = new List<ContentStalenessAssessment>(publishedContent.Count);
         foreach (var content in publishedContent)
         {
-            var assessment = await ComputeForContentAsync(content.Id, ct);
-            if (assessment is not null)
-                results.Add(assessment);
+            attemptsByContent.TryGetValue(content.Id, out var usage);
+            criteriaBySubtest.TryGetValue(content.SubtestCode, out var criteria);
+            results.Add(AssessContent(
+                content,
+                usage ?? AttemptUsageAggregate.Empty,
+                criteria ?? [],
+                now));
         }
 
         logger.LogInformation("Computed staleness for {Count} content items", results.Count);
@@ -64,10 +112,6 @@ public sealed class ContentStalenessService(LearnerDbContext db, ILogger<Content
         var now = DateTimeOffset.UtcNow;
         var ninetyDaysAgo = now.AddDays(-90);
 
-        // Days since last edit
-        var lastEdit = content.UpdatedAt > content.CreatedAt ? content.UpdatedAt : content.CreatedAt;
-        var daysSinceEdit = (now - lastEdit).Days;
-
         // Usage count in last 90 days
         var usageCount = await db.Attempts
             .AsNoTracking()
@@ -82,16 +126,35 @@ public sealed class ContentStalenessService(LearnerDbContext db, ILogger<Content
             .FirstOrDefaultAsync(ct);
         var daysSinceUsage = lastUsage is not null ? (int?)(now - lastUsage.Value).Days : null;
 
-        // Rubric coverage
-        var rubricCriteria = !string.IsNullOrWhiteSpace(content.CriteriaFocusJson) && content.CriteriaFocusJson != "[]"
-            ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(content.CriteriaFocusJson) ?? new List<string>()
-            : new List<string>();
         var allCriteria = await db.Criteria
             .AsNoTracking()
             .Where(c => c.SubtestCode == content.SubtestCode)
             .Select(c => c.Code)
             .ToListAsync(ct);
 
+        return AssessContent(
+            content,
+            new AttemptUsageAggregate(usageCount, lastUsage),
+            allCriteria,
+            now);
+    }
+
+    private static ContentStalenessAssessment AssessContent(
+        ContentItem content,
+        AttemptUsageAggregate usage,
+        IReadOnlyList<string> allCriteria,
+        DateTimeOffset now)
+    {
+        // Days since last edit
+        var lastEdit = content.UpdatedAt > content.CreatedAt ? content.UpdatedAt : content.CreatedAt;
+        var daysSinceEdit = (now - lastEdit).Days;
+        var usageCount = usage.UsageCountLast90Days;
+        var daysSinceUsage = usage.LastUsage is not null ? (int?)(now - usage.LastUsage.Value).Days : null;
+
+        // Rubric coverage
+        var rubricCriteria = !string.IsNullOrWhiteSpace(content.CriteriaFocusJson) && content.CriteriaFocusJson != "[]"
+            ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(content.CriteriaFocusJson) ?? new List<string>()
+            : new List<string>();
         var covered = rubricCriteria.Count;
         var total = allCriteria.Count;
         var coveragePercent = total > 0 ? (covered * 100.0 / total) : 100.0;
@@ -129,6 +192,11 @@ public sealed class ContentStalenessService(LearnerDbContext db, ILogger<Content
             isStale,
             string.Join("; ", reason),
             recommendedAction);
+    }
+
+    private sealed record AttemptUsageAggregate(int UsageCountLast90Days, DateTimeOffset? LastUsage)
+    {
+        public static readonly AttemptUsageAggregate Empty = new(0, null);
     }
 
     public async Task<List<ContentStalenessAssessment>> GetStaleContentAsync(int thresholdDays, CancellationToken ct)

@@ -176,7 +176,7 @@ public static class BillingExpansionV3Endpoints
 
     private static async Task<IResult> StreamQrAsync(string? imageKey, IFileStorage storage, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(imageKey) || !storage.Exists(imageKey))
+        if (string.IsNullOrWhiteSpace(imageKey) || !await storage.ExistsAsync(imageKey, ct))
         {
             return Results.NotFound();
         }

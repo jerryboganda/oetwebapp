@@ -19,6 +19,9 @@ public class VocabularyService(
     OetLearner.Api.Services.Readiness.ReadinessComputationService? readinessComputation = null)
 {
     private const int FreeListSizeCap = 500;
+    private const int QuizMaxQuestionCount = 25;
+    private const int QuizMaterializationCap = 200;
+    private const int StreakDateScanCap = 3_660;
 
     // ── Browse terms ─────────────────────────────────────────────────────
 
@@ -36,7 +39,7 @@ public class VocabularyService(
         string? userId = null)
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
-        var query = db.VocabularyTerms.Where(t => t.Status == "active");
+        var query = db.VocabularyTerms.AsNoTracking().Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrEmpty(category)) query = query.Where(t => t.Category == category);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
@@ -64,59 +67,34 @@ public class VocabularyService(
             query = query.Where(t => t.RecallSetCodesJson.Contains(needle));
         }
 
-        // Per-user Recall-set allow-list (Phase E — restriction-within-plan, owner
-        // directive). A learner with ANY UserRecallSetAccess rows is restricted to
-        // terms whose RecallSetCodesJson intersects those set codes; no rows ==
-        // unchanged (all sets the module already grants). The intersection is
-        // computed in-memory after materialising — matching how the rest of this
-        // file parses RecallSetCodesJson (see ParseStringArray) — rather than as a
-        // DB-level predicate, since a multi-code JSON-array membership test
-        // doesn't translate cleanly across providers (same EF-InMemory-safety
-        // rationale as GetCategoriesAsync's two-step query below).
-        var allowedRecallSets = await ResolveAllowedRecallSetsAsync(userId, ct);
+        // UserRecallSetAccess is the normalized allow-list relation. Keep the
+        // unrestricted "no rows" contract, but perform the quoted JSON-token
+        // intersection in SQL so restricted users never materialize the catalog.
+        // RecallSetTag.Code and the persisted JSON codes are lowercase by schema
+        // contract; ToLower also preserves the old case-insensitive behavior for
+        // legacy rows.
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var allowedRecallSets = db.UserRecallSetAccesses
+                .AsNoTracking()
+                .Where(x => x.UserId == userId);
 
-        int total;
-        List<VocabularyTerm> items;
-        if (allowedRecallSets.Count > 0)
-        {
-            var candidates = await query.OrderBy(t => t.Term).ToListAsync(ct);
-            var restricted = candidates
-                .Where(t => ParseStringArray(t.RecallSetCodesJson).Any(allowedRecallSets.Contains))
-                .ToList();
-            total = restricted.Count;
-            items = restricted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            query = query.Where(t =>
+                !allowedRecallSets.Any()
+                || allowedRecallSets.Any(access =>
+                    t.RecallSetCodesJson.ToLower().Contains(
+                        "\"" + access.RecallSetCode.ToLower() + "\"")));
         }
-        else
-        {
-            total = await query.CountAsync(ct);
-            items = await query.OrderBy(t => t.Term)
-                .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        }
+
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderBy(t => t.Term)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
 
         // Free learners only get full content for curated free-preview terms.
         // All other terms are returned locked (content redacted) so the UI can
         // render a blurred placeholder + subscribe prompt without leaking data.
         var mapped = items.Select(t => Map(t, isLocked: !isPremium && !t.IsFreePreview)).ToList();
         return new VocabularyTermsPageResponse(total, page, pageSize, mapped, mapped);
-    }
-
-    /// <summary>
-    /// Resolves a learner's per-user Recall-set allow-list (Phase E). Returns an
-    /// empty set when <paramref name="userId"/> is null/blank or the learner has
-    /// no <see cref="UserRecallSetAccess"/> rows — callers treat an empty result
-    /// as "unrestricted, inherit whatever the module already grants".
-    /// </summary>
-    private async Task<HashSet<string>> ResolveAllowedRecallSetsAsync(string? userId, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(userId)) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var codes = await db.UserRecallSetAccesses
-            .AsNoTracking()
-            .Where(x => x.UserId == userId)
-            .Select(x => x.RecallSetCode)
-            .ToListAsync(ct);
-
-        return new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -133,31 +111,35 @@ public class VocabularyService(
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var resolvedExam = examTypeCode ?? ExamCodes.DefaultCode;
 
-        var query = db.VocabularyTerms.Where(t => t.Status == "active");
+        var query = db.VocabularyTerms.AsNoTracking().Where(t => t.Status == "active");
         query = ApplyExamTypeFilter(query, examTypeCode);
         if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(t => t.ProfessionId == profession);
 
-        // Count of curated free-preview terms — powers the "Free Preview Recalls"
-        // chip badge. Computed over the same active/exam/profession scope.
-        var freePreviewCount = await query.CountAsync(t => t.IsFreePreview, ct);
-
-        // Pull only the JSON column for cheap in-memory tally.
-        var rawCodes = await query
-            .Where(t => t.RecallSetCodesJson != null && t.RecallSetCodesJson != "[]")
-            .Select(t => t.RecallSetCodesJson)
+        // Aggregate identical tag payloads in SQL. This returns one row per
+        // distinct tag combination (plus its multiplicity), rather than pulling
+        // one JSON payload for every active term on every registry request.
+        var tallyRows = await query
+            .GroupBy(t => t.RecallSetCodesJson)
+            .Select(g => new
+            {
+                CodesJson = g.Key,
+                TermCount = g.Count(),
+                FreePreviewCount = g.Count(t => t.IsFreePreview),
+            })
             .ToListAsync(ct);
 
+        var freePreviewCount = tallyRows.Sum(x => x.FreePreviewCount);
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var json in rawCodes)
+        foreach (var row in tallyRows)
         {
             try
             {
-                var list = JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                var list = JsonSerializer.Deserialize<List<string>>(row.CodesJson) ?? new List<string>();
                 foreach (var raw in list)
                 {
                     var c = raw?.Trim();
                     if (string.IsNullOrEmpty(c)) continue;
-                    counts[c] = counts.TryGetValue(c, out var n) ? n + 1 : 1;
+                    counts[c] = counts.TryGetValue(c, out var n) ? n + row.TermCount : row.TermCount;
                 }
             }
             catch { /* malformed row ignored */ }
@@ -275,34 +257,35 @@ public class VocabularyService(
         string userId,
         string? mastery,
         CancellationToken ct,
-        bool isPremium = true)
+        bool isPremium = true,
+        string? termId = null)
     {
-        var query = db.LearnerVocabularies
-            .Where(lv => lv.UserId == userId)
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t });
+        var rows = await BuildMyVocabularyQuery(userId, mastery, isPremium, termId)
+            .ToListAsync(ct);
+        return rows.Select(ToMyItem).ToList();
+    }
 
-        if (!string.IsNullOrEmpty(mastery))
-            query = query.Where(x => x.lv.Mastery == mastery);
+    public async Task<MyVocabularyPageResponse> GetMyVocabularyPageAsync(
+        string userId,
+        string? mastery,
+        int page,
+        int pageSize,
+        CancellationToken ct,
+        bool isPremium = true,
+        string? termId = null)
+    {
+        var query = BuildMyVocabularyQuery(userId, mastery, isPremium, termId);
+        var total = await query.CountAsync(ct);
+        var rows = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
 
-        if (!isPremium)
-            query = query.Where(x => x.t.IsFreePreview);
-
-        var items = await query.OrderBy(x => x.lv.NextReviewDate).ToListAsync(ct);
-        return items.Select(x => new MyVocabularyItem(
-            Id: x.lv.Id,
-            TermId: x.lv.TermId,
-            Term: x.t.Term,
-            Definition: x.t.Definition,
-            Mastery: x.lv.Mastery,
-            EaseFactor: x.lv.EaseFactor,
-            IntervalDays: x.lv.IntervalDays,
-            ReviewCount: x.lv.ReviewCount,
-            CorrectCount: x.lv.CorrectCount,
-            NextReviewDate: x.lv.NextReviewDate,
-            DueAt: x.lv.NextReviewDate?.ToString("yyyy-MM-dd"),
-            LastReviewedAt: x.lv.LastReviewedAt,
-            AddedAt: x.lv.AddedAt,
-            SourceRef: x.lv.SourceRef)).ToList();
+        return new MyVocabularyPageResponse(
+            Total: total,
+            Page: page,
+            PageSize: pageSize,
+            Items: rows.Select(ToMyItem).ToList());
     }
 
     public async Task<MyVocabularyAddResponse> AddToMyVocabularyAsync(
@@ -481,37 +464,41 @@ public class VocabularyService(
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var weekEnd = today.AddDays(7);
 
-        var totalInList = await db.LearnerVocabularies.CountAsync(lv => lv.UserId == userId, ct);
-        var mastered = await db.LearnerVocabularies.CountAsync(lv => lv.UserId == userId && lv.Mastery == "mastered", ct);
-        var reviewing = await db.LearnerVocabularies.CountAsync(lv => lv.UserId == userId && lv.Mastery == "reviewing", ct);
-        var learning = await db.LearnerVocabularies.CountAsync(lv => lv.UserId == userId && lv.Mastery == "learning", ct);
-        var newCount = await db.LearnerVocabularies.CountAsync(lv => lv.UserId == userId && lv.Mastery == "new", ct);
-
-        var dueToday = await db.LearnerVocabularies.CountAsync(
-            lv => lv.UserId == userId
-              && lv.Mastery != "mastered"
-              && (lv.NextReviewDate == null || lv.NextReviewDate <= today),
-            ct);
-        var dueThisWeek = await db.LearnerVocabularies.CountAsync(
-            lv => lv.UserId == userId
-              && lv.Mastery != "mastered"
-              && lv.NextReviewDate != null
-              && lv.NextReviewDate >= today
-              && lv.NextReviewDate <= weekEnd,
-            ct);
+        var stats = await db.LearnerVocabularies
+            .AsNoTracking()
+            .Where(lv => lv.UserId == userId)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalInList = g.Count(),
+                Mastered = g.Count(lv => lv.Mastery == "mastered"),
+                Reviewing = g.Count(lv => lv.Mastery == "reviewing"),
+                Learning = g.Count(lv => lv.Mastery == "learning"),
+                NewCount = g.Count(lv => lv.Mastery == "new"),
+                DueToday = g.Count(lv =>
+                    lv.Mastery != "mastered"
+                    && (lv.NextReviewDate == null || lv.NextReviewDate <= today)),
+                DueThisWeek = g.Count(lv =>
+                    lv.Mastery != "mastered"
+                    && lv.NextReviewDate != null
+                    && lv.NextReviewDate >= today
+                    && lv.NextReviewDate <= weekEnd),
+            })
+            .SingleOrDefaultAsync(ct);
 
         var streakDays = await ComputeStreakAsync(userId, today, ct);
-
-        var totalTermsInCatalog = await db.VocabularyTerms.CountAsync(t => t.Status == "active", ct);
+        var totalTermsInCatalog = await db.VocabularyTerms
+            .AsNoTracking()
+            .CountAsync(t => t.Status == "active", ct);
 
         return new VocabularyStatsResponse(
-            TotalInList: totalInList,
-            Mastered: mastered,
-            Reviewing: reviewing,
-            Learning: learning,
-            New: newCount,
-            DueToday: dueToday,
-            DueThisWeek: dueThisWeek,
+            TotalInList: stats?.TotalInList ?? 0,
+            Mastered: stats?.Mastered ?? 0,
+            Reviewing: stats?.Reviewing ?? 0,
+            Learning: stats?.Learning ?? 0,
+            New: stats?.NewCount ?? 0,
+            DueToday: stats?.DueToday ?? 0,
+            DueThisWeek: stats?.DueThisWeek ?? 0,
             StreakDays: streakDays,
             TotalTermsInCatalog: totalTermsInCatalog);
     }
@@ -519,26 +506,36 @@ public class VocabularyService(
     private async Task<int> ComputeStreakAsync(string userId, DateOnly today, CancellationToken ct)
     {
         // Consecutive-day streak from today back, where each day has at least one
-        // flashcard review OR a completed quiz.
-        // Note: EF Core (PostgreSQL) cannot translate `.UtcDateTime.Date` on a
-        // DateTimeOffset projection — coercion DateTimeOffset → DateTime? throws.
-        // Project the raw DateTimeOffset values and convert client-side.
-        var reviewTimestamps = await db.LearnerVocabularies
+        // flashcard review OR a completed quiz. All service writes use UTC
+        // timestamps, so Date preserves the prior UtcDateTime.Date outcome while
+        // allowing relational providers to deduplicate dates in SQL. The exact
+        // scan cap is 3,660 calendar days (ten years plus leap-day headroom).
+        var firstDay = today.AddDays(-(StreakDateScanCap - 1))
+            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var lastDay = today.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+
+        var reviewDays = db.LearnerVocabularies
+            .AsNoTracking()
             .Where(lv => lv.UserId == userId && lv.LastReviewedAt != null)
-            .Select(lv => lv.LastReviewedAt!.Value)
-            .ToListAsync(ct);
-        var quizTimestamps = await db.VocabularyQuizResults
+            .Select(lv => lv.LastReviewedAt!.Value.Date);
+        var quizDays = db.VocabularyQuizResults
+            .AsNoTracking()
             .Where(r => r.UserId == userId)
-            .Select(r => r.CompletedAt)
+            .Select(r => r.CompletedAt.Date);
+
+        var activeDays = await reviewDays
+            .Concat(quizDays)
+            .Where(day => day >= firstDay && day <= lastDay)
+            .Distinct()
+            .OrderByDescending(day => day)
+            .Take(StreakDateScanCap)
             .ToListAsync(ct);
 
-        var activeDays = new HashSet<DateTime>();
-        foreach (var ts in reviewTimestamps) activeDays.Add(ts.UtcDateTime.Date);
-        foreach (var ts in quizTimestamps) activeDays.Add(ts.UtcDateTime.Date);
+        var activeDaySet = activeDays.ToHashSet();
 
         var streak = 0;
         var cursor = today;
-        while (activeDays.Contains(cursor.ToDateTime(TimeOnly.MinValue)))
+        while (activeDaySet.Contains(cursor.ToDateTime(TimeOnly.MinValue)))
         {
             streak++;
             cursor = cursor.AddDays(-1);
@@ -556,35 +553,56 @@ public class VocabularyService(
         bool isPremium = true)
     {
         var normalisedFormat = NormaliseFormat(format);
+        var questionCount = Math.Clamp(count, 0, QuizMaxQuestionCount);
 
-        var allTerms = await db.VocabularyTerms
+        var eligibleTerms = db.VocabularyTerms
+            .AsNoTracking()
             .Where(t => t.Status == "active")
-            .Where(t => isPremium || t.IsFreePreview)
-            .ToListAsync(ct);
+            .Where(t => isPremium || t.IsFreePreview);
 
-        if (allTerms.Count == 0)
+        var eligibleCount = await eligibleTerms.CountAsync(ct);
+        if (eligibleCount == 0 || questionCount == 0)
         {
             return new VocabularyQuizResponse(normalisedFormat, Array.Empty<VocabularyQuizQuestionDto>());
         }
 
-        var myTermIds = await db.LearnerVocabularies
+        var myTermIds = db.LearnerVocabularies
+            .AsNoTracking()
             .Where(lv => lv.UserId == userId)
-            .Select(lv => lv.TermId)
-            .ToListAsync(ct);
+            .Select(lv => lv.TermId);
 
-        var candidateTerms = myTermIds.Count >= count
-            ? allTerms.Where(t => myTermIds.Contains(t.Id)).ToList()
-            : allTerms;
+        var ownedEligibleCount = await eligibleTerms.CountAsync(t => myTermIds.Contains(t.Id), ct);
+        var candidateQuery = ownedEligibleCount >= questionCount
+            ? eligibleTerms.Where(t => myTermIds.Contains(t.Id))
+            : eligibleTerms;
+        var candidateCount = ownedEligibleCount >= questionCount
+            ? ownedEligibleCount
+            : eligibleCount;
 
-        // Deterministic but unpredictable shuffle using Random.Shared seeded with
-        // (userId, utcNowTicks) — avoids the OrderBy(Guid.NewGuid()) pattern.
         var rng = Random.Shared;
-        var selected = candidateTerms
-            .OrderBy(_ => rng.Next())
-            .Take(Math.Min(count, candidateTerms.Count))
-            .ToList();
+        var selected = await LoadBoundedQuizWindowAsync(
+            candidateQuery,
+            candidateCount,
+            Math.Min(questionCount, candidateCount),
+            rng,
+            ct);
+        ShuffleInPlace(selected, rng);
 
-        var questions = selected.Select(term => BuildQuizQuestion(term, allTerms, normalisedFormat, rng))
+        // Keep the complete candidate+distractor materialization at or below 200
+        // rows (175 distractors for the endpoint maximum of 25 questions). A
+        // random indexed window avoids a full-catalog random ORDER BY.
+        var selectedIds = selected.Select(t => t.Id).ToArray();
+        var remainingCount = eligibleCount - selected.Count;
+        var distractorTake = Math.Min(QuizMaterializationCap - selected.Count, remainingCount);
+        var distractors = await LoadBoundedQuizWindowAsync(
+            eligibleTerms.Where(t => !selectedIds.Contains(t.Id)),
+            remainingCount,
+            distractorTake,
+            rng,
+            ct);
+        var quizPool = selected.Concat(distractors).ToList();
+
+        var questions = selected.Select(term => BuildQuizQuestion(term, quizPool, normalisedFormat, rng))
             .Where(q => q is not null)
             .Cast<VocabularyQuizQuestionDto>()
             .ToList();
@@ -618,11 +636,11 @@ public class VocabularyService(
                     .Where(t => t.Id != term.Id && !string.IsNullOrWhiteSpace(t.Definition) && t.Definition != term.Definition)
                     .Select(t => t.Definition)
                     .Distinct()
-                    .OrderBy(_ => rng.Next())
-                    .Take(3)
                     .ToList();
+                distractors = SampleDistinct(distractors, 3, rng);
                 while (distractors.Count < 3) distractors.Add($"(no distractor {distractors.Count + 1})");
-                var options = distractors.Append(term.Definition).OrderBy(_ => rng.Next()).ToList();
+                var options = distractors.Append(term.Definition).ToList();
+                ShuffleInPlace(options, rng);
                 return new VocabularyQuizQuestionDto(
                     TermId: term.Id,
                     Term: term.Term,
@@ -668,9 +686,8 @@ public class VocabularyService(
                     .SelectMany(t => ParseStringArray(t.SynonymsJson))
                     .Where(s => !string.IsNullOrWhiteSpace(s) && !synonyms.Contains(s, StringComparer.OrdinalIgnoreCase))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(_ => rng.Next())
-                    .Take(3)
                     .ToList();
+                distractorPool = SampleDistinct(distractorPool, 3, rng);
                 while (distractorPool.Count < 3)
                 {
                     var fillerTerm = allTerms[rng.Next(allTerms.Count)];
@@ -680,7 +697,8 @@ public class VocabularyService(
                     else
                         distractorPool.Add($"(filler {distractorPool.Count + 1})");
                 }
-                var options = distractorPool.Append(correct).OrderBy(_ => rng.Next()).ToList();
+                var options = distractorPool.Append(correct).ToList();
+                ShuffleInPlace(options, rng);
                 return new VocabularyQuizQuestionDto(
                     TermId: term.Id,
                     Term: term.Term,
@@ -700,12 +718,14 @@ public class VocabularyService(
                 // Distractors: sentences from other terms.
                 var distractors = allTerms
                     .Where(t => t.Id != term.Id && !string.IsNullOrWhiteSpace(t.ExampleSentence))
-                    .OrderBy(_ => rng.Next())
-                    .Take(3)
-                    .Select(t => t.ExampleSentence)
                     .ToList();
+                distractors = SampleDistinct(distractors, 3, rng);
                 if (distractors.Count < 3) return null;
-                var options = distractors.Append(term.ExampleSentence).OrderBy(_ => rng.Next()).ToList();
+                var options = distractors
+                    .Select(t => t.ExampleSentence)
+                    .Append(term.ExampleSentence)
+                    .ToList();
+                ShuffleInPlace(options, rng);
                 return new VocabularyQuizQuestionDto(
                     TermId: term.Id,
                     Term: term.Term,
@@ -747,6 +767,13 @@ public class VocabularyService(
 
         var format = NormaliseFormat(submission.Format);
         var duration = Math.Max(0, submission.DurationSeconds ?? 0);
+        var submittedTermIds = submission.Answers
+            .Select(answer => answer.TermId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var learnerVocabularyByTermId = await db.LearnerVocabularies
+            .Where(lv => lv.UserId == userId && submittedTermIds.Contains(lv.TermId))
+            .ToDictionaryAsync(lv => lv.TermId, StringComparer.Ordinal, ct);
 
         var result = new VocabularyQuizResult
         {
@@ -764,9 +791,7 @@ public class VocabularyService(
         var newlyMastered = new List<string>();
         foreach (var ans in submission.Answers)
         {
-            var lv = await db.LearnerVocabularies.FirstOrDefaultAsync(
-                x => x.UserId == userId && x.TermId == ans.TermId, ct);
-            if (lv == null) continue;
+            if (!learnerVocabularyByTermId.TryGetValue(ans.TermId, out var lv)) continue;
 
             var quality = ans.Correct ? 4 : 2;
             var prevMastery = lv.Mastery;
@@ -846,6 +871,90 @@ public class VocabularyService(
     }
 
     // ── Mapping helpers ─────────────────────────────────────────────────
+
+    private IQueryable<MyVocabularyRow> BuildMyVocabularyQuery(
+        string userId,
+        string? mastery,
+        bool isPremium,
+        string? termId)
+    {
+        var query = db.LearnerVocabularies
+            .AsNoTracking()
+            .Where(lv => lv.UserId == userId)
+            .Join(
+                db.VocabularyTerms.AsNoTracking(),
+                lv => lv.TermId,
+                term => term.Id,
+                (lv, term) => new { lv, term });
+
+        if (!string.IsNullOrEmpty(mastery))
+            query = query.Where(x => x.lv.Mastery == mastery);
+        if (!string.IsNullOrWhiteSpace(termId))
+            query = query.Where(x => x.lv.TermId == termId);
+        if (!isPremium)
+            query = query.Where(x => x.term.IsFreePreview);
+
+        return query
+            .OrderBy(x => x.lv.NextReviewDate)
+            .ThenBy(x => x.lv.Id)
+            .Select(x => new MyVocabularyRow(
+                x.lv.Id,
+                x.lv.TermId,
+                x.term.Term,
+                x.term.Definition,
+                x.lv.Mastery,
+                x.lv.EaseFactor,
+                x.lv.IntervalDays,
+                x.lv.ReviewCount,
+                x.lv.CorrectCount,
+                x.lv.NextReviewDate,
+                x.lv.LastReviewedAt,
+                x.lv.AddedAt,
+                x.lv.SourceRef));
+    }
+
+    private static async Task<List<VocabularyTerm>> LoadBoundedQuizWindowAsync(
+        IQueryable<VocabularyTerm> query,
+        int sourceCount,
+        int take,
+        Random rng,
+        CancellationToken ct)
+    {
+        take = Math.Min(Math.Max(0, take), sourceCount);
+        if (take == 0) return [];
+
+        // Pick an indexed contiguous window that always fits in one query. The
+        // window is shuffled client-side after materialization; no random DB sort.
+        var maxStart = sourceCount - take;
+        var start = maxStart == 0 ? 0 : rng.Next(maxStart + 1);
+        return await query
+            .OrderBy(term => term.Id)
+            .Skip(start)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
+    private static List<T> SampleDistinct<T>(IReadOnlyList<T> source, int count, Random rng)
+    {
+        var sample = source.ToList();
+        var take = Math.Min(count, sample.Count);
+        for (var i = 0; i < take; i++)
+        {
+            var swapIndex = rng.Next(i, sample.Count);
+            (sample[i], sample[swapIndex]) = (sample[swapIndex], sample[i]);
+        }
+        if (sample.Count > take) sample.RemoveRange(take, sample.Count - take);
+        return sample;
+    }
+
+    private static void ShuffleInPlace<T>(IList<T> items, Random rng)
+    {
+        for (var i = items.Count - 1; i > 0; i--)
+        {
+            var swapIndex = rng.Next(i + 1);
+            (items[i], items[swapIndex]) = (items[swapIndex], items[i]);
+        }
+    }
 
     /// <summary>
     /// Best-effort achievement re-evaluation. Never fails the caller — if the
@@ -972,6 +1081,22 @@ public class VocabularyService(
         AddedAt: lv.AddedAt,
         SourceRef: lv.SourceRef);
 
+    private static MyVocabularyItem ToMyItem(MyVocabularyRow row) => new(
+        Id: row.Id,
+        TermId: row.TermId,
+        Term: row.Term,
+        Definition: row.Definition!,
+        Mastery: row.Mastery,
+        EaseFactor: row.EaseFactor,
+        IntervalDays: row.IntervalDays,
+        ReviewCount: row.ReviewCount,
+        CorrectCount: row.CorrectCount,
+        NextReviewDate: row.NextReviewDate,
+        DueAt: row.NextReviewDate?.ToString("yyyy-MM-dd"),
+        LastReviewedAt: row.LastReviewedAt,
+        AddedAt: row.AddedAt,
+        SourceRef: row.SourceRef);
+
     private static VocabularyFlashcardDto ToFlashcard(LearnerVocabulary lv, VocabularyTerm term) => new(
         Id: lv.Id,
         TermId: term.Id,
@@ -1016,6 +1141,21 @@ public class VocabularyService(
             return null;
         }
     }
+
+    private sealed record MyVocabularyRow(
+        Guid Id,
+        string TermId,
+        string Term,
+        string? Definition,
+        string Mastery,
+        double EaseFactor,
+        int IntervalDays,
+        int ReviewCount,
+        int CorrectCount,
+        DateOnly? NextReviewDate,
+        DateTimeOffset? LastReviewedAt,
+        DateTimeOffset AddedAt,
+        string? SourceRef);
 }
 
 // Legacy record kept for backward compatibility with older call sites.

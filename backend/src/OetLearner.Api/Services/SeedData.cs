@@ -642,7 +642,7 @@ public static partial class SeedData
         await DemoMediaSeedLock.WaitAsync(cancellationToken);
         try
         {
-            if (storage.Exists(demoAudioStorageKey))
+            if (await storage.ExistsAsync(demoAudioStorageKey, cancellationToken))
             {
                 return;
             }

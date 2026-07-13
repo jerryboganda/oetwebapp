@@ -34,7 +34,7 @@ public sealed class ConversationAsrProviderSelector(
         {
             var p = Find(requested);
             if (p is null) throw new InvalidOperationException($"ASR provider '{requested}' not registered.");
-            if (!p.IsConfigured && requested != "mock")
+            if (requested != "mock" && !await p.IsConfiguredAsync(ct))
                 throw new InvalidOperationException($"ASR provider '{requested}' not configured.");
             if (string.Equals(requested, "mock", StringComparison.Ordinal) && IsProductionMockForbidden())
                 throw new InvalidOperationException(
@@ -45,7 +45,7 @@ public sealed class ConversationAsrProviderSelector(
         foreach (var candidate in new[] { "azure", "whisper", "deepgram" })
         {
             var p = Find(candidate);
-            if (p is { IsConfigured: true })
+            if (p is not null && await p.IsConfiguredAsync(ct))
             {
                 logger.LogDebug("Conversation ASR: selected {Provider} (auto)", candidate);
                 return p;
@@ -93,11 +93,13 @@ public sealed class ConversationAsrProviderSelector(
 
             var provider = Find(lookup);
             if (provider is null) return null;
-            return provider.IsConfigured ? provider : null;
+            return await provider.IsConfiguredAsync(ct) ? provider : null;
         }
 
-        foreach (var provider in all.Where(provider => provider.IsConfigured))
+        foreach (var provider in all)
         {
+            if (!await provider.IsConfiguredAsync(ct)) continue;
+
             if (!IsMockProvider(provider.Name) && !await CanUseRealProviderAsync(options, provider.Name, ct))
             {
                 logger.LogWarning("Conversation realtime ASR auto skipped provider {Provider} because real-provider readiness gates are incomplete.", provider.Name);

@@ -2579,6 +2579,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("HostedCheckoutUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -4771,7 +4775,16 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("SourceProvenance");
 
+                    b.HasIndex("SourceProvenance", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_ContentItems_Published_Provenance_Created")
+                        .HasFilter("\"Status\" = 4");
+
                     b.HasIndex("IsPreviewEligible", "Status");
+
+                    b.HasIndex("SubtestCode", "Title")
+                        .HasDatabaseName("IX_ContentItems_Published_Subtest_Title")
+                        .HasFilter("\"Status\" = 4 AND \"FreshnessConfidence\" <> 'superseded'");
 
                     b.HasIndex("SubtestCode", "Status");
 

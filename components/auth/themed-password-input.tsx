@@ -6,7 +6,7 @@ import React, {
   useState,
   type InputHTMLAttributes,
 } from "react";
-import { IconEye, IconEyeOff } from "@tabler/icons-react";
+import { Eye, EyeOff } from "lucide-react";
 
 interface ThemedPasswordInputProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -94,7 +94,7 @@ const ThemedPasswordInput = forwardRef<
             boxShadow: "none",
           }}
         >
-          {isVisible ? <IconEyeOff size={22} /> : <IconEye size={22} />}
+          {isVisible ? <EyeOff size={22} /> : <Eye size={22} />}
         </button>
       </div>
     );

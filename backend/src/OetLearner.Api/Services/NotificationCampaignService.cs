@@ -21,6 +21,8 @@ public sealed class NotificationCampaignService(
     TimeProvider clock,
     ILogger<NotificationCampaignService> logger) : INotificationCampaignService
 {
+    internal const int RecipientBatchSize = 500;
+
     public async Task<NotificationCampaign> CreateAsync(string adminId, CreateCampaignRequest request, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Name);
@@ -61,6 +63,29 @@ public sealed class NotificationCampaignService(
             throw new InvalidOperationException($"Cannot edit campaign in {campaign.Status} status.");
 
         var now = clock.GetUtcNow();
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+
+        if (transaction is not null)
+        {
+            var editable = await db.NotificationCampaigns
+                .Where(c => c.Id == campaignId
+                    && (c.Status == NotificationCampaignStatus.Draft
+                        || c.Status == NotificationCampaignStatus.Scheduled))
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(c => c.UpdatedAt, now),
+                    ct);
+
+            if (editable == 0)
+            {
+                await db.Entry(campaign).ReloadAsync(ct);
+                throw new InvalidOperationException($"Cannot edit campaign in {campaign.Status} status.");
+            }
+
+            await db.Entry(campaign).ReloadAsync(ct);
+        }
+
         if (request.Name is not null) campaign.Name = request.Name;
         if (request.Subject is not null) campaign.Subject = request.Subject;
         if (request.Body is not null) campaign.Body = request.Body;
@@ -71,6 +96,12 @@ public sealed class NotificationCampaignService(
         campaign.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct);
+        }
+
         return campaign;
     }
 
@@ -119,15 +150,46 @@ public sealed class NotificationCampaignService(
 
     public async Task CancelAsync(string adminId, Guid campaignId, CancellationToken ct)
     {
-        var campaign = await db.NotificationCampaigns.FindAsync([campaignId], ct)
-            ?? throw new InvalidOperationException("Campaign not found.");
+        var now = clock.GetUtcNow();
 
-        if (campaign.Status is NotificationCampaignStatus.Sent or NotificationCampaignStatus.Cancelled)
-            throw new InvalidOperationException($"Cannot cancel campaign in {campaign.Status} status.");
+        if (db.Database.IsRelational())
+        {
+            var cancelled = await db.NotificationCampaigns
+                .Where(c => c.Id == campaignId
+                    && c.Status != NotificationCampaignStatus.Sent
+                    && c.Status != NotificationCampaignStatus.Cancelled)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(c => c.Status, NotificationCampaignStatus.Cancelled)
+                        .SetProperty(c => c.UpdatedAt, now),
+                    ct);
 
-        campaign.Status = NotificationCampaignStatus.Cancelled;
-        campaign.UpdatedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(ct);
+            if (cancelled == 0)
+            {
+                var current = await db.NotificationCampaigns
+                    .AsNoTracking()
+                    .Where(c => c.Id == campaignId)
+                    .Select(c => new { c.Status })
+                    .SingleOrDefaultAsync(ct)
+                    ?? throw new InvalidOperationException("Campaign not found.");
+
+                throw new InvalidOperationException(
+                    $"Cannot cancel campaign in {current.Status} status.");
+            }
+        }
+        else
+        {
+            var campaign = await db.NotificationCampaigns.FindAsync([campaignId], ct)
+                ?? throw new InvalidOperationException("Campaign not found.");
+
+            if (campaign.Status is NotificationCampaignStatus.Sent or NotificationCampaignStatus.Cancelled)
+                throw new InvalidOperationException($"Cannot cancel campaign in {campaign.Status} status.");
+
+            campaign.Status = NotificationCampaignStatus.Cancelled;
+            campaign.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+        }
+
         logger.LogInformation("Campaign {CampaignId} cancelled by {AdminId}", campaignId, adminId);
     }
 
@@ -159,37 +221,144 @@ public sealed class NotificationCampaignService(
             throw new InvalidOperationException($"Campaign must be approved before sending (current: {campaign.Status}).");
 
         var now = clock.GetUtcNow();
-        campaign.Status = NotificationCampaignStatus.Sending;
-        campaign.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
 
-        // Resolve recipients from segment (simplified: all consented users for channel)
-        var recipients = await db.NotificationConsents
-            .Where(c => c.IsGranted && c.Channel == campaign.Channel)
-            .Select(c => new { c.AuthAccountId })
-            .Distinct()
-            .ToListAsync(ct);
-
-        var recipientRows = recipients.Select(r => new NotificationCampaignRecipient
+        if (transaction is not null)
         {
-            Id = Guid.NewGuid(),
-            CampaignId = campaignId,
-            RecipientUserId = r.AuthAccountId,
-            RecipientEmail = "", // Will be resolved by the delivery pipeline
-            DeliveryStatus = NotificationDeliveryStatus.Pending,
-            CreatedAt = now,
-        }).ToList();
+            // Claim while holding the row lock through recipient insertion. A
+            // concurrent sender re-evaluates this predicate after the winner
+            // commits and cannot create duplicate recipient audit rows.
+            var claimed = await db.NotificationCampaigns
+                .Where(c => c.Id == campaignId
+                    && (c.Status == NotificationCampaignStatus.Sending
+                        || c.Status == NotificationCampaignStatus.Scheduled))
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(c => c.Status, NotificationCampaignStatus.Sending)
+                        .SetProperty(c => c.UpdatedAt, now),
+                    ct);
 
-        db.NotificationCampaignRecipients.AddRange(recipientRows);
+            if (claimed == 0)
+            {
+                await db.Entry(campaign).ReloadAsync(ct);
+                throw new InvalidOperationException(
+                    $"Campaign must be approved before sending (current: {campaign.Status}).");
+            }
 
-        campaign.RecipientCount = recipientRows.Count;
-        campaign.SentAt = now;
-        campaign.Status = NotificationCampaignStatus.Sent;
-        campaign.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
+            // The pre-claim read was only for the friendly status error. Reload
+            // under the held claim lock so segmentation uses the latest channel.
+            await db.Entry(campaign).ReloadAsync(ct);
+        }
+        else
+        {
+            campaign.Status = NotificationCampaignStatus.Sending;
+            campaign.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+        }
 
-        logger.LogInformation("Campaign {CampaignId} sent to {Count} recipients", campaignId, recipientRows.Count);
-        return new CampaignSendResult(recipientRows.Count, 0);
+        // Keep recipient materialization bounded. The transaction makes a failed
+        // multi-batch attempt retryable without leaving a partial recipient audit.
+        var recipientCount = 0;
+        string? cursor = null;
+
+        try
+        {
+            while (true)
+            {
+                var recipientQuery = db.NotificationConsents
+                    .AsNoTracking()
+                    .Where(c => c.IsGranted && c.Channel == campaign.Channel)
+                    .Select(c => c.AuthAccountId)
+                    .Distinct();
+
+                if (cursor is not null)
+                {
+                    recipientQuery = recipientQuery.Where(userId => userId.CompareTo(cursor) > 0);
+                }
+
+                var recipientIds = await recipientQuery
+                    .OrderBy(userId => userId)
+                    .Take(RecipientBatchSize)
+                    .ToListAsync(ct);
+
+                if (recipientIds.Count == 0)
+                {
+                    break;
+                }
+
+                var recipientRows = recipientIds.Select(userId => new NotificationCampaignRecipient
+                {
+                    Id = Guid.NewGuid(),
+                    CampaignId = campaignId,
+                    RecipientUserId = userId,
+                    RecipientEmail = "", // Resolved by the delivery pipeline.
+                    DeliveryStatus = NotificationDeliveryStatus.Pending,
+                    CreatedAt = now,
+                }).ToList();
+
+                db.NotificationCampaignRecipients.AddRange(recipientRows);
+                await db.SaveChangesAsync(ct);
+
+                foreach (var recipientRow in recipientRows)
+                {
+                    db.Entry(recipientRow).State = EntityState.Detached;
+                }
+
+                recipientCount += recipientRows.Count;
+                cursor = recipientIds[^1];
+            }
+
+            campaign.RecipientCount = recipientCount;
+            campaign.SentAt = now;
+            campaign.Status = NotificationCampaignStatus.Sent;
+            campaign.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct);
+            }
+        }
+        catch (Exception sendError)
+        {
+            if (transaction is not null)
+            {
+                try
+                {
+                    await transaction.RollbackAsync(CancellationToken.None);
+                }
+                catch (Exception rollbackError)
+                {
+                    logger.LogWarning(
+                        rollbackError,
+                        "Campaign {CampaignId} rollback failed after send error {ErrorType}",
+                        campaignId,
+                        sendError.GetType().Name);
+                }
+            }
+
+            foreach (var entry in db.ChangeTracker.Entries<NotificationCampaignRecipient>().ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            // Do not leave a rolled-back Sent value cached in this context: a
+            // caller may safely retry the same service instance after failure.
+            foreach (var entry in db.ChangeTracker
+                .Entries<NotificationCampaign>()
+                .Where(entry => entry.Entity.Id == campaignId)
+                .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            throw;
+        }
+
+        logger.LogInformation("Campaign {CampaignId} sent to {Count} recipients", campaignId, recipientCount);
+        return new CampaignSendResult(recipientCount, 0);
     }
 }
 

@@ -88,27 +88,49 @@ public class MarketplaceService(LearnerDbContext db)
 
     public async Task<object> GetMySubmissionsAsync(string userId, int page, int pageSize, CancellationToken ct)
     {
-        var contributor = await db.ContentContributors
-            .FirstOrDefaultAsync(c => c.UserId == userId, ct);
+        var contributorId = await db.ContentContributors
+            .AsNoTracking()
+            .Where(c => c.UserId == userId)
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync(ct);
 
-        if (contributor == null)
+        if (contributorId == null)
         {
             return new { items = Array.Empty<object>(), total = 0, page, pageSize };
         }
 
         var query = db.ContentSubmissions
-            .Where(s => s.ContributorId == contributor.Id);
+            .AsNoTracking()
+            .Where(s => s.ContributorId == contributorId);
 
         var total = await query.CountAsync(ct);
         var items = await query
             .OrderByDescending(s => s.SubmittedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(s => new MarketplaceSubmissionListItem(
+                s.Id,
+                s.ContributorId,
+                s.ExamFamilyCode,
+                s.SubtestCode,
+                s.Title,
+                s.Description,
+                s.ContentType,
+                s.ProfessionId,
+                s.Difficulty,
+                s.Tags,
+                s.Status,
+                s.ReviewedBy,
+                s.ReviewNotes,
+                s.PublishedContentId,
+                s.SubmittedAt,
+                s.ApprovedAt,
+                s.CreatedAt))
             .ToListAsync(ct);
 
         return new
         {
-            items = items.Select(MapSubmission),
+            items,
             total,
             page,
             pageSize
@@ -136,6 +158,7 @@ public class MarketplaceService(LearnerDbContext db)
     public async Task<object> BrowseContentAsync(string? examTypeCode, string? subtest, string? search, int page, int pageSize, CancellationToken ct)
     {
         var query = db.ContentSubmissions
+            .AsNoTracking()
             .Where(s => s.Status == "approved");
 
         if (!string.IsNullOrWhiteSpace(examTypeCode))
@@ -155,11 +178,29 @@ public class MarketplaceService(LearnerDbContext db)
             .OrderByDescending(s => s.ApprovedAt ?? s.SubmittedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(s => new MarketplaceSubmissionListItem(
+                s.Id,
+                s.ContributorId,
+                s.ExamFamilyCode,
+                s.SubtestCode,
+                s.Title,
+                s.Description,
+                s.ContentType,
+                s.ProfessionId,
+                s.Difficulty,
+                s.Tags,
+                s.Status,
+                s.ReviewedBy,
+                s.ReviewNotes,
+                s.PublishedContentId,
+                s.SubmittedAt,
+                s.ApprovedAt,
+                s.CreatedAt))
             .ToListAsync(ct);
 
         return new
         {
-            items = items.Select(MapSubmission),
+            items,
             total,
             page,
             pageSize
@@ -171,6 +212,7 @@ public class MarketplaceService(LearnerDbContext db)
     public async Task<object> GetPendingSubmissionsAsync(int page, int pageSize, CancellationToken ct)
     {
         var query = db.ContentSubmissions
+            .AsNoTracking()
             .Where(s => s.Status == "pending" || s.Status == "in_review");
 
         var total = await query.CountAsync(ct);
@@ -178,11 +220,29 @@ public class MarketplaceService(LearnerDbContext db)
             .OrderBy(s => s.SubmittedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(s => new MarketplaceSubmissionListItem(
+                s.Id,
+                s.ContributorId,
+                s.ExamFamilyCode,
+                s.SubtestCode,
+                s.Title,
+                s.Description,
+                s.ContentType,
+                s.ProfessionId,
+                s.Difficulty,
+                s.Tags,
+                s.Status,
+                s.ReviewedBy,
+                s.ReviewNotes,
+                s.PublishedContentId,
+                s.SubmittedAt,
+                s.ApprovedAt,
+                s.CreatedAt))
             .ToListAsync(ct);
 
         return new
         {
-            items = items.Select(MapSubmission),
+            items,
             total,
             page,
             pageSize
@@ -276,6 +336,25 @@ public class MarketplaceService(LearnerDbContext db)
         approvedAt = s.ApprovedAt,
         createdAt = s.CreatedAt
     };
+
+    private sealed record MarketplaceSubmissionListItem(
+        string id,
+        string contributorId,
+        string examFamilyCode,
+        string subtestCode,
+        string title,
+        string? description,
+        string contentType,
+        string? professionId,
+        string? difficulty,
+        string? tags,
+        string status,
+        string? reviewedBy,
+        string? reviewNotes,
+        string? publishedContentId,
+        DateTimeOffset submittedAt,
+        DateTimeOffset? approvedAt,
+        DateTimeOffset createdAt);
 }
 
 public record MarketplaceProfileUpdateRequest(string? DisplayName, string? Bio);

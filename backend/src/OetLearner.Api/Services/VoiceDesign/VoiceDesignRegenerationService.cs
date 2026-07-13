@@ -313,7 +313,7 @@ public sealed class VoiceDesignRegenerationService(
         var orphans = new List<string>();
         foreach (var prefix in prefixes)
         {
-            foreach (var key in storage.ListKeys(prefix))
+            await foreach (var key in storage.ListKeysAsync(prefix, ct))
             {
                 ct.ThrowIfCancellationRequested();
                 if (!referenced.Contains(key))
@@ -329,8 +329,8 @@ public sealed class VoiceDesignRegenerationService(
             {
                 try
                 {
-                    var size = storage.Length(key);
-                    if (storage.Delete(key)) { deleted++; bytes += Math.Max(0, size); }
+                    var size = await storage.LengthAsync(key, ct);
+                    if (await storage.DeleteAsync(key, ct)) { deleted++; bytes += Math.Max(0, size); }
                 }
                 catch (Exception ex)
                 {
@@ -383,20 +383,30 @@ public sealed class VoiceDesignRegenerationService(
             .ToListAsync(ct);
 
         var normalizedScope = string.IsNullOrWhiteSpace(scope) ? "missing" : scope.Trim().ToLowerInvariant();
-        var candidates = rows.Where(row => normalizedScope switch
+        var candidates = new List<RecallAudioCandidateRow>();
+        foreach (var row in rows)
         {
-            "all" => true,
-            "different-voice" => IsMissingStoredAudio(row)
-                || !MatchesRecallAudioProvenance(row, voiceId, modelVariant, providerName),
-            _ => IsMissingStoredAudio(row),
-        });
+            var matchesScope = normalizedScope switch
+            {
+                "all" => true,
+                "different-voice" => await IsMissingStoredAudioAsync(row, ct)
+                    || !MatchesRecallAudioProvenance(row, voiceId, modelVariant, providerName),
+                _ => await IsMissingStoredAudioAsync(row, ct),
+            };
+            if (!matchesScope)
+            {
+                continue;
+            }
 
-        if (retryOnly)
-        {
-            candidates = candidates.Where(row =>
-                IsMissingStoredAudio(row)
-                || !MatchesRecallAudioProvenance(row, voiceId, modelVariant, providerName)
-                || !string.Equals(row.AudioBatchId, batchId, StringComparison.Ordinal));
+            if (retryOnly
+                && !await IsMissingStoredAudioAsync(row, ct)
+                && MatchesRecallAudioProvenance(row, voiceId, modelVariant, providerName)
+                && string.Equals(row.AudioBatchId, batchId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            candidates.Add(row);
         }
 
         return candidates
@@ -405,12 +415,20 @@ public sealed class VoiceDesignRegenerationService(
             .ToList();
     }
 
-    private bool IsMissingStoredAudio(RecallAudioCandidateRow row)
-        => string.IsNullOrWhiteSpace(row.AudioMediaAssetId)
-           || string.IsNullOrWhiteSpace(row.AudioUrl)
-           || !row.MediaAssetReady
-           || !IsStoredAudioKey(row.AudioUrl)
-           || !storage.Exists(row.AudioUrl!);
+    private async Task<bool> IsMissingStoredAudioAsync(
+        RecallAudioCandidateRow row,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(row.AudioMediaAssetId)
+            || string.IsNullOrWhiteSpace(row.AudioUrl)
+            || !row.MediaAssetReady
+            || !IsStoredAudioKey(row.AudioUrl))
+        {
+            return true;
+        }
+
+        return !await storage.ExistsAsync(row.AudioUrl, ct);
+    }
 
     private static bool MatchesRecallAudioProvenance(
         RecallAudioCandidateRow row,

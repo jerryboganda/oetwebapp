@@ -491,50 +491,63 @@ void ConfigureJwtBearer(JwtBearerOptions options)
 
             await using var scope = context.HttpContext.RequestServices.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-            var account = await db.ApplicationUserAccounts
+            var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
+            var accountState = await db.ApplicationUserAccounts
                 .AsNoTracking()
-                .SingleOrDefaultAsync(x => x.Id == authAccountId, context.HttpContext.RequestAborted);
+                .Where(account => account.Id == authAccountId)
+                .Select(account => new
+                {
+                    account.DeletedAt,
+                    account.Role,
+                    LearnerIsActive = account.Role != ApplicationUserRoles.Learner
+                        || db.Users.Any(learner =>
+                            learner.AuthAccountId == account.Id
+                            && learner.AccountStatus.ToLower() == "active"),
+                    LearnerAccessExpiresAt = account.Role == ApplicationUserRoles.Learner
+                        ? db.Users
+                            .Where(learner => learner.AuthAccountId == account.Id)
+                            .Select(learner => learner.AccessExpiresAt)
+                            .SingleOrDefault()
+                        : null,
+                    ExpertIsActive = account.Role != ApplicationUserRoles.Expert
+                        || db.ExpertUsers.Any(expert =>
+                            expert.AuthAccountId == account.Id
+                            && expert.IsActive)
+                })
+                .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
 
-            if (account is null)
+            if (accountState is null)
             {
                 context.Fail("account_not_found");
                 return;
             }
 
-            if (account.DeletedAt is not null)
+            if (accountState.DeletedAt is not null)
             {
                 context.Fail("account_deleted");
                 return;
             }
 
-            if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+            if (string.Equals(accountState.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
             {
-                var learnerActive = await db.Users
-                    .AsNoTracking()
-                    .Where(x => x.AuthAccountId == account.Id)
-                    .Select(x => x.AccountStatus)
-                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
-
-                if (!string.Equals(learnerActive, "active", StringComparison.OrdinalIgnoreCase))
+                if (!accountState.LearnerIsActive)
                 {
                     context.Fail("account_suspended");
+                    return;
+                }
+
+                if (accountState.LearnerAccessExpiresAt is { } accessExpiry && accessExpiry <= now)
+                {
+                    context.Fail("subscription_expired");
                 }
 
                 return;
             }
 
-            if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+            if (string.Equals(accountState.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
+                && !accountState.ExpertIsActive)
             {
-                var expertActive = await db.ExpertUsers
-                    .AsNoTracking()
-                    .Where(x => x.AuthAccountId == account.Id)
-                    .Select(x => x.IsActive)
-                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
-
-                if (!expertActive)
-                {
-                    context.Fail("account_suspended");
-                }
+                context.Fail("account_suspended");
             }
         }
     };
@@ -1754,7 +1767,7 @@ await using (var migrationScope = app.Services.CreateAsyncScope())
 // Dev/test explicitly opt in via the default UploadScanner:Provider=noop.
 {
     var runtimeSettings = app.Services.GetRequiredService<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider>();
-    var scannerSettings = runtimeSettings.GetAsync().GetAwaiter().GetResult().UploadScanner;
+    var scannerSettings = (await runtimeSettings.GetAsync()).UploadScanner;
     var scannerProvider = scannerSettings.Provider;
     if (app.Environment.IsProduction()
         && !string.Equals(scannerProvider, "clamav", StringComparison.OrdinalIgnoreCase))

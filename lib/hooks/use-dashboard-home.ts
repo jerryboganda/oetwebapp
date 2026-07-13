@@ -1,9 +1,16 @@
 'use client';
 
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '@/contexts/auth-context';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { ApiError, fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile, isApiError } from '@/lib/api';
+import { ApiError, isApiError } from '@/lib/api';
+import {
+  useDashboardHome as useDashboardHomeQuery,
+  useEngagement,
+  useReadiness,
+  useStudyPlan,
+  useUserProfileQuery,
+} from '@/lib/query/hooks';
 import type { ReadinessData, StudyPlanTask, UserProfile } from '@/lib/mock-data';
 
 export interface EngagementData {
@@ -27,23 +34,13 @@ export interface DashboardHomeData {
   loadedAt: string | null;
 }
 
-interface DashboardHomeState {
-  data: DashboardHomeData;
-  error: string | null;
-  status: 'loading' | 'success' | 'error' | 'partial';
-}
-
-const initialState: DashboardHomeState = {
-  data: {
-    home: null,
-    profile: null,
-    readiness: null,
-    tasks: [],
-    engagement: null,
-    loadedAt: null,
-  },
-  error: null,
-  status: 'loading',
+const emptyData: DashboardHomeData = {
+  home: null,
+  profile: null,
+  readiness: null,
+  tasks: [],
+  engagement: null,
+  loadedAt: null,
 };
 
 function toErrorMessage(error: unknown): string {
@@ -74,126 +71,75 @@ export function useDashboardHome() {
   const authLoading = authContext?.loading ?? false;
   const isAuthenticated = authContext?.isAuthenticated ?? true;
   const signOut = authContext?.signOut;
-  const [state, setState] = useState<DashboardHomeState>(initialState);
-
-  async function load() {
-    if (authLoading || !isAuthenticated) {
-      return;
-    }
-
-    setState((current) => ({
-      ...current,
-      error: null,
-      status: 'loading',
-    }));
-
-    try {
-      const [tasksResult, readinessResult, profileResult, homeResult, engagementResult] = await Promise.allSettled([
-        fetchStudyPlan(),
-        fetchReadiness(),
-        fetchUserProfile(),
-        fetchDashboardHome(),
-        fetchEngagement(),
-      ]);
-
-      const settledResults = [tasksResult, readinessResult, profileResult, homeResult, engagementResult];
-      const hasAuthFailure = settledResults.some((result) => result.status === 'rejected' && isAuthFailure(result.reason));
-      if (hasAuthFailure) {
-        if (signOut) {
-          try {
-            await signOut();
-          } catch {
-            // If sign-out fails, stop here so auth guards can re-evaluate state.
-          }
-        }
-        return;
-      }
-
-      const taskError = tasksResult.status === 'rejected' ? tasksResult.reason : null;
-      const readinessError = readinessResult.status === 'rejected' ? readinessResult.reason : null;
-      const profileError = profileResult.status === 'rejected' ? profileResult.reason : null;
-      const homeError = homeResult.status === 'rejected' ? homeResult.reason : null;
-      const engagementError = engagementResult.status === 'rejected' ? engagementResult.reason : null;
-
-      const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : [];
-      const readiness = readinessResult.status === 'fulfilled' ? readinessResult.value : null;
-      const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
-      const home = homeResult.status === 'fulfilled' ? homeResult.value : null;
-      const engagementData = engagementResult.status === 'fulfilled' ? engagementResult.value : null;
-
-      const raw = (engagementData ?? {}) as Partial<EngagementData>;
-      const engagement: EngagementData = {
-        currentStreak: raw.currentStreak ?? 0,
-        longestStreak: raw.longestStreak ?? 0,
-        lastPracticeDate: raw.lastPracticeDate ?? null,
-        totalPracticeMinutes: raw.totalPracticeMinutes ?? 0,
-        totalPracticeSessions: raw.totalPracticeSessions ?? 0,
-        avgSessionMinutes: raw.avgSessionMinutes ?? 0,
-        weeklyActivity: raw.weeklyActivity ?? [],
-        streakFreezeAvailable: raw.streakFreezeAvailable ?? false,
-        streakFreezeUsedThisWeek: raw.streakFreezeUsedThisWeek ?? false,
-      };
-
-      const firstError = taskError ?? readinessError ?? profileError ?? homeError ?? engagementError;
-      const partial = !!firstError;
-
-      setState({
-        data: {
-          home,
-          profile,
-          readiness,
-          tasks,
-          engagement,
-          loadedAt: new Date().toISOString(),
-        },
-        error: firstError ? toErrorMessage(firstError) : null,
-        status: partial ? 'partial' : 'success',
-      });
-
-      if (!partial) {
-        track('readiness_viewed');
-      }
-    } catch (error) {
-      setState((current) => ({
-        ...current,
-        error: toErrorMessage(error),
-        status: 'error',
-      }));
-    }
-  }
-
-  // NOTE: Stable-callback pattern via useRef instead of React 19.2 `useEffectEvent`.
-  // `useEffectEvent` resolves to `undefined` in certain bundler/minifier
-  // configurations in our production build, so we use the classic ref-wrapper
-  // pattern which has the same stale-closure guarantees.
-  const loadRef = useRef<() => void>(() => {});
-  useLayoutEffect(() => {
-    loadRef.current = () => {
-      void load();
-    };
-  });
+  const userId = authContext?.user?.userId ?? 'current';
+  const enabled = !authLoading && isAuthenticated;
+  const queryOptions = {
+    enabled,
+    retry: (failureCount: number, error: Error) => !isAuthFailure(error) && failureCount < 1,
+  };
+  const tasksQuery = useStudyPlan(userId, queryOptions);
+  const readinessQuery = useReadiness(userId, queryOptions);
+  const profileQuery = useUserProfileQuery(userId, queryOptions);
+  const homeQuery = useDashboardHomeQuery(userId, queryOptions);
+  const engagementQuery = useEngagement(userId, queryOptions);
+  const queries = [tasksQuery, readinessQuery, profileQuery, homeQuery, engagementQuery];
+  const firstError = queries.find((query) => query.error)?.error ?? null;
+  const hasAuthFailure = queries.some((query) => isAuthFailure(query.error));
+  const handledAuthFailureFor = useRef<string | null>(null);
+  const trackedReadinessFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (authLoading) {
-      return;
-    }
+    if (!hasAuthFailure || !signOut || handledAuthFailureFor.current === userId) return;
+    handledAuthFailureFor.current = userId;
+    void Promise.resolve(signOut()).catch(() => {
+      // Auth guards will re-evaluate even when the best-effort sign-out request fails.
+    });
+  }, [hasAuthFailure, signOut, userId]);
 
-    if (!isAuthenticated) {
-      setState({
-        data: initialState.data,
-        error: null,
-        status: 'success',
-      });
-      return;
-    }
+  const allSuccessful = enabled && queries.every((query) => query.isSuccess);
+  useEffect(() => {
+    if (!allSuccessful || trackedReadinessFor.current === userId) return;
+    trackedReadinessFor.current = userId;
+    track('readiness_viewed');
+  }, [allSuccessful, track, userId]);
 
-    loadRef.current();
-  }, [authLoading, isAuthenticated]);
+  const rawEngagement = (engagementQuery.data ?? {}) as Partial<EngagementData>;
+  const engagement: EngagementData = {
+    currentStreak: rawEngagement.currentStreak ?? 0,
+    longestStreak: rawEngagement.longestStreak ?? 0,
+    lastPracticeDate: rawEngagement.lastPracticeDate ?? null,
+    totalPracticeMinutes: rawEngagement.totalPracticeMinutes ?? 0,
+    totalPracticeSessions: rawEngagement.totalPracticeSessions ?? 0,
+    avgSessionMinutes: rawEngagement.avgSessionMinutes ?? 0,
+    weeklyActivity: rawEngagement.weeklyActivity ?? [],
+    streakFreezeAvailable: rawEngagement.streakFreezeAvailable ?? false,
+    streakFreezeUsedThisWeek: rawEngagement.streakFreezeUsedThisWeek ?? false,
+  };
+  const latestUpdate = Math.max(...queries.map((query) => query.dataUpdatedAt), 0);
+  const data: DashboardHomeData = !isAuthenticated
+    ? emptyData
+    : {
+        home: homeQuery.data ?? null,
+        profile: profileQuery.data ?? null,
+        readiness: readinessQuery.data ?? null,
+        tasks: tasksQuery.data ?? [],
+        engagement,
+        loadedAt: latestUpdate > 0 ? new Date(latestUpdate).toISOString() : null,
+      };
+  const status = authLoading || hasAuthFailure || (enabled && queries.some((query) => query.isPending))
+    ? 'loading'
+    : firstError
+      ? 'partial'
+      : 'success';
+  const reload = async () => {
+    if (!enabled) return;
+    await Promise.all(queries.map((query) => query.refetch()));
+  };
 
   return {
-    data: state.data,
-    error: state.error,
-    reload: load,
-    status: state.status,
+    data,
+    error: firstError ? toErrorMessage(firstError) : null,
+    reload,
+    status,
   };
 }

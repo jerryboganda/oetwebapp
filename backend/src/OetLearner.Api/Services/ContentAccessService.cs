@@ -6,6 +6,8 @@ namespace OetLearner.Api.Services;
 
 public class ContentAccessService(LearnerDbContext db, ContentHierarchyService hierarchy)
 {
+    private const int MaxPageSize = 100;
+
     /// <summary>
     /// Browse content items with access annotations.
     /// Returns all published items with isAccessible/isPreview flags based on user's subscription.
@@ -15,9 +17,14 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
         string? difficulty, string? language, string? provenance,
         int page, int pageSize, CancellationToken ct)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (int)Math.Min((long)(page - 1) * pageSize, int.MaxValue);
+
         var accessibleIds = await hierarchy.ResolveAccessibleContentIdsAsync(userId, ct);
 
         var query = db.ContentItems
+            .AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published && c.FreshnessConfidence != "superseded");
 
         if (!string.IsNullOrEmpty(subtestCode))
@@ -34,7 +41,22 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
         var total = await query.CountAsync(ct);
         var items = await query
             .OrderBy(c => c.SubtestCode).ThenBy(c => c.Title)
-            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Skip(offset).Take(pageSize)
+            .Select(c => new
+            {
+                c.Id,
+                c.ContentType,
+                c.SubtestCode,
+                c.ProfessionId,
+                c.Title,
+                c.Difficulty,
+                c.EstimatedDurationMinutes,
+                c.ScenarioType,
+                c.InstructionLanguage,
+                c.SourceProvenance,
+                c.QualityScore,
+                c.IsPreviewEligible
+            })
             .ToListAsync(ct);
 
         var hasSubscription = accessibleIds.Count > 0;
@@ -68,8 +90,19 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
     /// </summary>
     public async Task<ContentAccessCheck> CheckAccessAsync(string userId, string contentItemId, CancellationToken ct)
     {
-        var item = await db.ContentItems.FindAsync([contentItemId], ct);
-        if (item is null)
+        var item = await db.ContentItems
+            .AsNoTracking()
+            .Where(content => content.Id == contentItemId)
+            .Select(content => new
+            {
+                content.Status,
+                content.FreshnessConfidence,
+                content.IsPreviewEligible
+            })
+            .SingleOrDefaultAsync(ct);
+        if (item is null
+            || item.Status != ContentStatus.Published
+            || item.FreshnessConfidence == "superseded")
             return new ContentAccessCheck(false, "not_found", null);
 
         if (item.IsPreviewEligible)
@@ -81,7 +114,10 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
 
         // Find which package they'd need
         var packageForContent = await db.PackageContentRules
-            .Where(r => r.TargetId == contentItemId && r.TargetType == "content_item" && r.RuleType == "include_item")
+            .AsNoTracking()
+            .Where(r => r.TargetId == contentItemId
+                        && r.TargetType == "content_item"
+                        && (r.RuleType == "include_content_item" || r.RuleType == "include_item"))
             .Select(r => r.PackageId)
             .FirstOrDefaultAsync(ct);
 
@@ -94,16 +130,44 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
     public async Task<object> BrowseProgramsWithAccessAsync(
         string userId, string? type, string? language, int page, int pageSize, CancellationToken ct)
     {
-        var accessibleIds = await hierarchy.ResolveAccessibleContentIdsAsync(userId, ct);
-        var hasSubscription = accessibleIds.Count > 0;
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (int)Math.Min((long)(page - 1) * pageSize, int.MaxValue);
 
-        var query = db.ContentPrograms.Where(p => p.Status == ContentStatus.Published);
+        var userPackageIds = await db.ContentPackages
+            .AsNoTracking()
+            .Where(package => package.Status == ContentStatus.Published
+                              && package.BillingPlanId != null
+                              && db.Subscriptions.Any(subscription =>
+                                  subscription.UserId == userId
+                                  && subscription.Status == SubscriptionStatus.Active
+                                  && subscription.PlanId == package.BillingPlanId))
+            .Select(package => package.Id)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var query = db.ContentPrograms
+            .AsNoTracking()
+            .Where(p => p.Status == ContentStatus.Published);
         if (!string.IsNullOrEmpty(type)) query = query.Where(p => p.ProgramType == type);
         if (!string.IsNullOrEmpty(language)) query = query.Where(p => p.InstructionLanguage == language);
 
         var total = await query.CountAsync(ct);
         var programs = await query.OrderBy(p => p.DisplayOrder)
-            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Skip(offset).Take(pageSize)
+            .Select(p => new
+            {
+                p.Id,
+                p.Code,
+                p.Title,
+                p.Description,
+                p.ProfessionId,
+                p.InstructionLanguage,
+                p.ProgramType,
+                p.ThumbnailUrl,
+                p.DisplayOrder,
+                p.EstimatedDurationMinutes
+            })
             .ToListAsync(ct);
 
         var programIds = programs.Select(p => p.Id).ToList();
@@ -116,25 +180,17 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
                 .Select(group => new { ProgramId = group.Key, Count = group.Count() })
                 .ToDictionaryAsync(item => item.ProgramId, item => item.Count, ct);
 
-        // Check which programs the user has access to via package rules
-        var packageRules = hasSubscription
+        // Limit the rule query to the user's eligible packages and the current page.
+        var accessibleProgramIds = userPackageIds.Count > 0 && programIds.Count > 0
             ? await db.PackageContentRules
-                .Where(r => r.RuleType == "include_program")
-                .ToListAsync(ct)
+                .AsNoTracking()
+                .Where(rule => rule.RuleType == "include_program"
+                               && userPackageIds.Contains(rule.PackageId)
+                               && programIds.Contains(rule.TargetId))
+                .Select(rule => rule.TargetId)
+                .Distinct()
+                .ToHashSetAsync(ct)
             : [];
-
-        var userPackageIds = hasSubscription
-            ? await db.ContentPackages
-                .Where(p => db.Subscriptions.Any(s =>
-                    s.UserId == userId && s.Status == SubscriptionStatus.Active && s.PlanId == p.BillingPlanId))
-                .Select(p => p.Id)
-                .ToListAsync(ct)
-            : [];
-
-        var accessibleProgramIds = packageRules
-            .Where(r => userPackageIds.Contains(r.PackageId))
-            .Select(r => r.TargetId)
-            .ToHashSet();
 
         var result = programs.Select(p => new
         {

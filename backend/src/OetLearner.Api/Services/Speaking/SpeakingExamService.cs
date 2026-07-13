@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -609,11 +610,44 @@ public sealed class SpeakingExamService(
                 "There aren't enough published role-play cards for this profession to run an exam.");
         }
 
-        // Random distinct pair.
-        var shuffled = published.OrderBy(_ => Guid.NewGuid()).Take(2).ToList();
-        var cardA = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == shuffled[0], ct);
-        var cardB = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == shuffled[1], ct);
+        // The matching ids are already materialized above. Select the first two
+        // positions of a partial Fisher-Yates shuffle without sorting the full
+        // list. RandomNumberGenerator.GetInt32 uses rejection sampling, so each
+        // ordered pair of distinct cards is equally likely.
+        var selected = SampleTwo(published, RandomNumberGenerator.GetInt32);
+        var cardA = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == selected.First, ct);
+        var cardB = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == selected.Second, ct);
         return (cardA, cardB, profession);
+    }
+
+    internal static (T First, T Second) SampleTwo<T>(
+        IReadOnlyList<T> items,
+        Func<int, int> nextIndex)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(nextIndex);
+        if (items.Count < 2)
+        {
+            throw new ArgumentException("At least two items are required.", nameof(items));
+        }
+
+        var firstIndex = nextIndex(items.Count);
+        var secondIndex = nextIndex(items.Count - 1);
+        if ((uint)firstIndex >= (uint)items.Count
+            || (uint)secondIndex >= (uint)(items.Count - 1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(nextIndex),
+                "The random index provider returned an index outside its requested range.");
+        }
+
+        // Skip the first selection in the remaining compact index range. This
+        // is equivalent to two swaps of a partial Fisher-Yates shuffle.
+        if (secondIndex >= firstIndex)
+        {
+            secondIndex++;
+        }
+
+        return (items[firstIndex], items[secondIndex]);
     }
 
     private async Task<(int Prep, int Discussion)> TimingAsync(string cardId, CancellationToken ct)

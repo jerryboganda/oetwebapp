@@ -19,25 +19,23 @@ public sealed class WhisperConversationAsrProvider(
     ILogger<WhisperConversationAsrProvider> logger) : IConversationAsrProvider
 {
     private const string WhisperProviderCode = "whisper-asr";
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "whisper";
-    public bool IsConfigured
+    public bool IsConfigured =>
+        IsConversationConfigured(optionsProvider.Current)
+        || (runtimeSettings.CurrentSnapshot?.Effective.SpeakingWhisper.IsConfigured ?? false);
+
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
     {
-        get
-        {
-            var opts = ReadOptions();
-            if (!string.IsNullOrWhiteSpace(opts.WhisperApiKey) && !string.IsNullOrWhiteSpace(opts.WhisperBaseUrl))
-                return true;
-            try { return runtimeSettings.GetAsync().GetAwaiter().GetResult().SpeakingWhisper.IsConfigured; }
-            catch { return false; }
-        }
+        var options = await optionsProvider.GetAsync(ct);
+        if (IsConversationConfigured(options)) return true;
+        return (await runtimeSettings.GetAsync(ct)).SpeakingWhisper.IsConfigured;
     }
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
         // Resolve credentials: own ConversationOptions → admin-panel SpeakingWhisper (shared key).
-        var opts = ReadOptions();
+        var opts = await optionsProvider.GetAsync(ct);
         var apiKey = string.IsNullOrWhiteSpace(opts.WhisperApiKey) ? null : opts.WhisperApiKey;
         var whisperUrl = string.IsNullOrWhiteSpace(opts.WhisperBaseUrl) ? null : opts.WhisperBaseUrl;
         var whisperModel = string.IsNullOrWhiteSpace(opts.WhisperModel) ? null : opts.WhisperModel;
@@ -157,4 +155,9 @@ public sealed class WhisperConversationAsrProvider(
             _ => "audio.webm",
         };
     }
+
+    private static bool IsConversationConfigured(ConversationOptions? options)
+        => options is not null
+           && !string.IsNullOrWhiteSpace(options.WhisperApiKey)
+           && !string.IsNullOrWhiteSpace(options.WhisperBaseUrl);
 }

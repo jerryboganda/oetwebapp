@@ -4,7 +4,6 @@ import { Suspense, type ReactNode, useContext, useEffect } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
-import { NotificationCenterProvider } from '@/contexts/notification-center-context';
 import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
@@ -160,20 +159,20 @@ export function AppShell({
     </div>
   );
 
-  const shellWithNotifications = requireAuth
+  const shellWithTour = requireAuth
     ? (
-      <NotificationCenterProvider>
+      <>
         {shell}
         <TourAutoTrigger workspaceRole={workspaceRole} />
-      </NotificationCenterProvider>
+      </>
     )
     : shell;
 
   const content = requireAuth ? (
     <Suspense fallback={<ShellFallback />}>
-      <AuthGuard requiredRole={requiredRole}>{shellWithNotifications}</AuthGuard>
+      <AuthGuard requiredRole={requiredRole}>{shellWithTour}</AuthGuard>
     </Suspense>
-  ) : shellWithNotifications;
+  ) : shellWithTour;
 
   return requireAuth && !hasAuthProvider ? <AuthProvider>{content}</AuthProvider> : content;
 }

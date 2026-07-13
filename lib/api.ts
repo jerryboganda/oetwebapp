@@ -83,6 +83,7 @@ import type {
 } from './billing-types';
 import type { FreezePolicy } from './types/freeze';
 import type { BulkActionResultDto } from './types/admin';
+import type { LearnerVocabulary, MyVocabularyPageResponse } from './types/vocabulary';
 import type {
   CalibrationCaseDetail,
   CalibrationCase,
@@ -6797,9 +6798,32 @@ export async function requestVocabularyGloss(payload: { word: string; context?: 
   });
 }
 
-export async function fetchMyVocabulary(mastery?: string) {
-  const p = mastery ? `?mastery=${mastery}` : '';
-  return apiRequest(`/v1/vocabulary/my-list${p}`);
+export interface MyVocabularyPageRequest {
+  page: number;
+  pageSize: number;
+  termId?: string;
+}
+
+export function fetchMyVocabulary(mastery?: string): Promise<LearnerVocabulary[]>;
+export function fetchMyVocabulary(
+  mastery: string | undefined,
+  pagination: MyVocabularyPageRequest,
+): Promise<MyVocabularyPageResponse>;
+export async function fetchMyVocabulary(
+  mastery?: string,
+  pagination?: MyVocabularyPageRequest,
+): Promise<LearnerVocabulary[] | MyVocabularyPageResponse> {
+  const p = new URLSearchParams();
+  if (mastery) p.set('mastery', mastery);
+  if (pagination?.termId) p.set('termId', pagination.termId);
+  if (pagination) {
+    p.set('page', String(pagination.page));
+    p.set('pageSize', String(pagination.pageSize));
+  }
+  const qs = p.toString();
+  return apiRequest<LearnerVocabulary[] | MyVocabularyPageResponse>(
+    `/v1/vocabulary/my-list${qs ? `?${qs}` : ''}`,
+  );
 }
 
 export async function addToMyVocabulary(termId: string, opts?: { sourceRef?: string; context?: string }) {

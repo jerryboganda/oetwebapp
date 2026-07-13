@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithRouter } from '@/tests/test-utils';
 const {
   mockFetchStudyPlan,
@@ -47,6 +48,7 @@ vi.mock('@/lib/api', () => ({
   fetchUserProfile: mockFetchUserProfile,
   fetchDashboardHome: mockFetchDashboardHome,
   fetchEngagement: mockFetchEngagement,
+  isApiError: () => false,
   learnerGetScoringPolicy: mockLearnerGetScoringPolicy,
   fetchPronunciationProfile: vi.fn().mockResolvedValue({
     overallScore: 0,
@@ -62,11 +64,24 @@ vi.mock('@/lib/api', () => ({
   // page renders without throwing in the test environment.
   fetchMyEntitlementSnapshot: mockFetchMyEntitlementSnapshot,
   fetchSubscriptionMe: mockFetchSubscriptionMe,
+  fetchMyAiPackageCredits: vi.fn(),
 }));
 
 import DashboardPage from './page';
 
 describe('Dashboard page', () => {
+  function renderDashboard() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return renderWithRouter(
+      <QueryClientProvider client={client}>
+        <DashboardPage />
+      </QueryClientProvider>,
+      { router: { push: mockPush } },
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -177,7 +192,7 @@ describe('Dashboard page', () => {
   });
 
   it('renders through the shared learner dashboard shell', async () => {
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect(await screen.findByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
@@ -196,7 +211,7 @@ describe('Dashboard page', () => {
       blockers: [],
     } as any);
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect(await screen.findByText('Trend data will appear after more practice.')).toBeInTheDocument();
   });
@@ -221,7 +236,7 @@ describe('Dashboard page', () => {
       },
     ]);
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect((await screen.findAllByText('Reading: Part C Practice')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Writing: Discharge Summary Practice')).not.toBeInTheDocument();
@@ -256,7 +271,7 @@ describe('Dashboard page', () => {
       },
     ]);
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect((await screen.findAllByText('Speaking: Private Session Prep')).length).toBeGreaterThan(0);
   });
@@ -280,7 +295,7 @@ describe('Dashboard page', () => {
       isFrozen: false,
     });
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect((await screen.findAllByText('Full Nursing OET Course')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0);
@@ -310,7 +325,7 @@ describe('Dashboard page', () => {
       trialEndsAt: null,
     });
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect((await screen.findAllByText('Full Nursing OET Course')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/days left/i).length).toBeGreaterThan(0);
@@ -319,7 +334,7 @@ describe('Dashboard page', () => {
   it('keeps the dashboard usable when there is no active subscription', async () => {
     mockFetchSubscriptionMe.mockResolvedValueOnce(null);
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect((await screen.findAllByText('No active subscription')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /see all catalog/i })).toHaveAttribute('href', '/catalog');
@@ -328,7 +343,7 @@ describe('Dashboard page', () => {
   it('keeps the dashboard usable when subscription details fail to load', async () => {
     mockFetchSubscriptionMe.mockRejectedValueOnce(new Error('network failed'));
 
-    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+    renderDashboard();
 
     expect(await screen.findByText('Subscription details unavailable')).toBeInTheDocument();
     expect(screen.getByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();

@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace OetLearner.Api.Tests;
@@ -56,20 +57,40 @@ internal sealed class InMemoryFileStorage : IFileStorage
         return Task.FromResult<Stream>(ms);
     }
 
-    public bool Exists(string key) => _files.ContainsKey(key);
-    public bool AnyKeyStartsWith(string prefix) => _files.Keys.Any(key => key.StartsWith(prefix, StringComparison.Ordinal));
-    public bool Delete(string key) => _files.Remove(key);
-    public long Length(string key) => _files[key].Length;
-    public void Move(string src, string dst, bool overwrite)
+    public Task<bool> ExistsAsync(string key, CancellationToken ct)
     {
-        if (_files.ContainsKey(dst) && !overwrite) return;
-        _files[dst] = _files[src];
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_files.ContainsKey(key));
     }
-    public int DeletePrefix(string prefix)
+
+    public bool AnyKeyStartsWith(string prefix) => _files.Keys.Any(key => key.StartsWith(prefix, StringComparison.Ordinal));
+
+    public Task<bool> DeleteAsync(string key, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_files.Remove(key));
+    }
+
+    public Task<long> LengthAsync(string key, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult((long)_files[key].Length);
+    }
+
+    public Task MoveAsync(string src, string dst, bool overwrite, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_files.ContainsKey(dst) && !overwrite) return Task.CompletedTask;
+        _files[dst] = _files[src];
+        return Task.CompletedTask;
+    }
+
+    public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
         var keys = _files.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
         foreach (var k in keys) _files.Remove(k);
-        return keys.Count;
+        return Task.FromResult(keys.Count);
     }
 
     private static string NormalizeWhitespace(string value)
@@ -132,9 +153,9 @@ public class ChunkedUploadServiceTests
         Assert.Equal(6, result.SizeBytes);
         Assert.Equal(64, result.Sha256.Length); // hex sha256
         // published file exists
-        Assert.True(storage.Exists($"uploads/published/{result.Sha256[..2]}/{result.Sha256.Substring(2, 2)}/{result.Sha256}.mp3"));
+        Assert.True(await storage.ExistsAsync($"uploads/published/{result.Sha256[..2]}/{result.Sha256.Substring(2, 2)}/{result.Sha256}.mp3", CancellationToken.None));
         // staging is cleaned
-        Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00001.bin"));
+        Assert.False(await storage.ExistsAsync($"uploads/staging/admin-1/{session.Id}/00001.bin", CancellationToken.None));
 
         var media = await db.MediaAssets.SingleAsync();
         Assert.Equal(result.Sha256, media.Sha256);
@@ -173,7 +194,7 @@ public class ChunkedUploadServiceTests
         await Assert.ThrowsAsync<ApiException>(() =>
             svc.UploadPartAsync("admin-1", session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
 
-        Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00002.bin"));
+        Assert.False(await storage.ExistsAsync($"uploads/staging/admin-1/{session.Id}/00002.bin", CancellationToken.None));
         await db.DisposeAsync();
     }
 
@@ -186,7 +207,7 @@ public class ChunkedUploadServiceTests
         await Assert.ThrowsAsync<ApiException>(() =>
             svc.UploadPartAsync("admin-1", session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("toolong")), default));
 
-        Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00001.bin"));
+        Assert.False(await storage.ExistsAsync($"uploads/staging/admin-1/{session.Id}/00001.bin", CancellationToken.None));
         await db.DisposeAsync();
     }
 
@@ -223,7 +244,7 @@ public class ChunkedUploadServiceTests
         await svc.AbortAsync("admin-1", s.Id, default);
         var reload = await db.AdminUploadSessions.FirstAsync();
         Assert.Equal(AdminUploadState.Aborted, reload.State);
-        Assert.False(storage.Exists($"uploads/staging/admin-1/{s.Id}/00001.bin"));
+        Assert.False(await storage.ExistsAsync($"uploads/staging/admin-1/{s.Id}/00001.bin", CancellationToken.None));
         await db.DisposeAsync();
     }
 
@@ -319,7 +340,7 @@ public class ChunkedUploadServiceTests
         var session = await db.AdminUploadSessions.SingleAsync();
         Assert.NotEqual(AdminUploadState.Aborted, session.State);
         Assert.Null(session.MediaAssetId);
-        Assert.True(storage.Exists($"uploads/staging/admin-1/{s.Id}/00001.bin"));
+        Assert.True(await storage.ExistsAsync($"uploads/staging/admin-1/{s.Id}/00001.bin", CancellationToken.None));
         Assert.Equal(0, await db.MediaAssets.CountAsync());
 
         // Once the scanner recovers, retrying the commit publishes the asset
@@ -332,5 +353,225 @@ public class ChunkedUploadServiceTests
         Assert.False(result.Deduplicated);
         Assert.Equal(1, await db.MediaAssets.CountAsync());
         await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Complete_awaits_part_opens_in_order_and_streams_with_a_bounded_buffer()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var storage = new TrackingFileStorage();
+        var uploadOptions = new ContentUploadOptions { ChunkSizeBytes = 1024 * 1024 };
+        var service = new ChunkedUploadService(
+            db,
+            storage,
+            Options.Create(new StorageOptions
+            {
+                LocalRootPath = "/tmp",
+                ContentUpload = uploadOptions,
+            }),
+            validator: null,
+            scanner: null,
+            NullLogger<ChunkedUploadService>.Instance);
+        var first = Enumerable.Repeat((byte)0x11, 1024 * 1024).ToArray();
+        var second = Enumerable.Repeat((byte)0x22, 1024 * 1024).ToArray();
+        var session = await service.StartAsync(new ChunkedUploadStart(
+            "admin-stream", "large.pdf", "application/pdf",
+            first.LongLength + second.LongLength, "QuestionPaper"), default);
+        await service.UploadPartAsync(
+            "admin-stream", session.Id, 1, new MemoryStream(first), default);
+        await service.UploadPartAsync(
+            "admin-stream", session.Id, 2, new MemoryStream(second), default);
+
+        using var expectedHasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        expectedHasher.AppendData(first);
+        expectedHasher.AppendData(second);
+        var expectedSha = Convert.ToHexString(expectedHasher.GetHashAndReset())
+            .ToLowerInvariant();
+
+        var result = await service.CompleteAsync(
+            "admin-stream", session.Id, default);
+
+        Assert.Equal(expectedSha, result.Sha256);
+        Assert.Equal(
+            new[] { "00001.bin", "00002.bin" },
+            storage.PartOpenKeys.Select(Path.GetFileName));
+        Assert.All(storage.PartStreams, stream => Assert.True(stream.IsDisposed));
+        Assert.All(
+            storage.PartStreams,
+            stream => Assert.InRange(stream.MaxReadRequest, 1, 81920));
+    }
+
+    [Fact]
+    public async Task Complete_cancellation_while_opening_a_later_part_disposes_opened_streams()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var storage = new TrackingFileStorage { BlockOnPartOpen = 2 };
+        var service = new ChunkedUploadService(
+            db,
+            storage,
+            Options.Create(new StorageOptions
+            {
+                LocalRootPath = "/tmp",
+                ContentUpload = new ContentUploadOptions { ChunkSizeBytes = 3 },
+            }),
+            validator: null,
+            scanner: null,
+            NullLogger<ChunkedUploadService>.Instance);
+        var session = await service.StartAsync(new ChunkedUploadStart(
+            "admin-cancel", "cancel.pdf", "application/pdf", 6,
+            "QuestionPaper"), default);
+        await service.UploadPartAsync(
+            "admin-cancel", session.Id, 1,
+            new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
+        await service.UploadPartAsync(
+            "admin-cancel", session.Id, 2,
+            new MemoryStream(Encoding.ASCII.GetBytes("def")), default);
+        using var cts = new CancellationTokenSource();
+
+        var completing = service.CompleteAsync(
+            "admin-cancel", session.Id, cts.Token);
+        await storage.BlockedPartOpen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await completing);
+        var opened = Assert.Single(storage.PartStreams);
+        Assert.True(opened.IsDisposed);
+    }
+
+    private sealed class TrackingFileStorage : IFileStorage
+    {
+        private readonly InMemoryFileStorage _inner = new();
+        private int _partOpenCount;
+
+        public int BlockOnPartOpen { get; init; }
+        public TaskCompletionSource BlockedPartOpen { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<string> PartOpenKeys { get; } = [];
+        public List<TrackingReadStream> PartStreams { get; } = [];
+
+        public Task<long> WriteAsync(string key, Stream source, CancellationToken ct)
+            => _inner.WriteAsync(key, source, ct);
+
+        public async Task<Stream> OpenReadAsync(string key, CancellationToken ct)
+        {
+            if (key.EndsWith(".bin", StringComparison.Ordinal))
+            {
+                await Task.Yield();
+                PartOpenKeys.Add(key);
+                var partOpen = Interlocked.Increment(ref _partOpenCount);
+                if (partOpen == BlockOnPartOpen)
+                {
+                    BlockedPartOpen.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                }
+
+                var tracked = new TrackingReadStream(
+                    await _inner.OpenReadAsync(key, ct));
+                PartStreams.Add(tracked);
+                return tracked;
+            }
+
+            return await _inner.OpenReadAsync(key, ct);
+        }
+
+        public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
+            => _inner.OpenWriteAsync(key, ct);
+        public Task<bool> ExistsAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return _inner.ExistsAsync(key, ct);
+        }
+
+        public Task<bool> DeleteAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return _inner.DeleteAsync(key, ct);
+        }
+
+        public Task<long> LengthAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return _inner.LengthAsync(key, ct);
+        }
+
+        public Task MoveAsync(
+            string sourceKey,
+            string destKey,
+            bool overwrite,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return _inner.MoveAsync(sourceKey, destKey, overwrite, ct);
+        }
+
+        public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return _inner.DeletePrefixAsync(prefix, ct);
+        }
+        public string? TryResolveLocalPath(string key) => null;
+        public Uri? ResolveReadUrl(string key, TimeSpan ttl)
+            => _inner.ResolveReadUrl(key, ttl);
+    }
+
+    private sealed class TrackingReadStream(Stream inner) : Stream
+    {
+        public bool IsDisposed { get; private set; }
+        public int MaxReadRequest { get; private set; }
+
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => inner.Length;
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            MaxReadRequest = Math.Max(MaxReadRequest, count);
+            return inner.Read(buffer, offset, count);
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            MaxReadRequest = Math.Max(MaxReadRequest, buffer.Length);
+            return await inner.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override void Flush() => inner.Flush();
+        public override long Seek(long offset, SeekOrigin origin)
+            => inner.Seek(offset, origin);
+        public override void SetLength(long value) => inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count)
+            => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                IsDisposed = true;
+                inner.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            IsDisposed = true;
+            await inner.DisposeAsync();
+            GC.SuppressFinalize(this);
+        }
     }
 }

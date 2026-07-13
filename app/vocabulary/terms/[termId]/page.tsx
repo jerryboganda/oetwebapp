@@ -52,7 +52,7 @@ export default function VocabularyTermDetailPage() {
     try {
       const [termR, listR] = await Promise.all([
         fetchVocabularyTerm(id),
-        fetchMyVocabulary().catch(() => []),
+        fetchMyVocabulary(undefined, { page: 1, pageSize: 1, termId: id }).catch(() => []),
       ]);
       setTerm(termR as VocabularyTerm);
       const myList = Array.isArray(listR) ? listR : ((listR as { items?: LearnerVocabulary[] }).items ?? []);

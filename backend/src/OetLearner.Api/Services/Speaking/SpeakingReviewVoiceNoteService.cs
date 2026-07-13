@@ -122,7 +122,9 @@ public sealed class SpeakingReviewVoiceNoteService
                 "Voice notes must be audio files.",
                 [new ApiFieldError("mediaAssetId", "invalid_type", "Upload mp3, m4a, wav, ogg, or webm audio.")]);
         }
-        if (media.Status != MediaAssetStatus.Ready || string.IsNullOrWhiteSpace(media.StoragePath) || !_fileStorage.Exists(media.StoragePath))
+        if (media.Status != MediaAssetStatus.Ready
+            || string.IsNullOrWhiteSpace(media.StoragePath)
+            || !await _fileStorage.ExistsAsync(media.StoragePath, ct))
         {
             throw ApiException.Validation(
                 "voice_note_media_not_ready",

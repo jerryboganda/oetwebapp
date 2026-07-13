@@ -1,6 +1,6 @@
 'use client';
 
-import { IconArrowRight, IconCheck, IconShieldLock } from '@tabler/icons-react';
+import { ArrowRight, Check, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -74,7 +74,7 @@ export default function ResetPasswordSuccessPage() {
       >
         <div className={styles.successHeroBadge}>
           <span className={styles.successHeroBadgeIcon}>
-            <IconCheck size={28} strokeWidth={2.5} />
+            <Check size={28} strokeWidth={2.5} />
           </span>
           <div>
             <strong>Password reset successfully</strong>
@@ -84,16 +84,16 @@ export default function ResetPasswordSuccessPage() {
 
         <ul className={styles.successChecklistCompact}>
           <li>
-            <IconShieldLock size={16} /> All other sessions have been signed out for security.
+            <ShieldCheck size={16} /> All other sessions have been signed out for security.
           </li>
           <li>
-            <IconCheck size={16} /> You can now sign in with {email}.
+            <Check size={16} /> You can now sign in with {email}.
           </li>
         </ul>
 
         <Link href={signInHref} className={styles.successPrimaryButton}>
           <span>Continue to sign in</span>
-          <IconArrowRight size={18} />
+          <ArrowRight size={18} />
         </Link>
 
         <p

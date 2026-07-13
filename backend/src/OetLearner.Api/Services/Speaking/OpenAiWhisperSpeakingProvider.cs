@@ -94,27 +94,11 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
 
     /// <summary>
     /// Synchronous check used at DI bind time + by the pipeline router. Reads
-    /// the cached registry snapshot first, then the cached effective settings;
-    /// both have a 30s TTL so admin-panel changes propagate quickly. Falls back
-    /// to false when neither has finished loading on cold start.
+    /// only last-known in-memory snapshots; it never performs DB/network I/O.
     /// </summary>
     public bool IsConfigured
-    {
-        get
-        {
-            try
-            {
-                if (_registryCredentials.IsRegistryConfigured(WhisperProviderCode))
-                    return true;
-                var snapshot = _runtimeSettings.GetAsync().GetAwaiter().GetResult();
-                return snapshot.SpeakingWhisper.IsConfigured;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-    }
+        => _registryCredentials.IsRegistryConfigured(WhisperProviderCode)
+           || (_runtimeSettings.CurrentSnapshot?.Effective.SpeakingWhisper.IsConfigured ?? false);
 
     public async Task<SpeakingTranscriptionProviderResult> TranscribeAsync(
         string mediaAssetReference,

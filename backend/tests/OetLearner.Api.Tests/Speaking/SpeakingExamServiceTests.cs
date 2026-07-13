@@ -359,6 +359,44 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(SpeakingSessionMode.LiveTutor, childA.Mode);
     }
 
+    [Fact]
+    public void SampleTwo_ProducesEveryOrderedDistinctPairExactlyOnceAcrossAllDraws()
+    {
+        string[] cards = ["A", "B", "C", "D"];
+        var pairs = new HashSet<(string First, string Second)>();
+
+        for (var firstDraw = 0; firstDraw < cards.Length; firstDraw++)
+        {
+            for (var secondDraw = 0; secondDraw < cards.Length - 1; secondDraw++)
+            {
+                var draws = new Queue<int>([firstDraw, secondDraw]);
+
+                var pair = SpeakingExamService.SampleTwo(cards, maxExclusive =>
+                {
+                    var draw = draws.Dequeue();
+                    Assert.InRange(draw, 0, maxExclusive - 1);
+                    return draw;
+                });
+
+                Assert.NotEqual(pair.First, pair.Second);
+                Assert.True(pairs.Add(pair), $"Duplicate ordered pair: {pair}");
+            }
+        }
+
+        Assert.Equal(cards.Length * (cards.Length - 1), pairs.Count);
+    }
+
+    [Fact]
+    public void SampleTwo_DoesNotMutateTheMaterializedSource()
+    {
+        string[] cards = ["A", "B", "C"];
+
+        var pair = SpeakingExamService.SampleTwo(cards, _ => 0);
+
+        Assert.Equal(("A", "B"), pair);
+        Assert.Equal(["A", "B", "C"], cards);
+    }
+
     private static void AssertNoLeak(SpeakingExamDetail detail)
     {
         var json = JsonSerializer.Serialize(detail);

@@ -197,7 +197,7 @@ public static class MediaEndpoints
         var storagePath = asset.StoragePath;
         db.MediaAssets.Remove(asset);
         await db.SaveChangesAsync(ct);
-        storage.Delete(storagePath);
+        await storage.DeleteAsync(storagePath, ct);
 
         return Results.Ok(new { deleted = true, id = asset.Id });
     }
@@ -257,11 +257,20 @@ public static class MediaEndpoints
         if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
         if (!await access.CanAccessAsync(http.User, media, ct)) return Results.NotFound();
 
-        if (!storage.Exists(media.StoragePath)) return Results.NotFound();
+        FileStorageReadResult read;
+        try
+        {
+            read = await storage.OpenReadWithMetadataAsync(media.StoragePath, ct);
+        }
+        catch (FileNotFoundException)
+        {
+            return Results.NotFound();
+        }
+
         http.Response.Headers.CacheControl = "private, no-store";
         http.Response.Headers.Vary = "Authorization";
-        var stream = await storage.OpenReadAsync(media.StoragePath, ct);
-        return Results.Stream(stream, media.MimeType, media.OriginalFilename);
+        http.Response.ContentLength = read.Length;
+        return Results.Stream(read.Stream, media.MimeType, media.OriginalFilename);
     }
 
 }

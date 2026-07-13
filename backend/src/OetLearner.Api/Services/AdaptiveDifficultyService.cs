@@ -55,22 +55,26 @@ public class AdaptiveDifficultyService(LearnerDbContext db)
 
         var targetRating = profile?.CurrentRating ?? DefaultRating;
         var tolerance = 200;
+        var published = db.ContentItems
+            .AsNoTracking()
+            .Where(c => c.ExamTypeCode == examTypeCode && c.SubtestCode == subtestCode && c.Status == ContentStatus.Published);
 
-        var items = await db.ContentItems
-            .Where(c => c.ExamTypeCode == examTypeCode && c.SubtestCode == subtestCode && c.Status == ContentStatus.Published)
-            .Where(c => c.DifficultyRating >= targetRating - tolerance && c.DifficultyRating <= targetRating + tolerance)
-            .OrderBy(_ => Guid.NewGuid())
-            .Take(count)
-            .ToListAsync(ct);
+        var items = await SampleAsync(
+            published.Where(c =>
+                c.DifficultyRating >= targetRating - tolerance &&
+                c.DifficultyRating <= targetRating + tolerance),
+            count,
+            excludedIds: null,
+            ct);
 
         // Fall back to any content if not enough in range
         if (items.Count < count)
         {
-            var fallback = await db.ContentItems
-                .Where(c => c.ExamTypeCode == examTypeCode && c.SubtestCode == subtestCode && c.Status == ContentStatus.Published)
-                .OrderBy(_ => Guid.NewGuid())
-                .Take(count - items.Count)
-                .ToListAsync(ct);
+            var fallback = await SampleAsync(
+                published,
+                count - items.Count,
+                items.Select(item => item.Id).ToList(),
+                ct);
             items.AddRange(fallback);
         }
 
@@ -83,6 +87,58 @@ public class AdaptiveDifficultyService(LearnerDbContext db)
             estimatedMinutes = c.EstimatedDurationMinutes
         });
     }
+
+    private static async Task<List<AdaptiveContentSample>> SampleAsync(
+        IQueryable<ContentItem> query,
+        int requestedCount,
+        IReadOnlyCollection<string>? excludedIds,
+        CancellationToken ct)
+    {
+        if (requestedCount <= 0)
+            return [];
+
+        if (excludedIds is { Count: > 0 })
+            query = query.Where(item => !excludedIds.Contains(item.Id));
+
+        var availableCount = await query.CountAsync(ct);
+        if (availableCount == 0)
+            return [];
+
+        var sampleCount = Math.Min(requestedCount, availableCount);
+        var startOffset = Random.Shared.Next(availableCount);
+        var firstBatchCount = Math.Min(sampleCount, availableCount - startOffset);
+        var ordered = query.OrderBy(item => item.Id);
+
+        var samples = await ProjectSamples(ordered)
+            .Skip(startOffset)
+            .Take(firstBatchCount)
+            .ToListAsync(ct);
+
+        if (samples.Count < sampleCount)
+        {
+            var wrapped = await ProjectSamples(ordered)
+                .Take(sampleCount - samples.Count)
+                .ToListAsync(ct);
+            samples.AddRange(wrapped);
+        }
+
+        return samples;
+    }
+
+    private static IQueryable<AdaptiveContentSample> ProjectSamples(IQueryable<ContentItem> query)
+        => query.Select(item => new AdaptiveContentSample(
+            item.Id,
+            item.SubtestCode,
+            item.DifficultyRating,
+            item.Title,
+            item.EstimatedDurationMinutes));
+
+    private sealed record AdaptiveContentSample(
+        string Id,
+        string SubtestCode,
+        int DifficultyRating,
+        string Title,
+        int EstimatedDurationMinutes);
 
     // ── Update content difficulty after evaluation ─────────────────────────
 

@@ -131,25 +131,49 @@ public class GamificationService(LearnerDbContext db)
 
     public async Task CheckAndAwardAchievementsAsync(string userId, string trigger, CancellationToken ct)
     {
-        var already = await db.LearnerAchievements
-            .Where(la => la.UserId == userId)
-            .Select(la => la.AchievementId)
-            .ToHashSetAsync(ct);
-
         var candidates = await db.Achievements
-            .Where(a => a.Status == "active" && !already.Contains(a.Id))
+            .AsNoTracking()
+            .Where(a =>
+                a.Status == "active" &&
+                !db.LearnerAchievements.Any(la =>
+                    la.UserId == userId &&
+                    la.AchievementId == a.Id))
             .ToListAsync(ct);
 
-        var xp = await db.LearnerXPs.FindAsync([userId], ct);
-        var streak = await db.LearnerStreaks.FindAsync([userId], ct);
-        var attemptCount = await db.Attempts.CountAsync(a => a.UserId == userId, ct);
-        var vocabAdded = await db.LearnerVocabularies.CountAsync(v => v.UserId == userId, ct);
-        var vocabMastered = await db.LearnerVocabularies.CountAsync(v => v.UserId == userId && v.Mastery == "mastered", ct);
+        if (candidates.Count == 0)
+            return;
+
+        var prerequisites = await (
+            from user in db.Users
+            where user.Id == userId
+            join learnerXp in db.LearnerXPs on user.Id equals learnerXp.UserId into xpRows
+            from xpRow in xpRows.DefaultIfEmpty()
+            join learnerStreak in db.LearnerStreaks on user.Id equals learnerStreak.UserId into streakRows
+            from streak in streakRows.DefaultIfEmpty()
+            select new
+            {
+                Xp = xpRow,
+                CurrentStreak = (int?)streak.CurrentStreak ?? 0,
+                AttemptCount = db.Attempts.Count(a => a.UserId == user.Id),
+                VocabAdded = db.LearnerVocabularies.Count(v => v.UserId == user.Id),
+                VocabMastered = db.LearnerVocabularies.Count(v =>
+                    v.UserId == user.Id &&
+                    v.Mastery == "mastered")
+            })
+            .SingleOrDefaultAsync(ct);
+
+        var xp = prerequisites?.Xp;
 
         var toAward = new List<Achievement>();
         foreach (var ach in candidates)
         {
-            if (await MeetsCriteriaAsync(ach, userId, xp, streak, attemptCount, vocabAdded, vocabMastered, ct))
+            if (MeetsCriteria(
+                ach,
+                xp,
+                prerequisites?.CurrentStreak ?? 0,
+                prerequisites?.AttemptCount ?? 0,
+                prerequisites?.VocabAdded ?? 0,
+                prerequisites?.VocabMastered ?? 0))
                 toAward.Add(ach);
         }
 
@@ -307,9 +331,13 @@ public class GamificationService(LearnerDbContext db)
         streakFreezesAvailable = s.StreakFreezeCount - s.StreakFreezeUsedCount
     };
 
-    private static async Task<bool> MeetsCriteriaAsync(
-        Achievement ach, string userId, LearnerXP? xp, LearnerStreak? streak,
-        int attemptCount, int vocabAdded, int vocabMastered, CancellationToken ct)
+    private static bool MeetsCriteria(
+        Achievement ach,
+        LearnerXP? xp,
+        int currentStreak,
+        int attemptCount,
+        int vocabAdded,
+        int vocabMastered)
     {
         try
         {
@@ -318,7 +346,7 @@ public class GamificationService(LearnerDbContext db)
             return type switch
             {
                 "attempt_count" => attemptCount >= criteria.GetProperty("threshold").GetInt32(),
-                "streak_days" => (streak?.CurrentStreak ?? 0) >= criteria.GetProperty("threshold").GetInt32(),
+                "streak_days" => currentStreak >= criteria.GetProperty("threshold").GetInt32(),
                 "total_xp" => (xp?.TotalXP ?? 0) >= criteria.GetProperty("threshold").GetInt64(),
                 "vocab_added" => vocabAdded >= criteria.GetProperty("threshold").GetInt32(),
                 "vocab_mastered" => vocabMastered >= criteria.GetProperty("threshold").GetInt32(),

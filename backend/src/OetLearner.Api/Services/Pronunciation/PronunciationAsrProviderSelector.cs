@@ -54,21 +54,21 @@ public sealed class PronunciationAsrProviderSelector(
         if (requested == "azure")
         {
             var az = FindByName("azure");
-            if (az is { IsConfigured: true }) return az;
+            if (az is not null && await az.IsConfiguredAsync(ct)) return az;
             throw Unconfigured("azure");
         }
 
         if (requested == "gemini")
         {
             var g = FindByName("gemini");
-            if (g is { IsConfigured: true }) return g;
+            if (g is not null && await g.IsConfiguredAsync(ct)) return g;
             throw Unconfigured("gemini");
         }
 
         if (requested == "whisper")
         {
             var w = FindByName("whisper");
-            if (w is { IsConfigured: true }) return w;
+            if (w is not null && await w.IsConfiguredAsync(ct)) return w;
             throw Unconfigured("whisper");
         }
 
@@ -78,19 +78,19 @@ public sealed class PronunciationAsrProviderSelector(
 
         // auto
         var azure = FindByName("azure");
-        if (azure is { IsConfigured: true })
+        if (azure is not null && await azure.IsConfiguredAsync(ct))
         {
             logger.LogDebug("Pronunciation ASR: selected azure (auto)");
             return azure;
         }
         var gemini = FindByName("gemini");
-        if (gemini is { IsConfigured: true })
+        if (gemini is not null && await gemini.IsConfiguredAsync(ct))
         {
             logger.LogDebug("Pronunciation ASR: selected gemini (auto; azure unconfigured)");
             return gemini;
         }
         var whisper = FindByName("whisper");
-        if (whisper is { IsConfigured: true })
+        if (whisper is not null && await whisper.IsConfiguredAsync(ct))
         {
             logger.LogDebug("Pronunciation ASR: selected whisper (auto; azure/gemini unconfigured)");
             return whisper;

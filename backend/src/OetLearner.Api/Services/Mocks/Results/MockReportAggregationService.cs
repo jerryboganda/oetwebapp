@@ -64,7 +64,9 @@ public sealed record MockSectionResultContext(
     LearnerDbContext Db,
     MockAttempt MockAttempt,
     MockSectionAttempt SectionAttempt,
-    MockBundleSection BundleSection);
+    MockBundleSection BundleSection,
+    IReadOnlyDictionary<string, ReadingAttempt>? ReadingAttemptsById = null,
+    IReadOnlyDictionary<string, ListeningAttempt>? ListeningAttemptsById = null);
 
 public sealed record MockSectionResolvedResult(
     string ResultStatus,
@@ -87,12 +89,26 @@ public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "missing_authoritative_attempt");
         }
 
-        var attempt = await context.Db.ReadingAttempts.AsNoTracking()
-            .FirstOrDefaultAsync(x =>
-                x.Id == context.SectionAttempt.ContentAttemptId &&
-                x.UserId == context.MockAttempt.UserId &&
-                x.PaperId == context.BundleSection.ContentPaperId,
-                ct);
+        ReadingAttempt? attempt;
+        if (context.ReadingAttemptsById is null)
+        {
+            attempt = await context.Db.ReadingAttempts.AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == context.SectionAttempt.ContentAttemptId &&
+                    x.UserId == context.MockAttempt.UserId &&
+                    x.PaperId == context.BundleSection.ContentPaperId,
+                    ct);
+        }
+        else
+        {
+            context.ReadingAttemptsById.TryGetValue(context.SectionAttempt.ContentAttemptId, out attempt);
+            if (attempt is not null &&
+                (attempt.UserId != context.MockAttempt.UserId ||
+                 attempt.PaperId != context.BundleSection.ContentPaperId))
+            {
+                attempt = null;
+            }
+        }
 
         if (attempt is null)
         {
@@ -121,12 +137,26 @@ public sealed class ListeningMockSectionResultAdapter : IMockSectionResultAdapte
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "missing_authoritative_attempt");
         }
 
-        var attempt = await context.Db.ListeningAttempts.AsNoTracking()
-            .FirstOrDefaultAsync(x =>
-                x.Id == context.SectionAttempt.ContentAttemptId &&
-                x.UserId == context.MockAttempt.UserId &&
-                x.PaperId == context.BundleSection.ContentPaperId,
-                ct);
+        ListeningAttempt? attempt;
+        if (context.ListeningAttemptsById is null)
+        {
+            attempt = await context.Db.ListeningAttempts.AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == context.SectionAttempt.ContentAttemptId &&
+                    x.UserId == context.MockAttempt.UserId &&
+                    x.PaperId == context.BundleSection.ContentPaperId,
+                    ct);
+        }
+        else
+        {
+            context.ListeningAttemptsById.TryGetValue(context.SectionAttempt.ContentAttemptId, out attempt);
+            if (attempt is not null &&
+                (attempt.UserId != context.MockAttempt.UserId ||
+                 attempt.PaperId != context.BundleSection.ContentPaperId))
+            {
+                attempt = null;
+            }
+        }
 
         if (attempt is null)
         {
@@ -175,6 +205,58 @@ public sealed class LegacyMockSectionResultAdapter : IMockSectionResultAdapter
 
 public sealed class MockSectionResultResolver(IEnumerable<IMockSectionResultAdapter> adapters)
 {
+    public async Task<IReadOnlyDictionary<string, MockSectionResolvedResult>> ResolveAllAsync(
+        IReadOnlyList<MockSectionResultContext> contexts,
+        CancellationToken ct)
+    {
+        if (contexts.Count == 0)
+        {
+            return new Dictionary<string, MockSectionResolvedResult>(StringComparer.Ordinal);
+        }
+
+        var readingAttemptIds = contexts
+            .Where(context => string.Equals(context.SectionAttempt.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            .Select(context => context.SectionAttempt.ContentAttemptId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var listeningAttemptIds = contexts
+            .Where(context => string.Equals(context.SectionAttempt.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase))
+            .Select(context => context.SectionAttempt.ContentAttemptId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var db = contexts[0].Db;
+        var readingAttempts = readingAttemptIds.Count == 0
+            ? new Dictionary<string, ReadingAttempt>(StringComparer.Ordinal)
+            : await db.ReadingAttempts.AsNoTracking()
+                .Where(attempt => readingAttemptIds.Contains(attempt.Id))
+                .ToDictionaryAsync(attempt => attempt.Id, StringComparer.Ordinal, ct);
+        var listeningAttempts = listeningAttemptIds.Count == 0
+            ? new Dictionary<string, ListeningAttempt>(StringComparer.Ordinal)
+            : await db.ListeningAttempts.AsNoTracking()
+                .Where(attempt => listeningAttemptIds.Contains(attempt.Id))
+                .ToDictionaryAsync(attempt => attempt.Id, StringComparer.Ordinal, ct);
+
+        var resolvedBySectionId = new Dictionary<string, MockSectionResolvedResult>(StringComparer.Ordinal);
+        foreach (var context in contexts)
+        {
+            var resolved = await ResolveAsync(
+                context with
+                {
+                    ReadingAttemptsById = readingAttempts,
+                    ListeningAttemptsById = listeningAttempts
+                },
+                ct);
+            resolvedBySectionId[context.SectionAttempt.Id] = resolved;
+        }
+
+        return resolvedBySectionId;
+    }
+
     public async Task<MockSectionResolvedResult> ResolveAsync(MockSectionResultContext context, CancellationToken ct)
     {
         var adapter = adapters.First(adapter => adapter.Supports(context.SectionAttempt.SubtestCode));
@@ -228,12 +310,10 @@ public sealed class MockReportAggregationService(
             .OrderBy(x => x.bundleSection.SectionOrder)
             .ToListAsync(ct);
 
-        var resolvedBySectionId = new Dictionary<string, MockSectionResolvedResult>(StringComparer.Ordinal);
-        foreach (var row in sections)
-        {
-            var resolved = await sectionResolver.ResolveAsync(new MockSectionResultContext(db, mockAttempt, row.sectionAttempt, row.bundleSection), ct);
-            resolvedBySectionId[row.sectionAttempt.Id] = resolved;
-        }
+        var sectionContexts = sections
+            .Select(row => new MockSectionResultContext(db, mockAttempt, row.sectionAttempt, row.bundleSection))
+            .ToList();
+        var resolvedBySectionId = await sectionResolver.ResolveAllAsync(sectionContexts, ct);
 
         var reviewAttemptIds = sections
             .Select(x => x.sectionAttempt.ContentAttemptId)

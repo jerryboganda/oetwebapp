@@ -20,6 +20,14 @@ public class CheckoutSession
     [MaxLength(256)]
     public string? StripeSessionId { get; set; }
 
+    /// <summary>
+    /// Hosted provider URL returned with <see cref="StripeSessionId"/>.
+    /// Persisted so idempotent replays do not need a provider round-trip.
+    /// Null only for non-hosted gateways and legacy Stripe rows awaiting backfill.
+    /// </summary>
+    [MaxLength(2048)]
+    public string? HostedCheckoutUrl { get; set; }
+
     /// <summary>Which gateway owns this session: "stripe" (hosted redirect) or "paypal"
     /// (in-page embedded capture). Defaults to stripe for back-compat with existing rows.</summary>
     [MaxLength(16)]

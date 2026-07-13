@@ -697,7 +697,9 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
                 "Voice notes must be audio files.",
                 [new ApiFieldError("mediaAssetId", "invalid_type", "Upload mp3, m4a, wav, ogg, or webm audio.")]);
         }
-        if (media.Status != MediaAssetStatus.Ready || string.IsNullOrWhiteSpace(media.StoragePath) || !fileStorage.Exists(media.StoragePath))
+        if (media.Status != MediaAssetStatus.Ready
+            || string.IsNullOrWhiteSpace(media.StoragePath)
+            || !await fileStorage.ExistsAsync(media.StoragePath, ct))
         {
             throw ApiException.Validation(
                 "voice_note_media_not_ready",
@@ -904,10 +906,18 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
                 media => media.Id,
                 (note, media) => new { media.Status, media.StoragePath, media.MimeType })
             .ToListAsync(ct);
-        var hasVoiceNote = voiceNoteMedia.Any(item => item.Status == MediaAssetStatus.Ready
-            && item.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(item.StoragePath)
-            && fileStorage.Exists(item.StoragePath));
+        var hasVoiceNote = false;
+        foreach (var item in voiceNoteMedia)
+        {
+            if (item.Status == MediaAssetStatus.Ready
+                && item.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(item.StoragePath)
+                && await fileStorage.ExistsAsync(item.StoragePath, ct))
+            {
+                hasVoiceNote = true;
+                break;
+            }
+        }
         if (!hasVoiceNote)
         {
             throw ApiException.Validation(

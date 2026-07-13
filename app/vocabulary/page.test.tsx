@@ -66,10 +66,15 @@ import VocabularyPage from './page';
 describe('Vocabulary hub page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchMyVocabulary.mockResolvedValue([
-      { termId: 'vt-001', term: 'dyspnoea', mastery: 'learning', dueAt: '2026-04-21' },
-      { termId: 'vt-002', term: 'tachycardia', mastery: 'mastered', dueAt: null },
-    ]);
+    mockFetchMyVocabulary.mockResolvedValue({
+      total: 2,
+      page: 1,
+      pageSize: 20,
+      items: [
+        { termId: 'vt-001', term: 'dyspnoea', mastery: 'learning', dueAt: '2026-04-21' },
+        { termId: 'vt-002', term: 'tachycardia', mastery: 'mastered', dueAt: null },
+      ],
+    });
     mockFetchVocabularyStats.mockResolvedValue({
       totalInList: 2,
       mastered: 1,
@@ -96,6 +101,7 @@ describe('Vocabulary hub page', () => {
     expect(await screen.findByRole('heading', { level: 1, name: /clinical vocabulary/i })).toBeInTheDocument();
     expect(await screen.findByText('dyspnoea')).toBeInTheDocument();
     expect(await screen.findByText('tachycardia')).toBeInTheDocument();
+    expect(mockFetchMyVocabulary).toHaveBeenCalledWith(undefined, { page: 1, pageSize: 20 });
   });
 
   it('tracks vocabulary_home_viewed on mount', async () => {
@@ -113,7 +119,7 @@ describe('Vocabulary hub page', () => {
   });
 
   it('shows empty state when word bank is empty', async () => {
-    mockFetchMyVocabulary.mockResolvedValueOnce([]);
+    mockFetchMyVocabulary.mockResolvedValueOnce({ total: 0, page: 1, pageSize: 20, items: [] });
     mockFetchVocabularyStats.mockResolvedValueOnce({
       totalInList: 0, mastered: 0, reviewing: 0, learning: 0, new: 0,
       dueToday: 0, dueThisWeek: 0, streakDays: 0, totalTermsInCatalog: 500,

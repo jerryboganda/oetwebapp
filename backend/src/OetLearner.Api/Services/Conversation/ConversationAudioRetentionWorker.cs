@@ -43,7 +43,7 @@ public sealed class ConversationAudioRetentionWorker(
             if (key is null) { turn.AudioUrl = null; continue; }
             try
             {
-                if (storage.Exists(key)) { storage.Delete(key); deleted++; }
+                if (await storage.ExistsAsync(key, ct)) { await storage.DeleteAsync(key, ct); deleted++; }
                 turn.AudioUrl = null;
             }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to delete audio {Key}", key); }

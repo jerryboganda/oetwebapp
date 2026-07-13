@@ -11,16 +11,16 @@ public sealed class ElevenLabsConversationTtsProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<ElevenLabsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
-
     public string Name => "elevenlabs";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ElevenLabsApiKey);
+    public bool IsConfigured => IsConfiguredWith(optionsProvider.Current);
+
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => IsConfiguredWith(await optionsProvider.GetAsync(ct));
 
     public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
     {
-        if (!IsConfigured) throw new InvalidOperationException("ElevenLabs not configured.");
-
-        var options = ReadOptions();
+        var options = await optionsProvider.GetAsync(ct);
+        if (!IsConfiguredWith(options)) throw new InvalidOperationException("ElevenLabs not configured.");
         var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
         var voice = string.IsNullOrWhiteSpace(request.Voice) ? options.ElevenLabsDefaultVoiceId : request.Voice;
         var model = string.IsNullOrWhiteSpace(request.ModelVariant)
@@ -74,4 +74,7 @@ public sealed class ElevenLabsConversationTtsProvider(
            && outputFormat.StartsWith("mp3_", StringComparison.OrdinalIgnoreCase)
             ? outputFormat.Trim()
             : "mp3_44100_128";
+
+    private static bool IsConfiguredWith(ConversationOptions? options)
+        => options is not null && !string.IsNullOrWhiteSpace(options.ElevenLabsApiKey);
 }

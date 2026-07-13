@@ -45,27 +45,62 @@ public class PronunciationService(
     public async Task<object> GetProfileAsync(string userId, CancellationToken ct)
     {
         var progress = await db.LearnerPronunciationProgress
-            .Where(p => p.UserId == userId)
+            .AsNoTracking()
+            .Where(p => p.UserId == userId && p.PhonemeCode != "_speech_overall")
+            .OrderByDescending(p => p.LastPracticedAt)
+            .ThenBy(p => p.PhonemeCode)
+            .Select(p => new
+            {
+                p.PhonemeCode,
+                p.AverageScore,
+                p.AttemptCount,
+                p.LastPracticedAt,
+                p.NextDueAt,
+                p.IntervalDays,
+            })
+            .Take(10)
             .ToListAsync(ct);
 
         var assessments = await db.PronunciationAssessments
+            .AsNoTracking()
             .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.CreatedAt)
+            .ThenBy(a => a.Id)
+            .Select(a => new
+            {
+                a.CreatedAt,
+                a.OverallScore,
+                a.AccuracyScore,
+                a.FluencyScore,
+                a.ProjectedSpeakingScaled,
+            })
+            .Take(10)
             .ToListAsync(ct);
 
-        assessments = assessments
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(10)
-            .ToList();
+        var weakProgress = await db.LearnerPronunciationProgress
+            .AsNoTracking()
+            .Where(p => p.UserId == userId
+                && p.PhonemeCode != "_speech_overall"
+                && p.AverageScore < 60)
+            .OrderBy(p => p.AverageScore)
+            .ThenBy(p => p.PhonemeCode)
+            .Select(p => new
+            {
+                p.PhonemeCode,
+                p.AverageScore,
+                p.AttemptCount,
+                p.LastPracticedAt,
+                p.NextDueAt,
+            })
+            .Take(5)
+            .ToListAsync(ct);
 
         var overallScore = assessments.Count > 0
             ? Math.Round(assessments.Average(a => a.OverallScore), 1)
             : 0.0;
         var projected = OetScoring.PronunciationProjectedBand(overallScore);
 
-        var weakPhonemes = progress
-            .Where(p => p.AverageScore < 60 && p.PhonemeCode != "_speech_overall")
-            .OrderBy(p => p.AverageScore)
-            .Take(5)
+        var weakPhonemes = weakProgress
             .Select(p => new
             {
                 phonemeCode = p.PhonemeCode,
@@ -93,7 +128,6 @@ public class PronunciationService(
                 projectedScaled = a.ProjectedSpeakingScaled,
             }).ToList(),
             phonemeProgress = progress
-                .Where(p => p.PhonemeCode != "_speech_overall")
                 .Select(p => new
                 {
                     phonemeCode = p.PhonemeCode,
@@ -109,12 +143,23 @@ public class PronunciationService(
     public async Task<object> GetMyProgressAsync(string userId, CancellationToken ct)
     {
         var progress = await db.LearnerPronunciationProgress
+            .AsNoTracking()
             .Where(p => p.UserId == userId && p.PhonemeCode != "_speech_overall")
+            .OrderByDescending(p => p.LastPracticedAt)
+            .ThenBy(p => p.PhonemeCode)
+            .Select(p => new
+            {
+                p.PhonemeCode,
+                p.AverageScore,
+                p.AttemptCount,
+                p.LastPracticedAt,
+                p.NextDueAt,
+                p.IntervalDays,
+            })
+            .Take(10)
             .ToListAsync(ct);
 
-        return progress
-            .OrderByDescending(p => p.LastPracticedAt)
-            .Select(p => new
+        return progress.Select(p => new
         {
             phonemeCode = p.PhonemeCode,
             averageScore = Math.Round(p.AverageScore, 1),
@@ -267,9 +312,11 @@ public class PronunciationService(
         long bytes = 0;
         try
         {
-            await using var writer = await storage.OpenWriteAsync(storageKey, ct);
-            await audio.CopyToAsync(writer, ct);
-            bytes = storage.Length(storageKey);
+            await using (var writer = await storage.OpenWriteAsync(storageKey, ct))
+            {
+                await audio.CopyToAsync(writer, ct);
+            }
+            bytes = await storage.LengthAsync(storageKey, ct);
         }
         catch (Exception ex)
         {
@@ -283,7 +330,7 @@ public class PronunciationService(
 
         if (bytes > _opts.MaxAudioBytes)
         {
-            storage.Delete(storageKey);
+            await storage.DeleteAsync(storageKey, ct);
             attempt.Status = "refused";
             attempt.ErrorCode = "audio_too_large";
             attempt.ErrorMessage = $"Audio exceeds {_opts.MaxAudioBytes} bytes (received {bytes}).";

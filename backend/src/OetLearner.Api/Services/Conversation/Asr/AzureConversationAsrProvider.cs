@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
@@ -10,14 +11,10 @@ public sealed class AzureConversationAsrProvider(
     ILogger<AzureConversationAsrProvider> logger) : IConversationAsrProvider
 {
     public string Name => "azure";
-    public bool IsConfigured
-    {
-        get
-        {
-            var o = optionsProvider.GetAsync().GetAwaiter().GetResult();
-            return !string.IsNullOrWhiteSpace(o.AzureSpeechKey) && !string.IsNullOrWhiteSpace(o.AzureSpeechRegion);
-        }
-    }
+    public bool IsConfigured => IsConfiguredWith(optionsProvider.Current);
+
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => IsConfiguredWith(await optionsProvider.GetAsync(ct));
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
@@ -82,4 +79,9 @@ public sealed class AzureConversationAsrProvider(
         "audio/webm" => "audio/webm; codecs=opus",
         _ => mime,
     };
+
+    private static bool IsConfiguredWith(ConversationOptions? options)
+        => options is not null
+           && !string.IsNullOrWhiteSpace(options.AzureSpeechKey)
+           && !string.IsNullOrWhiteSpace(options.AzureSpeechRegion);
 }

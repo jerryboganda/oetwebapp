@@ -6,10 +6,10 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { motionTokens } from '@/lib/motion';
 import {
-  IconBrandFacebook,
-  IconBrandGoogle,
-  IconBrandLinkedin,
-} from '@tabler/icons-react';
+  Facebook,
+  Linkedin,
+  LogIn,
+} from 'lucide-react';
 import { readErrorMessage } from '@/lib/read-error-message';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
@@ -107,11 +107,11 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
               : 'Sign in with LinkedIn',
         icon:
           provider === 'facebook' ? (
-            <IconBrandFacebook size={18} />
+            <Facebook size={18} />
           ) : provider === 'google' ? (
-            <IconBrandGoogle size={18} />
+            <LogIn size={18} />
           ) : (
-            <IconBrandLinkedin size={18} />
+            <Linkedin size={18} />
           ),
       })),
     [externalAuthProviders, nextHref],

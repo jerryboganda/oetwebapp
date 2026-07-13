@@ -38,6 +38,7 @@ public sealed class LiveClassRecordingProcessingService(
     ILogger<LiveClassRecordingProcessingService> logger)
 {
     private const long MaxTranscriptionAttachmentBytes = 24L * 1024L * 1024L;
+    private const int TranscriptionReadBufferBytes = 81920;
 
     // The cached system prompt from the plan §14.3. Stays static so the
     // model's prompt-cache hit-rate stays high — every summary on every
@@ -138,19 +139,36 @@ public sealed class LiveClassRecordingProcessingService(
                 throw new InvalidOperationException($"Recording {recordingId} has no stored audio or video file to transcribe.");
             }
 
-            var length = fileStorage.Length(audioKey);
+            var audioRead = await fileStorage.OpenReadWithMetadataAsync(audioKey, ct);
+            await using var audioStream = audioRead.Stream;
+            var length = audioRead.Length;
             if (length > MaxTranscriptionAttachmentBytes)
             {
                 throw new InvalidOperationException(
                     $"Recording {recordingId} is {length} bytes, which exceeds the {MaxTranscriptionAttachmentBytes} byte transcription upload limit.");
             }
-
-            await using var audioStream = await fileStorage.OpenReadAsync(audioKey, ct);
-            using var audioBuffer = new MemoryStream();
-            await audioStream.CopyToAsync(audioBuffer, ct);
-            if (audioBuffer.Length == 0)
+            if (length <= 0)
             {
                 throw new InvalidOperationException($"Recording {recordingId} storage object is empty and cannot be transcribed.");
+            }
+
+            // The gateway attachment contract currently requires byte[]. Read
+            // once into an exact-sized buffer instead of growing a MemoryStream
+            // and duplicating it with ToArray().
+            var audioBytes = GC.AllocateUninitializedArray<byte>(checked((int)length));
+            var offset = 0;
+            while (offset < audioBytes.Length)
+            {
+                var requested = Math.Min(
+                    TranscriptionReadBufferBytes, audioBytes.Length - offset);
+                var read = await audioStream.ReadAsync(
+                    audioBytes.AsMemory(offset, requested), ct);
+                if (read == 0)
+                {
+                    throw new EndOfStreamException(
+                        $"Recording {recordingId} ended after {offset} of {length} bytes.");
+                }
+                offset += read;
             }
 
             var userMessage = "Transcribe the attached OET class recording. Return plain text only.";
@@ -169,7 +187,7 @@ public sealed class LiveClassRecordingProcessingService(
                         new AiProviderAudioAttachment
                         {
                             MimeType = GuessAudioMimeType(audioKey),
-                            Data = audioBuffer.ToArray(),
+                            Data = audioBytes,
                         },
                     },
                 }, ct);
@@ -416,6 +434,9 @@ public sealed class LiveClassRecordingProcessingService(
         var now = timeProvider.GetUtcNow();
         var inserted = 0;
 
+        // IAiGatewayService does not expose a batch-embedding contract. Keep
+        // concurrency at one so its scoped usage-accounting DbContext and
+        // provider rate limits are never exercised concurrently.
         foreach (var chunk in chunks)
         {
             // Best-effort: a missing/embedding-failed chunk doesn't fail the

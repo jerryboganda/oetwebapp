@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   LineChart,
@@ -15,7 +16,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend
-} from 'recharts';
+} from '@/components/charts/dynamic-recharts';
 import {
   TrendingUp,
   Activity,
@@ -23,9 +24,11 @@ import {
   Clock
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { AuthContext } from '@/contexts/auth-context';
 import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
 import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
+import { queryKeys } from '@/lib/query/hooks';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
@@ -70,37 +73,50 @@ function SrChartSummary({ children }: { children: string }) {
 
 export default function ProgressDashboard() {
   const [criterionFilter, setCriterionFilter] = useState('Writing');
-  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
-  const [completionData, setCompletionData] = useState<CompletionPoint[]>([]);
-  const [volumeData, setVolumeData] = useState<VolumePoint[]>([]);
-  const [progressSummary, setProgressSummary] = useState<ProgressEvidenceSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const authContext = useContext(AuthContext);
+  const queryUserId = authContext?.user?.userId ?? 'current';
+  const queriesEnabled = authContext ? !authContext.loading && authContext.isAuthenticated : true;
+  const trendQuery = useQuery({
+    queryKey: queryKeys.progress.trend(queryUserId),
+    queryFn: fetchTrendData,
+    staleTime: 45_000,
+    enabled: queriesEnabled,
+  });
+  const completionQuery = useQuery({
+    queryKey: queryKeys.progress.completion(queryUserId),
+    queryFn: fetchCompletionData,
+    staleTime: 45_000,
+    enabled: queriesEnabled,
+  });
+  const volumeQuery = useQuery({
+    queryKey: queryKeys.progress.submissionVolume(queryUserId),
+    queryFn: fetchSubmissionVolume,
+    staleTime: 45_000,
+    enabled: queriesEnabled,
+  });
+  const summaryQuery = useQuery({
+    queryKey: queryKeys.progress.evidence(queryUserId),
+    queryFn: fetchProgressEvidenceSummary,
+    staleTime: 45_000,
+    enabled: queriesEnabled,
+  });
+  const progressQueries = [trendQuery, completionQuery, volumeQuery, summaryQuery];
+  const trendData = (trendQuery.data ?? []) as TrendPoint[];
+  const completionData = (completionQuery.data ?? []) as CompletionPoint[];
+  const volumeData = (volumeQuery.data ?? []) as VolumePoint[];
+  const progressSummary = (summaryQuery.data ?? null) as ProgressEvidenceSummary | null;
+  const loading = queriesEnabled && progressQueries.some((query) => query.isPending);
+  const failedQueries = progressQueries.filter((query) => query.error);
+  const allFailed = failedQueries.length === progressQueries.length
+    && progressQueries.every((query) => query.data === undefined);
+  const error = failedQueries.length === 0
+    ? null
+    : allFailed
+      ? 'Failed to load progress data. Please try again.'
+      : 'Some progress data could not be loaded.';
 
   useEffect(() => {
     analytics.track('progress_viewed');
-    Promise.allSettled([
-      fetchTrendData(),
-      fetchCompletionData(),
-      fetchSubmissionVolume(),
-      fetchProgressEvidenceSummary(),
-    ]).then((results) => {
-      const [trendResult, completionResult, volumeResult, summaryResult] = results;
-      if (trendResult.status === 'fulfilled') setTrendData(trendResult.value);
-      if (completionResult.status === 'fulfilled') setCompletionData(completionResult.value as CompletionPoint[]);
-      if (volumeResult.status === 'fulfilled') setVolumeData(volumeResult.value as VolumePoint[]);
-      if (summaryResult.status === 'fulfilled') setProgressSummary(summaryResult.value);
-
-      const anyFailed = results.some(r => r.status === 'rejected');
-      const allFailed = results.every(r => r.status === 'rejected');
-
-      if (allFailed) {
-        setError('Failed to load progress data. Please try again.');
-      } else if (anyFailed) {
-        setError('Some progress data could not be loaded.');
-      }
-      setLoading(false);
-    });
   }, []);
 
   const completedLast7 = completionData.reduce((sum, point) => sum + point.completed, 0);

@@ -30,8 +30,76 @@ public sealed class LocalFileStorageTests
         var bytes = await storage.WriteAsync("uploads/staging/file.bin", payload, default);
 
         Assert.Equal(3, bytes);
-        Assert.True(storage.Exists("uploads/staging/file.bin"));
-        Assert.Equal(3, storage.Length("uploads/staging/file.bin"));
+        Assert.True(await storage.ExistsAsync("uploads/staging/file.bin", default));
+        Assert.Equal(3, await storage.LengthAsync("uploads/staging/file.bin", default));
+    }
+
+    [Fact]
+    public async Task AsyncOperations_PreserveMoveListDeleteAndMissingSemantics()
+    {
+        using var temp = new TempDirectory();
+        var storage = CreateStorage(temp.Path);
+        await WriteBytesAsync(storage, "uploads/source.bin", [1]);
+        await WriteBytesAsync(storage, "uploads/destination.bin", [2, 3]);
+        await WriteBytesAsync(storage, "uploads/nested/other.bin", [4]);
+
+        await storage.MoveAsync(
+            "uploads/source.bin",
+            "uploads/destination.bin",
+            overwrite: false,
+            default);
+        Assert.True(await storage.ExistsAsync("uploads/source.bin", default));
+        Assert.Equal(2, await storage.LengthAsync("uploads/destination.bin", default));
+
+        await storage.MoveAsync(
+            "uploads/source.bin",
+            "uploads/destination.bin",
+            overwrite: true,
+            default);
+        Assert.False(await storage.ExistsAsync("uploads/source.bin", default));
+        Assert.Equal(1, await storage.LengthAsync("uploads/destination.bin", default));
+
+        var listed = await CollectAsync(storage.ListKeysAsync("uploads", default));
+        Assert.Equal(
+            ["uploads/destination.bin", "uploads/nested/other.bin"],
+            listed.Order(StringComparer.Ordinal));
+
+        Assert.True(await storage.DeleteAsync("uploads/destination.bin", default));
+        Assert.False(await storage.DeleteAsync("uploads/destination.bin", default));
+        Assert.Equal(1, await storage.DeletePrefixAsync("uploads/nested", default));
+        Assert.Equal(0, await storage.DeletePrefixAsync("uploads/missing", default));
+        Assert.Empty(await CollectAsync(storage.ListKeysAsync("uploads/missing", default)));
+        Assert.False(await storage.ExistsAsync("uploads/missing.bin", default));
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            storage.LengthAsync("uploads/missing.bin", default));
+    }
+
+    [Fact]
+    public async Task AsyncOperations_HonorPreCanceledTokensWithoutMutation()
+    {
+        using var temp = new TempDirectory();
+        var storage = CreateStorage(temp.Path);
+        await WriteBytesAsync(storage, "uploads/source.bin", [1, 2, 3]);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.ExistsAsync("uploads/source.bin", cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.LengthAsync("uploads/source.bin", cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.DeleteAsync("uploads/source.bin", cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.MoveAsync("uploads/source.bin", "uploads/moved.bin", true, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.DeletePrefixAsync("uploads", cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            CollectAsync(storage.ListKeysAsync("uploads", cts.Token)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.OpenWriteAsync("uploads/new.bin", cts.Token));
+
+        Assert.True(await storage.ExistsAsync("uploads/source.bin", default));
+        Assert.False(await storage.ExistsAsync("uploads/moved.bin", default));
     }
 
     [Fact]
@@ -70,6 +138,23 @@ public sealed class LocalFileStorageTests
         using var destination = new MemoryStream();
         await stream.CopyToAsync(destination);
         return destination.ToArray();
+    }
+
+    private static async Task WriteBytesAsync(
+        IFileStorage storage,
+        string key,
+        byte[] payload)
+    {
+        await using var source = new MemoryStream(payload);
+        await storage.WriteAsync(key, source, default);
+    }
+
+    private static async Task<List<string>> CollectAsync(IAsyncEnumerable<string> keys)
+    {
+        var result = new List<string>();
+        await foreach (var key in keys)
+            result.Add(key);
+        return result;
     }
 
     private static LocalFileStorage CreateStorage(string root)

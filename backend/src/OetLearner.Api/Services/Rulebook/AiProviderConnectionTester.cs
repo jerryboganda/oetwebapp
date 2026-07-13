@@ -144,7 +144,12 @@ public sealed class AiProviderConnectionTester(
             using var req = plan.Request;
             using var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
             stopwatch.Stop();
-            var result = ClassifyResponse(response, stopwatch.ElapsedMilliseconds, startedAt, apiKey);
+            var result = await ClassifyResponseAsync(
+                response,
+                stopwatch.ElapsedMilliseconds,
+                startedAt,
+                apiKey,
+                ct);
             // On a successful auth/metadata probe, optionally surface a
             // non-fatal warning when the configured DefaultModel is absent
             // from the provider's advertised model list. Status stays "ok"
@@ -176,6 +181,10 @@ public sealed class AiProviderConnectionTester(
                 (int)stopwatch.ElapsedMilliseconds,
                 startedAt);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();
@@ -188,7 +197,12 @@ public sealed class AiProviderConnectionTester(
         }
     }
 
-    internal static AiProviderTestResult ClassifyResponse(HttpResponseMessage response, long latencyMs, DateTimeOffset startedAt, string? apiKey = null)
+    internal static async Task<AiProviderTestResult> ClassifyResponseAsync(
+        HttpResponseMessage response,
+        long latencyMs,
+        DateTimeOffset startedAt,
+        string? apiKey = null,
+        CancellationToken ct = default)
     {
         if ((int)response.StatusCode is >= 200 and < 300)
         {
@@ -211,12 +225,16 @@ public sealed class AiProviderConnectionTester(
         string? message = null;
         try
         {
-            var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var body = await response.Content.ReadAsStringAsync(ct);
             if (!string.IsNullOrWhiteSpace(body))
             {
                 var redactedBody = RedactSecrets(body, apiKey) ?? string.Empty;
                 message = TryExtractErrorMessage(redactedBody) ?? Truncate(redactedBody, 256);
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch { /* fail-soft; status code is enough */ }
 

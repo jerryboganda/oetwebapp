@@ -3,12 +3,7 @@
  * Connects to /v1/ai-assistant/hub with auto-reconnect and exponential backoff.
  */
 
-import {
-  HubConnectionBuilder,
-  HubConnectionState,
-  LogLevel,
-  type HubConnection,
-} from '@microsoft/signalr';
+import type { HubConnection, HubConnectionState } from '@microsoft/signalr';
 import { env } from '@/lib/env';
 
 // ─── Connection State ───────────────────────────────────────────────────────
@@ -21,16 +16,16 @@ export type AssistantConnectionState =
   | 'disconnecting';
 
 export function mapHubState(state: HubConnectionState): AssistantConnectionState {
-  switch (state) {
-    case HubConnectionState.Connected:
+  switch (String(state)) {
+    case 'Connected':
       return 'connected';
-    case HubConnectionState.Connecting:
+    case 'Connecting':
       return 'connecting';
-    case HubConnectionState.Reconnecting:
+    case 'Reconnecting':
       return 'reconnecting';
-    case HubConnectionState.Disconnecting:
+    case 'Disconnecting':
       return 'disconnecting';
-    case HubConnectionState.Disconnected:
+    case 'Disconnected':
     default:
       return 'disconnected';
   }
@@ -72,10 +67,14 @@ export interface AssistantConnectionOptions {
  * Creates a SignalR HubConnection to the AI Assistant hub.
  * The connection is NOT started — call `.start()` after attaching event handlers.
  */
-export function createAssistantConnection(
+export async function createAssistantConnection(
   token: string,
   options?: AssistantConnectionOptions,
-): HubConnection {
+): Promise<HubConnection> {
+  const {
+    HubConnectionBuilder,
+    LogLevel,
+  } = await import('@microsoft/signalr');
   const hubUrl = resolveHubUrl();
 
   const connection = new HubConnectionBuilder()

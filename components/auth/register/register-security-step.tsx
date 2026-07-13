@@ -1,8 +1,8 @@
 import {
-  IconBriefcase,
-  IconMail,
-  IconMapPin,
-} from '@tabler/icons-react';
+  BriefcaseBusiness,
+  Mail,
+  MapPin,
+} from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 import { PasswordField } from '@/components/auth/password-field';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
@@ -83,7 +83,7 @@ export function RegisterSecurityStep({
         <div className={styles.summaryList}>
           <div className={styles.summaryItem}>
             <span className={styles.summaryIcon}>
-              <IconMail size={14} />
+              <Mail size={14} />
             </span>
             <p>
               {getValues('firstName')} {getValues('lastName')} · {getValues('email')}
@@ -91,7 +91,7 @@ export function RegisterSecurityStep({
           </div>
           <div className={styles.summaryItem}>
             <span className={styles.summaryIcon}>
-              <IconBriefcase size={14} />
+              <BriefcaseBusiness size={14} />
             </span>
             <p>
               {examTypes.find((item) => item.id === selectedExamTypeId)?.label ?? 'Exam'} ·{' '}
@@ -100,7 +100,7 @@ export function RegisterSecurityStep({
           </div>
           <div className={styles.summaryItem}>
             <span className={styles.summaryIcon}>
-              <IconMapPin size={14} />
+              <MapPin size={14} />
             </span>
             <p>{getValues('countryTarget') || 'Target country not selected'}</p>
           </div>

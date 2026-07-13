@@ -4,6 +4,8 @@ public interface IConversationAsrProvider
 {
     string Name { get; }
     bool IsConfigured { get; }
+    Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => Task.FromResult(IsConfigured);
     Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct);
 }
 
@@ -11,6 +13,8 @@ public interface IConversationRealtimeAsrProvider
 {
     string Name { get; }
     bool IsConfigured { get; }
+    Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => Task.FromResult(IsConfigured);
     Task<IConversationRealtimeAsrSession> StartAsync(
         ConversationRealtimeAsrStartRequest request,
         IConversationRealtimeTranscriptSink sink,

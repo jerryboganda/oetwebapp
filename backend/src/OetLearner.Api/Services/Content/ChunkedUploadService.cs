@@ -106,7 +106,7 @@ public sealed class ChunkedUploadService(
 
         var key = ContentAddressed.StagingPartKey(
             _opts.StagingSubpath, session.AdminUserId, session.Id, partNumber);
-        if (storage.Exists(key))
+        if (await storage.ExistsAsync(key, ct))
             throw ApiException.Conflict("upload_part_duplicate", $"Part {partNumber} has already been uploaded.");
 
         var remaining = session.DeclaredSizeBytes - session.ReceivedBytes;
@@ -121,13 +121,13 @@ public sealed class ChunkedUploadService(
         }
         catch
         {
-            storage.Delete(key);
+            await storage.DeleteAsync(key, ct);
             throw;
         }
 
         if (wrote <= 0)
         {
-            storage.Delete(key);
+            await storage.DeleteAsync(key, ct);
             throw ApiException.Validation("upload_part_empty", "Upload part was empty.");
         }
 
@@ -158,11 +158,16 @@ public sealed class ChunkedUploadService(
         var sessionPrefix = ContentAddressed.StagingSessionPrefix(
             _opts.StagingSubpath, session.AdminUserId, session.Id);
 
-        var partKeys = Enumerable.Range(1, session.TotalParts)
-            .Select(n => ContentAddressed.StagingPartKey(
-                _opts.StagingSubpath, session.AdminUserId, session.Id, n))
-            .Where(storage.Exists)
-            .ToList();
+        var partKeys = new List<string>(session.TotalParts);
+        foreach (var partNumber in Enumerable.Range(1, session.TotalParts))
+        {
+            var partKey = ContentAddressed.StagingPartKey(
+                _opts.StagingSubpath, session.AdminUserId, session.Id, partNumber);
+            if (await storage.ExistsAsync(partKey, ct))
+            {
+                partKeys.Add(partKey);
+            }
+        }
 
         if (partKeys.Count != session.TotalParts)
             throw ApiException.Conflict("upload_parts_missing", "One or more staged parts are missing for this session. Reload the page and start the upload again.");
@@ -176,7 +181,7 @@ public sealed class ChunkedUploadService(
             var result = await validator.ValidateAsync(peek, session.Extension, ct);
             if (!result.Accepted)
             {
-                storage.DeletePrefix(sessionPrefix);
+                await storage.DeletePrefixAsync(sessionPrefix, ct);
                 session.State = AdminUploadState.Aborted;
                 await db.SaveChangesAsync(ct);
                 throw ApiException.Validation(
@@ -192,20 +197,24 @@ public sealed class ChunkedUploadService(
         string sha;
         {
             await using var output = await storage.OpenWriteAsync(assembledStagingKey, ct);
-            var partStreams = partKeys.Select<string, Stream>(k =>
-            {
-                var stream = storage.OpenReadAsync(k, ct).GetAwaiter().GetResult();
-                return stream;
-            }).ToList();
+            var partStreams = new List<Stream>(partKeys.Count);
             try
             {
+                foreach (var partKey in partKeys)
+                {
+                    partStreams.Add(await storage.OpenReadAsync(partKey, ct));
+                }
+
                 var result = await StreamingSha256.ComputeAsync(partStreams, output, ct);
                 total = result.bytes;
                 sha = result.sha256;
             }
             finally
             {
-                foreach (var s in partStreams) s.Dispose();
+                foreach (var partStream in partStreams)
+                {
+                    await partStream.DisposeAsync();
+                }
             }
         }
 
@@ -215,7 +224,7 @@ public sealed class ChunkedUploadService(
         {
             logger.LogInformation("Chunked upload {Session} deduplicated against existing asset {Existing}.",
                 session.Id, existing.Id);
-            storage.DeletePrefix(sessionPrefix);
+            await storage.DeletePrefixAsync(sessionPrefix, ct);
             session.State = AdminUploadState.Completed;
             session.ReceivedBytes = total;
             session.Sha256 = sha;
@@ -247,7 +256,7 @@ public sealed class ChunkedUploadService(
                 if (IsGenuineDetection(reason))
                 {
                     logger.LogWarning("Chunked upload {Session} rejected by scanner: {Reason}", session.Id, reason);
-                    storage.DeletePrefix(sessionPrefix);
+                    await storage.DeletePrefixAsync(sessionPrefix, ct);
                     session.State = AdminUploadState.Aborted;
                     await db.SaveChangesAsync(ct);
                     throw ApiException.Validation("upload_quarantined", $"Upload quarantined by scanner: {reason}");
@@ -264,16 +273,16 @@ public sealed class ChunkedUploadService(
 
         // Promote to published/{sha[..2]}/{sha[2..4]}/{sha}.{ext}.
         var publishedKey = ContentAddressed.PublishedKey(_opts.PublishedSubpath, sha, session.Extension);
-        if (storage.Exists(publishedKey))
+        if (await storage.ExistsAsync(publishedKey, ct))
         {
             // Two uploads with the same SHA raced — acceptable. Drop ours.
-            storage.Delete(assembledStagingKey);
+            await storage.DeleteAsync(assembledStagingKey, ct);
         }
         else
         {
-            storage.Move(assembledStagingKey, publishedKey, overwrite: false);
+            await storage.MoveAsync(assembledStagingKey, publishedKey, overwrite: false, ct);
         }
-        storage.DeletePrefix(sessionPrefix);
+        await storage.DeletePrefixAsync(sessionPrefix, ct);
 
         var mediaId = Guid.NewGuid().ToString("N");
         var media = new MediaAsset
@@ -307,8 +316,8 @@ public sealed class ChunkedUploadService(
     {
         var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId && x.AdminUserId == adminUserId, ct);
         if (session is null) return;
-        storage.DeletePrefix(ContentAddressed.StagingSessionPrefix(
-            _opts.StagingSubpath, session.AdminUserId, session.Id));
+        await storage.DeletePrefixAsync(ContentAddressed.StagingSessionPrefix(
+            _opts.StagingSubpath, session.AdminUserId, session.Id), ct);
         session.State = AdminUploadState.Aborted;
         await db.SaveChangesAsync(ct);
     }

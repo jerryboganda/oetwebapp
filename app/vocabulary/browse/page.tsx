@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft, Volume2, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
+import { AuthContext } from '@/contexts/auth-context';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,6 +23,7 @@ import {
   type RecallSetSummary,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { queryKeys } from '@/lib/query/hooks';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
@@ -39,8 +42,6 @@ type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 
 
 export default function BrowseVocabularyPage() {
   const [terms, setTerms] = useState<TermRow[]>([]);
-  const [categories, setCategories] = useState<Array<{ category: string; termCount: number }>>([]);
-  const [recallSets, setRecallSets] = useState<RecallSetSummary[]>([]);
   const [recallSet, setRecallSet] = useState('');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
@@ -55,6 +56,27 @@ export default function BrowseVocabularyPage() {
   // opens this modal with the canonical subscribe prompt.
   const [showLockedModal, setShowLockedModal] = useState(false);
   const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
+  const authContext = useContext(AuthContext);
+  const queryUserId = authContext?.user?.userId ?? 'current';
+  const referenceQueriesEnabled = authContext ? !authContext.loading && authContext.isAuthenticated : true;
+  const categoriesQuery = useQuery({
+    queryKey: queryKeys.vocabulary.categories(queryUserId, 'oet'),
+    queryFn: () => fetchVocabularyCategories({ examTypeCode: 'oet' }),
+    staleTime: 60_000,
+    enabled: referenceQueriesEnabled,
+  });
+  const recallSetsQuery = useQuery({
+    queryKey: queryKeys.vocabulary.recallSets(queryUserId, 'oet'),
+    queryFn: () => fetchVocabularyRecallSets({ examTypeCode: 'oet' }),
+    staleTime: 60_000,
+    enabled: referenceQueriesEnabled,
+  });
+  const categories = ((categoriesQuery.data as VocabularyCategoriesResponse | undefined)?.categories ?? []);
+  const recallSets = ((recallSetsQuery.data?.sets ?? []) as RecallSetSummary[]);
+  const referenceError = categoriesQuery.error || recallSetsQuery.error
+    ? 'Some vocabulary filters could not be loaded.'
+    : null;
+  const displayError = error ?? referenceError;
 
   const pageSize = 20;
 
@@ -84,17 +106,6 @@ export default function BrowseVocabularyPage() {
 
   useEffect(() => {
     analytics.track('vocab_browse_viewed');
-    // Load categories once on mount.
-    fetchVocabularyCategories({ examTypeCode: 'oet' })
-      .then((data) => {
-        const d = data as VocabularyCategoriesResponse;
-        setCategories(d.categories ?? []);
-      })
-      .catch(() => {/* non-fatal */});
-    // Load recall-set registry (practice-collection dimension).
-    fetchVocabularyRecallSets({ examTypeCode: 'oet' })
-      .then((data) => setRecallSets(data.sets ?? []))
-      .catch(() => {/* non-fatal */});
   }, []);
 
   useEffect(() => {
@@ -141,7 +152,7 @@ export default function BrowseVocabularyPage() {
         <LearnerPageHero title="Browse Vocabulary" description="Explore OET medical vocabulary terms" icon={BookOpen} />
       </div>
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {displayError && <InlineAlert variant="warning" className="mb-4">{displayError}</InlineAlert>}
       {audioUpgradeModal}
 
       {/* Filters */}

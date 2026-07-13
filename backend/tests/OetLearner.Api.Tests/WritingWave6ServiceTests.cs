@@ -428,21 +428,40 @@ public class WritingWave6ServiceTests
             return Task.FromResult<Stream>(new CommitOnDisposeStream(stream, bytes => files[key] = bytes));
         }
 
-        public bool Exists(string key) => files.ContainsKey(key);
-        public bool Delete(string key) => files.Remove(key);
-        public long Length(string key) => files[key].LongLength;
-        public void Move(string sourceKey, string destKey, bool overwrite)
+        public Task<bool> ExistsAsync(string key, CancellationToken ct)
         {
-            if (!files.TryGetValue(sourceKey, out var bytes)) return;
-            if (!overwrite && files.ContainsKey(destKey)) return;
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(files.ContainsKey(key));
+        }
+
+        public Task<bool> DeleteAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(files.Remove(key));
+        }
+
+        public Task<long> LengthAsync(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(files[key].LongLength);
+        }
+
+        public Task MoveAsync(string sourceKey, string destKey, bool overwrite, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!files.TryGetValue(sourceKey, out var bytes)) return Task.CompletedTask;
+            if (!overwrite && files.ContainsKey(destKey)) return Task.CompletedTask;
             files[destKey] = bytes;
             files.Remove(sourceKey);
+            return Task.CompletedTask;
         }
-        public int DeletePrefix(string prefix)
+
+        public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             var keys = files.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
             foreach (var key in keys) files.Remove(key);
-            return keys.Count;
+            return Task.FromResult(keys.Count);
         }
         public string? TryResolveLocalPath(string key) => null;
         public Uri? ResolveReadUrl(string key, TimeSpan ttl) => new($"storage:///{key}");

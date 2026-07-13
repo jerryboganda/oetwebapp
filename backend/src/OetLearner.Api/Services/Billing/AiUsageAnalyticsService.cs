@@ -61,12 +61,20 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
         var fromTs = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toTs = new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
 
-        var q = _db.AiUsageRecords.Where(r => r.UserId == userId && r.CreatedAt >= fromTs && r.CreatedAt <= toTs);
+        var q = _db.AiUsageRecords
+            .AsNoTracking()
+            .Where(r => r.UserId == userId && r.CreatedAt >= fromTs && r.CreatedAt <= toTs);
 
-        var totalCalls = await q.CountAsync(ct);
-        var totalTokens = await q.SumAsync(r => (long?)(r.PromptTokens + r.CompletionTokens), ct) ?? 0L;
-        var totalCost = await q.SumAsync(r => (decimal?)r.CostEstimateUsd, ct) ?? 0m;
-        var failedCalls = await q.CountAsync(r => r.Outcome != AiCallOutcome.Success, ct);
+        var aggregate = await q
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalCalls = g.Count(),
+                TotalTokens = g.Sum(r => (long)(r.PromptTokens + r.CompletionTokens)),
+                TotalCost = g.Sum(r => r.CostEstimateUsd),
+                FailedCalls = g.Count(r => r.Outcome != AiCallOutcome.Success),
+            })
+            .FirstOrDefaultAsync(ct);
 
         var byFeatureRaw = await q
             .GroupBy(r => r.FeatureCode)
@@ -77,10 +85,10 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
                 Tokens = g.Sum(x => (long)(x.PromptTokens + x.CompletionTokens)),
                 Cost = g.Sum(x => x.CostEstimateUsd),
             })
+            .OrderByDescending(f => f.Calls)
             .ToListAsync(ct);
         var byFeature = byFeatureRaw
             .Select(f => new FeatureBreakdown(f.Feature, f.Calls, f.Tokens, f.Cost))
-            .OrderByDescending(f => f.Calls)
             .ToList();
 
         var dailyRaw = await q
@@ -92,23 +100,26 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
                 Tokens = g.Sum(x => (long)(x.PromptTokens + x.CompletionTokens)),
                 Cost = g.Sum(x => x.CostEstimateUsd),
             })
+            .OrderBy(d => d.Day)
             .ToListAsync(ct);
         var daily = dailyRaw
             .Select(d => new DailyBucket(d.Day, d.Calls, d.Tokens, d.Cost))
-            .OrderBy(b => b.Day)
             .ToList();
 
         var creditsUsed = await _db.AiCreditLedger
+            .AsNoTracking()
             .Where(e => e.UserId == userId && e.CreatedAt >= fromTs && e.CreatedAt <= toTs && e.TokensDelta < 0)
             .SumAsync(e => (int?)e.TokensDelta, ct) ?? 0;
         creditsUsed = Math.Abs(creditsUsed);
 
         var walletBalance = await _db.Wallets
+            .AsNoTracking()
             .Where(w => w.UserId == userId)
             .Select(w => (int?)w.CreditBalance)
             .FirstOrDefaultAsync(ct) ?? 0;
 
         var forecast = await _db.UsageForecastSnapshots
+            .AsNoTracking()
             .Where(f => f.UserId == userId && f.FeatureCode == "*")
             .OrderByDescending(f => f.SnapshotDate)
             .Select(f => new { f.ForecastCalls, f.ForecastCredits, f.ForecastCostUsd, f.SuggestedTopUpCredits })
@@ -117,10 +128,10 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
         return new LearnerUsageSummary(
             From: from,
             To: to,
-            TotalCalls: totalCalls,
-            TotalTokens: totalTokens,
-            TotalCostUsd: decimal.Round(totalCost, 4),
-            FailedCalls: failedCalls,
+            TotalCalls: aggregate?.TotalCalls ?? 0,
+            TotalTokens: aggregate?.TotalTokens ?? 0L,
+            TotalCostUsd: decimal.Round(aggregate?.TotalCost ?? 0m, 4),
+            FailedCalls: aggregate?.FailedCalls ?? 0,
             CreditsUsed: creditsUsed,
             WalletBalance: walletBalance,
             ByFeature: byFeature,
@@ -136,16 +147,32 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
         var fromTs = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toTs = new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
 
-        var q = _db.AiUsageRecords.Where(r => r.CreatedAt >= fromTs && r.CreatedAt <= toTs);
+        var q = _db.AiUsageRecords
+            .AsNoTracking()
+            .Where(r => r.CreatedAt >= fromTs && r.CreatedAt <= toTs);
         if (!string.IsNullOrEmpty(feature)) q = q.Where(r => r.FeatureCode == feature);
         if (!string.IsNullOrEmpty(provider)) q = q.Where(r => r.ProviderId == provider);
 
-        var totalCalls = await q.CountAsync(ct);
-        var totalTokens = await q.SumAsync(r => (long?)(r.PromptTokens + r.CompletionTokens), ct) ?? 0L;
-        var totalCost = await q.SumAsync(r => (decimal?)r.CostEstimateUsd, ct) ?? 0m;
-        var uniqueUsers = await q.Where(r => r.UserId != null).Select(r => r.UserId).Distinct().CountAsync(ct);
-        var successes = await q.CountAsync(r => r.Outcome == AiCallOutcome.Success, ct);
-        var avgLatency = totalCalls > 0 ? (int)Math.Round(await q.AverageAsync(r => (double)r.LatencyMs, ct)) : 0;
+        var aggregate = await q
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalCalls = g.Count(),
+                TotalTokens = g.Sum(r => (long)(r.PromptTokens + r.CompletionTokens)),
+                TotalCost = g.Sum(r => r.CostEstimateUsd),
+                UniqueUsers = g
+                    .Where(r => r.UserId != null)
+                    .Select(r => r.UserId)
+                    .Distinct()
+                    .Count(),
+                Successes = g.Count(r => r.Outcome == AiCallOutcome.Success),
+                AverageLatency = g.Average(r => (double)r.LatencyMs),
+            })
+            .FirstOrDefaultAsync(ct);
+
+        var totalCalls = aggregate?.TotalCalls ?? 0;
+        var successes = aggregate?.Successes ?? 0;
+        var avgLatency = aggregate is not null ? (int)Math.Round(aggregate.AverageLatency) : 0;
         var successRate = totalCalls > 0 ? decimal.Round((decimal)successes / totalCalls * 100m, 2) : 0m;
 
         var byFeatureRaw = await q
@@ -157,11 +184,11 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
                 Tokens = g.Sum(x => (long)(x.PromptTokens + x.CompletionTokens)),
                 Cost = g.Sum(x => x.CostEstimateUsd),
             })
+            .OrderByDescending(f => f.Calls)
+            .Take(20)
             .ToListAsync(ct);
         var byFeature = byFeatureRaw
             .Select(f => new FeatureBreakdown(f.Feature, f.Calls, f.Tokens, f.Cost))
-            .OrderByDescending(f => f.Calls)
-            .Take(20)
             .ToList();
 
         var byProviderRaw = await q
@@ -194,10 +221,10 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
                 Tokens = g.Sum(x => (long)(x.PromptTokens + x.CompletionTokens)),
                 Cost = g.Sum(x => x.CostEstimateUsd),
             })
+            .OrderBy(d => d.Day)
             .ToListAsync(ct);
         var daily = dailyRaw
             .Select(d => new DailyBucket(d.Day, d.Calls, d.Tokens, d.Cost))
-            .OrderBy(b => b.Day)
             .ToList();
 
         var topUsersRaw = await q
@@ -210,20 +237,20 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
                 Tokens = g.Sum(x => (long)(x.PromptTokens + x.CompletionTokens)),
                 Cost = g.Sum(x => x.CostEstimateUsd),
             })
+            .OrderByDescending(u => u.Calls)
+            .Take(25)
             .ToListAsync(ct);
         var topUsers = topUsersRaw
             .Select(u => new TopUserUsage(u.UserId, u.Calls, u.Tokens, u.Cost))
-            .OrderByDescending(u => u.Calls)
-            .Take(25)
             .ToList();
 
         return new AdminUsageSummary(
             From: from,
             To: to,
             TotalCalls: totalCalls,
-            TotalTokens: totalTokens,
-            TotalCostUsd: decimal.Round(totalCost, 4),
-            UniqueUsers: uniqueUsers,
+            TotalTokens: aggregate?.TotalTokens ?? 0L,
+            TotalCostUsd: decimal.Round(aggregate?.TotalCost ?? 0m, 4),
+            UniqueUsers: aggregate?.UniqueUsers ?? 0,
             SuccessRate: successRate,
             AvgLatencyMs: avgLatency,
             ByFeature: byFeature,

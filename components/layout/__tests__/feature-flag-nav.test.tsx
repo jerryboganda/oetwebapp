@@ -4,8 +4,16 @@ import userEvent from '@testing-library/user-event';
 import { Library, Sparkles, Video } from 'lucide-react';
 import { renderWithRouter } from '@/tests/test-utils';
 
-const { mockFetchLearnerFeatureFlag, mockFetchStreak, mockFetchXP, mockSignOut, mockUseAuth } = vi.hoisted(() => ({
+const {
+  mockFetchLearnerFeatureFlag,
+  mockFetchMyEntitlementSnapshot,
+  mockFetchStreak,
+  mockFetchXP,
+  mockSignOut,
+  mockUseAuth,
+} = vi.hoisted(() => ({
   mockFetchLearnerFeatureFlag: vi.fn(),
+  mockFetchMyEntitlementSnapshot: vi.fn(),
   mockFetchStreak: vi.fn(),
   mockFetchXP: vi.fn(),
   mockSignOut: vi.fn(),
@@ -14,6 +22,7 @@ const { mockFetchLearnerFeatureFlag, mockFetchStreak, mockFetchXP, mockSignOut, 
 
 vi.mock('@/lib/api', () => ({
   fetchLearnerFeatureFlag: mockFetchLearnerFeatureFlag,
+  fetchMyEntitlementSnapshot: mockFetchMyEntitlementSnapshot,
   fetchStreak: mockFetchStreak,
   fetchXP: mockFetchXP,
 }));
@@ -56,6 +65,7 @@ function prepareFlag(enabled: boolean) {
 describe('learner feature-gated navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchMyEntitlementSnapshot.mockResolvedValue({ enabledModules: [] });
   });
 
   // Per the 2026-05-27 OET sample-test alignment, the Learn group (Grammar,

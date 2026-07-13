@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
@@ -54,6 +55,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
+    private readonly ConcurrentDictionary<long, Lazy<Task<RuntimeSettingsSnapshot>>> _snapshotLoads = new();
+    private RuntimeSettingsSnapshot _currentSnapshot = null!;
+    private long _snapshotGeneration;
 
     public RuntimeSettingsProvider(
         IServiceScopeFactory scopeFactory,
@@ -113,23 +117,44 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _smtp = smtp;
         _config = config;
         _environment = environment;
+        var initialRow = new RuntimeSettingsRow { Id = "default" };
+        _currentSnapshot = new RuntimeSettingsSnapshot(Merge(initialRow), initialRow);
     }
 
-    public async Task<EffectiveSettings> GetAsync(CancellationToken ct = default)
-    {
-        if (_cache.TryGetValue<EffectiveSettings>(CacheKey, out var cached) && cached is not null)
-            return cached;
+    public RuntimeSettingsSnapshot CurrentSnapshot => Volatile.Read(ref _currentSnapshot);
 
-        var row = await LoadRowAsync(ct) ?? new RuntimeSettingsRow { Id = "default" };
-        var merged = Merge(row);
-        _cache.Set(CacheKey, merged, CacheTtl);
-        return merged;
+    public async Task<EffectiveSettings> GetAsync(CancellationToken ct = default)
+        => (await GetSnapshotAsync(ct)).Effective;
+
+    public async Task<RuntimeSettingsSnapshot> GetSnapshotAsync(CancellationToken ct = default)
+    {
+        while (true)
+        {
+            var generation = Volatile.Read(ref _snapshotGeneration);
+            if (TryGetCachedSnapshot(generation, out var cached))
+                return cached;
+
+            ct.ThrowIfCancellationRequested();
+            var load = _snapshotLoads.GetOrAdd(
+                generation,
+                key => new Lazy<Task<RuntimeSettingsSnapshot>>(
+                    () => LoadSnapshotAsync(key),
+                    LazyThreadSafetyMode.ExecutionAndPublication));
+
+            var snapshot = await load.Value.WaitAsync(ct);
+            if (generation == Volatile.Read(ref _snapshotGeneration))
+                return snapshot;
+        }
     }
 
     public async Task<RuntimeSettingsRow> GetRawAsync(CancellationToken ct = default)
         => await LoadRowAsync(ct) ?? new RuntimeSettingsRow { Id = "default" };
 
-    public void Invalidate() => _cache.Remove(CacheKey);
+    public void Invalidate()
+    {
+        Interlocked.Increment(ref _snapshotGeneration);
+        _cache.Remove(CacheKey);
+    }
 
     public string Protect(string plain) => _protector.Protect(plain);
 
@@ -138,6 +163,61 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         if (string.IsNullOrEmpty(cipher)) return null;
         try { return _protector.Unprotect(cipher); }
         catch { return null; }
+    }
+
+    private async Task<RuntimeSettingsSnapshot> LoadSnapshotAsync(long generation)
+    {
+        try
+        {
+            // A previous generation may have completed between the caller's
+            // cache check and creation of this flight.
+            if (TryGetCachedSnapshot(generation, out var cached))
+                return cached;
+
+            // Caller cancellation only cancels that caller's wait. A shared
+            // database load must not be poisoned by one canceled request.
+            var row = await LoadRowAsync(CancellationToken.None)
+                ?? new RuntimeSettingsRow { Id = "default" };
+            var snapshot = new RuntimeSettingsSnapshot(Merge(row), row);
+
+            // Never let a load started before Invalidate repopulate the cache
+            // or overwrite the last-known view with stale data.
+            if (generation == Volatile.Read(ref _snapshotGeneration))
+            {
+                _cache.Set(CacheKey, snapshot, CacheTtl);
+                Volatile.Write(ref _currentSnapshot, snapshot);
+            }
+
+            return snapshot;
+        }
+        finally
+        {
+            // Success, failure, and cancellation all release the flight so a
+            // later cache miss can retry.
+            _snapshotLoads.TryRemove(generation, out _);
+        }
+    }
+
+    private bool TryGetCachedSnapshot(long generation, out RuntimeSettingsSnapshot snapshot)
+    {
+        snapshot = null!;
+        if (generation != Volatile.Read(ref _snapshotGeneration)
+            || !_cache.TryGetValue<RuntimeSettingsSnapshot>(CacheKey, out var cached)
+            || cached is null
+            || generation != Volatile.Read(ref _snapshotGeneration))
+        {
+            return false;
+        }
+
+        // A delayed cache hit must not overwrite a newer snapshot that another
+        // generation published while this request was preempted.
+        var observed = Volatile.Read(ref _currentSnapshot);
+        Interlocked.CompareExchange(ref _currentSnapshot, cached, observed);
+        if (generation != Volatile.Read(ref _snapshotGeneration))
+            return false;
+
+        snapshot = cached;
+        return true;
     }
 
     private async Task<RuntimeSettingsRow?> LoadRowAsync(CancellationToken ct)

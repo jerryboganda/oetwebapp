@@ -1,15 +1,15 @@
 'use client';
 
 import {
-  IconArrowRight,
-  IconBrandWhatsapp,
-  IconCalendarEvent,
-  IconCheck,
-  IconLifebuoy,
-  IconMail,
-  IconMapPin,
-  IconUserCircle,
-} from '@tabler/icons-react';
+  ArrowRight,
+  CalendarDays,
+  Check,
+  CircleUserRound,
+  LifeBuoy,
+  Mail,
+  MapPin,
+  MessageCircle,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
@@ -67,13 +67,13 @@ export default function RegisterSuccessPage() {
         <div className={styles.successHeroGrid}>
           <div className={styles.successBadge}>
             <span className={styles.successBadgeIcon}>
-              <IconCheck size={18} />
+              <Check size={18} />
             </span>
             <div>
               <strong className={styles.successBadgeName}>{fullName}</strong>
               <p>Your OET workspace setup has been saved for {email}.</p>
               <div className={styles.successBadgeTime}>
-                <IconCalendarEvent size={14} />
+                <CalendarDays size={14} />
                 <span>Registered on {registrationStamp}</span>
               </div>
               <div className={styles.successBadgeMeta}>
@@ -106,7 +106,7 @@ export default function RegisterSuccessPage() {
             <div className={styles.successSummaryGrid}>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconMail size={14} />
+                  <Mail size={14} />
                 </span>
                 <div>
                   <strong>Email</strong>
@@ -115,7 +115,7 @@ export default function RegisterSuccessPage() {
               </div>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconUserCircle size={14} />
+                  <CircleUserRound size={14} />
                 </span>
                 <div>
                   <strong>Exam And Profession</strong>
@@ -124,7 +124,7 @@ export default function RegisterSuccessPage() {
               </div>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconMapPin size={14} />
+                  <MapPin size={14} />
                 </span>
                 <div>
                   <strong>Target Country</strong>
@@ -133,7 +133,7 @@ export default function RegisterSuccessPage() {
               </div>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
-                  <IconCalendarEvent size={14} />
+                  <CalendarDays size={14} />
                 </span>
                 <div>
                   <strong>Registered</strong>
@@ -164,14 +164,14 @@ export default function RegisterSuccessPage() {
             href={signInHref}
             className={`${styles.submit} ${styles.successPrimaryAction}`.trim()}
           >
-            <IconArrowRight size={18} />
+            <ArrowRight size={18} />
             <span>Login</span>
           </Link>
           <a
             href={buildSupportMailto(email)}
             className={`${styles.secondaryButton} ${styles.successGhostAction}`.trim()}
           >
-            <IconLifebuoy size={18} />
+            <LifeBuoy size={18} />
             <span>Contact Support</span>
           </a>
           <a
@@ -180,7 +180,7 @@ export default function RegisterSuccessPage() {
             target="_blank"
             rel="noreferrer"
           >
-            <IconBrandWhatsapp size={18} />
+            <MessageCircle size={18} />
             <span>Contact on WhatsApp</span>
           </a>
         </div>

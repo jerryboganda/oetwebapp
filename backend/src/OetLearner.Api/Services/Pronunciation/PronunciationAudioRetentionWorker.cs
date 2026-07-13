@@ -55,9 +55,9 @@ public sealed class PronunciationAudioRetentionWorker(
             var key = attempt.AudioStorageKey!;
             try
             {
-                if (storage.Exists(key))
+                if (await storage.ExistsAsync(key, ct))
                 {
-                    storage.Delete(key);
+                    await storage.DeleteAsync(key, ct);
                     deleted++;
                 }
                 attempt.AudioStorageKey = null;

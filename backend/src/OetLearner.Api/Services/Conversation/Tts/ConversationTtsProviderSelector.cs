@@ -40,7 +40,7 @@ public sealed class ConversationTtsProviderSelector(
             logger.LogWarning("ElevenLabs TTS provider is not registered.");
             return null;
         }
-        if (!elevenLabs.IsConfigured)
+        if (!await elevenLabs.IsConfiguredAsync(ct))
         {
             logger.LogWarning("ElevenLabs TTS is not configured (missing API key).");
             return null;
@@ -48,13 +48,13 @@ public sealed class ConversationTtsProviderSelector(
         return elevenLabs;
     }
 
-    public Task<IConversationTtsProvider?> TrySelectAsync(string providerName, CancellationToken ct = default)
+    public async Task<IConversationTtsProvider?> TrySelectAsync(string providerName, CancellationToken ct = default)
     {
         // Used by the admin Voice Design preview so the provider can be
         // auditioned regardless of the global on/off switch.
         if (!string.Equals(providerName, "elevenlabs", StringComparison.OrdinalIgnoreCase))
-            return Task.FromResult<IConversationTtsProvider?>(null);
+            return null;
         var elevenLabs = providers.FirstOrDefault(p => string.Equals(p.Name, "elevenlabs", StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult(elevenLabs is { IsConfigured: true } ? elevenLabs : null);
+        return elevenLabs is not null && await elevenLabs.IsConfiguredAsync(ct) ? elevenLabs : null;
     }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Accessibility,
   ArrowLeft,
@@ -53,11 +54,13 @@ import { deleteAccount } from '@/lib/auth-client';
 import { useProfessions } from '@/lib/hooks/use-professions';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 import type { SettingsSectionData, SettingsSectionId } from '@/lib/mock-data';
+import { queryKeys } from '@/lib/query/hooks';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 
 type FieldType = 'text' | 'email' | 'number' | 'date' | 'select' | 'textarea' | 'toggle';
 type FieldTagTone = 'section' | 'muted' | 'writing' | 'speaking' | 'reading' | 'listening' | 'study';
+type EditableSettingsSectionId = Parameters<typeof updateSettingsSection>[0];
 
 interface FieldConfig {
   key: string;
@@ -994,13 +997,64 @@ function DangerZoneDeleteSection() {
 export default function LearnerSettingsSectionPage() {
   const params = useParams<{ section: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const section = toSectionId(params?.section);
+  const queryUserId = user?.userId ?? 'current';
+  const draftKey = `${queryUserId}:${section ?? 'invalid'}`;
+  const loadsRemoteData = Boolean(section && section !== 'notifications' && section !== 'danger-zone');
+  const sectionQuery = useQuery({
+    queryKey: queryKeys.settings.section(queryUserId, section ?? 'invalid'),
+    queryFn: () => fetchSettingsSection(section as EditableSettingsSectionId),
+    staleTime: 60_000,
+    enabled: loadsRemoteData,
+  });
 
-  const [data, setData] = useState<SettingsSectionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ key: string; data: SettingsSectionData } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    key: string;
+    error: string | null;
+    successMessage: string | null;
+  } | null>(null);
+  const data = draft?.key === draftKey ? draft.data : sectionQuery.data ?? null;
+  const actionError = feedback?.key === draftKey ? feedback.error : null;
+  const successMessage = feedback?.key === draftKey ? feedback.successMessage : null;
+  const updateMutation = useMutation({
+    mutationFn: ({ targetSection, values }: {
+      userId: string;
+      draftKey: string;
+      targetSection: EditableSettingsSectionId;
+      values: SettingsSectionData['values'];
+    }) =>
+      updateSettingsSection(targetSection, values),
+    onSuccess: async (response, variables) => {
+      const nextData = {
+        section: variables.targetSection,
+        values: response.values ?? variables.values,
+      };
+      queryClient.setQueryData(
+        queryKeys.settings.section(variables.userId, variables.targetSection),
+        nextData,
+      );
+      setDraft((current) => current?.key === variables.draftKey ? null : current);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings.home(variables.userId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.settings.section(variables.userId, variables.targetSection),
+        }),
+      ]);
+    },
+  });
+  const loading = loadsRemoteData && sectionQuery.isPending;
+  const saving = updateMutation.isPending;
+  const loadError = !section
+    ? 'This settings section does not exist.'
+    : sectionQuery.error instanceof Error
+      ? sectionQuery.error.message
+      : sectionQuery.error
+        ? 'Failed to load this settings section.'
+        : null;
+  const error = actionError ?? loadError;
 
   const config = useMemo(() => (section ? SECTION_CONFIG[section] : null), [section]);
   const configuredFieldCount = useMemo(() => {
@@ -1009,64 +1063,40 @@ export default function LearnerSettingsSectionPage() {
   }, [config, data]);
 
   useEffect(() => {
-    if (!section) {
-      setLoading(false);
-      setError('This settings section does not exist.');
-      return;
-    }
-
-    if (section === 'notifications' || section === 'danger-zone') {
-      setLoading(false);
-      setData(null);
-      setError(null);
-      analytics.track('content_view', { page: 'settings-section', section });
-      return;
-    }
-
-    let cancelled = false;
-    analytics.track('content_view', { page: 'settings-section', section });
-
-    (async () => {
-      try {
-        const result = await fetchSettingsSection(section);
-        if (!cancelled) {
-          setData(result);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load this settings section.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    if (section) analytics.track('content_view', { page: 'settings-section', section });
   }, [section]);
 
   const handleChange = (key: string, value: string | boolean) => {
     if (!data) return;
-    setData((current) => current ? { ...current, values: setNestedValue(current.values, key, value) } : current);
-    setSuccessMessage(null);
+    setDraft({
+      key: draftKey,
+      data: { ...data, values: setNestedValue(data.values, key, value) },
+    });
+    setFeedback((current) => ({
+      key: draftKey,
+      error: current?.key === draftKey ? current.error : null,
+      successMessage: null,
+    }));
   };
 
   const handleSave = async () => {
     if (!section || !data) return;
-    setSaving(true);
-    setError(null);
-    setSuccessMessage(null);
+    const activeDraftKey = draftKey;
+    setFeedback({ key: activeDraftKey, error: null, successMessage: null });
     try {
-      const response = await updateSettingsSection(section as Parameters<typeof updateSettingsSection>[0], data.values);
-      setData({ section, values: response.values ?? data.values });
-      setSuccessMessage('Settings saved.');
+      await updateMutation.mutateAsync({
+        userId: queryUserId,
+        draftKey: activeDraftKey,
+        targetSection: section as EditableSettingsSectionId,
+        values: data.values,
+      });
+      setFeedback({ key: activeDraftKey, error: null, successMessage: 'Settings saved.' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save this settings section.');
-    } finally {
-      setSaving(false);
+      setFeedback({
+        key: activeDraftKey,
+        error: err instanceof Error ? err.message : 'Failed to save this settings section.',
+        successMessage: null,
+      });
     }
   };
 

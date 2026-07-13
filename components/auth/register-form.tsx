@@ -2,10 +2,10 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  IconBrandFacebook,
-  IconBrandGoogle,
-  IconBrandLinkedin,
-} from '@tabler/icons-react';
+  Facebook,
+  Linkedin,
+  LogIn,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -26,7 +26,7 @@ import { RegisterEnrollmentStep } from '@/components/auth/register/register-enro
 import { RegisterPersonalStep } from '@/components/auth/register/register-personal-step';
 import { RegisterSecurityStep } from '@/components/auth/register/register-security-step';
 import { RegisterStepProgress } from '@/components/auth/register/register-step-progress';
-import { countryOptions } from '@/components/auth/country-code-select';
+import { COUNTRY_OPTIONS } from '@/lib/countries';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { readErrorMessage } from '@/lib/read-error-message';
 
@@ -52,17 +52,17 @@ export function RegisterForm() {
     {
       href: buildExternalAuthStartHref('facebook', nextPath),
       label: 'Sign up with Facebook',
-      icon: <IconBrandFacebook size={18} />,
+      icon: <Facebook size={18} />,
     },
     {
       href: buildExternalAuthStartHref('google', nextPath),
       label: 'Sign up with Google',
-      icon: <IconBrandGoogle size={18} />,
+      icon: <LogIn size={18} />,
     },
     {
       href: buildExternalAuthStartHref('linkedin', nextPath),
       label: 'Sign up with LinkedIn',
-      icon: <IconBrandLinkedin size={18} />,
+      icon: <Linkedin size={18} />,
     },
   ]), [nextPath]);
 
@@ -103,7 +103,7 @@ export function RegisterForm() {
   );
 
   useEffect(() => {
-    const dialCode = countryOptions.find((item) => item.value === selectedCountryCode)?.dialCode ?? '';
+    const dialCode = COUNTRY_OPTIONS.find((item) => item.value === selectedCountryCode)?.dialCode ?? '';
 
     form.setValue('mobileNumber', `${dialCode}${mobileLocalNumber}`.trim(), {
       shouldDirty: true,

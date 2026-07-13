@@ -52,12 +52,14 @@ public sealed class MediaAssetAccessService(
             return false;
         }
 
-        if (await CanLearnerAccessReviewVoiceNoteAsync(userId, media.Id, ct))
+        var relationKinds = await LoadLearnerMediaRelationKindsAsync(userId, media.Id, ct);
+
+        if (relationKinds.Contains(LearnerReviewVoiceNoteRelation))
         {
             return true;
         }
 
-        if (await CanLearnerAccessWritingMarkingVoiceNoteAsync(userId, media.Id, ct))
+        if (relationKinds.Contains(LearnerWritingVoiceNoteRelation))
         {
             return true;
         }
@@ -74,54 +76,62 @@ public sealed class MediaAssetAccessService(
 
         var normalizedProfession = profession?.Trim().ToLowerInvariant();
 
-        if (await IsVocabularyAudioAsync(media.Id, ct))
+        if (relationKinds.Contains(VocabularyAudioRelation))
         {
             return false;
         }
 
-        if (await CanLearnerAccessPublishedRulebookReferencePdfAsync(media.Id, normalizedProfession, ct))
+        if (relationKinds.Contains(RulebookRelation)
+            && await CanLearnerAccessPublishedRulebookReferencePdfAsync(media.Id, normalizedProfession, ct))
         {
             return true;
         }
 
-        if (await CanLearnerAccessSpeakingSharedResourceAsync(media.Id, normalizedProfession, ct))
+        if (relationKinds.Contains(SpeakingResourceRelation)
+            && await CanLearnerAccessSpeakingSharedResourceAsync(media.Id, normalizedProfession, ct))
         {
             return true;
         }
 
-        if (await materialAccess.CanCandidateAccessMaterialFileAsync(userId, media.Id, ct))
+        if (relationKinds.Contains(MaterialFileRelation)
+            && await materialAccess.CanCandidateAccessMaterialFileAsync(userId, media.Id, ct))
         {
             return true;
         }
 
-        if (await CanLearnerAccessVideoLibraryAssetAsync(userId, media.Id, normalizedProfession, ct))
+        if (relationKinds.Contains(VideoLibraryRelation)
+            && await CanLearnerAccessVideoLibraryAssetAsync(userId, media.Id, normalizedProfession, ct))
         {
             return true;
         }
 
-        if (await CanLearnerAccessActiveResultTemplateAsync(media.Id, normalizedProfession, ct))
+        if (relationKinds.Contains(ResultTemplateRelation)
+            && await CanLearnerAccessActiveResultTemplateAsync(media.Id, normalizedProfession, ct))
         {
             return true;
         }
 
-        if (await CanLearnerAccessPublishedWritingStimulusPdfAsync(media.Id, normalizedProfession, ct))
+        if (relationKinds.Contains(WritingStimulusRelation)
+            && await CanLearnerAccessPublishedWritingStimulusPdfAsync(media.Id, normalizedProfession, ct))
         {
             return true;
         }
 
         var learnerVisibleRoles = LearnerVisiblePaperAssetRoles;
-        var attachedPaperAssets = await db.ContentPaperAssets
-            .AsNoTracking()
-            .Where(asset => asset.MediaAssetId == media.Id
-                && asset.Paper != null
-                && asset.Paper.Status == ContentStatus.Published)
-            .Select(asset => new
-            {
-                asset.Role,
-                asset.IsPrimary,
-                Paper = asset.Paper!,
-            })
-            .ToListAsync(ct);
+        var attachedPaperAssets = relationKinds.Contains(PublishedPaperRelation)
+            ? await db.ContentPaperAssets
+                .AsNoTracking()
+                .Where(asset => asset.MediaAssetId == media.Id
+                    && asset.Paper != null
+                    && asset.Paper.Status == ContentStatus.Published)
+                .Select(asset => new
+                {
+                    asset.Role,
+                    asset.IsPrimary,
+                    Paper = asset.Paper!,
+                })
+                .ToListAsync(ct)
+            : [];
 
         var isReadingQuestionPaperAsset = attachedPaperAssets.Any(candidate =>
             candidate.Role == PaperAssetRole.QuestionPaper
@@ -155,7 +165,7 @@ public sealed class MediaAssetAccessService(
             return false;
         }
 
-        if (await IsPublishedFreePreviewMediaAsync(media.Id, ct))
+        if (relationKinds.Contains(FreePreviewRelation))
         {
             return true;
         }
@@ -172,6 +182,114 @@ public sealed class MediaAssetAccessService(
         PaperAssetRole.WarmUpQuestions,
     ];
 
+    private const string LearnerReviewVoiceNoteRelation = "learner_review_voice_note";
+    private const string LearnerWritingVoiceNoteRelation = "learner_writing_voice_note";
+    private const string VocabularyAudioRelation = "vocabulary_audio";
+    private const string RulebookRelation = "rulebook";
+    private const string SpeakingResourceRelation = "speaking_resource";
+    private const string MaterialFileRelation = "material_file";
+    private const string VideoLibraryRelation = "video_library";
+    private const string ResultTemplateRelation = "result_template";
+    private const string WritingStimulusRelation = "writing_stimulus";
+    private const string PublishedPaperRelation = "published_paper";
+    private const string FreePreviewRelation = "free_preview";
+
+    /// <summary>
+    /// Classifies all learner-relevant relationships for one media asset in one
+    /// relational command. Expensive entitlement/policy services are then called
+    /// only for relationship kinds that actually exist.
+    /// </summary>
+    private Task<List<string>> LoadLearnerMediaRelationKindsAsync(
+        string learnerId,
+        string mediaAssetId,
+        CancellationToken ct)
+    {
+        var reviewVoiceNotes = db.ReviewVoiceNotes
+            .AsNoTracking()
+            .Where(note => note.MediaAssetId == mediaAssetId && note.Status == "ready")
+            .Join(
+                db.ReviewRequests.AsNoTracking().Where(review => review.State == ReviewRequestState.Completed),
+                note => note.ReviewRequestId,
+                review => review.Id,
+                (note, review) => review)
+            .Join(
+                db.Attempts.AsNoTracking().Where(attempt => attempt.UserId == learnerId),
+                review => review.AttemptId,
+                attempt => attempt.Id,
+                (review, attempt) => LearnerReviewVoiceNoteRelation);
+
+        var writingVoiceNotes = db.WritingReviewVoiceNotes
+            .AsNoTracking()
+            .Where(note => note.MediaAssetId == mediaAssetId && note.Status == "ready")
+            .Join(
+                db.WritingSubmissions.AsNoTracking().Where(submission => submission.UserId == learnerId),
+                note => note.SubmissionId,
+                submission => submission.Id,
+                (note, submission) => submission)
+            .Join(
+                db.WritingTutorReviews.AsNoTracking().Where(review => review.Status == "submitted"),
+                submission => submission.Id,
+                review => review.SubmissionId,
+                (submission, review) => LearnerWritingVoiceNoteRelation);
+
+        var relationKinds = reviewVoiceNotes
+            .Concat(writingVoiceNotes)
+            .Concat(db.VocabularyTerms
+                .AsNoTracking()
+                .Where(term => term.AudioMediaAssetId == mediaAssetId)
+                .Select(_ => VocabularyAudioRelation))
+            .Concat(db.RulebookVersions
+                .AsNoTracking()
+                .Where(rulebook => rulebook.ReferencePdfAssetId == mediaAssetId
+                    && rulebook.Status == RulebookStatus.Published)
+                .Select(_ => RulebookRelation))
+            .Concat(db.SpeakingSharedResources
+                .AsNoTracking()
+                .Where(resource => resource.MediaAssetId == mediaAssetId
+                    && resource.Status == ContentStatus.Published)
+                .Select(_ => SpeakingResourceRelation))
+            .Concat(db.MaterialFiles
+                .AsNoTracking()
+                .Where(file => file.MediaAssetId == mediaAssetId)
+                .Select(_ => MaterialFileRelation))
+            .Concat(db.LibraryVideos
+                .AsNoTracking()
+                .Where(video => video.CustomThumbnailMediaAssetId == mediaAssetId)
+                .Select(_ => VideoLibraryRelation))
+            .Concat(db.VideoAttachments
+                .AsNoTracking()
+                .Where(attachment => attachment.MediaAssetId == mediaAssetId)
+                .Select(_ => VideoLibraryRelation))
+            .Concat(db.VideoCaptionTracks
+                .AsNoTracking()
+                .Where(track => track.MediaAssetId == mediaAssetId)
+                .Select(_ => VideoLibraryRelation))
+            .Concat(db.ResultTemplateAssets
+                .AsNoTracking()
+                .Where(template => template.MediaAssetId == mediaAssetId && template.IsActive)
+                .Select(_ => ResultTemplateRelation))
+            .Concat(db.WritingScenarios
+                .AsNoTracking()
+                .Where(scenario =>
+                    (scenario.StimulusPdfMediaAssetId == mediaAssetId
+                        || scenario.AnswerSheetPdfMediaAssetId == mediaAssetId)
+                    && scenario.Status == "published")
+                .Select(_ => WritingStimulusRelation))
+            .Concat(db.ContentPaperAssets
+                .AsNoTracking()
+                .Where(asset => asset.MediaAssetId == mediaAssetId
+                    && asset.Paper != null
+                    && asset.Paper.Status == ContentStatus.Published)
+                .Select(_ => PublishedPaperRelation))
+            .Concat(db.FreePreviewAssets
+                .AsNoTracking()
+                .Where(preview => preview.MediaAssetId == mediaAssetId
+                    && preview.Status == ContentStatus.Published)
+                .Select(_ => FreePreviewRelation));
+
+        return relationKinds.Distinct().ToListAsync(ct);
+    }
+
     /// <summary>
     /// Video Library assets served through /v1/media/{id}/content:
     ///   • custom thumbnail — visible whenever the video itself is visible
@@ -185,69 +303,50 @@ public sealed class MediaAssetAccessService(
     {
         var now = DateTimeOffset.UtcNow;
 
-        var thumbnailVideos = await db.LibraryVideos
+        var relatedVideos = await db.LibraryVideos
             .AsNoTracking()
-            .Where(v => v.CustomThumbnailMediaAssetId == mediaAssetId
-                && v.Status == ContentStatus.Published
-                && (v.PublishAt == null || v.PublishAt <= now))
-            .Select(v => v.ProfessionIdsJson)
+            .Where(video => video.Status == ContentStatus.Published
+                && (video.PublishAt == null || video.PublishAt <= now)
+                && (video.CustomThumbnailMediaAssetId == mediaAssetId
+                    || db.VideoAttachments.Any(attachment =>
+                        attachment.VideoId == video.Id && attachment.MediaAssetId == mediaAssetId)
+                    || db.VideoCaptionTracks.Any(track =>
+                        track.VideoId == video.Id && track.MediaAssetId == mediaAssetId)))
+            .Select(video => new
+            {
+                Video = video,
+                IsThumbnail = video.CustomThumbnailMediaAssetId == mediaAssetId,
+                RequiresEntitlement =
+                    db.VideoAttachments.Any(attachment =>
+                        attachment.VideoId == video.Id && attachment.MediaAssetId == mediaAssetId)
+                    || db.VideoCaptionTracks.Any(track =>
+                        track.VideoId == video.Id && track.MediaAssetId == mediaAssetId),
+            })
             .ToListAsync(ct);
-        if (thumbnailVideos.Any(json =>
-            OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService.IsProfessionVisible(json, normalizedProfession)))
+
+        if (relatedVideos.Any(candidate =>
+            candidate.IsThumbnail
+            && OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService.IsProfessionVisible(
+                candidate.Video.ProfessionIdsJson,
+                normalizedProfession)))
         {
             return true;
         }
 
-        var attachmentVideoIds = await db.VideoAttachments.AsNoTracking()
-            .Where(a => a.MediaAssetId == mediaAssetId)
-            .Select(a => a.VideoId)
-            .ToListAsync(ct);
-        var captionVideoIds = await db.VideoCaptionTracks.AsNoTracking()
-            .Where(c => c.MediaAssetId == mediaAssetId)
-            .Select(c => c.VideoId)
-            .ToListAsync(ct);
-        var videoIds = attachmentVideoIds.Concat(captionVideoIds).Distinct().ToList();
-        if (videoIds.Count == 0)
-        {
-            return false;
-        }
-
-        var videos = await db.LibraryVideos.AsNoTracking()
-            .Where(v => videoIds.Contains(v.Id)
-                && v.Status == ContentStatus.Published
-                && (v.PublishAt == null || v.PublishAt <= now))
-            .ToListAsync(ct);
-        foreach (var video in videos)
+        foreach (var candidate in relatedVideos.Where(candidate => candidate.RequiresEntitlement))
         {
             if (!OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService.IsProfessionVisible(
-                    video.ProfessionIdsJson, normalizedProfession))
+                    candidate.Video.ProfessionIdsJson, normalizedProfession))
             {
                 continue;
             }
-            var entitlement = await videoEntitlements.AllowAccessAsync(userId, video, ct);
+            var entitlement = await videoEntitlements.AllowAccessAsync(userId, candidate.Video, ct);
             if (entitlement.Allowed)
             {
                 return true;
             }
         }
         return false;
-    }
-
-    private Task<bool> IsPublishedFreePreviewMediaAsync(string mediaAssetId, CancellationToken ct)
-        => db.FreePreviewAssets
-            .AsNoTracking()
-            .AnyAsync(preview =>
-                preview.MediaAssetId == mediaAssetId
-                && preview.Status == ContentStatus.Published, ct);
-
-    private Task<bool> IsVocabularyAudioAsync(string mediaAssetId, CancellationToken ct)
-    {
-        // Vocabulary/recall audio has its own paid, no-store streaming endpoint.
-        // Do not allow learners to bypass that entitlement gate through /v1/media.
-        return db.VocabularyTerms
-            .AsNoTracking()
-            .AnyAsync(term =>
-                term.AudioMediaAssetId == mediaAssetId, ct);
     }
 
     private Task<bool> CanLearnerAccessPublishedRulebookReferencePdfAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
@@ -295,25 +394,6 @@ public sealed class MediaAssetAccessService(
             .Join(db.ExpertReviewAssignments.AsNoTracking(), note => note.ReviewRequestId, assignment => assignment.ReviewRequestId, (note, assignment) => assignment)
             .AnyAsync(assignment => assignment.AssignedReviewerId == expertId
                 && assignment.ClaimState != ExpertAssignmentState.Released, ct);
-
-    private Task<bool> CanLearnerAccessReviewVoiceNoteAsync(string learnerId, string mediaAssetId, CancellationToken ct)
-        => db.ReviewVoiceNotes
-            .AsNoTracking()
-            .Where(note => note.MediaAssetId == mediaAssetId && note.Status == "ready")
-            .Join(db.ReviewRequests.AsNoTracking().Where(review => review.State == ReviewRequestState.Completed), note => note.ReviewRequestId, review => review.Id, (note, review) => review)
-            .Join(db.Attempts.AsNoTracking(), review => review.AttemptId, attempt => attempt.Id, (review, attempt) => attempt)
-            .AnyAsync(attempt => attempt.UserId == learnerId, ct);
-
-    // Writing V2 (System A) marking voice note: the owning learner may play it once the
-    // tutor review for their submission has been submitted.
-    private Task<bool> CanLearnerAccessWritingMarkingVoiceNoteAsync(string learnerId, string mediaAssetId, CancellationToken ct)
-        => db.WritingReviewVoiceNotes
-            .AsNoTracking()
-            .Where(note => note.MediaAssetId == mediaAssetId && note.Status == "ready")
-            .Join(db.WritingSubmissions.AsNoTracking(), note => note.SubmissionId, submission => submission.Id, (note, submission) => submission)
-            .Where(submission => submission.UserId == learnerId)
-            .Join(db.WritingTutorReviews.AsNoTracking().Where(review => review.Status == "submitted"), submission => submission.Id, review => review.SubmissionId, (submission, review) => submission)
-            .AnyAsync(ct);
 
     // Writing V2 (System A) marking voice note: a tutor with an active assignment for the
     // submission may play it (covers second/senior markers; the uploader already matches

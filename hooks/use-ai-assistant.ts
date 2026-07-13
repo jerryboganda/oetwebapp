@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { HubConnectionState } from '@microsoft/signalr';
 import type { HubConnection } from '@microsoft/signalr';
 import type {
   AiAssistantMessage,
@@ -101,6 +100,7 @@ export function useAiAssistant(
   const unsubRef = useRef<(() => void) | null>(null);
   const activeThreadRef = useRef<AiAssistantThread | null>(null);
   const activeToolCallsRef = useRef<ToolCallInfo[]>([]);
+  const connectionAttemptRef = useRef(0);
 
   // Keep refs in sync
   useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
@@ -116,20 +116,44 @@ export function useAiAssistant(
       return;
     }
 
+    const attempt = connectionAttemptRef.current + 1;
+    connectionAttemptRef.current = attempt;
+
     // Cleanup previous connection
     if (unsubRef.current) {
       unsubRef.current();
       unsubRef.current = null;
     }
-    if (connectionRef.current && connectionRef.current.state !== HubConnectionState.Disconnected) {
+    if (connectionRef.current && mapHubState(connectionRef.current.state) !== 'disconnected') {
       await connectionRef.current.stop().catch(() => {});
     }
 
-    const connection = createAssistantConnection(token, {
-      onReconnecting: () => setConnectionState('reconnecting'),
-      onReconnected: () => setConnectionState('connected'),
-      onClose: () => setConnectionState('disconnected'),
-    });
+    setConnectionState('connecting');
+    let connection: HubConnection;
+    try {
+      connection = await createAssistantConnection(token, {
+        onReconnecting: () => {
+          if (connectionAttemptRef.current === attempt) setConnectionState('reconnecting');
+        },
+        onReconnected: () => {
+          if (connectionAttemptRef.current === attempt) setConnectionState('connected');
+        },
+        onClose: () => {
+          if (connectionAttemptRef.current === attempt) setConnectionState('disconnected');
+        },
+      });
+    } catch (err) {
+      if (connectionAttemptRef.current !== attempt) return;
+      console.error('[AI Assistant] Connection failed:', err);
+      setConnectionState('disconnected');
+      setError('Failed to connect to AI assistant');
+      return;
+    }
+
+    if (connectionAttemptRef.current !== attempt) {
+      await connection.stop().catch(() => {});
+      return;
+    }
 
     connectionRef.current = connection;
 
@@ -181,12 +205,23 @@ export function useAiAssistant(
     unsubRef.current = unsub;
 
     // Start connection
-    setConnectionState('connecting');
     try {
       await connection.start();
+      if (connectionAttemptRef.current !== attempt) {
+        await connection.stop().catch(() => {});
+        return;
+      }
       setConnectionState('connected');
       setError(null);
     } catch (err) {
+      if (connectionAttemptRef.current !== attempt) return;
+      unsub();
+      if (unsubRef.current === unsub) {
+        unsubRef.current = null;
+      }
+      if (connectionRef.current === connection) {
+        connectionRef.current = null;
+      }
       console.error('[AI Assistant] Connection failed:', err);
       setConnectionState('disconnected');
       setError('Failed to connect to AI assistant');
@@ -194,11 +229,12 @@ export function useAiAssistant(
   }, [token]);
 
   const disconnect = useCallback(() => {
+    connectionAttemptRef.current += 1;
     if (unsubRef.current) {
       unsubRef.current();
       unsubRef.current = null;
     }
-    if (connectionRef.current && connectionRef.current.state !== HubConnectionState.Disconnected) {
+    if (connectionRef.current && mapHubState(connectionRef.current.state) !== 'disconnected') {
       connectionRef.current.stop().catch(() => {});
     }
     connectionRef.current = null;
@@ -278,7 +314,7 @@ export function useAiAssistant(
   const sendMessage = useCallback(
     async (content: string) => {
       const connection = connectionRef.current;
-      if (!connection || connection.state !== HubConnectionState.Connected) {
+      if (!connection || mapHubState(connection.state) !== 'connected') {
         setError('Not connected to assistant');
         return;
       }
