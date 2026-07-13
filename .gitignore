@@ -245,3 +245,6 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 .design-sync/build/styles.compiled.css
+
+# Bulk video upload scratch (state, manifest, logs) — never commit
+scripts/videos/state/
