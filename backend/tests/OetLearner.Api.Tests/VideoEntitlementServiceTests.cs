@@ -36,7 +36,8 @@ public class VideoEntitlementServiceTests
         string userId,
         string entitlementsJson,
         SubscriptionStatus status = SubscriptionStatus.Active,
-        DateTimeOffset? expiresAt = null)
+        DateTimeOffset? expiresAt = null,
+        string? dashboardModulesJson = null)
     {
         var now = DateTimeOffset.UtcNow;
         var planCode = $"plan-{Guid.NewGuid():N}"[..24];
@@ -46,6 +47,9 @@ public class VideoEntitlementServiceTests
             Code = planCode,
             Name = "Test plan",
             EntitlementsJson = entitlementsJson,
+            // Default "[]" (no modules) keeps the legacy tests exercising the entitlement-node path;
+            // callers that pass a list exercise the admin "Videos" module-toggle grant.
+            DashboardModulesJson = dashboardModulesJson ?? "[]",
         });
         db.Subscriptions.Add(new Subscription
         {
@@ -108,6 +112,72 @@ public class VideoEntitlementServiceTests
 
         Assert.True(result.Allowed);
         Assert.Equal("plan_grants_video_library", result.Reason);
+    }
+
+    [Fact]
+    public async Task PremiumVideo_PlanEnablesVideoLibraryModule_IsAllowed()
+    {
+        // The admin "Videos" toggle (DashboardModulesJson contains "VideoLibrary") is now a
+        // first-class grant — no separate video_library entitlement node required. This is the
+        // path every real production plan takes (migration 20260725 back-filled the key).
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", "{}", dashboardModulesJson: """["Recalls","VideoLibrary","Mocks"]""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(), default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
+    }
+
+    [Fact]
+    public async Task PremiumVideo_PlanEnablesVideoLibraryModule_UnlocksEverySubtest()
+    {
+        // Module-toggle grant is unrestricted (no subtest node) → all OET modules unlock.
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", "{}", dashboardModulesJson: """["VideoLibrary"]""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        foreach (var subtest in new[] { "listening", "reading", "writing", "speaking" })
+        {
+            var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: subtest), default);
+            Assert.True(result.Allowed, $"expected {subtest} to unlock");
+        }
+    }
+
+    [Fact]
+    public async Task PremiumVideo_PlanModuleListExcludesVideoLibrary_IsDenied()
+    {
+        // A non-empty module list that omits VideoLibrary = the admin DISABLED the Videos toggle
+        // (the FULL gate). No entitlement node, no add-on → locked.
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", "{}", dashboardModulesJson: """["Recalls","MaterialsLibrary","Mocks"]""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_does_not_grant", result.Reason);
+    }
+
+    [Fact]
+    public async Task PremiumVideo_ModuleEnabledButExpiredSubscription_IsDeniedAsExpired()
+    {
+        // The module toggle never overrides the eligibility/expiry gate.
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", "{}",
+            expiresAt: DateTimeOffset.UtcNow.AddDays(-1),
+            dashboardModulesJson: """["VideoLibrary"]""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("subscription_expired", result.Reason);
     }
 
     [Fact]
