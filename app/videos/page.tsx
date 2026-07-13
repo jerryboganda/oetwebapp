@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpenCheck, Clock, PlayCircle, RotateCcw, Search, Video } from 'lucide-react';
+import { BookOpen, BookOpenCheck, Clock, Headphones, Mic, PenLine, PlayCircle, RotateCcw, Search, Video } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,6 +23,27 @@ const SUBTEST_OPTIONS: Array<[string, string]> = [
   ['writing', 'Writing'],
   ['speaking', 'Speaking'],
 ];
+
+// Category shelves are named "Module / Sub / Sub" (e.g. "Reading / English / Sessions").
+// The learner browse view groups them into top-level module sections, each holding
+// its sub-category shelves — so the tree reads Module → subcategory → videos.
+const MODULE_ORDER: Record<string, number> = { listening: 0, reading: 1, speaking: 2, writing: 3, mocks: 4 };
+const MODULE_META: Record<string, { label: string; icon: LucideIcon }> = {
+  listening: { label: 'Listening', icon: Headphones },
+  reading: { label: 'Reading', icon: BookOpen },
+  speaking: { label: 'Speaking', icon: Mic },
+  writing: { label: 'Writing', icon: PenLine },
+  mocks: { label: 'Mocks', icon: BookOpenCheck },
+};
+
+function moduleKeyOf(title: string): string {
+  return (title.split('/')[0] ?? '').trim().toLowerCase();
+}
+
+function subTitleOf(title: string): string {
+  const parts = title.split('/').map((part) => part.trim()).filter(Boolean);
+  return parts.slice(1).join(' / ') || 'General';
+}
 
 function flattenVideos(home: VideoLibraryHome): VideoSummary[] {
   const byId = new Map<string, VideoSummary>();
@@ -101,6 +123,28 @@ export default function VideoLibraryPage() {
     [home],
   );
   const savedVideos = useMemo(() => allVideos.filter((video) => video.bookmarked), [allVideos]);
+
+  // Group the flat category shelves into top-level module sections (Reading, Listening,
+  // Speaking, Writing …) so the default browse view renders as a Module → subcategory tree.
+  const moduleGroups = useMemo(() => {
+    if (!home) return [];
+    const groups = new Map<string, VideoLibraryHome['categories']>();
+    for (const category of home.categories) {
+      if (category.videos.length === 0) continue;
+      const key = moduleKeyOf(category.title);
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(category);
+      else groups.set(key, [category]);
+    }
+    return Array.from(groups.entries())
+      .sort((a, b) => (MODULE_ORDER[a[0]] ?? 99) - (MODULE_ORDER[b[0]] ?? 99) || a[0].localeCompare(b[0]))
+      .map(([key, categories]) => ({
+        key,
+        meta: MODULE_META[key] ?? { label: key ? key[0].toUpperCase() + key.slice(1) : 'Other', icon: Video },
+        categories,
+        count: categories.reduce((sum, category) => sum + category.videos.length, 0),
+      }));
+  }, [home]);
 
   const filtersActive = Boolean(query.trim() || subtest || categoryId) || view !== 'all' || sort !== 'newest';
 
@@ -304,25 +348,40 @@ export default function VideoLibraryPage() {
               </section>
             )}
 
-            {home.categories.map((category) =>
-              category.videos.length > 0 ? (
-                <section key={category.id}>
-                  <LearnerSurfaceSectionHeader
-                    eyebrow="Category"
-                    title={category.title}
-                    description={category.description ?? undefined}
-                    className="mb-4"
-                  />
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {category.videos.map((video, index) => (
-                      <MotionItem key={video.id} delayIndex={index}>
-                        <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
-                      </MotionItem>
+            {moduleGroups.map((group) => {
+              const ModuleIcon = group.meta.icon;
+              return (
+                <section key={group.key} className="space-y-6">
+                  <div className="flex items-center gap-3 border-b border-border pb-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-lavender/40 text-primary dark:bg-violet-900/40">
+                      <ModuleIcon className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <h2 className="text-xl font-bold text-navy">{group.meta.label}</h2>
+                      <p className="text-xs text-muted">
+                        {group.count} video{group.count === 1 ? '' : 's'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-8 md:pl-2">
+                    {group.categories.map((category) => (
+                      <div key={category.id}>
+                        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+                          {subTitleOf(category.title)}
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                          {category.videos.map((video, index) => (
+                            <MotionItem key={video.id} delayIndex={index}>
+                              <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
+                            </MotionItem>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </section>
-              ) : null,
-            )}
+              );
+            })}
 
             {home.uncategorized.length > 0 && (
               <section>
