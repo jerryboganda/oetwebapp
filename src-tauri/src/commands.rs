@@ -241,7 +241,11 @@ fn apply_capture_protection(app: &AppHandle, enabled: bool) -> bool {
         Ok(handle) => handle,
         Err(_) => return false,
     };
-    let affinity = if enabled { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
+    let affinity = if enabled {
+        WDA_EXCLUDEFROMCAPTURE
+    } else {
+        WDA_NONE
+    };
     // SAFETY: hwnd is the live top-level window handle for this process's main
     // window, which we just resolved; SetWindowDisplayAffinity only reads it.
     unsafe { SetWindowDisplayAffinity(hwnd, affinity).is_ok() }
