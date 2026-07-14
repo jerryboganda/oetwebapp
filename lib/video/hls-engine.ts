@@ -47,13 +47,20 @@ function signedQuery(url: string): string {
 }
 
 export async function createHlsEngine(video: HTMLVideoElement, url: string): Promise<HlsEngineHandle> {
-  if (supportsNativeHls(video)) {
-    return createNativeEngine(video, url);
-  }
-
+  // Engine selection — prefer hls.js (MSE) WHENEVER it is supported. This is the canonical
+  // hls.js order and is deliberately NOT gated on canPlayType first.
+  //
+  // Why: a Chromium-family engine (Windows WebView2 — i.e. the Tauri desktop shell —, Electron,
+  // desktop Chrome/Edge) reports canPlayType('application/vnd.apple.mpegurl') === 'maybe', yet it
+  // CANNOT actually demux an HLS playlist natively. Trusting canPlayType first (the previous
+  // behaviour) sent those clients down the native path where `video.src = playlist.m3u8` fails
+  // silently — black screen, stuck at 0:00, and the native engine only surfaces MEDIA_ERR_NETWORK
+  // (not SRC_NOT_SUPPORTED), so nothing even errored. hls.js/MSE plays the exact same stream fine.
+  //
+  // Native HLS is the RIGHT path only where hls.js/MSE is unavailable — Safari / iOS WKWebView —
+  // and there native HLS genuinely works, so the fallback below still covers it.
   const { default: Hls } = await import('hls.js');
   if (!Hls.isSupported()) {
-    // Last-resort fallback: let the element try (some WebViews expose MSE oddly).
     return createNativeEngine(video, url);
   }
 

@@ -404,9 +404,14 @@ public sealed class BunnyStreamClient(
     /// suffix-less form returned 403. Pinned by BunnyStreamClientTests.
     /// </para>
     /// <para>
-    /// The Bunny library must also have <c>AllowDirectPlay = true</c> and not
-    /// block referrer-less requests, or the CDN blocks direct HLS access (403)
-    /// before the token is ever evaluated — see docs/VIDEO-LIBRARY-BUNNY-SETUP.md.
+    /// The Bunny library must have <c>AllowDirectPlay = true</c> and
+    /// "Block direct url file access" (BlockNoneReferrer) <b>OFF</b>. This token
+    /// IS the cryptographic control (signed, per-video, expiring, attestation-
+    /// gated). The referrer block is spoofable and, worse, the native Tauri/
+    /// Capacitor WebViews don't reliably send an accepted Referer, so with it ON
+    /// the CDN 403s every HLS request before the token is evaluated and NO video
+    /// plays (proven 2026-07-14: signed URL → 200 with a referer, 403 without).
+    /// See docs/VIDEO-LIBRARY-BUNNY-SETUP.md and scripts/videos/diagnose-playback.mjs.
     /// </para>
     /// </summary>
     public static string ComputeCdnToken(string tokenAuthKey, string tokenPath, long expiresUnix)
