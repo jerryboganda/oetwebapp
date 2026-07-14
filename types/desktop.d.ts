@@ -111,6 +111,15 @@ declare global {
       hard: () => Promise<void>;
     };
     /**
+     * OS-level screen-capture exclusion (desktop shell >= 0.6.0). When enabled the
+     * window renders BLACK in screenshots / screen recorders / screen shares
+     * (Windows WDA_EXCLUDEFROMCAPTURE, macOS NSWindow sharingType None). The video
+     * player toggles it on during playback. Optional; feature-detect before calling.
+     */
+    captureProtection?: {
+      set: (enabled: boolean) => Promise<{ ok: boolean }>;
+    };
+    /**
      * Native HMAC signer for app-only video playback (desktop shell >= 0.4.0).
      * Optional because v0.3 shells lack it — feature-detect before calling.
      * Signs "{nonce}|{videoId}|{userId}|tauri|v1" with a build-time secret that

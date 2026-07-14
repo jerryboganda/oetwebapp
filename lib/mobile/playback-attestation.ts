@@ -21,7 +21,12 @@ export interface PlaybackAttestationSignResult {
 }
 
 export interface PlaybackAttestationSecureScreenResult {
-  /** True when the platform actually applied the secure flag (Android FLAG_SECURE); iOS resolves false (no-op). */
+  /**
+   * True when the platform engaged capture protection: Android FLAG_SECURE
+   * (black in screenshots + recordings), iOS recording/mirroring blackout via
+   * UIScreen.isCaptured (blanks during active capture; iOS cannot black-out a
+   * single still screenshot without DRM).
+   */
   ok: boolean;
 }
 

@@ -1,6 +1,7 @@
 import Foundation
 import Capacitor
 import CryptoKit
+import UIKit
 
 /// Native HMAC attestation for app-only video playback.
 ///
@@ -51,16 +52,68 @@ public class PlaybackAttestationPlugin: CAPPlugin, CAPBridgedPlugin {
         ])
     }
 
+    // Screen-capture blackout state (main-thread only).
+    private var captureObserver: NSObjectProtocol?
+    private var blackoutView: UIView?
+
     @objc func setSecureScreen(_ call: CAPPluginCall) {
-        // iOS has no direct FLAG_SECURE equivalent. The known workaround (re-parenting
-        // the window layer into a UITextField with isSecureTextEntry) is fragile to
-        // undo and has broken across iOS point releases (risking a black-screened
-        // app), so this resolves honestly as a no-op instead of best-effort hacking.
-        // TODO: revisit with UIScreen.capturedDidChangeNotification-driven overlay or
-        // a maintained secure-view implementation if screen-capture blocking becomes
-        // a hard requirement on iOS.
-        _ = call.getBool("enabled") ?? false
-        call.resolve(["ok": false])
+        // iOS has no FLAG_SECURE, and it cannot make an ARBITRARY view render black
+        // in a still SCREENSHOT (only DRM/AVPlayer-protected content can). What it
+        // CAN do — and what actually matters for video piracy — is blank the app
+        // during active screen RECORDING / mirroring, which is exactly what
+        // UIScreen.isCaptured reports. We overlay an opaque black view whenever a
+        // capture is in progress and observe capturedDidChangeNotification so the
+        // blackout tracks recording start/stop for the lifetime of playback.
+        let enabled = call.getBool("enabled") ?? false
+        DispatchQueue.main.async {
+            if enabled {
+                self.enableCaptureBlackout()
+            } else {
+                self.disableCaptureBlackout()
+            }
+            // ok=true when we engaged the recording/mirroring blackout; the JS side
+            // treats this as best-effort hardening, never a gate.
+            call.resolve(["ok": enabled])
+        }
+    }
+
+    private func enableCaptureBlackout() {
+        if captureObserver == nil {
+            captureObserver = NotificationCenter.default.addObserver(
+                forName: UIScreen.capturedDidChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.applyBlackoutForCaptureState()
+            }
+        }
+        applyBlackoutForCaptureState()
+    }
+
+    private func disableCaptureBlackout() {
+        if let observer = captureObserver {
+            NotificationCenter.default.removeObserver(observer)
+            captureObserver = nil
+        }
+        blackoutView?.removeFromSuperview()
+        blackoutView = nil
+    }
+
+    private func applyBlackoutForCaptureState() {
+        guard let container = self.bridge?.viewController?.view else { return }
+        if UIScreen.main.isCaptured {
+            if blackoutView == nil {
+                let view = UIView(frame: container.bounds)
+                view.backgroundColor = .black
+                view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                view.isUserInteractionEnabled = false
+                blackoutView = view
+            }
+            if let view = blackoutView, view.superview == nil {
+                container.addSubview(view)
+                container.bringSubviewToFront(view)
+            }
+        } else {
+            blackoutView?.removeFromSuperview()
+        }
     }
 
     /// Reads a required challenge param; rejects the call and returns nil when the

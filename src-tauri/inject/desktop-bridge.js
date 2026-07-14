@@ -77,6 +77,13 @@
       // Ctrl+F5 equivalent: native clear browsing data + re-navigate to origin.
       hard: () => invoke('hard_reload'),
     },
+    captureProtection: {
+      // OS-level screen-capture exclusion for the whole window: the window renders
+      // BLACK in screenshots / screen recorders / screen shares while enabled
+      // (Windows WDA_EXCLUDEFROMCAPTURE / macOS NSWindow sharingType None). The
+      // video player toggles this on during playback. Resolves { ok: boolean }.
+      set: (enabled) => invoke('set_capture_protection', { enabled: !!enabled }),
+    },
     secureSecrets: {
       get: (namespace, key) => invoke('secret_get', { namespace, key }),
       set: (namespace, key, value) => invoke('secret_set', { namespace, key, value }),

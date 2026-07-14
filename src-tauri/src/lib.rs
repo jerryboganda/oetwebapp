@@ -159,6 +159,7 @@ pub fn run() {
             commands::updater_install,
             commands::app_relaunch,
             commands::hard_reload,
+            commands::set_capture_protection,
         ])
         .on_window_event(|window, event| {
             if matches!(

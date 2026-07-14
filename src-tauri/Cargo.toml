@@ -1,6 +1,6 @@
 [package]
 name = "oet-desktop"
-version = "0.5.1"
+version = "0.6.0"
 description = "OET with Dr Hesham desktop shell (Tauri 2, remote-only thin client)"
 edition = "2021"
 
@@ -30,6 +30,17 @@ base64 = "=0.22.1"
 # HMAC-SHA256 for the video playback attestation command.
 hmac = "=0.12.1"
 sha2 = "=0.10.9"
+
+# Screen-capture exclusion (set_capture_protection): render the window black in
+# screenshots / recorders / screen shares while a video plays.
+#   Windows: SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) — windows crate,
+#            pinned to the same 0.61.3 Tauri 2.11 already resolves (HWND types align).
+#   macOS:   NSWindow.sharingType = None — via objc2 0.6.4 (already in the tree).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.4"
 
 # Release profile — optimized for a small, fast-starting thin client.
 # strip+lto+codegen-units=1: smaller binary, better cross-crate inlining (slower

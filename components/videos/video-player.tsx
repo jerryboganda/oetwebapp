@@ -20,7 +20,6 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { createHlsEngine, type HlsEngineHandle, type HlsQualityLevel } from '@/lib/video/hls-engine';
 import {
   PlaybackGateError,
@@ -28,7 +27,7 @@ import {
   type PlaybackGateErrorCode,
 } from '@/lib/video/attestation';
 import { postVideoEvent, postVideoProgress, renewPlaybackSession } from '@/lib/api/videos';
-import { setSecureScreen } from '@/lib/mobile/playback-attestation';
+import { setVideoScreenProtection } from '@/lib/video/screen-protection';
 import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/types/videos';
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
 import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
@@ -258,20 +257,17 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     }
   }, [scheduleRenewal, teardownEngine, userId, videoId]);
 
-  // Boot: attest + attach. Also engage FLAG_SECURE on mobile for the lifetime
-  // of the player (screenshot/recents-thumbnail deterrence).
+  // Boot: attest + attach. Also engage OS screen-capture protection for the
+  // lifetime of the player on every native shell — desktop (Tauri window
+  // capture-exclusion) AND mobile (Android FLAG_SECURE) — so screenshots and
+  // screen recorders capture only black. No-op on web. Best-effort, never a gate.
   useEffect(() => {
-    const runtime = getAppRuntimeKind();
-    if (runtime === 'capacitor-native') {
-      void setSecureScreen(true);
-    }
+    void setVideoScreenProtection(true);
     void startPlayback();
     return () => {
       teardownEngine();
       if (heartbeatTimerRef.current !== null) window.clearInterval(heartbeatTimerRef.current);
-      if (runtime === 'capacitor-native') {
-        void setSecureScreen(false);
-      }
+      void setVideoScreenProtection(false);
       if (maxWatchedRef.current > lastReportedRef.current) {
         lastReportedRef.current = maxWatchedRef.current;
         void reportProgress(maxWatchedRef.current);
