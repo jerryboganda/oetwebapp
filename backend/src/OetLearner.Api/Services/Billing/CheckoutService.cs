@@ -115,9 +115,14 @@ public sealed class CheckoutService : ICheckoutService
                 {
                     var bp = billingPrices.FirstOrDefault(p => p.Id == i.BillingPriceId)
                         ?? throw new InvalidOperationException($"BillingPrice '{i.BillingPriceId}' not found.");
-                    if (string.IsNullOrEmpty(bp.StripePriceId))
-                        throw new InvalidOperationException($"BillingPrice '{i.BillingPriceId}' has no StripePriceId.");
-                    return new CheckoutLineItem(bp.StripePriceId, i.Quantity);
+                    return new CheckoutLineItem(
+                        StripePriceId: bp.StripePriceId,
+                        Quantity: i.Quantity,
+                        UnitAmount: checked((long)bp.Amount),
+                        Currency: bp.Currency,
+                        ProductName: i.ProductName,
+                        Interval: bp.Interval,
+                        IntervalCount: bp.IntervalCount);
                 })
                 .ToList();
 

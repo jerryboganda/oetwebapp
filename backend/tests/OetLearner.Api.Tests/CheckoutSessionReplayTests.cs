@@ -30,6 +30,11 @@ public sealed class CheckoutSessionReplayTests
         Assert.Equal(1, stripe.EnsureCustomerCallCount);
         Assert.Equal(1, stripe.CreateCallCount);
         Assert.Equal(0, stripe.RetrieveCallCount);
+        var firstLineItem = Assert.Single(stripe.LastCreateRequest!.LineItems);
+        Assert.Null(firstLineItem.StripePriceId);
+        Assert.Equal(49, firstLineItem.UnitAmount);
+        Assert.Equal("GBP", firstLineItem.Currency);
+        Assert.Equal("Test Product", firstLineItem.ProductName);
 
         var callsAfterFirst = stripe.TotalProviderCallCount;
         var replay = await service.CreateCheckoutSessionAsync(
@@ -47,6 +52,24 @@ public sealed class CheckoutSessionReplayTests
         var stored = await db.CheckoutSessions.SingleAsync();
         Assert.Equal(first.StripeSessionId, stored.StripeSessionId);
         Assert.Equal(first.Url, stored.HostedCheckoutUrl);
+    }
+
+    [Fact]
+    public void MissingStripePriceId_BuildsInlineStripePriceData()
+    {
+        var options = StripeService.BuildLineItemOptions(new CheckoutLineItem(
+            StripePriceId: null,
+            Quantity: 2,
+            UnitAmount: 500,
+            Currency: "GBP",
+            ProductName: "Priority grade"));
+
+        Assert.Null(options.Price);
+        Assert.Equal(2, options.Quantity);
+        Assert.Equal(500, options.PriceData.UnitAmount);
+        Assert.Equal("gbp", options.PriceData.Currency);
+        Assert.Equal("Priority grade", options.PriceData.ProductData.Name);
+        Assert.Null(options.PriceData.Recurring);
     }
 
     [Fact]
@@ -223,7 +246,7 @@ public sealed class CheckoutSessionReplayTests
                         {
                             Id = priceId,
                             BillingProductId = productId,
-                            StripePriceId = "price_test",
+                            StripePriceId = null,
                             Currency = "GBP",
                             Amount = 49m,
                             IsActive = true,
@@ -299,6 +322,7 @@ public sealed class CheckoutSessionReplayTests
         public int EnsureCustomerCallCount => Volatile.Read(ref _ensureCustomerCallCount);
         public int CreateCallCount => Volatile.Read(ref _createCallCount);
         public int RetrieveCallCount => Volatile.Read(ref _retrieveCallCount);
+        public CreateCheckoutSessionRequest? LastCreateRequest { get; private set; }
         public int TotalProviderCallCount =>
             EnsureCustomerCallCount + CreateCallCount + RetrieveCallCount;
         public bool PauseCreate { get; init; }
@@ -322,6 +346,7 @@ public sealed class CheckoutSessionReplayTests
             CancellationToken ct = default)
         {
             Interlocked.Increment(ref _createCallCount);
+            LastCreateRequest = request;
             CreateEntered.TrySetResult();
             if (PauseCreate)
                 await AllowCreate.Task.WaitAsync(ct);

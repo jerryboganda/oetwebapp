@@ -96,11 +96,7 @@ public sealed class StripeService : IStripeService
             return ($"cs_sandbox_{Guid.NewGuid():N}", $"{request.SuccessUrl}?session_id=sandbox");
         }
 
-        var lineItems = request.LineItems.Select(li => new SessionLineItemOptions
-        {
-            Price = li.StripePriceId,
-            Quantity = li.Quantity
-        }).ToList();
+        var lineItems = request.LineItems.Select(BuildLineItemOptions).ToList();
 
         var options = new SessionCreateOptions
         {
@@ -128,6 +124,47 @@ public sealed class StripeService : IStripeService
         var service = new SessionService();
         var session = await service.CreateAsync(options, requestOptions, ct);
         return (session.Id, session.Url);
+    }
+
+    internal static SessionLineItemOptions BuildLineItemOptions(CheckoutLineItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.StripePriceId))
+        {
+            return new SessionLineItemOptions
+            {
+                Price = item.StripePriceId,
+                Quantity = item.Quantity
+            };
+        }
+
+        if (item.UnitAmount is null || item.UnitAmount < 0
+            || string.IsNullOrWhiteSpace(item.Currency)
+            || string.IsNullOrWhiteSpace(item.ProductName))
+        {
+            throw new InvalidOperationException(
+                "Checkout line items without a Stripe price ID require a non-negative unit amount, currency, and product name.");
+        }
+
+        return new SessionLineItemOptions
+        {
+            Quantity = item.Quantity,
+            PriceData = new SessionLineItemPriceDataOptions
+            {
+                Currency = item.Currency.ToLowerInvariant(),
+                UnitAmount = item.UnitAmount,
+                ProductData = new SessionLineItemPriceDataProductDataOptions
+                {
+                    Name = item.ProductName
+                },
+                Recurring = string.IsNullOrWhiteSpace(item.Interval)
+                    ? null
+                    : new SessionLineItemPriceDataRecurringOptions
+                    {
+                        Interval = item.Interval.ToLowerInvariant(),
+                        IntervalCount = item.IntervalCount ?? 1
+                    }
+            }
+        };
     }
 
     public async Task<(string SessionId, string Url)> CreateAdHocPaymentCheckoutSessionAsync(

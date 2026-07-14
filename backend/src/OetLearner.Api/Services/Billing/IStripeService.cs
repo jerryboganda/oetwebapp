@@ -98,8 +98,13 @@ public sealed record CreateCheckoutSessionRequest(
 );
 
 public sealed record CheckoutLineItem(
-    string StripePriceId,
-    int Quantity = 1
+    string? StripePriceId,
+    int Quantity = 1,
+    long? UnitAmount = null,
+    string? Currency = null,
+    string? ProductName = null,
+    string? Interval = null,
+    long? IntervalCount = null
 );
 
 public sealed record CreateStripeCouponRequest(
