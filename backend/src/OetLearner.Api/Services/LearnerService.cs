@@ -8338,12 +8338,19 @@ public partial class LearnerService(
                     "billing_plan_not_found",
                     "No billing plan is available for checkout.");
 
+            // A brand-new learner with no prior subscription needs a parent row so
+            // this quote (and any add-on items) have something to hang off. It is a
+            // pre-payment SCAFFOLD only — it MUST NOT confer entitlements until the
+            // payment actually completes, otherwise merely opening checkout would
+            // light up "Active on your account" and unlock gated modules for free.
+            // So it starts Pending (fails-low to FREE in EffectiveEntitlementResolver)
+            // and is flipped to Active in ApplyCheckoutCompletionAsync once paid.
             subscription = new Subscription
             {
                 Id = TruncateIdentifier($"sub-{Guid.NewGuid():N}"),
                 UserId = userId,
                 PlanId = defaultPlan.Code,
-                Status = SubscriptionStatus.Active,
+                Status = SubscriptionStatus.Pending,
                 NextRenewalAt = now.AddMonths(Math.Max(defaultPlan.DurationMonths, 1)),
                 StartedAt = now,
                 ChangedAt = now,
@@ -10793,6 +10800,18 @@ public partial class LearnerService(
                 // renews the learner's one-time self-service freeze entitlement.
                 await ResetFreezeEntitlementForNewPurchaseAsync(transaction.LearnerUserId, ct);
             }
+        }
+
+        // Activate the pre-payment scaffold subscription now that we are on the paid
+        // completion path. A plan purchase has already transitioned it to Active above;
+        // this covers add-on / credit / review-pack purchases by a first-time learner
+        // whose scaffold subscription was created Pending in BuildBillingQuoteAsync and
+        // never runs the plan block. Guarded on Pending so it is a strict no-op for a
+        // returning learner's existing Active/Cancelled/Frozen subscription (Pending is
+        // only ever the checkout scaffold — no other code path produces it).
+        if (subscription.Status == SubscriptionStatus.Pending)
+        {
+            SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
         }
 
         foreach (var item in quoteResponse.Items.Where(x => string.Equals(x.Kind, "addon", StringComparison.OrdinalIgnoreCase)))
