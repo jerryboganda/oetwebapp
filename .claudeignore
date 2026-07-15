@@ -53,3 +53,7 @@ rulebooks/source-pdfs/
 *.mov
 *.mkv
 *.zip
+
+# Serena/CodeGraph local indexes
+.codegraph/
+.serena/
