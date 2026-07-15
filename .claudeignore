@@ -1,0 +1,55 @@
+# .claudeignore — keep Claude Code's workspace indexing/search off noise and huge content drops.
+# Same syntax as .gitignore.
+
+# Dependencies & lockfiles
+node_modules/
+.pnpm-store/
+*.lock
+pnpm-lock.yaml
+
+# Build output
+.next/
+dist/
+build/
+out/
+output/
+coverage/
+tsconfig.tsbuildinfo
+**/bin/
+**/obj/
+src-tauri/target/
+src-tauri/binaries/
+android/.gradle/
+android/app/build/
+ios/App/Pods/
+storybook-static/
+desktop-backend-runtime/
+ds-bundle/
+
+# VCS internals
+.git/
+
+# Test/QA artifacts
+playwright-report-prod/
+playwright/.auth/
+backend/TestResults/
+backend/tests/**/TestResults/
+.qa-artifacts/
+_audit/
+
+# Local databases / caches
+ruvector.db
+*.sqlite
+*.db-shm
+*.db-wal
+
+# Huge OET content drops (videos, materials, PDFs by the gigabyte — never index)
+OET/
+OET Materials & Videos Data/
+OET with Dr. Ahmed Hesham ( Medicine Only )/
+Project Real Content/
+rulebooks/source-pdfs/
+*.mp4
+*.mov
+*.mkv
+*.zip
