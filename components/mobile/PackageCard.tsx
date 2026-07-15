@@ -16,6 +16,8 @@ import { useMobileBillingContext } from './use-mobile-billing-context';
  */
 export interface MobilePackageDescriptor {
   productCode: string;
+  /** Selects the express checkout product type. Defaults to a plan purchase. */
+  kind?: 'plan' | 'addon';
   name: string;
   description?: string | null;
   /** Amount in major units (e.g. 19, 99.99). */
@@ -46,7 +48,9 @@ export function PackageCard({ package: pkg, contextOverride, className }: Packag
     setRedirecting(true);
     setError(null);
     try {
-      await openExternalCheckout(pkg.productCode);
+      await openExternalCheckout(pkg.productCode, {
+        productType: pkg.kind === 'addon' ? 'addon_purchase' : 'plan_purchase',
+      });
       setConfirmOpen(false);
     } catch (err) {
       setError(
@@ -57,7 +61,7 @@ export function PackageCard({ package: pkg, contextOverride, className }: Packag
     } finally {
       setRedirecting(false);
     }
-  }, [pkg.productCode, redirecting]);
+  }, [pkg.productCode, pkg.kind, redirecting]);
 
   const handleClick = useCallback(() => {
     if (!context) return;

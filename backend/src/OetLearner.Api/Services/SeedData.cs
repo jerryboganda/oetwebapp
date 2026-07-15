@@ -938,7 +938,11 @@ public static partial class SeedData
             new ProfessionReference { Id = "pharmacy", Code = "pharmacy", Label = "Pharmacy", Status = "active", SortOrder = 4 },
             new ProfessionReference { Id = "physiotherapy", Code = "physiotherapy", Label = "Physiotherapy", Status = "active", SortOrder = 5 },
             new ProfessionReference { Id = "radiography", Code = "radiography", Label = "Radiography", Status = "active", SortOrder = 6 },
-            new ProfessionReference { Id = "academic-english", Code = "academic-english", Label = "Academic / General English", Status = "active", SortOrder = 7 }
+            // Mirror of SignupProfessionCatalog (the canonical taxonomy) — ids and
+            // sort order must stay identical to the catalog seeded below, or the
+            // discipline filters that join on Id fall through.
+            new ProfessionReference { Id = "other-allied-health", Code = "other-allied-health", Label = "Other Allied health profession", Status = "active", SortOrder = 7 },
+            new ProfessionReference { Id = "academic-english", Code = "academic-english", Label = "Academic / General English", Status = "active", SortOrder = 8 }
         );
 
         db.Subtests.AddRange(

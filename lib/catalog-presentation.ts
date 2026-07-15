@@ -16,6 +16,7 @@ import {
   Gem,
   Library,
 } from 'lucide-react';
+import { PROFESSION_CATALOG } from '@/lib/auth/enrollment';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow, PublicCatalogResponse } from '@/lib/types/admin';
 
@@ -166,6 +167,24 @@ export const DEFAULT_CATALOG_CATEGORIES: CatalogCategoryConfig[] = [
   { key: 'book', label: 'The Tutor Book', visible: true, displayOrder: 120 },
 ];
 
+/**
+ * Discipline-tab labels, keyed by `BillingPlan.Profession`.
+ *
+ * Derived from the canonical taxonomy (spec §3) so the storefront cannot drift
+ * from what a learner can actually register as — a plan tagged with an id that
+ * is absent here renders its raw id (see {@link resolveProfessionLabel}), and
+ * one tagged with an id absent from the catalog can never match a buyer.
+ * `all` is the catalog-wide wildcard and has no catalog row.
+ */
+export const DEFAULT_PROFESSION_LABELS: Record<string, string> = {
+  all: 'All disciplines',
+  ...Object.fromEntries(PROFESSION_CATALOG.map((item) => [item.id, item.label])),
+  // Pre-migration alias: plans authored before 20260729091000_UnifyProfessionTaxonomy
+  // remapped `allied_health` → `other-allied-health`. Kept so a stale row labels
+  // rather than showing a raw id during a blue/green rollover.
+  allied_health: 'Allied health professions',
+};
+
 export const DEFAULT_CATALOG_STOREFRONT: CatalogStorefrontConfig = {
   accent: 'primary',
   hero: {
@@ -181,15 +200,7 @@ export const DEFAULT_CATALOG_STOREFRONT: CatalogStorefrontConfig = {
     ],
   },
   categories: DEFAULT_CATALOG_CATEGORIES,
-  professionLabels: {
-    all: 'All disciplines',
-    medicine: 'Medicine',
-    nursing: 'Nursing',
-    pharmacy: 'Pharmacy',
-    physiotherapy: 'Physiotherapy',
-    radiography: 'Radiography',
-    allied_health: 'Allied health professions',
-  },
+  professionLabels: DEFAULT_PROFESSION_LABELS,
   legend: [
     { key: 'W', label: 'Writing add-ons', description: 'Writing letter assessment add-ons are offered on this product.' },
     { key: 'S', label: 'Speaking add-ons', description: 'Extra private speaking sessions can be added to this product.' },

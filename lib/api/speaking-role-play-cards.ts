@@ -20,7 +20,9 @@
  *   GET     /v1/speaking/role-play-cards/{id}        (learner — no interlocutor)
  */
 
+import { fetchProfessionCatalog, professionCatalogOptions } from '@/lib/api/professions';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
+import { professions } from '@/lib/auth/enrollment';
 import { env } from '@/lib/env';
 import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
 import type { BulkActionResultDto } from '@/lib/types/admin';
@@ -555,20 +557,26 @@ export async function learnerGetRolePlayCard(cardId: string): Promise<RolePlayCa
 // Constants for forms
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const PROFESSION_OPTIONS: { value: string; label: string }[] = [
-  { value: 'nursing', label: 'Nursing' },
-  { value: 'medicine', label: 'Medicine' },
-  { value: 'pharmacy', label: 'Pharmacy' },
-  { value: 'physiotherapy', label: 'Physiotherapy' },
-  { value: 'dentistry', label: 'Dentistry' },
-  { value: 'occupational_therapy', label: 'Occupational therapy' },
-  { value: 'radiography', label: 'Radiography' },
-  { value: 'optometry', label: 'Optometry' },
-  { value: 'podiatry', label: 'Podiatry' },
-  { value: 'speech_pathology', label: 'Speech pathology' },
-  { value: 'dietetics', label: 'Dietetics' },
-  { value: 'veterinary_science', label: 'Veterinary science' },
-];
+/**
+ * Profession choices for card authoring, video access tagging and expert
+ * queue filters.
+ *
+ * Derived from the canonical taxonomy (spec §3) rather than hand-listed: the
+ * ids written here are persisted (`ProfessionIdsJson`, card `professionId`)
+ * and joined against the learner's registered profession, so an id outside
+ * `SignupProfessionCatalog` tags content nobody can ever match. Synchronous
+ * because every consumer renders a `<Select>` during first paint; use
+ * {@link fetchProfessionOptions} where a live catalog read is worth the await.
+ */
+export const PROFESSION_OPTIONS: { value: string; label: string }[] = professions.map((item) => ({
+  value: item.id,
+  label: item.label,
+}));
+
+/** Live canonical catalog as select options; falls back to {@link PROFESSION_OPTIONS} when the API is unreachable. */
+export async function fetchProfessionOptions(signal?: AbortSignal): Promise<{ value: string; label: string }[]> {
+  return professionCatalogOptions(await fetchProfessionCatalog({ signal }));
+}
 
 export const DIFFICULTY_OPTIONS: { value: RolePlayCardDifficulty; label: string }[] = [
   { value: 'core', label: 'Core' },

@@ -427,6 +427,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var authTokens = ResolveAuthTokens(r, _authTokens.Value);
         var bunnyStream = ResolveBunnyStream(r);
         var videoAttestation = ResolveVideoAttestation(r);
+        var support = ResolveSupport(r);
 
         return new EffectiveSettings(
             Email: email,
@@ -469,7 +470,25 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             BunnyStream = bunnyStream,
             VideoAttestation = videoAttestation,
             EasyKash = easyKash,
+            Support = support,
         };
+    }
+
+    // ── Support (public WhatsApp proof channel) ────────────────────
+    // (DB-over-env: null DB field → Support:* config. Not a secret — the number
+    // is printed in the learner UI, so it is stored and returned plain.)
+    private SupportSettings ResolveSupport(RuntimeSettingsRow r)
+        => new(
+            WhatsAppNumber: NormalizeWhatsAppNumber(Coalesce(r.SupportWhatsAppNumber, _config["Support:WhatsAppNumber"])),
+            WhatsAppProofTemplate: Coalesce(r.SupportWhatsAppProofTemplate, _config["Support:WhatsAppProofTemplate"]));
+
+    // wa.me accepts digits only (no '+', spaces, or dashes), and admins type the
+    // number free-form, so strip everything else rather than emit a dead link.
+    private static string? NormalizeWhatsAppNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var digits = new string(value.Where(char.IsAsciiDigit).ToArray());
+        return digits.Length == 0 ? null : digits;
     }
 
     // ── Bunny Stream + Video attestation (Video Library) ───────────

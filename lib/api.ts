@@ -4277,6 +4277,10 @@ export async function fetchBillingQuote(input: {
   if (input.addOnCodes && input.addOnCodes.length > 0) params.set('addOnCodes', input.addOnCodes.join(','));
   if (input.parentSubscriptionId) params.set('parentSubscriptionId', input.parentSubscriptionId);
   const quote = await apiRequest<ApiRecord>(`/v1/billing/quote?${params.toString()}`);
+  // The backend reports the plan's delivery method inside the quote's `validation`
+  // bag rather than as a top-level field. Prefer a top-level value if one ever
+  // appears, so promoting it server-side does not need a change here.
+  const validation = asRecord(quote.validation);
   return {
     quoteId: quote.quoteId,
     status: quote.status,
@@ -4298,7 +4302,8 @@ export async function fetchBillingQuote(input: {
     })),
     expiresAt: quote.expiresAt,
     summary: String(quote.summary ?? ''),
-    validation: asRecord(quote.validation),
+    deliveryMethod: toNullableString(quote.deliveryMethod) ?? toNullableString(validation.deliveryMethod),
+    validation,
   };
 }
 
@@ -14182,6 +14187,21 @@ export interface CheckoutSessionStatus {
   items?: CheckoutSessionStatusItem[];
   failureReason?: string | null;
   fulfilledAt?: string | null;
+  /**
+   * How the purchased package is handed over — `automatic_web` | `manual_web` |
+   * `telegram` | `manual_material`. `status: 'fulfilled'` only means the PAYMENT
+   * cleared; for anything other than `automatic_web` access is NOT live, because the
+   * subscription stays Pending until an admin marks it fulfilled (spec 2026-07-15
+   * §2/§6.6). The success page must branch on this before claiming access was added.
+   */
+  deliveryMethod?: string | null;
+  /**
+   * `auto` | `pending_manual` | `fulfilled` for the subscription this order opened.
+   * Null when the order granted no course subscription, and also null on cart-pipeline
+   * orders that never created a domain Subscription — so treat `deliveryMethod` as the
+   * load-bearing signal and this as best-effort enrichment.
+   */
+  fulfilmentStatus?: string | null;
 }
 
 export async function fetchCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {

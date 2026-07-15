@@ -122,6 +122,31 @@ public sealed record EffectiveSettings(
     // so the existing EffectiveSettings construction sites keep compiling; the
     // provider sets it via object initializer in Merge.
     public EasyKashSettings EasyKash { get; init; } = EasyKashSettings.Unconfigured;
+
+    // Support (public WhatsApp proof channel). Init-only property (like
+    // BunnyStream) so the existing EffectiveSettings construction sites keep
+    // compiling; the provider sets it via object initializer in Merge.
+    public SupportSettings Support { get; init; } = SupportSettings.Unconfigured;
+}
+
+/// <summary>
+/// Public support channel settings (DB-over-env merged). <see cref="WhatsAppNumber"/>
+/// is the wa.me-dialable number printed next to every package ("send your proof
+/// on WhatsApp") — it is public, NOT a secret, and is therefore stored plain.
+///
+/// <para>
+/// This is a different concept from <see cref="MessagingSettings.WhatsAppPhoneNumberId"/>,
+/// which is the Meta Cloud API sender id used to POST outbound template messages
+/// and is not dialable by a learner. Do not conflate the two.
+/// </para>
+/// </summary>
+public sealed record SupportSettings(
+    string? WhatsAppNumber,
+    string? WhatsAppProofTemplate)
+{
+    public bool IsWhatsAppConfigured => !string.IsNullOrWhiteSpace(WhatsAppNumber);
+
+    public static SupportSettings Unconfigured { get; } = new(null, null);
 }
 
 /// <summary>

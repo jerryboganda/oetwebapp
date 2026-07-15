@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Stethoscope } from 'lucide-react';
 import { Input } from '@/components/ui/form-controls';
 import { Button } from '@/components/admin/ui/button';
+import { InlineAlert } from '@/components/ui/alert';
 import { adminListMaterialFolders, type MaterialFolderDto } from '@/lib/materials-api';
+import { readErrorMessage } from '@/lib/read-error-message';
 import type { AdminBillingAddOn, AdminBillingPlan } from '@/lib/types/admin';
+import {
+  restoreUserPackage,
+  suspendUserPackage,
+  type UserAccessSubscriptionRow,
+} from '@/lib/api/user-access-packages';
 import {
   fetchAdminAddons,
   fetchAdminBillingPlans,
@@ -20,10 +28,15 @@ import { FolderScopePicker } from './folder-scope-picker';
 import { RecallSetPicker } from './recall-set-picker';
 
 interface ManageAccessPanelProps {
-  /** Not required for local edits — kept for callers that want to key/cache by user. */
+  /** Required for suspend/restore, which act on already-persisted packages. */
   userId?: string;
   value: UserAccess;
   onChange: (next: UserAccess) => void;
+  /** The learner's registered profession — every access decision keys off it, so
+   *  it is shown here and drives the plan mismatch warning. Pass `undefined` (not
+   *  an empty string) when the caller does not know it: blank means "none set". */
+  learnerProfessionId?: string | null;
+  learnerProfessionLabel?: string | null;
   plans?: AdminBillingPlan[];
   addons?: AdminBillingAddOn[];
   recallSets?: RecallSetTagDto[];
@@ -33,17 +46,24 @@ interface ManageAccessPanelProps {
 
 /**
  * Fully controlled access editor: packages, add-ons, module toggles, and
- * folder/recall-set scope, all bound to a single `UserAccess` value. Never
- * calls the mutation endpoints itself — the caller (Add User modal or the
- * user detail page) is responsible for persisting the draft via
- * grantUserPackage / grantUserAddon / putUserAccessScope on submit or save.
+ * folder/recall-set scope, all bound to a single `UserAccess` value. Grants and
+ * scope changes are drafts — the caller (Add User modal or the user detail page)
+ * persists them via grantUserPackage / grantUserAddon / putUserAccessScope on
+ * submit or save.
+ *
+ * Suspend/restore are the exception: they are reversible state transitions on a
+ * package that already exists server-side, so they are applied immediately and
+ * merged back into the draft rather than queued for save.
  *
  * Picker option lists (plans/add-ons/recall sets/folder tree) can be passed
  * in by the caller; any that are omitted are fetched internally.
  */
 export function ManageAccessPanel({
+  userId,
   value,
   onChange,
+  learnerProfessionId,
+  learnerProfessionLabel,
   plans: plansProp,
   addons: addonsProp,
   recallSets: recallSetsProp,
@@ -57,6 +77,8 @@ export function ManageAccessPanel({
   const [isLoadingOptions, setIsLoadingOptions] = useState<boolean>(
     !plansProp || !addonsProp || !recallSetsProp || !folderTreeProp,
   );
+  const [busySubscriptionId, setBusySubscriptionId] = useState<string | null>(null);
+  const [packageError, setPackageError] = useState<string | null>(null);
 
   const needsPlans = !plansProp;
   const needsAddons = !addonsProp;
@@ -103,15 +125,66 @@ export function ManageAccessPanel({
 
   const materialsEnabled = isModuleEnabled(value.moduleOverrides, 'MaterialsLibrary');
   const recallsEnabled = isModuleEnabled(value.moduleOverrides, 'Recalls');
+  const professionDisplay = learnerProfessionLabel?.trim() || learnerProfessionId?.trim() || null;
+
+  /**
+   * Re-reads the changed package from the server response but keeps the local
+   * draft as the source of truth for membership, so an unsaved grant or removal
+   * elsewhere in the panel survives a suspend/restore.
+   */
+  async function applyPackageTransition(
+    subscriptionId: string,
+    transition: (userId: string, subscriptionId: string) => Promise<UserAccess>,
+  ) {
+    if (!userId) return;
+    setBusySubscriptionId(subscriptionId);
+    setPackageError(null);
+    try {
+      const saved = await transition(userId, subscriptionId);
+      const savedById = new Map(saved.subscriptions.map((sub) => [sub.id, sub]));
+      onChange({
+        ...value,
+        subscriptions: value.subscriptions.map((sub) =>
+          sub.isPending ? sub : savedById.get(sub.id) ?? sub,
+        ),
+      });
+    } catch (error) {
+      console.error('Failed to change package state', error);
+      setPackageError(readErrorMessage(error, 'Unable to update this package.'));
+    } finally {
+      setBusySubscriptionId(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
+      {learnerProfessionId !== undefined ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-background-light px-4 py-3">
+          <Stethoscope className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Registered profession</p>
+            <p className="text-sm font-semibold text-navy">{professionDisplay ?? 'Not set'}</p>
+          </div>
+        </div>
+      ) : null}
+
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-navy">Packages</h3>
+        {packageError ? (
+          // Keyed on the message: InlineAlert latches its own dismissed state, so a
+          // fresh error after a dismiss needs a fresh instance to show at all.
+          <InlineAlert key={packageError} variant="error" dismissible>
+            {packageError}
+          </InlineAlert>
+        ) : null}
         <PackageList
           plans={plans}
-          subscriptions={value.subscriptions}
+          subscriptions={value.subscriptions as UserAccessSubscriptionRow[]}
           onChange={(subscriptions) => onChange({ ...value, subscriptions })}
+          learnerProfessionId={learnerProfessionId}
+          onSuspend={userId ? (id) => applyPackageTransition(id, suspendUserPackage) : undefined}
+          onRestore={userId ? (id) => applyPackageTransition(id, restoreUserPackage) : undefined}
+          busySubscriptionId={busySubscriptionId}
           disabled={disabled || isLoadingOptions}
         />
       </section>

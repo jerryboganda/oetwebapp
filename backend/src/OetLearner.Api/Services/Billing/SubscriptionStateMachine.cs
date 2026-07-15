@@ -22,6 +22,7 @@ public static class SubscriptionStateMachine
             {
                 SubscriptionStatus.Trial,
                 SubscriptionStatus.Active,
+                SubscriptionStatus.Suspended, // admin suspend (reversible via Suspended -> Active)
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
             },
@@ -30,6 +31,7 @@ public static class SubscriptionStateMachine
                 SubscriptionStatus.Pending,
                 SubscriptionStatus.Active,
                 SubscriptionStatus.Trial,
+                SubscriptionStatus.Suspended,
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
             },
@@ -49,6 +51,7 @@ public static class SubscriptionStateMachine
                 SubscriptionStatus.FreezeRequested,
                 SubscriptionStatus.Active,
                 SubscriptionStatus.Frozen,
+                SubscriptionStatus.Suspended,
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
             },
@@ -56,12 +59,14 @@ public static class SubscriptionStateMachine
             {
                 SubscriptionStatus.Frozen,
                 SubscriptionStatus.Active,
+                SubscriptionStatus.Suspended,
                 SubscriptionStatus.Cancelled,
             },
             [SubscriptionStatus.Paused] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Paused,
                 SubscriptionStatus.Active,    // Phase 6 resume
+                SubscriptionStatus.Suspended,
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
             },
@@ -83,6 +88,7 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Cancelled] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Cancelled,
+                SubscriptionStatus.Active,    // admin restore / ReactivateCancelled
                 SubscriptionStatus.Expired,
             },
             [SubscriptionStatus.Expired] = new HashSet<SubscriptionStatus>

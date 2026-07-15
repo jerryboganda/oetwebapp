@@ -236,5 +236,9 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamCollection
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamPlaybackTokenTtlSeconds"" integer;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BunnyStreamEnabled"" boolean;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoAttestationKeysEncrypted"" text;
+
+-- Support (public WhatsApp proof channel) -- sync with migration 20260729092000
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportWhatsAppNumber"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportWhatsAppProofTemplate"" character varying(1000);
 ";
 }

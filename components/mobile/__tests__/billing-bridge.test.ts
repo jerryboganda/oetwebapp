@@ -153,8 +153,18 @@ describe('billing-bridge — openExternalCheckout', () => {
 
     await openExternalCheckout('pkg_quick_check');
 
-    expect(apiPostMock).toHaveBeenCalledWith('/v1/checkout/sessions', {
-      productCode: 'pkg_quick_check',
+    // The bridge is repointed at the express checkout pipeline, which addresses
+    // the plan or add-on by code via `priceId` (owner decision 8).
+    expect(apiPostMock).toHaveBeenCalledWith('/v1/billing/checkout-sessions', {
+      productType: 'plan_purchase',
+      quantity: 1,
+      priceId: 'pkg_quick_check',
+      couponCode: null,
+      addOnCodes: null,
+      parentSubscriptionId: null,
+      quoteId: null,
+      gateway: null,
+      idempotencyKey: expect.any(String),
     });
     expect(browserOpenMock).toHaveBeenCalledWith({
       url: 'https://checkout.stripe.com/cs_test_123',

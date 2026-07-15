@@ -89,6 +89,14 @@ export interface BillingQuote {
   items: BillingQuoteLineItem[];
   expiresAt: string;
   summary: string;
+  /**
+   * How the plan being quoted is handed over — `automatic_web` | `manual_web` |
+   * `telegram` | `manual_material` (spec 2026-07-15 §2/§6.6). Anything other than
+   * `automatic_web` means paying does NOT unlock access: the subscription parks at
+   * Pending until an admin marks it fulfilled. Null when the backend did not report
+   * one. Add-on/credit quotes buy no plan and report `automatic_web`.
+   */
+  deliveryMethod: string | null;
   validation: Record<string, unknown>;
 }
 

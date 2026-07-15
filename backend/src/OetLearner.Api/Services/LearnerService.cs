@@ -78,6 +78,8 @@ public partial class LearnerService(
     IAddonEligibilityService? addonEligibilityService = null,
     IAiPackageCreditService? aiPackageCreditService = null,
     IInvoicePdfService? invoicePdfService = null,
+    IPlanContentAvailabilityService? planContentAvailability = null,
+    IManualPaymentService? manualPaymentService = null,
     ILogger<LearnerService>? logger = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
@@ -653,7 +655,7 @@ public partial class LearnerService(
 
             if (request.Values.TryGetValue("professionId", out var professionId))
             {
-                var normalizedProfession = ReadString(professionId) ?? goal.ProfessionId ?? user.ActiveProfessionId;
+                var normalizedProfession = await ResolveProfessionChangeAsync(user, goal, professionId, "profile", cancellationToken);
                 if (!string.IsNullOrWhiteSpace(normalizedProfession))
                 {
                     goal.ProfessionId = normalizedProfession;
@@ -704,7 +706,7 @@ public partial class LearnerService(
 
             if (request.Values.TryGetValue("professionId", out var studyProfessionId))
             {
-                var normalizedProfession = ReadString(studyProfessionId) ?? goal.ProfessionId ?? user.ActiveProfessionId;
+                var normalizedProfession = await ResolveProfessionChangeAsync(user, goal, studyProfessionId, "study", cancellationToken);
                 if (!string.IsNullOrWhiteSpace(normalizedProfession))
                 {
                     goal.ProfessionId = normalizedProfession;
@@ -742,6 +744,80 @@ public partial class LearnerService(
         await db.SaveChangesAsync(cancellationToken);
         return new { section, values = JsonSupport.Deserialize<Dictionary<string, object?>>(merged, new Dictionary<string, object?>()) };
     }
+
+    /// <summary>
+    /// Resolve a learner-requested profession change into the canonical catalog id, or
+    /// throw. Profession is one half of the subtest x profession axis that decides which
+    /// content a package unlocks, so it is not free-text and it does not stay editable
+    /// forever: once the learner has bought something, only an admin can move it.
+    /// Returns the value to persist (unchanged when the PATCH is a no-op re-send, which
+    /// the settings form does on every save).
+    /// </summary>
+    private async Task<string?> ResolveProfessionChangeAsync(
+        LearnerUser user,
+        LearnerGoal goal,
+        object? requestedProfessionId,
+        string section,
+        CancellationToken cancellationToken)
+    {
+        var current = goal.ProfessionId ?? user.ActiveProfessionId;
+        var requested = ReadString(requestedProfessionId)?.Trim();
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            return current;
+        }
+
+        if (string.Equals(requested, current, StringComparison.OrdinalIgnoreCase))
+        {
+            return current;
+        }
+
+        var normalized = requested.ToLowerInvariant();
+        var catalogEntry = await db.SignupProfessionCatalog.AsNoTracking()
+            .FirstOrDefaultAsync(entry => entry.Id.ToLower() == normalized && entry.IsActive, cancellationToken)
+            ?? throw ApiException.Validation(
+                "unknown_profession",
+                $"Unknown profession '{requested}'.",
+                [new ApiFieldError("professionId", "unknown", "Choose a profession from the registration list.")]);
+
+        if (await HasCompletedPurchaseAsync(user.Id, cancellationToken))
+        {
+            throw ApiException.Validation(
+                "profession_locked",
+                "Your profession is locked because you have already purchased a package. Contact support to request a change.",
+                [new ApiFieldError("professionId", "locked", "Contact support to change your profession.")]);
+        }
+
+        await RecordEventAsync(user.Id, "profession_changed", new
+        {
+            userId = user.Id,
+            section,
+            from = current,
+            to = catalogEntry.Id
+        }, cancellationToken);
+        LogAudit(
+            user.Id,
+            "Updated",
+            "Profession",
+            user.Id,
+            $"Profession changed from '{current ?? "(none)"}' to '{catalogEntry.Id}' via {section} settings");
+
+        return catalogEntry.Id;
+    }
+
+    /// <summary>
+    /// True once the learner owns anything they paid for. Reads the Subscriptions table
+    /// rather than PaymentTransactions so admin-granted packages (which never produce a
+    /// transaction) count too. The only subscription that is NOT a purchase is the
+    /// pre-payment checkout scaffold — Pending with the default auto fulfilment — so a
+    /// learner who merely opened checkout is not locked, while a paid manual-delivery
+    /// order awaiting admin hand-over (Pending + pending_manual) is.
+    /// </summary>
+    private async Task<bool> HasCompletedPurchaseAsync(string userId, CancellationToken cancellationToken)
+        => await db.Subscriptions.AsNoTracking().AnyAsync(subscription =>
+            subscription.UserId == userId
+            && (subscription.Status != SubscriptionStatus.Pending
+                || subscription.FulfilmentStatus != FulfilmentStatuses.Auto), cancellationToken);
 
     public async Task<object> GetDashboardAsync(string userId, CancellationToken cancellationToken)
     {
@@ -3825,7 +3901,7 @@ public partial class LearnerService(
 
     public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        var checkoutUser = await EnsureUserAsync(userId, cancellationToken);
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
 
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
@@ -3958,6 +4034,20 @@ public partial class LearnerService(
                         "quote_mismatch",
                         "The supplied add-on codes do not match the saved quote.",
                         [new ApiFieldError("addOnCodes", "mismatch", "Refresh your quote before checking out.")]);
+                }
+            }
+
+            // Re-run the profession / content-availability gate against the plan the
+            // saved quote locked in. BuildBillingQuoteAsync already gates the fresh-quote
+            // path below, but a stored quote skips it entirely — and the learner's
+            // profession may have changed since the quote was built.
+            if (normalizedProductType is "plan_purchase" or "plan_upgrade" or "plan_downgrade"
+                && !string.IsNullOrWhiteSpace(quoteEntity.PlanCode))
+            {
+                var quotedPlan = await FindBillingPlanAsync(quoteEntity.PlanCode, cancellationToken);
+                if (quotedPlan is not null)
+                {
+                    await EnsurePlanMatchesLearnerProfessionAsync(checkoutUser, quotedPlan, cancellationToken);
                 }
             }
 
@@ -7880,6 +7970,53 @@ public partial class LearnerService(
               : null;
       }
 
+      /// <summary>
+      /// Gate a plan purchase on the buyer's registered profession. A plan tagged
+      /// <c>all</c> (or untagged) is sold to everyone; anything else must match the
+      /// buyer's ActiveProfessionId, because the package's content is resolved on the
+      /// subtest x profession axis and a mismatched buyer would pay for an empty course.
+      /// Runs on every checkout entry point (fresh quote and saved quote) so a profession
+      /// changed after the quote was built cannot slip through.
+      /// </summary>
+      private async Task EnsurePlanMatchesLearnerProfessionAsync(
+          LearnerUser user,
+          BillingPlan plan,
+          CancellationToken cancellationToken)
+      {
+          var planProfession = plan.Profession?.Trim();
+          if (string.IsNullOrWhiteSpace(planProfession)
+              || string.Equals(planProfession, "all", StringComparison.OrdinalIgnoreCase))
+          {
+              return;
+          }
+
+          if (!string.Equals(planProfession, user.ActiveProfessionId, StringComparison.OrdinalIgnoreCase))
+          {
+              throw ApiException.Validation(
+                  "profession_mismatch",
+                  $"{plan.Name} is only available to learners registered under a different profession.",
+                  [new ApiFieldError("priceId", "profession_mismatch", "Choose a package that matches your registered profession.")]);
+          }
+
+          // A package whose enabled content modules resolve to zero items for this
+          // profession is unsellable — block it here rather than let the learner pay for
+          // an empty course (e.g. Physiotherapy packages while no physiotherapy video
+          // exists yet). Fails open when the service is unregistered.
+          if (planContentAvailability is null)
+          {
+              return;
+          }
+
+          var availability = await planContentAvailability.ResolveAsync(plan, user.ActiveProfessionId, cancellationToken);
+          if (availability.EmptyEnabledModules.Count > 0)
+          {
+              throw ApiException.Validation(
+                  "content_unavailable_for_profession",
+                  $"{plan.Name} has no {string.Join(", ", availability.EmptyEnabledModules)} content for your profession yet. Please contact support.",
+                  [new ApiFieldError("priceId", "content_unavailable", "Choose a package that has content for your profession.")]);
+          }
+      }
+
       private async Task<bool> UserOwnsTutorBookAsync(string userId, CancellationToken cancellationToken)
           => await db.Subscriptions.AsNoTracking().AnyAsync(s =>
               s.UserId == userId
@@ -8388,6 +8525,10 @@ public partial class LearnerService(
                     [new ApiFieldError("priceId", "unknown", "Choose a published billing plan.")]);
 
             AdminService.EnsurePlanCanStartNewSubscription(targetPlan);
+            await EnsurePlanMatchesLearnerProfessionAsync(
+                await EnsureUserAsync(userId, cancellationToken),
+                targetPlan,
+                cancellationToken);
             if (targetPlan.BundledTutorBook && await UserOwnsTutorBookAsync(userId, cancellationToken))
             {
                 throw ApiException.Validation(
@@ -8678,6 +8819,16 @@ public partial class LearnerService(
 
         var total = Math.Max(0m, Math.Round(subtotal - discount, 2, MidpointRounding.AwayFromZero));
         var planVersion = snapshotPlan is null ? null : await ResolvePlanVersionRefAsync(snapshotPlan, cancellationToken);
+
+        // How the plan being bought is handed over, so checkout can tell a Telegram/manual
+        // buyer their order sits Pending Manual Fulfilment rather than implying access is
+        // live the moment they pay (spec 2026-07-15 §2/§6.6). Read from the version locked
+        // to this quote so a mid-flight admin edit cannot change an in-flight order. An
+        // add-on/credit purchase buys no plan, so it is always automatic_web.
+        validation["deliveryMethod"] = snapshotPlan is null
+            ? DeliveryMethods.AutomaticWeb
+            : await ResolvePlanDeliveryMethodAsync(planVersion?.Id, snapshotPlan.Code, cancellationToken);
+
         var addOnVersions = new Dictionary<string, BillingCatalogVersionRef>(StringComparer.OrdinalIgnoreCase);
         foreach (var snapshotAddOn in snapshotAddOns)
         {
@@ -10673,6 +10824,76 @@ public partial class LearnerService(
         }, ct);
     }
 
+    /// <summary>
+    /// Delivery method for a purchased plan, read from the immutable BillingPlanVersion
+    /// locked to the quote so a mid-flight admin edit cannot change how an already-paid
+    /// order is delivered. Falls back to the live plan, then to automatic_web.
+    /// </summary>
+    private async Task<string> ResolvePlanDeliveryMethodAsync(string? planVersionId, string? planCode, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(planVersionId))
+        {
+            var version = await db.BillingPlanVersions.AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == planVersionId, ct);
+            if (version is not null)
+            {
+                return DeliveryMethods.IsValid(version.DeliveryMethod)
+                    ? version.DeliveryMethod
+                    : DeliveryMethods.AutomaticWeb;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(planCode))
+        {
+            var livePlan = await FindBillingPlanAsync(planCode, ct);
+            if (livePlan is not null)
+            {
+                return DeliveryMethods.IsValid(livePlan.DeliveryMethod)
+                    ? livePlan.DeliveryMethod
+                    : DeliveryMethods.AutomaticWeb;
+            }
+        }
+
+        return DeliveryMethods.AutomaticWeb;
+    }
+
+    /// <summary>
+    /// Mint the system receipt that stands in for a learner-uploaded proof file on a card
+    /// gateway order, so every order carries exactly one proof row for the admin dashboard.
+    /// Idempotent on PaymentTransactionId (completion fires from both the webhook and the
+    /// synchronous capture path). Best-effort by design: the learner has already paid, so a
+    /// bookkeeping failure must never block activation.
+    /// </summary>
+    private async Task TryWriteGatewayReceiptAsync(
+        PaymentTransaction transaction,
+        BillingQuote quote,
+        string courseName,
+        CancellationToken ct)
+    {
+        if (manualPaymentService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await manualPaymentService.CreateGatewayReceiptAsync(
+                transaction.LearnerUserId,
+                transaction,
+                courseName,
+                quote.PlanCode,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(
+                ex,
+                "Failed to write gateway payment receipt for transaction {GatewayTransactionId} (quote {QuoteId}). Access was granted regardless.",
+                transaction.GatewayTransactionId,
+                quote.Id);
+        }
+    }
+
     private async Task ApplyCheckoutCompletionAsync(PaymentTransaction transaction, CancellationToken ct)
     {
         var quote = await GetQuoteForTransactionAsync(transaction, ct);
@@ -10724,7 +10945,27 @@ public partial class LearnerService(
             {
                 subscription.PlanId = targetPlan.Code;
                 subscription.PlanVersionId = quote.PlanVersionId;
-                SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
+
+                // Delivery method decides whether payment alone releases access. The quote
+                // snapshot carries pricing only, so read it from the immutable version row
+                // locked to this purchase, falling back to the live plan.
+                var deliveryMethod = await ResolvePlanDeliveryMethodAsync(quote.PlanVersionId, quote.PlanCode, ct);
+                if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod))
+                {
+                    // Telegram / manual-web / manual-material: the learner has paid, but an
+                    // admin still has to hand the package over. Park it at pending_manual and
+                    // leave Status alone — a scaffold subscription stays Pending (which the
+                    // entitlement resolver treats as FREE, so this grants nothing), and an
+                    // existing Active subscription is never downgraded out from under a
+                    // learner who already has access. Admin "Mark Fulfilled" flips both.
+                    subscription.FulfilmentStatus = FulfilmentStatuses.PendingManual;
+                }
+                else
+                {
+                    subscription.FulfilmentStatus = FulfilmentStatuses.Auto;
+                    SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
+                }
+
                 subscription.PriceAmount = targetPlan.Price;
                 subscription.Currency = targetPlan.Currency;
                 subscription.Interval = targetPlan.Interval;
@@ -10803,13 +11044,17 @@ public partial class LearnerService(
         }
 
         // Activate the pre-payment scaffold subscription now that we are on the paid
-        // completion path. A plan purchase has already transitioned it to Active above;
-        // this covers add-on / credit / review-pack purchases by a first-time learner
-        // whose scaffold subscription was created Pending in BuildBillingQuoteAsync and
-        // never runs the plan block. Guarded on Pending so it is a strict no-op for a
-        // returning learner's existing Active/Cancelled/Frozen subscription (Pending is
-        // only ever the checkout scaffold — no other code path produces it).
-        if (subscription.Status == SubscriptionStatus.Pending)
+        // completion path. An automatic_web plan purchase has already transitioned it to
+        // Active above; this covers add-on / credit / review-pack purchases by a
+        // first-time learner whose scaffold subscription was created Pending in
+        // BuildBillingQuoteAsync and never runs the plan block. Guarded on Pending so it
+        // is a strict no-op for a returning learner's existing Active/Cancelled/Frozen
+        // subscription. Pending now has TWO producers — the checkout scaffold, and a
+        // manual-delivery plan purchase parked above — so the pending_manual conjunct is
+        // load-bearing: without it this would activate a Telegram/manual order that an
+        // admin has not yet fulfilled.
+        if (subscription.Status == SubscriptionStatus.Pending
+            && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingManual, StringComparison.OrdinalIgnoreCase))
         {
             SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
         }
@@ -11054,6 +11299,8 @@ public partial class LearnerService(
 
         quote.Status = BillingQuoteStatus.Completed;
         quote.CheckoutSessionId = transaction.GatewayTransactionId;
+
+        await TryWriteGatewayReceiptAsync(transaction, quote, quoteResponse.Summary, ct);
 
         // Mark pricing-experiment conversion if this quote was assigned to a variant.
         if (!string.IsNullOrEmpty(quote.ExperimentAssignmentId))

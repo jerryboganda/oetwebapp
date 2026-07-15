@@ -17,7 +17,20 @@ public sealed class UserAccessAllocationService(
     IAddonGrantProcessor addonGrantProcessor,
     TimeProvider timeProvider)
 {
-    private static readonly SubscriptionStatus[] LiveStatuses =
+    /// <summary>Statuses that actually grant access — mirrors the set
+    /// <c>EffectiveEntitlementResolver.TryResolveEffectivePackage</c> resolves. Frozen is
+    /// deliberately absent: a frozen package resolves to no entitlements.</summary>
+    private static readonly SubscriptionStatus[] AccessGrantingStatuses =
+    {
+        SubscriptionStatus.Active,
+        SubscriptionStatus.Trial,
+        SubscriptionStatus.FreezeRequested,
+    };
+
+    /// <summary>Statuses that still own the plan slot: access-granting plus Frozen, which
+    /// is paused-but-owned. Re-granting one of these adjusts it in place rather than
+    /// creating a duplicate row.</summary>
+    private static readonly SubscriptionStatus[] AllocatedStatuses =
     {
         SubscriptionStatus.Active,
         SubscriptionStatus.Trial,
@@ -67,7 +80,9 @@ public sealed class UserAccessAllocationService(
             planNames.TryGetValue(s.PlanId, out var name) ? name : s.PlanId,
             s.Status.ToString(),
             s.ExpiresAt,
-            string.Equals(s.PlanId, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase))).ToList();
+            string.Equals(s.PlanId, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase),
+            s.StartedAt,
+            s.FulfilmentStatus)).ToList();
 
         return new UserAccessDto(
             subscriptionDtos,
@@ -94,18 +109,23 @@ public sealed class UserAccessAllocationService(
             ?? throw ApiException.Validation("plan_not_found", $"Billing plan '{planCode}' was not found.");
 
         var now = timeProvider.GetUtcNow();
+        var startsAt = request.StartsAt ?? now;
+
+        await EnsureProfessionMatchAsync(adminId, adminName, learner, plan, request.OverrideProfessionMismatch, ct);
 
         // Idempotent: if a live subscription for this plan already exists, adjust it in
-        // place (expiry / primary) rather than creating a duplicate row.
+        // place (start / expiry / primary) rather than creating a duplicate row.
         var existing = await db.Subscriptions.FirstOrDefaultAsync(
-            s => s.UserId == userId && s.PlanId == plan.Code && LiveStatuses.Contains(s.Status), ct);
+            s => s.UserId == userId && s.PlanId == plan.Code && AllocatedStatuses.Contains(s.Status), ct);
 
         if (existing is not null)
         {
+            if (request.StartsAt.HasValue) existing.StartedAt = startsAt;
             if (request.ExpiresAt.HasValue) existing.ExpiresAt = request.ExpiresAt;
             existing.ChangedAt = now;
             if (request.MakePrimary) learner.CurrentPlanId = plan.Code;
             await db.SaveChangesAsync(ct);
+            await SyncAccessExpiryAsync(learner, ct);
             await AuditAsync(adminId, adminName, "Package Re-granted", existing.Id,
                 $"Adjusted package {plan.Code} for {userId}", ct);
             return await GetAccessAsync(userId, ct);
@@ -118,15 +138,16 @@ public sealed class UserAccessAllocationService(
             PlanId = plan.Code,
             PlanVersionId = null,
             Status = SubscriptionStatus.Active,
-            StartedAt = now,
+            StartedAt = startsAt,
             ChangedAt = now,
-            NextRenewalAt = now.AddMonths(Math.Max(1, plan.DurationMonths)),
+            NextRenewalAt = startsAt.AddMonths(Math.Max(1, plan.DurationMonths)),
             PriceAmount = plan.Price,
             Currency = plan.Currency,
             Interval = plan.Interval,
         };
-        // Bundled entitlements + access-duration expiry; then honour a custom expiry.
-        SubscriptionBundleInitializer.ApplyBundle(subscription, plan, now);
+        // Bundled entitlements + access-duration expiry anchored on the start date
+        // (plan.AccessDurationDays, 180 by default); then honour a custom expiry.
+        SubscriptionBundleInitializer.ApplyBundle(subscription, plan, startsAt);
         if (request.ExpiresAt.HasValue) subscription.ExpiresAt = request.ExpiresAt;
         db.Subscriptions.Add(subscription);
 
@@ -168,37 +189,65 @@ public sealed class UserAccessAllocationService(
         }
 
         await db.SaveChangesAsync(ct);
+        await SyncAccessExpiryAsync(learner, ct);
         await AuditAsync(adminId, adminName, "Package Granted", subscription.Id,
-            $"Granted package {plan.Code} to {userId}", ct);
+            $"Granted package {plan.Code} to {userId} (starts {startsAt:u}, expires {(subscription.ExpiresAt is { } e ? e.ToString("u") : "never")})", ct);
         return await GetAccessAsync(userId, ct);
     }
 
     public async Task<UserAccessDto> RemovePackageAsync(
         string adminId, string adminName, string userId, string subscriptionId, CancellationToken ct)
     {
-        var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
-            ?? throw ApiException.NotFound("user_not_found", "User not found.");
+        var (learner, sub) = await LoadPackageAsync(userId, subscriptionId, ct);
 
-        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId && s.UserId == userId, ct)
-            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found for this user.");
-
-        var now = timeProvider.GetUtcNow();
-        sub.Status = SubscriptionStatus.Cancelled;
-        sub.ChangedAt = now;
-
-        // If this was the primary plan, repoint to any other still-live subscription.
-        if (string.Equals(learner.CurrentPlanId, sub.PlanId, StringComparison.OrdinalIgnoreCase))
+        // Expired/Cancelled already grant nothing, and the state machine keeps Expired
+        // terminal — removing one of those again is a no-op rather than a 409.
+        if (sub.Status is not (SubscriptionStatus.Expired or SubscriptionStatus.Cancelled))
         {
-            var replacement = await db.Subscriptions
-                .Where(s => s.UserId == userId && s.Id != sub.Id && LiveStatuses.Contains(s.Status))
-                .OrderByDescending(s => s.ChangedAt)
-                .FirstOrDefaultAsync(ct);
-            learner.CurrentPlanId = replacement?.PlanId;
+            SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Cancelled, "admin_remove_package");
         }
 
+        await RepointPrimaryAwayFromAsync(learner, sub, ct);
         await db.SaveChangesAsync(ct);
+        await SyncAccessExpiryAsync(learner, ct);
         await AuditAsync(adminId, adminName, "Package Removed", sub.Id,
             $"Cancelled package {sub.PlanId} for {userId}", ct);
+        return await GetAccessAsync(userId, ct);
+    }
+
+    /// <summary>Reversibly park a package: Suspended grants nothing (the resolver ignores
+    /// it) but the row, its bundled counters and its expiry survive for
+    /// <see cref="RestorePackageAsync"/>.</summary>
+    public async Task<UserAccessDto> SuspendPackageAsync(
+        string adminId, string adminName, string userId, string subscriptionId, CancellationToken ct)
+    {
+        var (learner, sub) = await LoadPackageAsync(userId, subscriptionId, ct);
+
+        SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Suspended, "admin_suspend_package");
+
+        await RepointPrimaryAwayFromAsync(learner, sub, ct);
+        await db.SaveChangesAsync(ct);
+        await SyncAccessExpiryAsync(learner, ct);
+        await AuditAsync(adminId, adminName, "Package Suspended", sub.Id,
+            $"Suspended package {sub.PlanId} for {userId}", ct);
+        return await GetAccessAsync(userId, ct);
+    }
+
+    /// <summary>Undo a suspend or a remove — both land the package back on Active with its
+    /// original expiry. An Expired package cannot be restored; re-grant it instead.</summary>
+    public async Task<UserAccessDto> RestorePackageAsync(
+        string adminId, string adminName, string userId, string subscriptionId, CancellationToken ct)
+    {
+        var (learner, sub) = await LoadPackageAsync(userId, subscriptionId, ct);
+
+        SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Active, "admin_restore_package");
+
+        if (string.IsNullOrWhiteSpace(learner.CurrentPlanId)) learner.CurrentPlanId = sub.PlanId;
+
+        await db.SaveChangesAsync(ct);
+        await SyncAccessExpiryAsync(learner, ct);
+        await AuditAsync(adminId, adminName, "Package Restored", sub.Id,
+            $"Restored package {sub.PlanId} for {userId}", ct);
         return await GetAccessAsync(userId, ct);
     }
 
@@ -229,7 +278,7 @@ public sealed class UserAccessAllocationService(
         else
         {
             var primary = await db.Subscriptions.AsNoTracking()
-                .Where(s => s.UserId == userId && LiveStatuses.Contains(s.Status))
+                .Where(s => s.UserId == userId && AllocatedStatuses.Contains(s.Status))
                 .OrderByDescending(s => s.ChangedAt)
                 .FirstOrDefaultAsync(ct)
                 ?? throw ApiException.Validation("no_subscription", "The user has no active subscription to attach the add-on to.");
@@ -334,6 +383,73 @@ public sealed class UserAccessAllocationService(
         return await GetAccessAsync(userId, ct);
     }
 
+    private async Task<(LearnerUser Learner, Subscription Subscription)> LoadPackageAsync(
+        string userId, string subscriptionId, CancellationToken ct)
+    {
+        var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
+            ?? throw ApiException.NotFound("user_not_found", "User not found.");
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId && s.UserId == userId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found for this user.");
+        return (learner, sub);
+    }
+
+    /// <summary>If <paramref name="sub"/> was the primary plan, repoint CurrentPlanId at any
+    /// other package the learner still holds.</summary>
+    private async Task RepointPrimaryAwayFromAsync(LearnerUser learner, Subscription sub, CancellationToken ct)
+    {
+        if (!string.Equals(learner.CurrentPlanId, sub.PlanId, StringComparison.OrdinalIgnoreCase)) return;
+
+        var replacement = await db.Subscriptions
+            .Where(s => s.UserId == learner.Id && s.Id != sub.Id && AllocatedStatuses.Contains(s.Status))
+            .OrderByDescending(s => s.ChangedAt)
+            .FirstOrDefaultAsync(ct);
+        learner.CurrentPlanId = replacement?.PlanId;
+    }
+
+    /// <summary>Mirror the master login gate (<see cref="LearnerUser.AccessExpiresAt"/>) onto the
+    /// furthest expiry across the learner's access-granting packages. A package that never
+    /// expires clears the gate. With no access-granting package left the admin-set value is
+    /// left alone — the packages themselves already grant nothing.</summary>
+    private async Task SyncAccessExpiryAsync(LearnerUser learner, CancellationToken ct)
+    {
+        var expiries = await db.Subscriptions.AsNoTracking()
+            .Where(s => s.UserId == learner.Id && AccessGrantingStatuses.Contains(s.Status))
+            .Select(s => s.ExpiresAt)
+            .ToListAsync(ct);
+        if (expiries.Count == 0) return;
+
+        learner.AccessExpiresAt = expiries.Any(e => e is null) ? null : expiries.Max();
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>A profession-specific plan may only be attached to a learner registered under
+    /// that profession — an admin can force it through with
+    /// <c>OverrideProfessionMismatch</c>. Both the block and the override are audited.</summary>
+    private async Task EnsureProfessionMatchAsync(
+        string adminId, string adminName, LearnerUser learner, BillingPlan plan, bool overrideMismatch, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(plan.Profession)
+            || string.Equals(plan.Profession, "all", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(plan.Profession, learner.ActiveProfessionId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var learnerProfession = string.IsNullOrWhiteSpace(learner.ActiveProfessionId) ? "none" : learner.ActiveProfessionId;
+        if (overrideMismatch)
+        {
+            await AuditAsync(adminId, adminName, "Package Profession Mismatch Overridden", learner.Id,
+                $"Attached {plan.Profession} package {plan.Code} to {learnerProfession} learner {learner.Id}", ct);
+            return;
+        }
+
+        await AuditAsync(adminId, adminName, "Package Grant Blocked", learner.Id,
+            $"Refused {plan.Profession} package {plan.Code} for {learnerProfession} learner {learner.Id}", ct);
+        throw ApiException.Validation("profession_mismatch",
+            $"This package is for {plan.Profession}, but the learner is registered as {learnerProfession}. "
+            + "Tick 'override profession check' to grant it anyway.");
+    }
+
     private async Task AuditAsync(string adminId, string adminName, string action, string resourceId, string details, CancellationToken ct)
     {
         db.AuditEvents.Add(new AuditEvent
@@ -367,7 +483,9 @@ public record UserAccessSubscriptionDto(
     string PlanName,
     string Status,
     DateTimeOffset? ExpiresAt,
-    bool IsPrimary);
+    bool IsPrimary,
+    DateTimeOffset StartedAt,
+    string FulfilmentStatus);
 
 public record UserAccessAddonDto(string Code, string SubscriptionId);
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
 
 namespace OetLearner.Api.Services.Billing;
@@ -286,6 +287,8 @@ public sealed class CheckoutService : ICheckoutService
                 .ToListAsync(ct)
             : [];
 
+        var (deliveryMethod, fulfilmentStatus) = ResolveDelivery();
+
         return new CheckoutSessionStatusDto(
             session.StripeSessionId ?? session.Id.ToString(),
             session.Id,
@@ -295,8 +298,47 @@ public sealed class CheckoutService : ICheckoutService
             session.TotalAmount,
             session.Currency,
             items,
-            FailureReasonFor(session.Status));
+            FailureReasonFor(session.Status),
+            deliveryMethod,
+            fulfilmentStatus);
     }
+
+    /// <summary>
+    /// Delivery method and subscription fulfilment state for a cart order — both
+    /// <c>null</c>, because neither is knowable from a cart order. This is deliberate:
+    /// reporting "unknown" is the only honest answer available here.
+    ///
+    /// <para><b>Why nothing can be resolved.</b> <see cref="DeliveryMethods"/> is a
+    /// <see cref="BillingPlan"/> property, and a cart order references no plan. A
+    /// <see cref="CartItem"/> points only at a <see cref="BillingProduct"/>/<see cref="BillingPrice"/>;
+    /// <see cref="BillingProduct"/> carries no plan id, and its <c>MetadataJson</c> is
+    /// <c>{category, source}</c> (written by <see cref="BillingCatalogSyncStartupTask"/>) — no plan
+    /// reference. No join table exists. The two catalogues are seeded independently and their
+    /// Codes are disjoint namespaces, NOT a shared one: products come from
+    /// <c>scripts/StripeProductSeeder/catalog.json</c> as snake_case (<c>pkg_oet_mastery</c>,
+    /// <c>addon_credits_10</c>, <c>sub_mastery_annual</c>), while plan Codes come from
+    /// <c>Data/Seeds/oet-2026-catalog.json</c> <c>plans[]</c> as kebab-case
+    /// (<c>full-nursing</c>, <c>crash-course</c>). Their intersection is empty — the three codes
+    /// that do appear in both files (<c>pkg_quick_check</c>, <c>pkg_exam_prep_pro</c>,
+    /// <c>pkg_oet_mastery</c>) are <c>addOns[]</c>, which seed <see cref="BillingAddOn"/>, not
+    /// <see cref="BillingPlan"/>. A previous revision matched <c>productCodes</c> against
+    /// <c>BillingPlan.Code</c> on the stated premise that the namespaces were shared; that join
+    /// matched nothing on every order and silently reported a confident <c>automatic_web</c>.
+    /// It is not restored here: with disjoint namespaces any hit would be a coincidental
+    /// code collision, not a real association, so it could only ever launder a guess into a
+    /// claim about the buyer's access.
+    ///
+    /// <para><b>Why FulfilmentStatus is null.</b> <see cref="CheckoutSession"/> holds no
+    /// subscription link, and the cart pipeline never opens a domain <c>Subscription</c> —
+    /// <c>FulfillmentService</c> grants product entitlements and upserts the Stripe-mirror
+    /// <c>CustomerSubscription</c> only. There is nothing to read.</para>
+    ///
+    /// <para>Callers must treat null as UNKNOWN and say only what is actually known: the
+    /// payment cleared. Asserting entitlements were added — or that the order is awaiting a
+    /// hand-over — would both be fabrications (spec 2026-07-15 §2/§6.6, §7).</para>
+    /// </summary>
+    private static (string? DeliveryMethod, string? FulfilmentStatus) ResolveDelivery()
+        => (null, null);
 
     public async Task ExpireSessionAsync(Guid sessionId, CancellationToken ct = default)
     {

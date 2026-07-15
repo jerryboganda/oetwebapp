@@ -16,6 +16,7 @@ import {
   type CreateAdminUserResult,
   type UserAccess,
 } from '@/lib/user-access';
+import type { GrantUserPackageInput, UserAccessSubscriptionRow } from '@/lib/api/user-access-packages';
 import { ManageAccessPanel } from './manage-access-panel';
 
 type LoginSetupMode = 'invite' | 'password';
@@ -45,6 +46,8 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
   const [access, setAccess] = useState<UserAccess>(initialAccess());
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const professionLabel = professionOptions.find((option) => option.value === professionId)?.label ?? null;
 
   function resetForm() {
     setName('');
@@ -98,13 +101,16 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
         sendInvite: loginSetup === 'invite',
       });
 
-      for (const sub of access.subscriptions) {
-        await grantUserPackage(created.id, {
+      for (const sub of access.subscriptions as UserAccessSubscriptionRow[]) {
+        const payload: GrantUserPackageInput = {
           planCode: sub.planCode,
+          startsAt: sub.startsAt,
           expiresAt: sub.expiresAt,
           makePrimary: sub.isPrimary,
           grantIncludedCredits: sub.grantIncludedCredits,
-        });
+          overrideProfessionMismatch: sub.overrideProfessionMismatch,
+        };
+        await grantUserPackage(created.id, payload);
       }
 
       for (const addOn of access.addOns) {
@@ -194,7 +200,13 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
 
         <div className="border-t border-border pt-4">
           <h3 className="mb-3 text-sm font-semibold text-navy">Access &amp; allocation</h3>
-          <ManageAccessPanel value={access} onChange={setAccess} disabled={isSubmitting} />
+          <ManageAccessPanel
+            value={access}
+            onChange={setAccess}
+            learnerProfessionId={professionId}
+            learnerProfessionLabel={professionLabel}
+            disabled={isSubmitting}
+          />
         </div>
 
         <div className="flex justify-end gap-3 border-t border-border pt-4">

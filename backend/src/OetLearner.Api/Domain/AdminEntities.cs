@@ -394,6 +394,30 @@ public class BillingPlan
     public bool IsDraft { get; set; }
     public bool ExtensionAllowed { get; set; } = true;
     public bool RecallUpdatesEnabled { get; set; }
+
+    // ── Delivery + content scoping (access & payment spec 2026-07-15) ───────────────
+    // NOTE: the subtest axis of the "subtest × profession" content model reuses the
+    // existing IncludedSubtestsJson column above ("[]" ⇒ all subtests). The profession
+    // axis comes from the buyer's registered profession, not from the plan.
+
+    /// <summary><see cref="DeliveryMethods"/> — automatic_web | manual_web | telegram | manual_material.
+    /// Anything but automatic_web parks the Subscription at Pending until an admin marks it fulfilled.</summary>
+    [MaxLength(32)]
+    public string DeliveryMethod { get; set; } = DeliveryMethods.AutomaticWeb;
+
+    /// <summary>Telegram channel invite revealed to the learner only once the order is fulfilled.</summary>
+    [MaxLength(512)]
+    public string? TelegramInviteUrl { get; set; }
+
+    /// <summary>Free-text hand-over instructions shown on the learner's order page after fulfilment.</summary>
+    [MaxLength(2000)]
+    public string? DeliveryInstructions { get; set; }
+
+    /// <summary>Per-plan content include/exclude overrides layered on top of the
+    /// subtest × profession resolution:
+    /// <c>{"videos":{"include":[],"exclude":[]},"materialFolders":{"include":[],"exclude":[]}}</c>.
+    /// Null ⇒ no overrides.</summary>
+    public string? ContentOverridesJson { get; set; }
 }
 
 /// <summary>Immutable billing plan catalog snapshot.</summary>
@@ -480,6 +504,18 @@ public class BillingPlanVersion
     public bool IsDraft { get; set; }
     public bool ExtensionAllowed { get; set; } = true;
     public bool RecallUpdatesEnabled { get; set; }
+
+    // ── Delivery + content scoping (immutable snapshot mirrors the live entity) ─────
+    [MaxLength(32)]
+    public string DeliveryMethod { get; set; } = DeliveryMethods.AutomaticWeb;
+
+    [MaxLength(512)]
+    public string? TelegramInviteUrl { get; set; }
+
+    [MaxLength(2000)]
+    public string? DeliveryInstructions { get; set; }
+
+    public string? ContentOverridesJson { get; set; }
 }
 
 /// <summary>Admin-initiated AI content generation job.</summary>

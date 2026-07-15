@@ -29,6 +29,7 @@ import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { ManageAccessPanel } from '@/components/admin/user-access/manage-access-panel';
+import type { GrantUserPackageInput, UserAccessSubscriptionRow } from '@/lib/api/user-access-packages';
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
@@ -375,14 +376,17 @@ export default function UserDetailPage() {
     try {
       // Persist any locally drafted packages, then remove any that were
       // dropped from the original server-fetched list.
-      for (const sub of access.subscriptions) {
+      for (const sub of access.subscriptions as UserAccessSubscriptionRow[]) {
         if (sub.isPending) {
-          await grantUserPackage(user.id, {
+          const payload: GrantUserPackageInput = {
             planCode: sub.planCode,
+            startsAt: sub.startsAt,
             expiresAt: sub.expiresAt,
             makePrimary: sub.isPrimary,
             grantIncludedCredits: sub.grantIncludedCredits,
-          });
+            overrideProfessionMismatch: sub.overrideProfessionMismatch,
+          };
+          await grantUserPackage(user.id, payload);
         }
       }
       const remainingIds = new Set(access.subscriptions.filter((sub) => !sub.isPending).map((sub) => sub.id));
@@ -1099,6 +1103,8 @@ export default function UserDetailPage() {
                         userId={user.id}
                         value={access}
                         onChange={setAccess}
+                        learnerProfessionId={user.professionId ?? user.profession ?? ''}
+                        learnerProfessionLabel={displayedProfession}
                         disabled={isSavingAccess}
                       />
                     ) : (

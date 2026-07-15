@@ -21,7 +21,9 @@ import {
   Headphones,
   Keyboard,
   Loader2,
+  Lock,
   Mail,
+  MessageCircle,
   MessageSquareMore,
   Mic,
   NotebookText,
@@ -48,9 +50,10 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
-import { fetchSettingsSection, updateSettingsSection } from '@/lib/api';
+import { ApiError, fetchSettingsSection, updateSettingsSection } from '@/lib/api';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import { deleteAccount } from '@/lib/auth-client';
+import { fetchSupportWhatsApp, normalizeWhatsAppNumber, PLATFORM_WHATSAPP } from '@/lib/billing/whatsapp';
 import { useProfessions } from '@/lib/hooks/use-professions';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 import type { SettingsSectionData, SettingsSectionId } from '@/lib/mock-data';
@@ -72,7 +75,7 @@ interface FieldConfig {
   secondaryTag?: string;
   primaryTagTone?: FieldTagTone;
   secondaryTagTone?: FieldTagTone;
-  options?: Array<{ value: string; label: string }>;
+  options?: SelectOption[];
   min?: number;
   max?: number;
 }
@@ -227,18 +230,13 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
         key: 'professionId',
         label: 'Profession',
         type: 'select',
-        description: 'Controls profession-specific writing and speaking material.',
+        description: 'Decides which videos, materials, and writing and speaking cases you get. Locked once you buy a package.',
         icon: BriefcaseMedical,
         primaryTag: '',
         secondaryTag: '',
         secondaryTagTone: 'muted',
-        options: [
-          { value: 'medicine', label: 'Medicine' },
-          { value: 'nursing', label: 'Nursing' },
-          { value: 'pharmacy', label: 'Pharmacy' },
-          { value: 'dentistry', label: 'Dentistry' },
-          { value: 'physiotherapy', label: 'Physiotherapy' },
-        ],
+        // No static options: the choices come from the signup catalog via
+        // useProfessions(), which is the same list the backend validates against.
       },
     ],
   },
@@ -684,6 +682,86 @@ function toggleFocusClasses(accent: LearnerSurfaceAccent) {
     .replace('focus:ring-', 'focus-visible:ring-');
 }
 
+interface SelectOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+/**
+ * The profession select may only offer ids the backend will accept — a PATCH is validated
+ * against the signup catalog and anything else is rejected as `unknown_profession`. The
+ * catalog (via useProfessions) is therefore the only source of choices, so no hardcoded
+ * list can drift out of it. A value the account already holds but the catalog no longer
+ * offers — an archived or legacy id — is kept as a disabled entry so the control shows
+ * what is stored instead of rendering blank, while still not offering it as a choice.
+ */
+function professionSelectOptions(catalog: SelectOption[], current: string): SelectOption[] {
+  if (!current || catalog.some((option) => option.value === current)) return catalog;
+  return [...catalog, { value: current, label: `${current} (no longer available)`, disabled: true }];
+}
+
+/**
+ * Rendered under the Profession field once the backend answers a change with
+ * `profession_locked`. Access is granted per profession — the videos and materials a
+ * package unlocks are resolved from it — so moving it after a purchase would re-point
+ * everything the learner already paid for. Only an admin can do that, hence the WhatsApp
+ * hand-off rather than a retry.
+ */
+function ProfessionLockNotice() {
+  const { user } = useAuth();
+  const [supportNumber, setSupportNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSupportWhatsApp().then((settings) => {
+      if (!cancelled) setSupportNumber(settings.whatsAppNumber);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Built against the fallback number until the settings read lands, so the CTA is never
+  // a dead link on first paint.
+  const href = `https://wa.me/${normalizeWhatsAppNumber(supportNumber) ?? PLATFORM_WHATSAPP}?text=${encodeURIComponent(
+    [
+      'Hello OET team, I need to change the profession on my account.',
+      '',
+      `Registered email: ${user?.email ?? ''}`,
+      '',
+      'Please tell me what you need from me to move my access to a different profession.',
+    ].join('\n'),
+  )}`;
+
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200 bg-amber-100">
+          <Lock className="h-5 w-5 text-amber-700" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-3">
+          <p className="text-sm font-black uppercase tracking-widest text-amber-800">Profession locked</p>
+          <p className="max-w-2xl text-sm font-medium leading-relaxed text-amber-900/80">
+            Your videos and materials are tied to the profession you registered with, so changing it now would
+            re-point every package on your account. That is why it locks after your first purchase — our team can
+            move you across and re-point your access for you.
+          </p>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:brightness-95"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Request a change on WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsSectionHelperCard({
   accent,
   helperBadge,
@@ -734,10 +812,13 @@ function SettingsSectionForm({
   accent,
   data,
   onChange,
+  professionLocked = false,
 }: {
   accent: LearnerSurfaceAccent;
   data: SettingsSectionData;
   onChange: (key: string, value: string | boolean) => void;
+  /** Set once the backend has rejected a change with `profession_locked`. */
+  professionLocked?: boolean;
 }) {
   const { options: professionOptions } = useProfessions();
   const config = SECTION_CONFIG[data.section];
@@ -751,50 +832,68 @@ function SettingsSectionForm({
             const value = fieldValue(data.values, field);
             const status = fieldStatus(field, value);
             const FieldIcon = field.icon;
+            const isProfessionField = field.key === 'professionId';
+            const isLocked = isProfessionField && professionLocked;
+            const selectOptions: SelectOption[] = isProfessionField
+              ? professionSelectOptions(professionOptions, String(value))
+              : (field.options ?? []);
 
             return (
-              <div key={field.key} className={cn('p-6 sm:p-8 flex flex-col xl:flex-row xl:items-start gap-6 transition-colors duration-300 hover:bg-background-light', i !== config.fields.length - 1 && 'border-b border-border')}>
-                <div className="flex min-w-0 flex-1 items-start gap-5">
-                  <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
-                    <FieldIcon className={cn('h-7 w-7', status.label === 'Set' ? 'text-primary' : '')} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                      <label className="text-xl font-black text-navy tracking-tight" htmlFor={field.key}>{field.label}</label>
-                      <Badge className={cn('rounded-full px-3 py-1 font-bold text-[10px] uppercase tracking-widest', palette.badge)}>
-                        Personal Info
-                      </Badge>
-                      <Badge variant={status.variant} className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest shadow-sm">
-                        {status.label}
-                      </Badge>
+              <div key={field.key} className={cn('transition-colors duration-300 hover:bg-background-light', i !== config.fields.length - 1 && 'border-b border-border')}>
+                <div className="p-6 sm:p-8 flex flex-col xl:flex-row xl:items-start gap-6">
+                  <div className="flex min-w-0 flex-1 items-start gap-5">
+                    <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
+                      <FieldIcon className={cn('h-7 w-7', status.label === 'Set' ? 'text-primary' : '')} />
                     </div>
-                    <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <label className="text-xl font-black text-navy tracking-tight" htmlFor={field.key}>{field.label}</label>
+                        <Badge className={cn('rounded-full px-3 py-1 font-bold text-[10px] uppercase tracking-widest', palette.badge)}>
+                          Personal Info
+                        </Badge>
+                        <Badge variant={isLocked ? 'muted' : status.variant} className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest shadow-sm">
+                          {isLocked ? 'Locked' : status.label}
+                        </Badge>
+                      </div>
+                      <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
+                    </div>
+                  </div>
+                  <div className="w-full xl:w-96 shrink-0">
+                    {field.type === 'select' ? (
+                      <select
+                        id={field.key}
+                        className={cn(
+                          inputClasses(accent),
+                          'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold h-14',
+                          isLocked && 'cursor-not-allowed opacity-60',
+                        )}
+                        value={String(value)}
+                        disabled={isLocked}
+                        aria-describedby={isLocked ? `${field.key}-lock` : undefined}
+                        onChange={(event) => onChange(field.key, event.target.value)}
+                      >
+                        <option value="" disabled className="text-navy/30">Select an option…</option>
+                        {selectOptions.map((option) => (
+                          <option key={option.value} value={option.value} disabled={option.disabled} className="text-navy font-bold">{option.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={field.key}
+                        type={field.type}
+                        className={cn(inputClasses(accent), 'font-bold h-14')}
+                        value={String(value)}
+                        onChange={(event) => onChange(field.key, event.target.value)}
+                        placeholder={`Enter your ${field.label.toLowerCase()}`}
+                      />
+                    )}
                   </div>
                 </div>
-                <div className="w-full xl:w-96 shrink-0">
-                  {field.type === 'select' ? (
-                    <select
-                      id={field.key}
-                      className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold h-14')}
-                      value={String(value)}
-                      onChange={(event) => onChange(field.key, event.target.value)}
-                    >
-                      <option value="" disabled className="text-navy/30">Select an option…</option>
-                      {(field.key === 'professionId' && professionOptions.length > 0 ? professionOptions : (field.options ?? [])).map((option) => (
-                        <option key={option.value} value={option.value} className="text-navy font-bold">{option.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      id={field.key}
-                      type={field.type}
-                      className={cn(inputClasses(accent), 'font-bold h-14')}
-                      value={String(value)}
-                      onChange={(event) => onChange(field.key, event.target.value)}
-                      placeholder={`Enter your ${field.label.toLowerCase()}`}
-                    />
-                  )}
-                </div>
+                {isLocked ? (
+                  <div id={`${field.key}-lock`} className="px-6 pb-6 sm:px-8 sm:pb-8">
+                    <ProfessionLockNotice />
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -862,11 +961,11 @@ function SettingsSectionForm({
                     onChange={(event) => onChange(field.key, event.target.value)}
                   >
                     <option value="" disabled className="text-navy/30">Select an option…</option>
-                    {(field.key === 'professionId' && professionOptions.length > 0
-                      ? professionOptions
+                    {(field.key === 'professionId'
+                      ? professionSelectOptions(professionOptions, String(value))
                       : (field.options ?? [])
                     ).map((option) => (
-                      <option key={option.value} value={option.value} className="text-navy font-bold">{option.label}</option>
+                      <option key={option.value} value={option.value} disabled={option.disabled} className="text-navy font-bold">{option.label}</option>
                     ))}
                   </select>
                 ) : field.type === 'textarea' ? (
@@ -1011,6 +1110,9 @@ export default function LearnerSettingsSectionPage() {
   });
 
   const [draft, setDraft] = useState<{ key: string; data: SettingsSectionData } | null>(null);
+  // Sticky for the page session: the lock is only discoverable from a rejected save, and
+  // it can never lift on its own — a purchase is not undone.
+  const [professionLocked, setProfessionLocked] = useState(false);
   const [feedback, setFeedback] = useState<{
     key: string;
     error: string | null;
@@ -1092,6 +1194,26 @@ export default function LearnerSettingsSectionPage() {
       });
       setFeedback({ key: activeDraftKey, error: null, successMessage: 'Settings saved.' });
     } catch (err) {
+      // The whole profile section is PATCHed on every save, so a locked learner editing
+      // only their name would be blocked by their own unchanged profession — the backend
+      // treats a no-op re-send as no change, so reaching here means the pick really did
+      // move. Roll it back to the stored value (keeping the rest of the draft) and swap
+      // the control for the locked state + support route; retrying can never succeed.
+      if (err instanceof ApiError && err.code === 'profession_locked') {
+        setProfessionLocked(true);
+        const storedProfession = sectionQuery.data?.values.professionId ?? '';
+        setDraft((current) =>
+          current?.key === activeDraftKey
+            ? {
+                key: current.key,
+                data: {
+                  ...current.data,
+                  values: setNestedValue(current.data.values, 'professionId', storedProfession),
+                },
+              }
+            : current,
+        );
+      }
       setFeedback({
         key: activeDraftKey,
         error: err instanceof Error ? err.message : 'Failed to save this settings section.',
@@ -1183,7 +1305,12 @@ export default function LearnerSettingsSectionPage() {
                 totalFieldCount={config.fields.length}
               />
 
-              <SettingsSectionForm accent={config.accent} data={data} onChange={handleChange} />
+              <SettingsSectionForm
+                accent={config.accent}
+                data={data}
+                onChange={handleChange}
+                professionLocked={professionLocked}
+              />
 
               <div className="rounded-[2rem] border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">

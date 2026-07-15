@@ -8,8 +8,11 @@ using OetLearner.Api.Services.Content;
 namespace OetLearner.Api.Services.Billing;
 
 /// <summary>
-/// Phase 4 manual-payment workflow. Learners upload proof of bank/Fawry/cash
-/// payment; admins approve to grant the same access an online payment would.
+/// Universal proof-of-payment workflow — every order carries exactly one
+/// <see cref="ManualPaymentRequest"/> row. Learners upload proof for offline
+/// methods (bank transfer / Vodafone Cash / InstaPay / Fawry / Wise / …) and an
+/// admin approves it to grant the same access an online payment would; card
+/// gateways get a system-minted receipt instead (<see cref="CreateGatewayReceiptAsync"/>).
 /// </summary>
 public interface IManualPaymentService
 {
@@ -17,10 +20,30 @@ public interface IManualPaymentService
     Task<ManualPaymentRequest> ApproveAsync(string requestId, string adminId, string? notes, CancellationToken ct);
     Task<ManualPaymentRequest> RejectAsync(string requestId, string adminId, string reason, CancellationToken ct);
 
-    /// <summary>Move a request between the two non-terminal states
-    /// (<c>pending</c> ↔ <c>needs_review</c>). Approved/paid/rejected requests
-    /// are terminal and cannot be re-opened here.</summary>
+    /// <summary>Move a request between the non-terminal states (<c>pending</c> ↔
+    /// <c>needs_review</c>), or re-open a <c>rejected</c> one back to <c>pending</c>
+    /// (a mis-clicked Reject must be recoverable). <c>approved</c>/<c>paid</c> stay
+    /// terminal — money has already been recognised and access granted.</summary>
     Task<ManualPaymentRequest> SetStatusAsync(string requestId, string adminId, string targetStatus, string? notes, CancellationToken ct);
+
+    /// <summary>Mint the proof row for a completed card-gateway payment, so the admin
+    /// dashboard shows one record per order regardless of how it was paid. Idempotent on
+    /// <see cref="PaymentTransaction.Id"/>.
+    ///
+    /// Does NOT call SaveChanges — the row is added to the caller's unit of work
+    /// (the checkout-completion path mutates the subscription in the same transaction
+    /// and must commit the receipt atomically with it).</summary>
+    Task<ManualPaymentRequest> CreateGatewayReceiptAsync(
+        string userId,
+        PaymentTransaction transaction,
+        string courseName,
+        string? courseId,
+        CancellationToken ct);
+
+    /// <summary>Release a pending offline order whose payment was confirmed out-of-band,
+    /// without an uploaded file. Records who waived it, when, and why, plus an AuditEvent.
+    /// The request stays pending — the admin still has to approve it.</summary>
+    Task<ManualPaymentRequest> WaiveProofAsync(string requestId, string adminId, string adminName, string reason, CancellationToken ct);
 }
 
 public sealed record ManualPaymentSubmitRequest(
@@ -111,15 +134,27 @@ public sealed class ManualPaymentService : IManualPaymentService
         }
 
         var hashHex = Convert.ToHexString(SHA256.HashData(proofBytes)).ToLowerInvariant();
+        var courseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim();
 
-        // Reject if the same proof file has been used for another user previously.
-        var existingForOtherUser = await _db.ManualPaymentRequests
-            .Where(r => r.ProofHashHex == hashHex && r.UserId != userId)
-            .Select(r => r.Id)
-            .FirstOrDefaultAsync(ct);
-        if (existingForOtherUser is not null)
+        // A proof file is evidence for exactly one order. Reject it when it has already
+        // been used by anyone else, or by this learner against a *different* order —
+        // one receipt must not pay for two packages. Re-uploading against the same order
+        // (fixing a typo, an admin asked for a resubmit) stays allowed.
+        var priorUses = await _db.ManualPaymentRequests
+            .Where(r => r.ProofHashHex == hashHex)
+            .Select(r => new { r.Id, r.UserId, r.QuoteId, r.CourseId })
+            .ToListAsync(ct);
+
+        var otherUserUse = priorUses.FirstOrDefault(u => !string.Equals(u.UserId, userId, StringComparison.Ordinal));
+        if (otherUserUse is not null)
         {
-            throw new InvalidOperationException($"Duplicate proof detected (already submitted by another user as {existingForOtherUser}).");
+            throw new InvalidOperationException($"Duplicate proof detected (already submitted by another user as {otherUserUse.Id}).");
+        }
+
+        var otherOrderUse = priorUses.FirstOrDefault(u => !IsSameOrder(u.QuoteId, u.CourseId, request.QuoteId, courseId));
+        if (otherOrderUse is not null)
+        {
+            throw new InvalidOperationException($"Duplicate proof detected (already submitted for a different order as {otherOrderUse.Id}).");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -129,11 +164,18 @@ public sealed class ManualPaymentService : IManualPaymentService
             await _storage.WriteAsync(proofKey, stream, ct);
         }
 
+        var professionId = await _db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
+
         var row = new ManualPaymentRequest
         {
             Id = Guid.NewGuid().ToString("N"),
             UserId = userId,
             QuoteId = request.QuoteId,
+            Kind = PaymentProofKinds.LearnerUpload,
+            ProfessionId = professionId,
             AmountAmount = request.AmountAmount,
             Currency = request.Currency.ToUpperInvariant(),
             Method = request.Method,
@@ -144,7 +186,7 @@ public sealed class ManualPaymentService : IManualPaymentService
             CandidateEmail = request.CandidateEmail.Trim(),
             CandidateWhatsApp = (request.CandidateWhatsApp ?? string.Empty).Trim(),
             CourseName = request.CourseName.Trim(),
-            CourseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim(),
+            CourseId = courseId,
             PaymentCategory = NormalizePaymentCategory(request.PaymentCategory),
             Status = "pending",
             SubmittedAt = now,
@@ -231,7 +273,23 @@ public sealed class ManualPaymentService : IManualPaymentService
         {
             SubscriptionBundleInitializer.ApplyPlanEntitlements(subscription, plan, now);
         }
-        subscription.Status = SubscriptionStatus.Active;
+        // Delivery method decides whether payment alone unlocks access. Telegram /
+        // manual packages are paid but not delivered: the entitlement resolver grants
+        // nothing on Pending, so access stays shut until an admin marks the order
+        // fulfilled. The Active guard means re-approving an order never revokes access
+        // a learner already has.
+        var deliveryMethod = planVersion?.DeliveryMethod ?? plan?.DeliveryMethod ?? DeliveryMethods.AutomaticWeb;
+        if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod)
+            && subscription.FulfilmentStatus != FulfilmentStatuses.Fulfilled
+            && subscription.Status != SubscriptionStatus.Active)
+        {
+            subscription.FulfilmentStatus = FulfilmentStatuses.PendingManual;
+            subscription.Status = SubscriptionStatus.Pending;
+        }
+        else
+        {
+            subscription.Status = SubscriptionStatus.Active;
+        }
         subscription.ChangedAt = now;
 
         // AI-credit parity with the Stripe webhook fulfillment path: the
@@ -319,23 +377,139 @@ public sealed class ManualPaymentService : IManualPaymentService
         var row = await _db.ManualPaymentRequests.FirstOrDefaultAsync(r => r.Id == requestId, ct)
             ?? throw new InvalidOperationException("Manual payment request not found.");
 
-        if (row.Status is "approved" or "paid" or "rejected")
+        // approved/paid are terminal — the payment is recognised and access granted, so
+        // re-opening would leave the two records disagreeing. 'rejected' is reversible:
+        // a mis-clicked Reject must not permanently strand a genuine payment.
+        if (row.Status is "approved" or "paid")
         {
             throw new InvalidOperationException($"Manual payment already {row.Status} and cannot be re-opened.");
+        }
+        if (row.Status == "rejected" && normalized != "pending")
+        {
+            throw new InvalidOperationException("A rejected payment can only be re-opened to 'pending'.");
         }
         if (row.Status == normalized)
         {
             return row;
         }
 
+        var wasRejected = row.Status == "rejected";
         row.Status = normalized;
         row.ReviewedByAdminId = adminId;
         // Leave ReviewedAt null — needs_review / pending are not terminal review outcomes.
+        if (wasRejected)
+        {
+            row.ReviewedAt = null;
+        }
         if (!string.IsNullOrWhiteSpace(notes))
         {
             row.AdminNotes = notes;
         }
         row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return row;
+    }
+
+    public async Task<ManualPaymentRequest> CreateGatewayReceiptAsync(
+        string userId,
+        PaymentTransaction transaction,
+        string courseName,
+        string? courseId,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        // Idempotent on the transaction: a webhook replay (or a webhook racing the
+        // synchronous capture path) must not mint a second receipt for one payment.
+        // Checks the change tracker too — the caller batches its writes, so an
+        // already-added row is not yet visible to a query.
+        var pending = _db.ChangeTracker.Entries<ManualPaymentRequest>()
+            .Select(e => e.Entity)
+            .FirstOrDefault(e => e.PaymentTransactionId == transaction.Id);
+        if (pending is not null)
+        {
+            return pending;
+        }
+        var existing = await _db.ManualPaymentRequests
+            .FirstOrDefaultAsync(r => r.PaymentTransactionId == transaction.Id, ct);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var now = DateTimeOffset.UtcNow;
+        var row = new ManualPaymentRequest
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            QuoteId = transaction.QuoteId,
+            Kind = PaymentProofKinds.GatewayReceipt,
+            Gateway = Truncate(transaction.Gateway, 32),
+            PaymentTransactionId = transaction.Id,
+            ProfessionId = user?.ActiveProfessionId,
+            AmountAmount = transaction.Amount,
+            Currency = transaction.Currency.ToUpperInvariant(),
+            Method = Truncate(transaction.Gateway, 32),
+            Reference = Truncate(transaction.GatewayTransactionId, 128),
+            // No file to store, and nothing to dedupe against — the gateway's own
+            // transaction id is the evidence.
+            ProofUrl = null,
+            ProofHashHex = string.Empty,
+            CandidateFullName = Truncate(user?.DisplayName ?? string.Empty, 128),
+            CandidateEmail = Truncate(user?.Email ?? string.Empty, 256),
+            CandidateWhatsApp = string.Empty,
+            CourseName = Truncate(courseName ?? string.Empty, 128),
+            CourseId = string.IsNullOrWhiteSpace(courseId) ? null : Truncate(courseId.Trim(), 64),
+            PaymentCategory = "international",
+            // Card money has already cleared — there is nothing for an admin to verify.
+            Status = "paid",
+            SubmittedAt = transaction.CreatedAt == default ? now : transaction.CreatedAt,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        _db.ManualPaymentRequests.Add(row);
+        return row;
+    }
+
+    public async Task<ManualPaymentRequest> WaiveProofAsync(string requestId, string adminId, string adminName, string reason, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new InvalidOperationException("A reason is required when waiving the proof requirement.");
+        }
+
+        var row = await _db.ManualPaymentRequests.FirstOrDefaultAsync(r => r.Id == requestId, ct)
+            ?? throw new InvalidOperationException("Manual payment request not found.");
+
+        if (row.Status is "approved" or "paid" or "rejected")
+        {
+            throw new InvalidOperationException($"Manual payment already {row.Status}.");
+        }
+        if (row.Kind != PaymentProofKinds.LearnerUpload)
+        {
+            throw new InvalidOperationException("Only a learner-upload proof can be waived; gateway receipts have no upload requirement.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        row.ProofWaivedByAdminId = adminId;
+        row.ProofWaivedAt = now;
+        row.ProofWaiverReason = Truncate(reason.Trim(), 512);
+        row.UpdatedAt = now;
+
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = adminId,
+            ActorName = adminName,
+            Action = "manual_payment.waive_proof",
+            ResourceType = "ManualPaymentRequest",
+            ResourceId = row.Id,
+            Details = $"Waived the proof-upload requirement for {row.CandidateEmail} / {row.CourseName} ({row.AmountAmount:0.00} {row.Currency}). Reason: {row.ProofWaiverReason}",
+        });
+
         await _db.SaveChangesAsync(ct);
         return row;
     }
@@ -378,9 +552,13 @@ public sealed class ManualPaymentService : IManualPaymentService
         CancellationToken ct)
     {
         var planCode = plan?.Code ?? planVersion?.Code ?? row.CourseId ?? row.CourseName;
+
+        // Match on the plan being approved ONLY. Subscriptions are many-per-user and
+        // additive: falling back to "any subscription this user happens to have" would
+        // overwrite an unrelated package in place, silently deleting access the learner
+        // already paid for. No match ⇒ this is a new package ⇒ new row.
         var subscription = await _db.Subscriptions.FirstOrDefaultAsync(
-            s => s.UserId == row.UserId && s.PlanId == planCode, ct)
-            ?? await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == row.UserId, ct);
+            s => s.UserId == row.UserId && s.PlanId == planCode, ct);
 
         if (subscription is not null)
         {
@@ -403,7 +581,9 @@ public sealed class ManualPaymentService : IManualPaymentService
             UserId = row.UserId,
             PlanId = planCode,
             PlanVersionId = planVersion?.Id,
-            Status = SubscriptionStatus.Active,
+            // Pending on creation; ApproveAsync decides Active vs pending-manual from
+            // the plan's delivery method.
+            Status = SubscriptionStatus.Pending,
             StartedAt = now,
             ChangedAt = now,
             NextRenewalAt = now.AddMonths(Math.Max(1, plan?.DurationMonths ?? planVersion?.DurationMonths ?? 6)),
@@ -415,6 +595,26 @@ public sealed class ManualPaymentService : IManualPaymentService
         _db.Subscriptions.Add(subscription);
         return subscription;
     }
+
+    /// <summary>Two proof submissions belong to the same order when they carry the same
+    /// quote. Quote-less orders (direct course purchases) fall back to the course id; a
+    /// quoted and a quote-less submission are never the same order.</summary>
+    private static bool IsSameOrder(string? quoteIdA, string? courseIdA, string? quoteIdB, string? courseIdB)
+    {
+        var hasQuoteA = !string.IsNullOrWhiteSpace(quoteIdA);
+        var hasQuoteB = !string.IsNullOrWhiteSpace(quoteIdB);
+        if (hasQuoteA || hasQuoteB)
+        {
+            return hasQuoteA && hasQuoteB && string.Equals(quoteIdA, quoteIdB, StringComparison.OrdinalIgnoreCase);
+        }
+        return string.Equals(courseIdA ?? string.Empty, courseIdB ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Clamp to the destination column width. Gateway-supplied values (transaction
+    /// ids especially) are wider than the proof row's columns, and a receipt must never be
+    /// lost to a length overflow on save.</summary>
+    private static string Truncate(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
 
     private static string NormalizePaymentCategory(string? value)
         => string.Equals(value, "egypt", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "inside_egypt", StringComparison.OrdinalIgnoreCase)

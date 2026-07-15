@@ -236,10 +236,28 @@ export async function resolveMobileBillingContext(): Promise<MobileBillingContex
 /* ── External browser navigation ────────────────────────────────── */
 
 interface CheckoutResponse {
-  url: string | null;
+  url?: string | null;
   checkoutUrl?: string | null;
   sessionId?: string | null;
   checkoutSessionId?: string | null;
+}
+
+/** Express checkout product types the mobile shells can start. */
+export type MobileCheckoutProductType = 'plan_purchase' | 'addon_purchase';
+
+export interface MobileCheckoutOptions {
+  /** Defaults to `plan_purchase`. Add-ons must pass `addon_purchase`. */
+  productType?: MobileCheckoutProductType;
+  /** Defaults to 1. */
+  quantity?: number;
+  /** Defaults to the server's gateway (stripe). */
+  gateway?: string | null;
+}
+
+function newIdempotencyKey(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `mobile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function extractUrl(response: CheckoutResponse): string {
@@ -268,13 +286,35 @@ async function openInPlatformBrowser(url: string): Promise<void> {
   }
 }
 
-export async function openExternalCheckout(productCode: string): Promise<void> {
+/**
+ * Starts a checkout for one product and opens the gateway's hosted page.
+ *
+ * Drives the SAME express pipeline as the web `/checkout/review` page
+ * (`POST /v1/billing/checkout-sessions`), so mobile inherits the profession
+ * block, the plan/profession content-availability block, the delivery-method
+ * rules, and proof-of-payment handling without mirroring any of them here.
+ * The older cart pipeline (`POST /v1/checkout/sessions`) keys off a
+ * server-side `cartId` the mobile shells never create.
+ */
+export async function openExternalCheckout(
+  productCode: string,
+  options: MobileCheckoutOptions = {},
+): Promise<void> {
   if (typeof productCode !== 'string' || productCode.length === 0) {
     throw new Error('A product code is required to open external checkout.');
   }
 
-  const response = await apiClient.post<CheckoutResponse>('/v1/checkout/sessions', {
-    productCode,
+  const response = await apiClient.post<CheckoutResponse>('/v1/billing/checkout-sessions', {
+    productType: options.productType ?? 'plan_purchase',
+    quantity: options.quantity ?? 1,
+    // The express contract addresses the plan or add-on by code via `priceId`.
+    priceId: productCode,
+    couponCode: null,
+    addOnCodes: null,
+    parentSubscriptionId: null,
+    quoteId: null,
+    gateway: options.gateway ?? null,
+    idempotencyKey: newIdempotencyKey(),
   });
   await openInPlatformBrowser(extractUrl(response));
 }

@@ -87,8 +87,8 @@ public sealed class MaterialAccessService(
         // encodes discipline as folder names (Speaking/Medicine, Writing/Nursing, …) with no
         // structured column, so we match those names against the learner's ActiveProfessionId:
         // a learner sees only their own discipline's folders, while Reading/Listening and every
-        // non-discipline folder stay visible to all. Admins and learners with no profession are
-        // unfiltered (fail-open).
+        // non-discipline folder stay visible to all. Admins are unfiltered; a learner with no
+        // profession now fails CLOSED on discipline-tagged folders (spec §7.5).
         HashSet<string> disciplineUniverse;
         HashSet<string> learnerDisciplines;
         if (IsAdmin(principal))
@@ -102,21 +102,30 @@ public sealed class MaterialAccessService(
             (disciplineUniverse, learnerDisciplines) = await ResolveDisciplineFilterAsync(userId, ct);
         }
 
+        // Subtest × profession content scope (spec §3) — the plan's IncludedSubtests axis plus
+        // its per-plan folder include/exclude overrides. Admins bypass; for everyone else an
+        // unscoped plan resolves to "all subtests, no overrides", so this is a no-op until a
+        // plan actually declares a scope.
+        var scopeEntitlement = IsAdmin(principal) ? null : entitlement;
+
         foreach (var folder in allFolders)
         {
             if (IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
-                && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines)
+                && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines)
                 && (navigableFolderScope is null || navigableFolderScope.Contains(folder.Id)))
                 visibleFolderIds.Add(folder.Id);
         }
 
-        // Root-level files (FolderId == null) are always visible — UNLESS a per-user
-        // folder allow-list restriction is active, in which case they aren't under
-        // any granted folder and are hidden.
+        // Root-level files (FolderId == null) carry no folder, hence no audience and no
+        // discipline/subtest tag of their own — like an untagged video they are intentionally
+        // neutral, and the subscription + module gate at the top of this method has already run.
+        // They are hidden when a per-user folder allow-list restriction is active, since they sit
+        // under no granted folder. A file's own SubtestCode still has to be in the plan's scope.
         var visibleFiles = allFiles
             .Where(f => contentFolderScope is null
                 ? (f.FolderId == null || visibleFolderIds.Contains(f.FolderId))
                 : (f.FolderId != null && visibleFolderIds.Contains(f.FolderId) && contentFolderScope.Contains(f.FolderId)))
+            .Where(f => IsSubtestInScope(f.SubtestCode, scopeEntitlement))
             .ToList();
 
         var rootFolders = allFolders
@@ -134,14 +143,28 @@ public sealed class MaterialAccessService(
     /// </summary>
     public async Task<bool> CanCandidateAccessMaterialFileAsync(string userId, string mediaAssetId, CancellationToken ct)
     {
+        // This overload only receives a userId, so the role is resolved directly (the tree path
+        // short-circuits on the ClaimsPrincipal instead). Admins bypass every learner gate below,
+        // mirroring GetVisibleTreeAsync.
+        var role = await db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.Role)
+            .FirstOrDefaultAsync(ct);
+        var isAdmin = string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase);
+
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
 
-        // Admin-togglable module gate (fail-open): a plan that explicitly disables the
-        // "MaterialsLibrary" module withholds all materials downloads. No new subscription
-        // requirement is imposed here (unlike the visible tree) so admin/preview media paths and
-        // legacy audience-based access are preserved; the empty-tree gate already hides materials
-        // from ineligible learners.
-        if (!entitlement.IsModuleEnabled(ModuleKeys.MaterialsLibrary)) return false;
+        // Subscription + module gate — MIRRORS the tree gate (spec §7.1). Downloads previously
+        // required only IsModuleEnabled, which is FAIL-OPEN on an empty module list; an expired
+        // subscription normalises to exactly that empty list, so every material stayed
+        // downloadable after expiry. HasEligibleSubscription is what closes it.
+        if (!isAdmin
+            && (!entitlement.HasEligibleSubscription
+                || !entitlement.IsModuleEnabled(ModuleKeys.MaterialsLibrary)))
+        {
+            return false;
+        }
 
         var files = await db.MaterialFiles
             .AsNoTracking()
@@ -152,48 +175,36 @@ public sealed class MaterialAccessService(
 
         // Per-user Materials folder allow-list (Phase E — restriction-within-plan).
         // A learner with ANY UserMaterialFolderAccess rows is restricted to those
-        // folders and their descendants; admins bypass (mirrors the IsAdmin
-        // short-circuit used by GetVisibleTreeAsync — this overload only receives
-        // a userId, so the role is looked up directly).
+        // folders and their descendants; admins bypass.
         var allowedFolderIds = await db.UserMaterialFolderAccesses
             .AsNoTracking()
             .Where(x => x.UserId == userId)
             .Select(x => x.FolderId)
             .ToListAsync(ct);
 
-        var hasFolderRestriction = false;
-        if (allowedFolderIds.Count > 0)
-        {
-            var role = await db.Users
-                .AsNoTracking()
-                .Where(u => u.Id == userId)
-                .Select(u => u.Role)
-                .FirstOrDefaultAsync(ct);
-            hasFolderRestriction = !string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase);
-        }
+        var hasFolderRestriction = allowedFolderIds.Count > 0 && !isAdmin;
 
-        if (hasFolderRestriction)
+        // Subtest × profession content scope (spec §3). Admins bypass; an unscoped plan resolves
+        // to "all subtests, no overrides".
+        var scopeEntitlement = isAdmin ? null : entitlement;
+
+        if (!hasFolderRestriction
+            && files.Any(f => f.FolderId == null && IsSubtestInScope(f.SubtestCode, scopeEntitlement)))
         {
-            // Root-level files aren't under any granted folder — hide them outright.
-            files = files.Where(f => f.FolderId != null).ToList();
-            if (files.Count == 0) return false;
-        }
-        else if (files.Any(f => f.FolderId == null))
-        {
-            // Root-level files are accessible to all authenticated candidates.
+            // Root-level files carry no folder, so no audience or discipline tag applies to them —
+            // they are neutral content, NOT a bypass: the subscription + module gate above has
+            // already run (spec §7.2 — this used to return true before any of those checks). Under
+            // a per-user folder allow-list they sit beneath no granted folder, so they stay hidden.
             return true;
         }
 
-        var folderIds = files.Select(f => f.FolderId!).Distinct().ToList();
-        var folders = await db.MaterialFolders
-            .AsNoTracking()
-            .Include(f => f.Audiences)
-            .Where(f => folderIds.Contains(f.Id) && f.Status == ContentStatus.Published)
-            .ToListAsync(ct);
+        // Every remaining candidate is folder-bound; a root-level file that got here is out of
+        // scope (or restricted away) and must not leak through the folder checks below.
+        files = files.Where(f => f.FolderId != null).ToList();
+        if (files.Count == 0) return false;
 
-        if (folders.Count == 0) return false;
-
-        // Also load all ancestor folders for the published-ancestors check
+        // Every published folder (not just the candidates') — the ancestor walks in
+        // IsFolderVisible / IsDisciplineVisible / IsContentScopeVisible need the whole chain.
         var allFolders = await db.MaterialFolders
             .AsNoTracking()
             .Include(f => f.Audiences)
@@ -204,7 +215,9 @@ public sealed class MaterialAccessService(
         var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(entitlement, userId, ct);
         // Mirror the tree's discipline gate so a learner cannot download another discipline's
         // file by guessing its mediaAssetId (defence in depth alongside GetVisibleTreeAsync).
-        var (disciplineUniverse, learnerDisciplines) = await ResolveDisciplineFilterAsync(userId, ct);
+        var (disciplineUniverse, learnerDisciplines) = isAdmin
+            ? (new HashSet<string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+            : await ResolveDisciplineFilterAsync(userId, ct);
 
         HashSet<string>? contentFolderScope = null;
         if (hasFolderRestriction)
@@ -212,13 +225,20 @@ public sealed class MaterialAccessService(
             (_, contentFolderScope) = ComputeUserFolderScope(allowedFolderIds, folderDict);
         }
 
-        return folders.Any(folder =>
-            IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
-            && IsDisciplineVisible(folder, folderDict, disciplineUniverse, learnerDisciplines)
+        // Evaluated per FILE (not per folder) so the file's own SubtestCode is checked against the
+        // same folder that grants it.
+        return files.Any(file =>
+            folderDict.TryGetValue(file.FolderId!, out var folder)
+            && IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
+            && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines)
+            && IsSubtestInScope(file.SubtestCode, scopeEntitlement)
             && (contentFolderScope is null || contentFolderScope.Contains(folder.Id)));
     }
 
-    private bool IsFolderVisible(
+    /// <summary>Audience gate for one folder. Static + internal so
+    /// <see cref="Billing.PlanContentAvailabilityService"/> can ask the same question of a plan
+    /// (rather than of a signed-in learner) without a second implementation drifting from this one.</summary>
+    internal static bool IsFolderVisible(
         MaterialFolder folder,
         Dictionary<string, MaterialFolder> allFolders,
         string? planId,
@@ -395,17 +415,20 @@ public sealed class MaterialAccessService(
     /// Name-based discipline gate. A folder (or any of its ancestors) whose name is a known
     /// discipline that is NOT the learner's own is hidden; non-discipline folders (Reading,
     /// Listening, subtest parents, source folders …) are always visible. An empty
-    /// <paramref name="learnerDisciplines"/> (admin, or learner with no profession) disables the
-    /// filter (fail-open). Walking ancestors ensures a non-discipline child under an excluded
-    /// discipline parent is also dropped.
+    /// <paramref name="learnerDisciplines"/> means the learner has no/unknown profession and now
+    /// fails CLOSED on every discipline-tagged folder (spec §7.5 — it used to disable the filter
+    /// entirely, so a profession-less learner saw every discipline; this matches how video
+    /// targeting already behaves). Admins are unfiltered by being passed an EMPTY
+    /// <paramref name="disciplineUniverse"/>, which no folder name can match. Walking ancestors
+    /// ensures a non-discipline child under an excluded discipline parent is also dropped.
     /// </summary>
-    private static bool IsDisciplineVisible(
+    internal static bool IsDisciplineVisible(
         MaterialFolder folder,
         Dictionary<string, MaterialFolder> allFolders,
         HashSet<string> disciplineUniverse,
         HashSet<string> learnerDisciplines)
     {
-        if (learnerDisciplines.Count == 0) return true;
+        if (disciplineUniverse.Count == 0) return true;
 
         var current = folder;
         var guard = 0;
@@ -420,6 +443,88 @@ public sealed class MaterialAccessService(
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Subtest × profession content scope for a folder (access &amp; payment spec §3): the
+    /// discipline gate, the plan's IncludedSubtests axis, and its per-plan folder
+    /// include/exclude overrides. The audience, module and subscription gates are the caller's
+    /// job — an override never bypasses those. An explicit include DOES win over the discipline
+    /// and subtest scope; an exclude drops the folder. A null <paramref name="entitlement"/>
+    /// (admin) skips the plan-derived scope, and an admin's empty
+    /// <paramref name="disciplineUniverse"/> already neutralises the discipline gate.
+    /// </summary>
+    private static bool IsContentScopeVisible(
+        MaterialFolder folder,
+        Dictionary<string, MaterialFolder> allFolders,
+        EffectiveEntitlementSnapshot? entitlement,
+        HashSet<string> disciplineUniverse,
+        HashSet<string> learnerDisciplines)
+    {
+        if (entitlement is not null
+            && ResolveFolderOverride(folder, allFolders, entitlement.ContentOverrides) is bool decided)
+        {
+            return decided;
+        }
+
+        return IsDisciplineVisible(folder, allFolders, disciplineUniverse, learnerDisciplines)
+            && IsSubtestInScope(ResolveEffectiveSubtest(folder, allFolders), entitlement);
+    }
+
+    /// <summary>
+    /// Nearest per-plan content override on the folder or any ANCESTOR (so excluding a parent
+    /// excludes its whole subtree): true = explicitly included, false = explicitly excluded,
+    /// null = no override applies and the normal scope decides. Internal so
+    /// <see cref="Billing.PlanContentAvailabilityService"/> reads overrides exactly as the
+    /// learner gate does.
+    /// </summary>
+    internal static bool? ResolveFolderOverride(
+        MaterialFolder folder,
+        Dictionary<string, MaterialFolder> allFolders,
+        ContentOverrideSets overrides)
+    {
+        if (overrides.IsEmpty) return null;
+
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            if (overrides.MaterialFolderIncludes.Contains(current.Id)) return true;
+            if (overrides.MaterialFolderExcludes.Contains(current.Id)) return false;
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The subtest axis of the content model. An untagged item (no SubtestCode of its own or of
+    /// any ancestor) is not subtest-restricted and stays in scope, mirroring how an untagged video
+    /// unlocks under any premium grant. A null <paramref name="entitlement"/> (admin) is a no-op.
+    /// </summary>
+    private static bool IsSubtestInScope(string? subtestCode, EffectiveEntitlementSnapshot? entitlement)
+    {
+        if (entitlement is null || entitlement.AllSubtestsIncluded) return true;
+        if (string.IsNullOrWhiteSpace(subtestCode)) return true;
+        return entitlement.IncludedSubtests.Contains(subtestCode.Trim());
+    }
+
+    /// <summary>Nearest SubtestCode walking up from the folder (folders inherit their parent's
+    /// subtest — the tree is Writing/Medicine, Speaking/Nursing, …).</summary>
+    internal static string? ResolveEffectiveSubtest(
+        MaterialFolder folder,
+        Dictionary<string, MaterialFolder> allFolders)
+    {
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            if (!string.IsNullOrWhiteSpace(current.SubtestCode)) return current.SubtestCode;
+            if (current.ParentFolderId is null) return null;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+        return null;
     }
 
     /// <summary>

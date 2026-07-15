@@ -386,6 +386,11 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
     webPush: {
       enabled: true,
     },
+    support: {
+      whatsAppNumber: '447961725989',
+      whatsAppProofTemplate: '',
+      isWhatsAppConfigured: true,
+    },
     updatedBy: 'admin@example.com',
     updatedByUserId: 'u-1',
     updatedAt: '2026-05-16T10:00:00Z',

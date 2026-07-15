@@ -8,8 +8,10 @@ namespace OetLearner.Api.Services.VideoLibrary;
 /// <summary>
 /// Issues and renews token-signed playback sessions for attested native
 /// clients. Attestation + entitlement checks happen BEFORE this service is
-/// invoked (see VideoLibraryEndpoints); this service owns concurrency limits,
-/// session persistence, CDN URL signing, and the watermark text.
+/// invoked on the ISSUE path (see VideoLibraryEndpoints); this service owns
+/// concurrency limits, session persistence, CDN URL signing, and the watermark
+/// text. RENEW re-checks visibility + entitlement itself: it mints a fresh
+/// signed CDN URL, and the endpoint has no other gate in front of it.
 /// </summary>
 public interface IVideoPlaybackSessionService
 {
@@ -40,6 +42,8 @@ public sealed class VideoPlaybackSessionService(
     LearnerDbContext db,
     IBunnyStreamClient bunny,
     IRuntimeSettingsProvider settingsProvider,
+    VideoLibraryLearnerService learnerService,
+    IVideoEntitlementService entitlements,
     ILogger<VideoPlaybackSessionService> logger) : IVideoPlaybackSessionService
 {
     private const int MaxConcurrentDistinctVideos = 3;
@@ -136,12 +140,43 @@ public sealed class VideoPlaybackSessionService(
                 "This playback session has expired. Start the video again to get a new session.");
         }
 
-        var video = await db.LibraryVideos.AsNoTracking()
-            .FirstOrDefaultAsync(v => v.Id == session.VideoId, ct)
-            ?? throw ApiException.Forbidden("session_expired", "This playback session is no longer valid.");
+        // A renew mints a NEW signed CDN URL, so it must re-earn the grant that issued the
+        // session — a session outliving the entitlement that created it (expired/frozen
+        // subscription, module disabled, profession changed, video unpublished) would otherwise
+        // keep handing out playable URLs for its whole TTL. A lapsed grant kills the session.
+        var video = await learnerService.FindVisibleVideoAsync(userId, session.VideoId, now, ct);
+        if (video is null)
+        {
+            await RevokeAsync(session.Id, now, ct);
+            throw ApiException.Forbidden("session_expired", "This playback session is no longer valid.");
+        }
+
+        var access = await entitlements.AllowAccessAsync(userId, video, ct);
+        if (!access.Allowed)
+        {
+            await RevokeAsync(session.Id, now, ct);
+            logger.LogInformation(
+                "Revoked video playback session {SessionId} for user {UserId} video {VideoId} on renew: {Reason}.",
+                session.Id, userId, video.Id, access.Reason);
+
+            // Maps the denial reason onto the same 402/403 contract the issue path uses.
+            await entitlements.RequireAccessAsync(userId, video, ct);
+
+            // Unreachable while RequireAccessAsync mirrors AllowAccessAsync — but the session is
+            // revoked either way, so never fall through to a fresh signed URL.
+            throw ApiException.Forbidden("session_expired", "This playback session is no longer valid.");
+        }
 
         // New signed URL; expiry stays capped at the session's ExpiresAt.
         return await BuildResultAsync(session.Id, video, session.ExpiresAt, userId, ct);
+    }
+
+    private async Task RevokeAsync(string sessionId, DateTimeOffset now, CancellationToken ct)
+    {
+        var tracked = await db.VideoPlaybackSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+        if (tracked is null || tracked.RevokedAt is not null) return;
+        tracked.RevokedAt = now;
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task<PlaybackSessionResult> BuildResultAsync(

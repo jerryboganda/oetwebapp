@@ -11,6 +11,10 @@ import { apiClient, fetchAuthorizedBlob } from '@/lib/api';
 
 // ── Manual payments ───────────────────────────────────────────────
 
+/** `learner_upload` = the buyer uploaded a file; `gateway_receipt` = the system wrote a
+ * receipt row when a card gateway completed, and there is no file to view. */
+export type PaymentProofKind = 'learner_upload' | 'gateway_receipt';
+
 export interface ManualPaymentDto {
   id: string;
   userId: string;
@@ -24,12 +28,24 @@ export interface ManualPaymentDto {
   currency: string;
   method: string;
   reference: string;
-  proofUrl: string;
+  /** True when a proof file exists. The storage key is never sent to clients —
+   * fetch the bytes via {@link getManualPaymentProofBlob}. Always false for
+   * `gateway_receipt` rows, whose evidence is the gateway reference. */
+  hasProof: boolean;
+  kind: PaymentProofKind | string;
+  /** stripe/paypal/easykash/... — set only on `gateway_receipt` rows. */
+  gateway: string | null;
+  /** The buyer's registered profession at purchase time. */
+  professionId: string | null;
+  proofWaivedAt: string | null;
+  proofWaiverReason: string | null;
   status: 'pending' | 'needs_review' | 'approved' | 'paid' | 'rejected' | 'cancelled' | string;
   submittedAt: string;
   reviewedAt: string | null;
   adminNotes: string | null;
   accessGrantedSubscriptionId?: string | null;
+  /** Fulfilment status of the subscription this proof granted, when it granted one. */
+  fulfilmentStatus?: FulfilmentStatus | string | null;
 }
 
 export interface ManualPaymentSubmitRequest {
@@ -57,9 +73,32 @@ export function listOwnManualPayments(): Promise<ManualPaymentDto[]> {
   return apiClient.get<ManualPaymentDto[]>('/v1/billing/manual-payments/mine');
 }
 
-export function listAdminManualPayments(status?: string): Promise<ManualPaymentDto[]> {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  return apiClient.get<ManualPaymentDto[]>(`/v1/admin/billing/manual-payments/${qs}`);
+export interface ManualPaymentListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: ManualPaymentDto[];
+}
+
+export interface AdminManualPaymentListParams {
+  status?: string;
+  kind?: PaymentProofKind | string;
+  /** 1-based. */
+  page?: number;
+  /** Server clamps to 1..200. */
+  pageSize?: number;
+}
+
+/** Server-paged — the dashboard must render `total` and drive `page` itself; the
+ * response is never the whole table. */
+export function listAdminManualPayments(params: AdminManualPaymentListParams = {}): Promise<ManualPaymentListResponse> {
+  const q = new URLSearchParams();
+  if (params.status) q.set('status', params.status);
+  if (params.kind) q.set('kind', params.kind);
+  if (params.page) q.set('page', String(params.page));
+  if (params.pageSize) q.set('pageSize', String(params.pageSize));
+  const qs = q.toString();
+  return apiClient.get<ManualPaymentListResponse>(`/v1/admin/billing/manual-payments/${qs ? `?${qs}` : ''}`);
 }
 
 export function approveManualPayment(id: string, notes?: string): Promise<ManualPaymentDto> {
@@ -79,12 +118,63 @@ export function setManualPaymentStatus(id: string, status: 'pending' | 'needs_re
 }
 
 /**
+ * Release a pending offline order whose payment was confirmed out-of-band (the owner
+ * saw the transfer land) without waiting for the learner to upload a file. Audited.
+ */
+export function waiveManualPaymentProof(id: string, reason: string): Promise<ManualPaymentDto> {
+  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/waive-proof`, { reason });
+}
+
+/** Undo a mis-clicked Reject: `rejected` → `pending`. */
+export function reopenManualPayment(id: string, notes?: string): Promise<ManualPaymentDto> {
+  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/reopen`, { notes });
+}
+
+/**
  * Fetch the uploaded proof file as a Blob for the admin verification dashboard.
  * The caller inspects `blob.type` to render an inline image or embedded PDF, and
  * owns createObjectURL/revoke. Authorized via the admin session.
  */
 export function getManualPaymentProofBlob(id: string): Promise<Blob> {
   return fetchAuthorizedBlob(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/proof`);
+}
+
+// ── Manual fulfilment queue ──────────────────────────────────────
+
+export type DeliveryMethod = 'automatic_web' | 'manual_web' | 'telegram' | 'manual_material';
+
+export type FulfilmentStatus = 'auto' | 'pending_manual' | 'fulfilled';
+
+/** A paid order awaiting an admin hand-over. Its subscription stays Pending, so the
+ * entitlement resolver grants nothing until it is marked fulfilled. */
+export interface PendingFulfilmentDto {
+  subscriptionId: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  planCode: string;
+  planName: string;
+  deliveryMethod: DeliveryMethod | string;
+  telegramInviteUrl: string | null;
+  deliveryInstructions: string | null;
+  status: string;
+  fulfilmentStatus: FulfilmentStatus | string;
+  startedAt: string;
+  changedAt: string;
+  proof: ManualPaymentDto | null;
+}
+
+export function listPendingFulfilment(): Promise<PendingFulfilmentDto[]> {
+  return apiClient.get<PendingFulfilmentDto[]>('/v1/admin/billing/fulfilment/');
+}
+
+/** Hand the package over: FulfilmentStatus → `fulfilled` and the subscription → Active,
+ * which is what actually releases access. */
+export function markSubscriptionFulfilled(subscriptionId: string, notes?: string): Promise<PendingFulfilmentDto> {
+  return apiClient.post<PendingFulfilmentDto>(
+    `/v1/admin/billing/fulfilment/subscriptions/${encodeURIComponent(subscriptionId)}/mark-fulfilled`,
+    { notes },
+  );
 }
 
 // ── Payment methods (admin-configurable) ─────────────────────────

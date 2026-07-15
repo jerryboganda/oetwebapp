@@ -3,18 +3,19 @@
 import { Suspense, useCallback, useEffect, useState, type ElementType } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CreditCard, Info, Landmark, Mail, MessageCircle, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
+import { CreditCard, Info, Landmark, Mail, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { ProofDropzone } from '@/components/billing/proof-dropzone';
-import { buildManualPaymentWhatsAppLink } from '@/lib/billing/whatsapp';
+import { SendProofOnWhatsAppButton } from '@/components/billing/send-proof-whatsapp-button';
+import { buildManualPaymentWhatsAppLink, fetchSupportWhatsApp } from '@/lib/billing/whatsapp';
 import {
   fetchAvailablePaymentGateways,
   fetchPaymentMethodQrBlob,
@@ -127,6 +128,9 @@ function ManualPaymentContent() {
   const courseParam = searchParams.get('course');
   const amountParam = searchParams.get('amount');
   const currencyParam = searchParams.get('currency');
+  // `?region=egypt` comes from the Egypt route on checkout — it only picks the default
+  // method; every offline method stays selectable, whatever region the learner arrived from.
+  const preferredCategory = searchParams.get('region') === 'egypt' ? 'inside_egypt' : null;
   const hasOrderContext = Boolean(quoteId || amountParam);
 
   const registeredEmail = user?.email ?? '';
@@ -136,6 +140,8 @@ function ManualPaymentContent() {
   const currency = (currencyParam ?? 'EGP').toUpperCase();
 
   const [reference, setReference] = useState('');
+  const [methodKey, setMethodKey] = useState('');
+  const [candidateWhatsApp, setCandidateWhatsApp] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
 
@@ -147,7 +153,6 @@ function ManualPaymentContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
-  const [whatsAppUrl, setWhatsAppUrl] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -183,6 +188,15 @@ function ManualPaymentContent() {
       cancelled = true;
     };
   }, []);
+
+  // The method the proof is filed against. `preferredCategory` only picks the initial
+  // default — every configured method stays selectable, because the backend accepts
+  // proof for any offline route, not just the Egyptian ones.
+  const selectedMethodKey =
+    methodKey
+    || (preferredCategory ? paymentMethods.find((m) => m.category === preferredCategory)?.key : undefined)
+    || paymentMethods[0]?.key
+    || '';
 
   // Resolve object URLs for any admin-uploaded QR images.
   useEffect(() => {
@@ -230,8 +244,17 @@ function ManualPaymentContent() {
       setError('We could not read your account email. Please refresh and try again.');
       return;
     }
+    const selectedMethod = paymentMethods.find((m) => m.key === selectedMethodKey);
+    if (!selectedMethod) {
+      setError('Please choose the payment method you used.');
+      return;
+    }
     if (!reference.trim()) {
       setError('Please enter your transaction ID.');
+      return;
+    }
+    if (!candidateWhatsApp.trim()) {
+      setError('Please enter your WhatsApp number so our team can reach you about this payment.');
       return;
     }
     if (!proofFile) {
@@ -246,34 +269,38 @@ function ManualPaymentContent() {
     setSubmitting(true);
     try {
       const proofBase64 = await readFileAsBase64(proofFile);
-      const method = paymentMethods.find((m) => m.category === 'inside_egypt')?.key ?? 'instapay_qr_link';
       const payload: ManualPaymentSubmitRequest = {
         quoteId: quoteId ?? null,
         amountAmount: orderAmount,
         currency,
-        method,
+        method: selectedMethod.key,
         reference: reference.trim(),
         proofUrl: '',
         candidateFullName: fullName,
         candidateEmail: registeredEmail,
-        candidateWhatsApp: '',
+        candidateWhatsApp: candidateWhatsApp.trim(),
         courseName,
         courseId: null,
-        paymentCategory: 'inside_egypt',
+        // Follows the chosen method rather than a hardcoded 'inside_egypt' — the admin
+        // dashboard filters on this, so a Wise/UK transfer must not be filed as Egyptian.
+        paymentCategory: selectedMethod.category,
         proofBase64,
       };
       await submitManualPayment(payload);
-      const url = buildManualPaymentWhatsAppLink({
-        name: fullName,
-        email: registeredEmail,
-        course: courseName,
-        amount: orderAmount,
-        currency,
-        reference: reference.trim(),
-      });
-      setWhatsAppUrl(url);
+      const support = await fetchSupportWhatsApp();
+      const url = buildManualPaymentWhatsAppLink(
+        {
+          name: fullName,
+          email: registeredEmail,
+          course: courseName,
+          amount: orderAmount,
+          currency,
+          reference: reference.trim(),
+        },
+        { number: support.whatsAppNumber, template: support.whatsAppProofTemplate },
+      );
       setSuccessOpen(true);
-      try { window.open(url, '_blank', 'noopener'); } catch { /* popup blocked — use the button */ }
+      try { window.open(url, '_blank', 'noopener'); } catch { /* popup blocked — the modal's button is the fallback */ }
       await load();
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Submission failed.');
@@ -287,8 +314,8 @@ function ManualPaymentContent() {
       <LearnerPageHero
         icon={<Receipt className="h-6 w-6" />}
         eyebrow="OET with Dr. Ahmed Hesham"
-        title="Pay inside Egypt"
-        description="Pay with one of the Egyptian methods below, then upload your screenshot. Access is activated after our team verifies your payment."
+        title="Submit your payment proof"
+        description="Pay with any of the methods below, then upload your screenshot. Access is activated after our team verifies your payment."
       />
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -296,6 +323,14 @@ function ManualPaymentContent() {
           <PaymentCategory
             title="Payment Inside Egypt"
             category="inside_egypt"
+            methods={paymentMethods}
+            qrSrcFor={qrSrcFor}
+            availableGateways={availableGateways}
+            onPayWithPayPal={handlePayWithPayPal}
+          />
+          <PaymentCategory
+            title="International payment"
+            category="international"
             methods={paymentMethods}
             qrSrcFor={qrSrcFor}
             availableGateways={availableGateways}
@@ -313,11 +348,29 @@ function ManualPaymentContent() {
 
             <div className="mt-4 grid gap-4">
               <Input label="Your registered email" type="email" value={registeredEmail} readOnly />
+              <Select
+                label="How did you pay?"
+                value={selectedMethodKey}
+                onChange={(e) => setMethodKey(e.target.value)}
+                options={paymentMethods.map((m) => ({
+                  value: m.key,
+                  label: `${m.label} · ${m.category === 'inside_egypt' ? 'Inside Egypt' : 'International'}`,
+                }))}
+                placeholder={paymentMethods.length === 0 ? 'Loading payment methods…' : undefined}
+              />
               <Input
                 label="Transaction ID"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder="The reference / ID from your transfer"
+              />
+              <Input
+                label="Your WhatsApp number"
+                type="tel"
+                value={candidateWhatsApp}
+                onChange={(e) => setCandidateWhatsApp(e.target.value)}
+                placeholder="+20 10 1234 5678"
+                hint="Include the country code — our team uses this to confirm your payment."
               />
               <div>
                 <span className="mb-1 block text-sm font-semibold tracking-tight text-navy">Payment screenshot</span>
@@ -329,7 +382,14 @@ function ManualPaymentContent() {
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <SendProofOnWhatsAppButton
+                variant="outline"
+                course={courseName}
+                amount={orderAmount > 0 ? orderAmount : undefined}
+                currency={currency}
+                reference={reference.trim() || quoteId}
+              />
               <Button onClick={handleSubmit} disabled={submitting}>
                 <Upload className="mr-2 h-4 w-4" />
                 {submitting ? 'Submitting...' : 'Submit'}
@@ -348,7 +408,8 @@ function ManualPaymentContent() {
           <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
             <h2 className="text-base font-semibold text-navy">Pick a package first</h2>
             <p className="mt-2 text-sm text-muted">
-              Choose a plan from Subscriptions &amp; Packages, then select &ldquo;Pay inside Egypt&rdquo; at checkout to submit your proof here.
+              Choose a plan from Subscriptions &amp; Packages, then pick an offline payment method at
+              checkout to submit your proof here.
             </p>
             <Link
               href="/subscriptions"
@@ -356,6 +417,9 @@ function ManualPaymentContent() {
             >
               Browse Subscriptions &amp; Packages
             </Link>
+            <div className="mt-3 flex justify-center">
+              <SendProofOnWhatsAppButton variant="outline" course="" label="Message us on WhatsApp" />
+            </div>
           </div>
         )}
       </section>
@@ -392,14 +456,13 @@ function ManualPaymentContent() {
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setSuccessOpen(false)}>Done</Button>
-            <a
-              href={whatsAppUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#25D366] px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-95"
-            >
-              <MessageCircle className="h-4 w-4" /> Notify us on WhatsApp
-            </a>
+            <SendProofOnWhatsAppButton
+              course={courseName}
+              amount={orderAmount > 0 ? orderAmount : undefined}
+              currency={currency}
+              reference={reference.trim() || quoteId}
+              label="Notify us on WhatsApp"
+            />
           </div>
         </div>
       </Modal>
@@ -431,6 +494,7 @@ function PaymentCategory({
   onPayWithPayPal: () => void;
 }) {
   const rows = methods.filter((method) => method.category === category);
+  if (rows.length === 0) return null;
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <h2 className="text-base font-semibold text-navy">{title}</h2>

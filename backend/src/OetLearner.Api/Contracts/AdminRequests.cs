@@ -285,14 +285,19 @@ public record AdminUserCreateRequest(
 // ── Per-user access allocation (Add-User feature) ──
 
 /// <summary>Grant one package (billing plan) to a user as a new subscription row.
-/// Multiple packages per user are allowed. <paramref name="ExpiresAt"/> overrides the
-/// plan's access-duration expiry when provided. <paramref name="MakePrimary"/> points the
-/// learner's CurrentPlanId at this package.</summary>
+/// Multiple packages per user are allowed. <paramref name="StartsAt"/> backdates or
+/// postdates the grant (defaults to now) and anchors the expiry; <paramref name="ExpiresAt"/>
+/// overrides the plan's access-duration expiry when provided. <paramref name="MakePrimary"/>
+/// points the learner's CurrentPlanId at this package. <paramref name="OverrideProfessionMismatch"/>
+/// lets an admin attach a profession-specific plan to a learner registered under a
+/// different profession (audited either way).</summary>
 public record AdminUserAccessPackageRequest(
     string PlanCode,
+    DateTimeOffset? StartsAt,
     DateTimeOffset? ExpiresAt,
     bool MakePrimary,
-    bool GrantIncludedCredits);
+    bool GrantIncludedCredits,
+    bool OverrideProfessionMismatch);
 
 /// <summary>Grant an add-on to a user, applied to a target subscription (defaults to the
 /// user's primary/latest). Idempotent per (user, addon, subscription).</summary>
@@ -354,7 +359,14 @@ public record AdminBillingPlanCreateRequest(
     bool? ExtensionAllowed = null,
     bool? RecallUpdatesEnabled = null,
     // "What's included" bullet list — persisted on the linked ContentPackage.
-    string? ComparisonFeaturesJson = null);
+    string? ComparisonFeaturesJson = null,
+    // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
+    // Empty string clears TelegramInviteUrl / DeliveryInstructions / ContentOverridesJson;
+    // null leaves the stored value untouched.
+    string? DeliveryMethod = null,
+    string? TelegramInviteUrl = null,
+    string? DeliveryInstructions = null,
+    string? ContentOverridesJson = null);
 
 public record AdminBillingPlanUpdateRequest(
     string Code,
@@ -390,7 +402,14 @@ public record AdminBillingPlanUpdateRequest(
     bool? IsDraft = null,
     bool? ExtensionAllowed = null,
     bool? RecallUpdatesEnabled = null,
-    string? ComparisonFeaturesJson = null);
+    string? ComparisonFeaturesJson = null,
+    // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
+    // Empty string clears TelegramInviteUrl / DeliveryInstructions / ContentOverridesJson;
+    // null leaves the stored value untouched.
+    string? DeliveryMethod = null,
+    string? TelegramInviteUrl = null,
+    string? DeliveryInstructions = null,
+    string? ContentOverridesJson = null);
 
 public record AdminBillingAddOnCreateRequest(
     string Code,
