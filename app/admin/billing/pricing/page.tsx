@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { CreditCard, FileText } from 'lucide-react';
+import { CreditCard, FileText, Store } from 'lucide-react';
 
 import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
 import { Button } from '@/components/admin/ui/button';
@@ -113,11 +113,18 @@ function PricingHubInner() {
           { label: 'Pricing' },
         ]}
         actions={
-          <Button asChild variant="secondary">
-            <Link href="/admin/audit-logs?search=billing">
-              <FileText className="mr-2 h-4 w-4" /> Audit log
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="secondary">
+              <Link href="/admin/billing/storefront">
+                <Store className="mr-2 h-4 w-4" /> Catalog storefront
+              </Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link href="/admin/audit-logs?search=billing">
+                <FileText className="mr-2 h-4 w-4" /> Audit log
+              </Link>
+            </Button>
+          </div>
         }
       />
 
