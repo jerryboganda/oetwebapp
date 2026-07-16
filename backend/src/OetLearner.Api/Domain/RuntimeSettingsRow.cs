@@ -462,6 +462,15 @@ public class RuntimeSettingsRow
     // HMAC over the attestation challenge with one of these secrets.
     public string? VideoAttestationKeysEncrypted { get; set; }
 
+    // ── Support (WhatsApp proof channel) ───────────────────────────
+    // Public support number offered next to every package ("send your proof on
+    // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back
+    // to the PLATFORM_WHATSAPP constant in lib/billing/whatsapp.ts.
+    [MaxLength(32)] public string? SupportWhatsAppNumber { get; set; }
+    /// <summary>Message template pre-filled in the WhatsApp deep link. Supports the
+    /// placeholders the proof button substitutes (name / course / reference).</summary>
+    [MaxLength(1000)] public string? SupportWhatsAppProofTemplate { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

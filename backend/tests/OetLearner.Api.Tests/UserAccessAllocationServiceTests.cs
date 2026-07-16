@@ -49,7 +49,8 @@ public class UserAccessAllocationServiceTests
         var customExpiry = DateTimeOffset.UtcNow.AddDays(90);
 
         var access = await CreateService(db).GrantPackageAsync("admin", "Admin", "learner-1",
-            new AdminUserAccessPackageRequest("med", customExpiry, MakePrimary: true, GrantIncludedCredits: false), default);
+            new AdminUserAccessPackageRequest("med", StartsAt: null, ExpiresAt: customExpiry,
+                MakePrimary: true, GrantIncludedCredits: false, OverrideProfessionMismatch: false), default);
 
         Assert.Single(access.Subscriptions);
         var sub = access.Subscriptions[0];
@@ -67,7 +68,8 @@ public class UserAccessAllocationServiceTests
         db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
         await db.SaveChangesAsync();
         var svc = CreateService(db);
-        var req = new AdminUserAccessPackageRequest("med", null, MakePrimary: true, GrantIncludedCredits: false);
+        var req = new AdminUserAccessPackageRequest("med", StartsAt: null, ExpiresAt: null,
+            MakePrimary: true, GrantIncludedCredits: false, OverrideProfessionMismatch: false);
 
         await svc.GrantPackageAsync("admin", "Admin", "learner-2", req, default);
         var access = await svc.GrantPackageAsync("admin", "Admin", "learner-2", req, default);
@@ -87,8 +89,8 @@ public class UserAccessAllocationServiceTests
         await db.SaveChangesAsync();
         var svc = CreateService(db);
 
-        await svc.GrantPackageAsync("admin", "Admin", "learner-3", new AdminUserAccessPackageRequest("med", null, true, false), default);
-        var access = await svc.GrantPackageAsync("admin", "Admin", "learner-3", new AdminUserAccessPackageRequest("physio", null, false, false), default);
+        await svc.GrantPackageAsync("admin", "Admin", "learner-3", new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+        var access = await svc.GrantPackageAsync("admin", "Admin", "learner-3", new AdminUserAccessPackageRequest("physio", null, null, false, false, false), default);
 
         Assert.Equal(2, access.Subscriptions.Count);
     }

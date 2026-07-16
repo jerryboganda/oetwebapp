@@ -252,5 +252,8 @@ ds-bundle/
 # Bulk video upload scratch (state, manifest, logs) — never commit
 scripts/videos/state/
 
+# Materials ingest scratch (state, manifest, logs) — never commit
+scripts/materials/state/
+
 # CodeGraph index (per-environment artifact — never commit)
 .codegraph/

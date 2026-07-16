@@ -26,7 +26,8 @@ public partial class AdminService(
     LearnerService learnerService,
     OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue? vocabularyAudioQueue = null,
     IConversationOptionsProvider? conversationOptionsProvider = null,
-    OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService? voiceDesignRegeneration = null)
+    OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService? voiceDesignRegeneration = null,
+    OetLearner.Api.Services.Professions.IProfessionCatalogService? professionCatalog = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -326,7 +327,14 @@ public partial class AdminService(
         bool? IsDraft,
         bool? ExtensionAllowed,
         bool? RecallUpdatesEnabled,
-        string? ComparisonFeaturesJson)
+        string? ComparisonFeaturesJson,
+        // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
+        // Unlike the fields above, the three nullable strings use "" ⇒ clear to NULL
+        // semantics so an admin can remove a Telegram invite once set.
+        string? DeliveryMethod = null,
+        string? TelegramInviteUrl = null,
+        string? DeliveryInstructions = null,
+        string? ContentOverridesJson = null)
     {
         public static Oet2026PlanFields Empty { get; } = new(
             null, null, null, null, null, null, null, null, null,
@@ -402,6 +410,33 @@ public partial class AdminService(
         if (fields.IsDraft.HasValue) plan.IsDraft = fields.IsDraft.Value;
         if (fields.ExtensionAllowed.HasValue) plan.ExtensionAllowed = fields.ExtensionAllowed.Value;
         if (fields.RecallUpdatesEnabled.HasValue) plan.RecallUpdatesEnabled = fields.RecallUpdatesEnabled.Value;
+
+        // ── Delivery + content scoping ──
+        // DeliveryMethod is NOT NULL, so blank leaves the stored value alone; the
+        // validator has already rejected any non-empty value outside DeliveryMethods.
+        if (DeliveryMethods.IsValid(fields.DeliveryMethod))
+        {
+            plan.DeliveryMethod = fields.DeliveryMethod!.Trim().ToLowerInvariant();
+        }
+
+        // The three below deliberately skip the IsNullOrWhiteSpace guard used above:
+        // null ⇒ field omitted (leave as-is), "" ⇒ admin cleared it (write NULL).
+        // Guarding on whitespace would make a Telegram invite impossible to remove.
+        if (fields.TelegramInviteUrl is not null)
+        {
+            var value = fields.TelegramInviteUrl.Trim();
+            plan.TelegramInviteUrl = value.Length == 0 ? null : value;
+        }
+        if (fields.DeliveryInstructions is not null)
+        {
+            var value = fields.DeliveryInstructions.Trim();
+            plan.DeliveryInstructions = value.Length == 0 ? null : value;
+        }
+        if (fields.ContentOverridesJson is not null)
+        {
+            var value = fields.ContentOverridesJson.Trim();
+            plan.ContentOverridesJson = value.Length == 0 ? null : value;
+        }
     }
 
     private static void ApplyOet2026Fields(BillingAddOn addOn, Oet2026AddOnFields fields)
@@ -564,7 +599,11 @@ public partial class AdminService(
             request.IsDraft,
             request.ExtensionAllowed,
             request.RecallUpdatesEnabled,
-            request.ComparisonFeaturesJson));
+            request.ComparisonFeaturesJson,
+            request.DeliveryMethod,
+            request.TelegramInviteUrl,
+            request.DeliveryInstructions,
+            request.ContentOverridesJson));
 
     private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanUpdateRequest request) => new(
         request.Code,
@@ -601,7 +640,11 @@ public partial class AdminService(
             request.IsDraft,
             request.ExtensionAllowed,
             request.RecallUpdatesEnabled,
-            request.ComparisonFeaturesJson));
+            request.ComparisonFeaturesJson,
+            request.DeliveryMethod,
+            request.TelegramInviteUrl,
+            request.DeliveryInstructions,
+            request.ContentOverridesJson));
 
     private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnCreateRequest request) => new(
         request.Code,
@@ -991,6 +1034,36 @@ public partial class AdminService(
         if (request.TrialDays < 0)
         {
             AddCatalogError(errors, "trialDays", "negative", "Trial days cannot be negative.");
+        }
+
+        // Delivery method: blank ⇒ leave the stored value alone; anything else must be known.
+        var deliveryMethod = request.Oet2026.DeliveryMethod?.Trim();
+        if (!string.IsNullOrEmpty(deliveryMethod) && !DeliveryMethods.IsValid(deliveryMethod))
+        {
+            AddCatalogError(
+                errors,
+                "deliveryMethod",
+                "invalid",
+                "Delivery method must be automatic_web, manual_web, telegram, or manual_material.");
+        }
+
+        // Content overrides are read back by the entitlement resolver at request time —
+        // a malformed blob must never reach the column.
+        var contentOverrides = request.Oet2026.ContentOverridesJson?.Trim();
+        if (!string.IsNullOrEmpty(contentOverrides))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(contentOverrides);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    AddCatalogError(errors, "contentOverridesJson", "invalid_json_shape", "contentOverridesJson must be a JSON object.");
+                }
+            }
+            catch (JsonException)
+            {
+                AddCatalogError(errors, "contentOverridesJson", "invalid_json", "contentOverridesJson must be valid JSON.");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(code))
@@ -1421,6 +1494,13 @@ public partial class AdminService(
         isDraft = plan.IsDraft,
         extensionAllowed = plan.ExtensionAllowed,
         recallUpdatesEnabled = plan.RecallUpdatesEnabled,
+        // Delivery + content scoping — the plan editor hydrates its form from these.
+        // Omitting them would make every save post deliveryMethod='automatic_web'
+        // (the form's default for an absent value) and silently unlock a Telegram plan.
+        deliveryMethod = plan.DeliveryMethod,
+        telegramInviteUrl = plan.TelegramInviteUrl,
+        deliveryInstructions = plan.DeliveryInstructions,
+        contentOverridesJson = plan.ContentOverridesJson,
         // "What's included" — loaded from the linked ContentPackage.
         comparisonFeatures = JsonSupport.Deserialize<List<string>>(comparisonFeaturesJson ?? "[]", [])
     };
@@ -1535,6 +1615,13 @@ public partial class AdminService(
         IsDraft = plan.IsDraft,
         ExtensionAllowed = plan.ExtensionAllowed,
         RecallUpdatesEnabled = plan.RecallUpdatesEnabled,
+        // Delivery + content scoping — frozen onto the snapshot. LearnerService
+        // resolves delivery off the VERSION, so omitting these here would silently
+        // fall back to automatic_web and grant instant access to a Telegram plan.
+        DeliveryMethod = plan.DeliveryMethod,
+        TelegramInviteUrl = plan.TelegramInviteUrl,
+        DeliveryInstructions = plan.DeliveryInstructions,
+        ContentOverridesJson = plan.ContentOverridesJson,
     };
 
     private static BillingAddOnVersion CreateBillingAddOnVersion(BillingAddOn addOn, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
@@ -5937,13 +6024,9 @@ public partial class AdminService(
         var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, ct)
             ?? throw ApiException.NotFound("user_not_found", "User not found.");
 
-        var existing = await db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == request.UserId, ct);
-        if (existing is not null)
-        {
-            throw ApiException.Validation("subscription_exists",
-                "This learner already has a subscription. Use Change Plan instead.");
-        }
-
+        // Multiple subscriptions per learner are intentional — EffectiveEntitlementResolver
+        // aggregates packages additively, so a new grant must never depend on the learner
+        // having none.
         var planCode = request.PlanCode.Trim();
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == planCode || p.Id == planCode, ct)
             ?? throw ApiException.Validation("plan_not_found", $"Billing plan '{planCode}' was not found.");

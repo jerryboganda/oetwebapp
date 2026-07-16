@@ -3,20 +3,21 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CreditCard, ShieldCheck, ShoppingBag, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CreditCard, ShieldCheck, ShoppingBag, Wallet } from 'lucide-react';
 
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
+import { SendProofOnWhatsAppButton } from '@/components/billing/send-proof-whatsapp-button';
 import { CheckoutPayRegion, type PayRegion } from '@/components/checkout/checkout-pay-region';
 import { detectBillingRegion } from '@/lib/api/billing-region';
 import { useAuth } from '@/contexts/auth-context';
 import {
+  ApiError,
   createBillingCheckoutSession,
   fetchAvailablePaymentGateways,
   fetchBillingQuote,
-  safePaymentRedirect,
   type PaymentCaptureResult,
   type PaymentMethodMode,
   type PaymentMethodOption,
@@ -45,6 +46,27 @@ function normalizeProductType(value: string | null): BillingProductType {
   return 'plan_purchase';
 }
 
+/**
+ * Checkout blocks the backend raises when a package can never serve this buyer
+ * (spec 2026-07-15 §3). Both are terminal for this plan — no retry, coupon or
+ * alternative payment route resolves them — so they replace the payment options
+ * rather than sit above them as one more dismissable error.
+ */
+const PLAN_BLOCK_CODES = ['profession_mismatch', 'content_unavailable_for_profession'] as const;
+type PlanBlockCode = (typeof PLAN_BLOCK_CODES)[number];
+
+interface PlanBlock {
+  code: PlanBlockCode;
+  message: string;
+}
+
+function asPlanBlock(err: unknown): PlanBlock | null {
+  if (err instanceof ApiError && (PLAN_BLOCK_CODES as readonly string[]).includes(err.code)) {
+    return { code: err.code as PlanBlockCode, message: err.message };
+  }
+  return null;
+}
+
 export default function CheckoutReviewPage() {
   return (
     <Suspense fallback={<CheckoutReviewSkeleton />}>
@@ -56,7 +78,7 @@ export default function CheckoutReviewPage() {
 function CheckoutReviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
   const productType = normalizeProductType(searchParams?.get('productType'));
   const priceId = searchParams?.get('priceId') ?? searchParams?.get('plan') ?? searchParams?.get('addOn') ?? '';
   const parentSubscriptionId = searchParams?.get('parentSubscriptionId') ?? searchParams?.get('parent') ?? null;
@@ -79,6 +101,7 @@ function CheckoutReviewContent() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [planBlock, setPlanBlock] = useState<PlanBlock | null>(null);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
   const [quoteRefreshed, setQuoteRefreshed] = useState(false);
   // When PayPal Expanded checkout is selected but the embedded config is unavailable
@@ -105,19 +128,26 @@ function CheckoutReviewContent() {
     return `/checkout/review${query ? `?${query}` : ''}`;
   }, [searchParams]);
 
+  const courseLabel = quote?.items?.[0]?.name ?? '';
+
+  // The plan's delivery method decides whether payment alone releases access. The
+  // quote DTO does not carry it yet, so this is null until the backend adds it —
+  // the success screen then falls back to its neutral confirmation copy.
+  const deliveryMethod =
+    (quote as (BillingQuote & { deliveryMethod?: string | null }) | null)?.deliveryMethod ?? null;
+
   // Pre-filled link to the manual / offline payment page (bank transfer,
   // InstaPay, Vodafone Cash, PayPal). Carries the quote so admin approval can
   // reliably resolve the same plan and activate access.
   const manualPaymentHref = useMemo(() => {
     const params = new URLSearchParams();
     if (quote?.quoteId) params.set('quoteId', quote.quoteId);
-    const courseLabel = quote?.items?.[0]?.name ?? '';
     if (courseLabel) params.set('course', courseLabel);
     if (quote?.totalAmount != null) params.set('amount', String(quote.totalAmount));
     if (quote?.currency) params.set('currency', quote.currency);
     const qs = params.toString();
     return `/billing/manual-payment${qs ? `?${qs}` : ''}`;
-  }, [quote]);
+  }, [courseLabel, quote]);
 
   // Same target as the manual-payment link, focused on the Egypt section.
   const egyptHref = useMemo(
@@ -133,6 +163,7 @@ function CheckoutReviewContent() {
     }
     setLoading(true);
     setError(null);
+    setPlanBlock(null);
     try {
       const result = await fetchBillingQuote({
         productType,
@@ -145,7 +176,12 @@ function CheckoutReviewContent() {
       setQuote(result);
     } catch (err) {
       setQuote(null);
-      setError(err instanceof Error ? err.message : 'Could not prepare this order.');
+      const block = asPlanBlock(err);
+      if (block) {
+        setPlanBlock(block);
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not prepare this order.');
+      }
     } finally {
       setLoading(false);
     }
@@ -274,7 +310,15 @@ function CheckoutReviewContent() {
       }
       // 'window-assign' navigates this tab to the portal itself — leave busy on.
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open secure checkout.');
+      // The profession/content gate re-runs against the saved quote, so it can fire
+      // here too — the learner's profession may have changed since the quote was built.
+      const block = asPlanBlock(err);
+      if (block) {
+        setPlanBlock(block);
+        setQuote(null);
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not open secure checkout.');
+      }
       setBusy(false);
     }
   };
@@ -296,14 +340,35 @@ function CheckoutReviewContent() {
     return checkout.checkoutSessionId;
   }, [quote, productType, quantity, priceId, couponCode, addOnCodes, parentSubscriptionId, selectedGateway]);
 
+  // Deliberately ignores the server's `redirectTo` (a hardcoded
+  // '/dashboard?purchase=success'): that drops the learner on the dashboard with no
+  // order confirmation, no proof CTA, and — for a manual-fulfilment package — the
+  // false impression that access is live. The success screen owns all three.
   const handlePaypalCaptured = useCallback(
     (result: PaymentCaptureResult) => {
-      router.replace(safePaymentRedirect(result.redirectTo, '/dashboard?purchase=success'));
+      const params = new URLSearchParams();
+      params.set('order', result.orderId);
+      if (quote?.quoteId) params.set('quote', quote.quoteId);
+      if (courseLabel) params.set('course', courseLabel);
+      if (quote?.totalAmount != null) params.set('amount', String(quote.totalAmount));
+      if (quote?.currency) params.set('currency', quote.currency);
+      if (deliveryMethod) params.set('delivery', deliveryMethod);
+      router.replace(`/checkout/success?${params.toString()}`);
     },
-    [router],
+    [courseLabel, deliveryMethod, quote, router],
   );
 
   if (authLoading || loading) return <CheckoutReviewSkeleton />;
+
+  if (planBlock) {
+    return (
+      <PlanBlockedScreen
+        block={planBlock}
+        course={courseLabel || priceId}
+        professionLabel={user?.activeProfessionLabel ?? null}
+      />
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background-light text-navy">
@@ -506,11 +571,86 @@ function CheckoutReviewContent() {
             </div>
           </div>
 
+          {/* Every package carries a proof-of-payment WhatsApp route (spec §7) — it sits
+              outside the region tabs so it is there whichever way the learner pays. */}
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 className="text-sm font-bold text-navy">Already paid, or need a hand?</h2>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Send us your payment proof on WhatsApp and we&apos;ll verify it and activate your access.
+            </p>
+            <SendProofOnWhatsAppButton
+              className="mt-3 w-full"
+              course={courseLabel}
+              amount={quote?.totalAmount}
+              currency={quote?.currency}
+              reference={quote?.quoteId}
+            />
+          </div>
+
           <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs text-muted">
             <ShieldCheck className="h-4 w-4 text-success" /> Encrypted, secure checkout
           </div>
         </aside>
       </section>
+    </main>
+  );
+}
+
+/**
+ * Terminal checkout block. Says which of the two things went wrong, what it means for
+ * this learner specifically, and gives them the two ways out (a package that does fit,
+ * or a human on WhatsApp). A toast would not carry any of that.
+ */
+function PlanBlockedScreen({
+  block,
+  course,
+  professionLabel,
+}: {
+  block: PlanBlock;
+  course: string;
+  professionLabel: string | null;
+}) {
+  const isMismatch = block.code === 'profession_mismatch';
+  const title = isMismatch
+    ? 'This package is for a different profession'
+    : 'This package has no content for your profession yet';
+  const registeredAs = professionLabel
+    ? `Your account is registered as ${professionLabel}.`
+    : 'Your account has no profession set yet.';
+  const explanation = isMismatch
+    ? `${registeredAs} Every package is built around one profession, so the videos and materials you would get here would not match your exam. Pick a package for your profession, or message us on WhatsApp if your profession is recorded incorrectly — we can change it for you.`
+    : `${registeredAs} We have not finished building this package's content for your profession, so we cannot sell it to you yet. Message us on WhatsApp — we will tell you when it is ready, or point you at a package that already fits.`;
+
+  return (
+    <main className="min-h-screen bg-background-light text-navy">
+      <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+        <Link href="/catalog" className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-navy">
+          <ArrowLeft className="h-4 w-4" /> Back to catalogue
+        </Link>
+
+        <div className="mt-6 rounded-2xl border border-warning/30 bg-warning/10 p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
+            <div>
+              <h1 className="text-xl font-semibold">{title}</h1>
+              {course ? <p className="mt-1 text-sm font-medium text-navy">{course}</p> : null}
+              <p className="mt-3 text-sm leading-6 text-navy">{block.message}</p>
+              <p className="mt-3 text-sm leading-6 text-navy">{explanation}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/catalog">Browse packages for my profession</Link>
+            </Button>
+            <SendProofOnWhatsAppButton
+              course={course}
+              variant="outline"
+              label={isMismatch ? 'Ask us to change my profession' : 'Ask us about this package'}
+            />
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

@@ -1,0 +1,628 @@
+522036cf9f04c48ebcdd943aead792cd311cbcbb26bc134630c3afc023bbf4e4|532926|Listening/Jahshan/Sample test 5|Listening-Sample Test-5-Question-Paper|4
+e9a6e509476c77d84af9be2f6b8bf18cc59d511f9d7908227fd6ecbcde3a103c|1117444|Listening/Jahshan/Sample test 5|Listening-Sample-Test-5-Script|4
+21b61d59e69467f2fa69d06f3b5cb002b26c46c86550a1a6db70ece638a38543|339306|Listening/Jahshan/Sample test 5|Listening-Sample-Test-5-Answer-Key|4
+fbe8fc3a7bc92b88c465f2218eb6956fc3827e9c3fec771672fec47369e41989|34502263|Listening/Jahshan/Sample test 5|Listening Sample Test 5|4
+f37425f1f84c94c27320286c60488d94ab02fd31b174fd6f6826660b506c7932|828586|Listening/Jahshan/Sample test 3/Listening|Listening-Sample-Test-3-Question-Paper|4
+80bcfb199d110acf6f7bbef230d143db23daf0fc805f9311bea8ef78a9d591ec|377694|Listening/Jahshan/Sample test 3/Listening|Listening-Sample-Test-3-Audio-Script|4
+77288c0ac253b20d8fe894ba1f330aa93ce9d55ca54b5e774a344b9283f7c75a|263963|Listening/Jahshan/Sample test 3/Listening|Listening-Sample-Test-3-Answer-Key|4
+1f4bf40fdb622fc060ed6726164f9350428422edcfd16b15828a2a00af66d45a|34518412|Listening/Jahshan/Sample test 3/Listening|oet-listening-sample-test-3|4
+03697989fd06c261aa15c70f595d5f276b1888e42b19c8fcb0f773c15afd04b4|790006|Listening/Extra Listening Exams/Questions And Answers|42|4
+0b927409df3065131a9327e1961e898d7f7f26090ba1ee47ea5d472356543ec2|814061|Listening/Extra Listening Exams/Questions And Answers|41|4
+baa17ff1fde9dd371651f00b897d8656a840fd44783a003fc2a5feab047238d5|15773473|Listening/Jahshan/Audio/3- Sample Test 1|3-Part C|4
+dc084db955f1fd0c226c791ad34003e8644a0ea2cc0f8d9ac5a2d2a05ff5c622|12729331|Listening/Jahshan/Audio/5- Practice Test 1|5-Part B|4
+a3f03042f4f360d49224bd88e5b6258ea78f6aa948ff797e37f9e3ca2c46311d|8548631|Listening/Jahshan/Audio/3- Sample Test 1|3-Part B|4
+ae2081028bf7aca26aaab48db5a388c615a883b3264a5bc73172d05865bd44b7|1274467|Listening/Jahshan/Audio/1- Kaplan Startegies and Practice Set/Part A|Track 3|4
+c9493b1a2dd1c557f653d91ed9753f1a0f030abf70988e0ab86e9853dc8f7cb0|457231|Listening/Extra Listening Exams/Questions And Answers|46 answers|4
+753c85c86f52004487082856e216ddad9eb558c4dcc0194678dc1ee39b538b2d|683548|Listening/Extra Listening Exams/Questions And Answers|44|4
+a628a61707ca95d728002fceab7ef996c3e3442c6ee97aa4a362562c126ba23e|798580|Listening/Extra Listening Exams/Questions And Answers|45|4
+e3706e9729349b8a4cfc01dcef13c87878f11ee159158ecc8a48563c85d7793b|153|Listening/Jahshan/Audio/8- Practice Test 4|8- Practice Test 4|4
+ee34c40828319f3133bde933230caf92a96c0c242c17589a96630b86a5191988|8332546|Listening/Jahshan/Audio/4- Sample Test 2|4-Part B|4
+49d8190a73c357f0ebc3587b91443fec5676399ae6714322f835f9e9ab9057ca|12253839|Listening/Jahshan/Audio/4- Sample Test 2|4-Part A|4
+6c4cc8d4bde92adecd9aed71a6e9a3bdff81b173938a01ef99dae0595f355ddf|808725|Listening/Extra Listening Exams/Questions And Answers|43|4
+a6104bdd0e1885af0cef628cf2787da416818cc053af98d8156fd17599409dea|800378|Listening/Extra Listening Exams/Questions And Answers|46|4
+ba7874a73e8b945161a7a016c7cbc25b587f43e15ae3660e74548d24bb4c78ba|6402891|Listening/Jahshan/Audio/7- Practice Test 3|7-Part B|4
+bc5381030daced1515d88f15ffce92ce55772cff3bbdddbc95d2e367b3fedaa5|5997956|Listening/Jahshan/Audio/9- Practice Test 5|9-Part B|4
+5b49f7fd305c756f61fd9a011f72b36a8d900d770540e0df0a59af87c73165cc|10694015|Listening/Jahshan/Audio/3- Sample Test 1|3-Part A|4
+daf0fd2fdc9b55e586a0adc76d2f5ca57b902fc1636c2cd4f0e49b0f4410b551|15306049|Listening/Jahshan/Audio/5- Practice Test 1|5-Part A|4
+873973be08e260920233eff1081df8af61ed1b66459441b5f98352cc295468d3|11707420|Listening/Jahshan/Audio/6- Practice Test 2|6-Part B|4
+2d035ef1c7c5ffdbf8630b07565a37645a2e3b8d74d4632db00957d41e17631a|11418757|Listening/Jahshan/Audio/9- Practice Test 5|9-Part A|4
+887cfd3669f99bba383271743d9ca2075f172acdfbce22db6a1391bf118a7107|17146469|Listening/Jahshan/Audio/4- Sample Test 2|4-Part C|4
+e72f6e1cd9b6b3e06d7f5cd11605aa58e955356ceb6373272f0f934b03435267|8946616|Listening/Jahshan/Audio/15- OET Online Test 1|15-Part B|4
+2cf4dc2f3f3a0a655c97b18bbf96d2d83fcd646977b94ce849b6e3acf3987a5f|10399592|Listening/Jahshan/Audio/10- E2Language Test I|10-Part A|4
+05f04183cf01d6719a1c5e4a30f5b5a205093ae0ba76fea4bb8338552f2cac10|7793381|Listening/Jahshan/Audio/19- OET Online Test 5|19-Part A|4
+71592bda20e38cf205fbdb5b62d53e3e858d79a53baa7d63ace87c267b4ad48b|17805656|Listening/Jahshan/Audio/23-IRS Test 3|23-Part B|4
+d9e4400d883ee35a21c5064a12d2fc9987be15467f83571a946706b65846eace|14642896|Listening/Jahshan/Audio/20- OET Online Test 6|20-Part C|4
+5cbceb92dd31a0c82c330ed57170a533f389faa8594b5cb0cd2c57d07bebd3a2|3823150|Listening/Jahshan/Jahshan Script|7- Practice Test 3|4
+ddd09e67e738a3a5b918cbe20a03097355e2f15e57a55e4d44a2ce7288d9fa77|730076|Listening/Jahshan/Jahshan Script|10- E2language Test I|4
+18e1f6a5dba314a85cbfce4a5418035623c93f655c478f5e2160ca140a56f584|18038326|Listening/Jahshan/Audio/25-IRS Test 5|25-Part A|4
+a96e5019141656414199a3f35007ae29ecf05e1d3ecfa9186abf91d165517bd1|31444709|Listening/Jahshan/Audio/23-IRS Test 3|23-Part C|4
+37e408b3e57df1b1d0cd315e06c0504b6fd55b86ca7747192c9ea5cc1982d437|1083434|Listening/Jahshan/Jahshan Script|14- E2language Test V|4
+92f323939561eae641fb201d59535f6892b9cab2d31f4952ba98fad1266a6cf8|527062|Listening/Jahshan/Jahshan Script|19- OET Online Test 5|4
+e48b7c5dbd6df37c836c1aec88caee13da4dc29c8797c0ceac032a96e3fbc756|534289|Listening/Jahshan/Jahshan Script|20- OET Online Test 6|4
+f8e4db8dbd8dda83672d2b077a465c69df4b0fdc01b9da53b44382cd058c3b04|734349|Listening/Jahshan/Jahshan Script|25- IRS Test 5|4
+1e73d8cd17e9e352c8c47413ba8cf699ac5529feaadbb7d36d3f2129b5f03768|197610|Listening/Jahshan/Practice test 4/Practice Test 4|part C|4
+ba0bac9841f7fa6760010a6555bfe8c04f5ab27a306f07b3dc69b7cd30f402f9|7452604|Listening/Jahshan/Audio/10- E2Language Test I|10-Part B|4
+e88c823b938e36786f60a11e553fc99705867b9a3957de159fb72db4352f40d1|16535831|Listening/Jahshan/Audio/9- Practice Test 5|9-Part C|4
+6de02b94e3e418a2813f7e7085028ec39bace9a5d4427942650efc029f4956f5|12759635|Listening/Jahshan/Audio/14- E2Language Test V|14-Part C|4
+e5b70c74ebb16311ab21bce0a3ee8d8491e9b936e17df130b51ffdb550a9751f|15589425|Listening/Jahshan/Audio/7- Practice Test 3|7-Part A|4
+86f6064e4fdd5f2af9d50069332b15aea43ff1e41f6bb314534c2fc0803e98cf|9006802|Listening/Jahshan/Audio/16- OET Online Test 2|16-Part B|4
+31d83103944801d88ef58968d9c498c6c2df3f756f9c5641535028ad8caeddd9|14290556|Listening/Jahshan/Audio/17- OET Online Test 3|17-Part C|4
+0a95309c061ed4d0010db28a7a4fe9478dc999f45a827edfe23d353fac0afb41|14458994|Listening/Jahshan/Audio/19- OET Online Test 5|19-Part C|4
+4d70eeb46678481ebb5b23ab60eaaa74648f67318fecde49ebf802e98f227928|775333|Listening/Jahshan/Jahshan Script|1- Kaplan Strategies Practice Set|4
+ab3758856c386591cff5ba38e243d3552a904a8e5b4dcc1d4f05fc0fb5bed45a|684779|Listening/Jahshan/Jahshan Script|2- Kaplan Practice Test|4
+46baf8792bd2152513d21facb547be9a53bd955be5beb2e946d2db962f5cb780|684435|Listening/Jahshan/Jahshan Script|4- Sample Test 2|4
+813eb4ba46250e324a4bd6ecaff953450ee1d22f3e7e2fd37f3c61ef03e22c12|13986345|Listening/Jahshan/Audio/22-IRS Test 2|22-Part B|4
+6980c01f015f3863038897d55bd683c3b5b140055d9cccce492f694302fa8833|15900389|Listening/Jahshan/Audio/24-IRS Test 4|24-Part B|4
+c60646750eb7a98872c595ad859eccfcd1c4147f18165d38fad83c5fd51eec5c|747490|Listening/Jahshan/Jahshan Script|9- Practice Test 5|4
+8d24187220c7c82d1302efc110030ef31e8e9336f84686de62c8e11f8739dfdf|453798|Listening/Jahshan/Jahshan Script|15- OET Online Test 1|4
+9478386a9069736f89edef81b73926997f6e4ea0564bc7234e4310097fc8bcec|17211943|Listening/Jahshan/Audio/6- Practice Test 2|6-Part A|4
+3a5f324f8de7d813928dbb4725929cc2e94904c2193eec811c2ac14c336424df|8216836|Listening/Jahshan/Audio/14- E2Language Test V|14-Part A|4
+fde9c65c951fb1d901062f4737bd2bbaa4f507845f29861b00fa76665366a352|9925894|Listening/Jahshan/Audio/20- OET Online Test 6|20-Part B|4
+55e5ec9202e36c5a8defe0b63d9d58f8f46a1ccc1a6f067c49de6eddf649bf67|10100601|Listening/Jahshan/Audio/19- OET Online Test 5|19-Part B|4
+c9354af850b9df8ecdcc90930c8f75f99786499bd1e0ba11033ea48593be9c7e|619897|Listening/Jahshan/Jahshan Script|3- Sample Test 1|4
+118bf97a266f5b75ce0ac0ff39a47884d596a75b4655ed738bc080a0c0aaa782|4498369|Listening/Jahshan/Jahshan Script|6- Practice Test 2|4
+03468ae5fe4fbd556e5ce663ea292da77d2f4d823447db2d931303385ed5934a|747521|Listening/Jahshan/Jahshan Script|8- Practice Test 4|4
+4c75ff004f0145bb52fb63ede506761c82a48f5b994a4e3ff520b3da5cad055c|4043595|Listening/Jahshan/Jahshan Script|5- Practice Test 1|4
+1c32ccd96a08491cb727383744248b6d580fdda5ca48ebee813d194419e76973|737008|Listening/Jahshan/Jahshan Script|11- E2language Test II|4
+3db36c860845e7e8783095c7c3e626877fc28ae78ad4af303f4fd7ec1600d78e|22441868|Listening/Jahshan/Audio/23-IRS Test 3|23-Part A|4
+2c206e3d9cef1a7dcb8c14e8fce6985572829856db3436fac0892a4c5c6e1dd6|734427|Listening/Jahshan/Jahshan Script|23- IRS Test 3|4
+9fa4a9ae6b008ea4bf92b689d49a45d7f2116632008039f384df0ceaf053b272|75581|Listening/Jahshan/Practice test 4/Practice Test 4|part A 1|4
+ebdc3c459880b2a30d47a89b63a2c99e425426a388ffd69a25d6cc218e2c4524|743975|Listening/Jahshan/Jahshan Script|12- E2language Test III|4
+42a159d14b8295dfc1da0fdc086ce6968cd22920ca0ea334cdf27cc417fe77d8|727271|Listening/Jahshan/Jahshan Script|22- IRS Test 2|4
+117f4df7f2d71ecd053dc7f804b3719e7cb571d933f80dc9b376e3826ed803cf|782044|Listening/Jahshan/Jahshan Script|16- OET Online Test 2|4
+67aef542753d3d3c77b521627b4bf80fff8b38b6926047a964078c7af84cd0da|526260|Listening/Jahshan/Jahshan Script|18- OET Online Test 4|4
+e1bd7fe1a976fe4a86761a19175a15726899fa940b4780aa07366d21bb97552c|817|Listening/Jahshan/Practice test 4/Practice Test 4|Answers|4
+8895b2cf6b07237a4fe100bcf31d7e13dd5c5a972b787ea8361e436a8316ef84|727260|Listening/Jahshan/Jahshan Script|21- IRS Test 1|4
+257d5b832980e9cf9af036e7bb542a541dd92add08de2d12e5f2b78de65fc9e1|1073866|Listening/Jahshan/Jahshan Script|13- E2language Test IV|4
+10fb4ff775f1c1dafc16155c5f088b14affaccf1f5955ccfb7c9c488739246ab|498540|Listening/Jahshan/Jahshan Script|17- OET Online Test 3|4
+12667000661941aa4420a6014e5f61d08aff217365cb1cb419e5e65e9fb4f116|1644|Listening/Jahshan/Practice test 4/Practice Test 4|part B|4
+002109f4cd6127552b5e167685179cdf204656dc05c713242e4ff93873314a85|253916|Listening/Jahshan/Practice test 4/Practice Test 4|part A 2|4
+a65ab073ffa4f3158ca9a7fc25d6fd31bf498df10b0db0329cfb587504f63757|734229|Listening/Jahshan/Jahshan Script|24- IRS Test 4|4
+e5fb896d341dcd4545a1215aafc877472582254ce8d2e2d865c5160d0d6d79fd|19453641|Listening/Jahshan/Practice test 4/Practice Test 4|part C|4
+e41682e2e1cd98d2e87b209456e177383f9a76cd44ac91bc70d8b26077a699cd|250713|Reading/Jahshan/Jahshan - Reading Sample test 3|Reading-Sample-Test-3-Answer-Key-Part-A|4
+e41682e2e1cd98d2e87b209456e177383f9a76cd44ac91bc70d8b26077a699cd|250713|Listening/Jahshan/Sample test 3/Reading|Reading-Sample-Test-3-Answer-Key-Part-A|4
+4320214f6f695304f6248ccc194fa79c74ad31ee1f06846992058432ca79ba99|11964082|Listening/Jahshan/Practice test 4/Practice Test 4|part A 2|4
+40fe3ab11710df5bf362000e9f68eab218e556f8b76780dfd4c0585d5e6ccfa4|1142316|Listening/Jahshan/Sample test 3/Reading|Reading-Sample-Test-3-Question-Paper-Part-A (1) (1)|4
+40fe3ab11710df5bf362000e9f68eab218e556f8b76780dfd4c0585d5e6ccfa4|1142316|Reading/Jahshan/Jahshan - Reading Sample test 3|Reading-Sample-Test-3-Question-Paper-Part-A (1) (1)|4
+9440f9b82882e0fdc1bccf4ea118d60ce7a2598e159e50a6de4bf5957217ad85|800825|Listening/Jahshan/Sample test 3/Writing|Sample test 3 writing|4
+b845146132d08b45523c843dab29136f14e20da9eb557e4901a774f242e13067|372492|Listening/Jahshan/Sample test 4|Sample Test 4 Listening script|4
+fcbd89ebdc69164a3814f8ab239eefd68b9f13b8ab1fa8e74ea5e5071146e8f8|3540572|Reading/Extra Books|Anna Hartford|4
+5bdb0567bf75553734aa32f4d08c35e0414116f70aae8c01e4a359af4c97b66f|240868|Reading/Jahshan/Jahshan - Reading Sample test 4|Reading-Sample-Test-4-Answer-Key-Part-BC|4
+d04e14a1bc8d8be63c65a02504cf1c39c518049b769c68eb968b1ecd2b604475|803763|Reading/Jahshan/Jahshan - Reading Sample test 4|Sample Test 4 PtA Question Paper|4
+8e41693794b1245fd269342e1c3ff3151638f6ed83e7177f28bd30eaf31c8f19|601277|Reading/Jahshan/Jahshan - Reading Sample test 4|Sample Test 4 PtBC Question Paper|4
+dd7180f1628e10028481e28d8b51e6a56688a6c8b8c78537abaae40cb92212f0|74846|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|Part 1|4
+cb8aa6464e30d457c5d637db06aa7c6573d6a6b38a26435fbed276e327af6ed6|76562|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|part 4|4
+a0fb71d15e529971d296353c408fb4f8aaf296b0153751241dc209bc54991bd1|73190|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|part 5|4
+02f1c8470dbc4845a083e212ea91aebbc40d7829f4c78f4a292654accc524b51|732203|Reading/Jahshan/Jahshan - Reading Sample test 5|Reading Sample test 5 - Reading Part A Text Booklet|4
+fe232ae49b8a936dd9faadb20ef84285e55d63cc3acea4ce7f862edf5ffe358b|87199|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 10|4
+3a9273e96b025d03139218a7e5bb4da5ac62590c653884403b1a9be7800e0c3b|72172|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 14|4
+c66ed2043d0594a328c3b46d8397775e222248538dca9749613274859e11d62a|77137|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 13|4
+6338f9eb017e951809ca701fd642335db65ccf29bcb9ba0c17a0db958027b515|77103|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 15|4
+090b3b30121aa6cd9586616ea7a70c029c11e22a1c929965a7daf81e9cc7c713|13101526|Listening/Jahshan/Practice test 4/Practice Test 4|part A 1|4
+087272945f696a9abc0ebf62b54331043089d1b1cc7fe9444946eba55fc26078|9532826|Listening/Jahshan/Practice test 4/Practice Test 4|part B|4
+590143eb54612193e1ff01881c1de49c137b6b2bd758485574ef5aa3c3994dee|120752|Listening/Jahshan/Sample test 4|Listening-Sample-Test-4-Answer-Key Jan 23|4
+00858a83d20c743d56c697a98807846d9d0c6c7a78b0370b31d347ea673f3708|718280|Reading/Jahshan/Jahshan - Reading Sample test 3|Reading-Sample-Test-3-Question-Paper-Part-BC|4
+00858a83d20c743d56c697a98807846d9d0c6c7a78b0370b31d347ea673f3708|718280|Listening/Jahshan/Sample test 3/Reading|Reading-Sample-Test-3-Question-Paper-Part-BC|4
+af706012bb58a3df03b0419d157c3cf6fd3cbde28ea64262d01fa6856c63bfbc|592160|Listening/Jahshan/Sample test 4|Sample Test 4 Listening QP|4
+bfe70c7d6bc2a95e2179549e26c98fad88dac36c36b9bb31111f16566bb88601|841337|Reading/Jahshan/Jahshan - Reading Sample test 3|Reading-Sample-Test-3-Text-Booklet-Part-A (1) (1)|4
+bfe70c7d6bc2a95e2179549e26c98fad88dac36c36b9bb31111f16566bb88601|841337|Listening/Jahshan/Sample test 3/Reading|Reading-Sample-Test-3-Text-Booklet-Part-A (1) (1)|4
+5069ec07b07f052ac17e0fa4081044b355ebedfcc05c0b6f03429cd2d023b198|165903|Reading/Jahshan/Jahshan - Reading Sample test 4|Reading-Sample-Test-4-Answer-KeyPart-A Jul 23|4
+8d806c98135383072ffbf1c65e8024135b67d7c7212d05b5ec5b7af06d7658ca|700336|Reading|OET English only - 1001 Common words rebranding By Dr. Ahmed Hesham|4
+09e8e40ec9fb3fdf8e2a9374086c708b659e3564e8b9fb3823280ca16bbcf470|605309|Reading/Jahshan/Jahshan - Reading Sample test 5|Reading Sample test 5 - Reading Part A Question Paper|4
+61e209dc935316b6787b8e6b47d5afecd81030cf5af665eefce11c6dac99572d|75179|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 11|4
+608bd274a4515b436de39acaba589c2a5aba4ae1394984de6019268a79778b6d|75011|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 17|4
+99a507cb8c29d7256e282c817b69ff8644af81899f450bb859c2493a964ff002|78568|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 21|4
+89e81773495f602d86130d16827038cdedb2d3052ebda12c54cf0288270c7026|77651|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 20|4
+fb5f1eac34b61e69d1ab7da065c8bd18d5bf8a7b32a6401f27e7073d3b78da49|77263|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 22|4
+ab60aa4c13d42db938085a4ba296b7068a47de7a9b9dd1e6bb0b747f1c5fd091|186495|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 2|4
+e3f73457301839b0ab69c9f033b2f1fc6431b2a65db7bb901d39959c686a9560|186380|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 6|4
+6a91c9145337ce6772a566bc07f128be42167522c107bca786a1ef9cc3de7f4d|195534|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 9|4
+89e2515d8e6696a510bccff9ac8e59422ac23b636046f6200c540e8de047785d|206378|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 11|4
+b47e3007a279991af67fd1896458864b43789345b1f8f7844847e320bec754c3|199301|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 12|4
+e2e6b72104d4c9c0849f7a2eaf3c453edc8417e70e92d2323bd41b567c587220|217683|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 13|4
+27053efd7abee957bdcc8c0a137926dbe63eb1264076d3faaa86a85f6f462d14|176666|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 16|4
+51bef2a0163caabbdb63edb9914f3e3c34820d04571ded1b4202205088e8f1cf|189374|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 18|4
+e1a2ca3008877bc11003ea29973cdac4abdbf1569d4750295401feb24974c7cf|223880|Reading/Jahshan/Jahshan - Reading Sample test 3|Reading-Sample-Test-3-Answer-Key-Part-BC (1)|4
+e1a2ca3008877bc11003ea29973cdac4abdbf1569d4750295401feb24974c7cf|223880|Listening/Jahshan/Sample test 3/Reading|Reading-Sample-Test-3-Answer-Key-Part-BC (1)|4
+36f0d482d2aa00dab0fdafcca928ec3e137b91d2b24270f86442ae3e2d06c4b6|1226677|Reading|1001 Common Words in OET|4
+d23d0cbf06fbbea8a7449e847c25c6b07a70a452e9dd7488ffde6dd2e5ee5585|666331|Reading/Extra Books|Jayden Book|4
+95285b9293f59f01ca355eeb805ba4f009dab84c4cd53643ec85435c4db7f4a5|4137567|Reading/Benchmark|BenchMark Reading Tests|4
+99b94f9982400cc7807e1c54f15cadedbf840be478bee56593e05fc8840f49b2|165246|Reading/Jahshan/Jahshan - Reading Sample test 5|Reading Sample test 5 - Reading Part A Answer Key|4
+aa15f88bded5f4417413b8b1ded177693553542b730e37921b43fabad34a96ea|653224|Reading/Jahshan/Jahshan - Reading Sample test 4|Sample Test 4 PtA Text Booklet|4
+02fb4bcd275bd2464c12cdc2cda099eb65e058658c6c8dd4beebdc4173aeb0d0|99170|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|part 2|4
+80bba9e3527a3a5a4fb0649d607583b3632f0001df75c9ba8905d8dd1c5b6511|82991|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|part 3|4
+3d747c2f74868755ef2c84533b6de9ae7c8ef98a8e57314b2b3451863b8c443d|88000|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|part 6|4
+a3c2746d02fa57fc14c74dda286ca6a13199f25ba154649d9bbfe4b38ef38226|86035|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|part 7|4
+c5952f13b2a9a94507cd2a596ab074adb080a22d4fbe8e2847faee3b7468b0c3|72775|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 8|4
+bf35bdabaf84f72ca24b4274a409a2079666360976a00c12fa10d874b7e4e459|77249|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 16|4
+c77fe5685d770467045da8e767082657dc0fdde5e2b46cd5230ba9e84e2928a3|166634|Reading/Jahshan/Jahshan - Reading Sample test 5|Reading Sample test 5 - Reading Part BC Answer Key|4
+8df14612baaa9adce2fb47e0290e5cb1049ab4c41c1fba80fcaf1a9491995b66|73585|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 9|4
+b6f40ca24893f3d3b66077f56f76c6d92a14dfe3fae488aebaf8ca4f8f4c2c85|73888|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 12|4
+f8535eec355e3c03d036121b81c0c2aff8ab7c53966024431f9eb96142181105|76059|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 18|4
+b32062aa1061c799d0e43349b87632f258e4dbefb5e2d2b67495258033913f5c|631517|Reading/Jahshan/Jahshan - Reading Sample test 5|Reading Sample test 5 - Reading Part BC Question Paper|4
+e7460fbdabe3b8540115f48cbc5b2a45fa61b16c0caa00c6792e163d7df8a5df|78270|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 19|4
+e9a012b9eec6efe4bf00964184dfe209a44e97edc308f50fa8cc5c9a2b736adf|78520|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 23|4
+a8e30cde3e8d386906949bb6dc5b570c0e67ee503f7555dbf0a2c21ee74ca046|78924|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 24|4
+048fcf50014ad77399fcba46f721283b8b50f9b4a4ffda73cecec50f0b83e65c|195699|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 1|4
+028a77c487e993e184033481990d728a82968e06fe00b190d1fc159f724b8c08|212917|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 3|4
+16d1dd9f23a45d22578da9bb99a917baeb9b5fd124ca162688c536ffb1b6e68b|197588|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 5|4
+5df53859f2d167ece239afb8078fdb41a89a03561633c490220a7d0a686c0b52|185812|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 4|4
+2d505710b2918b5edfd038ddcfa0026a8bdd4f086b654c89760f4790bacb6f1a|203054|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 7|4
+574d23d11f44b8f89dc6044fd7eb62bdc9404730aa6ea95d0a13558ec53051f3|205845|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|Reading 8|4
+2d499290068491a7f9140b8f61c9454eda2e248e68a77af0ffd2c6adf1ae85a4|193716|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 21|4
+08fb441cbe745d7c1132fc98808ea374cc4aacec57eb5486f233f8d3c2b02fa9|132432|Speaking/Medicine/Official Samples|Speaking Sample Test 5 Medicine|4
+019c6e5f9eaf1d6ad1732a144cffe35e6a3e1d2bce42b060fb665f1a33082012|507510|Speaking/Pharmacy|OET Speaking Pharmacy - Official Samples|4
+eeced7240a5a59397e75c6d065430c6c532634287138f786678671415d7be2a9|78131|Reading/NEW READING EXAMS ( More difficult than the real exam )/Answers|PART 25|4
+b1a35f139fc2ac035f01655e7dce34ac615f1b3c611ff318a3f1c2b8e59b70aa|444748|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 14|4
+c63f85205864ef3fd88425d1890e599f919a734ae6e5552e112b7437773a1a8a|175250|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 15|4
+09228962347e10d9b549e57ddd5c2ac40bc2a8605ff1cb49ea31b1c0ddacf33c|176695|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 17|4
+2c3fb430b9fa87b8c70c90723ceeddae8cf97ed5d16990790f77b3b802eff85e|200578|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 19|4
+0910b5bf8ce6913142d9481278cbce20cb72759f9ce909968e82208167e6bd47|203784|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 22|4
+146ac92a35b434011155fd080db44ebf36e953209911815933c1d0a6f46676d7|89888|Speaking/Radiography|Speaking Intro Qs|4
+146ac92a35b434011155fd080db44ebf36e953209911815933c1d0a6f46676d7|89888|Speaking/Pharmacy|Speaking Intro Qs|4
+146ac92a35b434011155fd080db44ebf36e953209911815933c1d0a6f46676d7|89888|Speaking/Physiotherapy|Speaking Intro Qs|4
+146ac92a35b434011155fd080db44ebf36e953209911815933c1d0a6f46676d7|89888|Speaking/Nursing|Speaking Intro Qs|4
+146ac92a35b434011155fd080db44ebf36e953209911815933c1d0a6f46676d7|89888|Speaking/Medicine|Speaking Intro Qs|4
+146ac92a35b434011155fd080db44ebf36e953209911815933c1d0a6f46676d7|89888|Speaking/Dentistry|Speaking Intro Qs|4
+27edc5f4b8af813703a338ad8802d8cf65f7e84ee63c1127a5d9ed14f54e319a|190257|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 23|4
+95cf56caa6798ecae008cb605b9d5588a8b86b8c41fbe7da7c369c65c3c6bc8c|525626|Speaking/Radiography|Speaking Criteria|4
+95cf56caa6798ecae008cb605b9d5588a8b86b8c41fbe7da7c369c65c3c6bc8c|525626|Speaking/Physiotherapy|Speaking Criteria|4
+95cf56caa6798ecae008cb605b9d5588a8b86b8c41fbe7da7c369c65c3c6bc8c|525626|Speaking/Pharmacy|Speaking Criteria|4
+95cf56caa6798ecae008cb605b9d5588a8b86b8c41fbe7da7c369c65c3c6bc8c|525626|Speaking/Dentistry|Speaking Criteria|4
+794a49f1cb06c7153e15e4e95b313b94dac8ef2b3a2abf3ea2e7bd414f3b556e|655671|Speaking/Dentistry|OET Speaking Dentistry Samples 1 to 5|4
+4e1ecd271385a92b4c98dfa5a10cec2e6b8c778da097c0172ff7144b589ebfcb|589401|Speaking/Nursing|OET Nursing Cards|4
+5799e377b16fddd871f9851f991896d89a9cc040426bcd30e638148a31c88723|8040519|Speaking/Nursing|Speaking Recalls 1|4
+8fde3fc878f2542bf8be37ce85b29780632c7087662b7aab6d70df28bb26f909|180269|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 20|4
+ea83f9a44c7a11bb8c38e09c0baf76d51c4d9a4a5e129eea512ea1e5e0a1dd4f|1588516|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|Reading -1|4
+ea27dadc46be7bed4dd0bb44bc3a2f1748aefb85c54922cf8ac05345c10b926a|483502|Speaking/Medicine|Speaking Recalls 2026 - Speaking Workshop - New Medicine Course 2026|4
+ac185f37e391a8d78f70bf496594f4949dbc3b7255b38e63569ffd72e3ce9b4a|178131|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 25|4
+1558f9fdc25b6bd0761067ed7827e2ded9e77ad73588475627922181461174f6|228294|Speaking/Nursing|Speaking Assessment Criteria|4
+6fdf7631b7c3b5798366e3441d7cd55875112f5a5d9e54c29eef1a28d6244fb1|2125541|Speaking/Pharmacy|Speaking Pharmacy Cards|4
+1a1bd76189d96fe7ad7919c7f02681e046d803d4f1c6fdd62a105722d6a28494|15760475|Speaking/Pharmacy|Pharmacy Extra Speaking Notes|4
+2df478fe2c90e3dd7ff3de85a98197e7c64467e17789ba3974216054cd482a37|27675|Speaking/Physiotherapy|OET Physiotherapy Speaking Cards - 2026 Recalls|4
+0e73c44185fded979c5bc6c3337efd2552e2d969b6d422dc2e250510ad48a652|502617|Speaking/Medicine/Official Samples|Speaking Sample Test 1 Medicine|4
+a02a4f0a19c359ac4610fb48c7299688d8c46e616611519a2d6264ea2511a055|196739|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 24|4
+8072c86f18ffab5f6a865bc02d99c707138c31f93a890e6b021746e466186253|502900|Speaking/Medicine/Official Samples|Speaking Sample Test 3 Medicine|4
+2227b9d706fd2c1d3c9c0882d41306856d102d9d0d36453d2f634241caf278f6|138850|Speaking/Medicine/Official Samples|Speaking Sample Test 2 Medicine|4
+c95d5850a48361163b40b08e198bd90d4d93fb31fffe974e01d4e737ad5e504e|132754|Speaking/Medicine/Official Samples|Speaking Sample Test 4 Medicine|4
+ecd26bafda426f70cd93f538de386cb11aef83fd9e342ba415a1fa0f44673542|53354|Speaking/Radiography|Radiography Speaking Cards - Dr. Ahmed Hesham|4
+4328fc4400577f980f308e579d07a444d39e0bebf8563ab23b59a4792e0d8573|14863096|Speaking/Nursing|OET Speaking Cards For Nurses (New)|4
+4df9d76448840ea973936270424f726bcdbd13158b5965b39c50c0f833f8f395|101333|Nursing Profession/Folder 1|file 1|6
+968b2e52286cc0a05501428d441f50792cb4a7b1fdae7d74d6cb150a17804b9b|9201874|Speaking/Pharmacy|Pharmacy Futureland 2|4
+4c252484aaf97edea5efecab7349d7d23ba7d6ae45a5616c8de6caff4654ed9a|565851|Speaking/Radiography|Radiography Speaking Guide Answers - Dr. Ahmed Hesham|4
+fd524c143b0e1239f23d24050cacdfb04070ecedd3922fd866f5a3f69287599e|8287397|Speaking/Physiotherapy|Futureland for Physiotherapy|4
+6aa32bc0c680a2184620de24836d4038f1214a233b582e2446a39581a41e75f1|181860|Writing/Radiography|Writing-Booklet-Sample|4
+6aa32bc0c680a2184620de24836d4038f1214a233b582e2446a39581a41e75f1|181860|Writing/Physiotherapy|Writing-Booklet-Sample|4
+6aa32bc0c680a2184620de24836d4038f1214a233b582e2446a39581a41e75f1|181860|Writing/Pharmacy|Writing-Booklet-Sample|4
+6aa32bc0c680a2184620de24836d4038f1214a233b582e2446a39581a41e75f1|181860|Writing/Medicine|Writing Booklet Sample|4
+6aa32bc0c680a2184620de24836d4038f1214a233b582e2446a39581a41e75f1|181860|Writing/Dentistry|Writing-Booklet-Sample|4
+aaeabff51601255023601069b71a75008e16a396ff60190991b8e60c416d8f86|68026|Writing/Medicine/Case Notes - 2026 Recalls/1- Routine Referral ( Mr James Greenbaum )|Mr James Greenbaum|4
+c167972acd003f90402e9d9e0f1a870c623fdad2dd38545c02859050f6158f81|480294|Writing/Medicine/Case Notes - 2026 Recalls/7- May 2026 Recall ( Urgent Referral - Mandibular Malignancy )|15 May 2026 Case Notes - Mr Raymond Cole ( Urgent Referral for Mandibular Malignancy )|4
+5da3ed345ac59c2b333a0e3415576a5e1666fc3db2fd5d6e389f1b8870053f02|105863|Writing/Medicine/Case Notes - 2026 Recalls/8- April 2026 Recall ( Discharge to a Community Nurse )|29 April 2026 Model Answer - Mr Arthur Billington ( Discharge letter to a Community Nurse )|4
+fe564fb490b10bb1524c52a18606ff4b6114c73ab68c0f47e7035d5733d82dda|626004|Writing/Medicine/Corrected letters according the Most Recent Criteria|Ms Betty Johnson. ( Discharge letter )|4
+99885c04886d09fcc54eee601d2a952b7135fe9465e01b5e4b75f09170dd92e2|810868|Writing/Medicine/Extra Case Notes|Mr Trevor Evans - Referral to GP|4
+a739ca1837e2a7fbbe4dd35da2e561dfc96376232b74affb0c2322ccae447656|17821218|Speaking/Medicine|Speaking Future Land|4
+f863b7ac763b50ee022bda9119e5bbf1e13bf7c4b37388cf37f32f76373a225e|151539|Writing/Radiography|Grammar Rules 2|4
+f863b7ac763b50ee022bda9119e5bbf1e13bf7c4b37388cf37f32f76373a225e|151539|Writing/Physiotherapy|Grammar Rules 2|4
+f863b7ac763b50ee022bda9119e5bbf1e13bf7c4b37388cf37f32f76373a225e|151539|Writing/Pharmacy|Grammar Rules 2|4
+f863b7ac763b50ee022bda9119e5bbf1e13bf7c4b37388cf37f32f76373a225e|151539|Writing/Dentistry|Grammar Rules 2|4
+f863b7ac763b50ee022bda9119e5bbf1e13bf7c4b37388cf37f32f76373a225e|151539|Writing/Medicine|Grammar Rules 2|4
+6c1714066581ce4a83383278bd33dcc77cf1552a400dd066acd973e4cce9656b|19115713|Speaking/Nursing|Speaking Recalls 2|4
+57eac2865035b805afc1dbc26fafe7a378e8eac523a3bab495efd34e36697d05|1481315|Writing/Radiography|Grammar Rules 1|4
+57eac2865035b805afc1dbc26fafe7a378e8eac523a3bab495efd34e36697d05|1481315|Writing/Pharmacy|Grammar Rules 1|4
+57eac2865035b805afc1dbc26fafe7a378e8eac523a3bab495efd34e36697d05|1481315|Writing/Physiotherapy|Grammar Rules 1|4
+57eac2865035b805afc1dbc26fafe7a378e8eac523a3bab495efd34e36697d05|1481315|Writing/Dentistry|Grammar Rules 1|4
+6687b3c9dbf2958f173d7fe74e3d51a5a81ec09a00e729f6a4ce6ec16a1d552c|97242|Writing/Medicine/Case Notes - 2026 Recalls/3- Referral to non medical profession ( Psychologist )- Mr David Thompson|Mr David Thompson|4
+53c25aeb3c84bb6807bd67c0bd53e34610c0abc9c7822cb04023b5c6b02f2fb9|144611|Writing/Medicine/Case Notes - 2026 Recalls/2- Update & Referral ( From ENT to Family Dentist ) - Mr Adam Wilson|Mr Adam Wilson - Case Notes|4
+60347c3086c5321902c6437555b22a7215fc528b3a9e0d97bd932321351fa3ea|417313|Writing/Medicine/Case Notes - 2026 Recalls/4- Urgent Referral ( Mrs Karen Smith )|Mrs Karen Smith ( Urgent Referral ) - Case notes|4
+285f443c3528bb4f54dfa96b65b1b9a5e628f2a1f81c8b953ab0d2b5047c7f5a|480848|Writing/Medicine/Case Notes - 2026 Recalls/6- June 2026 Recall ( Routine Referral - Nasal Polypectomy )|13 June 2026 Case Notes - Mr Brian Hughes - Nasal Polypectomy ( Routine Referral )|4
+5fa0b7e68dcc955d4a6bd28a040185abf306b39ce37b4f63cfcba94125232097|11665826|Speaking/Pharmacy|Pharmacy Futureland 1|4
+68de649b75dad8b78b1f589797d53094dde3912fb7903f8061edd8fe103ec634|1286856|Writing/Medicine|50 Medical Writing Task Answers|4
+57eac2865035b805afc1dbc26fafe7a378e8eac523a3bab495efd34e36697d05|1481315|Writing/Medicine|Grammar Rules 1|4
+3f5a06a39c97f7c6c066b3d9f937959931b6902a7b7455bc52e8317b405d5976|101604|Writing/Medicine/Case Notes - 2026 Recalls/5- Discharge letter ( Mr John Aloisius )|Mr John Aloisius|4
+15d707246cdfc13c9031dd8628a6bed55f94dbdbef33626ab0df2a8a45d59da0|116018|Writing/Medicine/Case Notes - 2026 Recalls/6- June 2026 Recall ( Routine Referral - Nasal Polypectomy )|13 June 2026 Model Answer - Mr Brian Hughes - Nasal Polypectomy ( Routine Referral )|4
+663e135c0feb40a4e036a48db6746a8ac66f96136d2bd6b5a70bc780e0e54dfc|131395|Writing/Radiography|Writing Criteria|4
+663e135c0feb40a4e036a48db6746a8ac66f96136d2bd6b5a70bc780e0e54dfc|131395|Writing/Physiotherapy|Writing Criteria|4
+663e135c0feb40a4e036a48db6746a8ac66f96136d2bd6b5a70bc780e0e54dfc|131395|Writing/Pharmacy|Writing Criteria|4
+663e135c0feb40a4e036a48db6746a8ac66f96136d2bd6b5a70bc780e0e54dfc|131395|Writing/Nursing|Writing Criteria|4
+663e135c0feb40a4e036a48db6746a8ac66f96136d2bd6b5a70bc780e0e54dfc|131395|Writing/Medicine/Writing Criteria|Writing Criteria|4
+663e135c0feb40a4e036a48db6746a8ac66f96136d2bd6b5a70bc780e0e54dfc|131395|Writing/Dentistry|Writing Criteria|4
+954ecbc24627a482d61a6a5fa0b0e627dd281cefdbfa00c2178ef7a985437e9b|1243191|Writing/Medicine|Writing Recalls 2020|4
+5c7a38079ab520649a4e41da7829ad6fa74e25bc21485f461f321f9ab1ba28b4|2814147|Writing/Dentistry|OET Writing Dentistry Samples 1 to 5|4
+3e6ffb0bf84e92d7273ba4d530d2d0e19f2cf51b47811835fccaa0c469c2f02f|6680576|Writing/Medicine|Writing Recalls 2019|4
+101ccd5b7d661e367d3557eb553cd65d9615e63f00148dd7324f950eb31ba515|98747|Writing/Medicine/Case Notes - 2026 Recalls/2- Update & Referral ( From ENT to Family Dentist ) - Mr Adam Wilson|Mr Adam Wilson|4
+b58541c17179e1e26988144f996b07b4e835f4571fbc312defc4a97bafca4d3c|98888|Writing/Medicine/Case Notes - 2026 Recalls/4- Urgent Referral ( Mrs Karen Smith )|Mrs Karen Smith|4
+b1f538bd4fdc8ef0ed4197820881c69e069f7138143d31cf1afacb7936b94fd6|235140|Writing/Medicine/Case Notes - 2026 Recalls/3- Referral to non medical profession ( Psychologist )- Mr David Thompson|Mr David Thompson - Case notes|4
+f70c5b1c1bc3ebf1783b7d90f253c7a50d374761b9fc4ed8010efce11196bf1b|6597064|Writing/Medicine|VIP Writing Tasks|4
+f9a926b862ff3795ffe6d8f89a75582af2d15f7019e89ab6e44063c278f8ec76|268298|Writing/Medicine/Extra Case Notes|Ms Louise Geller - Endocrinologist Referral|4
+a4ba71805c65f6c5963abde2a460952f92041ea90d208f2aa2529ecab3a1d776|6452|Writing/Medicine/Case Notes - 2026 Recalls/8- April 2026 Recall ( Discharge to a Community Nurse )|29 April 2026 Case Notes - Mr Arthur Billington ( Discharge letter to a Community Nurse )|4
+70204988dbd1aa0bd60f7151e618f29d1a1c81c46b0211a7e94d9ea9cf748f2c|350140|Writing/Medicine/Corrected letters according the Most Recent Criteria|Mr Barry Jones ( non-medical profession )|4
+f0cfaa021c2e139ff980f6a0c4f81b0d9b2180ec438fc993de1ea47729988b81|113648|Writing/Medicine/Case Notes - 2026 Recalls/7- May 2026 Recall ( Urgent Referral - Mandibular Malignancy )|15 May 2026 Model Answer - Mr Raymond Cole ( Urgent Referral for Mandibular Malignancy )|4
+34eefc2da193ab93d51a41b0666a1087ada0b72270dc49214854cdfed8585b62|92600|Writing/Medicine/Extra Case Notes|Mr John Aloisius TB (Discharge Letter)|4
+34eefc2da193ab93d51a41b0666a1087ada0b72270dc49214854cdfed8585b62|92600|Writing/Medicine/Case Notes - 2026 Recalls/5- Discharge letter ( Mr John Aloisius )|Mr John Aloisius TB ( Discharge letter )|4
+3a5c1ade195c4270618b9ed60ed4f286e735bd85d2fc43fdb103e03727095b61|579560|Writing/Medicine/Corrected letters according the Most Recent Criteria|Mr Brett Collister ( Routine referral )|4
+1975a758c25ed63846d405fd305c8262ba19b49f8f0961900f4f62f71a1db262|70211|Writing/Medicine/Extra Case Notes|Mr Brendan (Diplopia)|4
+73cfea9ac4a9d66031499d9220f850caa4442d213df26eec9763cfbbf0437eb3|87721|Writing/Medicine/Corrected letters according the Most Recent Criteria|Mrs Lucy Clarke ( Urgent referral )|4
+1aad8a5f32beacfdb0ead86fd60d1ac459a96eb90510915154911a85c4677e66|297937|Writing/Medicine/Extra Case Notes|Mr Eleanor Bennet (15 May 2021)|4
+b71538bf150130b20edfb6ff27e71fed4fa37730641c810c0044602ff96a31a6|95200|Writing/Medicine/Extra Case Notes|Betty Weston (Occupational Therapist)|4
+a601ca011732d1f3ad36fa37d350d21faa66fb81216349d356b3816682b0abb9|627728|Writing/Medicine/Extra Case Notes|Transfer Letter - Mr Julian McDonald|4
+a601ca011732d1f3ad36fa37d350d21faa66fb81216349d356b3816682b0abb9|627728|Writing/Medicine/Extra Case Notes|Transfer Letter|4
+9b901bef463d918cc28fd067d53f7344c9973dd65a453e1fe97d91136da248ce|72415|Writing/Nursing/New Writing Tasks|Alison Cooper|4
+bd7341154ccf2ed567fb2f697f072ee558f7a1d98fbaf48d52a28ba05cd45c4c|138166|Writing/Nursing/New Writing Tasks|Cassandra Kinser|4
+7c85a676e1981f3e87d6413f2e4a6b87ccc54c5f1cfd241dd00e55936060acf2|3801778|Writing/Medicine|OET ONLINE Case Notes 1-16|4
+a5d5f30594b99375028095a2d68a83ef5bbff0e785a9c45f470b2a4b1ecbc512|1450179|Writing/Medicine/Extra Case Notes|Mrs Karen Jackson (Referral to New GP)|4
+b4e41c2396c20949f3ab5af416e06392f2d9327aab88c4059751975e54e4cf3f|928448|Writing/Nursing/New Writing Tasks|Ling-Wu|4
+eb519af7bada0c9186984a3792414981183938a67152b17ca604221e71628bbb|1936043|Writing/Medicine/Extra Case Notes|Mr James Greenbaum (Orthopaedic)|4
+eb519af7bada0c9186984a3792414981183938a67152b17ca604221e71628bbb|1936043|Writing/Medicine/Case Notes - 2026 Recalls/1- Routine Referral ( Mr James Greenbaum )|Mr James Greenbaum ( Routine Referral to Ortho ) )|4
+5aea33ad29c93b4d551000906e9b1500fc540be5c70373f760958732bcdc61db|23818|Writing/Nursing/New Writing Tasks|Robert Griffith|4
+ff566eaf67cb4686e942d4b72fc3e5aa781dfd3c82d3a4cabeacfe78bf29a142|38785|Writing/Nursing/New Writing Tasks/Ann Ballard|FB IMG 1560439394401|4
+bb0ac2a5fc39c0a49b93edd3b6afb3b21627eacdd14e73ea4a816761a18881ee|611391|Writing/Nursing/New Writing Tasks|Mr Zhang Ming|4
+1ed895a98a24a540324114095dd38721e5e9e37cc355ab74abc0190341ce0883|27082|Writing/Nursing/New Writing Tasks/Clarissa Simons|FB IMG 1562107477084|4
+f983efd6a4df200144f69b92511e8d4c9d48e756e98f0c59da8ab54c00c0fb1d|134048|Writing/Nursing/New Writing Tasks/George Chien|IMG 20190624 104918|4
+1e561fb93ad85297e615075b53f2dc5f4ae211cfdb9889a93fe62c23c3fa7711|156204|Writing/Nursing/New Writing Tasks/George Chien|IMG 20190624 104933|4
+6b43c21d3b6cd038c2e0ce605d28869cce15f5e4e9132097b5510583b4e8976e|36150|Writing/Nursing/New Writing Tasks/Jane Brown|FB IMG 1560337027220|4
+7471b2233bade1f02d16f3099725dfe6ca2073c2aaccdbf31fe58ef247b35248|59789|Writing/Nursing/New Writing Tasks|belinda hoyle|4
+98fd97d388a1ba66eef159c1abca23b2ae8de162345f2183f7018fb042c04f4c|74614|Writing/Nursing/New Writing Tasks|Alexander Jones|4
+467a9cd66f39bda894be2f112f290a59c37cd0abef2eda3ffd9f0b57c3b92f7d|39600|Writing/Nursing/New Writing Tasks|Gemma Brown|4
+b75b212f65559e0fef1841458ec079c2910ab7e0d61b7e6736c877449dceb44d|762259|Writing/Nursing/New Writing Tasks|Harry-Kovacs|4
+e50493176c819b0c0e17e15a6a70b02b1b979bb2aae4e03ef95bb31b323e901c|156617|Writing/Nursing/New Writing Tasks|beryl casey|4
+9994a70dede67c98c0b6922df60ddafa2982b7b9113e4b8ce30ae6679460ef17|81975|Writing/Nursing/New Writing Tasks|Jane Robinson|4
+36f6604aa02222a17bc62dfcf754ec5edbf6b27443b7e2409e068cde5c684f12|53329|Writing/Nursing/New Writing Tasks|Jennifer Mckay|4
+ae85882f4a5472074fabab607c8c384c17dc0e3ff3c26eff0ccbb6ea67354573|758083|Writing/Medicine/Extra Case Notes|Ms Anne Hall (Gastroenterologist)|4
+816390b2179b68f2e3703b699169b299181df7da022fa005fdc06e9abe4f1b53|127673|Writing/Nursing/New Writing Tasks|Jane-Lapaglia|4
+9a70e4dd5d7506c3340121ee8ea3cc4249c90a457b454452e8c8f992ddfd9d49|83598|Writing/Nursing/New Writing Tasks|lee wong|4
+a080807c252c3edba8556395cbd95332289c61dccc5f852b6bd5cdddceeb4e3f|484494|Writing/Nursing/New Writing Tasks|Kate-Murray|4
+e848aea633e7fda03504487843fa19eba3872a594d6445bd3823c2b31d01d04d|25331|Writing/Nursing/New Writing Tasks/Ann Ballard|FB IMG 1560439397980|4
+bbe4ea83a59d5d5c592e1569825425e9956c7f2346139fa164c2cbad5f183d34|50574|Writing/Nursing/New Writing Tasks/Bethany tallor|FB IMG 1562757873989|4
+8ea9d4b3a14a5b4db22e4fcc52d278902129898d9bbaf8b68bdf4f014a1f178b|348266|Writing/Nursing/New Writing Tasks/Inform letter/Ebola|Sample inform ebola|4
+ed431013d91dd265b0477bd64f0c48fc58479b41307d9fcbb82c9a72f8bc9e2d|75503|Writing/Nursing/New Writing Tasks/Luis Morgan|FB IMG 1559228666262|4
+6f066375806821ac53b53b861cbcf99b1113dabbc0058a43aef6bf02e17be642|707771|Writing/Nursing/New Writing Tasks|Harry Kovacs|4
+b62f4a55c5f4c9d77fe06bfd7d22947e550cf859529e6aa61e8a0508f7d8b913|55407|Writing/Nursing/New Writing Tasks|philip sachell|4
+630662d90f0f9eed38057cb8dbf9327371b88af752da7587f35e6b57656f548e|42860|Writing/Nursing/New Writing Tasks|Rachel Oakley|4
+3fec5f8e8c9815b240e652351bf1e14253873b21d74f7263f309ecf2783e7aba|2932487|Writing/Nursing/New Writing Tasks|Sandra Choi|4
+9bc04984c17e7b6cd480af016b7ff385e6c617274b7dcad39156d984f04131fe|38117|Writing/Nursing/New Writing Tasks|Nina Sharman|4
+9f1e9ef039d8b4c8213ecaea16b69c95b8fe2fc8b46a4523b90fee2567d31edd|13279|Writing/Nursing/New Writing Tasks/Clarissa Simons|FB IMG 1562107480443|4
+cd7f75dfeae6fd8d3fc618d6612ea1ddf1853e8a4d390cf1bf86847f18a4edd3|50055|Writing/Nursing/New Writing Tasks/Diane Carpenter|FB IMG 1559919480043|4
+6aa86bdcce3ce2ba4e4c2b8ae3e1b754a5a7daa108a9c50947fc4f5c98b264a8|42691|Writing/Nursing/New Writing Tasks/Keisha Odet|FB IMG 1560455858224|4
+ab8ad2b44f9280c94d5c88305ec5b945177b2cc8edbd7a4a0d7167650ca36c24|30686|Writing/Nursing/New Writing Tasks/Maeeve Greerson|FB IMG 1561690857592|4
+c2675f95d2ee5ee051b271a57a3e3395c2f623f2c914e3b76ad8414c42f89cce|24513|Writing/Nursing/New Writing Tasks/Michelle Norris|FB IMG 1562107512653|4
+e5919a34476c8cf99d91c4e185c5ba87b50073175465a3c390f774d9c844c9fc|14086|Writing/Nursing/New Writing Tasks/Monica Osburn|FB IMG 1560439378717|4
+43c88099935c2e1b531c03ceb126c346dbae143444d97317c8f38cc8f0096a4a|34058|Writing/Nursing/New Writing Tasks/Monica Osburn|FB IMG 1560439375588|4
+795d2a7c8a2ee8288916be3ef39cb0077b44dedb4dd60f3d72e09a4dcaa65941|3022120|Writing/Nursing/New Writing Tasks/Marjorie Mellors|IMG 20190624 104739|4
+bbca738a47fe83cf02d62b7f56608204563b1ff752ec917d977c720ce37bd474|49908|Writing/Nursing/New Writing Tasks/Greg Whitby|FB IMG 1560453257490|4
+6bda8fe932d569705550a687952e622b8172290a69e4b68d16f4c45c61e1e87f|34834|Writing/Nursing/New Writing Tasks/Greg Whitby|FB IMG 1560453261615|4
+d44e3bc90c18b2c3c91804abc7b3a942cdd69cc6241d3f634384b98b99bc88ef|25932|Writing/Nursing/New Writing Tasks/Guy hoang chueng|FB IMG 1560306549164|4
+7fba1264be7283e6a1008fc21b07e5d7fa8ea67d9f1e9453dbe75a21848aa559|167138|Writing/Nursing/New Writing Tasks/Jake Peterson|IMG 20190628 104358|4
+2d8ecd272ad598267da2913b7e98027cdf41d196e76cd2d283a5be6cfe1a3453|308808|Writing/Nursing/New Writing Tasks|Rosalind Hinds|4
+384022b8cbbc023c7c27f8154a7a811d15e925f31a49f6c4488a2d231131201f|28611|Writing/Nursing/New Writing Tasks/Maria Joseph|FB IMG 1559228717618|4
+9dc791eb0dc4693bf869bd6ce6e10601fddc2504f71832fb64fd09f09f2c85d1|54036|Writing/Nursing/New Writing Tasks/Jasmine Thompson|FB IMG 1561032870266|4
+b683c425625e09a9ce69e28d18393b7ec90ba35bb2275e54a5057f5aac5e4711|48455|Writing/Nursing/New Writing Tasks/Keisha Odet|FB IMG 1560455860854|4
+77142d78b9d320e6530f48c061bd3b3d4131aaf123493311fe9bbf648fae70da|55377|Writing/Nursing/New Writing Tasks/Margaret goldstein|page 1|4
+97656092d3f32db4da3d00c99d3961629d1425727e32fad0136d0da495e6743a|53268|Writing/Nursing/New Writing Tasks/Margaret goldstein|page 2|4
+bcd5e66f452881b99c50bee7af47544706293e0d7c46288243e66ef71415ffd2|53327|Writing/Nursing/New Writing Tasks/Maria Joseph|FB IMG 1559228714378|4
+7cf17aa8a8c4be49568f605b839342845d891498ca53ebaaeeb143fe454f74a2|52462|Writing/Nursing/New Writing Tasks/Maeeve Greerson|FB IMG 1561690854956|4
+925ffb6b82f1710ab45a0e8a4493a8c5e5951368cb1a61c85ae8aa40a398f95b|57340|Writing/Nursing/New Writing Tasks/Margaret Helen Martin|FB IMG 1560062119959|4
+6d3e6704947a11015dac27b3f579f9933da927103570f5423efd64f18f94766b|133932|Writing/Nursing/New Writing Tasks/Michael Collins|IMG 20190624 105436|4
+3b2bb349d0611603db999bccbc1fbec16a2413e5fe7e4042f23c48d26feda350|26905|Writing/Nursing/New Writing Tasks/Michelle Norris|FB IMG 1562107510257|4
+96b7ddc40df9ba46e16437d38819cc32d75bf4766a8b1883d92bb64eaacd3797|54256|Writing/Nursing/New Writing Tasks/Olivia hawthorne|page 1|4
+4e5090ca6770227c6b5dbf96e5e752f2c207945d8b506c9a8e0953c3b6d5d169|37923|Writing/Nursing/New Writing Tasks/Robert Smithson|FB IMG 1559873660476|4
+3fe76c63399e94f6323dd469c2999cae28b4d7940e5dc86fe94772ed1427de91|47673|Writing/Nursing/New Writing Tasks/Robert Smithson|FB IMG 1559873662497|4
+a9a554aa3ad7f14aa1f72e94eabb52028ecb47945cb7b77f21f8815fe06a908f|2693272|Writing/Nursing/New Writing Tasks/Peter Dunbar|IMG 20190617 182306|4
+bb4fa2e613545b05654d1285160fc1973296d0e547437f93d968ab6d1d994546|48947|Writing/Nursing/New Writing Tasks/Ryan and rohan|page 1|4
+c7643dfe627243b78c46a6267948273f36c3f967d9f58643bf6d5fd36e56ba36|43760|Writing/Nursing/New Writing Tasks/Sandra peterson|FB IMG 1561799932519|4
+b9aac422c10292d667bed2436da7b7d1e9dd6811793c0dd2f5723bf057da2f55|46609|Writing/Nursing/New Writing Tasks/Vamuya Obeki|FB IMG 1561690821597|4
+4affeb2a58f0f5135027a83747ed63ca2ab68f911d3fa97e9c8281afe7a8e365|49599|Writing/Nursing/Nursing Case Notes|Adam White|4
+a2762efc32c81d426b9f0d007cf21820f3ebc6b40e77f153101e52a7e56f3893|218244|Writing/Nursing/Nursing Case Notes|James Andersen|4
+139b9957040712ff1c8eb1fb3916a1788e42903aac43352adaf734c1e723f399|1070335|Writing/Nursing/Nursing Case Notes|Exam practice 1 ( Kevin Brown )|4
+7334de868dea54a7a4fb94e9989c9b8643d3a44ed8fd9eaa638f44357e866295|1599010|Writing/Nursing/Nursing Case Notes|Margaret Helen Martin|4
+5c0fc49441c99820d86cff2bbb37f0ba0976b3a208be97d15573d930a07ac4b8|264122|Writing/Nursing/Nursing Case Notes|Ms Sheila Cartwright ( Discharge letter )|4
+d0c2725ced0c5bd409a19e91c1645b14470d74414b82cf89ffa65bf08f44af61|2954381|Writing/Nursing/Nursing Case Notes|Ms Cathy Jones|4
+806b96a0696ff86de9eb50dffab90be262ec74021f3063e430eac84e6fe1777b|35240|Writing/Nursing/New Writing Tasks/Olivia hawthorne|page 2|4
+5d6240b6e0dc287386254fd240c3deeca08b13bf92994b00286e9ffb2845a483|26117|Writing/Nursing/New Writing Tasks/Priya sharma|FB IMG 1561217540650|4
+7935caf4f347d6bae88307d0a33d4e5d9b14b44ffcd16abf836379fe93f3334e|42622|Writing/Nursing/New Writing Tasks/Sandra peterson|pg 2|4
+fa1ece709312e00d63057fd34926a7fee225c1c7739b97c41b554c92f3e46570|30293|Writing/Nursing/New Writing Tasks/Vamuya Obeki|FB IMG 1561690824022|4
+d3d14425cfc964e2c2c6aac55b6b6f06aae55dfb26aa73d4797791a16ac936a6|24814|Writing/Nursing/New Writing Tasks/Walter Pitman|FB IMG 1562107408571|4
+9bf0aeef5d150fcfaf3c1c9c41557e648abfe93abb3e66df179910f7ee61d9f2|1880954|Writing/Nursing/New Writing Tasks/Venice Parkson|IMG20190626140637|4
+de0e8f880b437b9fbd8f18638f278d9c21ba979d5b05a4508e6c4e7ad2398d0f|1833898|Writing/Nursing/New Writing Tasks/Venice Parkson|IMG20190626140644|4
+689ab50a7ee0e8ffe89b0d9a806b979f5fd3f060b10eff41d102f9ce1f489c8b|371963|Writing/Nursing/Nursing Case Notes|#oet medicine writing case notes 099 cathy jones suspected ectopic pregnancy|4
+29e85285a2c345326a66a3713d70717ce79694dec6a51cda522bc2deac47418c|540172|Writing/Nursing/New Writing Tasks|Alison Martin|4
+77c1e2217a72814113f811822393d3f1c2e8134c16d990fbbfa87e43bd9ad137|277176|Writing/Nursing/Nursing Case Notes|Mr Gerald Baker ( Discharge letter )|4
+9855bab4cfee6468beb95d18d1b567bfab3542861537564e8f392257ab25e2db|642663|Writing/Nursing/Nursing Official Samples|Mr George Gale ( Discharge letter )|4
+a1367ff917a5d6285e9de6ffabbd3195e57f25ddd1f62bd198a3252869c87c86|896840|Writing/Nursing/Nursing Case Notes|Nursing case notes 1|4
+68e69cf31f434c06f123249f09e46cb1224e6804e5bf3754e0918471c7db0ab7|747143|Writing/Nursing/Nursing Official Samples|Mr Peter Dunbar ( Transfer letter )|4
+0df557faca8a5d3b75cc21ad5e732d1fb641f5562d4b10524686d7edb8003271|98124|Writing/Pharmacy/Corrected Letters/Mr. Colin Barrett - Discharge letter|Mr Colin Barrett|4
+e4f1c6390d6332952ecc4d3b123480e7d42497e0647c3cb4bd61e4b8c534411d|349584|Writing/Pharmacy/Corrected Letters/Ms. Alexia Rollinson - Routine Referral|Ms Alexia Rollinson - Corrected letter|4
+734731bdcf73eb36b7d5204010cc567f95e34c808864906b87109474fc59c896|681929|Writing/Nursing/Nursing Official Samples|Ms Patricia Styles ( Urgent referral )|4
+3a7591e834b69a8e5a2ba9636fe5ba5d184f63653973af172cb5c074e5c7cab8|37945|Writing/Nursing/New Writing Tasks/Priya sharma|FB IMG 1561217535849|4
+ae6ad821f4815c0cda5c7a8eda81d380f4a8f7ce5168297fb7b5c47c7ce70666|60516|Writing/Nursing/New Writing Tasks/Sandra peterson|FB IMG 1561799935382|4
+37ee2c40ed385e7a56b6d96b4631f0cfc97fd4bfe807cac6dedd49f0d86933db|232377|Writing/Nursing/New Writing Tasks/Sophia Joe Patrick|IMG 20190630 155013|4
+34b2f208bdde84ecaa01648c547974000fa3fd4e49be4e2a99b9224f6d6ed268|19323|Writing/Nursing/New Writing Tasks/Walter Pitman|FB IMG 1562107412009|4
+8904a0ac2b6010fb92a237c35f92a9651750ef08869cecb06c29b380936f119e|498966|Writing/Nursing/Nursing Case Notes|CamScanner 12-20-2021 15.59|4
+6403cbe6b28fd7dfb1895bf689b1ab9ae3410987bef6158541355c72d45717ed|181832|Writing/Nursing/Nursing Case Notes|Monica Osburn|4
+aff583ceca59b2db5f9e518a6417a6f2e0c415bddb52eb38a96e65da30aec4f1|1559157|Writing/Nursing/Nursing Case Notes|Jasmine Thompson|4
+4a403a1a82e16005ed1e438642afd2fd2778ddc20dddbbaa9ae763590778a95d|344687|Writing/Nursing/Nursing Corrected letters|Mr Stephen Kerry ( Referral letter Corrected )|4
+244c16511a29adfbc40e3c99ddfb33aa5ac9351e1167eb7a36c7f4a3b6d6efb7|67201|Writing/Nursing/Nursing Corrected letters|Mr Lionel Ramamurthy ( Discharge Corrected letter )|4
+2dfaff3dfe5bb739ca108154ebb4bb79aa6fa8648163d174952edec10909ab48|745014|Writing/Nursing/Nursing Case Notes|Nursing letter sample|4
+7c2dbc5f941ac1dcd691cf65e1234384591281167d66d03d2d86420f3e3b43cd|300155|Writing/Pharmacy|Mr. Alex Roden|4
+eef577d0ba08f5b087c17b68908aff60372eb46f8355fae4d8872bc732a2ad64|333426|Writing/Pharmacy|Pharmacy Case notes 2|4
+68b6b0171c9cc140a21332334b7d88e24772e0a68f0c5f76993d6949510d00e7|1663812|Writing/Nursing/New Writing Tasks/Peter Dunbar|IMG 20190617 182331|4
+30e5b457e3e9c47794a9673a8e72684bd438c4baceffe74b202b34384484d3c4|31853|Writing/Nursing/New Writing Tasks|Martin-Wilson|4
+2ae412bebe02fc53bc19f040ab805092a4ef553a3d337f55a8d721ae04a92ed8|41264|Writing/Nursing/New Writing Tasks/Sandra peterson|pg 1|4
+84d67cd6699e58cccaeb5bac7cb43de62dda221667ce082b2e75f84a9e114cfc|44991|Writing/Nursing/New Writing Tasks/Sandra peterson|pg3|4
+9ab94dea87aefac6b62ef91972c51abe40fdeaefd5e0ef475ec91e7d6d2dd35f|1665738|Writing/Nursing/New Writing Tasks/Venice Parkson|IMG20190626140652|4
+ffa1c04c01879252a91b982c412b63fcf061c145d0a95d77b41dcb8a474351c0|910086|Writing/Nursing/Nursing Case Notes|margery drake ( Discharge letter )|4
+abfb96b73a3a1404c87865c5aa7fd84d71f9e518090c895a17d71fd64361caf9|1579086|Writing/Nursing/Nursing Case Notes|Mary Bell|4
+3206230cd4ffcd631977acf3a7d16f412989128b60bf49205759e69e8d9081fe|38135|Writing/Nursing/Nursing Case Notes|robert 1|4
+7cf248b0f0ddb8a73a5a287f0e33c98ee9d081b8a58dafbe873dc78f460b19d6|1854331|Writing/Nursing/New Writing Tasks|Joe Black|4
+f8e279fc4a5fe437668e1e5d7d50ef3c7c1173810fa5f3742d83ce71c79a839f|256298|Writing/Pharmacy/Corrected Letters/Mr. Colin Barrett - Discharge letter|Discharge letter ( Case notes ) - Mr. Collin Barrett|4
+08354d01d44e0f27a549ef1537c06b6b2e18cb7aebd0fed0397fb6ab498f9d97|791340|Writing/Pharmacy/Official Samples|Pharmacy OET Sample 2|4
+08354d01d44e0f27a549ef1537c06b6b2e18cb7aebd0fed0397fb6ab498f9d97|791340|Writing/Pharmacy/Corrected Letters/Ms. Alexia Rollinson - Routine Referral|Referral letter ( Case notes ) - Ms. Alexia Rollinson|4
+0bd745e36f06e7ea03aa1e9d52107cca5c4341d637fba91d2c5a6c949c5502da|174465|Writing/Nursing/New Writing Tasks/Sophia Joe Patrick|IMG 20190630 155028|4
+6944212bbb6acd793a8d2fb9c8fc76637df6ac853f5860e49cff5027e58162b2|337860|Writing/Nursing/Nursing Case Notes|Beryl casey|4
+92844ed2fe8486241ab9c9cc13f881f06b8d3eae6b5672331bb95f61ed1c7dc5|252194|Writing/Nursing/Nursing Case Notes|Lionel ramamurthy|4
+a0d77ed49258bbcba856c5c4ee0afa29a3604d399d6102e0c074507abbe130f7|240422|Writing/Nursing/Nursing Case Notes|Mr Phillip Satchell ( Transfer letter )|4
+aabff8b1099b554c3f635556d63ca2c3f7d09be56daa3fa3bf25bc9ee5de0b6a|47547|Writing/Nursing/Nursing Case Notes|robert 2|4
+1e03bbe0b40c4bf911d3271caf69262a7494448042016eda80c487b0550a545a|74942|Writing/Nursing/Nursing Corrected letters|Ms Patricia Styles ( Urgent Referral Corrected )|4
+345e0c633521060b36f42aeca5586c2f5bd359f140e3e0d09322d270c5fe22e0|6476364|Writing/Pharmacy|Pharmacy Case Notes 3|4
+6ff380deeb078c2bbdf690fc8c0d7498977c9244be242d3b600d904d6b03e725|698171|Writing/Pharmacy/Official Samples|Pharmacy OET Sample 3|4
+6f3884b7c6f6afcc5e8ac8bd22ffaf24a206c65a41369b9a657a493c2a2abec1|724170|Writing/Nursing/Nursing Official Samples|Jake Peterson ( Referral of a child )|4
+c15c1db9a330cf38b1369ee632ed00ed04c02b72e572531eae0db7ead91f090c|816636|Writing/Nursing/Nursing Official Samples|Mr Lionel Ramamurthy ( Discharge letter )|4
+e3d20386dce804bfe2c28104ee475c820dc468067b93bcff9eea9f273ac91966|324904|Writing/Pharmacy/Corrected Letters/Mr. Henry Styles - Advice & information letter - to the Pt himself|A letter to the pt himself ( Case notes ) - Mr. Henry Styles|4
+45dcfa65ac6fcee9c499201242e9ee96580c61993323b2f9f052e56da8ca8aae|5676764|Writing/Nursing/Nursing Case Notes|Nursing case notes 2|4
+4086fee9b0ac4f7f5a8d5bd4fc3b2154c6ac9ddcc79cd1cd79bfa5b0fafc5bde|574042|Writing/Pharmacy/Official Samples|Pharmacy OET Sample 5|4
+3b58eb10ead73019b7b3a3f6c76510048ae12a38b8c2d5375f8e13b05f680b6d|6660322|Writing/Pharmacy|Pharmacy Case notes 1|4
+1948594ffee6d149d1153e8a069ccc3cb3bf4957d9ce4f5416b6b9ca34bfb8b0|1006430|Writing/Physiotherapy|OET Writing Physiotherapy - Official Samples|4
+bdcf01f3bfdef86cd584271ec2fd1ea97bf7eb09c828f97ee2ce66bde5c078f2|12406|Writing/Medicine/Corrected letters according the Most Recent Criteria|Ms Betty Johnson|4
+43a6f26225380fe6fc1d3eb819a24f9dbe51a1e8e8009fa40a32dae10a88d246|17250|Writing/Nursing/Nursing Case Notes|Ann Ballard|4
+bb899990f60017f78bf244e7906473ef731289acb165daa8d9a2dc534fdfd05e|766832|Writing/Pharmacy/Official Samples|Pharmacy OET Sample 4|4
+0e0038a51dacc0473e14acd2f4af422f7d775d56224d32f538e4d3d6da131e6e|1232147|Writing/Pharmacy/Official Samples|Pharmacy OET Sample 1|4
+65007b2cb21c533bd286b8a1ac2389868cde6da7c1d1eab0e8c6531f099b1430|572604|Writing/Radiography|Radiography Writing Case Notes - Dr. Ahmed Hesham|4
+500463dca2b2021efd8795609464201300d3417ce93badb9f4a2f510c6f879e1|12616|Writing/Medicine/Corrected letters according the Most Recent Criteria|Mr Barry Jones|4
+64981df154745fac8b781fc2d46cb3e62e81556dbe61aa563eb43226e8af5983|18711|Writing/Nursing/Nursing Case Notes|Jen Smith|4
+d40755df73ae503440146adc977f2c3ae7e9601ed1f0d158cd9cce8cc6ced048|564502|Writing/Radiography|Radiography Writing Model Answers - Dr Ahmed Hesham|4
+c82a399286c0d41a6cfa5e1e6dcb7044a4b5bb8b875620c8e5b197f9c713b492|15705|Writing/Medicine/Corrected letters according the Most Recent Criteria|Mrs Lucy Clarke|4
+cb78fa2a53d0ab96d18b36e61dc5d5a6bfe8a9e935e8b646228bf3ec40d9fce0|16573|Writing/Nursing/Nursing Case Notes|Julia Montoa|4
+e3ca9a6932720f1966f1ad7e076d9a33ad83523e1691454a3d6c2cfa3883ad4a|12587|Writing/Medicine/Corrected letters according the Most Recent Criteria|Mr Brett Collister|4
+21dfc6b45596510a9ecc66f937f8417710f0304932cfbfa9b50049f400ecf9d5|18779|Writing/Nursing/Nursing Case Notes|Jake Cruz|4
+fc57765b19b8322b3a3d9557cfcca12866e70363753f2e08b4923a863db3fd21|11750|Writing/Nursing/Nursing Case Notes|Peter Black|4
+61a476d784fe4582f2a5d26b4278eb2ed1b00fec1b1746e1e8aaccb7976da1be|1584645|Listening/Extra Listening Exams/Questions And Answers|17|4
+1fd5e6d1c59a8c40dd4133991c2ad12499d850abeb2129df9ebe474e0c1308de|33434077|Listening/Extra Listening Exams|L40 Mr Greg Mathews|4
+f3deb02a1112906eb1f589ac17de767165fbd5f64b2d86c828262325d6c45de7|1473834|Listening/Jahshan/Audio/1- Kaplan Startegies and Practice Set/Part A|Track 1|4
+51e46fe4ccfd58376a22d6ea45f0929a0659d93277ec1ef578566fe24bd79c79|25422960|Listening/Jahshan/Audio/5- Practice Test 1|5-Part C|4
+a2d9cc39e598a8c2acc9756359479faafff5ce16cc3aed21e5c570fe4a1b58bf|26003505|Listening/Jahshan/Audio/6- Practice Test 2|6-Part C|4
+8fa119520bead0a04551b934ce49e819315713d535ef79cfde0f03c9a2e0b1ce|9691494|Listening/Jahshan/Audio/11- E2Language Test II|11-Part C|4
+b76a973ddc9416a6e035879a4c12608d1cf631a50e79c32474d25a6c99ac5ae9|7530215|Listening/Jahshan/Audio/13- E2Language Test IV|13-Part B|4
+b35c92f61d3b8e9fc77deb22f4b725993dd7eb5a7af30604f6102f4d5818b696|11525819|Listening/Jahshan/Audio/12- E2Language Test III|12-Part C|4
+dcd99fdd721d477c241dff65f179402f3d8a9ee1c47995f4523f1f5acec2f6bf|13102779|Listening/Jahshan/Audio/13- E2Language Test IV|13-Part C|4
+8c46105323f655dd3f268cdaeece1186426c0ed16048ed8504f1b7a2e2e9c9ad|45533|Writing/Nursing/New Writing Tasks/Alice Woot|pg 1|4
+b18b0dfacab5c08aa8cc96c55afc9e79b77a9f4fa8cf253a26b536857b906bb9|13708|Writing/Nursing/Nursing Corrected letters|Ms Patricia Styles ( Urgent Referral Corrected )|4
+d042a3f3a60b9391e4664acc7fa5d2531dc1e628f91fa423f4530a7627a679bf|1637902|Listening/Extra Listening Exams/Questions And Answers|10|4
+cb95a2491e71e8e1d3cc30007979e3fb66f89c8315785771b5546b850e953c8d|2717479|Listening/Extra Listening Exams/Questions And Answers|4|4
+dddf324aaf9ec14a76f9f9d7711aa125e82865911bc2fa455676c81e6de64c84|15203296|Listening/Jahshan/Audio/10- E2Language Test I|10-Part C|4
+0aace8b3cb2ae17aaf4b9bdcb29467105199b145c480787a5f28cfec8d5d4b69|8648943|Listening/Jahshan/Audio/12- E2Language Test III|12-Part A|4
+5d00367071d009f634c846b71d3f40ee78f3058169be149f473805dcc9b3f89a|6364796|Listening/Jahshan/Audio/11- E2Language Test II|11-Part B|4
+fcc819313274fd51b9f8701dfdbd049a5b468ccf5961da61ec7b5103b3c02ef2|9650373|Listening/Jahshan/Audio/18- OET Online Test 4|18-Part A|4
+ccd1a8a177205497450ed97e575f55e6dc762df5f18c70bc7fc431431c47f972|8936585|Listening/Jahshan/Audio/18- OET Online Test 4|18-Part B|4
+1fbb835d1d5a6fe5d1bb2c1ed6d16f8b55c705c05e7bf329604b39a0ea50dc9f|7775826|Listening/Jahshan/Audio/17- OET Online Test 3|17-Part A|4
+144aeb7bb27ef9c3101636c54be47e34173375c8dee99bb20e99104dbe0cd7d4|9074425|Listening/Jahshan/Audio/16- OET Online Test 2|16-Part A|4
+f41608adfc567eb1ce78049b470fa8edbe80cf74a1fa4809d6e79f0127ddc391|15588800|Listening/Jahshan/Audio/21-IRS Test 1|21-Part B|4
+b610ce09106cbb3fe321393e59f8d782a61b563ca252dd1c6bdf8aa78bb8f606|23243723|Listening/Jahshan/Audio/22-IRS Test 2|22-Part A|4
+020b6bfb01db2127b346240d779cdd8120f2f663439ca03642a7683a901e032d|29926263|Listening/Jahshan/Audio/21-IRS Test 1|21-Part C|4
+96fe412f828375eaf3c07f57a6d185b1be7185dd2732746e3a6134d242e2d559|18243886|Listening/Jahshan/Audio/24-IRS Test 4|24-Part A|4
+2ca52ffdd8e568f4450da61d37e60d9be939d0ca5dd69c2ca0e4bc2235bc2df6|27967080|Listening/Jahshan/Audio/22-IRS Test 2|22-Part C|4
+ecc09ccac2f1eae32a655267805cf99dae281fc1438d264ff4f6e810fc4fde7f|1852475|Writing/Nursing/New Writing Tasks/Alfred Billy|IMG 20190624 111914|4
+d3fcf122f700d16b62e88b7aeb6aecb1c8d0545b4639936a874f44ef910ed69f|1543236|Listening/Extra Listening Exams/Questions And Answers|16|4
+447db5d545d41c5b68867116f97e3870b6eea34cbc01602adc69ddd6f0733bcc|1271478|Listening/Extra Listening Exams/Questions And Answers|20|4
+6f8a53c883f51430a71b96248259cb0ce9ad95f4d1554cc2bc19f00c4bdb6c6a|8005350|Listening/Jahshan/Audio/11- E2Language Test II|11-Part A|4
+1a0bfc151869e42cd27603c81b08421eee05b30a861ae8852325552c17ef3128|1231198|Listening/Extra Listening Exams/Questions And Answers|6|4
+2d2583f53db0f9dbe709cfa71ce5569023f8079e598ad804d7c985e9c994dc54|1606745|Listening/Jahshan/Audio/1- Kaplan Startegies and Practice Set/Part A|Track 4|4
+2cd9bd0bf5cdde30f01ff04496fb47aaac02d5cfe8117e47388cb26d9643be42|31938735|Listening/Jahshan/Audio/7- Practice Test 3|7-Part C|4
+2f16bcee7d62f75b1d50ef7c7ab15ca55d4afb139083010c70c5fdd56a3ab4ba|7953041|Listening/Jahshan/Audio/15- OET Online Test 1|15-Part A|4
+0cb6332bc2e92f3426bb6202e7dbb49190020ad28e5f1404d0812270977f1578|7790186|Listening/Jahshan/Audio/14- E2Language Test V|14-Part B|4
+0347417ac7dbc7ebc481f29619de360b3a61c4db0aaf3f4eca3d1ce04dd0b748|14227444|Listening/Jahshan/Audio/15- OET Online Test 1|15-Part C|4
+5b10e270feffb1381cf18db3ca77bcbf062ade718f68edae5dcf68650177c359|14455232|Listening/Jahshan/Audio/18- OET Online Test 4|18-Part C|4
+05395f9c3fdc999116bdeae12a7d81db3093ac6de3a0dc1e685f1ba876764a96|14324968|Listening/Jahshan/Audio/25-IRS Test 5|25-Part B|4
+ff1d666d933ffee130cac222b9709c7ff6afef34c8e2fdbfa7b5696a417a2ce8|899904|Writing/Nursing/New Writing Tasks/Alfred Billy|IMG 20190624 111925|4
+4723b54589f88403fb3e1c3904b028e0551004ba6012e3f321d50fc3358cbd1c|3116684|Reading/NEW READING EXAMS ( More difficult than the real exam )/Exams|READING 10|4
+f17abaaa0484e0da5603658a29dd848ccb786fc1bc387388ff4a0a424d8532cc|30966|Writing/Nursing/New Writing Tasks/Bruce Brew|FB IMG 1560605455155|4
+0253e73f06764caa7eb9ff28b717bdd97ec9ce6d1a769157926ef2d0fbd1eaab|491864|Writing/Nursing/New Writing Tasks/Inform letter/Ebola|Page 2 ebola|4
+240468d37e9c99b7a10fb344b5919f93edc7fb85b2642fc7d160467dfadfba75|48522|Writing/Nursing/New Writing Tasks/Jane Brown|FB IMG 1560337025099|4
+156156ddbb12a39ef2c4a6f00b123510cf03974479f2af358ca3a07b7556919c|55517|Writing/Nursing/New Writing Tasks/Jasmine Thompson|FB IMG 1561032867998|4
+38cf0c580db76673afad8779df40183b1b23d10ee8b655b71ca3cc6711f52cc4|33423|Writing/Nursing/New Writing Tasks/Keisha Odet|FB IMG 1560455863678|4
+9f0d32316bd5aa6addd2faa4a3f6fdfd03f5ad657076aa2f29d153b74f4587eb|34188896|Listening/Jahshan/Audio/25-IRS Test 5|25-Part C|4
+9d678387f9fb1cc76edfabf50f97c52cd4b5d6580f08779396eeba61bc2716fe|4491081|Listening/Jahshan/Audio/1- Kaplan Startegies and Practice Set/Part A|Track 6|4
+c234c69b0e19d27814eb5cbccb44523e86cf95a5638084d7dba984e6c4c219bf|31625829|Listening/Jahshan/Audio/2- Kaplan Practice Test|Track 21|4
+ea6d364d99919229c9f8757fc27ce056bd9b7f6937577f70c39bfd7ccdaed6ee|1273213|Listening/Jahshan/Audio/1- Kaplan Startegies and Practice Set/Part A|Track 2|4
+62026af9bccd7ef22674610f0ad453138effc5df2775a9b28b0c750e6599799a|5897936|Listening/Jahshan/Audio/12- E2Language Test III|12-Part B|4
+4e927d518a2b52d74c6b7ef4873450f74d0b6b517fda098c84a8e4cbcc72da95|8762691|Listening/Jahshan/Audio/13- E2Language Test IV|13-Part A|4
+ffad2136728b5058666e989df5f5b8e0a2ca06a35cfce31701cf569e9d7620a0|9901985|Listening/Jahshan/Audio/20- OET Online Test 6|20-Part A|4
+640788fb5e1e5b13370dde27052774fe4f0881f28c0773584939ab26d3e13449|15177048|Listening/Jahshan/Audio/16- OET Online Test 2|16-Part C|4
+fc45c0bdd7e2fde46d4314da890e3463c87ad3493d44550a61746f2af234a3df|48089|Writing/Nursing/New Writing Tasks/Alice Woot|pg 2|4
+3588b95f595a4ccf8c92495e3047df8f6b6b42413a385891a59d2b73eaea0a2b|3040899|Writing/Nursing/New Writing Tasks/Alisha john|IMG 20190624 104512|4
+6753ad514f4aa103e4751ee38f9fd7b55d902b2bfe60d352a7817926a4fdda63|24041|Writing/Nursing/New Writing Tasks/Alison Martin|FB IMG 1561640833994|4
+1b9910199620bf76b188a1f5d6344b3f7245ca78125cb3cb421061e3a1fffbf5|31385150|Listening/Jahshan/Audio/24-IRS Test 4|24-Part C|4
+bf5e11c8f9b669ac015f65fd490693bbf2a78990945974cc82d13290a75170f5|47539|Writing/Nursing/New Writing Tasks/Bruce Brew|FB IMG 1560605457673|4
+fa1347e3a0ee855294754afdee97c6ce682fadc0ec1ca4aa1813fd30b2a3a622|10170267|Listening/Jahshan|Part A only listening jahshan|4
+6a5a4dbdf23d00c8147081172adf3176eec440012f03595dd486c153e0e6e35f|8449245|Listening/Jahshan/Audio/17- OET Online Test 3|17-Part B|4
+32c8b54654089aa29c88a645a2be2123eeeb6247240b24eb24f47e4263ec7bce|19643840|Listening/Jahshan/Audio/21-IRS Test 1|21-Part A|4
+226a86a7192faea8563de560dd8aaa4d01ae5c02e97c4ed306201673a48ed474|2816412|Writing/Nursing/New Writing Tasks/Alisha john|IMG 20190624 104444|4
+898889712b7562ca9c955de736891387aec47c65041342bf853429a408f79b94|29210|Writing/Nursing/New Writing Tasks/Alison Martin|FB IMG 1561640836555|4
+4f4a8654220e13220de9e5886e30b643541b18175df75766244b3070b1b94652|53810|Writing/Nursing/New Writing Tasks/Amir akbari|FB IMG 1560336843791|4
+f440d2daa59e4a7b637107de1aa93394ee98fa45d309b04000e096e1572687f9|50901|Writing/Nursing/New Writing Tasks/Diane Carpenter|FB IMG 1559919477834|4
+73788dcc8a7cac131f73c4b9899e9c7adf56b73b1f82ae4e4f0643581d012bc0|169317|Writing/Nursing/New Writing Tasks/Jake Peterson|IMG 20190628 104333|4
+bc551aa6e67a6114441d66526b7cf88af8db4259f03a3fe36fa7da4b5e285769|45763|Writing/Nursing/New Writing Tasks/Michael Collins|FB IMG 1560021428304|4
+7381fd777a3e9076d266ae28af17cf4ae59972c5b99ef9fed631a36218cba55c|227096|Basic English Course|Basic English Course - Correct the following sentences|4
+7a4f0733418f365bc789d2932256a5861f96784b560e9cb2bee9a16f910249f1|15476|Writing/Nursing/New Writing Tasks/Alison Martin|FB IMG 1561640840493|4
+1ead7e438855d9aaf50f40bc3e56009e157dc61669a4b6ad76d3b50b7f650d16|33050|Writing/Nursing/New Writing Tasks/Dallas Walters|FB IMG 1560605604833|4
+7d1778b68399844b1511ab1b85743b22b3331babe9c3b1a4bcf3545141626ce8|36441|Writing/Nursing/New Writing Tasks/Guy hoang chueng|FB IMG 1560306546261|4
+6daf5adbb5ddb12e8ec4fc75614a368899e0023f36722672767446cf03b9dc16|36522|Writing/Nursing/New Writing Tasks/Shelly kate|FB IMG 1561640986459|4
+808ba5c540e5d41a51b67c4e8658b91b4dc3f456a2cf52cd6fb936c01109927d|46811|Writing/Nursing/New Writing Tasks/Amir akbari|FB IMG 1560336840220|4
+d9d28d54512cc067a09a6d0414271cf44d0e9fd1a564b8ff77f7557c483c0dcc|30489|Writing/Nursing/New Writing Tasks/Bethany tallor|FB IMG 1562757877049|4
+db4cb69fb6eb34e809ca570988cabcb26e44f79417301ba887abc0413e9082e9|122269|Writing/Nursing/New Writing Tasks/Inform letter|headlice|4
+ecf0a6384251b26b8e27eb788a2bcbca37c6424b9800cd0ea7190951180b8180|608362|Writing/Nursing/New Writing Tasks/Inform letter|threadworms|4
+0c4a5ff2a5685099fc1186401c38c3f439f3a7dcbbd389f2425f06f6299e1713|30497|Writing/Nursing/New Writing Tasks/Jason Callis|FB IMG 1561471439693|4
+10cb8635d1e71aceeebfd4e9e36e4f51103388eaca5407347b0d4357b83a2177|65164|Writing/Nursing/New Writing Tasks/Margaret Helen Martin|FB IMG 1560062117398|4
+4ca4da16e130556101c81689b610915669e59836eb9c593b7352d8f7425fac9b|2780001|Writing/Nursing/New Writing Tasks/Marjorie Mellors|IMG 20190624 104720|4
+16893e9c9a803a6bfdf95e530a0a526e86d3fc3e0193666fa236796bb6022b1d|2251518|Basic English Course|Basic English Course|4
+2c828039ffc4afaa60db6e731bbb5ce4e309a32ca398120965795acbceb2166a|33841|Writing/Nursing/New Writing Tasks/Dallas Walters|FB IMG 1560605607410|4
+6c5e2f66c66f8033ecb2ebcfa609428d171e828e322419b5e864302269a186c6|695925|Writing/Nursing/New Writing Tasks/Inform letter/Ebola|Ebola page 1|4
+cc34c4595d03487dc6f1ae8ef19ac501a2052a4735f24239b25064674d12ebc3|27528|Writing/Nursing/New Writing Tasks/Jason Callis|FB IMG 1561471437281|4
+bef17bd283d8d43f26d539226389076d760e8dd0bba21fd9e70f36ef6488ae7e|82488|Writing/Nursing/New Writing Tasks/Luis Morgan|FB IMG 1559228663983|4
+cf33428d6b939e17b151d0b39fb4a46a8e00a2dca00a8b0e5dcd5786aa1b4c61|56220|Writing/Nursing/New Writing Tasks/Ryan and rohan|page 2|4
+5c3dce90e17c5edab3bd7c5ac704cf6b1863e8a122e1abf084fa6f0c5e0275ec|340294|Basic English Course|Reading Interaction For Basic English Course|4
+5201a95dab071ae9b799e03ad0256ee3b5eef8e9ebe90339054b4c425d12c1a6|44489|Writing/Nursing/New Writing Tasks/Priya sharma|FB IMG 1561217538162|4
+e20437f9371df5fc9a1eaca1a5c3e8546fbb4d0461185a0854b068dd71e94789|50507|Writing/Nursing/New Writing Tasks/Shelly kate|FB IMG 1561640989298|4
+8fa75dc188c0ccb1cc5f1d64842abd91b1c38ce7dd02bf195ea90dbb2c7ff861|361680|Basic English Course|Old Recalls + Most common words in OET|4
+8e7676db632eaf06d0b5dd6e5883f566aef5656b285d3ed88924a61912c6ce79|367609|Basic English Course|Reading Topics|4
+234a885e7dde3d9d36f3ea45fe7e1624e8961838f6b05e1449cc072e40a89ae9|2934448|Basic English Course|Grammar guide from oetonline|4
+0c3c478fb2b51c810d94ab264033f234235b7fb4762661b4d98c63a5af3ac2f7|197420662|Listening/Jahshan/Sample test 4|Listening Sample Test 4 Audio|4
+5fea70453e05b014fca4a48fc3d9f5e2c85d04922c4114702c5197b1d9c88d87|63603062|Listening/Jahshan|Listening Jahshan OET Collection|4
+f1be7b14b939c135043ccf91db72ffdf8fd92e22829df8486899de315ff3afa9|122640475|Reading/Jahshan|Reading Jahshan OET Collection|4
+4717a7c9aebca91ecd66b347a08023bb91bc7031f0f3cad816c44df62cfabbc6|35814159|Listening/Jahshan/Sample test 4|Listening Sample Test 4 Audio|6
+4a2fd8aae7763633961d95e7f1204554ea2e18a537715448a155aa456982e46a|24535215|Reading/Jahshan|Reading Jahshan OET Collection (Part 1 of 4)|6
+5795a86e82799730a857d57a1157033d57bb440d3e202d60fbbc96ec6f38099e|37762277|Reading/Jahshan|Reading Jahshan OET Collection (Part 2 of 4)|6
+496b44c39b670a19eed000b5879bdf66858ac311da1b1883c8b808f10e7b21a2|41917787|Reading/Jahshan|Reading Jahshan OET Collection (Part 3 of 4)|6
+d6e33cc85f3b1c04a047a9d06e7e80e398ae059b46a1cccbba613355c5952560|18439812|Reading/Jahshan|Reading Jahshan OET Collection (Part 4 of 4)|6
+324de97b11e4b9164d145553273f4bd7d918a3bf0d28eaef706c4030373a480d|92503|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910878071|4
+f46569bca2a877763ac48b54e5d6c56fd9a20eb62f0c171ca4be04d84cf1a0b8|90206|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910883901|4
+f46569bca2a877763ac48b54e5d6c56fd9a20eb62f0c171ca4be04d84cf1a0b8|90206|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910740923|4
+7dbaf2caf54234b73253214e1372d024181167cb01d6be611ec5963f7375cac2|93763|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910875026|4
+9bf7f3b267526948d645695cc4b9d65e7cc9ed43ae809a465c070fa364febd00|91525|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910880055|4
+02506983c4aa1854924201e0ed769cdb8276b401caa63ba9d1148e899679f623|93009|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910892024|4
+02506983c4aa1854924201e0ed769cdb8276b401caa63ba9d1148e899679f623|93009|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910748701|4
+df2ce56defe6577b284fbf15e7af3a1ea281ee3462651e971ba17d5905f19a5b|92977|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910881958|4
+9da277b9e77705e9187934512ceaa23134efc290283d2f437cda3706c950fe21|94131|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910888125|4
+8a93c00fb284aaa10c6fa2056617391c67f55cff402b69f58b38e33d5ebdb58f|95709|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910890086|4
+e4084763bae17a81c27feac4a17f3a5bbeb0c46ce293613838bebb7e5bad0ae2|90887|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910885838|4
+7faa0d9d9453ac438949f36f4951e65440086e85bd50306154d3322a0dc7a4cc|91964|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910898758|4
+0338d66abbce0bf604b9ca115993b78d5949118c8ce68615f5a3f828f3cb11ee|93012|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910896804|4
+27fda6b48c2ef1c0c766282bdead700cffc07dbfd8920dbb0f1cc125fe48716b|97300|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910901021|4
+aa54b618073fcd500aba1b4b5cfd29dfb55f228a65916292922fc5deb3253a61|93504|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910894127|4
+ece74e363eb898af44f458f3dc7cfe0bf7891943cbf36e1f0d3f5e6f1ff8ccc7|91882|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910904872|4
+f5a4ce356131e61026930e3af9f1c471724b7ed80fcda6e10e57d773fc2cfdfa|94634|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910902980|4
+8d37193c85f2ad69b18f043c19cfc7d857c07c7f66faa6a4fdf2724ca17f9a25|91846|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910907007|4
+ff9310f35fe1283c6ea9e159b4f223de7bf0fa19524ca5bdbe7e4a3350dfde0d|92857|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910909072|4
+ad76f647402faa6d1da6b2e25f1b55792eff83bd7925dc2054075ba7d529aabe|93427|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910910938|4
+f216c15bc0ad77b938649d890426e8661756e7166efdc42f20f9848f5aefd4ab|55577|Listening/Benchmark Exams/Benchmark Listening Answers|Test 4|4
+56677abc30e9f98cb7bea15c24e42e38bd833c5705fcbb1d73d36ad0cdfaf265|55829|Listening/Benchmark Exams/Benchmark Listening Answers|Test 10|4
+e69f78ef2f9daae4c24861e733d98a9681cc687c2a5e780eebf2e1ff9179653e|55495|Listening/Benchmark Exams/Benchmark Listening Answers|Test 13|4
+ccb88e34b70238f00737078dae6f9bc8217e9b20e8f5bbeaf679d89277a15f05|55709|Listening/Benchmark Exams/Benchmark Listening Answers|Test 16|4
+aa399aa297e895e32b0f4631eb3d06c6cbeeea8e35cf00c7e21359cdd29ed40c|91624|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910912976|4
+494ffb26c217e60cb5573b9ae3d17c9d6875fc04b6dbc34695db88e9b99b353d|56508|Listening/Benchmark Exams/Benchmark Listening Answers|Test 5|4
+157d80290da1b55c35405427b1c67fde3063f6587ed0c8a9de9df6117e3c3b67|56223|Listening/Benchmark Exams/Benchmark Listening Answers|Test 19|4
+dcad18004bee5013eb39403839e5034a14d7d81729ca601229ef17086832b886|91434|Listening/Benchmark Exams/Benchmark Listening Answers|FB IMG 1636910914857|4
+c2ae2b44791a48bad29751ab6682a53cd928f7f53dc3fa9ae605382aa048485a|54906|Listening/Benchmark Exams/Benchmark Listening Answers|Test 2|4
+0e9a38e736d09fc3d9dede9d8891cb50c6a1b37dd7387acc8fbddfa757a09968|53965|Listening/Benchmark Exams/Benchmark Listening Answers|Test 8|4
+565376fb381fa40b83c73d5389aa74a30d4ea4e562dd87a446922fcd220751e7|55022|Listening/Benchmark Exams/Benchmark Listening Answers|Test 9|4
+29145cc26d29572a820e2b633b09cca893d69b0ae15e4ce401e577d09892b2be|55336|Listening/Benchmark Exams/Benchmark Listening Answers|Test 11|4
+a1060077fe6e31206bb82aee4ac208938c2d8b3330c6044379734d0e2b5b6617|58488|Listening/Benchmark Exams/Benchmark Listening Answers|Test 15|4
+d6d3de49b924dfe2ac4c8ea6c9cd203bfd5cd8067bbef73503130f7a385c794d|55193|Listening/Benchmark Exams/Benchmark Listening Answers|Test 18|4
+918ee6fceb4f687652596f5c8a11f28fb0bcd45c90af33a2946fa1824844d6a9|56081|Listening/Benchmark Exams/Benchmark Listening Answers|Test 17|4
+3ad589c9aa5b44cd22f981ee6b06f810a21bad6df0c8a75475e4b732f51d675d|56993|Listening/Benchmark Exams/Benchmark Listening Answers|Test 3|4
+3f89f01e2b035d5c464d158b6ab68c8c59a44191e5f04f010ce4ee415d19bca4|55385|Listening/Benchmark Exams/Benchmark Listening Answers|Test 7|4
+1f496dac85f148651f160a7858b45e7a2c4e203abb026073a988e77bfff58fac|56152|Listening/Benchmark Exams/Benchmark Listening Answers|Test 14|4
+d6db058046d561808dd8f3694ab05befcefbe1464f09777f8c53569911d6c62e|97276|Listening/Benchmark Exams/Benchmark Transcript|6|4
+1940bae5521a04c649db3866eef2a4679aa356352bee2e06d00ff2d5411d438a|34613426|Listening/Extra Listening Exams|L2 Sara Croft|4
+7d57d64aee4fca2057646a8a72b761529742f9cd1fd2ba3cdb4fd7300a2bd8df|112039|Listening/Benchmark Exams/Benchmark Transcript|8|4
+99084b40bc41891144c874046f956792fb1f85fd3469769a1dec15d6b017473e|97443|Listening/Benchmark Exams/Benchmark Transcript|10|4
+27cbf7ab6ba3bbdae00886e4c5f3041a02df15d9a615d5728276e03cb00fa1e5|33683467|Listening/Extra Listening Exams|L1 Melissa Gordon|4
+019747ef9678f1717765b39d75dd5ddf155621cd68c0ea8bb04a976019066f8b|38764737|Listening/Extra Listening Exams|L6 Tainatongo|4
+a64ec521daacd5104f70b7f1ee0c508cbf0a3dfe6f584e22219e896c4ee1650d|40326649|Listening/Extra Listening Exams|L8 Bernardito|4
+51c593eea30eb14fcfcbdb67b948b64430095c89ad6c52a2d0ead999d9b289cf|33761624|Listening/Extra Listening Exams|L3 Robert Miller|4
+850da162d8d2298f92f18dfdd408f0f95d7b1d624d13b11f5fad54ab72099da9|37165486|Listening/Extra Listening Exams|L10 Bryan Haris|4
+1e84a64adc97ff3e0485f67b10854982863962927a33c7b3fb3f59e9db44ba4c|32718284|Listening/Extra Listening Exams|L16 Hiromichi|4
+1e84a64adc97ff3e0485f67b10854982863962927a33c7b3fb3f59e9db44ba4c|32718284|Listening/Extra Listening Exams|L16 Hiromichi(1)|4
+562c58752267b5aae8582715715e326b7509411655f25adf25da42b907371cfc|36282756|Listening/Extra Listening Exams|L18 Mrs Melissa|4
+649df444224d1e87af230eea2bf05fa4c111956d97562e8851dd9241f899c17e|32566520|Listening/Extra Listening Exams|L20 Polina Semyonova|4
+cc73d827925bc09389281ddf572b6bd542c6af80245c210cbab8699f2fb2397b|35097006|Listening/Extra Listening Exams|L15 Eugenusz|4
+80a65a7e1a09b4808b57b65eca3b0fb0347b5212f4fe1eb5c0def2b2dd030a6b|27819585|Listening/Extra Listening Exams|L24 Mr Gwalather|4
+31996f36c2b9391fd90446dad54c7bcd3ef7a1f30786da66bc62a57bd0b26371|55552|Listening/Benchmark Exams/Benchmark Listening Answers|Test 1|4
+79749a03459e18c78ec8eb5973e5eda2149711fc075b48871eefe490127de794|57394|Listening/Benchmark Exams/Benchmark Listening Answers|Test 6|4
+f6a8a3df02b4a5dec4f7f96375325bfca7ad852ffcd4a62d660182e8760bf17d|97623|Listening/Benchmark Exams/Benchmark Transcript|1|4
+80c35577e3a5a048fad41aec5fab82172d4316ac54284dcbfafe0442514c3dd0|52070581|Listening/Benchmark Exams/Audio|LISTENING TEST 5|4
+8fe6c17daa75428940b61c17f9396505871889daa6499db8d85eac5d13d26762|98444|Listening/Benchmark Exams/Benchmark Transcript|4|4
+7137144dd3c2888d30c324321d557687d799eb7faab28690702f0bb9a3c19374|109314|Listening/Benchmark Exams/Benchmark Transcript|2|4
+0163ec46da1c4dc3a0fff8154cb7408ddd093d133d56343a143ad2ed5caa7916|96877|Listening/Benchmark Exams/Benchmark Transcript|7|4
+4f9d2052f3ce54e02fdd89fdc1af513700450269ddaeecbaaeea2d7feffb9147|55384|Listening/Benchmark Exams/Benchmark Listening Answers|Test 12|4
+59ace8fb925e402d1faff2c6b0592626915438207467d45c95a83bfdaf6aad26|52479306|Listening/Benchmark Exams/Audio|LISTENING TEST 9|4
+8635181cdca5f86b7b38bd5a034615f598c22446822fd411e318c2484560db49|99668|Listening/Benchmark Exams/Benchmark Transcript|3|4
+70f4ed7e6e1e934a7ae2a4225d018fdf945f388513af8361e62fca1f76de9bc0|106023|Listening/Benchmark Exams/Benchmark Transcript|5|4
+c44d5619ce396269e374e92aea810e822c529516176c7517abcda628c5c335d6|100059|Listening/Benchmark Exams/Benchmark Transcript|9|4
+8adfbf2ba6d50c8acb3e74398f98289363200d8864c467f1e795f6d28757b6ee|12881156|Listening/Benchmark Exams|Benchmark Listeninig Tests|4
+f8199e8106facb52e6eb1088c65dea93a6b185168f560d32aba5356b54cb7a5b|32952457|Listening/Extra Listening Exams|L4 Ray Sands|4
+22f47c193122d3ce862cf574aacd77b9f0bf8abdb857f9f7b9cf28320e216be1|37881448|Listening/Extra Listening Exams|L11 Ms Elissa|4
+47687802dae2b64280f8161c51e2f3f3938976bda59cc347d790b1b15e0caeec|38602150|Listening/Extra Listening Exams|L12 Chong Walton|4
+6329a06da9602c497f124b20450f5e0b2e55d47c9dd487781efad88a4f028e12|38880510|Listening/Extra Listening Exams|L17 Greg Mathew|4
+44e91edf652f4ad7eca6f7df4fb6d28f55e5f25a13580aa0fef58c02e35b4d96|36522663|Listening/Extra Listening Exams|L7 Sedif Dagli|4
+40c6c04f1a8cabcb8401510daf3464624bc77fc4226fb43e7a1b45ff52820d3b|31574028|Listening/Extra Listening Exams|L13 Magtanggol|4
+d0b82352a0d11c732ccc866ad128b24a0ce45891d86c1261eb38cade97a5dad4|8929199|Listening/Extra Listening Exams|L27 Jason Raily|4
+8f5b10e1310a98eb5c019aacb1a46acce4d661d8fd16137b8ab837e049ac5101|41894415|Listening/Extra Listening Exams|L21 Breegi|4
+c5d1144ef6768c65fb9466fc1ab624b3e39495c002a890b1a0566c37f1d586ef|33885093|Listening/Extra Listening Exams|L23 James|4
+8b8e21d0e5d14dd3b4c63f10724db36ef813336915c9ded4d544cc769c0d9464|45142376|Listening/Extra Listening Exams|L22 Duzambel|4
+57cd4563dcb9561c11eb35aaa480d1dcaba117720c414e346caacd33db30ca3e|40953586|Listening/Extra Listening Exams|L26 Simon Mortaklie|4
+ea9dccee7e9d863eaaea65a687ec7ba6edb42ada2e46d33b721e474d07428df6|16421805|Listening/Extra Listening Exams|L39 Gary Wilton|4
+d0d42b285f6f13a5d496baf74c0b9df179ff90ea7f45266b7a3c38789b81c2b2|37910706|Listening/Extra Listening Exams|L31 Rongomani|4
+c77a9de8b1409892bedc962d845ad60b97a6c035061dec02524d021866f6dfee|34360978|Listening/Extra Listening Exams|L34 Daniel Anderson|4
+7f0d91e20805f178d413aac4591d71244f453f9ec9808323c068e15496bfad1b|29588844|Listening/Extra Listening Exams|L32 Daniel|4
+8d237ca27e1c5da2c98a99c3a63737697559f69b20e4091118525e325433e43f|383088|Listening/Extra Listening Exams/Questions And Answers|1 answers|4
+c8dc8e8e8fdc67f7fdf97bb3a2132b1315b617cd2b50d4a62e6df97db552f168|1347304|Listening/Extra Listening Exams/Questions And Answers|1|4
+4da92e34ac5e8fcc5ad14a8c12f98f4d8514a4102e0026e2034f975dd42f5d79|32361239|Listening/Extra Listening Exams|L43 Mrs Lizavita|4
+55057364a2cf9016eb0a7aa20ad094504f3cb715efc1c0c61ac6aae720042975|352364|Listening/Extra Listening Exams/Questions And Answers|2 answers|4
+5434c6c8842cc45331cddc6df842971f26e8f426de6ad755e6374ed6c628e2f9|39467744|Listening/Extra Listening Exams|L33 Gonzalves|4
+9422832313e3f8bc09554acc8aac1b4e27a34312d027ef13b6294de9dfaffb1a|1496193|Listening/Extra Listening Exams/Questions And Answers|3|4
+0a4893025e2cf825631d650c2e58932f922091b4f5040b521cd05c2e2ac7c7db|233974|Listening/Extra Listening Exams/Questions And Answers|7 answers|4
+49ea70195b35ba30c75d45f7157ef6bd3c0e07f742d8d01af1328f85983e2ff6|273325|Listening/Extra Listening Exams/Questions And Answers|10 answers|4
+9a6aaa72e487140d1aeb6faeadfc1e20387bfbb09d0e1ea733fb842c548c1f97|1245975|Listening/Extra Listening Exams/Questions And Answers|7|4
+5b2e106819d4eaf4f8682b3a1a401376a9c1950f5537e66e6cd5ca107eeb9a07|1109558|Listening/Extra Listening Exams/Questions And Answers|8|4
+568980b1799fd405e00c1919857450670b803e645b6af9c82901950dc842ec40|289654|Listening/Extra Listening Exams/Questions And Answers|12 answers|4
+0a9bf36e02d696e71fde96e22bcfab10a0af4de42aa048e026bc4cf96216512d|32498205|Listening/Extra Listening Exams|L46 Daniel|4
+4cc108f6cf3b129152ff2c02b1ddf40dc3bcc9b95213b283ebc712252d129280|1370063|Listening/Extra Listening Exams/Questions And Answers|12|4
+6c2c61c83ef6852a692cae9c4ecd4592a487eedc719ab7f9ad828a2d1d684599|1456194|Listening/Extra Listening Exams/Questions And Answers|15|4
+99976cb6c170cbb584fc6791b0dba9d320d324d8923c62d131514ef44290d0f2|9321|Listening/Extra Listening Exams/Questions And Answers|21 answers|4
+6b6c1d20309786dc9fe6baa2195b0e598b6d2ea6b6b9693eeaf4b42fb8e218a4|394623|Listening/Extra Listening Exams/Questions And Answers|3 answers|4
+ebbe0c03c3c6b869bc33c1e4a80befbb44ed57e6d9a6276545d9c9e73f7f8046|104665|Listening/Extra Listening Exams/Questions And Answers|4 answers|4
+659d612920b2709286d93cd4ee496e7dd6ab1e0874725509b534493363d43c37|229276|Listening/Extra Listening Exams/Questions And Answers|6 answers|4
+9dd752b65a42178ffa084f457e7a2fd032ddd62ab0336e2b08ec6002640a6116|182372|Listening/Extra Listening Exams/Questions And Answers|11 answers|4
+6e8c14a901cc010e4c84e6dbcbfec08a65343bc0b7eaddc66a12957f87680d14|190723|Listening/Extra Listening Exams/Questions And Answers|11|4
+e080037f897e356ca2be2bcd39c2bc53c6e288eaef5b39c5c55dfa7157818106|217373|Listening/Extra Listening Exams/Questions And Answers|15 answers|4
+c905fabe01853d227e47d64432103fa061841ef4065d34774266321148b96e24|1358317|Listening/Extra Listening Exams/Questions And Answers|13|4
+a918f6a08247f217c615beaaf48882b779a13aeff67360ef4376e76cff0068c6|266794|Listening/Extra Listening Exams/Questions And Answers|17 answers|4
+80074fbdce573a422c5a0792857cddd7d78dc5a4e1aa69f1d338ad037d0d45e4|31807030|Listening/Extra Listening Exams|L44 Alejandro|4
+d58151eb4e74840c3506c14a846420c88d09f86e2d64be8926f75bc60424eb7c|224951|Listening/Extra Listening Exams/Questions And Answers|18 answers|4
+806e34fde6751af1762efd4f5fc9361bf9a3769366431c2e71da7938f3f6c3cd|1533460|Listening/Extra Listening Exams/Questions And Answers|2|4
+7cac510cf86666237315da84b58b4d341e58c82d917ba87d2c00a7eedfc820c4|199826|Listening/Extra Listening Exams/Questions And Answers|8 answers|4
+caab9075d14dc38262313eaea4bffde1c252fce592965dda292dd5f84799ff43|284559|Listening/Extra Listening Exams/Questions And Answers|13 answers|4
+0cd03aa8fc0bf43f130ffbac07ae2fe723b8fea5618fd8d85888d8d3e871c0b3|268101|Listening/Extra Listening Exams/Questions And Answers|16 answers|4
+9b0ab69779781ac5da778d40763fd3d58a42495e328f116745dd9f5e35beb9a8|33254201|Listening/Extra Listening Exams|L41 Mr Jonathan|4
+36a753fefea456448d58adb844ae5224fa0a5e75d8f5d41387303cb1854eb36c|263107|Listening/Extra Listening Exams/Questions And Answers|20 answers|4
+73d71e6ef6f417cddb22bd40de697d618066d8105e409e70a4c61bf24c9b3529|10058|Listening/Extra Listening Exams/Questions And Answers|22 answers|4
+3baa7c85eec568bc4710302b7b3f157a7559510e40b4c78eb4b8c9ca5a13ca57|192662|Listening/Extra Listening Exams/Questions And Answers|21|4
+ea1d6d4cfb908d344470b92d45251afd061b573afb39bbf1d55e63a583df5e1b|195040|Listening/Extra Listening Exams/Questions And Answers|22|4
+006b069aad7938a353eba96cbc7ea36d14385488e1d7838c19d02ef63ef8154a|1301684|Listening/Extra Listening Exams/Questions And Answers|18|4
+9cfd1589edfe16f0dca058235922f693687f0575928716fdca8db500d9b57249|685200|Listening/Extra Listening Exams/Questions And Answers|23 answers|4
+9cfd1589edfe16f0dca058235922f693687f0575928716fdca8db500d9b57249|685200|Listening/Extra Listening Exams/Questions And Answers|23|4
+136424f3c77c249aa121600c2f27f732a40f73fc3d9533b34665fd6cd028cc4b|455311|Listening/Extra Listening Exams/Questions And Answers|24 answers|4
+7a9181013c2a7484dde7b64c6da61e86a08a44a413ddd18d711b5f6290b822af|156723|Listening/Extra Listening Exams/Questions And Answers|26 answers|4
+f77d4b35cac0579a1ce9cefe88962c840c0c6188803f2b2e086b80ec54b21153|42084|Listening/Extra Listening Exams/Questions And Answers|31 answers|4
+98fcf556055ff5f30932c30f76a20a1d4fccb02917551668ede32c5b66bbdea1|144981|Listening/Extra Listening Exams/Questions And Answers|27 answers|4
+c6434e7b847c01f49b2a3b7d6343bc055f3539eeca319328a2305fe84072d203|184742|Listening/Extra Listening Exams/Questions And Answers|32 answers|4
+6f322f55769eea5eafdd67175565f8de6667ec36686387cb1a1c92835dcec824|41120412|Listening/Extra Listening Exams|L42 Dzhumbul|4
+da3c3fb0a6a69b7f947f29b0d42aa6b400b4fc000cc81c0c1b88d43dbbbb69fe|221821|Listening/Extra Listening Exams/Questions And Answers|33 answers|4
+134bc91525035a4bca353c65ac3fe107c4020043d018b925f91a0fe1ca4c9378|29698798|Listening/Extra Listening Exams|L45 Mrs Gracia|4
+bb886d074bbcea2c45ea930a747772cc1be3156b916650a8ca239b823064be8a|672052|Listening/Extra Listening Exams/Questions And Answers|31|4
+8f1829f1b872071ee2de617357db4544e018af5b4c5bdbb1fa965f4f3d1d344a|799717|Listening/Extra Listening Exams/Questions And Answers|24|4
+1cde9b645c94e2a71945e50e3207ca47e48ceaf5b1ea536a8ba449c39e596383|704676|Listening/Extra Listening Exams/Questions And Answers|32|4
+9581a9af3cab4ac79aee6ff6a357cd08599390998be7619eca1d6e6b991bc7d9|117671|Listening/Extra Listening Exams/Questions And Answers|34 answers|4
+c20a1e900fd2b876aa62d2b8b65697d897f7251a193e254e6ae28215d4ca3697|294876|Listening/Extra Listening Exams/Questions And Answers|39 answers|4
+6c447cfef241588de110e54c965c34067eeb0b7504b72d79e46b3c1edcb4ef61|910180|Listening/Extra Listening Exams/Questions And Answers|26|4
+4084d3618d811e1305fdb2c3b5b6ad9bed0bd103025fffa7b978d2ba54b7a7cb|1487968|Listening/Extra Listening Exams/Questions And Answers|33|4
+5bc6e4c19acf460ac6376bac12444891e97dbe9ab8a772580bb3194df933374b|316615|Listening/Extra Listening Exams/Questions And Answers|45 answers|4
+b720d6ab2d83f12562761ab7fb3e84b2adbd2cbcb2492262b5e5710855ecb6c8|797651|Listening/Extra Listening Exams/Questions And Answers|40|4
+19c50243ab0d731bc9a2d25a75ed1833a2f11fcdb494e906056e3ed753779971|369201|Listening/Extra Listening Exams/Questions And Answers|41 answers|4
+b970d0bf3a36b64bf843f6ee963f6853ca7995fea3122485a3c22a1a1ef33947|1001826|Listening/Extra Listening Exams/Questions And Answers|39|4
+acac811a5731e53c90c97c92564efd946bd89a188b76e7ab0b20d9bfd53d014b|188743|Listening/Extra Listening Exams/Questions And Answers|34|4
+cdf76b30a34e5edca8d9280febb546ecd8a20adc12878390290f2453e5a86577|318377|Listening/Extra Listening Exams/Questions And Answers|40 answers|4
+43e2c1b67463245794b406c2ca5dee8819c9c5fd7823fe8185f203fecf19d5da|455140|Listening/Extra Listening Exams/Questions And Answers|42 answers|4
+1ce78fad696beb7dc2766ec118708d73ab19b7aa17ca4010f352bcbd88e58f2f|873046|Listening/Extra Listening Exams/Questions And Answers|27|4
+894a46fbf41cdc9c44169cbd30bf3159080201d88cb6fa7ff8fc71a560264571|456034|Listening/Extra Listening Exams/Questions And Answers|43 answers|4
+5bc6e4c19acf460ac6376bac12444891e97dbe9ab8a772580bb3194df933374b|316615|Listening/Extra Listening Exams/Questions And Answers|44 answers|4

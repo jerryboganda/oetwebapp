@@ -43,6 +43,12 @@ import {
 } from '@/lib/api';
 import { adminAdjustSubscriptionEntitlements } from '@/lib/admin-subscription-entitlements';
 import {
+  fetchProfessionCatalog,
+  professionCatalogOptions,
+  PROFESSION_CATALOG_FALLBACK,
+  type ProfessionCatalogEntry,
+} from '@/lib/api/professions';
+import {
   getAdminBillingAddOnData,
   getAdminBillingAddOnVersionHistoryData,
   getAdminBillingCouponData,
@@ -638,6 +644,7 @@ export default function BillingPage() {
   const [invoiceEvidenceStatus, setInvoiceEvidenceStatus] = useState<PageStatus>('empty');
   const invoiceEvidenceRequestRef = useRef(0);
   const [toast, setToast] = useState<ToastState>(null);
+  const [professionCatalog, setProfessionCatalog] = useState<ProfessionCatalogEntry[]>(PROFESSION_CATALOG_FALLBACK);
 
   // 409 conflict banner state — one banner per editor surface so we never
   // silently overwrite a concurrent admin's catalog edits.
@@ -1091,6 +1098,29 @@ export default function BillingPage() {
       cancelled = true;
     };
   }, []);
+
+  // Canonical profession taxonomy for the plan allocation dropdown. fetchProfessionCatalog
+  // never rejects — it resolves to the static fallback when the API is unreachable.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchProfessionCatalog().then((entries) => {
+      if (!cancelled) setProfessionCatalog(entries);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 'all' is a billing-only pseudo-profession (plan shows under every discipline tab). An
+  // unrecognised stored value is kept selectable so saving a legacy plan never silently
+  // reallocates it to 'all'.
+  const professionOptions = useMemo(() => {
+    const options = [{ value: 'all', label: 'All disciplines' }, ...professionCatalogOptions(professionCatalog)];
+    if (planForm.profession && !options.some((option) => option.value === planForm.profession)) {
+      options.push({ value: planForm.profession, label: `${planForm.profession} — not in catalog` });
+    }
+    return options;
+  }, [professionCatalog, planForm.profession]);
 
   const metrics = useMemo(() => {
     const totalMRR = plans
@@ -3284,15 +3314,8 @@ export default function BillingPage() {
               <Input label="Original price £ (was)" type="number" min={0} step="0.01" value={planForm.originalPriceGbp} onChange={(event) => setPlanForm((current) => ({ ...current, originalPriceGbp: event.target.value }))} hint="Strikethrough price. Blank = none." />
               <Input label="Access duration (days)" type="number" min={0} value={planForm.accessDurationDays} onChange={(event) => setPlanForm((current) => ({ ...current, accessDurationDays: event.target.value }))} hint="180 = 6 months. 9999 = permanent." />
               <Select label="Profession" value={planForm.profession} onChange={(event) => setPlanForm((current) => ({ ...current, profession: event.target.value }))}
-                options={[
-                  { value: 'all', label: 'All disciplines' },
-                  { value: 'medicine', label: 'Medicine' },
-                  { value: 'nursing', label: 'Nursing' },
-                  { value: 'pharmacy', label: 'Pharmacy' },
-                  { value: 'physiotherapy', label: 'Physiotherapy' },
-                  { value: 'radiography', label: 'Radiography' },
-                  { value: 'allied_health', label: 'Allied health professions' },
-                ]}
+                options={professionOptions}
+                hint="From the canonical signup catalog — a buyer must be registered as this profession to check out."
               />
             </div>
             <div className="mt-3 grid gap-4 md:grid-cols-2">

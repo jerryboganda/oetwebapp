@@ -252,6 +252,13 @@ public sealed class Oet2026CatalogSeeder(
         dst.IsDraft = src.IsDraft;
         dst.ExtensionAllowed = src.ExtensionAllowed;
         dst.RecallUpdatesEnabled = src.RecallUpdatesEnabled;
+        // Delivery + content scoping (access & payment spec 2026-07-15). A version is
+        // the snapshot the checkout reads back, so anything missing here is silently
+        // lost from the order even though the plan row still carries it.
+        dst.DeliveryMethod = src.DeliveryMethod;
+        dst.TelegramInviteUrl = src.TelegramInviteUrl;
+        dst.DeliveryInstructions = src.DeliveryInstructions;
+        dst.ContentOverridesJson = src.ContentOverridesJson;
     }
 
     private static async Task UpsertAddOnAsync(

@@ -413,6 +413,14 @@ export interface WebPushSettings {
   enabled: boolean | null;
 }
 
+// Distinct from MessagingSettings.whatsAppPhoneNumberId (the Meta Cloud API sender
+// id, which is not dialable). This is the public wa.me number learners message.
+export interface SupportSettings {
+  whatsAppNumber: string;
+  whatsAppProofTemplate: string;
+  isWhatsAppConfigured?: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -450,6 +458,7 @@ export interface RuntimeSettingsResponse {
   pronunciation: PronunciationSettings;
   authTokens: AuthTokensSettings;
   webPush: WebPushSettings;
+  support: SupportSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -462,7 +471,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush';
+type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush' | 'support';
 
 // The object-valued payload keys (every UI section maps to one of these; the "paypal"
 // UI section writes into "billing"). Excludes the scalar audit fields so updateField can
@@ -873,6 +882,11 @@ const WEB_PUSH_FIELDS: FieldDef<WebPushSettings>[] = [
   { key: 'enabled', label: 'Enable Browser Web Push', type: 'checkbox', hint: 'Allow learners to receive browser push notifications (requires VAPID keys in the Push section).' },
 ];
 
+const SUPPORT_FIELDS: FieldDef<SupportSettings>[] = [
+  { key: 'whatsAppNumber', label: 'Support WhatsApp Number (dialable)', type: 'text', hint: 'The number learners message to send payment proof — shown next to every package. Digits only, country code first, no "+", spaces, or dashes (e.g. 447961725989); the server strips those and rejects anything else, because the value goes straight into a wa.me/<number> link. NOT the "WhatsApp Phone Number ID" in the Messaging section — that is the Meta Cloud API sender id and cannot be dialled. Blank falls back to the built-in default number.' },
+  { key: 'whatsAppProofTemplate', label: 'Payment-Proof Message Template', type: 'text', hint: 'Message pre-filled for the learner when they tap "Send proof on WhatsApp". Blank uses the built-in wording. wa.me can only pre-fill text — the learner still attaches the screenshot themselves.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -910,6 +924,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'pronunciation', title: 'Pronunciation', description: 'Pronunciation ASR provider selection, region/locale, Whisper/Gemini base-urls + models, audio limits, retention, and free-tier gating. API keys live in Admin → AI Providers.' },
   { id: 'authTokens', title: 'Auth Tokens', description: 'Access/refresh/OTP token lifetimes and the authenticator issuer label. Signing keys, issuer, and audience stay env-only (trust anchors).' },
   { id: 'webPush', title: 'Web Push', description: 'Browser web-push master toggle. VAPID keys are configured in the Push section.' },
+  { id: 'support', title: 'Support WhatsApp', description: 'The public WhatsApp number learners message to send payment proof, plus the pre-filled message. Shown next to every package and on every checkout/billing surface. Stored in plaintext — it is a public number, not a secret. Separate from the Messaging section, which holds the Meta Cloud API sender credentials for automated notifications.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -1262,6 +1277,11 @@ function emptyResponse(): RuntimeSettingsResponse {
     webPush: {
       enabled: null,
     },
+    support: {
+      whatsAppNumber: '',
+      whatsAppProofTemplate: '',
+      isWhatsAppConfigured: false,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -1314,6 +1334,7 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     pronunciation: { ...empty.pronunciation, ...data.pronunciation },
     authTokens: { ...empty.authTokens, ...data.authTokens },
     webPush: { ...empty.webPush, ...data.webPush },
+    support: { ...empty.support, ...data.support },
   });
 }
 
@@ -1771,6 +1792,7 @@ export function RuntimeSettingsClient() {
     pronunciation: false,
     authTokens: false,
     webPush: false,
+    support: false,
   });
 
   const load = useCallback(async () => {
@@ -2910,6 +2932,28 @@ export function RuntimeSettingsClient() {
                     onChange={(next) =>
                       updateField(
                         'webPush',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'support' &&
+                SUPPORT_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.support[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'support',
                         field.key,
                         (field.type === 'number'
                           ? parseNullableNumberInput(String(next))

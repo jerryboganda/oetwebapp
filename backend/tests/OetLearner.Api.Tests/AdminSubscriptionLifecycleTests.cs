@@ -322,19 +322,25 @@ public class AdminSubscriptionLifecycleTests
     }
 
     [Fact]
-    public async Task CreateSubscriptionAsync_ExistingSubscription_Throws()
+    public async Task CreateSubscriptionAsync_ExistingSubscription_GrantsSecondPackage_WithoutRemovingTheFirst()
     {
         await using var db = NewDb();
-        await SeedAsync(db);
-        var existingPlanCode = (await db.BillingPlans.FirstAsync()).Code;
+        var (_, existingPlan, existingSub) = await SeedAsync(db);
+        var secondPlan = await SeedPlanAsync(db, "premium", "Premium Plan", price: 49.00m, durationMonths: 1, includedCredits: 0);
         var service = NewAdminService(db);
 
-        var ex = await Assert.ThrowsAsync<ApiException>(() => service.CreateSubscriptionAsync(
+        await service.CreateSubscriptionAsync(
             AdminId, AdminName,
-            new AdminSubscriptionCreateRequest(UserId: LearnerId, PlanCode: existingPlanCode),
-            CancellationToken.None));
+            new AdminSubscriptionCreateRequest(UserId: LearnerId, PlanCode: secondPlan.Code),
+            CancellationToken.None);
 
-        Assert.Equal("subscription_exists", ex.ErrorCode);
+        // Packages aggregate additively — a new grant must never remove existing access.
+        var subs = await db.Subscriptions.Where(s => s.UserId == LearnerId).ToListAsync();
+        Assert.Equal(2, subs.Count);
+        var kept = subs.Single(s => s.Id == existingSub.Id);
+        Assert.Equal(existingPlan.Code, kept.PlanId);
+        Assert.Equal(SubscriptionStatus.Active, kept.Status);
+        Assert.Equal(SubscriptionStatus.Active, subs.Single(s => s.PlanId == secondPlan.Code).Status);
     }
 
     // ── Helpers ─────────────────────────────────────────────────

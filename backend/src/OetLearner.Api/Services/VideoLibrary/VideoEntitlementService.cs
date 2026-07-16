@@ -57,6 +57,7 @@ public sealed record VideoEntitlementResult(
     bool Allowed,
     string Reason,        // "admin" | "free_tier" | "plan_grants_video_library" | "addon_grants_video_library"
                           // | "no_active_subscription" | "subscription_frozen" | "subscription_expired" | "plan_does_not_grant"
+                          // | "plan_does_not_grant_subtest" | "profession_mismatch" | "plan_excludes_video"
     string? CurrentTier); // null | "free" | "premium" | "trial" | "frozen" | "expired" | "admin"
 
 /// <summary>Resolved-once grant context for evaluating many videos.</summary>
@@ -79,7 +80,18 @@ public sealed record VideoAccessContext(
     // SubtestCode ∈ GrantedSubtests unlock; a video with no SubtestCode is not subtest-restricted
     // (fails open under any premium grant). Admin and free-tier paths ignore this entirely.
     bool AllSubtestsGranted = true,
-    IReadOnlySet<string>? GrantedSubtests = null);
+    IReadOnlySet<string>? GrantedSubtests = null,
+    // Profession axis of the "subtest × profession" content model (access & payment spec §3):
+    // the learner's registered profession, lower-cased, or null when they have none. Checked
+    // against LibraryVideo.ProfessionIdsJson in Evaluate as defence in depth — the learner
+    // listing/lookup paths filter by profession too, but a caller holding a video by id must
+    // not be able to skip the check.
+    string? ProfessionId = null,
+    // Per-plan content overrides (BillingPlan.ContentOverridesJson), keyed by LibraryVideo.Id.
+    // An explicit include beats the subtest/profession scope AND an exclude; neither ever
+    // bypasses the module / subscription gate.
+    IReadOnlySet<string>? VideoIncludes = null,
+    IReadOnlySet<string>? VideoExcludes = null);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
@@ -119,6 +131,9 @@ public sealed class VideoEntitlementService(
             case "subscription_expired":
                 throw ApiException.Forbidden("subscription_expired",
                     "Your subscription has expired. Renew access before watching this video.");
+            case "profession_mismatch":
+                throw ApiException.PaymentRequired("content_locked",
+                    "This video is for a different profession. It is not part of your package.");
             default:
                 throw ApiException.PaymentRequired("content_locked",
                     "Your current plan does not include the Video Library. Upgrade to a plan or add-on that includes it.");
@@ -154,7 +169,8 @@ public sealed class VideoEntitlementService(
                 IsAdmin: false, Authenticated: true,
                 HasEligibleSubscription: false, Frozen: frozen, Expired: expired,
                 PlanGrantsPremium: false, AddOnGrantsPremium: false,
-                CurrentTier: frozen ? "frozen" : expired ? "expired" : "free");
+                CurrentTier: frozen ? "frozen" : expired ? "expired" : "free",
+                ProfessionId: entitlement.ProfessionId);
         }
 
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
@@ -180,12 +196,20 @@ public sealed class VideoEntitlementService(
         var addOn = await ResolveAddOnVideoGrantAsync(userId, ct);
         var addOnGrants = addOn.Grants;
 
+        // The plan's subtest scope is the INTERSECTION of two independent restrictions: the legacy
+        // video_library.subtests node and the plan's IncludedSubtestsJson (the subtest axis of the
+        // subtest × profession model, spec §3). Either side being unrestricted narrows nothing, so
+        // the plan is unrestricted only when BOTH are.
+        var (planAllSubtests, planSubtests) = IntersectSubtestScopes(
+            bundle.RestrictsSubtests ? bundle.Subtests : null,
+            entitlement.AllSubtestsIncluded ? null : entitlement.IncludedSubtests);
+
         // Union the per-subtest scope across the plan and every active add-on. If ANY grant is
         // unrestricted, the learner gets all modules; otherwise only the union of listed subtests.
-        var allSubtestsGranted = (planGrantsPremium && !bundle.RestrictsSubtests)
+        var allSubtestsGranted = (planGrantsPremium && planAllSubtests)
             || (addOnGrants && addOn.AllSubtests);
         var grantedSubtests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (planGrantsPremium && bundle.RestrictsSubtests) grantedSubtests.UnionWith(bundle.Subtests);
+        if (planGrantsPremium && !planAllSubtests) grantedSubtests.UnionWith(planSubtests);
         if (addOnGrants && !addOn.AllSubtests) grantedSubtests.UnionWith(addOn.Subtests);
 
         return new VideoAccessContext(
@@ -196,7 +220,10 @@ public sealed class VideoEntitlementService(
             CurrentTier: entitlement.IsTrial ? "trial" : planGrantsPremium || addOnGrants ? "premium" : "free",
             ModuleEnabled: moduleEnabled,
             AllSubtestsGranted: allSubtestsGranted,
-            GrantedSubtests: grantedSubtests);
+            GrantedSubtests: grantedSubtests,
+            ProfessionId: entitlement.ProfessionId,
+            VideoIncludes: entitlement.ContentOverrides.VideoIncludes,
+            VideoExcludes: entitlement.ContentOverrides.VideoExcludes);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -204,6 +231,23 @@ public sealed class VideoEntitlementService(
         if (context.IsAdmin)
         {
             return new VideoEntitlementResult(true, "admin", "admin");
+        }
+
+        // Content scope (spec §3): an explicit per-plan include wins over the exclude list and over
+        // the subtest/profession scope — but never over the module/subscription gates below, which
+        // every path still has to clear.
+        var explicitlyIncluded = context.VideoIncludes is { Count: > 0 }
+            && context.VideoIncludes.Contains(video.Id);
+        if (!explicitlyIncluded)
+        {
+            if (context.VideoExcludes is { Count: > 0 } && context.VideoExcludes.Contains(video.Id))
+            {
+                return new VideoEntitlementResult(false, "plan_excludes_video", context.CurrentTier);
+            }
+            if (!VideoLibraryLearnerService.IsProfessionVisible(video.ProfessionIdsJson, context.ProfessionId))
+            {
+                return new VideoEntitlementResult(false, "profession_mismatch", context.CurrentTier);
+            }
         }
 
         if (string.Equals(video.AccessTier, "free", StringComparison.OrdinalIgnoreCase))
@@ -237,7 +281,8 @@ public sealed class VideoEntitlementService(
             // Per-subtest scoping: when the grant is limited to specific OET modules, a video whose
             // SubtestCode falls outside that set stays locked. A video with no SubtestCode is not
             // subtest-restricted and unlocks under any premium grant (fail-open).
-            if (!context.AllSubtestsGranted
+            if (!explicitlyIncluded
+                && !context.AllSubtestsGranted
                 && !string.IsNullOrWhiteSpace(video.SubtestCode)
                 && (context.GrantedSubtests is null
                     || !context.GrantedSubtests.Contains(video.SubtestCode.Trim())))
@@ -255,6 +300,28 @@ public sealed class VideoEntitlementService(
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Intersects two optional subtest restrictions. A null side imposes no restriction, so the
+    /// result is unrestricted only when both are null; otherwise it is the intersection (or the
+    /// single non-null side). An empty result with allSubtests=false means the two restrictions
+    /// are disjoint — the grant covers no subtest at all.
+    /// </summary>
+    private static (bool allSubtests, IReadOnlySet<string> subtests) IntersectSubtestScopes(
+        IReadOnlyCollection<string>? left,
+        IReadOnlySet<string>? right)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (left is null && right is null) return (true, result);
+        if (left is null) { result.UnionWith(right!); return (false, result); }
+        if (right is null) { result.UnionWith(left); return (false, result); }
+
+        foreach (var code in left)
+        {
+            if (right.Contains(code)) result.Add(code);
+        }
+        return (false, result);
+    }
 
     /// <summary>
     /// Parse the plan EntitlementsJson video_library node. Fail-low: malformed

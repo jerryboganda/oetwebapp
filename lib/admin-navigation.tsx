@@ -330,7 +330,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       },
       {
         href: '/admin/billing/manual-payments',
-        label: 'Manual Payments',
+        label: 'Payment Proofs',
         icon: <Receipt className={iconClassName} />,
         matchPrefix: '/admin/billing/manual-payments',
         requiredPermissions: [AdminPermission.BillingRead],
@@ -522,7 +522,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/billing/storefront', title: 'Catalog Storefront' },
   { prefix: '/admin/billing/subscriptions-packages', title: 'Subscriptions & Packages' },
   { prefix: '/admin/billing/wallet-tiers', title: 'Wallet Tiers' },
-  { prefix: '/admin/billing/manual-payments', title: 'Manual Payments' },
+  { prefix: '/admin/billing/manual-payments', title: 'Payment Proofs' },
   { prefix: '/admin/billing/payment-methods', title: 'Payment Methods' },
   { prefix: '/admin/billing', title: 'Billing Ops' },
   { prefix: '/admin/free-tier', title: 'Free Tier' },

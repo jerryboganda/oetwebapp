@@ -112,6 +112,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyPronunciation(row, request.Pronunciation, changedKeys);
                     ApplyAuthTokens(row, request.AuthTokens, changedKeys);
                     ApplyWebPush(row, request.WebPush, changedKeys);
+                    ApplySupport(row, request.Support, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -607,6 +608,14 @@ public static class AdminRuntimeSettingsEndpoints
             webPush = new
             {
                 enabled = settings.Push.WebPushEnabled,
+            },
+            // The support number is public (it is printed next to every package),
+            // so it is returned in plaintext — unlike every secret above.
+            support = new
+            {
+                whatsAppNumber = settings.Support.WhatsAppNumber,
+                whatsAppProofTemplate = settings.Support.WhatsAppProofTemplate,
+                isWhatsAppConfigured = settings.Support.IsWhatsAppConfigured,
             },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
@@ -1275,6 +1284,39 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.WhatsAppFallbackTemplateName, v => row.WhatsAppFallbackTemplateName = v, "messaging.whatsAppFallbackTemplateName", changed)) { }
     }
 
+    private static void ApplySupport(RuntimeSettingsRow row, RuntimeSettingsSupportUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        ValidateWhatsAppNumber(d.WhatsAppNumber, "support.whatsAppNumber");
+        if (TrySetPlain(NormalizeWhatsAppNumber(d.WhatsAppNumber), v => row.SupportWhatsAppNumber = v, "support.whatsAppNumber", changed)) { }
+        if (TrySetPlain(d.WhatsAppProofTemplate, v => row.SupportWhatsAppProofTemplate = v, "support.whatsAppProofTemplate", changed)) { }
+    }
+
+    /// <summary>
+    /// The number is embedded in a <c>wa.me/&lt;number&gt;</c> deep link, which accepts
+    /// digits only — no '+', spaces or dashes. Reject anything else here rather than
+    /// ship a silently dead proof button on every package.
+    /// </summary>
+    private static void ValidateWhatsAppNumber(string? value, string key)
+    {
+        if (value is null || value == SecretMask) return;
+        var normalized = NormalizeWhatsAppNumber(value);
+        if (string.IsNullOrEmpty(normalized)) return; // empty clears the override
+        if (normalized.Length is < 6 or > 20 || !normalized.All(char.IsAsciiDigit))
+        {
+            throw new RuntimeSettingsValidationException(
+                $"{key} must be 6-20 digits in international format without '+' (e.g. 447961725989).");
+        }
+    }
+
+    /// <summary>Strips the punctuation admins paste from a phone keypad ('+', spaces,
+    /// dashes, parentheses) so the stored value is always wa.me-ready.</summary>
+    private static string? NormalizeWhatsAppNumber(string? value)
+    {
+        if (value is null || value == SecretMask) return value;
+        return new string(value.Where(ch => !char.IsWhiteSpace(ch) && ch is not ('+' or '-' or '(' or ')')).ToArray());
+    }
+
     // ── Wave 4 appliers (FX / Billing core / Storage / PDF / Pronunciation /
     //    Auth tokens / Web push) ────────────────────────────────────
     private static void ApplyFx(RuntimeSettingsRow row, RuntimeSettingsFxUpdate? d,
@@ -1706,6 +1748,7 @@ public static class AdminRuntimeSettingsEndpoints
                     : (settings.Messaging.WhatsAppEnabled && !settings.Messaging.IsWhatsAppConfigured)
                         ? Failed(sectionId, "WhatsApp is enabled but not fully configured. Set Access Token and Phone Number ID.", testedAt)
                         : Ok(sectionId, $"Messaging configured: Twilio SMS {(settings.Messaging.IsTwilioConfigured ? "ready" : "off")}, WhatsApp {(settings.Messaging.IsWhatsAppConfigured ? "ready" : "off")}. No message was sent.", testedAt),
+            "support" => TestSupport(settings.Support, sectionId, testedAt),
             "fx" => string.IsNullOrWhiteSpace(settings.Fx.ApiKey) || string.IsNullOrWhiteSpace(settings.Fx.ApiBaseUrl)
                 ? Ok(sectionId, $"No FX provider configured — offline seed rates are used (base {settings.Fx.BaseCurrency}). Dynamic pricing {(settings.Fx.DynamicPricingEnabled ? "on" : "off")}.", testedAt)
                 : Uri.TryCreate(settings.Fx.ApiBaseUrl, UriKind.Absolute, out _)
@@ -1867,6 +1910,23 @@ public static class AdminRuntimeSettingsEndpoints
         if (unsafeReason is not null) return Failed(sectionId, unsafeReason, testedAt);
         var mode = s.ConvertToEgp ? "convert to EGP" : "charge quote currency";
         return Ok(sectionId, $"EasyKash is configured ({mode}). No live payment was created — run a real checkout to fully verify.", testedAt);
+    }
+
+    // The support number is only ever rendered into a wa.me/<number> deep link the
+    // learner taps — there is no outbound connection to probe, so this validates the
+    // effective number is present and wa.me-dialable (digits only) rather than faking
+    // a connection test. An unconfigured or malformed number means a dead proof button
+    // on every package, which is precisely what this catches.
+    private static RuntimeSettingsIntegrationTestResponse TestSupport(
+        SupportSettings s, string sectionId, DateTimeOffset testedAt)
+    {
+        if (!s.IsWhatsAppConfigured)
+            return Failed(sectionId, "Configure the support WhatsApp number. Without it the \"Send proof on WhatsApp\" button is hidden on every package and checkout surface.", testedAt);
+        var number = NormalizeWhatsAppNumber(s.WhatsAppNumber)!;
+        if (number.Length is < 6 or > 20 || !number.All(char.IsAsciiDigit))
+            return Failed(sectionId, $"\"{s.WhatsAppNumber}\" is not wa.me-dialable. Use 6-20 digits in international format without '+' (e.g. 447961725989).", testedAt);
+        var template = string.IsNullOrWhiteSpace(s.WhatsAppProofTemplate) ? "built-in wording" : "custom wording";
+        return Ok(sectionId, $"Support WhatsApp number is configured and wa.me-dialable (https://wa.me/{number}), proof message uses {template}. This is a deep link the learner taps — no message is sent from the server, so nothing was contacted.", testedAt);
     }
 
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestPayTabsAsync(
@@ -2042,6 +2102,17 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsPronunciationUpdate? Pronunciation { get; set; }
     public RuntimeSettingsAuthTokensUpdate? AuthTokens { get; set; }
     public RuntimeSettingsWebPushUpdate? WebPush { get; set; }
+    public RuntimeSettingsSupportUpdate? Support { get; set; }
+}
+
+/// <summary>Public support channel (WhatsApp proof number + deep-link template).
+/// Neither field is a secret — both are returned in plaintext by GET.</summary>
+public sealed class RuntimeSettingsSupportUpdate
+{
+    /// <summary>International format, digits only ("" clears the override and falls
+    /// back to the PLATFORM_WHATSAPP constant).</summary>
+    public string? WhatsAppNumber { get; set; }
+    public string? WhatsAppProofTemplate { get; set; }
 }
 
 /// <summary>AI Assistant orchestration tunables (Wave 2).</summary>

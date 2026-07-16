@@ -322,13 +322,20 @@ public sealed class VideoLibraryLearnerService(
         return profession?.Trim().ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Profession targeting gate. No tag at all (null/blank) and an EMPTY array both mean
+    /// "intentionally profession-neutral" and stay visible to everyone — the 28 untagged videos
+    /// (22 Reading/Listening + 6 general Speaking) rely on this, and it is an explicit owner
+    /// decision. A PRESENT but malformed / non-array tag fails CLOSED (spec §7.4): it is targeting
+    /// that cannot be evaluated, so it must not be read as "everyone".
+    /// </summary>
     public static bool IsProfessionVisible(string? professionIdsJson, string? normalizedProfession)
     {
         if (string.IsNullOrWhiteSpace(professionIdsJson)) return true;
         try
         {
             using var doc = JsonDocument.Parse(professionIdsJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return true;
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return false;
             if (doc.RootElement.GetArrayLength() == 0) return true;
             if (string.IsNullOrWhiteSpace(normalizedProfession)) return false;
             foreach (var el in doc.RootElement.EnumerateArray())
@@ -343,7 +350,7 @@ public sealed class VideoLibraryLearnerService(
         }
         catch (JsonException)
         {
-            return true; // malformed targeting must not hide content platform-wide
+            return false; // targeting we cannot evaluate is a lock, not a pass
         }
     }
 

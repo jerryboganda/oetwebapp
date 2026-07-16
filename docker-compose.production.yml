@@ -200,6 +200,20 @@ services:
     image: clamav/clamav:stable
     container_name: oet-clamav
     restart: unless-stopped
+    # Raise clamd's scan ceilings before starting the daemon. The stock image
+    # defaults (StreamMaxLength/MaxFileSize/MaxScanSize = 25 MB) make clamd reject
+    # any INSTREAM scan past 25 MB, which fails the upload /complete step closed —
+    # so course materials larger than 25 MB (audio up to the app's 350 MB cap,
+    # large PDFs) can never be ingested. Append the raised limits idempotently to
+    # the image's own clamd.conf, then hand off to the stock entrypoint (/init).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if ! grep -q '^StreamMaxLength 512M' /etc/clamav/clamd.conf 2>/dev/null; then
+          printf 'StreamMaxLength 512M\nMaxFileSize 512M\nMaxScanSize 512M\nPCREMaxFileSize 512M\n' >> /etc/clamav/clamd.conf
+        fi
+        exec /init
     volumes:
       - oet_clamav_data:/var/lib/clamav
     healthcheck:

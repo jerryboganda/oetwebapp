@@ -48,4 +48,4 @@ The editor reuses the existing `CatalogPresentationJson` runtime-setting column 
 
 ## Next Step
 
-Commit, push to `main`, and deploy to production. After deploy, verify the new admin nav item renders, edits save, and changes reflect on `/subscriptions`.
+Verify the merged PR deployed and the new admin editor works on production.

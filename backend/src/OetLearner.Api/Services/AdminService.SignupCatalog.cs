@@ -132,6 +132,7 @@ public partial class AdminService
         db.SignupProfessionCatalog.Add(item);
         await SyncProfessionTaxonomyAsync(item, ct);
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
         await LogAuditAsync(adminId, adminName, "Created", "SignupProfession", item.Id, $"Created signup profession: {item.Label}", ct);
         return item;
     }
@@ -156,6 +157,7 @@ public partial class AdminService
 
         await SyncProfessionTaxonomyAsync(item, ct);
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
         await LogAuditAsync(adminId, adminName, "Updated", "SignupProfession", item.Id, $"Updated signup profession: {item.Label}", ct);
         return item;
     }
@@ -167,6 +169,7 @@ public partial class AdminService
         item.IsActive = isActive;
         await SyncProfessionTaxonomyAsync(item, ct);
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
         await LogAuditAsync(adminId, adminName, isActive ? "Activated" : "Archived", "SignupProfession", item.Id, $"{(isActive ? "Activated" : "Archived")} signup profession: {item.Label}", ct);
         return new { item.Id, item.IsActive };
     }
@@ -191,9 +194,19 @@ public partial class AdminService
             ?? throw ApiException.NotFound("signup_profession_not_found", "Signup profession not found.");
         db.SignupProfessionCatalog.Remove(item);
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
         await LogAuditAsync(adminId, adminName, "ForceDeleted", "SignupProfession", item.Id, $"Force-deleted signup profession: {item.Label}", ct);
         return new { id, deleted = true };
     }
+
+    /// <summary>
+    /// Drops the 5-minute <see cref="Professions.IProfessionCatalogService"/> cache after
+    /// admin profession CRUD. Without this, signup, plan validation and the discipline
+    /// filters keep serving the stale canonical catalog for up to 5 minutes — a profession
+    /// created here would be rejected as unknown by the very validators that read it.
+    /// Null in unit tests that construct AdminService without the optional dependency.
+    /// </summary>
+    private void InvalidateProfessionCatalogCache() => professionCatalog?.Invalidate();
 
     /// <summary>
     /// Mirrors a SignupProfessionCatalog row into the legacy <c>Professions</c>

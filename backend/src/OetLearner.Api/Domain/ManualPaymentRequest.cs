@@ -4,13 +4,23 @@ using Microsoft.EntityFrameworkCore;
 namespace OetLearner.Api.Domain;
 
 /// <summary>
-/// Bank-transfer / Fawry-voucher / cash payment claim submitted by a learner.
-/// Admin verifies the proof and approves; on approval, access is granted via
-/// the same code path as gateway payments.
+/// Universal proof-of-payment record — exactly one row per order.
+/// <see cref="Kind"/> discriminates the two sources: a learner-uploaded file for
+/// offline methods (bank transfer / Fawry voucher / Vodafone Cash / …), which the
+/// admin verifies and approves; or a receipt the system mints automatically when a
+/// card gateway completes. On approval, access is granted via the same code path as
+/// gateway payments.
+///
+/// NAME IS LOAD-BEARING: production runs blue/green, so the entity and its
+/// <c>ManualPaymentRequests</c> table keep the original name even though the record
+/// is no longer manual-only — a rename would break the outgoing container mid-rollover.
+/// Admin UI calls it "Payment Proof".
 /// </summary>
 [Index(nameof(UserId), nameof(Status))]
 [Index(nameof(ProofHashHex))]
 [Index(nameof(Status), nameof(SubmittedAt))]
+[Index(nameof(PaymentTransactionId))]
+[Index(nameof(Kind), nameof(Status))]
 public class ManualPaymentRequest
 {
     [Key]
@@ -28,13 +38,35 @@ public class ManualPaymentRequest
     [MaxLength(8)]
     public string Currency { get; set; } = "AUD";
 
-    /// <summary>bank_transfer | wise | fawry_offline | other.</summary>
+    /// <summary>bank_transfer | wise | fawry_offline | other — or the gateway name for a
+    /// <see cref="PaymentProofKinds.GatewayReceipt"/> row.</summary>
     [MaxLength(32)]
     public string Method { get; set; } = default!;
 
-    /// <summary>URL to the uploaded payment proof image/PDF.</summary>
+    /// <summary><see cref="PaymentProofKinds"/> — learner_upload | gateway_receipt.</summary>
+    [MaxLength(24)]
+    public string Kind { get; set; } = PaymentProofKinds.LearnerUpload;
+
+    /// <summary>Card gateway that produced this receipt (stripe / paypal / easykash / …).
+    /// Null for learner uploads.</summary>
+    [MaxLength(32)]
+    public string? Gateway { get; set; }
+
+    /// <summary>The <see cref="PaymentTransaction"/> this receipt was minted from. Also the
+    /// idempotency key — the auto-receipt writer must not create a second row for the same
+    /// transaction. Null for learner uploads.</summary>
+    public Guid? PaymentTransactionId { get; set; }
+
+    /// <summary>Buyer's registered profession at purchase time, captured so the order record
+    /// stays truthful even if the profession is later changed by an admin.</summary>
+    [MaxLength(32)]
+    public string? ProfessionId { get; set; }
+
+    /// <summary>Storage key for the uploaded payment proof image/PDF. Null for gateway
+    /// receipts, which have no file. Never exposed to clients — the DTO carries
+    /// <c>HasProof</c> instead.</summary>
     [MaxLength(2048)]
-    public string ProofUrl { get; set; } = string.Empty;
+    public string? ProofUrl { get; set; } = string.Empty;
 
     /// <summary>SHA-256 hex hash of the uploaded proof file — used to reject duplicates.</summary>
     [MaxLength(64)]
@@ -77,6 +109,18 @@ public class ManualPaymentRequest
 
     [MaxLength(64)]
     public string? AccessGrantedSubscriptionId { get; set; }
+
+    // ── Admin proof waiver ──
+    // Set when an admin releases a pending offline order without an uploaded file
+    // (payment confirmed out-of-band). All three are written together, with an AuditEvent.
+
+    [MaxLength(64)]
+    public string? ProofWaivedByAdminId { get; set; }
+
+    public DateTimeOffset? ProofWaivedAt { get; set; }
+
+    [MaxLength(512)]
+    public string? ProofWaiverReason { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

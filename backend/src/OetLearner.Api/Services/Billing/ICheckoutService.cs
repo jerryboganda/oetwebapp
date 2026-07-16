@@ -36,6 +36,22 @@ public sealed record PayPalCartOrderDto(
     string Currency
 );
 
+/// <param name="DeliveryMethod">
+/// <see cref="OetLearner.Api.Domain.DeliveryMethods"/> — how the purchased package is handed
+/// over. A session whose status is <c>fulfilled</c> means the PAYMENT completed; for anything
+/// other than <c>automatic_web</c> it does NOT mean access is live, because the subscription
+/// stays Pending until an admin marks it fulfilled (spec 2026-07-15 §2/§6.6). The success page
+/// must branch on this before claiming entitlements were added.
+/// <para><b>Null means UNKNOWN, not automatic.</b> Delivery is a <c>BillingPlan</c> property and
+/// a cart order references no plan, so this endpoint cannot resolve it — see
+/// <c>CheckoutService.ResolveDelivery</c> for why. Callers must render a neutral
+/// payment-cleared state for null rather than claiming entitlements were added.</para>
+/// </param>
+/// <param name="FulfilmentStatus">
+/// <see cref="OetLearner.Api.Domain.FulfilmentStatuses"/> for the subscription this order opened,
+/// or null when the order granted no course subscription (credit/add-on carts) and on every
+/// cart order, which never opens a domain <c>Subscription</c> at all.
+/// </param>
 public sealed record CheckoutSessionStatusDto(
     string SessionId,
     Guid LocalSessionId,
@@ -45,7 +61,9 @@ public sealed record CheckoutSessionStatusDto(
     decimal TotalAmount,
     string Currency,
     IReadOnlyList<CheckoutSessionStatusItemDto> Items,
-    string? FailureReason
+    string? FailureReason,
+    string? DeliveryMethod,
+    string? FulfilmentStatus
 );
 
 public sealed record CheckoutSessionStatusItemDto(

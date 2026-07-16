@@ -316,6 +316,97 @@ public enum SubscriptionItemStatus
     Expired
 }
 
+// ── Access & payment string taxonomies ──
+// Stored as plain lower-case strings (not int-backed enums) so the columns stay
+// readable in SQL and additive values never renumber existing rows.
+
+/// <summary>
+/// How a purchased <see cref="BillingPlan"/> reaches the buyer. Stored in
+/// <see cref="BillingPlan.DeliveryMethod"/> / <see cref="BillingPlanVersion.DeliveryMethod"/>.
+/// Anything other than <see cref="AutomaticWeb"/> parks the Subscription at
+/// <c>Pending</c> + <see cref="FulfilmentStatuses.PendingManual"/> until an admin
+/// marks it fulfilled.
+/// </summary>
+public static class DeliveryMethods
+{
+    /// <summary>Default — access unlocks in the web app the moment payment completes.</summary>
+    public const string AutomaticWeb = "automatic_web";
+
+    /// <summary>Web access, but an admin must release it by hand.</summary>
+    public const string ManualWeb = "manual_web";
+
+    /// <summary>Delivered as a Telegram channel invite (<see cref="BillingPlan.TelegramInviteUrl"/>).</summary>
+    public const string Telegram = "telegram";
+
+    /// <summary>Physical/off-platform material handed over outside the app.</summary>
+    public const string ManualMaterial = "manual_material";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        AutomaticWeb, ManualWeb, Telegram, ManualMaterial,
+    };
+
+    public static bool IsValid(string? value) => value is not null && All.Contains(value);
+
+    /// <summary>True when the plan needs an admin "Mark Fulfilled" action before access is released.</summary>
+    public static bool RequiresManualFulfilment(string? value)
+        => IsValid(value) && !string.Equals(value, AutomaticWeb, StringComparison.OrdinalIgnoreCase);
+
+    public static string Label(string value) => value switch
+    {
+        AutomaticWeb => "Automatic (web app)",
+        ManualWeb => "Manual (web app)",
+        Telegram => "Telegram channel",
+        ManualMaterial => "Manual material",
+        _ => value,
+    };
+}
+
+/// <summary>
+/// Manual-fulfilment state of a <see cref="Subscription"/>, orthogonal to
+/// <see cref="SubscriptionStatus"/>. Only <see cref="Fulfilled"/> flips a
+/// manual-delivery subscription from Pending to Active.
+/// </summary>
+public static class FulfilmentStatuses
+{
+    /// <summary>Default — automatic delivery, nothing for an admin to do.</summary>
+    public const string Auto = "auto";
+
+    /// <summary>Paid, awaiting the admin hand-over step.</summary>
+    public const string PendingManual = "pending_manual";
+
+    /// <summary>Admin has handed the package over; access released.</summary>
+    public const string Fulfilled = "fulfilled";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        Auto, PendingManual, Fulfilled,
+    };
+
+    public static bool IsValid(string? value) => value is not null && All.Contains(value);
+}
+
+/// <summary>
+/// Discriminator on <see cref="ManualPaymentRequest"/> — every order carries exactly
+/// one proof row, either a file the learner uploaded or a receipt the system minted
+/// from a completed card-gateway transaction.
+/// </summary>
+public static class PaymentProofKinds
+{
+    /// <summary>Learner-uploaded proof file (bank transfer / Vodafone Cash / InstaPay / …).</summary>
+    public const string LearnerUpload = "learner_upload";
+
+    /// <summary>System-generated receipt for a card gateway; has no <c>ProofUrl</c>.</summary>
+    public const string GatewayReceipt = "gateway_receipt";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        LearnerUpload, GatewayReceipt,
+    };
+
+    public static bool IsValid(string? value) => value is not null && All.Contains(value);
+}
+
 public enum MediaAssetStatus
 {
     Processing,

@@ -233,16 +233,41 @@ pub fn run() {
                         false
                     });
 
-            // Speaking-module microphone capture: WebView2 denies getUserMedia by
-            // default unless the host grants it. The window is already locked to the
-            // trusted origin + bundled splash (see is_allowed_origin / on_navigation),
-            // so auto-accepting the media prompt for this first-party app is safe.
-            // NOTE: additional_browser_args REPLACES Tauri's defaults, so the default
-            // --disable-features set is re-specified here before appending our flag.
+            // WebView2 (Windows) tuning. NOTE: additional_browser_args REPLACES
+            // Tauri's defaults, so the default --disable-features set is re-specified
+            // here before appending ours.
+            //
+            //  • --use-fake-ui-for-media-stream: Speaking-module mic capture. WebView2
+            //    denies getUserMedia by default unless the host grants it. The window
+            //    is already locked to the trusted origin + bundled splash (see
+            //    is_allowed_origin / on_navigation), so auto-accepting the media prompt
+            //    for this first-party app is safe.
+            //
+            //  • --disable-gpu-compositing + --disable-direct-composition-video-overlays:
+            //    CRITICAL for video playback under screen-capture protection. By default
+            //    Chromium promotes hardware-decoded video onto a SEPARATE DirectComposition
+            //    overlay/swapchain plane (MPO) that DWM scans out INDEPENDENTLY of the
+            //    window's composited surface. Our SetWindowDisplayAffinity(
+            //    WDA_EXCLUDEFROMCAPTURE) protection (commands::set_capture_protection)
+            //    applies to the window surface, so that separate plane is dropped from the
+            //    protected path — the user sees a BLACK rectangle where the video should be
+            //    (stream loads, duration/controls/watermark render, only the frame is black).
+            //    --disable-gpu-compositing removes the GPU compositor so there is NO
+            //    independent video plane: the frame composites INTO the window surface that
+            //    WDA protects — the user sees the video AND capture stays black. It keeps
+            //    hardware DECODE (unlike --disable-gpu, which would also risk the native-HLS
+            //    black-screen regression). --disable-direct-composition-video-overlays is
+            //    kept as belt-and-suspenders. NOTE the overlay switch ALONE is NOT enough on
+            //    WebView2/Edge (MicrosoftEdge/WebView2Feedback#5574: video still routes
+            //    through a DComp swapchain; --disable-gpu-compositing is the lever proven to
+            //    fix it there). Do NOT add --disable-gpu or --disable-direct-composition
+            //    (WebView2 blank-screen / perf risk). A bare
+            //    --disable-features=DirectCompositionVideoOverlays is a NO-OP (no such
+            //    base::Feature). macOS uses NSWindow.sharingType and is unaffected.
             #[cfg(windows)]
             {
                 builder = builder.additional_browser_args(
-                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --use-fake-ui-for-media-stream",
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu-compositing --disable-direct-composition-video-overlays --use-fake-ui-for-media-stream",
                 );
             }
 

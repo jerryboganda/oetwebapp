@@ -767,6 +767,14 @@ public class Subscription
     public int? PreservedRemainingDays { get; set; }
     public DateTimeOffset? PendingFreezeRequestDate { get; set; }
     public DateTimeOffset? FrozenSince { get; set; }
+
+    /// <summary><see cref="FulfilmentStatuses"/> — auto | pending_manual | fulfilled.
+    /// Orthogonal to <see cref="Status"/>: a manual-delivery plan pays, sits at
+    /// <c>pending_manual</c> with Status Pending (which grants nothing, since the
+    /// entitlement resolver only accepts Active/Trial/FreezeRequested/Frozen), and only
+    /// reaches Active when an admin marks it fulfilled.</summary>
+    [MaxLength(24)]
+    public string FulfilmentStatus { get; set; } = FulfilmentStatuses.Auto;
 }
 
 public class SubscriptionFreeze

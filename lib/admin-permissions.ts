@@ -22,6 +22,8 @@ export const AdminPermission = {
   QualityAnalytics: 'quality_analytics',
   AiConfig: 'ai_config',
   FeatureFlags: 'feature_flags',
+  /** Campaign + notification-rule surfaces (backend policy `AdminNotifications`). */
+  Notifications: 'notifications',
   AuditLogs: 'audit_logs',
   SystemAdmin: 'system_admin',
   ManagePermissions: 'manage_permissions',
@@ -90,7 +92,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/voice-design': [AdminPermission.AiConfig],
   '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/review-ops': [AdminPermission.ReviewOps],
-  '/admin/notifications': [AdminPermission.SystemAdmin],
+  '/admin/notifications': [AdminPermission.Notifications],
   '/admin/analytics/quality': [AdminPermission.QualityAnalytics],
   '/admin/users': [AdminPermission.UsersRead],
   '/admin/experts': [AdminPermission.UsersRead],
@@ -219,7 +221,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/marketplace-review': [AdminPermission.ContentPublish],
   '/admin/live-classes': [AdminPermission.ReviewOps],
-  '/admin/notifications': [AdminPermission.SystemAdmin],
+  '/admin/notifications': [AdminPermission.Notifications],
   '/admin/onboarding/interlocutor': [AdminPermission.ReviewOps],
   '/admin/pending-review': [
     AdminPermission.ContentEditorReview,

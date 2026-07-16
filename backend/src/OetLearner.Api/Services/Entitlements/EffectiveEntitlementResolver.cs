@@ -21,6 +21,30 @@ public interface IEffectiveEntitlementResolver
     }
 }
 
+/// <summary>
+/// Merged per-plan content include/exclude overrides (access &amp; payment spec §3,
+/// <see cref="Domain.BillingPlan.ContentOverridesJson"/>). Unioned across the learner's
+/// active packages. An explicit include wins over the subtest/profession scope AND over an
+/// exclude; neither ever bypasses the module gate.
+/// </summary>
+public sealed record ContentOverrideSets(
+    IReadOnlySet<string> VideoIncludes,
+    IReadOnlySet<string> VideoExcludes,
+    IReadOnlySet<string> MaterialFolderIncludes,
+    IReadOnlySet<string> MaterialFolderExcludes)
+{
+    public static readonly ContentOverrideSets Empty = new(
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+    public bool IsEmpty => VideoIncludes.Count == 0
+        && VideoExcludes.Count == 0
+        && MaterialFolderIncludes.Count == 0
+        && MaterialFolderExcludes.Count == 0;
+}
+
 public sealed record EffectiveEntitlementSnapshot(
     string? UserId,
     bool HasEligibleSubscription,
@@ -57,6 +81,31 @@ public sealed record EffectiveEntitlementSnapshot(
     public bool BasicEnglishUnlocked { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
     public string? ProductCategory { get; init; }
+
+    // ── Subtest × profession content model (access & payment spec §3) ────────
+
+    /// <summary>The learner's registered profession (<see cref="Domain.ApplicationUser.ActiveProfessionId"/>),
+    /// trimmed and lower-cased, or null when they have none. This is the profession axis of the
+    /// "subtest × profession" content model; resolved here once so every content gate agrees.
+    /// Populated regardless of eligibility — it is a property of the user, not of the plan.</summary>
+    public string? ProfessionId { get; init; }
+
+    /// <summary>True when NO active package restricts the subtest axis. A plan whose
+    /// <see cref="Domain.BillingPlan.IncludedSubtestsJson"/> is empty/"[]" means "all subtests"
+    /// and therefore dominates the union across packages. When false, only
+    /// <see cref="IncludedSubtests"/> are in scope. Defaults true (non-restricting) so every
+    /// caller that predates this axis keeps today's behaviour.</summary>
+    public bool AllSubtestsIncluded { get; init; } = true;
+
+    /// <summary>Union of the OET subtest codes (listening|reading|writing|speaking) the learner's
+    /// active packages include. Meaningful only when <see cref="AllSubtestsIncluded"/> is false.</summary>
+    public IReadOnlySet<string> IncludedSubtests { get; init; } = EmptyStringSet;
+
+    /// <summary>Merged per-plan content include/exclude overrides across the learner's active packages.</summary>
+    public ContentOverrideSets ContentOverrides { get; init; } = ContentOverrideSets.Empty;
+
+    private static readonly IReadOnlySet<string> EmptyStringSet =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether an admin-togglable subscription module (see <see cref="ModuleKeys"/>) is enabled
@@ -167,6 +216,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         var subscription = subscriptions.Count > 0 ? subscriptions[0] : null;
         var overlays = await LoadResolverOverlaysAsync(userId, ct);
         var isFrozen = ResolveIsFrozen(overlays, now);
+        var professionId = await LoadActiveProfessionIdAsync(userId, ct);
 
         if (subscription is null)
         {
@@ -186,7 +236,10 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 AiQuotaPlanCodeSource: null,
                 ActiveAddOnCodes: Array.Empty<string>(),
                 IsFrozen: isFrozen,
-                Trace: trace);
+                Trace: trace)
+            {
+                ProfessionId = professionId,
+            };
         }
 
         var plans = await LoadBillingPlansAsync(subscriptions, ct);
@@ -292,12 +345,19 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             AiQuotaPlanCodeSource: aiQuotaMapping?.Source,
             ActiveAddOnCodes: addOnCodes,
             IsFrozen: isFrozen,
-            Trace: trace);
+            Trace: trace)
+        {
+            ProfessionId = professionId,
+        };
 
         if (eligible && plan is not null)
         {
+            var (allSubtests, includedSubtests) = UnionIncludedSubtests(new[] { plan });
             snapshot = snapshot with
             {
+                AllSubtestsIncluded = allSubtests,
+                IncludedSubtests = includedSubtests,
+                ContentOverrides = MergeContentOverrides(new[] { plan }),
                 EnabledModules = ParseDashboardModules(plan.DashboardModulesJson),
                 WritingAddonsEnabled = plan.WritingAddonsEnabled,
                 SpeakingAddonsEnabled = plan.SpeakingAddonsEnabled,
@@ -407,6 +467,14 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             var aiQuota = AiQuotaPlanMappingResolver.Resolve(primaryPkg.Plan);
             var aggIsTrial = primarySub.Status == SubscriptionStatus.Trial;
 
+            // Subtest × profession scope, re-derived across the effective set. Computed from
+            // effectivePackages ALONE (not folded into whatever the single-plan pass above
+            // resolved): a primary plan that is itself effective is already a member, and one
+            // that is not — failed-low, expired, or a non-course overlay — must not widen the
+            // scope of the packages that ARE live.
+            var aggPlans = effectivePackages.Select(p => p.Plan).ToList();
+            var (aggAllSubtests, aggSubtests) = UnionIncludedSubtests(aggPlans);
+
             if (effectivePackages.Count > 1)
             {
                 trace.Add($"packages.{effectivePackages.Count}");
@@ -414,6 +482,9 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
 
             snapshot = snapshot with
             {
+                AllSubtestsIncluded = aggAllSubtests,
+                IncludedSubtests = aggSubtests,
+                ContentOverrides = MergeContentOverrides(aggPlans),
                 HasEligibleSubscription = true,
                 IsTrial = aggIsTrial,
                 Tier = aggIsTrial ? "trial" : "paid",
@@ -568,7 +639,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         return new EffectivePackage(sub, plan, ParseDashboardModules(plan.DashboardModulesJson));
     }
 
-    private static IReadOnlyList<string> ParseDashboardModules(string json)
+    public static IReadOnlyList<string> ParseDashboardModules(string json)
     {
         if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
         try
@@ -590,6 +661,114 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         {
             return Array.Empty<string>();
         }
+    }
+
+    /// <summary>
+    /// Unions the subtest axis across a learner's plans. A plan whose IncludedSubtestsJson is
+    /// empty, "[]" or unparseable imposes no restriction ("all subtests") and therefore dominates
+    /// the union — the column is NOT NULL default "[]" and only ever written through the admin's
+    /// validated string-array path, so unparseable can only mean legacy data, which must not
+    /// silently lock a paying learner out of every subtest.
+    /// </summary>
+    public static (bool allSubtests, IReadOnlySet<string> subtests) UnionIncludedSubtests(
+        IReadOnlyList<BillingPlan> plans)
+    {
+        var subtests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var plan in plans)
+        {
+            var included = ParseStringArray(plan.IncludedSubtestsJson);
+            if (included.Count == 0) return (true, subtests);
+            foreach (var code in included) subtests.Add(code.ToLowerInvariant());
+        }
+
+        return subtests.Count == 0 ? (true, subtests) : (false, subtests);
+    }
+
+    /// <summary>
+    /// Merges every plan's ContentOverridesJson into one set-of-sets. Shape:
+    /// <c>{"videos":{"include":[],"exclude":[]},"materialFolders":{"include":[],"exclude":[]}}</c>.
+    /// Malformed JSON yields no overrides — an override can only ever refine the subtest ×
+    /// profession resolution, so dropping it falls back to that resolution rather than to open access.
+    /// </summary>
+    public static ContentOverrideSets MergeContentOverrides(IReadOnlyList<BillingPlan> plans)
+    {
+        var videoIncludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var videoExcludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var folderIncludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var folderExcludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var plan in plans)
+        {
+            if (string.IsNullOrWhiteSpace(plan.ContentOverridesJson)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(plan.ContentOverridesJson);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
+                ReadOverrideNode(doc.RootElement, "videos", videoIncludes, videoExcludes);
+                ReadOverrideNode(doc.RootElement, "materialFolders", folderIncludes, folderExcludes);
+                ReadOverrideNode(doc.RootElement, "material_folders", folderIncludes, folderExcludes);
+            }
+            catch (JsonException)
+            {
+                // Ignore this plan's overrides; the subtest × profession resolution still applies.
+            }
+        }
+
+        var merged = new ContentOverrideSets(videoIncludes, videoExcludes, folderIncludes, folderExcludes);
+        return merged.IsEmpty ? ContentOverrideSets.Empty : merged;
+    }
+
+    private static void ReadOverrideNode(
+        JsonElement root,
+        string nodeName,
+        HashSet<string> includes,
+        HashSet<string> excludes)
+    {
+        if (!root.TryGetProperty(nodeName, out var node) || node.ValueKind != JsonValueKind.Object) return;
+        if (node.TryGetProperty("include", out var inc))
+        {
+            foreach (var id in ReadStringArray(inc)) includes.Add(id);
+        }
+        if (node.TryGetProperty("exclude", out var exc))
+        {
+            foreach (var id in ReadStringArray(exc)) excludes.Add(id);
+        }
+    }
+
+    private static IReadOnlyList<string> ParseStringArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return ReadStringArray(doc.RootElement);
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array) return Array.Empty<string>();
+        var list = new List<string>(element.GetArrayLength());
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String) continue;
+            var value = item.GetString();
+            if (!string.IsNullOrWhiteSpace(value)) list.Add(value.Trim());
+        }
+        return list;
+    }
+
+    private async Task<string?> LoadActiveProfessionIdAsync(string userId, CancellationToken ct)
+    {
+        var profession = await db.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(profession) ? null : profession.Trim().ToLowerInvariant();
     }
 
     private static bool IsValidJsonObject(string json)

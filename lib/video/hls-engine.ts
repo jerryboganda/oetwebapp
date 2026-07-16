@@ -30,6 +30,8 @@ export interface HlsEngineHandle {
   onLevelsUpdated(handler: (levels: HlsQualityLevel[]) => void): void;
   destroy(): void;
   readonly mode: 'hls.js' | 'native';
+  /** TEMP diagnostic: last hls.js error + MSE codec support, for the on-screen HUD. */
+  getDiag?: () => string;
 }
 
 function levelLabel(height: number): string {
@@ -66,6 +68,44 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
 
   let fatalHandler: (() => void) | null = null;
   let levelsHandler: ((levels: HlsQualityLevel[]) => void) | null = null;
+  // TEMP diagnostic (surfaced to the on-screen HUD): the last hls.js error and whether
+  // this engine's MediaSource actually supports the stream's codecs. On WebView2 the
+  // stream fetches but buffers nothing — this tells us if MSE rejects the codec
+  // (bufferAddCodecError / mse=N) or the transmux/append fails (bufferAppendError etc).
+  let diagError = '-';
+  let diagMse = '?';
+  let diagErrCount = 0;
+  // On the first fatal manifest error, fetch the SAME url the app uses and report the
+  // raw outcome: fetch:200 = reachable (hls.js-specific bug), fetch:403 = token/auth,
+  // fetchERR:TypeError = CSP/CORS/network block (paired with any securitypolicyviolation).
+  let diagFetch = '-';
+  let fetchProbed = false;
+  // The manifest host + path (WITHOUT the token query) — reveals the CDN host and the
+  // Bunny video id, so a manifestLoadError can be traced to a wrong host (CSP block),
+  // a missing video (404), or a token issue (403).
+  const manifestHost = (() => {
+    try {
+      const u = new URL(url);
+      return u.host + u.pathname.replace(/\/playlist\.m3u8$/, '');
+    } catch {
+      return 'BADURL:' + String(url).slice(0, 28);
+    }
+  })();
+  const computeMseSupport = () => {
+    try {
+      const MS = (typeof window !== 'undefined' && (window as unknown as { MediaSource?: typeof MediaSource }).MediaSource) || undefined;
+      if (!MS || typeof MS.isTypeSupported !== 'function') return 'noMSE';
+      return hls.levels
+        .map((l) => {
+          const codecs = [l.videoCodec, l.audioCodec].filter(Boolean).join(',');
+          const mime = `video/mp4; codecs="${codecs}"`;
+          return `${l.height ?? '?'}p:${MS.isTypeSupported(mime) ? 'Y' : 'N'}`;
+        })
+        .join(' ');
+    } catch (e) {
+      return `mseErr:${(e as Error).message?.slice(0, 20)}`;
+    }
+  };
 
   // Bunny directory token authentication signs a token_path covering /{videoId}/,
   // and the ?token&expires&token_path query MUST be present on EVERY request —
@@ -105,9 +145,32 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
 
   const wire = () => {
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      diagMse = computeMseSupport();
       levelsHandler?.(mapLevels());
     });
     hls.on(Hls.Events.ERROR, (_event, data) => {
+      // Record EVERY error (incl. non-fatal) for the diagnostic HUD — buffer/codec
+      // errors that stall WebView2 are often non-fatal but recurring.
+      diagErrCount += 1;
+      const d = data as {
+        response?: { code?: number; text?: string };
+        networkDetails?: { status?: number };
+      };
+      const code = d.response?.code ?? d.networkDetails?.status ?? '-';
+      const txt = d.response?.text ? String(d.response.text).replace(/\s+/g, ' ').slice(0, 24) : '';
+      diagError = `${data.details}${data.fatal ? '!' : ''} code=${code}${txt ? ` "${txt}"` : ''} x${diagErrCount}`;
+      if (data.fatal && !fetchProbed) {
+        fetchProbed = true;
+        diagFetch = 'probing';
+        fetch(url, { method: 'GET', cache: 'no-store' })
+          .then((r) => {
+            diagFetch = `fetch:${r.status}`;
+          })
+          .catch((e: unknown) => {
+            const err = e as Error;
+            diagFetch = `fetchERR:${err?.name ?? 'e'}:${String(err?.message ?? '').slice(0, 34)}`;
+          });
+      }
       if (!data.fatal) return;
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
         fatalHandler?.();
@@ -166,6 +229,7 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       hls.destroy();
     },
     mode: 'hls.js',
+    getDiag: () => `${diagError} | ${diagFetch} | ${manifestHost} | mse=[${diagMse}]`,
   };
 }
 
