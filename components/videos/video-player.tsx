@@ -28,6 +28,7 @@ import {
 } from '@/lib/video/attestation';
 import { postVideoEvent, postVideoProgress, renewPlaybackSession } from '@/lib/api/videos';
 import { setVideoScreenProtection } from '@/lib/video/screen-protection';
+import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/types/videos';
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
 import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
@@ -35,6 +36,12 @@ import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const HEARTBEAT_INTERVAL_MS = 60_000;
 const RENEW_LEEWAY_MS = 120_000;
+
+// TEMPORARY: on-screen diagnostic HUD for the desktop black-video investigation.
+// Flip to false / delete once resolved. Shows the real <video> element state so we
+// can tell "stream not loading" (readyState 0-1, dim 0x0) from "loading but not
+// rendering / overlay-blackout" (readyState 4, dim 1920x1080, time advancing).
+const SHOW_VIDEO_DIAG = true;
 
 export interface VideoPlayerHandle {
   seekTo(seconds: number): void;
@@ -117,6 +124,9 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [captionsOn, setCaptionsOn] = useState(false);
   const [hasCaptionTracks, setHasCaptionTracks] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [diagWdaOk, setDiagWdaOk] = useState<boolean | null>(null);
+  const [diagVersion, setDiagVersion] = useState<string>('?');
+  const [diag, setDiag] = useState<string>('');
 
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {
@@ -262,7 +272,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   // capture-exclusion) AND mobile (Android FLAG_SECURE) — so screenshots and
   // screen recorders capture only black. No-op on web. Best-effort, never a gate.
   useEffect(() => {
-    void setVideoScreenProtection(true);
+    void setVideoScreenProtection(true).then((ok) => setDiagWdaOk(ok));
     void startPlayback();
     return () => {
       teardownEngine();
@@ -300,6 +310,36 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+
+  // TEMPORARY diagnostic: capture the desktop shell version + sample the live
+  // <video> element state so we can see (from the user's machine) whether the
+  // stream is decoding or the frame is being suppressed. Remove with SHOW_VIDEO_DIAG.
+  useEffect(() => {
+    if (!SHOW_VIDEO_DIAG) return;
+    void (async () => {
+      try {
+        const info = await window.desktopBridge?.runtime?.info?.();
+        if (info?.appVersion) setDiagVersion(info.appVersion);
+        else setDiagVersion(getAppRuntimeKind());
+      } catch {
+        setDiagVersion(getAppRuntimeKind());
+      }
+    })();
+    const id = window.setInterval(() => {
+      const v = videoRef.current;
+      if (!v) return;
+      const buffered = v.buffered;
+      const bufEnd = buffered.length ? buffered.end(buffered.length - 1) : 0;
+      setDiag(
+        [
+          `v${diagVersion} ${getAppRuntimeKind()} wda=${diagWdaOk === null ? '…' : diagWdaOk ? 'ON' : 'off'} phase=${phase.kind}`,
+          `hls=${engineRef.current?.mode ?? '-'} ready=${v.readyState} net=${v.networkState} err=${v.error?.code ?? '-'}`,
+          `dim=${v.videoWidth}x${v.videoHeight} t=${v.currentTime.toFixed(1)} buf=${bufEnd.toFixed(1)} paused=${v.paused}`,
+        ].join('\n'),
+      );
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [diagWdaOk, diagVersion, phase.kind]);
 
   const refreshCaptionTracks = useCallback(() => {
     const video = videoRef.current;
@@ -492,6 +532,13 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       )}
 
       {phase.kind === 'playing' && <WatermarkOverlay text={phase.session.watermarkText} />}
+
+      {/* TEMPORARY diagnostic HUD — remove with SHOW_VIDEO_DIAG once the black-video issue is resolved. */}
+      {SHOW_VIDEO_DIAG && diag && (
+        <div className="pointer-events-none absolute left-2 top-2 z-40 whitespace-pre rounded bg-black/75 px-2 py-1 font-mono text-[11px] leading-tight text-lime-300">
+          {diag}
+        </div>
+      )}
 
       {/* Controls */}
       <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pb-2 pt-8 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
