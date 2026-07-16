@@ -97,9 +97,32 @@ export interface CatalogCardPresentation {
   displayOrder?: number | null;
 }
 
+/** Overlay for a website package card shown on /subscriptions (learner dashboard). */
+export interface WebsitePackageOverlay {
+  name?: string;
+  metaChips?: string[];
+  formatLine?: string;
+  description?: string;
+  badges?: string[];
+  features?: string[];
+  bestFor?: string;
+  featured?: boolean;
+  packageNo?: number;
+}
+
+/** Presentation overrides for the static website packages list. */
+export interface WebsitePackagesPresentation {
+  /** Per-package overrides keyed by billing code. */
+  byCode?: Record<string, WebsitePackageOverlay>;
+  /** Per-section title/description overrides. */
+  sections?: Record<string, { title?: string; description?: string }>;
+}
+
 export interface CatalogPresentation {
   storefront: Partial<CatalogStorefrontConfig>;
   byCode: Record<string, CatalogCardPresentation>;
+  /** Optional overrides for the learner dashboard /subscriptions packages. */
+  websitePackages?: WebsitePackagesPresentation;
 }
 
 /** GET /v1/catalog/pricing may include the presentation overlay. */

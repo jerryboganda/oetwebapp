@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Store } from 'lucide-react';
+import { ArrowLeft, Package, Store } from 'lucide-react';
 import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
 import { Button } from '@/components/admin/ui/button';
 import { PageHeader } from '@/components/admin/ui/page-header';
@@ -30,11 +30,18 @@ export default function AdminStorefrontPage() {
           { label: 'Storefront' },
         ]}
         actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/admin/billing">
-              <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Billing
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/billing/subscriptions-packages">
+                <Package className="mr-1.5 h-4 w-4" /> Subscriptions & Packages
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/billing">
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Billing
+              </Link>
+            </Button>
+          </div>
         }
       />
       <StorefrontEditor />

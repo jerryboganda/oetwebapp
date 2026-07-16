@@ -14,12 +14,13 @@ import {
 } from '@/lib/api';
 import type { PublicCatalogResponse } from '@/lib/types/admin';
 import type { AiPackagesResponse } from '@/lib/billing-types';
-import { formatPrice } from '@/lib/catalog-presentation';
+import { formatPrice, type PublicCatalogResponseWithPresentation } from '@/lib/catalog-presentation';
 import {
   WEBSITE_SECTIONS,
   WEBSITE_PACKAGES,
   resolveWebsitePackageBySlug,
   resolveWebsitePackageByCode,
+  applyWebsitePackageOverlay,
   type WebsitePackage,
   type WebsiteSectionKey,
 } from '@/lib/catalog-website-packages';
@@ -197,7 +198,7 @@ function SubscriptionPackageCard({
 
 export function SubscriptionsCatalog() {
   const searchParams = useSearchParams();
-  const [catalog, setCatalog] = useState<PublicCatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<PublicCatalogResponseWithPresentation | null>(null);
   const [ai, setAi] = useState<AiPackagesResponse | null>(null);
   const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -211,7 +212,7 @@ export function SubscriptionsCatalog() {
       try {
         const [catalogResult, aiResult] = await Promise.allSettled([fetchPublicCatalog(), fetchAiPackages()]);
         if (cancelled) return;
-        if (catalogResult.status === 'fulfilled') setCatalog(catalogResult.value as PublicCatalogResponse);
+        if (catalogResult.status === 'fulfilled') setCatalog(catalogResult.value as PublicCatalogResponseWithPresentation);
         if (aiResult.status === 'fulfilled') setAi(aiResult.value);
         if (catalogResult.status === 'rejected' && aiResult.status === 'rejected') {
           setError('Could not load the packages right now. Please refresh to try again.');
@@ -241,6 +242,7 @@ export function SubscriptionsCatalog() {
   }, []);
 
   const priceMap = useMemo(() => buildPriceMap(catalog, ai), [catalog, ai]);
+  const websitePackages = catalog?.presentation?.websitePackages;
   const ownedPlanCode = entitlement?.planCode ?? null;
 
   // Discipline tabs are derived from the profession of the Full Recorded courses.
@@ -264,10 +266,11 @@ export function SubscriptionsCatalog() {
         const prof = priceMap.get(pkg.code)?.profession;
         if (prof && prof !== 'all' && prof !== activeProfession) continue;
       }
-      grouped.get(pkg.section)?.push(pkg);
+      const overlay = websitePackages?.byCode?.[pkg.code];
+      grouped.get(pkg.section)?.push(applyWebsitePackageOverlay(pkg, overlay));
     }
     return grouped;
-  }, [activeProfession, priceMap]);
+  }, [activeProfession, priceMap, websitePackages]);
 
   // Deep-link: /subscriptions?package=<slug|code> from the website CTAs — scroll to
   // and briefly highlight the requested package once the catalogue has loaded.
@@ -312,9 +315,13 @@ export function SubscriptionsCatalog() {
         WEBSITE_SECTIONS.map((section) => {
           const packages = packagesBySection.get(section.key) ?? [];
           if (packages.length === 0) return null;
+          const sectionOverlay = websitePackages?.sections?.[section.key];
           return (
             <section key={section.key} id={`section-${section.key}`} className="space-y-4">
-              <LearnerSurfaceSectionHeader title={section.title} description={section.description} />
+              <LearnerSurfaceSectionHeader
+                title={sectionOverlay?.title ?? section.title}
+                description={sectionOverlay?.description ?? section.description}
+              />
 
               {section.key === 'full-recorded' && professions.length > 1 ? (
                 <div className="flex flex-wrap gap-1.5">
