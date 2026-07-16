@@ -30,6 +30,8 @@ export interface HlsEngineHandle {
   onLevelsUpdated(handler: (levels: HlsQualityLevel[]) => void): void;
   destroy(): void;
   readonly mode: 'hls.js' | 'native';
+  /** TEMP diagnostic: last hls.js error + MSE codec support, for the on-screen HUD. */
+  getDiag?: () => string;
 }
 
 function levelLabel(height: number): string {
@@ -66,6 +68,28 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
 
   let fatalHandler: (() => void) | null = null;
   let levelsHandler: ((levels: HlsQualityLevel[]) => void) | null = null;
+  // TEMP diagnostic (surfaced to the on-screen HUD): the last hls.js error and whether
+  // this engine's MediaSource actually supports the stream's codecs. On WebView2 the
+  // stream fetches but buffers nothing — this tells us if MSE rejects the codec
+  // (bufferAddCodecError / mse=N) or the transmux/append fails (bufferAppendError etc).
+  let diagError = '-';
+  let diagMse = '?';
+  let diagErrCount = 0;
+  const computeMseSupport = () => {
+    try {
+      const MS = (typeof window !== 'undefined' && (window as unknown as { MediaSource?: typeof MediaSource }).MediaSource) || undefined;
+      if (!MS || typeof MS.isTypeSupported !== 'function') return 'noMSE';
+      return hls.levels
+        .map((l) => {
+          const codecs = [l.videoCodec, l.audioCodec].filter(Boolean).join(',');
+          const mime = `video/mp4; codecs="${codecs}"`;
+          return `${l.height ?? '?'}p:${MS.isTypeSupported(mime) ? 'Y' : 'N'}`;
+        })
+        .join(' ');
+    } catch (e) {
+      return `mseErr:${(e as Error).message?.slice(0, 20)}`;
+    }
+  };
 
   // Bunny directory token authentication signs a token_path covering /{videoId}/,
   // and the ?token&expires&token_path query MUST be present on EVERY request —
@@ -105,9 +129,15 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
 
   const wire = () => {
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      diagMse = computeMseSupport();
       levelsHandler?.(mapLevels());
     });
     hls.on(Hls.Events.ERROR, (_event, data) => {
+      // Record EVERY error (incl. non-fatal) for the diagnostic HUD — buffer/codec
+      // errors that stall WebView2 are often non-fatal but recurring.
+      diagErrCount += 1;
+      const respCode = (data as { response?: { code?: number } }).response?.code;
+      diagError = `${data.details}${data.fatal ? '!' : ''}${respCode ? `(${respCode})` : ''}x${diagErrCount}`;
       if (!data.fatal) return;
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
         fatalHandler?.();
@@ -166,6 +196,7 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       hls.destroy();
     },
     mode: 'hls.js',
+    getDiag: () => `${diagError} mse=[${diagMse}]`,
   };
 }
 

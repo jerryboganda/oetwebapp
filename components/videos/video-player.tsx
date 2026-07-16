@@ -335,6 +335,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           `v${diagVersion} ${getAppRuntimeKind()} wda=${diagWdaOk === null ? '…' : diagWdaOk ? 'ON' : 'off'} phase=${phase.kind}`,
           `hls=${engineRef.current?.mode ?? '-'} ready=${v.readyState} net=${v.networkState} err=${v.error?.code ?? '-'}`,
           `dim=${v.videoWidth}x${v.videoHeight} t=${v.currentTime.toFixed(1)} buf=${bufEnd.toFixed(1)} paused=${v.paused}`,
+          `hlserr=${engineRef.current?.getDiag?.() ?? '-'}`,
         ].join('\n'),
       );
     }, 500);
