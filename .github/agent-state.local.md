@@ -1,35 +1,46 @@
-# Agent State - Catalog Storefront Navigation
+# Agent State - Subscriptions & Packages Admin Editor
 
 Last updated: 2026-07-16
 
 ## Goal
+Make every package card on the learner dashboard `/subscriptions` page editable from the admin panel.
 
-Make the per-package feature-bullets (tick-list) editor discoverable in the admin panel and explain how admins add ticks to pricing cards.
+## Root Cause
+The `/subscriptions` page renders static `WEBSITE_PACKAGES` via `SubscriptionsCatalog`, while the existing **Catalog Storefront** editor only edits the presentation overlay for `CatalogStorefront` (used on `/catalog` and `/pricing`). The two systems were disconnected, so the storefront editor could not edit the packages the user sees under Subscriptions & Packages.
 
 ## Implemented This Run
 
-- Added **Catalog Storefront** (`/admin/billing/storefront`) to the admin sidebar under Commerce & Settings.
-- Added the matching page-title rule for `/admin/billing/storefront`.
-- Added a **Catalog storefront** button on `/admin/billing/pricing` so admins editing plans can jump straight to the display-copy editor.
+- Extended `CatalogPresentation` with a `websitePackages` overlay (`byCode` per package + `sections` overrides) in `lib/catalog-presentation.ts`.
+- Added `applyWebsitePackageOverlay` helper in `lib/catalog-website-packages.ts`.
+- Built `SubscriptionsPackagesEditor` (`components/admin/billing/subscriptions-packages-editor.tsx`) with:
+  - Searchable package selector grouped by section.
+  - Editable fields: name, package number, format line, description, meta chips, badges, feature bullets/ticks, best-for text, featured flag.
+  - Section heading overrides.
+- Created `/admin/billing/subscriptions-packages` page.
+- Added admin sidebar item and page title rule in `lib/admin-navigation.tsx`.
+- Updated `SubscriptionsCatalog` to apply the backend overlay from `catalog.presentation.websitePackages`.
+- Added cross-link from Catalog Storefront page to the new Subscriptions & Packages editor.
 
 ## Files Touched
 
+- `lib/catalog-presentation.ts`
+- `lib/catalog-website-packages.ts`
+- `components/admin/billing/subscriptions-packages-editor.tsx` (new)
+- `app/admin/billing/subscriptions-packages/page.tsx` (new)
+- `app/admin/billing/storefront/page.tsx`
+- `components/domain/catalog/subscriptions-catalog.tsx`
 - `lib/admin-navigation.tsx`
-- `app/admin/billing/pricing/page.tsx`
+- `.github/agent-state.local.md`
 
-## How to Add Ticks
+## Persistence
 
-1. In the admin panel go to **Commerce & Settings → Catalog Storefront** (`/admin/billing/storefront`).
-2. Under **Per-package presentation**, select the package.
-3. Fill in **Feature bullets (one per line)** — each line becomes a green checkmark bullet on the pricing card.
-4. (Optional) Set tagline, icon, accent, featured ribbon, display order.
-5. Click **Save changes**; the public `/pricing` and `/catalog` pages update immediately.
+The editor reuses the existing `CatalogPresentationJson` runtime-setting column (no DB migration). Admin saves via `saveAdminCatalogPresentation`; learner page reads via `fetchPublicCatalog` which returns the same JSON blob.
 
 ## Validation
 
-- Inspected `CatalogPlanCard` (`components/domain/catalog/catalog-plan-card.tsx`) and `planFeatureBullets` (`lib/catalog-presentation.ts`) to confirm feature bullets already render with `CheckCircle2` ticks.
+- `pnpm exec tsc --noEmit`: passed.
+- `pnpm run lint`: passed (exit 0; pre-existing warnings in unrelated files).
 - `git diff --check`: passed.
-- TypeScript / lint could not run because `node_modules` is not installed on this host; changes are limited to imports and JSX already used elsewhere.
 
 ## Blockers / Remaining Risk
 
@@ -37,4 +48,4 @@ Make the per-package feature-bullets (tick-list) editor discoverable in the admi
 
 ## Next Step
 
-Deploy and verify the new nav item renders and links to the Storefront editor.
+Verify the merged PR deployed and the new admin editor works on production.
