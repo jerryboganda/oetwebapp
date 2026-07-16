@@ -75,6 +75,17 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
   let diagError = '-';
   let diagMse = '?';
   let diagErrCount = 0;
+  // The manifest host + path (WITHOUT the token query) — reveals the CDN host and the
+  // Bunny video id, so a manifestLoadError can be traced to a wrong host (CSP block),
+  // a missing video (404), or a token issue (403).
+  const manifestHost = (() => {
+    try {
+      const u = new URL(url);
+      return u.host + u.pathname.replace(/\/playlist\.m3u8$/, '');
+    } catch {
+      return 'BADURL:' + String(url).slice(0, 28);
+    }
+  })();
   const computeMseSupport = () => {
     try {
       const MS = (typeof window !== 'undefined' && (window as unknown as { MediaSource?: typeof MediaSource }).MediaSource) || undefined;
@@ -136,8 +147,13 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       // Record EVERY error (incl. non-fatal) for the diagnostic HUD — buffer/codec
       // errors that stall WebView2 are often non-fatal but recurring.
       diagErrCount += 1;
-      const respCode = (data as { response?: { code?: number } }).response?.code;
-      diagError = `${data.details}${data.fatal ? '!' : ''}${respCode ? `(${respCode})` : ''}x${diagErrCount}`;
+      const d = data as {
+        response?: { code?: number; text?: string };
+        networkDetails?: { status?: number };
+      };
+      const code = d.response?.code ?? d.networkDetails?.status ?? '-';
+      const txt = d.response?.text ? String(d.response.text).replace(/\s+/g, ' ').slice(0, 24) : '';
+      diagError = `${data.details}${data.fatal ? '!' : ''} code=${code}${txt ? ` "${txt}"` : ''} x${diagErrCount}`;
       if (!data.fatal) return;
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
         fatalHandler?.();
@@ -196,7 +212,7 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       hls.destroy();
     },
     mode: 'hls.js',
-    getDiag: () => `${diagError} mse=[${diagMse}]`,
+    getDiag: () => `${diagError} | ${manifestHost} | mse=[${diagMse}]`,
   };
 }
 
