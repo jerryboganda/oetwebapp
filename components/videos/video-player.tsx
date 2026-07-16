@@ -127,6 +127,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [diagWdaOk, setDiagWdaOk] = useState<boolean | null>(null);
   const [diagVersion, setDiagVersion] = useState<string>('?');
   const [diag, setDiag] = useState<string>('');
+  const diagCspRef = useRef<string>('');
 
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {
@@ -316,6 +317,12 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   // stream is decoding or the frame is being suppressed. Remove with SHOW_VIDEO_DIAG.
   useEffect(() => {
     if (!SHOW_VIDEO_DIAG) return;
+    const onCsp = (e: SecurityPolicyViolationEvent) => {
+      if (/b-cdn|bunny|media/i.test(e.blockedURI) || e.violatedDirective.includes('connect')) {
+        diagCspRef.current = `${e.violatedDirective}→${String(e.blockedURI).slice(0, 40)}`;
+      }
+    };
+    document.addEventListener('securitypolicyviolation', onCsp);
     void (async () => {
       try {
         const info = await window.desktopBridge?.runtime?.info?.();
@@ -336,10 +343,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           `hls=${engineRef.current?.mode ?? '-'} ready=${v.readyState} net=${v.networkState} err=${v.error?.code ?? '-'}`,
           `dim=${v.videoWidth}x${v.videoHeight} t=${v.currentTime.toFixed(1)} buf=${bufEnd.toFixed(1)} paused=${v.paused}`,
           `hlserr=${engineRef.current?.getDiag?.() ?? '-'}`,
+          `csp=${diagCspRef.current || 'none'}`,
         ].join('\n'),
       );
     }, 500);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('securitypolicyviolation', onCsp);
+    };
   }, [diagWdaOk, diagVersion, phase.kind]);
 
   const refreshCaptionTracks = useCallback(() => {

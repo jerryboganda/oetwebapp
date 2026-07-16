@@ -75,6 +75,11 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
   let diagError = '-';
   let diagMse = '?';
   let diagErrCount = 0;
+  // On the first fatal manifest error, fetch the SAME url the app uses and report the
+  // raw outcome: fetch:200 = reachable (hls.js-specific bug), fetch:403 = token/auth,
+  // fetchERR:TypeError = CSP/CORS/network block (paired with any securitypolicyviolation).
+  let diagFetch = '-';
+  let fetchProbed = false;
   // The manifest host + path (WITHOUT the token query) — reveals the CDN host and the
   // Bunny video id, so a manifestLoadError can be traced to a wrong host (CSP block),
   // a missing video (404), or a token issue (403).
@@ -154,6 +159,18 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       const code = d.response?.code ?? d.networkDetails?.status ?? '-';
       const txt = d.response?.text ? String(d.response.text).replace(/\s+/g, ' ').slice(0, 24) : '';
       diagError = `${data.details}${data.fatal ? '!' : ''} code=${code}${txt ? ` "${txt}"` : ''} x${diagErrCount}`;
+      if (data.fatal && !fetchProbed) {
+        fetchProbed = true;
+        diagFetch = 'probing';
+        fetch(url, { method: 'GET', cache: 'no-store' })
+          .then((r) => {
+            diagFetch = `fetch:${r.status}`;
+          })
+          .catch((e: unknown) => {
+            const err = e as Error;
+            diagFetch = `fetchERR:${err?.name ?? 'e'}:${String(err?.message ?? '').slice(0, 34)}`;
+          });
+      }
       if (!data.fatal) return;
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
         fatalHandler?.();
@@ -212,7 +229,7 @@ export async function createHlsEngine(video: HTMLVideoElement, url: string): Pro
       hls.destroy();
     },
     mode: 'hls.js',
-    getDiag: () => `${diagError} | ${manifestHost} | mse=[${diagMse}]`,
+    getDiag: () => `${diagError} | ${diagFetch} | ${manifestHost} | mse=[${diagMse}]`,
   };
 }
 
