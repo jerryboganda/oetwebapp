@@ -27,6 +27,7 @@ fn main() {
             "updater_install",
             "app_relaunch",
             "hard_reload",
+            "set_capture_protection",
         ]),
     ))
     .expect("failed to run tauri-build")
