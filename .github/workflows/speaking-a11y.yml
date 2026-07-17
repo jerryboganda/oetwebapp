@@ -13,7 +13,7 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
       - uses: ./.github/actions/setup-oet-stack
