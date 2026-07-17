@@ -1,0 +1,16 @@
+# AI Package Manifest (APM)
+# https://github.com/microsoft/apm
+name: oet-prep
+version: 0.1.0
+description: OET Prep Platform — AI-ready Next.js + ASP.NET Core application
+packages:
+  - name: github-mcp
+    source: github:microsoft/agentrc
+  - name: sequential-thinking
+    source: npm:@modelcontextprotocol/server-sequential-thinking
+  - name: playwright-mcp
+    source: npm:@playwright/mcp
+instructions:
+  - AGENTS.md
+  - .github/copilot-instructions.md
+  - .github/instructions/*.instructions.md

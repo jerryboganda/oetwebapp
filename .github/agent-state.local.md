@@ -1,51 +1,60 @@
-# Agent State - Subscriptions & Packages Admin Editor
+# Agent State — AI-Readiness / Vibe-Coding Optimization
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Goal
-Make every package card on the learner dashboard `/subscriptions` page editable from the admin panel.
-
-## Root Cause
-The `/subscriptions` page renders static `WEBSITE_PACKAGES` via `SubscriptionsCatalog`, while the existing **Catalog Storefront** editor only edits the presentation overlay for `CatalogStorefront` (used on `/catalog` and `/pricing`). The two systems were disconnected, so the storefront editor could not edit the packages the user sees under Subscriptions & Packages.
+Make the OET Prep Platform repository highly optimized for vibe coding and development with AI agents/IDEs (GitHub Copilot, Claude Code, Codex).
 
 ## Implemented This Run
 
-- Extended `CatalogPresentation` with a `websitePackages` overlay (`byCode` per package + `sections` overrides) in `lib/catalog-presentation.ts`.
-- Added `applyWebsitePackageOverlay` helper in `lib/catalog-website-packages.ts`.
-- Built `SubscriptionsPackagesEditor` (`components/admin/billing/subscriptions-packages-editor.tsx`) with:
-  - Searchable package selector grouped by section.
-  - Editable fields: name, package number, format line, description, meta chips, badges, feature bullets/ticks, best-for text, featured flag.
-  - Section heading overrides.
-- Created `/admin/billing/subscriptions-packages` page.
-- Added admin sidebar item and page title rule in `lib/admin-navigation.tsx`.
-- Updated `SubscriptionsCatalog` to apply the backend overlay from `catalog.presentation.websitePackages`.
-- Added cross-link from Catalog Storefront page to the new Subscriptions & Packages editor.
+- Ran AgentRC readiness assessment and generated `reports/index.html`.
+- Raised AI-readiness maturity from **Level 0 → Level 3** and overall score from **48% → 93%**.
+- Synchronized `.github/copilot-instructions.md` with `AGENTS.md`.
+- Added area-specific instructions for `lib/` and `scripts/` (`.github/instructions/lib.instructions.md`, `scripts.instructions.md`).
+- Added area READMEs and `package.json` scripts for `backend/`, `lib/`, and `scripts/`.
+- Added `.vscode/mcp.json` + `.vscode/settings.json` for MCP servers and editor defaults.
+- Added Prettier formatter config (`.prettierrc`) and dependency.
+- Added OpenTelemetry API + `lib/observability/` helpers for observability surface.
+- Added governance files: `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`, `.github/dependabot.yml`.
+- Added `apm.yml` AI Package Manifest.
 
 ## Files Touched
 
-- `lib/catalog-presentation.ts`
-- `lib/catalog-website-packages.ts`
-- `components/admin/billing/subscriptions-packages-editor.tsx` (new)
-- `app/admin/billing/subscriptions-packages/page.tsx` (new)
-- `app/admin/billing/storefront/page.tsx`
-- `components/domain/catalog/subscriptions-catalog.tsx`
-- `lib/admin-navigation.tsx`
+- `.github/copilot-instructions.md`
 - `.github/agent-state.local.md`
-
-## Persistence
-
-The editor reuses the existing `CatalogPresentationJson` runtime-setting column (no DB migration). Admin saves via `saveAdminCatalogPresentation`; learner page reads via `fetchPublicCatalog` which returns the same JSON blob.
+- `.github/dependabot.yml`
+- `.github/instructions/lib.instructions.md` (new)
+- `.github/instructions/scripts.instructions.md` (new)
+- `.prettierrc` (new)
+- `.vscode/mcp.json` (new)
+- `.vscode/settings.json` (new)
+- `CONTRIBUTING.md` (new)
+- `LICENSE` (new)
+- `SECURITY.md` (new)
+- `apm.yml` (new)
+- `backend/package.json` (new)
+- `lib/README.md` (new)
+- `lib/observability/index.ts` (new)
+- `lib/observability/README.md` (new)
+- `lib/package.json` (new)
+- `package.json`
+- `pnpm-lock.yaml`
+- `reports/index.html` (new/regenerated)
+- `scripts/README.md` (new)
+- `scripts/package.json` (new)
 
 ## Validation
 
-- `pnpm exec tsc --noEmit`: passed.
-- `pnpm run lint`: passed (exit 0; pre-existing warnings in unrelated files).
-- `git diff --check`: passed.
+- `pnpm install`: passed.
+- `pnpm run lint`: passed (exit 0; pre-existing warnings).
+- `pnpm exec tsc --noEmit`: fails on pre-existing error in `components/domain/materials/materials-browser.tsx` (unrelated to this change).
+- AgentRC re-scan: Level 3, 93%, 25/27 criteria passing.
 
 ## Blockers / Remaining Risk
 
-- None.
+- `pnpm exec tsc --noEmit` has one pre-existing type error in `components/domain/materials/materials-browser.tsx` (event name not assignable to analytics union). Not introduced by this change.
+- Two AgentRC criteria remain: APM lockfile and APM CI integration. APM CLI is not trivially installable via `npx`; left as documented next steps.
 
 ## Next Step
 
-Verify the merged PR deployed and the new admin editor works on production.
+Commit and push the AI-readiness changes to the feature branch, then verify on production after merge.
