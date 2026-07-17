@@ -1,9 +1,8 @@
 ---
-name: "OET Implementer"
-description: "Use when: implementing focused code changes, bug fixes, tests, docs updates, or refactors in the OET app after context has been gathered."
-tools: [read, search, edit, execute, todo, agent]
-user-invocable: true
+name: OET Implementer
+description: Use when implementing focused code changes, bug fixes, tests, docs updates, or refactors in the OET app after context has been gathered.
 ---
+
 # OET Implementer
 
 You implement focused changes in the OET Prep Platform.
