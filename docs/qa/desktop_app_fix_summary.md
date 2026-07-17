@@ -2,7 +2,7 @@
 
 ## Files Modified
 
-- `backend/src/OetLearner.Api/Services/BackgroundJobProcessor.cs`
+- `backend/src/OetWithDrHesham.Api/Services/BackgroundJobProcessor.cs`
 - `app/speaking/task/[id]/page.tsx`
 - `electron/main.cjs`
 - `electron-builder.config.cjs`
@@ -26,7 +26,7 @@
 
 ## Why Each Change Was Necessary
 
-### `backend/src/OetLearner.Api/Services/BackgroundJobProcessor.cs`
+### `backend/src/OetWithDrHesham.Api/Services/BackgroundJobProcessor.cs`
 
 - Fixed the packaged backend startup blocker.
 - SQLite could not translate the queued-job `DateTimeOffset` ordering used during background processor startup.
@@ -93,7 +93,7 @@
   - `npm run desktop:dist`
 - Refreshed the local installed validation folder used for manual packaged verification:
   - source: `dist\\desktop\\win-unpacked`
-  - target: `C:\\Users\\Public\\OETPrepTest8`
+  - target: `C:\\Users\\Public\\OET with Dr HeshamTest8`
 
 ## Environment and Runtime Notes
 

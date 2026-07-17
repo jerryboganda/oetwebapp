@@ -1,0 +1,1037 @@
+using System.Text.Json;
+using OetWithDrHesham.Api.Services;
+using OetWithDrHesham.Api.Services.Rulebook;
+using OetWithDrHesham.Api.Services.Rulebooks;
+
+namespace OetWithDrHesham.Api.Tests;
+
+public class RulebookLoaderTests
+{
+    private readonly RulebookLoader _loader = new();
+
+    [Fact]
+    public void Loads_Writing_Medicine_Rulebook()
+    {
+        var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
+        Assert.Equal(RuleKind.Writing, book.Kind);
+        Assert.Equal(ExamProfession.Medicine, book.Profession);
+        Assert.Equal("1.0.0", book.Version);
+        Assert.Equal(16, book.Sections.Count);
+        Assert.True(book.Rules.Count >= 90);
+    }
+
+    [Fact]
+    public void Loads_Speaking_Medicine_Rulebook()
+    {
+        var book = _loader.Load(RuleKind.Speaking, ExamProfession.Medicine);
+        Assert.Equal(RuleKind.Speaking, book.Kind);
+        Assert.Equal(ExamProfession.Medicine, book.Profession);
+        Assert.Equal(8, book.Sections.Count);
+        Assert.Equal(62, book.Rules.Count);
+    }
+
+    [Fact]
+    public void Loads_Speaking_Nursing_Rulebook_ForSeededRolePlay()
+    {
+        var book = _loader.Load(RuleKind.Speaking, ExamProfession.Nursing);
+        Assert.Equal(RuleKind.Speaking, book.Kind);
+        Assert.Equal(ExamProfession.Nursing, book.Profession);
+        Assert.Contains(book.Rules, rule => rule.Id == "RULE_56" && rule.AppliesTo.HasValue);
+    }
+
+    [Fact]
+    public void Throws_For_Unregistered_Profession_Combination()
+    {
+        var registered = _loader.All()
+            .Select(book => (book.Kind, book.Profession))
+            .ToHashSet();
+
+        var missing = Enum.GetValues<RuleKind>()
+            .SelectMany(kind => Enum.GetValues<ExamProfession>().Select(profession => (kind, profession)))
+            .FirstOrDefault(pair => !registered.Contains(pair));
+
+        Assert.DoesNotContain(registered, pair => pair == missing);
+        Assert.Throws<OetWithDrHesham.Api.Services.Rulebook.RulebookNotFoundException>(() =>
+            _loader.Load(missing.kind, missing.profession));
+    }
+
+    [Theory]
+    [InlineData("R03.4")]
+    [InlineData("R07.6")]
+    [InlineData("R09.2")]
+    [InlineData("R13.10")]
+    [InlineData("R14.6")]
+    [InlineData("R14.12")]
+    public void Critical_Writing_Rule_Found(string id)
+    {
+        var rule = _loader.FindRule(RuleKind.Writing, ExamProfession.Medicine, id);
+        Assert.NotNull(rule);
+        Assert.Equal(RuleSeverity.Critical, rule!.Severity);
+    }
+
+    [Theory]
+    [InlineData("RULE_06")]
+    [InlineData("RULE_22")]
+    [InlineData("RULE_27")]
+    [InlineData("RULE_32")]
+    [InlineData("RULE_44")]
+    public void Critical_Speaking_Rule_Found(string id)
+    {
+        var rule = _loader.FindRule(RuleKind.Speaking, ExamProfession.Medicine, id);
+        Assert.NotNull(rule);
+        Assert.Equal(RuleSeverity.Critical, rule!.Severity);
+    }
+
+    [Fact]
+    public void Speaking_Has_13Stage_Consultation_StateMachine()
+    {
+        var book = _loader.Load(RuleKind.Speaking, ExamProfession.Medicine);
+        Assert.NotNull(book.StateMachines);
+        var sm = book.StateMachines!.Value;
+        Assert.Equal(13, sm.GetProperty("consultationStages").GetArrayLength());
+        Assert.Equal(7, sm.GetProperty("breakingBadNewsProtocol").GetArrayLength());
+        Assert.Equal(3, sm.GetProperty("smokingLadder").GetArrayLength());
+    }
+
+    [Fact]
+    public void Writing_Has_Letter_Skeleton_Table()
+    {
+        var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
+        Assert.NotNull(book.Tables);
+        var skeleton = book.Tables!.Value.GetProperty("letterSkeleton");
+        Assert.True(skeleton.GetArrayLength() > 10);
+    }
+
+    [Fact]
+    public void Assessment_Criteria_Is_Loaded_For_Both_Kinds()
+    {
+        Assert.Equal(JsonValueKind.Object, _loader.GetAssessmentCriteria(RuleKind.Writing).ValueKind);
+        Assert.Equal(JsonValueKind.Object, _loader.GetAssessmentCriteria(RuleKind.Speaking).ValueKind);
+    }
+}
+
+public class WritingRulebookCoverageValidatorTests
+{
+    private readonly RulebookLoader _loader = new();
+    private readonly WritingRulebookCoverageValidator _validator;
+
+    public WritingRulebookCoverageValidatorTests()
+    {
+        _validator = new WritingRulebookCoverageValidator(_loader);
+    }
+
+    [Fact]
+    public void CoverageGate_AcceptsCanonicalWritingRulebooks()
+    {
+        foreach (var book in _loader.All().Where(book => book.Kind == RuleKind.Writing))
+        {
+            _validator.ValidateBook(book);
+            Assert.Equal(172, book.Rules.Count);
+        }
+    }
+
+    [Fact]
+    public void CoverageGate_RejectsImportMissingCanonicalCriticalRule()
+    {
+        using var doc = JsonDocument.Parse(BuildImportJson(rule => rule.Id != "R16.2"));
+
+        var ex = Assert.Throws<ApiException>(() =>
+            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+
+        Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
+        Assert.Contains("R16.2", ex.Message);
+    }
+
+    [Fact]
+    public void CoverageGate_RejectsUnknownDeterministicCheckId()
+    {
+        using var doc = JsonDocument.Parse(BuildImportJson(
+            _ => true,
+            rule => rule.Id == "R03.4" ? "unknown_detector" : rule.CheckId));
+
+        var ex = Assert.Throws<ApiException>(() =>
+            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+
+        Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
+        Assert.Contains("unsupported checkId", ex.Message);
+    }
+
+    [Fact]
+    public void CoverageGate_RejectsRemovedCanonicalCheckId()
+    {
+        var canonicalDetectorRule = _loader.Load(RuleKind.Writing, ExamProfession.Medicine)
+            .Rules.First(rule => !string.IsNullOrWhiteSpace(rule.CheckId));
+        using var doc = JsonDocument.Parse(BuildImportJson(
+            _ => true,
+            rule => rule.Id == canonicalDetectorRule.Id ? null : rule.CheckId));
+
+        var ex = Assert.Throws<ApiException>(() =>
+            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+
+        Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
+        Assert.Contains(canonicalDetectorRule.Id, ex.Message);
+        Assert.Contains("checkId", ex.Message);
+    }
+
+    [Fact]
+    public void CoverageGate_RejectsSupportedCheckIdMovedToWrongRule()
+    {
+        var canonical = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
+        var detectorRule = canonical.Rules.First(rule => !string.IsNullOrWhiteSpace(rule.CheckId));
+        var structuredRule = canonical.Rules.First(rule => string.IsNullOrWhiteSpace(rule.CheckId));
+        using var doc = JsonDocument.Parse(BuildImportJson(
+            _ => true,
+            rule => rule.Id == detectorRule.Id
+                ? null
+                : rule.Id == structuredRule.Id
+                    ? detectorRule.CheckId
+                    : rule.CheckId));
+
+        var ex = Assert.Throws<ApiException>(() =>
+            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+
+        Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
+        Assert.Contains(detectorRule.Id, ex.Message);
+        Assert.Contains(structuredRule.Id, ex.Message);
+    }
+
+    [Fact]
+    public void CoverageGate_RejectsSectionDrift()
+    {
+        using var doc = JsonDocument.Parse(BuildImportJson(
+            _ => true,
+            sectionOverride: rule => rule.Id == "R16.2" ? "99" : rule.Section));
+
+        var ex = Assert.Throws<ApiException>(() =>
+            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+
+        Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
+        Assert.Contains("R16.2", ex.Message);
+        Assert.Contains("section", ex.Message);
+    }
+
+    [Fact]
+    public void CoverageGate_RejectsForbiddenPatternDrift()
+    {
+        var forbiddenRule = _loader.Load(RuleKind.Writing, ExamProfession.Medicine)
+            .Rules.First(rule => rule.ForbiddenPatterns is { Count: > 0 });
+        using var doc = JsonDocument.Parse(BuildImportJson(
+            _ => true,
+            forbiddenPatternsOverride: rule => rule.Id == forbiddenRule.Id ? Array.Empty<string>() : rule.ForbiddenPatterns));
+
+        var ex = Assert.Throws<ApiException>(() =>
+            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+
+        Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
+        Assert.Contains(forbiddenRule.Id, ex.Message);
+        Assert.Contains("forbiddenPatterns", ex.Message);
+    }
+
+    private string BuildImportJson(
+        Func<OetRule, bool> includeRule,
+        Func<OetRule, string?>? checkIdOverride = null,
+        Func<OetRule, string>? sectionOverride = null,
+        Func<OetRule, object?>? forbiddenPatternsOverride = null)
+    {
+        var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
+        var rules = book.Rules.Where(includeRule).Select(rule => new
+        {
+            id = rule.Id,
+            section = sectionOverride?.Invoke(rule) ?? rule.Section,
+            title = rule.Title,
+            body = rule.Body,
+            severity = rule.Severity.ToString().ToLowerInvariant(),
+            checkId = checkIdOverride is null ? rule.CheckId : checkIdOverride(rule),
+            forbiddenPatterns = forbiddenPatternsOverride is null ? rule.ForbiddenPatterns : forbiddenPatternsOverride(rule),
+        });
+
+        return JsonSerializer.Serialize(new
+        {
+            version = $"coverage-test-{Guid.NewGuid():N}",
+            kind = "writing",
+            profession = "medicine",
+            sections = book.Sections.Select(section => new { id = section.Id, title = section.Title, order = section.Order }),
+            rules,
+        });
+    }
+}
+
+public class WritingRuleEngineTests
+{
+    private readonly WritingRuleEngine _engine = new(new RulebookLoader());
+
+    private const string LetterWithBoth = @"Dr A B
+Cardiology Clinic
+Main Street
+City
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones D.O.B: 01/01/1980
+
+I am writing to refer Mr Jones, a 45-year-old teacher, for your assessment.
+
+Mr Jones smokes 10 cigarettes per day and drinks alcohol occasionally. He presented with chest pain today. His blood pressure was 150/90 mmHg. Examination revealed mild discomfort on palpation. He was advised lifestyle changes.
+
+Please do not hesitate to contact me.
+
+Yours sincerely,
+
+Doctor";
+
+    [Fact]
+    public void R03_4_Passes_With_Smoking_And_Drinking()
+    {
+        var findings = _engine.Lint(new WritingLintInput(LetterWithBoth, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R03.4");
+    }
+
+    [Fact]
+    public void R03_4_Fires_When_Smoking_Missing()
+    {
+        var text = LetterWithBoth.Replace("Mr Jones smokes 10 cigarettes per day and ", "");
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R03.4");
+    }
+
+    [Fact]
+    public void R03_4_Suppressed_When_Recipient_Is_OT()
+    {
+        var text = LetterWithBoth
+            .Replace("smokes 10 cigarettes per day and drinks alcohol occasionally. ", "");
+        var findings = _engine.Lint(new WritingLintInput(
+            text, "non_medical_referral", RecipientSpecialty: "Occupational Therapist"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R03.4");
+    }
+
+    [Fact]
+    public void R04_2_Fires_On_Blank_Between_Salutation_And_Re()
+    {
+        var text = "Dear Dr Smith,\n\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R04.2" || f.RuleId == "R06.3");
+    }
+
+    [Fact]
+    public void R05_8_Fires_On_Date_Prefix()
+    {
+        var text = "Dr A\n\nDate: 1 January 2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R05.8");
+    }
+
+    [Fact]
+    public void R06_10_Fires_On_Minor_With_Title()
+    {
+        var text = "Dear Dr Smith,\nRe: Miss Sara Miller D.O.B: 01/01/2015\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral", PatientIsMinor: true));
+        Assert.Contains(findings, f => f.RuleId == "R06.10");
+    }
+
+    [Fact]
+    public void R06_11_Fires_On_SirMadam_With_Sincerely()
+    {
+        var text = "Dear Sir/Madam,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R06.11");
+    }
+
+    [Fact]
+    public void R07_6_Fires_On_Urgent_Without_Urgent_Word()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for assessment.\n\nOn today's visit she presented with severe pain.\n\nAt your earliest convenience.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R07.6" || f.RuleId == "R13.2");
+    }
+
+    [Fact]
+    public void R08_7_Flags_Next_Visit()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nOn the next visit, she reported improvement.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R08.7" || f.RuleId == "R10.14");
+    }
+
+    [Fact]
+    public void R08_14_Flags_The_Patient()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms Miller\n\nIntro.\n\nThe patient presented with nausea.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R08.14" || f.RuleId == "R12.2");
+    }
+
+    [Fact]
+    public void R09_2_Fires_On_Urgent_Missing_Earliest_Convenience()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to urgently refer Ms A.\n\nOn today's visit she collapsed.\n\nPlease see her soon.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R09.2" || f.RuleId == "R13.3");
+    }
+
+    [Fact]
+    public void R11_1_Flags_Latin_Abbreviation_bd()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed amoxicillin 500 mg bd.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R11.1");
+    }
+
+    [Fact]
+    public void R12_1_Flags_Contractions()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe doesn't take any regular medication.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R12.1");
+    }
+
+    [Fact]
+    public void R13_10_Flags_ASAP()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nPlease see her ASAP.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R13.10");
+    }
+
+    [Fact]
+    public void R14_6_Flags_Was_Presented_In_Discharge()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to update you regarding Ms A.\n\nShe was presented with chest pain on admission.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge"));
+        Assert.Contains(findings, f => f.RuleId == "R14.6");
+    }
+
+    [Fact]
+    public void R14_12_Flags_Treated_From()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was treated from pneumonia.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R14.12");
+    }
+
+    [Fact]
+    public void R15_2_Flags_Jargon_In_Non_Medical_Referral()
+    {
+        var text = "Dear Sir/Madam,\nRe: Ms A\n\nMs A has hypertension and diabetes.\n\nYours faithfully,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(
+            text, "non_medical_referral", RecipientSpecialty: "Occupational Therapist"));
+        Assert.Contains(findings, f => f.RuleId == "R15.2");
+    }
+
+    [Fact]
+    public void R03_8_Body_Length_Suppressed_Below_80_Words()
+    {
+        // The default sample letter body is well under 80 words.
+        var findings = _engine.Lint(new WritingLintInput(LetterWithBoth, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R03.8");
+    }
+
+    [Fact]
+    public void R03_8_Body_Length_Advisory_When_Too_Long()
+    {
+        // Build a body of ~260 words (above the 200 max, above the 80 noise floor).
+        var word = "word ";
+        var bigBody = string.Concat(Enumerable.Repeat(word, 260));
+        var text =
+            "Dear Dr Smith,\nRe: Ms A\n\n"
+            + bigBody + "\n\n"
+            + "Yours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var advisory = findings.FirstOrDefault(f => f.RuleId == "R03.8");
+        Assert.NotNull(advisory);
+        Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
+        Assert.Contains("Too long", advisory.Message);
+        Assert.Contains("Advisory only", advisory.Message);
+    }
+
+    [Fact]
+    public void R03_8_Body_Length_Advisory_When_Too_Short()
+    {
+        // ~120 words: above the 80 noise floor, below the 180 minimum.
+        var word = "word ";
+        var smallBody = string.Concat(Enumerable.Repeat(word, 120));
+        var text =
+            "Dear Dr Smith,\nRe: Ms A\n\n"
+            + smallBody + "\n\n"
+            + "Yours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var advisory = findings.FirstOrDefault(f => f.RuleId == "R03.8");
+        Assert.NotNull(advisory);
+        Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
+        Assert.Contains("Too short", advisory.Message);
+    }
+
+    [Fact]
+    public void Findings_Are_Ordered_Critical_Then_Major_Then_Minor()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nThe patient has Hypertension.\n\nShe takes amoxicillin bd.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        for (int i = 1; i < findings.Count; i++)
+        {
+            Assert.True(Rank(findings[i - 1].Severity) <= Rank(findings[i].Severity));
+        }
+        static int Rank(RuleSeverity s) => s switch
+        {
+            RuleSeverity.Critical => 0, RuleSeverity.Major => 1, RuleSeverity.Minor => 2, _ => 3,
+        };
+    }
+
+    // ---------------------------------------------------------------------
+    // Newly ported detector coverage (mirrors lib/rulebook/writing-rules.ts)
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void R05_2_Flags_Address_Line_With_Trailing_Comma()
+    {
+        var text = "Dr A B,\nCardiology Clinic.\nMain Street\n\n1 January 2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R05.2" && f.Quote!.EndsWith(","));
+        Assert.Contains(findings, f => f.RuleId == "R05.2" && f.Quote!.EndsWith("."));
+    }
+
+    [Fact]
+    public void R05_2_Passes_Address_Without_Punctuation()
+    {
+        var text = "Dr A B\nCardiology Clinic\nMain Street\n\n1 January 2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R05.2");
+    }
+
+    [Fact]
+    public void R06_8_Fires_On_Capitalised_Age_Colon_In_Re_Line()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A Age: 40\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R06.8");
+    }
+
+    [Fact]
+    public void R06_8_Allows_Lowercase_Aged_In_Re_Line()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A, aged 40\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R06.8");
+    }
+
+    [Fact]
+    public void R06_12_Fires_On_Lowercase_Yours()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nyours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R06.12");
+    }
+
+    [Fact]
+    public void R06_12_Fires_On_Misspelled_Sincerely()
+    {
+        // The Yours-line parser requires the literal token 'sincerely' or 'faithfully',
+        // so we anchor on a correct 'Yours faithfully' and append a misspelling that the
+        // detector's spell pattern catches.
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours faithfully sincerly,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R06.12");
+    }
+
+    [Fact]
+    public void R07_1_Fires_When_Intro_Has_Too_Many_Sentences()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A. She is forty. She works as a teacher. She lives alone.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R07.1");
+    }
+
+    [Fact]
+    public void R07_1_Passes_When_Intro_Has_Three_Or_Fewer_Sentences()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for assessment. She is forty. She works as a teacher.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R07.1");
+    }
+
+    [Fact]
+    public void R09_7_Fires_When_Patient_Initiated_Without_Request_Phrase()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for assessment.\n\nShe came in for a check-up.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(
+            text, "routine_referral",
+            CaseNotesMarkers: new WritingCaseNotesMarkers(PatientInitiatedReferral: true)));
+        Assert.Contains(findings, f => f.RuleId == "R09.7");
+    }
+
+    [Fact]
+    public void R09_7_Passes_When_Request_Phrase_Present()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A upon her request for assessment.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(
+            text, "routine_referral",
+            CaseNotesMarkers: new WritingCaseNotesMarkers(PatientInitiatedReferral: true)));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R09.7");
+    }
+
+    [Fact]
+    public void R09_8_Fires_When_Consent_Documented_Without_Statement()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A.\n\nThank you for seeing her.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(
+            text, "routine_referral",
+            CaseNotesMarkers: new WritingCaseNotesMarkers(ConsentDocumented: true)));
+        Assert.Contains(findings, f => f.RuleId == "R09.8");
+    }
+
+    [Fact]
+    public void R09_8_Passes_When_Aware_Of_Diagnosis()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A.\n\nShe is aware of her diagnosis and management.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(
+            text, "routine_referral",
+            CaseNotesMarkers: new WritingCaseNotesMarkers(ConsentDocumented: true)));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R09.8");
+    }
+
+    [Fact]
+    public void R09_9_Fires_When_No_Blank_Line_Before_Yours()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nLast body line.\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R09.9");
+    }
+
+    [Fact]
+    public void R09_9_Passes_With_Blank_Line_Before_Yours()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nLast body line.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R09.9");
+    }
+
+    [Fact]
+    public void R10_5_Fires_On_Past_Simple_With_Since()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had hypertension since 2010.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R10.5");
+    }
+
+    [Fact]
+    public void R10_6_Fires_On_Past_Simple_With_For_Duration()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had hypertension for 5 years.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R10.6");
+    }
+
+    [Fact]
+    public void R10_8_Fires_On_Present_Perfect_For_Surgery()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R10.8");
+    }
+
+    [Fact]
+    public void R10_8_Passes_On_Past_Simple_For_Surgery()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R10.8");
+    }
+
+    [Fact]
+    public void R10_10_Fires_On_Present_Perfect_With_Ago()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has presented 3 weeks ago.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R10.10");
+    }
+
+    [Fact]
+    public void R12_10_Fires_On_Therefore_Without_Semicolon()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell, therefore she rested.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R12.10");
+    }
+
+    [Fact]
+    public void R12_10_Passes_On_Therefore_With_Semicolon()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell; therefore, she rested.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.10");
+    }
+
+    [Fact]
+    public void R12_11_Fires_On_In_Addition_Without_Semicolon()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin, in addition she uses an inhaler.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R12.11");
+    }
+
+    [Fact]
+    public void R12_11_Passes_On_In_Addition_To()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin in addition to her usual inhaler.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
+    }
+
+    [Fact]
+    public void R05_5_Fires_On_Mixed_Date_Formats()
+    {
+        var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nShe was seen on 1 January 2026 and again on 15/02/2026.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R05.5");
+    }
+
+    [Fact]
+    public void R05_5_Passes_With_Single_Date_Format()
+    {
+        var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nShe was seen on 15/02/2026.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R05.5");
+    }
+
+    [Fact]
+    public void R05_6_Fires_On_Two_Digit_Year()
+    {
+        var text = "Dr A\n\n01/01/26\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R05.6");
+    }
+
+    [Fact]
+    public void R05_6_Passes_On_Four_Digit_Year()
+    {
+        var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R05.6");
+    }
+}
+
+public class SpeakingRuleEngineTests
+{
+    private readonly SpeakingRuleEngine _engine = new(new RulebookLoader());
+
+    private static SpeakingAuditInput Input(
+        IEnumerable<SpeakingTurn> turns,
+        string cardType = "first_visit_routine",
+        int? silenceMs = null)
+        => new(turns.ToList(), cardType, ExamProfession.Medicine, silenceMs);
+
+    [Fact]
+    public void Jargon_Detector_Flags_CT_Scan()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "We will arrange a CT scan of your chest next week."),
+        }));
+        Assert.Contains(findings, f => f.RuleId is "RULE_06" or "RULE_07");
+    }
+
+    [Fact]
+    public void Jargon_Detector_Passes_Imaging_Scan()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "I'd like to arrange an imaging scan of your chest."),
+        }));
+        Assert.DoesNotContain(findings, f => f.RuleId == "RULE_07");
+    }
+
+    [Fact]
+    public void Monologue_Detector_Flags_Long_Candidate_Turn()
+    {
+        var longText = string.Join(' ', Enumerable.Range(0, 160).Select(i => "word" + i));
+        var findings = _engine.Audit(Input(new[] { new SpeakingTurn("candidate", longText) }));
+        Assert.Contains(findings, f => f.RuleId == "RULE_22");
+    }
+
+    [Fact]
+    public void Weight_Sensitivity_Flags_Direct_Question()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "What is your weight?"),
+        }));
+        Assert.Contains(findings, f => f.RuleId == "RULE_23");
+    }
+
+    [Fact]
+    public void Smoking_Ladder_Flags_Reduction_Before_Cessation()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "I would suggest you try to reduce how many cigarettes you smoke."),
+            new SpeakingTurn("patient", "I'm not sure."),
+            new SpeakingTurn("candidate", "Ideally we want you to quit smoking completely."),
+        }));
+        Assert.Contains(findings, f => f.RuleId == "RULE_27");
+    }
+
+    [Fact]
+    public void Smoking_Ladder_Passes_Cessation_First()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "I strongly recommend you quit smoking completely."),
+            new SpeakingTurn("patient", "I don't think I can."),
+            new SpeakingTurn("candidate", "If complete cessation is hard, we could discuss reducing your intake."),
+        }));
+        Assert.DoesNotContain(findings, f => f.RuleId == "RULE_27");
+    }
+
+    [Fact]
+    public void Overdiagnosis_Flags_You_Have_Hypertension()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "Based on this reading, you have hypertension."),
+        }));
+        Assert.Contains(findings, f => f.RuleId == "RULE_32");
+    }
+
+    [Fact]
+    public void Stage_Coverage_Flags_Missing_Empathy_Recap_Closure()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "Hello, I am Dr X. How can I help?"),
+            new SpeakingTurn("patient", "I have a headache."),
+            new SpeakingTurn("candidate", "Can you tell me more about the pain?"),
+            new SpeakingTurn("patient", "It started last week."),
+        }));
+        Assert.Contains(findings, f => f.RuleId == "RULE_15");
+        Assert.Contains(findings, f => f.RuleId == "RULE_20");
+        Assert.Contains(findings, f => f.RuleId == "RULE_21");
+    }
+
+    [Fact]
+    public void BBN_Protocol_Flags_Missing_Steps()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "Your results show cancer."),
+            new SpeakingTurn("patient", "…"),
+        }, cardType: "breaking_bad_news", silenceMs: 500));
+        Assert.Contains(findings, f => f.RuleId == "RULE_41");
+        Assert.Contains(findings, f => f.RuleId == "RULE_42");
+        Assert.Contains(findings, f => f.RuleId == "RULE_44");
+    }
+
+    [Fact]
+    public void BBN_Protocol_Passes_Fully_Sequenced_Transcript()
+    {
+        var findings = _engine.Audit(Input(new[]
+        {
+            new SpeakingTurn("candidate", "Before we discuss your results, is there anyone you'd like to have here with you?"),
+            new SpeakingTurn("patient", "My partner is outside."),
+            new SpeakingTurn("candidate", "I am afraid the results are not quite what we had hoped for."),
+            new SpeakingTurn("candidate", "I am very sorry to tell you — the results are showing signs of cancer."),
+            new SpeakingTurn("patient", "…"),
+            new SpeakingTurn("candidate", "I know this is a lot to take in. Please take all the time you need."),
+            new SpeakingTurn("candidate", "I want you to know that we caught this at an early stage, and there are effective treatment options available."),
+            new SpeakingTurn("candidate", "I am here for you, and my number is available whenever you need anything."),
+        }, cardType: "breaking_bad_news", silenceMs: 4000));
+        Assert.DoesNotContain(findings, f => f.RuleId.StartsWith("RULE_4"));
+    }
+
+    [Fact]
+    public void BBN_Rules_Do_Not_Fire_On_NonBBN_Card()
+    {
+        var findings = _engine.Audit(Input(new[] { new SpeakingTurn("candidate", "Hello.") }, cardType: "first_visit_routine"));
+        Assert.DoesNotContain(findings, f => f.RuleId.StartsWith("RULE_4"));
+    }
+}
+
+public class AiGatewayAndPromptTests
+{
+    private readonly RulebookLoader _loader = new();
+
+    private IAiGatewayService BuildGateway()
+        => new AiGatewayService(_loader, new[] { (IAiModelProvider)new MockAiProvider() });
+
+    [Fact]
+    public void Prompt_Contains_Rulebook_Header_And_Critical_Rules()
+    {
+        var gateway = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
+            CandidateCountry = "UK",
+        });
+        Assert.Contains("OET AI — Rulebook-Grounded System Prompt", prompt.SystemPrompt);
+        Assert.Contains("CRITICAL rules", prompt.SystemPrompt);
+        Assert.Contains("R03.4", prompt.SystemPrompt);
+        Assert.Equal(350, prompt.Metadata.ScoringPassMark);
+        Assert.Equal("B", prompt.Metadata.ScoringGrade);
+    }
+
+    [Fact]
+    public void Prompt_For_USA_Writing_Uses_300_Grade_CPlus()
+    {
+        var gateway = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            CandidateCountry = "USA",
+            LetterType = "routine_referral",
+        });
+        Assert.Equal(300, prompt.Metadata.ScoringPassMark);
+        Assert.Equal("C+", prompt.Metadata.ScoringGrade);
+    }
+
+    [Fact]
+    public void Prompt_For_Speaking_Is_350_Regardless_Of_Country()
+    {
+        var gateway = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Speaking,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Coach,
+            CandidateCountry = "USA",
+            CardType = "first_visit_routine",
+        });
+        Assert.Equal(350, prompt.Metadata.ScoringPassMark);
+        Assert.Equal("B", prompt.Metadata.ScoringGrade);
+        Assert.Contains("SPEAKING: Grade B at 350/500, universal", prompt.SystemPrompt);
+    }
+
+    [Fact]
+    public void Prompt_For_BBN_Card_Includes_BBN_Rules()
+    {
+        var gateway = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Speaking,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Coach,
+            CardType = "breaking_bad_news",
+        });
+        Assert.Contains("RULE_41", prompt.SystemPrompt);
+        Assert.Contains("RULE_44", prompt.SystemPrompt);
+    }
+
+    [Fact]
+    public void Prompt_For_Routine_First_Visit_Excludes_BBN_Rules()
+    {
+        var gateway = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Speaking,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Coach,
+            CardType = "first_visit_routine",
+        });
+        Assert.DoesNotContain("RULE_44 (critical)", prompt.SystemPrompt);
+    }
+
+    [Fact]
+    public async Task Gateway_Rejects_Empty_SystemPrompt()
+    {
+        var gateway = BuildGateway();
+        var prompt = new AiGroundedPrompt { SystemPrompt = "", TaskInstruction = "do stuff" };
+        await Assert.ThrowsAsync<PromptNotGroundedException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt }));
+    }
+
+    [Fact]
+    public async Task Gateway_Rejects_Ungrounded_SystemPrompt()
+    {
+        var gateway = BuildGateway();
+        var prompt = new AiGroundedPrompt
+        {
+            SystemPrompt = "You are a friendly chatbot, answer however you like.",
+            TaskInstruction = "Hi",
+        };
+        await Assert.ThrowsAsync<PromptNotGroundedException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt }));
+    }
+
+    [Fact]
+    public async Task Gateway_Accepts_Grounded_Prompt_Via_Builder()
+    {
+        var gateway = BuildGateway();
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
+        });
+        var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
+        Assert.False(string.IsNullOrWhiteSpace(result.Completion));
+        Assert.Equal("1.0.0", result.RulebookVersion);
+        Assert.NotEmpty(result.AppliedRuleIds);
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Writing_Prompt_Missing_LetterType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Writing,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                // LetterType intentionally omitted
+            }));
+        Assert.Contains("LetterType", ex.Message);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Writing_Prompt_With_Whitespace_LetterType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Writing,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                LetterType = "   ",
+            }));
+        Assert.Contains("LetterType", ex.Message);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Speaking_Prompt_Missing_CardType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Speaking,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                // CardType intentionally omitted
+            }));
+        Assert.Contains("CardType", ex.Message);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Speaking_Prompt_With_Whitespace_CardType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Speaking,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                CardType = "\t",
+            }));
+        Assert.Contains("CardType", ex.Message);
+        await Task.CompletedTask;
+    }
+}

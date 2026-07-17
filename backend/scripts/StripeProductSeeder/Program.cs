@@ -1,5 +1,5 @@
 using System.Text.Json;
-using OetLearner.Scripts.StripeProductSeeder;
+using OetWithDrHesham.Scripts.StripeProductSeeder;
 using Stripe;
 
 // ── CLI ───────────────────────────────────────────────────────────────────────

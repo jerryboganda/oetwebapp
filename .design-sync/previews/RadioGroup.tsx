@@ -1,7 +1,7 @@
 // Authored preview — RadioGroup. options shape: { value, label, description? }[].
 // RadioGroup is a controlled component (value + onChange). Each named export = one cell.
 import { useState } from 'react';
-import { RadioGroup } from 'oet-prep';
+import { RadioGroup } from 'oet-with-dr-hesham';
 
 const Column = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 460 }}>{children}</div>

@@ -14,7 +14,7 @@ test backed by SQLite (which honours the unique filtered index).
 
 ### Production code
 
-- `backend/src/OetLearner.Api/Services/Entitlements/EffectiveEntitlementResolver.cs`
+- `backend/src/OetWithDrHesham.Api/Services/Entitlements/EffectiveEntitlementResolver.cs`
   - Added structured fail-low semantics. The resolver now demotes an
     otherwise-Active/Trial subscription to `Tier="free"` /
     `HasEligibleSubscription=false` when:
@@ -36,7 +36,7 @@ test backed by SQLite (which honours the unique filtered index).
   - The snapshot still surfaces the underlying `SubscriptionStatus` for
     diagnostics; it just NEVER lets that status confer paid entitlements.
 
-- `backend/src/OetLearner.Api/Services/AiManagement/AiQuotaService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/AiManagement/AiQuotaService.cs`
   - No code change needed — the existing `ResolvePlanAsync` already
     treats `explicit-invalid` and `unknown` quotaPlanCodes as fall-back
     to FREE, and now inherits the resolver's stricter fail-low
@@ -44,7 +44,7 @@ test backed by SQLite (which honours the unique filtered index).
     FREE plan via `ResolveDefaultPlanAsync`).
   - Verified by `AiQuotaMappingTests` (see below).
 
-- `backend/src/OetLearner.Api/Services/AiManagement/AiCreditRenewalWorker.cs`
+- `backend/src/OetWithDrHesham.Api/Services/AiManagement/AiCreditRenewalWorker.cs`
   - No code change needed — the worker already uses the
     `UX_AiCreditLedger_PlanRenewal_ReferenceId` unique filtered index
     plus `IsUniqueConstraintViolation` swallowing for the race. New
@@ -52,7 +52,7 @@ test backed by SQLite (which honours the unique filtered index).
 
 ### Tests added
 
-- `backend/tests/OetLearner.Api.Tests/EntitlementResolverHardeningTests.cs`
+- `backend/tests/OetWithDrHesham.Api.Tests/EntitlementResolverHardeningTests.cs`
   (NEW — 12 tests, all passing)
   - `NonEligibleStatuses_AlwaysResolveToFreeTier` (theory ×5):
     Suspended / PastDue / Pending / Cancelled / Expired all collapse to
@@ -70,7 +70,7 @@ test backed by SQLite (which honours the unique filtered index).
     test documents as the safe default.
   - `NoUserSubscription_ReturnsAnonymousFree`.
 
-- `backend/tests/OetLearner.Api.Tests/AiQuotaMappingTests.cs` (NEW — 6
+- `backend/tests/OetWithDrHesham.Api.Tests/AiQuotaMappingTests.cs` (NEW — 6
   tests, all passing)
   - `UnknownExplicitQuotaPlanCode_FallsBackToFree_DoesNotElevate`.
   - `MalformedEntitlementsJson_OnActivePlan_ResolvesToFreePolicy`.
@@ -102,12 +102,12 @@ These pre-existing tests embedded the *old* lax behavior. Updated only
 their seed data / assertions to match the slice E security tightening,
 without changing what each test was conceptually verifying:
 
-- `backend/tests/OetLearner.Api.Tests/GrammarServiceTests.cs`:
+- `backend/tests/OetWithDrHesham.Api.Tests/GrammarServiceTests.cs`:
   `Entitlement_PaidSubscriberUnlimited` — added the missing
   `BillingPlan { Id = "pro" }` seed row. The previous assertion relied
   on the resolver returning `Tier="paid"` even when no plan row existed
   (which is exactly the loophole slice E closes).
-- `backend/tests/OetLearner.Api.Tests/CompactEntitlementGateTests.cs`:
+- `backend/tests/OetWithDrHesham.Api.Tests/CompactEntitlementGateTests.cs`:
   `ContentEntitlement_MissingPlanVersionAnchorFailsClosed` and
   `ContentEntitlement_MissingLivePlanWithoutSnapshotFailsClosed` —
   widened the reason assertion to accept either `plan_does_not_grant`
@@ -173,7 +173,7 @@ Commands run from repo root unless noted. Backend pwd:
 
 | Command | Result |
 | ------- | ------ |
-| `dotnet build OetLearner.sln` | **succeeded** — 0 errors, 4 pre-existing warnings (unchanged). |
+| `dotnet build OetWithDrHesham.sln` | **succeeded** — 0 errors, 4 pre-existing warnings (unchanged). |
 | `dotnet test … --filter "FullyQualifiedName~EntitlementResolverHardeningTests"` | **12 / 12 passed**. |
 | `dotnet test … --filter "FullyQualifiedName~AiQuotaMappingTests"` | **6 / 6 passed** (incl. parallel renewal exactly-once). |
 | `dotnet test … --filter "FullyQualifiedName~CompactEntitlementGateTests \| FullyQualifiedName~GrammarServiceTests \| FullyQualifiedName~Entitlement \| FullyQualifiedName~AiQuota \| FullyQualifiedName~AiCredit"` | **95 / 95 passed** — full slice-adjacent regression. |

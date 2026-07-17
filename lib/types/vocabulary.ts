@@ -1,5 +1,5 @@
 // ── Vocabulary Types ───────────────────────────────────────────────────
-// Source of truth: backend/src/OetLearner.Api/Contracts/VocabularyContracts.cs
+// Source of truth: backend/src/OetWithDrHesham.Api/Contracts/VocabularyContracts.cs
 // Kept in sync with the typed DTO response shapes produced by VocabularyService.
 
 export interface VocabularyTerm {

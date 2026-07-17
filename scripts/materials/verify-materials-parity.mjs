@@ -24,7 +24,7 @@
 //                        Default: scripts/materials/prod-manifest.txt (committed
 //                        snapshot). Regenerate the live manifest with:
 //
-//     ssh vps "docker exec oet-postgres psql -U oet_learner -d oet_learner -t -A -F'|' -c \"
+//     ssh vps "docker exec oet-postgres psql -U oet_with_dr_hesham -d oet_with_dr_hesham -t -A -F'|' -c \"
 //       WITH RECURSIVE t AS (
 //         SELECT \"Id\", \"Name\"::text AS path FROM \"MaterialFolders\" WHERE \"ParentFolderId\" IS NULL
 //         UNION ALL

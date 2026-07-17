@@ -20,7 +20,7 @@ required) rolling back the OET Speaking module that ships:
 ## 1. Feature flag
 
 Backend: `Features:SpeakingV2` in
-`backend/src/OetLearner.Api/appsettings.json` (and overrides in
+`backend/src/OetWithDrHesham.Api/appsettings.json` (and overrides in
 `appsettings.Production.json` / environment variable
 `Features__SpeakingV2`).
 

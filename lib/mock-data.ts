@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Canonical domain types for the OET Learner App
+// Canonical domain types for the OET with Dr Hesham App
 //
 // These types define the frontend contract for API responses and component
 // props across the learner, expert, and admin surfaces. They are imported

@@ -293,7 +293,7 @@ Backend checks:
 
 1. Unit tests for consent, suppression, template rendering, policy resolution, quiet hours, caps, and fallback.
 2. Integration tests for notification endpoints, admin policies, provider webhooks, and domain flow event creation.
-3. `dotnet build backend/OetLearner.sln` after each backend slice.
+3. `dotnet build backend/OetWithDrHesham.sln` after each backend slice.
 4. Targeted `dotnet test` filters for notification tests before broad suites.
 
 Frontend checks:

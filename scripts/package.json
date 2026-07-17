@@ -2,7 +2,7 @@
   "name": "@oet/scripts",
   "version": "0.1.0",
   "private": true,
-  "description": "Build, deploy, QA, and automation scripts for the OET Prep Platform",
+  "description": "Build, deploy, QA, and automation scripts for the OET with Dr Hesham Platform",
   "scripts": {
     "build": "cd .. && pnpm exec tsc --noEmit",
     "test": "cd .. && pnpm test"

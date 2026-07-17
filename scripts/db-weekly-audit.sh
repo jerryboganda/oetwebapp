@@ -10,8 +10,8 @@ OUT_DIR=/root/backups/db-audits
 AUDIT_SQL="$REPO_DIR/scripts/db-audit.sql"
 RETENTION_DIR="$REPO_DIR/scripts/db-retention-audit.sql"   # optional; see below
 PG_CONTAINER=oet-postgres
-PG_USER=oet_learner
-PG_DB=oet_learner
+PG_USER=oet_with_dr_hesham
+PG_DB=oet_with_dr_hesham
 
 STAMP=$(date -u +%Y%m%d_%H%M%SZ)
 REPORT="$OUT_DIR/audit_${STAMP}.txt"

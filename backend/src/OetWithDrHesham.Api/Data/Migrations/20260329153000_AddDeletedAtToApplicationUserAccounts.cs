@@ -1,0 +1,39 @@
+using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using OetWithDrHesham.Api.Data;
+
+#nullable disable
+
+namespace OetWithDrHesham.Api.Data.Migrations
+{
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260329153000_AddDeletedAtToApplicationUserAccounts")]
+    public partial class AddDeletedAtToApplicationUserAccounts : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.AddColumn<DateTimeOffset>(
+                name: "DeletedAt",
+                table: "ApplicationUserAccounts",
+                type: "timestamp with time zone",
+                nullable: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ApplicationUserAccounts_DeletedAt",
+                table: "ApplicationUserAccounts",
+                column: "DeletedAt");
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropIndex(
+                name: "IX_ApplicationUserAccounts_DeletedAt",
+                table: "ApplicationUserAccounts");
+
+            migrationBuilder.DropColumn(
+                name: "DeletedAt",
+                table: "ApplicationUserAccounts");
+        }
+    }
+}

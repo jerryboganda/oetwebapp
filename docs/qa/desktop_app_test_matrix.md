@@ -2,7 +2,7 @@
 
 | Test ID | Surface | Role | Preconditions | Steps | Expected result | Actual result | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BOOT-001 | Packaged install boot | Anonymous | Fresh packaged build copied to installed test folder | Launch installed `OET Prep.exe` from `C:\Users\Public\OETPrepTest8` | Desktop window opens without startup error | Window launched successfully after backend readiness fix | Pass | Manual packaged install validation |
+| BOOT-001 | Packaged install boot | Anonymous | Fresh packaged build copied to installed test folder | Launch installed `OET with Dr Hesham.exe` from `C:\Users\Public\OET with Dr HeshamTest8` | Desktop window opens without startup error | Window launched successfully after backend readiness fix | Pass | Manual packaged install validation |
 | BOOT-002 | Packaged backend readiness | Anonymous | Installed packaged backend running | Request `http://127.0.0.1:5199/health/ready` | `200 OK` readiness response | `200 OK` returned | Pass | Confirms packaged startup blocker is gone |
 | BOOT-003 | Packaged bridge and renderer health | Anonymous | Packaged shell launched | Run packaged smoke boot test | Packaged renderer, preload bridge, and health endpoints all respond | Passed in packaged desktop suite | Pass | Covered by `electron-packaged-smoke.spec.ts` |
 | AUTH-001 | Dev-shell sign-in surface | Anonymous | Docker-backed dev stack healthy | Launch unpackaged Electron shell | Sign-in screen renders and secure preload bridge is available | Passed | Pass | Covered by `electron-smoke.spec.ts` |

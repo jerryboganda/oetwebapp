@@ -63,7 +63,7 @@ Axelit's error pages follow the template-marketing illustration-heavy pattern. O
   description="The page you're looking for doesn't exist or has been moved."
   primaryAction={{ label: 'Back to dashboard', href: '/admin' }}
   secondaryAction={{ label: 'Search admin', onClick: openCommandPalette }}
-  supportLink={{ label: 'Report a broken link', href: 'mailto:support@oet-prep.com' }}
+  supportLink={{ label: 'Report a broken link', href: 'mailto:support@oet-with-dr-hesham.com' }}
 />
 ```
 
@@ -90,7 +90,7 @@ For authenticated users hitting unauthorized routes:
   description="This area requires the {role} permission. Ask your admin to grant access, or switch to a different account."
   primaryAction={{ label: 'Request access', onClick: openRequestAccessDialog }}
   secondaryAction={{ label: 'Back to my dashboard', href: '/admin' }}
-  supportLink={{ label: 'Contact your admin', href: 'mailto:admin@oet-prep.com' }}
+  supportLink={{ label: 'Contact your admin', href: 'mailto:admin@oet-with-dr-hesham.com' }}
 />
 ```
 
@@ -104,7 +104,7 @@ OET admin already has `AdminPermissionDenied` component in `app/admin/layout.tsx
   title="Something went wrong"
   description="We've been notified and are working on it. You can try again or come back in a few minutes."
   primaryAction={{ label: 'Try again', onClick: reload }}
-  secondaryAction={{ label: 'Check status page', href: 'https://status.oet-prep.com' }}
+  secondaryAction={{ label: 'Check status page', href: 'https://status.oet-with-dr-hesham.com' }}
   errorDetails={
     isDev && (
       <details className="mt-6 text-xs text-muted">
@@ -130,7 +130,7 @@ OET admin already has `AdminPermissionDenied` component in `app/admin/layout.tsx
   illustration={<MaintenanceIllustration />}
   title="We'll be right back"
   description="OET Admin is undergoing scheduled maintenance. We'll be back online by ~{eta}."
-  primaryAction={{ label: 'Status updates', href: 'https://status.oet-prep.com' }}
+  primaryAction={{ label: 'Status updates', href: 'https://status.oet-with-dr-hesham.com' }}
 />
 ```
 
@@ -214,7 +214,7 @@ NOT an empty state — a skeleton. Different component. Use shadcn `<Skeleton>` 
   title="Couldn't load reading papers"
   description={error.message ?? 'Please try again.'}
   primaryAction={{ label: 'Retry', onClick: refetch }}
-  secondaryAction={{ label: 'Report this issue', href: 'mailto:support@oet-prep.com' }}
+  secondaryAction={{ label: 'Report this issue', href: 'mailto:support@oet-with-dr-hesham.com' }}
 />
 ```
 

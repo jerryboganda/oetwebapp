@@ -83,6 +83,6 @@ Nginx Proxy Manager routes to the stable containers:
 - Never run `docker compose down -v`, `docker volume rm`, or recreate postgres
   or storage volumes without a verified backup and explicit approval.
 - Preserve `oetwebsite_oet_postgres_data` and
-  `oetwebsite_oet_learner_storage`.
+  `oetwebsite_oet_with_dr_hesham_storage`.
 - All media/user files must stay on persistent storage at
-  `/var/opt/oet-learner/storage`.
+  `/var/opt/oet-with-dr-hesham/storage`.

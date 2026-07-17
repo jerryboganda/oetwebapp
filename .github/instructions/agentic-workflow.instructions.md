@@ -1,6 +1,6 @@
 ---
 name: "Agentic Workflow"
-description: "Use when planning, implementing, debugging, refactoring, reviewing, or handing off work in the OET Prep Platform — covers continuity, routing, and autonomous-loop discipline."
+description: "Use when planning, implementing, debugging, refactoring, reviewing, or handing off work in the OET with Dr Hesham Platform — covers continuity, routing, and autonomous-loop discipline."
 ---
 
 # Agentic Workflow

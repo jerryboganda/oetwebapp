@@ -8,7 +8,7 @@ Audit date: 2026-05-13
 
 - `ROUTE-SNAPSHOT-2026-05-13`: `rg --files app -g page.tsx`, 304 page routes
 - `NEXT-ROUTE-HANDLERS-2026-05-13`: `rg --files app/api -g route.ts`, 2 route-handler files
-- `ENDPOINT-SNAPSHOT-2026-05-13`: backend endpoint-folder files under `backend/src/OetLearner.Api/Endpoints`, 50 files
+- `ENDPOINT-SNAPSHOT-2026-05-13`: backend endpoint-folder files under `backend/src/OetWithDrHesham.Api/Endpoints`, 50 files
 - `NAV-LEARNER`: `components/layout/sidebar.tsx`
 - `NAV-EXPERT`: `app/expert/layout.tsx`
 - `NAV-ADMIN`: `app/admin/layout.tsx`
@@ -23,7 +23,7 @@ Audit date: 2026-05-13
 - Learner navigation in `components/layout/sidebar.tsx`
 - Expert, admin, and sponsor navigation in their route `layout.tsx` files
 - Frontend integration and domain contracts in `lib/api.ts`, `lib/auth-routes.ts`, and product-specific API helpers
-- Backend endpoint-folder files under `backend/src/OetLearner.Api/Endpoints`
+- Backend endpoint-folder files under `backend/src/OetWithDrHesham.Api/Endpoints`
 - Backend startup/runtime surfaces in `Program.cs`, configuration options, hosted workers, hubs, storage, and scanner wiring
 - Mission-critical docs for scoring, rulebooks, AI usage, content upload, Reading authoring, Grammar, Pronunciation, Conversation, and OET result cards
 - Existing product-manual files under `docs/product-manual/`
@@ -215,7 +215,7 @@ The admin route tree includes 105 pages. It should be documented by workstream, 
 
 ## Backend Endpoint Inventory
 
-Endpoint-folder files discovered under `backend/src/OetLearner.Api/Endpoints`:
+Endpoint-folder files discovered under `backend/src/OetWithDrHesham.Api/Endpoints`:
 
 The count is 50 files: 49 route-mapping files plus one admin route-builder helper.
 
@@ -287,7 +287,7 @@ The full endpoint filename list is maintained in [Route, API, and Domain Surface
 
 The verbatim engineering wording is held in the [Reference Appendix, Section 1](./reference-appendix.md#1-mission-critical-hard-invariants); this section keeps a working summary that must not contradict it.
 
-- Scoring routes through `lib/scoring.ts` or `OetLearner.Api.Services.OetScoring`.
+- Scoring routes through `lib/scoring.ts` or `OetWithDrHesham.Api.Services.OetScoring`.
 - Rulebook enforcement routes through rulebook engines, not direct JSON access from UI or endpoint code.
 - AI calls route through grounded gateway and usage recording (`PromptNotGroundedException` physically refuses ungrounded prompts; `IAiUsageRecorder` writes one row per call including failures and refusals).
 - Content upload uses `ContentPaper -> ContentPaperAsset -> MediaAsset`, source provenance, publish gates, audit events, and storage abstraction.

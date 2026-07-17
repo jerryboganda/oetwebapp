@@ -103,7 +103,7 @@ services:
       Platform__PublicWebBaseUrl: ${APP_URL}
       Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-staging.example.invalid}
       Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL:-https://staging.oetwithdrhesham.co.uk}
-      Storage__LocalRootPath: /var/opt/oet-learner/storage
+      Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage
       Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-1073741824}
       Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-false}
       Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-true}
@@ -123,7 +123,7 @@ services:
       UploadScanner__Port: ${UPLOAD_SCANNER__PORT:-3310}
       UploadScanner__FailClosedOnError: ${UPLOAD_SCANNER__FAILCLOSEDONERROR:-true}
     volumes:
-      - oetwebsite_staging_learner_storage:/var/opt/oet-learner/storage
+      - oetwebsite_staging_learner_storage:/var/opt/oet-with-dr-hesham/storage
     expose:
       - "8080"
     networks:

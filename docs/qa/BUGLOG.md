@@ -1,4 +1,4 @@
-# OET Prep Desktop (Tauri 2) — Bug & Issue Log
+# OET with Dr Hesham Desktop (Tauri 2) — Bug & Issue Log
 
 Severity: **Critical** (blocks release) · **High** (fix before release) · **Med** (fix or document) ·
 **Low** (nice-to-have). Status: OPEN / FIXED / DEFERRED / WONTFIX.
@@ -6,7 +6,7 @@ Severity: **Critical** (blocks release) · **High** (fix before release) · **Me
 | ID | Sev | Status | Title | Found in | Notes / resolution |
 |----|-----|--------|-------|----------|--------------------|
 | BUG-001 | Low | **FIXED** | 4 clippy warnings in `src/lib.rs` (`unnecessary_mut_passed`, `needless_borrows_for_generic_args` ×3) | Phase 2 | Fixed on branch; `cargo clippy -- -D warnings` now exit 0. |
-| BUG-002 | Med | **OPEN/DEFERRED** | Deep link `oet-prep://pair?code=…` navigates to `/pair`, which has no route → 404 | Phase 0/3 | `lib.rs:95` maps it; no `app/pair/` page exists. **Frontend scope (out of this branch).** Tray/`/dashboard`/`/study-plan` routes are fine. Flagged for the frontend team. |
+| BUG-002 | Med | **OPEN/DEFERRED** | Deep link `oet-with-dr-hesham://pair?code=…` navigates to `/pair`, which has no route → 404 | Phase 0/3 | `lib.rs:95` maps it; no `app/pair/` page exists. **Frontend scope (out of this branch).** Tray/`/dashboard`/`/study-plan` routes are fine. Flagged for the frontend team. |
 | BUG-003 | High | **FIXED** | Sidecar stdout/stderr discarded (`Stdio::null()`), so production startup failures are undiagnosable | Phase 0/2 | Phase 6: both sidecars now log combined stdout+stderr to `<app_data>/logs/{backend,renderer}.log` (one-gen rotation); added a panic hook → `desktop.log`. Logging never blocks startup. +1 unit test. |
 | BUG-004 | Critical | **CONFIG FIXED** | Auto-updater shipped pointing at `http://127.0.0.1:8765/latest.json` with a throwaway minisign key | Phase 0 | Phase 3: generated fresh prod minisign key (private key outside repo, → CI secret); pubkey + HTTPS endpoint (`app.oetwithdrhesham.co.uk/desktop/updates/latest.json`) wired in `tauri.conf.json`. **Remaining:** host feed on prod server + set CI secret (Phase 7/8). |
 | BUG-005 | High | **FIXED** | No Windows Authenticode signing → SmartScreen "unknown publisher" | Phase 0 | Phase 8: self-signed cert generated (thumbprint `9E1D…DAA8`), wired into `tauri.dist.conf.json` (sha256 + RFC-3161 timestamp); release workflow imports the cert from a secret; `TESTER_SETUP.md` documents the one-time `.cer` trust import + Azure upgrade path. Signed installer verified in Phase 9. |

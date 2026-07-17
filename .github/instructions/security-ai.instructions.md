@@ -1,7 +1,7 @@
 ---
 name: "Security And AI Grounding"
 description: "Use when editing auth, middleware, admin permissions, AI gateway, provider routing, scoring, rulebooks, uploads, content storage, runtime settings, secrets, analytics, API clients, route handlers, or security-sensitive code."
-applyTo: "middleware.ts,lib/auth-client.ts,lib/api.ts,lib/network/**,lib/scoring.ts,lib/rulebook/**,lib/**/*ai*.ts,lib/**/*auth*.ts,rulebooks/**/*.json,app/api/**,backend/src/OetLearner.Api/Security/**,backend/src/OetLearner.Api/Services/**,backend/src/OetLearner.Api/Endpoints/**,Dockerfile*,docker-compose*.yml,.github/workflows/*.yml"
+applyTo: "middleware.ts,lib/auth-client.ts,lib/api.ts,lib/network/**,lib/scoring.ts,lib/rulebook/**,lib/**/*ai*.ts,lib/**/*auth*.ts,rulebooks/**/*.json,app/api/**,backend/src/OetWithDrHesham.Api/Security/**,backend/src/OetWithDrHesham.Api/Services/**,backend/src/OetWithDrHesham.Api/Endpoints/**,Dockerfile*,docker-compose*.yml,.github/workflows/*.yml"
 ---
 
 # Security And AI Grounding

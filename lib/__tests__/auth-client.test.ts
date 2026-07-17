@@ -5,7 +5,7 @@ const realFetch = global.fetch;
 function createCurrentUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
   return {
     userId: 'auth_learner_local_001',
-    email: 'learner@oet-prep.dev',
+    email: 'learner@oet-with-dr-hesham.dev',
     role: 'learner',
     displayName: 'Learner Local',
     isEmailVerified: true,
@@ -52,7 +52,7 @@ describe('auth-client', () => {
     const { loadStoredSession } = await import('@/lib/auth-storage');
 
     const result = await signIn({
-      email: 'learner@oet-prep.dev',
+      email: 'learner@oet-with-dr-hesham.dev',
       password: 'Password123!',
       rememberMe: true,
     });
@@ -83,7 +83,7 @@ describe('auth-client', () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({
       code: 'mfa_challenge_required',
       message: 'Authenticator code is required to continue.',
-      email: 'expert@oet-prep.dev',
+      email: 'expert@oet-with-dr-hesham.dev',
       challengeToken: 'challenge-token-1',
       retryable: false,
     }), {
@@ -95,7 +95,7 @@ describe('auth-client', () => {
     const { loadStoredSession } = await import('@/lib/auth-storage');
 
     const result = await signIn({
-      email: 'expert@oet-prep.dev',
+      email: 'expert@oet-with-dr-hesham.dev',
       password: 'Password123!',
       rememberMe: true,
     });
@@ -103,7 +103,7 @@ describe('auth-client', () => {
     expect(result).toEqual({
       status: 'mfa_required',
       challenge: {
-        email: 'expert@oet-prep.dev',
+        email: 'expert@oet-with-dr-hesham.dev',
         challengeToken: 'challenge-token-1',
         rememberMe: true,
       },
@@ -145,7 +145,7 @@ describe('auth-client', () => {
       challengeId: 'reset-challenge-1',
       purpose: 'reset_password',
       deliveryChannel: 'email',
-      destinationHint: 'l*****@oet-prep.dev',
+      destinationHint: 'l*****@oet-with-dr-hesham.dev',
       expiresAt: '2026-03-27T00:10:00.000Z',
       retryAfterSeconds: 60,
     };
@@ -157,12 +157,12 @@ describe('auth-client', () => {
 
     const { requestPasswordReset } = await import('@/lib/auth-client');
 
-    await expect(requestPasswordReset('learner@oet-prep.dev')).resolves.toEqual(challenge);
+    await expect(requestPasswordReset('learner@oet-with-dr-hesham.dev')).resolves.toEqual(challenge);
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(vi.mocked(global.fetch).mock.calls[0]?.[0]).toContain('/v1/auth/forgot-password');
     expect(JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body))).toEqual({
-      email: 'learner@oet-prep.dev',
+      email: 'learner@oet-with-dr-hesham.dev',
     });
   });
 
@@ -177,7 +177,7 @@ describe('auth-client', () => {
     const { loadStoredSession } = await import('@/lib/auth-storage');
 
     await expect(registerLearner({
-      email: 'learner@oet-prep.dev',
+      email: 'learner@oet-with-dr-hesham.dev',
       password: 'Password123!',
       displayName: 'Learner Local',
       firstName: 'Learner',
@@ -200,7 +200,7 @@ describe('auth-client', () => {
     const { resetPassword } = await import('@/lib/auth-client');
 
     await expect(resetPassword({
-      email: 'learner@oet-prep.dev',
+      email: 'learner@oet-with-dr-hesham.dev',
       resetToken: '123456',
       newPassword: 'BetterPassword123!',
     })).resolves.toBeUndefined();
@@ -208,7 +208,7 @@ describe('auth-client', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(vi.mocked(global.fetch).mock.calls[0]?.[0]).toContain('/v1/auth/reset-password');
     expect(JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body))).toEqual({
-      email: 'learner@oet-prep.dev',
+      email: 'learner@oet-with-dr-hesham.dev',
       resetToken: '123456',
       newPassword: 'BetterPassword123!',
     });

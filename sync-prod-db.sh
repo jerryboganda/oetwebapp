@@ -5,15 +5,15 @@
 # scheduled task.
 #
 #   Production:  root@185.252.233.186 (ssh alias "vps", MAIN prod) -> docker
-#                container "oet-postgres" (db oet_learner, user oet_learner).
+#                container "oet-postgres" (db oet_with_dr_hesham, user oet_with_dr_hesham).
 #                (Was OLD 68.183.32.122/"oet-dev" before the 2026-06-05 cutover.)
 #   Local:       podman container "oet-hotreload-postgres"
-#                (db oet_learner, user oet_user)
+#                (db oet_with_dr_hesham, user oet_user)
 #
 # SAFETY: aborts before touching the local DB if the prod dump is missing or
 # suspiciously small, so a failed/empty dump can never wipe local data.
 #
-# WARNING: this REPLACES the local oet_learner database every run. Any local
+# WARNING: this REPLACES the local oet_with_dr_hesham database every run. Any local
 # changes are lost. The dump contains REAL PRODUCTION DATA (PII) — the .db-sync/
 # folder is gitignored; never commit it.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ export MSYS2_ARG_CONV_EXCL="*"
 REMOTE="${REMOTE:-vps}"
 REMOTE_CONTAINER="${REMOTE_CONTAINER:-oet-postgres}"
 LOCAL_CONTAINER="${LOCAL_CONTAINER:-oet-hotreload-postgres}"
-LOCAL_DB="${LOCAL_DB:-oet_learner}"
+LOCAL_DB="${LOCAL_DB:-oet_with_dr_hesham}"
 LOCAL_USER="${LOCAL_USER:-oet_user}"
 KEEP_DUMPS="${KEEP_DUMPS:-5}"
 MIN_DUMP_BYTES="${MIN_DUMP_BYTES:-500000}"   # prod compressed dump is ~5.7MB; guard well below

@@ -1,6 +1,6 @@
 // Authored preview — Checkbox (single boolean; label required).
 // Each named export = one labeled card cell.
-import { Checkbox } from 'oet-prep';
+import { Checkbox } from 'oet-with-dr-hesham';
 
 const Column = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 460 }}>{children}</div>

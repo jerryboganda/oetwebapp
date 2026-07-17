@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | Frontend build | `cmd /c npm run build` | Passed | Next production build completed successfully after the speaking changes. |
 | Frontend unit tests | Focused Vitest suite | Passed | Previous focused suite completed successfully during implementation. |
-| Backend tests | `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj` | Passed | Previous backend verification completed successfully during implementation. |
+| Backend tests | `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj` | Passed | Previous backend verification completed successfully during implementation. |
 | Capacitor scaffold | `npm.cmd exec -- cap add android`, `npm.cmd exec -- cap add ios`, `npm.cmd exec -- cap sync` | Passed | Android and iOS native projects were generated/synced successfully. |
 | Speaking task flow | `app/speaking/task/[id]/page.tsx` | Implemented | Native recorder path now uses the Capacitor speaking bridge. |
 | Diagnostic speaking flow | `app/diagnostic/speaking/page.tsx` | Implemented | Native recorder fallback added for the diagnostic speaking path. |

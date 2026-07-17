@@ -1,7 +1,7 @@
 // Authored preview — MotionSection. An entrance-animation wrapper for a page
 // section (surface="section"). Motion is forced to final state globally, so
 // children render visibly. Give it real, meaningful children.
-import { MotionSection, Card, CardHeader, CardTitle, CardContent, Button, Badge } from 'oet-prep';
+import { MotionSection, Card, CardHeader, CardTitle, CardContent, Button, Badge } from 'oet-with-dr-hesham';
 
 export const DashboardSection = () => (
   <MotionSection style={{ maxWidth: 460 }}>

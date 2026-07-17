@@ -42,10 +42,10 @@ try {
 }
 
 # Create dev database if missing
-$exists = & "$pgBin\psql.exe" -h localhost -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='oet_learner_dev';"
+$exists = & "$pgBin\psql.exe" -h localhost -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='oet_with_dr_hesham_dev';"
 if ($exists -ne '1') {
-    Write-Host '==> Creating database oet_learner_dev'
-    & "$pgBin\psql.exe" -h localhost -U postgres -d postgres -c 'CREATE DATABASE oet_learner_dev;' | Out-Null
+    Write-Host '==> Creating database oet_with_dr_hesham_dev'
+    & "$pgBin\psql.exe" -h localhost -U postgres -d postgres -c 'CREATE DATABASE oet_with_dr_hesham_dev;' | Out-Null
 }
 
 # Register Windows service (best-effort, requires elevation)
@@ -64,7 +64,7 @@ Write-Host ''
 Write-Host 'PostgreSQL ready at localhost:5432'
 Write-Host '  user:     postgres'
 Write-Host '  password: postgres'
-Write-Host '  database: oet_learner_dev'
+Write-Host '  database: oet_with_dr_hesham_dev'
 Write-Host ''
-Write-Host 'Connection string already configured in backend/src/OetLearner.Api/appsettings.Development.json'
+Write-Host 'Connection string already configured in backend/src/OetWithDrHesham.Api/appsettings.Development.json'
 Write-Host 'Run the backend with:  pnpm run backend:run'

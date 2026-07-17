@@ -1,7 +1,7 @@
 // Authored preview — DataTable (generic). Requires columns (key/header/render),
 // data, and keyExtractor. Status column rendered via StatusBadge.
 // Each named export = one labeled card cell.
-import { DataTable, StatusBadge } from 'oet-prep';
+import { DataTable, StatusBadge } from 'oet-with-dr-hesham';
 
 interface Attempt {
   id: string;

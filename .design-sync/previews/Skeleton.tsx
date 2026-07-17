@@ -1,7 +1,7 @@
 // Authored preview — Skeleton (base loading block).
 // Props: variant ('text' | 'rectangle' | 'circle'), width, height, lines, className.
 // Each named export = one labeled card cell.
-import { Skeleton } from 'oet-prep';
+import { Skeleton } from 'oet-with-dr-hesham';
 
 export const Lines = () => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 360 }}>

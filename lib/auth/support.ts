@@ -1,4 +1,4 @@
-export const SUPPORT_EMAIL = "support@edu80.app";
+export const SUPPORT_EMAIL = "support@oetwithdrhesham.co.uk";
 
 export function buildSupportMailto(email?: string) {
   const subject = "Need help with my OET account";
@@ -16,6 +16,9 @@ export function buildSupportMailto(email?: string) {
   )}`;
 }
 
+export const SUPPORT_PHONE = "+44 7961 725989";
+export const SUPPORT_PHONE_E164 = "447961725989";
+
 export function buildSupportWhatsAppLink(email?: string) {
   const message = [
     "Hello, I need help with my OET account setup.",
@@ -24,5 +27,5 @@ export function buildSupportWhatsAppLink(email?: string) {
     .filter(Boolean)
     .join(" ");
 
-  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${SUPPORT_PHONE_E164}?text=${encodeURIComponent(message)}`;
 }

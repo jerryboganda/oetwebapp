@@ -14,17 +14,17 @@ For the granular rulebook → file:line → test mapping see
 ## 1. Mission-critical invariants
 
 1. **Raw → scaled is OetScoring only.** All raw → scaled conversions for
-   Listening MUST route through `OetLearner.Api.Services.OetScoring.OetRawToScaled`
+   Listening MUST route through `OetWithDrHesham.Api.Services.OetScoring.OetRawToScaled`
    (TS mirror: `lib/scoring.ts`). Anchor: **30/42 ≡ 350/500**. Inline
    math like `* 350` / `/ 42` / `* 8.33` is **forbidden** anywhere in
-   `backend/src/OetLearner.Api/Services/Listening/**` and is enforced by
+   `backend/src/OetWithDrHesham.Api/Services/Listening/**` and is enforced by
    the source-scanning audit test
-   [`ListeningScoringPathAuditTest`](../backend/tests/OetLearner.Api.Tests/Listening/ListeningScoringPathAuditTest.cs).
+   [`ListeningScoringPathAuditTest`](../backend/tests/OetWithDrHesham.Api.Tests/Listening/ListeningScoringPathAuditTest.cs).
 2. **Server-authoritative FSM.** Canonical section navigation is held in
   `ListeningAttempt.NavigationStateJson`. The client carries a mirror in
   [`lib/listening/transitions.ts`](../lib/listening/transitions.ts) that is
   parity-tested against the C# table
-  [`ListeningFsmTransitions.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningFsmTransitions.cs)
+  [`ListeningFsmTransitions.cs`](../backend/src/OetWithDrHesham.Api/Services/Listening/ListeningFsmTransitions.cs)
   by [`tests/unit/listening/transitions.parity.test.ts`](../tests/unit/listening/transitions.parity.test.ts).
   The active player now uses this V2 FSM for strict start, strict resume
   hydration, strict preview/audio/review forward advances, and audio-resume
@@ -35,23 +35,23 @@ For the granular rulebook → file:line → test mapping see
    require a second POST to `/v1/listening/v2/attempts/{id}/advance`
    echoing the HMAC token returned by the first call. TTL is 30 s by
    default. Implementation:
-   [`ListeningConfirmTokenService.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningConfirmTokenService.cs).
+   [`ListeningConfirmTokenService.cs`](../backend/src/OetWithDrHesham.Api/Services/Listening/ListeningConfirmTokenService.cs).
 4. **Version-pinned grading.** Every attempt snapshots
    `LastQuestionVersionMapJson` at first navigation. Grading reads
    that snapshot so admin question edits during in-flight attempts
    never silently invalidate the candidate's answer.
    Implementation:
-   [`ListeningGradingService.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs).
+   [`ListeningGradingService.cs`](../backend/src/OetWithDrHesham.Api/Services/Listening/ListeningGradingService.cs).
 5. **No answer-key leak in pre-submit DTOs.** Every learner-facing
    Listening DTO is source-scanned by
-   [`ListeningLearnerLeakAuditTest`](../backend/tests/OetLearner.Api.Tests/Listening/ListeningLearnerLeakAuditTest.cs)
+   [`ListeningLearnerLeakAuditTest`](../backend/tests/OetWithDrHesham.Api.Tests/Listening/ListeningLearnerLeakAuditTest.cs)
    for forbidden fields (`IsCorrect`, `CorrectAnswer*`, `AcceptedSynonyms*`,
    `Explanation*`, `WhyWrong*`, `TranscriptEvidence*`,
    `DistractorCategory`).
 6. **OWASP A01 on teacher classes.** Every read/write path in
-   [`TeacherClassService.cs`](../backend/src/OetLearner.Api/Services/Listening/TeacherClassService.cs)
+   [`TeacherClassService.cs`](../backend/src/OetWithDrHesham.Api/Services/Listening/TeacherClassService.cs)
    filters by `OwnerUserId == currentUserId`. Pinned by
-   [`TeacherClassServiceTests`](../backend/tests/OetLearner.Api.Tests/Listening/TeacherClassServiceTests.cs).
+   [`TeacherClassServiceTests`](../backend/tests/OetWithDrHesham.Api.Tests/Listening/TeacherClassServiceTests.cs).
 
 ---
 
@@ -70,7 +70,7 @@ All five modes are orchestrated today by the active learner route
 `mode` value returned by the backend while delegating reusable player
 chrome to `components/domain/listening/player/*`. Per-mode policy is
 resolved server-side by
-[`ListeningModePolicyResolver`](../backend/src/OetLearner.Api/Services/Listening/ListeningModePolicy.cs)
+[`ListeningModePolicyResolver`](../backend/src/OetWithDrHesham.Api/Services/Listening/ListeningModePolicy.cs)
 which maps every value of `ListeningAttemptMode` (Exam, OetHome, Paper,
 Learning, Diagnostic, Drill, MiniTest, ErrorBank — the last three all
 fall through to LearningModePolicy per planner Wave 2 §1f).
@@ -122,7 +122,7 @@ Pass thresholds (scaledScore via `OetScoring`):
 - Stage 1 (diagnostic): no threshold; just needs to be submitted
 
 Recompute is idempotent, runs on every grade, and is back-filled at
-startup by [`ListeningV2BackfillService`](../backend/src/OetLearner.Api/Services/Listening/ListeningV2BackfillService.cs).
+startup by [`ListeningV2BackfillService`](../backend/src/OetWithDrHesham.Api/Services/Listening/ListeningV2BackfillService.cs).
 
 ---
 
@@ -131,7 +131,7 @@ startup by [`ListeningV2BackfillService`](../backend/src/OetLearner.Api/Services
 All under `/v1/listening/v2/...`, all
 `.RequireAuthorization("LearnerOnly").RequireRateLimiting("PerUser")`,
 writes `+ "PerUserWrite"`. Mounted by
-[`ListeningV2Endpoints`](../backend/src/OetLearner.Api/Endpoints/ListeningV2Endpoints.cs)
+[`ListeningV2Endpoints`](../backend/src/OetWithDrHesham.Api/Endpoints/ListeningV2Endpoints.cs)
 alongside the legacy `/v1/listening-papers` group.
 
 |Verb|Path|Purpose|
@@ -237,9 +237,9 @@ npm test                  # MUST be green
 
 # Backend
 cd backend
-dotnet build OetLearner.sln                           # MUST be 0 errors
-dotnet test OetLearner.sln --filter "FullyQualifiedName~Listening"
-dotnet test OetLearner.sln                            # full backend regression
+dotnet build OetWithDrHesham.sln                           # MUST be 0 errors
+dotnet test OetWithDrHesham.sln --filter "FullyQualifiedName~Listening"
+dotnet test OetWithDrHesham.sln                            # full backend regression
 ```
 
 ---

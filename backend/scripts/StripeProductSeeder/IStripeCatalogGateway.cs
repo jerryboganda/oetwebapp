@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace OetLearner.Scripts.StripeProductSeeder;
+namespace OetWithDrHesham.Scripts.StripeProductSeeder;
 
 /// <summary>
 /// Narrow surface the seeder needs from Stripe so tests can swap in a fake

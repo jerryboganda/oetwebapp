@@ -103,10 +103,10 @@ import {
 } from '@/lib/scoring';
 ```
 
-### Backend / .NET — `OetLearner.Api.Services.OetScoring`
+### Backend / .NET — `OetWithDrHesham.Api.Services.OetScoring`
 
 ```csharp
-using OetLearner.Api.Services;
+using OetWithDrHesham.Api.Services;
 
 OetScoring.OetRawToScaled(30);                          // 350
 OetScoring.IsListeningReadingPassByRaw(30);             // true
@@ -126,7 +126,7 @@ OetScoring.FormatListeningReadingDisplay(30);           // "30/42 • 350/500 �
 
 Both implementations are **behaviourally identical**. The TypeScript module is
 tested by `lib/scoring.test.ts` (72 assertions). The .NET module is tested by
-`backend/tests/OetLearner.Api.Tests/OetScoringTests.cs` (98 assertions).
+`backend/tests/OetWithDrHesham.Api.Tests/OetScoringTests.cs` (98 assertions).
 
 ---
 
@@ -218,7 +218,7 @@ cross-checking the 30/42 ≡ 350/500 mapping:
 
 1. Update `Project Real Content/Scoring System.txt` first.
 2. Update this file (`docs/SCORING.md`) to match.
-3. Update `lib/scoring.ts` and `backend/src/OetLearner.Api/Services/OetScoring.cs` together.
+3. Update `lib/scoring.ts` and `backend/src/OetWithDrHesham.Api/Services/OetScoring.cs` together.
 4. Update both test files and make sure all tests pass.
 5. Note the change in `AGENTS.md` under the "Common Gotchas" section.
 

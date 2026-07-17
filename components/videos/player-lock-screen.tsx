@@ -37,7 +37,7 @@ export function PlayerLockScreen({
         <div>
           <h2 className="text-lg font-bold text-white">Videos play only in the OET app</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/70">
-            To protect our teaching content, “{title}” streams exclusively inside the OET Prep
+            To protect our teaching content, “{title}” streams exclusively inside the OET with Dr Hesham
             desktop and mobile apps. Install the app, sign in with this account, and continue
             right where you left off.
           </p>

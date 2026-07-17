@@ -6756,7 +6756,7 @@ export async function fetchVocabularyCategories(params?: { examTypeCode?: string
  * Recall-set registry (year/source dimension). Returns the canonical 3-set
  * list (`old`, `2023-2025`, `2026`) with live term counts. Stable even when
  * no terms are tagged yet — admin/learner UIs can render the chips eagerly.
- * See `backend/src/OetLearner.Api/Domain/RecallSetCodes.cs`.
+ * See `backend/src/OetWithDrHesham.Api/Domain/RecallSetCodes.cs`.
  */
 export interface RecallSetSummary {
   code: string;
@@ -12235,7 +12235,7 @@ export async function adminBulkListMockBundles(query: {
 //   - Conversation AI-draft + bulk-runner
 //   - Pronunciation bulk-runner + analytics
 //
-// Backend status notes (verified against backend/src/OetLearner.Api):
+// Backend status notes (verified against backend/src/OetWithDrHesham.Api):
 //   * Speaking list / paper CRUD / chunked uploads / publish / unarchive
 //     are already exposed via /v1/admin/papers/* and consumed via the
 //     `lib/content-upload-api.ts` helpers. We re-export thin wrappers here

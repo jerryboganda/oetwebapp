@@ -127,20 +127,20 @@ remaining_work:
     recommendation: Start with policy mapping for users, billing, content, AI config, and audit-sensitive mutations.
     source_labels:
       - docs/plan/backend-rbac-audit/research_findings_backend_api_rbac.yaml
-      - backend/src/OetLearner.Api/Program.cs
-      - backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs
+      - backend/src/OetWithDrHesham.Api/Program.cs
+      - backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs
       - middleware.ts
       - security-analysis-progress.md
     input_required: []
     evidence_links:
       - docs/security/admin-rbac-policy-mapping.md
-      - backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs: production debug-auth header rejection test added and focused `dotnet test --filter FullyQualifiedName~ProductionReadinessTests.App_IgnoresDevelopmentAuthHeaders_InProduction` passed 1/1 on 2026-05-09.
-      - backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs: `/v1/admin/ai-config` CRUD migrated from content permissions to `AdminAiConfig`.
-      - backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs: AI config dedicated-permission and content-permission denial coverage added; focused `dotnet test --filter FullyQualifiedName~AdminFlowsTests.AdminAIConfig` passed 5/5 on 2026-05-09.
+      - backend/tests/OetWithDrHesham.Api.Tests/ProductionReadinessTests.cs: production debug-auth header rejection test added and focused `dotnet test --filter FullyQualifiedName~ProductionReadinessTests.App_IgnoresDevelopmentAuthHeaders_InProduction` passed 1/1 on 2026-05-09.
+      - backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs: `/v1/admin/ai-config` CRUD migrated from content permissions to `AdminAiConfig`.
+      - backend/tests/OetWithDrHesham.Api.Tests/AdminFlowsTests.cs: AI config dedicated-permission and content-permission denial coverage added; focused `dotnet test --filter FullyQualifiedName~AdminFlowsTests.AdminAIConfig` passed 5/5 on 2026-05-09.
       - lib/backend-proxy.ts: proxy CSRF exemption narrowed to explicit auth bootstrap routes only; authenticated auth mutations under `/v1/auth` now require the double-submit token when a refresh cookie is present.
       - lib/__tests__/backend-proxy.test.ts: proxy CSRF regression covers allowed bootstrap routes and denied authenticated auth mutations; `npx vitest run lib/__tests__/backend-proxy.test.ts` passed 9/9 on 2026-05-09.
-      - backend/src/OetLearner.Api/Services/AuthService.cs: successful account deletion now clears the HttpOnly refresh cookie in the same response after soft-delete/token revocation.
-      - backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs: account-deletion lifecycle regression now asserts refresh-cookie expiry; focused `dotnet test --filter FullyQualifiedName~AuthEndpoints_DeleteAccount --no-restore` passed 5/5 on 2026-05-09.
+      - backend/src/OetWithDrHesham.Api/Services/AuthService.cs: successful account deletion now clears the HttpOnly refresh cookie in the same response after soft-delete/token revocation.
+      - backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs: account-deletion lifecycle regression now asserts refresh-cookie expiry; focused `dotnet test --filter FullyQualifiedName~AuthEndpoints_DeleteAccount --no-restore` passed 5/5 on 2026-05-09.
 
   - id: RW-004
     area: csrf-upload-security
@@ -152,19 +152,19 @@ remaining_work:
       have clear auth, nonce, signed-upload, or platform-specific protection and tests.
     recommendation: Produce a table of every DisableAntiforgery endpoint with justification and test coverage.
     source_labels:
-      - backend/src/OetLearner.Api/Endpoints
+      - backend/src/OetWithDrHesham.Api/Endpoints
       - app/api/backend/[...path]/route.ts
       - lib/backend-proxy.ts
       - docs/plan/research_findings_api_state_disconnect_audit.yaml
     input_required: none
     evidence_links:
       - docs/security/disable-antiforgery-audit.md
-      - backend/src/OetLearner.Api/Endpoints/PronunciationEndpoints.cs: pronunciation audio upload now applies `PerUserWrite` before `DisableAntiforgery()`.
-      - backend/tests/OetLearner.Api.Tests/EndpointRegistrationTests.cs: exact allowlist test covers all 8 current `DisableAntiforgery()` endpoints and asserts route, method, auth metadata, and `PerUserWrite` metadata.
-      - backend/tests/OetLearner.Api.Tests/DisableAntiforgeryUploadEndpointAuthorizationTests.cs: admin upload/import endpoints reject unauthenticated callers, reject admin callers missing the required granular permission, and pass auth/authz plus antiforgery layers when the correct permission is present.
-      - backend/tests/OetLearner.Api.Tests/MediaEndpointSecurityTests.cs: media upload rejects unauthenticated callers and reaches authenticated file-content validation.
-      - backend/tests/OetLearner.Api.Tests/PronunciationEndpointsTests.cs: pronunciation audio upload rejects unauthenticated and non-learner callers while the learner audio path remains covered.
-      - Focused local validation on 2026-05-09: `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests|FullyQualifiedName~MediaEndpointSecurityTests.Upload|FullyQualifiedName~PronunciationEndpointsTests.UploadAndScore" --no-restore` passed 39/39.
+      - backend/src/OetWithDrHesham.Api/Endpoints/PronunciationEndpoints.cs: pronunciation audio upload now applies `PerUserWrite` before `DisableAntiforgery()`.
+      - backend/tests/OetWithDrHesham.Api.Tests/EndpointRegistrationTests.cs: exact allowlist test covers all 8 current `DisableAntiforgery()` endpoints and asserts route, method, auth metadata, and `PerUserWrite` metadata.
+      - backend/tests/OetWithDrHesham.Api.Tests/DisableAntiforgeryUploadEndpointAuthorizationTests.cs: admin upload/import endpoints reject unauthenticated callers, reject admin callers missing the required granular permission, and pass auth/authz plus antiforgery layers when the correct permission is present.
+      - backend/tests/OetWithDrHesham.Api.Tests/MediaEndpointSecurityTests.cs: media upload rejects unauthenticated callers and reaches authenticated file-content validation.
+      - backend/tests/OetWithDrHesham.Api.Tests/PronunciationEndpointsTests.cs: pronunciation audio upload rejects unauthenticated and non-learner callers while the learner audio path remains covered.
+      - Focused local validation on 2026-05-09: `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter "FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests|FullyQualifiedName~MediaEndpointSecurityTests.Upload|FullyQualifiedName~PronunciationEndpointsTests.UploadAndScore" --no-restore` passed 39/39.
 
   - id: RW-005
     area: writing-authoring
@@ -184,11 +184,11 @@ remaining_work:
     input_required:
       - Admin UI must manage provider readiness, quotas, feature toggles, and secret references.
     evidence_links:
-      - "backend/src/OetLearner.Api/Services/Writing/WritingEvaluationPipeline.cs (718 lines): owns the entire Writing grading flow, calls `aiGateway.BuildGroundedPrompt(...)` (line 130) then `aiGateway.CompleteAsync(... FeatureCode = AiFeatureCodes.WritingGrade ...)` (lines 153-158); rule-engine pre-lint merges with AI findings (rule-engine wins); AI kill-switch via `IWritingOptionsProvider` short-circuits with deterministic findings before any prompt build."
+      - "backend/src/OetWithDrHesham.Api/Services/Writing/WritingEvaluationPipeline.cs (718 lines): owns the entire Writing grading flow, calls `aiGateway.BuildGroundedPrompt(...)` (line 130) then `aiGateway.CompleteAsync(... FeatureCode = AiFeatureCodes.WritingGrade ...)` (lines 153-158); rule-engine pre-lint merges with AI findings (rule-engine wins); AI kill-switch via `IWritingOptionsProvider` short-circuits with deterministic findings before any prompt build."
       - "Scoring invariants enforced via `OetScoring.ClampScaled`, `OetScoring.ScaledPassGradeB`, `OetScoring.OetGradeLetterFromScaled`, and country-aware `OetScoring.GradeWriting(scaled, candidateCountry)` (lines 207-225) — never compares `score >= 350` inline."
       - "Audit row written via `IAiUsageRecorder` inside the gateway path (`featureCode = AiFeatureCodes.WritingGrade`, line 252)."
       - "Deterministic fallback: on gateway exception or invalid JSON, evaluation persists `ScoreRange = 'pending'` (line 297) plus the rule-engine findings — learner still sees actionable output."
-      - "Test coverage: `backend/tests/OetLearner.Api.Tests/WritingEvaluationPipelineTests.cs` → `dotnet test --filter FullyQualifiedName~WritingEvaluationPipeline --no-restore` → Passed: 2/2 on 2026-05-10."
+      - "Test coverage: `backend/tests/OetWithDrHesham.Api.Tests/WritingEvaluationPipelineTests.cs` → `dotnet test --filter FullyQualifiedName~WritingEvaluationPipeline --no-restore` → Passed: 2/2 on 2026-05-10."
 
   - id: RW-006
     area: writing-e2e
@@ -221,13 +221,13 @@ remaining_work:
     source_labels:
       - PROGRESS:ListeningIngestion
       - docs/LISTENING-INGESTION-PRD.md
-      - backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs
+      - backend/src/OetWithDrHesham.Api/Services/Listening/ListeningLearnerService.cs
       - app/listening/page.tsx
     input_required: none
     evidence_links:
       - app/listening/page.test.tsx: premium lock badge regression added; `npx vitest run app/listening/page.test.tsx` passed 4/4 on 2026-05-09.
-      - backend/tests/OetLearner.Api.Tests/ListeningLearnerServiceTests.cs: DTO subscription/access-tier regression added; focused `dotnet test --filter FullyQualifiedName~ListeningLearnerServiceTests` passed 9/9 on 2026-05-09.
-      - backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs already projects `requiresSubscription` and `accessTier`.
+      - backend/tests/OetWithDrHesham.Api.Tests/ListeningLearnerServiceTests.cs: DTO subscription/access-tier regression added; focused `dotnet test --filter FullyQualifiedName~ListeningLearnerServiceTests` passed 9/9 on 2026-05-09.
+      - backend/src/OetWithDrHesham.Api/Services/Listening/ListeningLearnerService.cs already projects `requiresSubscription` and `accessTier`.
 
   - id: RW-008
     area: build-health
@@ -241,11 +241,11 @@ remaining_work:
     source_labels:
       - PROGRESS:ListeningIngestion
       - docs/speaking/PROGRESS.md
-      - backend/src/OetLearner.Api/Services/AdminService.cs
+      - backend/src/OetWithDrHesham.Api/Services/AdminService.cs
       - app/admin/alerts/page.tsx
     input_required: none
     evidence_links:
-      - backend/src/OetLearner.Api/Services/AdminService.ContentAdmin.cs nullable assignment warning fixed for Grammar lesson creation.
+      - backend/src/OetWithDrHesham.Api/Services/AdminService.ContentAdmin.cs nullable assignment warning fixed for Grammar lesson creation.
       - Focused backend Listening test/build path passed on 2026-05-09 with no compiler or analyzer warnings.
       - `npx tsc --noEmit` passed on 2026-05-09.
       - "Re-validated 2026-05-09: focused backend filter `dotnet test --filter FullyQualifiedName~AiProvider --no-restore` → Passed: 37/37, Failed: 0; `dotnet test --filter FullyQualifiedName~Sponsor --no-restore` → Passed: 5/5, Failed: 0. No compiler warnings on touched files."
@@ -289,12 +289,12 @@ remaining_work:
     source_labels:
       - docs/plan/research_findings_api_state_disconnect_audit.yaml
       - lib/api.ts
-      - backend/src/OetLearner.Api/Endpoints
+      - backend/src/OetWithDrHesham.Api/Endpoints
     input_required: []
     evidence_links:
       - "Sponsor surface (closed): lib/api.ts now declares typed `SponsorInvoice` and adds `currency: string | null` to both `SponsorBillingData` and `SponsorDashboardData` (replaces the prior `Array<Record<string, unknown>>` invoices fallback)."
-      - "Sponsor contract lock: backend/tests/OetLearner.Api.Tests/SponsorContractTests.cs (2 tests, reflection-based) asserts every documented field on `SponsorDashboardData` and `SponsorBillingData` (incl. `SponsorInvoice` shape) appears with the expected runtime type on the responses behind /v1/sponsor/dashboard and /v1/sponsor/billing."
-      - "Five-surface contract inventory: backend/tests/OetLearner.Api.Tests/ApiContractInventoryTests.cs (5 tests) hard-locks the C# DTO shape for: (1) Auth — CurrentUserResponse / AuthSessionResponse / ActiveSessionResponse with field-level type assertions; (2) Mocks — MockAttemptCreateRequest, MockSectionCompleteRequest, MockProctoringEventBatchRequest+Input, MockBookingCreate/Reschedule/UpdateRequest, StartSpeakingMockSetRequest; (3) Submissions/Expert review — ExpertQueueItemResponse, ExpertQueueResponse, ExpertWritingReviewBundleResponse, ExpertSpeakingReviewBundleResponse, ExpertReviewActionsResponse, ExpertReviewHistoryResponse, ExpertReworkChainResponse, ExpertReviewAmendResponse; (4) Admin content — AdminBulkContentResponse, AdminAlertItemResponse+Summary, AdminMockBundleCreate/Update/Section/ReorderRequest; (5) Conversation — discovers all OetLearner.Api.Contracts.*Conversation* types and falls back to asserting ConversationService presence so any rename/removal hard-fails the build."
+      - "Sponsor contract lock: backend/tests/OetWithDrHesham.Api.Tests/SponsorContractTests.cs (2 tests, reflection-based) asserts every documented field on `SponsorDashboardData` and `SponsorBillingData` (incl. `SponsorInvoice` shape) appears with the expected runtime type on the responses behind /v1/sponsor/dashboard and /v1/sponsor/billing."
+      - "Five-surface contract inventory: backend/tests/OetWithDrHesham.Api.Tests/ApiContractInventoryTests.cs (5 tests) hard-locks the C# DTO shape for: (1) Auth — CurrentUserResponse / AuthSessionResponse / ActiveSessionResponse with field-level type assertions; (2) Mocks — MockAttemptCreateRequest, MockSectionCompleteRequest, MockProctoringEventBatchRequest+Input, MockBookingCreate/Reschedule/UpdateRequest, StartSpeakingMockSetRequest; (3) Submissions/Expert review — ExpertQueueItemResponse, ExpertQueueResponse, ExpertWritingReviewBundleResponse, ExpertSpeakingReviewBundleResponse, ExpertReviewActionsResponse, ExpertReviewHistoryResponse, ExpertReworkChainResponse, ExpertReviewAmendResponse; (4) Admin content — AdminBulkContentResponse, AdminAlertItemResponse+Summary, AdminMockBundleCreate/Update/Section/ReorderRequest; (5) Conversation — discovers all OetWithDrHesham.Api.Contracts.*Conversation* types and falls back to asserting ConversationService presence so any rename/removal hard-fails the build."
       - "`dotnet test --filter FullyQualifiedName~ApiContractInventory --no-restore` → Passed: 5/5 on 2026-05-10."
       - "`dotnet test --filter FullyQualifiedName~Sponsor --no-restore` → Passed: 7/7 on 2026-05-10 (5 read-model + 2 contract)."
 
@@ -314,7 +314,7 @@ remaining_work:
     source_labels:
       - contexts/notification-center-context.tsx
       - app/conversation/[sessionId]/page.tsx
-      - backend/src/OetLearner.Api/Hubs/ConversationHub.cs
+      - backend/src/OetWithDrHesham.Api/Hubs/ConversationHub.cs
       - docs/plan/research_findings_api_state_disconnect_audit.yaml
     input_required: []
     evidence_links:
@@ -342,10 +342,10 @@ remaining_work:
     input_required: []
     evidence_links:
       - "Secret-management slice closed via RW-019 — see docs/security/ai-provider-secret-redaction.md and AdminAiProviderSecretsTests / AiProviderConnectionTesterTests redaction proofs (2026-05-09)."
-      - "Domain extension: backend/src/OetLearner.Api/Domain/AiProviderEntities.cs — AiProviderCategory enum widened to 6 values (TextChat=0, Tts=1, Asr=2, Phoneme=3, Ocr=4, PdfExtraction=5). Pre-existing migration 20260510130000_AddAiProviderCategory persists the column; new ordinals are additive (no DB migration needed)."
+      - "Domain extension: backend/src/OetWithDrHesham.Api/Domain/AiProviderEntities.cs — AiProviderCategory enum widened to 6 values (TextChat=0, Tts=1, Asr=2, Phoneme=3, Ocr=4, PdfExtraction=5). Pre-existing migration 20260510130000_AddAiProviderCategory persists the column; new ordinals are additive (no DB migration needed)."
       - "Admin UI: app/admin/ai-providers/page.tsx — category tab filter row now lists All/TextChat/Tts/Asr/Phoneme/Ocr/PdfExtraction; Edit modal Category select offers all 6 categories; lib/ai-management-api.ts AiProviderCategory union widened to match."
-      - "Selector hook: backend/src/OetLearner.Api/Services/Content/PaperExtractionProvider.cs — IPaperExtractionProvider + IPaperExtractionProviderSelector + PaperExtractionProviderSelector wired into DI in Program.cs, mirroring IConversationAsrProviderSelector. Selector picks active row by category ranked by FailoverPriority and rejects non-extraction categories with ArgumentException."
-      - "Tests: backend/tests/OetLearner.Api.Tests/PaperExtractionProviderSelectorTests.cs — 3 SQLite-in-memory tests (returns highest-priority active OCR provider; returns null when no active row for category; rejects non-extraction category). dotnet test --filter FullyQualifiedName~PaperExtraction → Passed: 3/3 on 2026-05-10."
+      - "Selector hook: backend/src/OetWithDrHesham.Api/Services/Content/PaperExtractionProvider.cs — IPaperExtractionProvider + IPaperExtractionProviderSelector + PaperExtractionProviderSelector wired into DI in Program.cs, mirroring IConversationAsrProviderSelector. Selector picks active row by category ranked by FailoverPriority and rejects non-extraction categories with ArgumentException."
+      - "Tests: backend/tests/OetWithDrHesham.Api.Tests/PaperExtractionProviderSelectorTests.cs — 3 SQLite-in-memory tests (returns highest-priority active OCR provider; returns null when no active row for category; rejects non-extraction category). dotnet test --filter FullyQualifiedName~PaperExtraction → Passed: 3/3 on 2026-05-10."
       - "Existing: TTS + ASR + Phoneme are already seeded by AiVoiceProviderSeeder and rotated via IConversationTtsProviderSelector / IConversationAsrProviderSelector / IPronunciationAsrProviderSelector. RW-012 closes by giving Ocr + PdfExtraction the same selector pattern."
 
 
@@ -361,15 +361,15 @@ remaining_work:
       are explicitly post-v1 enhancements (decision recorded 2026-05-10).
     recommendation: Ship v1 with the heuristic; track the SponsorshipId-on-PaymentTransaction enhancement post-launch.
     evidence_links:
-      - "Implementation: backend/src/OetLearner.Api/Services/SponsorService.cs (ComputeBillingAsync; populates totalSpend, currentMonthSpend, currency, invoices from real PaymentTransaction rows scoped to active sponsorship windows and status=completed)"
-      - "Tests: backend/tests/OetLearner.Api.Tests/SponsorBillingReadModelTests.cs (5 SQLite-in-memory tests: zero-state, window math, revocation cutoff, mixed-currency aggregate, invitation-without-learner exclusion) + backend/tests/OetLearner.Api.Tests/SponsorContractTests.cs (2 reflection-based shape locks for SponsorDashboardData and SponsorBillingData/SponsorInvoice)"
+      - "Implementation: backend/src/OetWithDrHesham.Api/Services/SponsorService.cs (ComputeBillingAsync; populates totalSpend, currentMonthSpend, currency, invoices from real PaymentTransaction rows scoped to active sponsorship windows and status=completed)"
+      - "Tests: backend/tests/OetWithDrHesham.Api.Tests/SponsorBillingReadModelTests.cs (5 SQLite-in-memory tests: zero-state, window math, revocation cutoff, mixed-currency aggregate, invitation-without-learner exclusion) + backend/tests/OetWithDrHesham.Api.Tests/SponsorContractTests.cs (2 reflection-based shape locks for SponsorDashboardData and SponsorBillingData/SponsorInvoice)"
       - "dotnet test --filter FullyQualifiedName~Sponsor --no-restore → Passed: 7/7 on 2026-05-10"
       - "lib/api.ts: typed SponsorInvoice interface + currency: string|null on SponsorBillingData and SponsorDashboardData. npx tsc --noEmit clean."
       - "docs/BILLING.md: new 'Known v1 limitation: sponsor billing is heuristic-attributed' section documents the attribution rule and the SponsorshipId v1.1 enhancement."
       - "Decision recorded 2026-05-10: cohort + full institutional portal scoped post-v1; not blocking launch."
     source_labels:
       - PROGRESS:TopRemainingThemes
-      - backend/src/OetLearner.Api/Services/SponsorService.cs
+      - backend/src/OetWithDrHesham.Api/Services/SponsorService.cs
       - docs/plan/research_findings_web_app_features_routes_audit.yaml
       - docs/BILLING.md
     input_required: []
@@ -488,7 +488,7 @@ remaining_work:
       - docs/plan/backend-rbac-audit/research_findings_backend_api_rbac.yaml
       - docs/plan/research_findings_web_app_features_routes_audit.yaml
       - app/admin
-      - backend/src/OetLearner.Api/Endpoints
+      - backend/src/OetWithDrHesham.Api/Endpoints
     input_required: []
     evidence_links:
       - "docs/STATUS/admin-route-inventory.md (new): full inventory of 35 admin routes mapped to backend endpoints, RBAC permissions, existing test coverage, and status (done / partial). Decision recorded 2026-05-10: all 11 admin route groups treated as T0 launch-critical."
@@ -508,14 +508,14 @@ remaining_work:
       - user_decisions:credential_policy
       - docs/AI-USAGE-POLICY.md
       - app/admin/ai-config/page.tsx
-      - backend/src/OetLearner.Api/Services
+      - backend/src/OetWithDrHesham.Api/Services
     input_required: none
     evidence_links:
       - user_decisions.credential_policy now requires secret references, masked admin display, server-side test connection, no plaintext persistence/logging, and redaction review before close.
       - docs/security/ai-provider-secret-redaction.md documents the contract and the test evidence backing every invariant.
-      - backend/src/OetLearner.Api/Services/Rulebook/AiProviderConnectionTester.cs `RedactSecrets` strips the live decrypted key plus documented PAT/key prefixes (`github_pat_…`, `ghp_…`, `gho_…`, `ghu_…`, `ghs_…`, `ghr_…`, `sk-ant-…`, `sk-proj-…`, `sk-…`, `AIza…`, `xox[baprs]-…`) before persistence and before returning to the admin UI.
-      - backend/tests/OetLearner.Api.Tests/AiProviderConnectionTesterTests `ProviderProbe_RedactsLiveApiKeyEchoedInErrorBody`, `ProviderProbe_RedactsForeignPatPatternsEvenWithoutLiveKeyMatch`, `NetworkException_RedactsLiveApiKeyEchoedInExceptionMessage`, `AccountProbe_RedactsLiveAccountKeyEchoedInErrorBody` lock down redaction across provider + account probe paths.
-      - backend/tests/OetLearner.Api.Tests/AdminAiProviderSecretsTests `PostProvider_DoesNotReturnRawOrEncryptedKey`, `GetProviders_DoesNotIncludeRawOrEncryptedKey`, `PostProvider_PersistsEncryptedKeyOnly_AndAuditDoesNotLeakIt`, `PostProviderAccount_DoesNotReturnRawOrEncryptedKey_AndPersistsEncryptedOnly` round-trip a synthetic key through admin endpoints + DB + audit and assert no leakage path.
+      - backend/src/OetWithDrHesham.Api/Services/Rulebook/AiProviderConnectionTester.cs `RedactSecrets` strips the live decrypted key plus documented PAT/key prefixes (`github_pat_…`, `ghp_…`, `gho_…`, `ghu_…`, `ghs_…`, `ghr_…`, `sk-ant-…`, `sk-proj-…`, `sk-…`, `AIza…`, `xox[baprs]-…`) before persistence and before returning to the admin UI.
+      - backend/tests/OetWithDrHesham.Api.Tests/AiProviderConnectionTesterTests `ProviderProbe_RedactsLiveApiKeyEchoedInErrorBody`, `ProviderProbe_RedactsForeignPatPatternsEvenWithoutLiveKeyMatch`, `NetworkException_RedactsLiveApiKeyEchoedInExceptionMessage`, `AccountProbe_RedactsLiveAccountKeyEchoedInErrorBody` lock down redaction across provider + account probe paths.
+      - backend/tests/OetWithDrHesham.Api.Tests/AdminAiProviderSecretsTests `PostProvider_DoesNotReturnRawOrEncryptedKey`, `GetProviders_DoesNotIncludeRawOrEncryptedKey`, `PostProvider_PersistsEncryptedKeyOnly_AndAuditDoesNotLeakIt`, `PostProviderAccount_DoesNotReturnRawOrEncryptedKey_AndPersistsEncryptedOnly` round-trip a synthetic key through admin endpoints + DB + audit and assert no leakage path.
       - `dotnet test ... --filter "FullyQualifiedName~AiProvider" --no-restore` → 35/35 passed (2026-05-09).
 
   - id: RW-020
@@ -531,7 +531,7 @@ remaining_work:
     source_labels:
       - PROGRESS:TopRemainingThemes
       - package.json
-      - backend/OetLearner.sln
+      - backend/OetWithDrHesham.sln
       - Dockerfile
       - .github/workflows
     input_required: none

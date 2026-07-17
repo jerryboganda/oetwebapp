@@ -3,9 +3,9 @@ import { expect, type Page } from '@playwright/test';
 export type SeededRole = 'learner' | 'expert' | 'admin';
 
 export const seededAccounts: Record<SeededRole, { email: string; password: string }> = {
-  learner: { email: 'learner@oet-prep.dev', password: 'Password123!' },
-  expert: { email: 'expert@oet-prep.dev', password: 'Password123!' },
-  admin: { email: 'admin@oet-prep.dev', password: 'Password123!' },
+  learner: { email: 'learner@oet-with-dr-hesham.dev', password: 'Password123!' },
+  expert: { email: 'expert@oet-with-dr-hesham.dev', password: 'Password123!' },
+  admin: { email: 'admin@oet-with-dr-hesham.dev', password: 'Password123!' },
 };
 
 export const authStatePathsByProject = {

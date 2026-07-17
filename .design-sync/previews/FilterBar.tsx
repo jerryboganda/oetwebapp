@@ -3,7 +3,7 @@
 // popovers (closed by default), so the toolbar with filter buttons is the goal.
 // Each named export = one labeled card cell.
 import { useState } from 'react';
-import { FilterBar } from 'oet-prep';
+import { FilterBar } from 'oet-with-dr-hesham';
 
 const groups = [
   {

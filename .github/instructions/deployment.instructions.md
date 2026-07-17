@@ -11,8 +11,8 @@ Local validation is NOT done here — it runs on the host via pnpm (see `validat
 
 ## Storage persistence (mission critical)
 
-- All media/user files persist at `/var/opt/oet-learner/storage`.
-- Every API-running `docker-compose*.yml` must set `Storage__LocalRootPath: /var/opt/oet-learner/storage`.
+- All media/user files persist at `/var/opt/oet-with-dr-hesham/storage`.
+- Every API-running `docker-compose*.yml` must set `Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage`.
 - Media/user file I/O goes through `IFileStorage` / `S3CompatibleFileStorage` — never raw
   `File.*`, `Path.*`, or `Directory.*` for media/user data.
 - Never run `docker compose down -v`, `docker volume rm`, or recreate postgres/storage volumes without
@@ -44,7 +44,7 @@ The VPS (`185.252.233.186`, production deploy target — never run validation th
 - **ROUTER_IMAGE digest bug:** `.env.production` sets `ROUTER_IMAGE=nginx:...@sha256:...`. Docker cannot
   use a digest as a build tag. Always override `ROUTER_IMAGE=oetwebsite-nginx-router:local` for build/up.
 - **Protected volumes:** never destroy `oetwebsite_oet_postgres_data` (database) or
-  `oetwebsite_oet_learner_storage` (uploads). No `down -v` on the VPS.
+  `oetwebsite_oet_with_dr_hesham_storage` (uploads). No `down -v` on the VPS.
 - **Blue/green slots:** `oet-api-<slot>` + `oet-web-<slot>`; only one slot is live. Confirm the active
   slot before acting.
 - **Nginx Proxy Manager health-test 400 false alarm:** `curl http://oet-api:8080/...` sends `Host: oet-api`, which ASP.NET

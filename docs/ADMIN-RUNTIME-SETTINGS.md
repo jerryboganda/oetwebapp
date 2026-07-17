@@ -189,7 +189,7 @@ feature existed.
 
 Secrets are encrypted using ASP.NET Core Data Protection with a fixed purpose
 string `RuntimeSettings.Secret.v1`. The key ring is stored on the Docker volume
-`oetwebsite_oet_learner_storage` under the `dataprotection/` sub-path (or the
+`oetwebsite_oet_with_dr_hesham_storage` under the `dataprotection/` sub-path (or the
 path configured by `DataProtectionKeyPath`). Encrypted blobs are stored with the
 `ENC:` prefix so plaintext values (e.g. template IDs that are not sensitive) can
 be stored without encryption and distinguished from encrypted blobs at read time.
@@ -359,7 +359,7 @@ The env file continues to work as a fallback until you complete this step.
 ## 10. Disaster recovery — Data Protection key ring lost
 
 > **Warning: this is unrecoverable.** If the ASP.NET Data Protection key ring
-> is lost (e.g. the `oetwebsite_oet_learner_storage` Docker volume is deleted),
+> is lost (e.g. the `oetwebsite_oet_with_dr_hesham_storage` Docker volume is deleted),
 > the encrypted blobs in the `RuntimeSettings` table cannot be decrypted. The
 > API falls back to env-var values automatically, so the platform continues to
 > run — but the DB-stored secrets are permanently unreadable.
@@ -380,7 +380,7 @@ Recovery steps:
 
 **Prevention:** back up the Data Protection key ring directory alongside the
 database. The key ring lives in the Docker volume at
-`oetwebsite_oet_learner_storage:/app/dataprotection/`. Include it in any volume
+`oetwebsite_oet_with_dr_hesham_storage:/app/dataprotection/`. Include it in any volume
 snapshot or off-site backup plan.
 
 ---

@@ -4,7 +4,7 @@ Every gate below must be green before flipping `Features__SpeakingV2 = true` for
 
 ## A. Tests
 
-- [ ] `dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~Speaking"` — green
+- [ ] `dotnet test backend/OetWithDrHesham.sln --filter "FullyQualifiedName~Speaking"` — green
 - [ ] `npm test` — green
 - [ ] `npm run lint` — green
 - [ ] `npx tsc --noEmit` — green

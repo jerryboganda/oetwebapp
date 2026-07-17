@@ -10,8 +10,8 @@ must not edit production code. This slice added:
 
 | File | Kind | Purpose |
 | ---- | ---- | ------- |
-| `backend/tests/OetLearner.Api.Tests/BillingFuzzTests.cs` | xUnit (theory) | Fuzz wallet top-up, checkout-session, and quote endpoints with malformed semantic + raw-JSON inputs. Goal: structured 4xx, never 500. |
-| `backend/tests/OetLearner.Api.Tests/BillingIntegrationE2ETests.cs` | xUnit (HTTP-level) | Full happy-path: ensure learner → fetch plans → quote → checkout → simulate webhook → assert audit + invoice/wallet credit. |
+| `backend/tests/OetWithDrHesham.Api.Tests/BillingFuzzTests.cs` | xUnit (theory) | Fuzz wallet top-up, checkout-session, and quote endpoints with malformed semantic + raw-JSON inputs. Goal: structured 4xx, never 500. |
+| `backend/tests/OetWithDrHesham.Api.Tests/BillingIntegrationE2ETests.cs` | xUnit (HTTP-level) | Full happy-path: ensure learner → fetch plans → quote → checkout → simulate webhook → assert audit + invoice/wallet credit. |
 | `tests/e2e/billing.spec.ts` | Playwright (`@smoke @billing`) | Visit `/billing`, click into `/billing/upgrade`, assert no console errors. Plus an unauth redirect guard. |
 | `app/billing/__tests__/billing-flow.integration.test.tsx` | Vitest + RTL | Walks the upgrade page through quote-like loading → checkout-like data → freeze-blocked terminal state with mocked `apiClient`. |
 
@@ -51,7 +51,7 @@ pass mapped binder failures to structured 400 responses.
 - **Original observed behaviour:** ASP.NET emits
   `Microsoft.AspNetCore.Http.BadHttpRequestException: Failed to read parameter ... from the request body as JSON`
   which the global exception handler converts to **HTTP 500** with an opaque
-  body. (Verified via `fail: OetLearner.Api[0]` log line:
+  body. (Verified via `fail: OetWithDrHesham.Api[0]` log line:
   *"Unhandled exception while processing POST /v1/billing/checkout-sessions"*.)
 - **Resolution:** global error middleware maps `BadHttpRequestException` to a
   structured 400 response.
@@ -99,9 +99,9 @@ errors.
 
 | Command | Result |
 | ------- | ------ |
-| `dotnet build backend/OetLearner.sln` | **succeeded**, 0 errors, 4 pre-existing warnings. |
-| `dotnet test backend/tests/OetLearner.Api.Tests --filter "FullyQualifiedName~BillingFuzzTests\|FullyQualifiedName~BillingIntegrationE2ETests"` | **39 passed, 16 failed, 55 total** — failures are H-D1 / H-D2 documentation tests as designed. |
-| `dotnet test backend/tests/OetLearner.Api.Tests --filter "FullyQualifiedName~BillingIntegrationE2ETests"` | **1 passed, 0 failed**. |
+| `dotnet build backend/OetWithDrHesham.sln` | **succeeded**, 0 errors, 4 pre-existing warnings. |
+| `dotnet test backend/tests/OetWithDrHesham.Api.Tests --filter "FullyQualifiedName~BillingFuzzTests\|FullyQualifiedName~BillingIntegrationE2ETests"` | **39 passed, 16 failed, 55 total** — failures are H-D1 / H-D2 documentation tests as designed. |
+| `dotnet test backend/tests/OetWithDrHesham.Api.Tests --filter "FullyQualifiedName~BillingIntegrationE2ETests"` | **1 passed, 0 failed**. |
 | `npx vitest run app/billing/__tests__/billing-flow.integration.test.tsx` | **1 passed**. |
 | `npx vitest run app/billing/__tests__` | **24 passed, 0 failed** across 8 files (no regressions in sibling tests). |
 | `npx tsc --noEmit` (filtered to the new files) | **no errors** in `app/billing/__tests__/billing-flow.integration.test.tsx` or `tests/e2e/billing.spec.ts`. (Pre-existing unrelated TS error in `app/billing/__tests__/double-submit-and-mask.test.tsx` line 134 was already on `main` and is out of Slice H's owned scope.) |

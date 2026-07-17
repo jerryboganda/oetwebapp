@@ -290,7 +290,7 @@ Present on both player and results pages: a **"Download original paper (PDF)"** 
 
 ## 5. Scoring contract (MISSION CRITICAL)
 
-Every grading call routes through `lib/scoring.ts` / `OetLearner.Api.Services.OetScoring`. Sequence:
+Every grading call routes through `lib/scoring.ts` / `OetWithDrHesham.Api.Services.OetScoring`. Sequence:
 
 1. Learner submits. Server validates: attempt belongs to user, status=InProgress, not expired.
 2. `ReadingGradingService.GradeAsync(attemptId)`:

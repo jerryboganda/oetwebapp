@@ -1,4 +1,4 @@
-# OET Prep - Complete Local Development with Hot Reload
+# OET with Dr Hesham - Complete Local Development with Hot Reload
 # Usage:
 #   podman compose -f docker-compose.hotreload.yml --env-file .env.docker-local up --build -d
 #
@@ -54,7 +54,7 @@ services:
       Platform__PublicApiBaseUrl: http://localhost:8080
       Platform__PublicWebBaseUrl: http://localhost:3000
       Billing__CheckoutBaseUrl: http://localhost:3000/billing/checkout
-      Storage__LocalRootPath: /var/opt/oet-learner/storage
+      Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage
       # Bootstrap a known expert/admin login for local dev
       Bootstrap__AutoMigrate: 'true'
       Bootstrap__ExpertEmail: ${BOOTSTRAP_EXPERT_EMAIL}
@@ -70,9 +70,9 @@ services:
       # artifacts. Without this, Windows MSBuild output (e.g. staticwebassets
       # with mixed-separator paths) leaks in through the bind mount and breaks
       # dotnet watch on Linux.
-      - oet_hotreload_api_obj:/app/backend/src/OetLearner.Api/obj
-      - oet_hotreload_api_bin:/app/backend/src/OetLearner.Api/bin
-      - oet_hotreload_storage:/var/opt/oet-learner/storage
+      - oet_hotreload_api_obj:/app/backend/src/OetWithDrHesham.Api/obj
+      - oet_hotreload_api_bin:/app/backend/src/OetWithDrHesham.Api/bin
+      - oet_hotreload_storage:/var/opt/oet-with-dr-hesham/storage
       - oet_hotreload_dotnet_cache:/root/.nuget/packages
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://localhost:8080/health/ready || exit 1']
@@ -83,7 +83,7 @@ services:
     # --no-launch-profile: ignore launchSettings.json (which binds localhost:5198,
     # unreachable from outside the container). With it bypassed, ASPNETCORE_URLS
     # (http://+:8080) binds all interfaces on the port the container exposes.
-    command: dotnet watch --project backend/src/OetLearner.Api/OetLearner.Api.csproj run --no-launch-profile
+    command: dotnet watch --project backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj run --no-launch-profile
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FRONTEND runs NATIVELY on Windows (pnpm dev), NOT in this compose.

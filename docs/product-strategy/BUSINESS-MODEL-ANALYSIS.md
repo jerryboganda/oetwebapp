@@ -1,4 +1,4 @@
-# OET Prep — Comprehensive Business Model Analysis
+# OET with Dr Hesham — Comprehensive Business Model Analysis
 
 **Prepared:** April 12, 2026  
 **Scope:** Full codebase-grounded commercial analysis  
@@ -96,7 +96,7 @@ oetwebapp/
 │   ├── admin/        # Admin CMS + ops + billing ops
 │   └── api/          # Next.js API proxy to .NET backend
 ├── backend/          # ASP.NET Core 10 monolith
-│   └── src/OetLearner.Api/
+│   └── src/OetWithDrHesham.Api/
 │       ├── Domain/       # 70+ EF Core entities
 │       ├── Endpoints/    # Minimal API route handlers
 │       ├── Services/     # Business logic services
@@ -407,7 +407,7 @@ It is **not**:
 ### 8.1 Value Proposition by Stakeholder
 
 **For Learners:**
-> "The only OET prep platform that combines profession-specific AI evaluation with trusted human expert review, structured readiness tracking, and a clear path from diagnosis to exam confidence — in one integrated workspace."
+> "The only OET with Dr Hesham platform that combines profession-specific AI evaluation with trusted human expert review, structured readiness tracking, and a clear path from diagnosis to exam confidence — in one integrated workspace."
 
 Key differentiators vs alternatives:
 - **Profession-specific** (nursing, medicine, physiotherapy, etc.) — not generic English practice **[Code-evidenced]** (12 healthcare professions in taxonomy)
@@ -691,11 +691,11 @@ The product has a natural **trust-led growth flywheel**:
 
 | Channel | Priority | CAC Profile | Evidence |
 |---------|----------|-------------|----------|
-| **Organic/SEO** (OET prep content marketing) | High | Low CAC, slow build | No marketing pages yet **[Recommendation]** |
+| **Organic/SEO** (OET with Dr Hesham content marketing) | High | Low CAC, slow build | No marketing pages yet **[Recommendation]** |
 | **Referral program** | High | Very low CAC | Implemented in code **[Code-evidenced]** |
 | **OET community presence** (forums, FB groups) | High | Low CAC | Not evidenced **[Recommendation]** |
 | **Healthcare professional networks** | Medium | Medium CAC | Not evidenced **[Recommendation]** |
-| **Google Ads (OET prep keywords)** | Medium | Medium-high CAC | Not evidenced **[Recommendation]** |
+| **Google Ads (OET with Dr Hesham keywords)** | Medium | Medium-high CAC | Not evidenced **[Recommendation]** |
 | **Nursing school partnerships** | Low (initially) | Low after setup | Route exists, not implemented **[Weak inference]** |
 | **YouTube/social content marketing** | Medium | Low CAC, slow build | Not evidenced **[Recommendation]** |
 
@@ -860,7 +860,7 @@ The product has a natural **trust-led growth flywheel**:
 
 The strategic sequence should be:
 
-1. **Prove B2C unit economics with OET** — Can you acquire, convert, and retain paying OET learners at a positive unit economics margin? This is the first thing to prove.
+1. **Prove B2C unit economics with OET with Dr Hesham** — Can you acquire, convert, and retain paying OET with Dr Hesham learners at a positive unit economics margin? This is the first thing to prove.
 
 2. **Prove expert review as a premium revenue lever** — Can you deliver expert reviews profitably with adequate quality and SLA compliance? This unlocks the highest-willingness-to-pay revenue stream.
 
@@ -876,7 +876,7 @@ The strategic sequence should be:
 
 2. **Human review is the premium moat**: Expert review is simultaneously the highest-margin upsell, the strongest willingness-to-pay trigger, and the hardest-to-replicate competitive advantage.
 
-3. **OET depth beats exam breadth**: Being the best OET prep platform in the world is more defensible than being a mediocre multi-exam platform.
+3. **OET with Dr Hesham depth beats exam breadth**: Being the best OET with Dr Hesham platform in the world is more defensible than being a mediocre multi-exam platform.
 
 4. **Subscription is the floor, credits are the ceiling**: Subscriptions provide predictable base revenue. Credits and sessions provide scalable upside revenue. The business needs both.
 
@@ -960,17 +960,17 @@ The strategic sequence should be:
 | `package.json` | Complete dependency inventory — frontend stack, versions, capabilities |
 | `global.json` | .NET SDK version (10.0.300) |
 | `docker-compose.production.yml` | Production deployment architecture (3 services: postgres, API, web) |
-| `capacitor.config.ts` | Mobile wrapper config — appId: `com.oetprep.learner`, Zoom + Capacitor plugins |
+| `capacitor.config.ts` | Mobile wrapper config — appId: `com.oetwithdrhesham.learner`, Zoom + Capacitor plugins |
 | `electron-builder.config.cjs` | Desktop wrapper config — auto-updater, standalone Next.js bundling |
-| `backend/src/OetLearner.Api/Domain/Entities.cs` | Core domain entities — Attempt, Evaluation, ContentItem, StudyPlan, ReadinessSnapshot |
-| `backend/src/OetLearner.Api/Domain/BillingEntities.cs` | Billing domain — Plans, AddOns, Coupons, Quotes, Events, Wallets |
-| `backend/src/OetLearner.Api/Domain/ExpertEntities.cs` | Expert domain — CalibrationCase, CalibrationResult |
-| `backend/src/OetLearner.Api/Domain/PrivateSpeakingEntities.cs` | Speaking sessions — Config, TutorProfile, AvailabilityRule, Booking |
-| `backend/src/OetLearner.Api/Services/PaymentGatewayService.cs` | Stripe integration — Checkout Sessions, webhooks, sandbox fallback |
-| `backend/src/OetLearner.Api/Services/WalletService.cs` | Wallet operations — credit, debit, concurrency-safe balance management |
-| `backend/src/OetLearner.Api/Services/ExpertService.cs` | Expert queue — filterable review items, assignment, pagination |
-| `backend/src/OetLearner.Api/Services/BackgroundJobProcessor.cs` | Async evaluation pipeline — job states, retry logic, timeout handling |
-| `backend/src/OetLearner.Api/Configuration/BillingOptions.cs` | Billing configuration — Stripe keys, success/cancel URLs |
+| `backend/src/OetWithDrHesham.Api/Domain/Entities.cs` | Core domain entities — Attempt, Evaluation, ContentItem, StudyPlan, ReadinessSnapshot |
+| `backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs` | Billing domain — Plans, AddOns, Coupons, Quotes, Events, Wallets |
+| `backend/src/OetWithDrHesham.Api/Domain/ExpertEntities.cs` | Expert domain — CalibrationCase, CalibrationResult |
+| `backend/src/OetWithDrHesham.Api/Domain/PrivateSpeakingEntities.cs` | Speaking sessions — Config, TutorProfile, AvailabilityRule, Booking |
+| `backend/src/OetWithDrHesham.Api/Services/PaymentGatewayService.cs` | Stripe integration — Checkout Sessions, webhooks, sandbox fallback |
+| `backend/src/OetWithDrHesham.Api/Services/WalletService.cs` | Wallet operations — credit, debit, concurrency-safe balance management |
+| `backend/src/OetWithDrHesham.Api/Services/ExpertService.cs` | Expert queue — filterable review items, assignment, pagination |
+| `backend/src/OetWithDrHesham.Api/Services/BackgroundJobProcessor.cs` | Async evaluation pipeline — job states, retry logic, timeout handling |
+| `backend/src/OetWithDrHesham.Api/Configuration/BillingOptions.cs` | Billing configuration — Stripe keys, success/cancel URLs |
 | `lib/billing-types.ts` | Frontend billing contracts — Plan, AddOn, Entitlements, Quote |
 | `.env.example` | Complete environment variable inventory — all integration points |
 | `learner_app_backend_api_complete_A_to_Z.md` | Comprehensive learner API documentation |

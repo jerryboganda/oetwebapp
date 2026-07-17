@@ -1,6 +1,6 @@
 # Speaking Module — AI Provider Matrix
 
-Source-of-truth registration in `backend/src/OetLearner.Api/Services/Seeding/SpeakingAiRouteSeed.cs`. Resolver in `AiFeatureRouteResolver.cs`. Provider registry in `AiProviderRegistry.cs` (AnthropicProvider, OpenAiCompatibleProvider, CloudflareWorkersAiProvider).
+Source-of-truth registration in `backend/src/OetWithDrHesham.Api/Services/Seeding/SpeakingAiRouteSeed.cs`. Resolver in `AiFeatureRouteResolver.cs`. Provider registry in `AiProviderRegistry.cs` (AnthropicProvider, OpenAiCompatibleProvider, CloudflareWorkersAiProvider).
 
 | Feature route | Default provider | Default model | Caching | Fallback |
 |---------------|------------------|---------------|---------|----------|

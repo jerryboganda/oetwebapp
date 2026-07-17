@@ -14,13 +14,13 @@ Key files reviewed:
 - `lib/api.ts`
 - `lib/admin.ts`
 - `lib/types/admin.ts`
-- `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`
-- `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
-- `backend/src/OetLearner.Api/Services/AdminService.cs`
-- `backend/src/OetLearner.Api/Services/LearnerService.cs`
-- `backend/src/OetLearner.Api/Services/SponsorService.cs`
-- `backend/src/OetLearner.Api/Services/Content/ContentEntitlementService.cs`
-- `backend/src/OetLearner.Api/Services/PaymentGatewayService.cs`
+- `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`
+- `backend/src/OetWithDrHesham.Api/Endpoints/LearnerEndpoints.cs`
+- `backend/src/OetWithDrHesham.Api/Services/AdminService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/SponsorService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/Content/ContentEntitlementService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/PaymentGatewayService.cs`
 
 ## Current Implementation Map
 

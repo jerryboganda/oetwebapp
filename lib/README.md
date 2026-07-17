@@ -1,6 +1,6 @@
 # Shared Libraries (`lib/`)
 
-Cross-cutting TypeScript utilities and domain helpers used by the OET Prep Platform frontend.
+Cross-cutting TypeScript utilities and domain helpers used by the OET with Dr Hesham Platform frontend.
 
 ## What lives here
 

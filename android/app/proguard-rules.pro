@@ -22,7 +22,7 @@
 
 # Keep Capacitor plugin classes (bridge interface)
 -keep class com.getcapacitor.** { *; }
--keep class com.oetprep.learner.** { *; }
+-keep class com.oetwithdrhesham.learner.** { *; }
 
 # Keep JavaScript interface annotations
 -keepclassmembers class * {

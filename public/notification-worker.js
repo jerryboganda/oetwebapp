@@ -8,12 +8,12 @@ self.addEventListener('push', (event) => {
     payload = event.data.json();
   } catch {
     payload = {
-      title: 'OET Prep notification',
+      title: 'OET with Dr Hesham notification',
       body: event.data.text(),
     };
   }
 
-  const title = payload.title || 'OET Prep notification';
+  const title = payload.title || 'OET with Dr Hesham notification';
   const options = {
     body: payload.body || '',
     icon: '/icon-192.png',

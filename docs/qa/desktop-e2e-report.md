@@ -14,7 +14,7 @@
 
 | Area | Command or suite | Result |
 | --- | --- | --- |
-| Backend regression coverage | `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj` | `149 passed` |
+| Backend regression coverage | `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj` | `149 passed` |
 | Frontend unit coverage | `npm test` | `101 passed` |
 | Frontend lint | `npm run lint` | passed |
 | Production build | `npm run build` | passed |

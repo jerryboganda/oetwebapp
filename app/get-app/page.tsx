@@ -71,11 +71,11 @@ export default function GetAppPage() {
           className="inline-flex items-center gap-2 text-sm font-semibold text-muted hover:text-primary"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to OET Prep
+          Back to OET with Dr Hesham
         </Link>
 
         <section className="mt-8 rounded-3xl bg-navy px-8 py-12 text-center text-white shadow-clinical">
-          <h1 className="text-3xl font-bold">Get the OET Prep app</h1>
+          <h1 className="text-3xl font-bold">Get the OET with Dr Hesham app</h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/75">
             The Video Library and the smoothest OET practice experience live in our desktop and
             mobile apps. One account, everything in sync.

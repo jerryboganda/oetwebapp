@@ -1,6 +1,6 @@
 // Authored preview — ProgressBar. Each named export = one labeled card cell.
 // Real numeric `value` is essential — defaults render an empty bar.
-import { ProgressBar } from 'oet-prep';
+import { ProgressBar } from 'oet-with-dr-hesham';
 
 export const FillLevels = () => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 420 }}>

@@ -78,7 +78,7 @@ describe('share', () => {
       expect(result.shared).toBe(true);
       expect(mockShare.share).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'OET Prep Learner',
+          title: 'OET with Dr Hesham Learner',
           url: 'https://app.oetwithdrhesham.co.uk',
         })
       );

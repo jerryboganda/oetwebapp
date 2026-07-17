@@ -1,6 +1,6 @@
 // Authored preview — CardTitle (the Card heading; renders an <h3>).
 // Each named export = one labeled card cell.
-import { Card, CardHeader, CardTitle, CardContent } from 'oet-prep';
+import { Card, CardHeader, CardTitle, CardContent } from 'oet-with-dr-hesham';
 
 export const SectionHeading = () => (
   <Card style={{ maxWidth: 360 }}>

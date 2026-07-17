@@ -1,6 +1,6 @@
 # UX Audit Workspace
 
-Complete, platform-wide UX audit for the OET Prep Platform. Read the master plan first, then drill into phases.
+Complete, platform-wide UX audit for the OET with Dr Hesham Platform. Read the master plan first, then drill into phases.
 
 ## Start here
 - [UX-AUDIT-MASTER-PLAN.md](./UX-AUDIT-MASTER-PLAN.md) — objectives, personas, phases, success metrics.

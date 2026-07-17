@@ -20,13 +20,13 @@
 
 ## Backend Runtime Compatibility
 
-- Updated [`backend/src/OetLearner.Api/Program.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Program.cs) to persist Data Protection keys and keep desktop runtime auth/session behavior stable.
-- Updated [`backend/src/OetLearner.Api/Services/SeedData.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/SeedData.cs) to keep local seeded role accounts consistent for desktop QA.
+- Updated [`backend/src/OetWithDrHesham.Api/Program.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Program.cs) to persist Data Protection keys and keep desktop runtime auth/session behavior stable.
+- Updated [`backend/src/OetWithDrHesham.Api/Services/SeedData.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/SeedData.cs) to keep local seeded role accounts consistent for desktop QA.
 - Added SQLite-safe query fallbacks in:
-  - [`backend/src/OetLearner.Api/Services/LearnerService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/LearnerService.cs)
-  - [`backend/src/OetLearner.Api/Services/ExpertService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/ExpertService.cs)
-  - [`backend/src/OetLearner.Api/Services/AdminService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/AdminService.cs)
-  - [`backend/src/OetLearner.Api/Services/NotificationService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/NotificationService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/LearnerService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/ExpertService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/ExpertService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/AdminService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/AdminService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/NotificationService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/NotificationService.cs)
 
 ## Test and QA Harness
 

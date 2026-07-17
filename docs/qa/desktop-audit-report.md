@@ -14,9 +14,9 @@
 - Frontend health: `http://localhost:3000/api/health`
 - Backend health: `http://localhost:5198/health/ready`
 - Seeded local accounts:
-  - learner: `learner@oet-prep.dev`
-  - expert: `expert@oet-prep.dev`
-  - admin: `admin@oet-prep.dev`
+  - learner: `learner@oet-with-dr-hesham.dev`
+  - expert: `expert@oet-with-dr-hesham.dev`
+  - admin: `admin@oet-with-dr-hesham.dev`
   - shared password: `Password123!`
 
 ## Architecture Summary
@@ -43,10 +43,10 @@
 - `desktop:dev` now aligns with the Docker-first validation baseline in [`scripts/electron-dev.cjs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/scripts/electron-dev.cjs).
 - Packaging flow was hardened in [`electron-builder.config.cjs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/electron-builder.config.cjs) and [`scripts/desktop-dist.cjs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/scripts/desktop-dist.cjs).
 - SQLite-safe service fallbacks were added in:
-  - [`backend/src/OetLearner.Api/Services/LearnerService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/LearnerService.cs)
-  - [`backend/src/OetLearner.Api/Services/ExpertService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/ExpertService.cs)
-  - [`backend/src/OetLearner.Api/Services/AdminService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/AdminService.cs)
-  - [`backend/src/OetLearner.Api/Services/NotificationService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetLearner.Api/Services/NotificationService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/LearnerService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/ExpertService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/ExpertService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/AdminService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/AdminService.cs)
+  - [`backend/src/OetWithDrHesham.Api/Services/NotificationService.cs`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/backend/src/OetWithDrHesham.Api/Services/NotificationService.cs)
 - Desktop-specific Playwright coverage was added under [`tests/e2e/desktop`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tests/e2e/desktop).
 - Privileged Playwright auth bootstrapping now seeds fresh role sessions during setup and reuses them across worker processes, which removed the remaining expert MFA concurrency failure from the seeded browser role-smoke matrix.
 

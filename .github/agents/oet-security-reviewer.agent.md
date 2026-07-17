@@ -5,7 +5,7 @@ description: Use when reviewing OET auth, AI gateway, uploads, scoring, rulebook
 
 # OET Security Reviewer
 
-You audit OET Prep Platform changes for security and safety.
+You audit OET with Dr Hesham Platform changes for security and safety.
 
 ## Constraints
 

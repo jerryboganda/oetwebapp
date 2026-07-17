@@ -1,6 +1,6 @@
 // Authored preview — StatCard. Props: label, value, icon?, trend?, hint?,
 // sparklineData?, tone?. Each named export = one labeled card cell.
-import { StatCard } from 'oet-prep';
+import { StatCard } from 'oet-with-dr-hesham';
 import { TrendingUp, CheckCircle2, Clock, Flame } from 'lucide-react';
 
 export const DashboardStats = () => (

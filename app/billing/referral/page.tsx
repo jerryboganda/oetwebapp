@@ -100,10 +100,10 @@ export default function ReferralPage() {
 
   const shareCode = useCallback(async () => {
     if (!info?.referralCode) return;
-    const shareText = `Use my referral code ${info.referralCode} for any referral benefit currently published by OET Prep.`;
+    const shareText = `Use my referral code ${info.referralCode} for any referral benefit currently published by OET with Dr Hesham.`;
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
-        await navigator.share({ title: 'Join OET Prep', text: shareText });
+        await navigator.share({ title: 'Join OET with Dr Hesham', text: shareText });
         analytics.track('referral_shared_native');
       } else {
         await navigator.clipboard.writeText(shareText);
@@ -147,7 +147,7 @@ export default function ReferralPage() {
           icon={Gift}
           accent="purple"
           title="Referral program"
-          description="Invite colleagues and classmates to OET Prep. Referral benefits are applied only when the backend confirms the current terms and a qualifying paid subscription clears."
+          description="Invite colleagues and classmates to OET with Dr Hesham. Referral benefits are applied only when the backend confirms the current terms and a qualifying paid subscription clears."
           highlights={heroHighlights}
         />
 

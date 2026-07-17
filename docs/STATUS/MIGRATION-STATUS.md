@@ -23,7 +23,7 @@ Why desktop-only: Electron's penalty (bundled Chromium ~100 MB, 200–300 MB RAM
 ## 2. Architecture
 
 The Tauri shell (`oet-desktop.exe`, Rust) orchestrates the **same two sidecars Electron spawns today**:
-1. Bundled `.NET` API (`OetLearner.Api.exe`) on a loopback port (SQLite for offline).
+1. Bundled `.NET` API (`OetWithDrHesham.Api.exe`) on a loopback port (SQLite for offline).
 2. `node .next/standalone/server.js` (Next.js SSR — middleware/CSP/CSRF intact).
 
 The WebView2 (Win) / WKWebView (mac) window points at `http://127.0.0.1:{port}`. The injected `inject/desktop-bridge.js` reproduces the exact `window.desktopBridge` contract (`types/desktop.d.ts`) the Electron preload exposes — **the frontend needs zero changes**.

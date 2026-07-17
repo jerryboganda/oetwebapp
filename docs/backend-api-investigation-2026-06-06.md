@@ -41,14 +41,14 @@
 
 ## Validation
 
-- `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --no-restore --disable-build-servers -p:UseSharedCompilation=false -p:RunAnalyzers=false -v:minimal`: passed with warnings only.
-- `dotnet build backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-restore --disable-build-servers -p:UseSharedCompilation=false -p:RunAnalyzers=false -v:minimal -m:1`: passed with warnings only.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName~AdminBillingEndpointsTests|FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~WritingWave6ServiceTests|FullyQualifiedName~SpeakingReviewVoiceNoteServiceTests" --logger "console;verbosity=normal"`: passed, 67 tests.
+- `dotnet build backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj --no-restore --disable-build-servers -p:UseSharedCompilation=false -p:RunAnalyzers=false -v:minimal`: passed with warnings only.
+- `dotnet build backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --no-restore --disable-build-servers -p:UseSharedCompilation=false -p:RunAnalyzers=false -v:minimal -m:1`: passed with warnings only.
+- `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --no-build --filter "FullyQualifiedName~AdminBillingEndpointsTests|FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~WritingWave6ServiceTests|FullyQualifiedName~SpeakingReviewVoiceNoteServiceTests" --logger "console;verbosity=normal"`: passed, 67 tests.
 - `pnpm exec tsc --noEmit`: passed.
 - `pnpm run lint`: passed with 0 errors and 364 existing warnings.
 - `pnpm test`: passed, 280 files and 1,866 tests.
 - `pnpm run backend:build`: passed with existing warnings only.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName~Writing.WritingEvaluationPipelineTests" --logger "console;verbosity=normal"`: passed, 4 tests after the SQLite-friendly profile-country fix.
+- `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --no-build --filter "FullyQualifiedName~Writing.WritingEvaluationPipelineTests" --logger "console;verbosity=normal"`: passed, 4 tests after the SQLite-friendly profile-country fix.
 - `pnpm run backend:test`: failed, 14 failed / 758 passed / 772 total, then test host crash warning.
 - `Test-NetConnection -ComputerName 127.0.0.1 -Port 5432`: TCP succeeded.
 - `bash -n scripts/deploy/auto-deploy-ghcr.sh` and `bash -n scripts/deploy/validate-production-env.sh`: passed.

@@ -131,10 +131,10 @@
   - `npm.cmd run test:e2e:smoke`
   - Result: `175 passed, 478 skipped, 0 failed`
 - Backend pass:
-  - `dotnet test backend/OetLearner.sln --configuration Release --no-logo`
+  - `dotnet test backend/OetWithDrHesham.sln --configuration Release --no-logo`
   - Result: `111 passed, 0 failed`
 - Targeted backend MFA validation:
-  - `dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~AuthEndpoints_BeginAndConfirmAuthenticatorSetup_EnableMfaForVerifiedExpert"`
+  - `dotnet test backend/OetWithDrHesham.sln --filter "FullyQualifiedName~AuthEndpoints_BeginAndConfirmAuthenticatorSetup_EnableMfaForVerifiedExpert"`
 - CI smoke workflow added:
   - `.github/workflows/qa-smoke.yml`
   - Runs backend tests, boots the Docker smoke stack, executes `npm run test:e2e:smoke`, and uploads Playwright artifacts

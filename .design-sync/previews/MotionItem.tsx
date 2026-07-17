@@ -1,7 +1,7 @@
 // Authored preview — MotionItem. An entrance-animation wrapper for a single
 // list row / element (surface="item"). Motion is forced to final state globally,
 // so children render visibly. Give it real, meaningful children.
-import { MotionItem, Card, CardTitle, Badge } from 'oet-prep';
+import { MotionItem, Card, CardTitle, Badge } from 'oet-with-dr-hesham';
 
 export const SingleRow = () => (
   <MotionItem>

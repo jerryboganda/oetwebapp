@@ -11,8 +11,8 @@ function argValue(name) {
 const platform = argValue('--platform') ?? 'both';
 const version = argValue('--version');
 const versionCode = argValue('--version-code');
-const iosBundleId = 'com.oetprep.learner';
-const androidPackageName = 'com.oetprep.learner';
+const iosBundleId = 'com.oetwithdrhesham.learner';
+const androidPackageName = 'com.oetwithdrhesham.learner';
 
 function fail(message) {
   console.error(`[mobile-release-preflight] ${message}`);

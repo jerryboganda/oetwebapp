@@ -15,8 +15,8 @@ if (!configuredAppUrl) {
 }
 
 const config: CapacitorConfig = {
-  appId: 'com.oetprep.learner',
-  appName: 'OET Prep Learner',
+  appId: 'com.oetwithdrhesham.learner',
+  appName: 'OET with Dr Hesham Learner',
   webDir: 'capacitor-web',
   server: {
     url: appUrl,
@@ -30,7 +30,7 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: false,
-    appendUserAgent: 'OETPrep-Capacitor',
+    appendUserAgent: 'OET with Dr Hesham-Capacitor',
     overrideUserAgent: undefined,
   },
   plugins: {

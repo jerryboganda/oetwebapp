@@ -2,7 +2,7 @@
 // backdrop), so each cell wraps it in a sized, transformed Stage that becomes the
 // containing block for the fixed elements — the drawer renders INSIDE the card
 // instead of escaping to the page viewport. Pass open + onClose so it mounts.
-import { Drawer, Button, Badge, InlineAlert } from 'oet-prep';
+import { Drawer, Button, Badge, InlineAlert } from 'oet-with-dr-hesham';
 import type { ReactNode } from 'react';
 
 const Stage = ({ children }: { children: ReactNode }) => (

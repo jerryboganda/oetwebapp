@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OetLearner.Scripts.StripeProductSeeder;
+namespace OetWithDrHesham.Scripts.StripeProductSeeder;
 
 /// <summary>Canonical Stripe seed catalogue parsed from catalog.json.</summary>
 public sealed class CatalogManifest

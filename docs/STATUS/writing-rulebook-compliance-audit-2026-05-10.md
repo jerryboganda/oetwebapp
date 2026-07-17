@@ -48,14 +48,14 @@ Every canonical Writing rule now has an explicit coverage status through the gen
 
 ## Validation Run
 
-- `dotnet test backend/OetLearner.sln --no-restore --filter "FullyQualifiedName~WritingEvaluationPipelineTests|FullyQualifiedName~WritingCoachServiceTests|FullyQualifiedName~WritingRulebookCoverageValidatorTests"` -> 16 passed, 0 failed.
-- `dotnet test backend/OetLearner.sln --no-restore --filter "FullyQualifiedName~WritingExamDraftPatch_RejectsContentDuringReadingWindow|FullyQualifiedName~WritingExamDraftPatch_RejectsScratchpadDuringReadingWindow|FullyQualifiedName~WritingExamDraftPatch_RejectsChecklistDuringReadingWindow|FullyQualifiedName~WritingExamSubmit_RejectsContentDuringReadingWindow|FullyQualifiedName~WritingLint_DerivesCaseNotesMarkersFromServerContent|FullyQualifiedName~WritingRulebookEndpoint_AcceptsKebabProfessionSlugs"` -> 8 passed, 0 failed.
-- `dotnet test backend/OetLearner.sln --no-restore --filter "FullyQualifiedName~WritingRuleEngineTests|FullyQualifiedName~WritingEngineParityTests"` -> 53 passed, 0 failed.
+- `dotnet test backend/OetWithDrHesham.sln --no-restore --filter "FullyQualifiedName~WritingEvaluationPipelineTests|FullyQualifiedName~WritingCoachServiceTests|FullyQualifiedName~WritingRulebookCoverageValidatorTests"` -> 16 passed, 0 failed.
+- `dotnet test backend/OetWithDrHesham.sln --no-restore --filter "FullyQualifiedName~WritingExamDraftPatch_RejectsContentDuringReadingWindow|FullyQualifiedName~WritingExamDraftPatch_RejectsScratchpadDuringReadingWindow|FullyQualifiedName~WritingExamDraftPatch_RejectsChecklistDuringReadingWindow|FullyQualifiedName~WritingExamSubmit_RejectsContentDuringReadingWindow|FullyQualifiedName~WritingLint_DerivesCaseNotesMarkersFromServerContent|FullyQualifiedName~WritingRulebookEndpoint_AcceptsKebabProfessionSlugs"` -> 8 passed, 0 failed.
+- `dotnet test backend/OetWithDrHesham.sln --no-restore --filter "FullyQualifiedName~WritingRuleEngineTests|FullyQualifiedName~WritingEngineParityTests"` -> 53 passed, 0 failed.
 - `npx vitest run lib/rulebook/__tests__/writing-rulebook-baseline.test.ts lib/rulebook/__tests__/writing-rulebook-coverage.test.ts lib/rulebook/__tests__/writing-rule-fixtures.test.ts lib/rulebook/__tests__/writing-professions.test.ts` -> 164 passed, 0 failed.
 - `npx tsc --noEmit` -> passed on rerun.
 - `git diff --check` on tracked Writing compliance files -> passed.
-- Isolated `dotnet test backend/OetLearner.sln --no-restore --filter "FullyQualifiedName~CriticalFlowsTests.WritingSubmission_QueuesAndCompletesEvaluation"` -> 1 passed, 0 failed after the mock AI scoring-contract fixture update.
-- Broad `dotnet test backend/OetLearner.sln --no-restore --filter "Writing" --logger "console;verbosity=minimal" --logger "trx;LogFileName=writing-broad-after-fix.trx"` -> 180 passed, 0 failed.
+- Isolated `dotnet test backend/OetWithDrHesham.sln --no-restore --filter "FullyQualifiedName~CriticalFlowsTests.WritingSubmission_QueuesAndCompletesEvaluation"` -> 1 passed, 0 failed after the mock AI scoring-contract fixture update.
+- Broad `dotnet test backend/OetWithDrHesham.sln --no-restore --filter "Writing" --logger "console;verbosity=minimal" --logger "trx;LogFileName=writing-broad-after-fix.trx"` -> 180 passed, 0 failed.
 - Earlier production smoke against the currently deployed environment: health `200`; authenticated rule lookup ok; authenticated lint ok with 26 rulebook findings. This does not prove the local closure fixes are live until deployment ships this change set.
 
 ## Recommended Next Phase

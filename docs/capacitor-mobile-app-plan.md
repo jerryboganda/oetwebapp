@@ -1,8 +1,8 @@
-# Capacitor Mobile App Conversion Plan — OET Prep Platform
+# Capacitor Mobile App Conversion Plan — OET with Dr Hesham Platform
 
 **Document version:** 1.0.0  
 **Date:** 2025-07-17  
-**Project:** OET Prep Learner (com.oetprep.learner)  
+**Project:** OET with Dr Hesham Learner (com.oetwithdrhesham.learner)  
 **Status:** Implementation-ready analysis and plan  
 
 ---
@@ -11,7 +11,7 @@
 
 ### What the Project Is
 
-OET Prep is a comprehensive OET (Occupational English Test) preparation platform built as a Next.js 15.4 App Router web application with an ASP.NET Core (.NET 8+) backend, PostgreSQL database (SQLite for desktop), and first-party JWT authentication. The platform serves three user roles — **Learner**, **Expert** (reviewer/instructor), and **Admin** — across approximately 120+ distinct routes covering diagnostic assessments, skill practice (listening, reading, writing, speaking), AI-powered conversation, mock exams, expert review workflows, study planning, achievements, billing, community features, and a full CMS/admin panel.
+OET with Dr Hesham is a comprehensive OET (Occupational English Test) preparation platform built as a Next.js 15.4 App Router web application with an ASP.NET Core (.NET 8+) backend, PostgreSQL database (SQLite for desktop), and first-party JWT authentication. The platform serves three user roles — **Learner**, **Expert** (reviewer/instructor), and **Admin** — across approximately 120+ distinct routes covering diagnostic assessments, skill practice (listening, reading, writing, speaking), AI-powered conversation, mock exams, expert review workflows, study planning, achievements, billing, community features, and a full CMS/admin panel.
 
 ### What the Mobile Plan Is
 
@@ -63,7 +63,7 @@ The Capacitor mobile integration is **70-80% complete**. Both Android and iOS na
 
 ### OWASP MASVS Compliance Matrix
 
-| Control Group | Relevance to OET Prep | Current Status | Gap |
+| Control Group | Relevance to OET with Dr Hesham | Current Status | Gap |
 |---|---|---|---|
 | **MASVS-STORAGE** | Auth tokens, offline cached content, user preferences | ✅ Good — secure storage helper is wired for auth tokens | Native-device validation still required |
 | **MASVS-CRYPTO** | Token storage, potential biometric key binding | ✅ Implemented for secure storage / biometric helper surface | Native-device validation still required |
@@ -158,7 +158,7 @@ The Capacitor mobile integration is **70-80% complete**. Both Android and iOS na
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    OET Prep Mobile App                       │
+│                    OET with Dr Hesham Mobile App                       │
 ├───────────────┬─────────────────────────────────────────────┤
 │   Native      │              WebView Layer                   │
 │   Shell       │  ┌──────────────────────────────────────┐   │
@@ -578,7 +578,7 @@ Deep linking requires a two-way association between the domain (`app.oetwithdrhe
     "apps": [],
     "details": [
       {
-        "appID": "TEAMID.com.oetprep.learner",
+        "appID": "TEAMID.com.oetwithdrhesham.learner",
         "paths": [
           "/dashboard/*",
           "/practice/*",
@@ -614,7 +614,7 @@ Deep linking requires a two-way association between the domain (`app.oetwithdrhe
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.oetprep.learner",
+      "package_name": "com.oetwithdrhesham.learner",
       "sha256_cert_fingerprints": ["<SHA256_FINGERPRINT>"]
     }
   }

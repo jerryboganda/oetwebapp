@@ -4,7 +4,7 @@
  * Phase 3 closure — admin form to grant or update a per-user Reading
  * policy override. Backed by `/v1/admin/reading-policy/users/{userId}`
  * (GET + PUT) which already exists at
- * `backend/src/OetLearner.Api/Endpoints/ReadingPolicyAdminEndpoints.cs:34-48`.
+ * `backend/src/OetWithDrHesham.Api/Endpoints/ReadingPolicyAdminEndpoints.cs:34-48`.
  *
  * Sits under the new `/admin/policies` namespace so future per-domain
  * policy admin pages (Listening, Mocks) can hang alongside.

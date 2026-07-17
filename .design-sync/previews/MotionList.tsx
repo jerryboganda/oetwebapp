@@ -2,7 +2,7 @@
 // container (surface="list"); typically wraps several MotionItem children that
 // stagger in. Motion is forced to final state globally, so children render
 // visibly. Give it real list children.
-import { MotionList, MotionItem, Card, Badge } from 'oet-prep';
+import { MotionList, MotionItem, Card, Badge } from 'oet-with-dr-hesham';
 
 const tasks = [
   { name: 'Speaking — Role-play: Reassure an anxious patient', tag: 'AI-marked', variant: 'violet' as const },

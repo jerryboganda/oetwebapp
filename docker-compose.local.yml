@@ -100,7 +100,7 @@ services:
       Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY}
       Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER}
       MaxUploadBytes: '${MAX_UPLOAD_BYTES}'
-      Storage__LocalRootPath: /var/opt/oet-learner/storage
+      Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage
       Features__EnableSwagger: 'true'
       # ── Speaking Module ──────────────────────────────────────────────────────
       LiveKit__Provider: ${LIVEKIT__PROVIDER:-disabled}
@@ -137,7 +137,7 @@ services:
     ports:
       - '8080:8080'
     volumes:
-      - oet_local_storage:/var/opt/oet-learner/storage
+      - oet_local_storage:/var/opt/oet-with-dr-hesham/storage
       - ./Project Real Content:/app/real-content:ro
 
   web:

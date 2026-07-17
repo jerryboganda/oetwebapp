@@ -2,7 +2,7 @@
 // each cell wraps it in a sized, transformed Stage that becomes the containing
 // block for the fixed element — the toast then renders INSIDE the card instead
 // of escaping to the page viewport. duration={0} disables the auto-dismiss timer.
-import { Toast } from 'oet-prep';
+import { Toast } from 'oet-with-dr-hesham';
 import type { ReactNode } from 'react';
 
 const Stage = ({ children }: { children: ReactNode }) => (

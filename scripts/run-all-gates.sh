@@ -4,7 +4,7 @@ set +e
 cd /opt/oetwebapp || exit 99
 
 echo "=== BUILD ==="
-dotnet build backend/OetLearner.sln --nologo -v q > /tmp/g_build.log 2>&1
+dotnet build backend/OetWithDrHesham.sln --nologo -v q > /tmp/g_build.log 2>&1
 echo "BUILD_EXIT=$?" >> /tmp/g_build.log
 
 echo "=== TEST ==="
@@ -23,7 +23,7 @@ run_batch() {
   local label="$1"
   local filter="$2"
   echo "--- BATCH: $label ---" >> /tmp/g_test.log
-  dotnet test backend/OetLearner.sln -c Debug --no-build -m:1 --nologo \
+  dotnet test backend/OetWithDrHesham.sln -c Debug --no-build -m:1 --nologo \
     --filter "$filter" --logger "console;verbosity=normal" \
     >> /tmp/g_test.log 2>&1
   local rc=$?

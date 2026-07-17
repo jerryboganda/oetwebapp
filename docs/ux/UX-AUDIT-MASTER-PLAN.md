@@ -1,4 +1,4 @@
-# UX Audit Master Plan — OET Prep Platform (A → Z, 100%)
+# UX Audit Master Plan — OET with Dr Hesham Platform (A → Z, 100%)
 
 > **Scope:** All 4 portals (Learner, Expert, Admin, Sponsor) • 217 routes • Web + Desktop (Electron) + Mobile (iOS/Android Capacitor)
 > **Goal:** Detect every UX gap, map every user journey, produce Figma-ready artifacts, and close 100% of gaps through phased delivery.

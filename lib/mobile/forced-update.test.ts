@@ -39,7 +39,7 @@ describe('forced-update', () => {
 
   describe('getAppVersion', () => {
     it('returns version info from native plugin', async () => {
-      mockApp.getInfo.mockResolvedValue({ version: '1.2.0', build: '5', name: 'OET Prep', id: 'com.oetprep.learner' });
+      mockApp.getInfo.mockResolvedValue({ version: '1.2.0', build: '5', name: 'OET with Dr Hesham', id: 'com.oetwithdrhesham.learner' });
       const result = await getAppVersion();
       expect(result).toEqual({
         currentVersion: '1.2.0',
@@ -57,7 +57,7 @@ describe('forced-update', () => {
 
   describe('checkForUpdate', () => {
     it('detects forced update when current version is below minimum', async () => {
-      mockApp.getInfo.mockResolvedValue({ version: '1.0.0', build: '1', name: 'OET Prep', id: 'com.oetprep.learner' });
+      mockApp.getInfo.mockResolvedValue({ version: '1.0.0', build: '1', name: 'OET with Dr Hesham', id: 'com.oetwithdrhesham.learner' });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify({ minVersion: '1.1.0', latestVersion: '1.2.0', forceUpdate: false }), {
@@ -75,7 +75,7 @@ describe('forced-update', () => {
     });
 
     it('detects no update needed when current version meets minimum', async () => {
-      mockApp.getInfo.mockResolvedValue({ version: '1.2.0', build: '5', name: 'OET Prep', id: 'com.oetprep.learner' });
+      mockApp.getInfo.mockResolvedValue({ version: '1.2.0', build: '5', name: 'OET with Dr Hesham', id: 'com.oetwithdrhesham.learner' });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify({ minVersion: '1.1.0', latestVersion: '1.2.0', forceUpdate: false }), {
@@ -91,7 +91,7 @@ describe('forced-update', () => {
     });
 
     it('detects forced update flag from backend', async () => {
-      mockApp.getInfo.mockResolvedValue({ version: '1.2.0', build: '5', name: 'OET Prep', id: 'com.oetprep.learner' });
+      mockApp.getInfo.mockResolvedValue({ version: '1.2.0', build: '5', name: 'OET with Dr Hesham', id: 'com.oetwithdrhesham.learner' });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify({ minVersion: '1.0.0', latestVersion: '1.3.0', forceUpdate: true }), {
@@ -107,7 +107,7 @@ describe('forced-update', () => {
     });
 
     it('does not block on network error', async () => {
-      mockApp.getInfo.mockResolvedValue({ version: '1.0.0', build: '1', name: 'OET Prep', id: 'com.oetprep.learner' });
+      mockApp.getInfo.mockResolvedValue({ version: '1.0.0', build: '1', name: 'OET with Dr Hesham', id: 'com.oetwithdrhesham.learner' });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network error'));
 

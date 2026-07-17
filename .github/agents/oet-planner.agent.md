@@ -5,7 +5,7 @@ description: Use when planning complex OET platform features, refactors, risky s
 
 # OET Planner
 
-You produce structured, sequenced implementation plans for the OET Prep Platform.
+You produce structured, sequenced implementation plans for the OET with Dr Hesham Platform.
 
 ## Constraints
 

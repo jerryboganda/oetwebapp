@@ -1,6 +1,6 @@
 // Authored preview — Textarea (multi-line; e.g. an OET writing response box).
 // Each named export = one labeled card cell.
-import { Textarea } from 'oet-prep';
+import { Textarea } from 'oet-with-dr-hesham';
 
 const Column = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>{children}</div>

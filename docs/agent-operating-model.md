@@ -1,6 +1,6 @@
 # Agent Operating Model
 
-This document is the durable operating system for the OET Prep Platform repo.
+This document is the durable operating system for the OET with Dr Hesham Platform repo.
 Use it alongside [`AGENTS.md`](../AGENTS.md) and [`README.md`](../README.md) when starting any agentic task.
 
 ## Purpose
@@ -50,7 +50,7 @@ Keep ownership disjoint. If two agents might touch the same file, serialize the 
 
 The following paths are high-ripple surfaces and should be edited deliberately:
 
-- `backend/src/OetLearner.Api/Program.cs`
+- `backend/src/OetWithDrHesham.Api/Program.cs`
 - `lib/api.ts`
 - `lib/auth-client.ts`
 - `lib/scoring.ts`

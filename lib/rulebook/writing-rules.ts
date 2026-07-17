@@ -3,7 +3,7 @@
  * Writing Rule Engine — Deterministic Detectors
  * ============================================================================
  *
- * Pure, testable, mirrors backend/src/OetLearner.Api/Services/WritingRules.cs.
+ * Pure, testable, mirrors backend/src/OetWithDrHesham.Api/Services/WritingRules.cs.
  *
  * Detectors consume the raw letter text plus a structured context object
  * and produce `LintFinding[]`. Each finding references a ruleId from the

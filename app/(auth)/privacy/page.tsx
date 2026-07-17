@@ -7,9 +7,9 @@ import legalStyles from '../../terms/terms.module.scss';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
 
 export const metadata: Metadata = {
-  title: 'Privacy Notice · OET with Dr Ahmed Hesham',
+  title: 'Privacy Notice · OET with Dr Hesham',
   description:
-    'How OET with Dr Ahmed Hesham collects, uses, retains, and protects your personal data, written under UK GDPR.',
+    'How OET with Dr Hesham collects, uses, retains, and protects your personal data, written under UK GDPR.',
 };
 
 const LAST_UPDATED = '26 April 2026';
@@ -28,7 +28,7 @@ const sections: LegalSection[] = [
     id: 'who-and-scope',
     title: 'Who this notice covers',
     lead:
-      'This Privacy Notice explains how OET with Dr Ahmed Hesham ("we", "us", "our") processes personal data when you use our learner platform, mobile and desktop apps, websites, marketing emails, and support channels.',
+      'This Privacy Notice explains how OET with Dr Hesham ("we", "us", "our") processes personal data when you use our learner platform, mobile and desktop apps, websites, marketing emails, and support channels.',
     bullets: [
       'We act as the data controller for personal data you give us directly (account details, submissions, payment metadata).',
       'For some services we also process data on behalf of sponsors or institutions (e.g. employer-funded learners). In those cases the sponsor is the controller and we are a processor under a written agreement.',
@@ -174,7 +174,7 @@ export default function PrivacyPage() {
   return (
     <AuthScreenShell
       brandHref={AUTH_ROUTES.signIn}
-      brandLabel="OET with Dr Ahmed Hesham"
+      brandLabel="OET with Dr Hesham"
       eyebrow="Legal"
       title="Privacy Notice"
       subtitle="What we collect, why, how long we keep it, and the rights you have over your data."
@@ -277,6 +277,12 @@ export default function PrivacyPage() {
                   <span>General support</span>
                   <a href="mailto:support@oetwithdrhesham.co.uk">
                     support@oetwithdrhesham.co.uk
+                  </a>
+                </div>
+                <div className={legalStyles.contactCard}>
+                  <span>Phone / WhatsApp</span>
+                  <a href="tel:+447961725989">
+                    +44 7961 725989
                   </a>
                 </div>
                 <div className={legalStyles.contactCard}>

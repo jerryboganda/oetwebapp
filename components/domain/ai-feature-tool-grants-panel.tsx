@@ -26,7 +26,7 @@ import {
  * cache server-side; the UI just refetches the current view.
  */
 
-// Mirror of OetLearner.Api.Domain.AiFeatureCodes (backend enforces server-side;
+// Mirror of OetWithDrHesham.Api.Domain.AiFeatureCodes (backend enforces server-side;
 // this is the picker list for "Add grant").
 const KNOWN_FEATURE_CODES = [
   'writing.grade',

@@ -1,5 +1,5 @@
 // Authored preview — ScoreRangeBadge. Each named export = one labeled card cell.
-import { ScoreRangeBadge } from 'oet-prep';
+import { ScoreRangeBadge } from 'oet-with-dr-hesham';
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>{children}</div>

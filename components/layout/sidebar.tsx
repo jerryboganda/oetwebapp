@@ -279,12 +279,12 @@ export function Sidebar({
         <Link
           href="/"
           className="pressable flex items-center justify-center text-navy transition-opacity hover:opacity-90"
-          aria-label="OET with Dr Ahmed Hesham home"
+          aria-label="OET with Dr Hesham home"
           onClick={() => { void triggerImpactHaptic('LIGHT'); }}
         >
           <Image
             src="/brand/oet-with-dr-hesham-logo.png"
-            alt="OET with Dr Ahmed Hesham"
+            alt="OET with Dr Hesham"
             width={400}
             height={140}
             priority
@@ -333,7 +333,7 @@ export function Sidebar({
           </li>
           <li>
             <a
-              href="mailto:support@edu80.app?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
+              href="mailto:support@oetwithdrhesham.co.uk?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
             >

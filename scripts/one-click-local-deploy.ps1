@@ -344,12 +344,12 @@ function Ensure-Postgres {
     throw "PostgreSQL did not become ready on localhost:5432."
   }
 
-  $dbExists = & $psql -h 127.0.0.1 -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='oet_learner_dev';"
+  $dbExists = & $psql -h 127.0.0.1 -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='oet_with_dr_hesham_dev';"
   if (($dbExists | Out-String).Trim() -ne '1') {
-    Write-Warn "Database oet_learner_dev does not exist. Creating it."
-    & $psql -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE oet_learner_dev;" | Out-Host
+    Write-Warn "Database oet_with_dr_hesham_dev does not exist. Creating it."
+    & $psql -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE oet_with_dr_hesham_dev;" | Out-Host
   }
-  Write-Ok "Database oet_learner_dev is available."
+  Write-Ok "Database oet_with_dr_hesham_dev is available."
 }
 
 function Start-LocalProcess {
@@ -409,7 +409,7 @@ function Ensure-NodeDependencies {
 function Test-Login {
   Write-Step "Testing local learner sign-in through the frontend proxy"
   $candidates = @(
-    @{ Email = 'learner@oet-prep.dev'; Password = 'Password123!' },
+    @{ Email = 'learner@oet-with-dr-hesham.dev'; Password = 'Password123!' },
     @{ Email = 'mindreader420123@gmail.com'; Password = '12345678' },
     @{ Email = 'xhsjs5901@gmail.com'; Password = '12345678' },
     @{ Email = 'manwara575@gmail.com'; Password = '12345678' }
@@ -440,7 +440,7 @@ function Show-IntegrationSummary {
   param([string]$ProjectRoot)
 
   Write-Step "Checking local integration configuration"
-  $appSettingsPath = Join-Path $ProjectRoot 'backend\src\OetLearner.Api\appsettings.Development.json'
+  $appSettingsPath = Join-Path $ProjectRoot 'backend\src\OetWithDrHesham.Api\appsettings.Development.json'
   if (-not (Test-Path -LiteralPath $appSettingsPath)) {
     Write-Warn "Could not find appsettings.Development.json for optional integration checks."
     return
@@ -556,10 +556,10 @@ Write-Host "  API ready:      http://localhost:5198/health/ready"
 Write-Host "  API live:       http://localhost:5198/health/live"
 Write-Host ""
 Write-Host "Test users" -ForegroundColor Cyan
-Write-Host "  Learner:            learner@oet-prep.dev / Password123!"
-Write-Host "  Expert:             expert@oet-prep.dev / Password123!"
-Write-Host "  Secondary expert:   expert-unauthorised@oet-prep.dev / Password123!"
-Write-Host "  Admin:              admin@oet-prep.dev / Password123!"
+Write-Host "  Learner:            learner@oet-with-dr-hesham.dev / Password123!"
+Write-Host "  Expert:             expert@oet-with-dr-hesham.dev / Password123!"
+Write-Host "  Secondary expert:   expert-unauthorised@oet-with-dr-hesham.dev / Password123!"
+Write-Host "  Admin:              admin@oet-with-dr-hesham.dev / Password123!"
 Write-Host ""
 Write-Host "Logs" -ForegroundColor Cyan
 Write-Host "  $logDir"

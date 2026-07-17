@@ -1,7 +1,7 @@
 // Authored preview — TabPanel, shown inside a controlled Tabs. TabPanel renders
 // its children only when `id === activeTab`. Each named export = one cell.
 import { useState } from 'react';
-import { Tabs, TabPanel, Card, CardTitle, Badge } from 'oet-prep';
+import { Tabs, TabPanel, Card, CardTitle, Badge } from 'oet-with-dr-hesham';
 
 export const WithTabs = () => {
   const [active, setActive] = useState('overview');

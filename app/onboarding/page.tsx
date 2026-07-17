@@ -13,7 +13,7 @@ import { completeOnboarding, fetchOnboardingState, startOnboarding } from '@/lib
 const STEPS = [
   {
     id: 'welcome',
-    title: 'Welcome to OET Prep',
+    title: 'Welcome to OET with Dr Hesham',
     icon: BookOpen,
     heading: 'What is the OET?',
     description:

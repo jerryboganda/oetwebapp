@@ -1,5 +1,5 @@
 // Authored preview — EmptyState. Each named export = one labeled card cell.
-import { EmptyState, Button } from 'oet-prep';
+import { EmptyState, Button } from 'oet-with-dr-hesham';
 
 export const NoMockExams = () => (
   <div style={{ maxWidth: 520 }}>

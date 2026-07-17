@@ -14,30 +14,30 @@
 
 ### Backend files to create
 
-- `backend/src/OetLearner.Api/Configuration/AuthTokenOptions.cs`
-- `backend/src/OetLearner.Api/Configuration/SmtpOptions.cs`
-- `backend/src/OetLearner.Api/Contracts/AuthRequests.cs`
-- `backend/src/OetLearner.Api/Contracts/AuthResponses.cs`
-- `backend/src/OetLearner.Api/Domain/AuthEntities.cs`
-- `backend/src/OetLearner.Api/Services/AuthTokenService.cs`
-- `backend/src/OetLearner.Api/Services/EmailOtpService.cs`
-- `backend/src/OetLearner.Api/Services/AuthService.cs`
-- `backend/src/OetLearner.Api/Services/SmtpEmailSender.cs`
-- `backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs`
-- `backend/src/OetLearner.Api/Data/Migrations/<timestamp>_IntegratedIdentityAuth.cs`
+- `backend/src/OetWithDrHesham.Api/Configuration/AuthTokenOptions.cs`
+- `backend/src/OetWithDrHesham.Api/Configuration/SmtpOptions.cs`
+- `backend/src/OetWithDrHesham.Api/Contracts/AuthRequests.cs`
+- `backend/src/OetWithDrHesham.Api/Contracts/AuthResponses.cs`
+- `backend/src/OetWithDrHesham.Api/Domain/AuthEntities.cs`
+- `backend/src/OetWithDrHesham.Api/Services/AuthTokenService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/EmailOtpService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/AuthService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/SmtpEmailSender.cs`
+- `backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs`
+- `backend/src/OetWithDrHesham.Api/Data/Migrations/<timestamp>_IntegratedIdentityAuth.cs`
 
 ### Backend files to modify
 
-- `backend/src/OetLearner.Api/OetLearner.Api.csproj`
-- `backend/src/OetLearner.Api/Program.cs`
-- `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
-- `backend/src/OetLearner.Api/Domain/Entities.cs`
-- `backend/src/OetLearner.Api/Domain/ExpertEntities.cs`
-- `backend/src/OetLearner.Api/Domain/AdminEntities.cs`
-- `backend/src/OetLearner.Api/Services/SeedData.cs`
-- `backend/src/OetLearner.Api/appsettings.json`
-- `backend/src/OetLearner.Api/appsettings.Development.json`
-- `backend/src/OetLearner.Api/appsettings.Production.json`
+- `backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj`
+- `backend/src/OetWithDrHesham.Api/Program.cs`
+- `backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs`
+- `backend/src/OetWithDrHesham.Api/Domain/Entities.cs`
+- `backend/src/OetWithDrHesham.Api/Domain/ExpertEntities.cs`
+- `backend/src/OetWithDrHesham.Api/Domain/AdminEntities.cs`
+- `backend/src/OetWithDrHesham.Api/Services/SeedData.cs`
+- `backend/src/OetWithDrHesham.Api/appsettings.json`
+- `backend/src/OetWithDrHesham.Api/appsettings.Development.json`
+- `backend/src/OetWithDrHesham.Api/appsettings.Production.json`
 
 ### Frontend files to create
 
@@ -73,11 +73,11 @@
 
 ### Test files to create or modify
 
-- `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
-- `backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs`
-- `backend/tests/OetLearner.Api.Tests/ExpertFlowsTests.cs`
-- `backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs`
-- `backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`
+- `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
+- `backend/tests/OetWithDrHesham.Api.Tests/AdminFlowsTests.cs`
+- `backend/tests/OetWithDrHesham.Api.Tests/ExpertFlowsTests.cs`
+- `backend/tests/OetWithDrHesham.Api.Tests/ProductionReadinessTests.cs`
+- `backend/tests/OetWithDrHesham.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`
 - `lib/__tests__/auth-client.test.ts`
 - `contexts/__tests__/auth-context.test.tsx`
 
@@ -94,11 +94,11 @@
 ### Task 1: Define the Unified Auth Domain
 
 **Files:**
-- Create: `backend/src/OetLearner.Api/Domain/AuthEntities.cs`
-- Modify: `backend/src/OetLearner.Api/Domain/Entities.cs`
-- Modify: `backend/src/OetLearner.Api/Domain/ExpertEntities.cs`
-- Modify: `backend/src/OetLearner.Api/Domain/AdminEntities.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Domain/AuthEntities.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Domain/Entities.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Domain/ExpertEntities.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Domain/AdminEntities.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -110,7 +110,7 @@ Add an xUnit test that expects the database model to contain:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL because the auth entities and DbSets do not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -132,22 +132,22 @@ Also link seeded learner, expert, and admin records to an auth account id instea
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS for the new domain-model presence test.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Domain/AuthEntities.cs backend/src/OetLearner.Api/Domain/Entities.cs backend/src/OetLearner.Api/Domain/ExpertEntities.cs backend/src/OetLearner.Api/Domain/AdminEntities.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Domain/AuthEntities.cs backend/src/OetWithDrHesham.Api/Domain/Entities.cs backend/src/OetWithDrHesham.Api/Domain/ExpertEntities.cs backend/src/OetWithDrHesham.Api/Domain/AdminEntities.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: add unified auth domain entities"
 ```
 
 ### Task 2: Wire EF Core and Migration for Auth Storage
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
-- Create: `backend/src/OetLearner.Api/Data/Migrations/<timestamp>_IntegratedIdentityAuth.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Data/Migrations/<timestamp>_IntegratedIdentityAuth.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -155,7 +155,7 @@ Add an integration test that creates an auth user and refresh token via `Learner
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL because `DbSet`s and mappings are missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -170,25 +170,25 @@ Generate the migration after the model compiles.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS for persistence tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Data/LearnerDbContext.cs backend/src/OetLearner.Api/Data/Migrations
+git add backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs backend/src/OetWithDrHesham.Api/Data/Migrations
 git commit -m "feat: add auth persistence model"
 ```
 
 ### Task 3: Replace Firebase/Auth Assumptions with Backend Token Options
 
 **Files:**
-- Create: `backend/src/OetLearner.Api/Configuration/AuthTokenOptions.cs`
-- Modify: `backend/src/OetLearner.Api/Program.cs`
-- Modify: `backend/src/OetLearner.Api/appsettings.json`
-- Modify: `backend/src/OetLearner.Api/appsettings.Development.json`
-- Modify: `backend/src/OetLearner.Api/appsettings.Production.json`
-- Test: `backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Configuration/AuthTokenOptions.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Program.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/appsettings.json`
+- Modify: `backend/src/OetWithDrHesham.Api/appsettings.Development.json`
+- Modify: `backend/src/OetWithDrHesham.Api/appsettings.Production.json`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/ProductionReadinessTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -196,7 +196,7 @@ Add tests asserting the app boots with local auth configuration and fails fast w
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter ProductionReadinessTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter ProductionReadinessTests`
 Expected: FAIL because the new options validation is not in place.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -218,22 +218,22 @@ Update `Program.cs` to:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter ProductionReadinessTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter ProductionReadinessTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Configuration/AuthTokenOptions.cs backend/src/OetLearner.Api/Program.cs backend/src/OetLearner.Api/appsettings.json backend/src/OetLearner.Api/appsettings.Development.json backend/src/OetLearner.Api/appsettings.Production.json backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs
+git add backend/src/OetWithDrHesham.Api/Configuration/AuthTokenOptions.cs backend/src/OetWithDrHesham.Api/Program.cs backend/src/OetWithDrHesham.Api/appsettings.json backend/src/OetWithDrHesham.Api/appsettings.Development.json backend/src/OetWithDrHesham.Api/appsettings.Production.json backend/tests/OetWithDrHesham.Api.Tests/ProductionReadinessTests.cs
 git commit -m "feat: configure first-party token auth"
 ```
 
 ### Task 4: Implement Auth Request and Response Contracts
 
 **Files:**
-- Create: `backend/src/OetLearner.Api/Contracts/AuthRequests.cs`
-- Create: `backend/src/OetLearner.Api/Contracts/AuthResponses.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Contracts/AuthRequests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Contracts/AuthResponses.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -251,7 +251,7 @@ Add API tests that deserialize the expected shapes for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL because the contracts and endpoints do not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -278,24 +278,24 @@ Minimum response models:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS for serialization contract tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Contracts/AuthRequests.cs backend/src/OetLearner.Api/Contracts/AuthResponses.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Contracts/AuthRequests.cs backend/src/OetWithDrHesham.Api/Contracts/AuthResponses.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: define auth api contracts"
 ```
 
 ### Task 5: Add Email Delivery Abstraction and SMTP-backed OTP Sending
 
 **Files:**
-- Create: `backend/src/OetLearner.Api/Configuration/SmtpOptions.cs`
-- Create: `backend/src/OetLearner.Api/Services/SmtpEmailSender.cs`
-- Create: `backend/src/OetLearner.Api/Services/EmailOtpService.cs`
-- Modify: `backend/src/OetLearner.Api/Program.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Configuration/SmtpOptions.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Services/SmtpEmailSender.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Services/EmailOtpService.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Program.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -307,7 +307,7 @@ Add tests that request an email verification OTP and assert:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL because no OTP service exists.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -324,22 +324,22 @@ Development rule:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Configuration/SmtpOptions.cs backend/src/OetLearner.Api/Services/SmtpEmailSender.cs backend/src/OetLearner.Api/Services/EmailOtpService.cs backend/src/OetLearner.Api/Program.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Configuration/SmtpOptions.cs backend/src/OetWithDrHesham.Api/Services/SmtpEmailSender.cs backend/src/OetWithDrHesham.Api/Services/EmailOtpService.cs backend/src/OetWithDrHesham.Api/Program.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: add email otp delivery"
 ```
 
 ### Task 6: Implement Password Auth, Refresh Tokens, and Current Session Service
 
 **Files:**
-- Create: `backend/src/OetLearner.Api/Services/AuthTokenService.cs`
-- Create: `backend/src/OetLearner.Api/Services/AuthService.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Services/AuthTokenService.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Services/AuthService.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -353,7 +353,7 @@ Add tests for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL because the auth service is missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -369,23 +369,23 @@ Use one auth account per human and role claims to decide learner/expert/admin ac
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Services/AuthTokenService.cs backend/src/OetLearner.Api/Services/AuthService.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Services/AuthTokenService.cs backend/src/OetWithDrHesham.Api/Services/AuthService.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: add core auth service and sessions"
 ```
 
 ### Task 7: Implement Email Verification OTP Flow
 
 **Files:**
-- Create: `backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs`
-- Modify: `backend/src/OetLearner.Api/Services/AuthService.cs`
-- Modify: `backend/src/OetLearner.Api/Program.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Create: `backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Services/AuthService.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Program.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -398,7 +398,7 @@ Add endpoint tests for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -418,22 +418,22 @@ Rule:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs backend/src/OetLearner.Api/Services/AuthService.cs backend/src/OetLearner.Api/Program.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs backend/src/OetWithDrHesham.Api/Services/AuthService.cs backend/src/OetWithDrHesham.Api/Program.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: add email verification auth flow"
 ```
 
 ### Task 8: Implement Authenticator App MFA and Recovery Codes
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Services/AuthService.cs`
-- Modify: `backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Services/AuthService.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -446,7 +446,7 @@ Add tests for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -465,23 +465,23 @@ Behavior:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Services/AuthService.cs backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Services/AuthService.cs backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: add authenticator app mfa"
 ```
 
 ### Task 9: Seed Real Auth Accounts for Learner, Expert, and Admin
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Services/SeedData.cs`
-- Modify: `backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs`
-- Modify: `backend/tests/OetLearner.Api.Tests/ExpertFlowsTests.cs`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Services/SeedData.cs`
+- Modify: `backend/tests/OetWithDrHesham.Api.Tests/AdminFlowsTests.cs`
+- Modify: `backend/tests/OetWithDrHesham.Api.Tests/ExpertFlowsTests.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -494,7 +494,7 @@ and that they map to the correct domain records and roles.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter "AuthFlowsTests|AdminFlowsTests|ExpertFlowsTests"`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter "AuthFlowsTests|AdminFlowsTests|ExpertFlowsTests"`
 Expected: FAIL.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -508,13 +508,13 @@ Also create a proper admin auth account because the current code only assumes ad
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter "AuthFlowsTests|AdminFlowsTests|ExpertFlowsTests"`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter "AuthFlowsTests|AdminFlowsTests|ExpertFlowsTests"`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Services/SeedData.cs backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs backend/tests/OetLearner.Api.Tests/ExpertFlowsTests.cs backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Services/SeedData.cs backend/tests/OetWithDrHesham.Api.Tests/AdminFlowsTests.cs backend/tests/OetWithDrHesham.Api.Tests/ExpertFlowsTests.cs backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: seed unified auth users for all roles"
 ```
 
@@ -756,11 +756,11 @@ git commit -m "feat: switch api client to first-party auth tokens"
 ### Task 15: Add Password Reset and Account Recovery
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Services/AuthService.cs`
-- Modify: `backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Services/AuthService.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs`
 - Create: `app/(auth)/forgot-password/page.tsx`
 - Create: `app/(auth)/reset-password/page.tsx`
-- Test: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -772,7 +772,7 @@ Add tests for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: FAIL.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -785,13 +785,13 @@ Use one-time expiring reset tokens delivered by email.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter AuthFlowsTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter AuthFlowsTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Services/AuthService.cs backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs app/(auth)/forgot-password/page.tsx app/(auth)/reset-password/page.tsx backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs
+git add backend/src/OetWithDrHesham.Api/Services/AuthService.cs backend/src/OetWithDrHesham.Api/Endpoints/AuthEndpoints.cs app/(auth)/forgot-password/page.tsx app/(auth)/reset-password/page.tsx backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs
 git commit -m "feat: add password reset flow"
 ```
 
@@ -803,7 +803,7 @@ git commit -m "feat: add password reset flow"
 - Modify: `docker-compose.production.yml`
 - Modify: `DEPLOYMENT.md`
 - Modify: `README.md`
-- Test: `backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs`
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/ProductionReadinessTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -815,7 +815,7 @@ Add production-readiness tests requiring:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter ProductionReadinessTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter ProductionReadinessTests`
 Expected: FAIL.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -839,22 +839,22 @@ Document localhost and VPS Docker behavior.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln --filter ProductionReadinessTests`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter ProductionReadinessTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .env.example .env.production.example docker-compose.production.yml DEPLOYMENT.md README.md backend/tests/OetLearner.Api.Tests/ProductionReadinessTests.cs
+git add .env.example .env.production.example docker-compose.production.yml DEPLOYMENT.md README.md backend/tests/OetWithDrHesham.Api.Tests/ProductionReadinessTests.cs
 git commit -m "docs: update deployment config for integrated auth"
 ```
 
 ### Task 17: End-to-End Verification Across All User Types
 
 **Files:**
-- Modify: `backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs`
-- Modify: `backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs`
-- Modify: `backend/tests/OetLearner.Api.Tests/ExpertFlowsTests.cs`
+- Modify: `backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs`
+- Modify: `backend/tests/OetWithDrHesham.Api.Tests/AdminFlowsTests.cs`
+- Modify: `backend/tests/OetWithDrHesham.Api.Tests/ExpertFlowsTests.cs`
 - Modify: `contexts/__tests__/auth-context.test.tsx`
 
 - [ ] **Step 1: Write the failing test**
@@ -866,7 +866,7 @@ Add final role-based flow coverage:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test backend/OetLearner.sln --filter "AuthFlowsTests|AdminFlowsTests|ExpertFlowsTests"`
+Run: `dotnet test backend/OetWithDrHesham.sln --filter "AuthFlowsTests|AdminFlowsTests|ExpertFlowsTests"`
 Run: `npm test`
 Expected: at least one auth regression still failing before final fixes.
 
@@ -881,7 +881,7 @@ Patch any remaining auth edge cases:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test backend/OetLearner.sln`
+Run: `dotnet test backend/OetWithDrHesham.sln`
 Expected: PASS
 
 Run: `npm test`
@@ -890,13 +890,13 @@ Expected: PASS
 Run: `npm run build`
 Expected: PASS
 
-Run: `dotnet build backend/OetLearner.sln`
+Run: `dotnet build backend/OetWithDrHesham.sln`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs backend/tests/OetLearner.Api.Tests/ExpertFlowsTests.cs contexts/__tests__/auth-context.test.tsx
+git add backend/tests/OetWithDrHesham.Api.Tests/AuthFlowsTests.cs backend/tests/OetWithDrHesham.Api.Tests/AdminFlowsTests.cs backend/tests/OetWithDrHesham.Api.Tests/ExpertFlowsTests.cs contexts/__tests__/auth-context.test.tsx
 git commit -m "test: verify integrated auth across all roles"
 ```
 
@@ -924,7 +924,7 @@ git commit -m "test: verify integrated auth across all roles"
 - [ ] Password reset works
 - [ ] Docker localhost boot works with configured auth env vars
 - [ ] Production startup fails fast on missing auth or SMTP secrets
-- [ ] `dotnet test backend/OetLearner.sln` passes
+- [ ] `dotnet test backend/OetWithDrHesham.sln` passes
 - [ ] `npm test` passes
 - [ ] `npm run build` passes
-- [ ] `dotnet build backend/OetLearner.sln` passes
+- [ ] `dotnet build backend/OetWithDrHesham.sln` passes

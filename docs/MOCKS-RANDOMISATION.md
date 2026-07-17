@@ -7,7 +7,7 @@
 
 `RandomisationHelper.SeededShuffle<T>` provides a **deterministic, learner-keyed** Fisher-Yates shuffle that mock authoring + learner delivery surfaces can use to vary item order without losing reproducibility for grading and analytics.
 
-The helper lives in `backend/src/OetLearner.Api/Services/RandomisationHelper.cs` and ships with 9 unit tests. **It is intentionally not yet wired into the live Reading / Listening DTO projections** — see "Why deferred" below.
+The helper lives in `backend/src/OetWithDrHesham.Api/Services/RandomisationHelper.cs` and ships with 9 unit tests. **It is intentionally not yet wired into the live Reading / Listening DTO projections** — see "Why deferred" below.
 
 ## API
 
@@ -69,7 +69,7 @@ Until that migration ships, the helper exists for:
 ## Validation
 
 ```powershell
-dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~RandomisationHelper"
+dotnet test backend/OetWithDrHesham.sln --filter "FullyQualifiedName~RandomisationHelper"
 # → Passed: 9, Failed: 0, Total: 9
 ```
 
@@ -77,5 +77,5 @@ dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~RandomisationHel
 
 - [`MOCKS-OPTION-ID-MIGRATION.md`](./MOCKS-OPTION-ID-MIGRATION.md) — structural migration plan (Wave 1.1).
 - [`docs/mocks/PROGRESS.md`](./mocks/PROGRESS.md) — V2 Wave 8 entry.
-- `backend/src/OetLearner.Api/Services/RandomisationHelper.cs`.
-- `backend/tests/OetLearner.Api.Tests/RandomisationHelperTests.cs`.
+- `backend/src/OetWithDrHesham.Api/Services/RandomisationHelper.cs`.
+- `backend/tests/OetWithDrHesham.Api.Tests/RandomisationHelperTests.cs`.

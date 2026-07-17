@@ -12,7 +12,7 @@ Three audiences contribute here: **content authors**, **engineers**, and **tutor
 
 ## Engineers
 
-- **Tests first**: every new endpoint needs an integration test (`backend/tests/OetLearner.Api.Tests/Speaking/`). Every new page needs an a11y spec (`tests/a11y/`). UI flows that cross routes need an E2E spec (`tests/e2e/`).
+- **Tests first**: every new endpoint needs an integration test (`backend/tests/OetWithDrHesham.Api.Tests/Speaking/`). Every new page needs an a11y spec (`tests/a11y/`). UI flows that cross routes need an E2E spec (`tests/e2e/`).
 - **Migrations**: one migration per concern. Never combine schema changes with data backfill in the same migration — use a follow-up data-migration script.
 - **AI prompts**: any change to a prompt template that affects scoring must be reviewed by the AI lead. Cache-control headers must be set on persona/system blocks; without them the multi-turn cost balloons.
 - **Compliance gates**: never bypass `SpeakingComplianceConsent` checks. Recording deletion must always write an `AuditEvent` row.

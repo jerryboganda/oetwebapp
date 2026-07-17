@@ -15,7 +15,7 @@ describe('ResetPasswordSuccessPage', () => {
   it('shows the password reset success state and redirects to sign in after the countdown', () => {
     renderWithRouter(<ResetPasswordSuccessPage />, {
       router: { replace: mockReplace },
-      searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
+      searchParams: new URLSearchParams({ email: 'learner@oet-with-dr-hesham.dev' }),
     });
 
     expect(screen.getByRole('heading', { name: /you're all set/i })).toBeInTheDocument();
@@ -25,6 +25,6 @@ describe('ResetPasswordSuccessPage', () => {
       vi.advanceTimersByTime(12000);
     });
 
-    expect(mockReplace).toHaveBeenCalledWith('/sign-in?email=learner%40oet-prep.dev');
+    expect(mockReplace).toHaveBeenCalledWith('/sign-in?email=learner%40oet-with-dr-hesham.dev');
   });
 });

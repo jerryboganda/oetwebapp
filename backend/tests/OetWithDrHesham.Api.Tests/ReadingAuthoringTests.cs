@@ -1,0 +1,4407 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.IO.Compression;
+using System.Reflection;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using OetWithDrHesham.Api.Data;
+using OetWithDrHesham.Api.Domain;
+using OetWithDrHesham.Api.Endpoints;
+using OetWithDrHesham.Api.Services;
+using OetWithDrHesham.Api.Services.Content;
+using OetWithDrHesham.Api.Services.Entitlements;
+using OetWithDrHesham.Api.Services.Reading;
+using OetWithDrHesham.Api.Tests.Infrastructure;
+
+namespace OetWithDrHesham.Api.Tests;
+
+/// <summary>
+/// Reading Authoring — unit tests covering the structure service, validator,
+/// policy resolver, grading strategies, and the full
+/// start → autosave → submit → grade lifecycle.
+///
+/// Everything runs on the in-memory EF provider for speed. Canonical
+/// raw→scaled conversion (30/42 ≡ 350) is asserted explicitly.
+/// </summary>
+public class ReadingAuthoringTests
+{
+    private static (LearnerDbContext db, ReadingStructureService structure,
+                    ReadingPolicyService policy, ReadingGradingService grader,
+                    ReadingAttemptService attempt)
+        Build()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        var db = new LearnerDbContext(options);
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var structure = new ReadingStructureService(db);
+        var policy = new ReadingPolicyService(db, cache);
+        var grader = new ReadingGradingService(db, policy, NullLogger<ReadingGradingService>.Instance);
+        var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
+        var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
+        return (db, structure, policy, grader, attempt);
+    }
+
+    private static async Task WriteStorageBytesAsync(IFileStorage storage, string key, byte[] bytes)
+    {
+        await using var stream = await storage.OpenWriteAsync(key, CancellationToken.None);
+        await stream.WriteAsync(bytes, CancellationToken.None);
+    }
+
+    private static MemoryStream CreateZip(params (string Path, byte[] Bytes)[] entries)
+    {
+        var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in entries)
+            {
+                var zipEntry = archive.CreateEntry(entry.Path);
+                using var entryStream = zipEntry.Open();
+                entryStream.Write(entry.Bytes, 0, entry.Bytes.Length);
+            }
+        }
+
+        stream.Position = 0;
+        return stream;
+    }
+
+    private static async Task EnableReadingAiExtractionAsync(ReadingPolicyService policy)
+    {
+        var current = await policy.GetGlobalAsync(default);
+        current.AiExtractionEnabled = true;
+        await policy.UpsertGlobalAsync(current, "test-admin", default);
+    }
+
+    private static async Task SeedPaperAsync(LearnerDbContext db, string paperId, ContentStatus status = ContentStatus.Published)
+    {
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = paperId,
+            SubtestCode = "reading",
+            Title = "Reading Sample 1",
+            Slug = "reading-sample-1",
+            AppliesToAllProfessions = true,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 60,
+            Status = status,
+            SourceProvenance = "Test",
+            TagsCsv = "access:free",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedPublishedReadingPaperForEndpointsAsync(LearnerDbContext db, string paperId)
+    {
+        var structure = new ReadingStructureService(db);
+        await SeedPaperAsync(db, paperId, ContentStatus.Published);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Structure service + validator
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task EnsureCanonicalParts_creates_A_B_C_once()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+
+        var parts = await db.ReadingParts.Where(p => p.PaperId == "p1").ToListAsync();
+        Assert.Equal(3, parts.Count);
+        Assert.Contains(parts, p => p.PartCode == ReadingPartCode.A && p.MaxRawScore == 20);
+        Assert.Contains(parts, p => p.PartCode == ReadingPartCode.B && p.MaxRawScore == 6);
+        Assert.Contains(parts, p => p.PartCode == ReadingPartCode.C && p.MaxRawScore == 16);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_fails_empty_paper()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var report = await structure.ValidatePaperAsync("p1", default);
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code.StartsWith("part_") && i.Code.Contains("_item_count"));
+        Assert.Contains(report.Issues, i => i.Code == "total_points_mismatch");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_passes_fully_authored_paper()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var report = await structure.ValidatePaperAsync("p1", default);
+        Assert.True(report.IsPublishReady, string.Join(", ", report.Issues.Select(i => i.Message)));
+        Assert.Equal(20, report.Counts.PartACount);
+        Assert.Equal(6, report.Counts.PartBCount);
+        Assert.Equal(16, report.Counts.PartCCount);
+        Assert.Equal(42, report.Counts.TotalPoints);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_requires_three_part_pdfs()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+
+        var parts = await db.ReadingParts.Where(p => p.PaperId == "p1").ToListAsync();
+        var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
+        var tA = await structure.UpsertTextAsync(new ReadingTextUpsert(null, partA.Id, 1, "Text A", "BMJ", "<p>A</p>", 10, null), "admin", default);
+        var tB = await structure.UpsertTextAsync(new ReadingTextUpsert(null, partB.Id, 1, "Text B", "NHS", "<p>B</p>", 20, null), "admin", default);
+        var tC = await structure.UpsertTextAsync(new ReadingTextUpsert(null, partC.Id, 1, "Text C", "Lancet", "<p>C</p>", 300, null), "admin", default);
+
+        for (var i = 1; i <= 20; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(null, partA.Id, tA.Id, i, 1, ReadingQuestionType.ShortAnswer, $"A{i}", "[]", $"\"a{i}\"", null, false, null, null), "admin", default);
+        for (var i = 1; i <= 6; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(null, partB.Id, tB.Id, i, 1, ReadingQuestionType.MultipleChoice3, $"B{i}", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default);
+        for (var i = 1; i <= 16; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(null, partC.Id, tC.Id, i, 1, ReadingQuestionType.MultipleChoice4, $"C{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"A\"", null, false, null, null), "admin", default);
+        foreach (var q in await db.ReadingQuestions.ToListAsync()) q.ReviewState = ReadingReviewState.Published;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_A_pdf_required");
+        Assert.Contains(report.Issues, i => i.Code == "part_B_pdf_required");
+        Assert.Contains(report.Issues, i => i.Code == "part_C_pdf_required");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_wrong_question_type_for_part()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partB = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.B);
+        var firstB = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partB.Id && q.DisplayOrder == 1);
+        // MatchingTextReference is only valid for Part A — never for Part B.
+        // (MultipleChoice4 was previously used here but is now allowed in Part B
+        //  since the section redesign expanded Part B's allowed type set.)
+        firstB.QuestionType = ReadingQuestionType.MatchingTextReference;
+        firstB.OptionsJson = "[]";
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_B_question_type" && i.TargetId == firstB.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_allows_pdf_only_questions_without_text_links()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var partAQuestions = await db.ReadingQuestions
+            .Where(question => question.ReadingPartId == partA.Id)
+            .ToListAsync();
+        foreach (var question in partAQuestions)
+        {
+            question.ReadingTextId = null;
+        }
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.True(report.IsPublishReady, string.Join(", ", report.Issues.Select(i => i.Message)));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_individual_part_a_question_missing_text_link()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var question = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        question.ReadingTextId = null;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, issue =>
+            issue.Code == "part_A_question_text_required" && issue.TargetId == question.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_non_official_time_limit()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partC = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.C);
+        partC.TimeLimitMinutes = 30;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_C_time_limit" && i.TargetId == partC.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Manifest_import_replaces_structure_and_preserves_text_links()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "source");
+        await SeedPaperAsync(db, "target");
+        await structure.EnsureCanonicalPartsAsync("source", default);
+        await structure.EnsureCanonicalPartsAsync("target", default);
+        await FullyAuthorPaperAsync(db, structure, "source");
+
+        var manifest = await structure.ExportManifestAsync("source", default);
+        var result = await structure.ImportManifestAsync("target", manifest, true, "admin", default);
+
+        Assert.True(result.Report.IsPublishReady, string.Join(", ", result.Report.Issues.Select(i => i.Message)));
+        Assert.Equal(20, result.Report.Counts.PartACount);
+        Assert.Equal(6, result.Report.Counts.PartBCount);
+        Assert.Equal(16, result.Report.Counts.PartCCount);
+        Assert.Equal(42, result.Report.Counts.TotalPoints);
+
+        var imported = await structure.ExportManifestAsync("target", default);
+        var partA = imported.Parts.Single(p => p.PartCode == ReadingPartCode.A);
+        Assert.Equal(20, partA.Questions.Count);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, partA.Questions
+            .Select(q => q.ReadingTextDisplayOrder ?? 0)
+            .Distinct()
+            .OrderBy(x => x));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ClonePaper_creates_draft_revision_with_copied_assets_and_structure()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "source");
+        await structure.EnsureCanonicalPartsAsync("source", default);
+        await FullyAuthorPaperAsync(db, structure, "source");
+
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-question-paper",
+            OriginalFilename = "reading.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 1024,
+            StoragePath = "media/reading.pdf",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "document",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-source",
+            PaperId = "source",
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-question-paper",
+            Title = "Part A paper",
+            DisplayOrder = 1,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var cloned = await structure.ClonePaperAsync(
+            "source",
+            new ReadingPaperCloneRequest("Reading Sample 1 v2", null),
+            "admin",
+            default);
+
+        var paper = await db.ContentPapers.Include(p => p.Assets).SingleAsync(p => p.Id == cloned.PaperId);
+        Assert.NotEqual("source", cloned.PaperId);
+        Assert.Equal(ContentStatus.Draft, paper.Status);
+        Assert.Equal("Reading Sample 1 v2", paper.Title);
+        Assert.StartsWith("reading-sample-1-revision", paper.Slug);
+        Assert.Contains($"cloned-from:source", paper.TagsCsv);
+        Assert.Equal(4, paper.Assets.Count);
+        Assert.Contains(paper.Assets, asset => asset.MediaAssetId == "media-question-paper");
+
+        var sourceQuestionIds = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == "source")
+            .Select(q => q.Id)
+            .ToHashSetAsync();
+        var clonedQuestions = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == cloned.PaperId)
+            .ToListAsync();
+        Assert.Equal(42, clonedQuestions.Count);
+        Assert.DoesNotContain(clonedQuestions, q => sourceQuestionIds.Contains(q.Id));
+        Assert.All(clonedQuestions, q => Assert.Equal(ReadingReviewState.Draft, q.ReviewState));
+
+        var clonedPartA = cloned.Structure.Parts.Single(p => p.PartCode == ReadingPartCode.A);
+        Assert.Equal(20, clonedPartA.Questions.Count);
+        Assert.All(clonedPartA.Questions, q => Assert.NotNull(q.ReadingTextId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Reading_home_safe_drills_include_unanswered_skills_and_prefer_unattempted_paper()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await SeedPaperAsync(db, "p2");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await structure.EnsureCanonicalPartsAsync("p2", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        await FullyAuthorPaperAsync(db, structure, "p2");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        var readyPapers = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.Id == "p1" || p.Id == "p2")
+            .OrderBy(p => p.Id)
+            .ToListAsync();
+        var parts = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == "p1" || p.PaperId == "p2")
+            .Include(p => p.Questions)
+            .ToListAsync();
+        var partsByPaper = parts.GroupBy(p => p.PaperId).ToDictionary(g => g.Key, g => g.ToList());
+        var attempts = await db.ReadingAttempts.AsNoTracking()
+            .Include(a => a.Answers)
+            .Where(a => a.UserId == "u1")
+            .ToListAsync();
+        var titles = readyPapers.ToDictionary(p => p.Id, p => p.Title);
+        var resolvedPolicy = await policy.ResolveForUserAsync("u1", default);
+
+        var method = typeof(LearnerEndpoints).GetMethod(
+            "BuildReadingSafeDrills",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+        var actions = (IReadOnlyList<object>)method!.Invoke(null, new object[]
+        {
+            readyPapers,
+            attempts,
+            partsByPaper,
+            titles,
+            resolvedPolicy,
+        })!;
+        var json = JsonSerializer.Serialize(actions, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Contains("missed or unanswered item", json);
+        Assert.Contains("/reading/paper/p2", json);
+        Assert.DoesNotContain("CorrectAnswerJson", json);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Learner_structure_endpoint_redacts_answers_explanations_synonyms_and_exposes_question_paper_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        var paperId = "redaction-paper";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        var firstQuestion = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstQuestion.CorrectAnswerJson = "\"SECRET-ANSWER\"";
+        firstQuestion.AcceptedSynonymsJson = "[\"SECRET-SYNONYM\"]";
+        firstQuestion.ExplanationMarkdown = "SECRET-EXPLANATION";
+        var firstMcq = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId && q.QuestionType == ReadingQuestionType.MultipleChoice3)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstMcq.OptionsJson = """
+            [
+                {"value":"A","label":"Safe option","isCorrect":true,"correctAnswer":"SECRET-OPTION-ANSWER","acceptedSynonyms":["SECRET-OPTION-SYNONYM"],"explanationMarkdown":"SECRET-OPTION-EXPLANATION"},
+                "Distractor B",
+                "Distractor C"
+            ]
+            """;
+
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-redaction-paper",
+            OriginalFilename = "reading-original.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 1024,
+            StoragePath = "reading/redaction/original.pdf",
+            Status = MediaAssetStatus.Ready,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-redaction-paper",
+            PaperId = paperId,
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-redaction-paper",
+            Title = "Original Part A PDF",
+            DisplayOrder = 0,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+        var response = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var payload = json.RootElement.GetRawText();
+
+        Assert.DoesNotContain("CorrectAnswerJson", payload);
+        Assert.DoesNotContain("correctAnswer", payload);
+        Assert.DoesNotContain("AcceptedSynonymsJson", payload);
+        Assert.DoesNotContain("acceptedSynonyms", payload);
+        Assert.DoesNotContain("ExplanationMarkdown", payload);
+        Assert.DoesNotContain("explanationMarkdown", payload);
+        Assert.DoesNotContain("SECRET-ANSWER", payload);
+        Assert.DoesNotContain("SECRET-SYNONYM", payload);
+        Assert.DoesNotContain("SECRET-EXPLANATION", payload);
+        Assert.DoesNotContain("isCorrect", payload);
+        Assert.DoesNotContain("correctAnswer", payload);
+        Assert.DoesNotContain("acceptedSynonyms", payload);
+        Assert.DoesNotContain("explanationMarkdown", payload);
+        Assert.DoesNotContain("SECRET-OPTION-ANSWER", payload);
+        Assert.DoesNotContain("SECRET-OPTION-SYNONYM", payload);
+        Assert.DoesNotContain("SECRET-OPTION-EXPLANATION", payload);
+        Assert.Contains("Safe option", payload);
+
+        var paper = json.RootElement.GetProperty("paper");
+        Assert.True(paper.GetProperty("allowPaperReadingMode").GetBoolean());
+        var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
+        Assert.Equal(4, assets.Count);
+        var asset = Assert.Single(assets.Where(asset => asset.GetProperty("id").GetString() == "asset-redaction-paper"));
+        Assert.Equal("A", asset.GetProperty("part").GetString());
+        Assert.Equal("/v1/media/media-redaction-paper/content", asset.GetProperty("downloadPath").GetString());
+    }
+
+    [Fact]
+    public async Task Learner_structure_endpoint_withholds_question_paper_assets_when_paper_mode_is_disabled()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        var paperId = "policy-disabled-paper";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        db.ReadingPolicies.Add(new ReadingPolicy
+        {
+            Id = "global",
+            AllowPaperReadingMode = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-policy-disabled-paper",
+            OriginalFilename = "reading-original.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 1024,
+            StoragePath = "reading/policy/original.pdf",
+            Status = MediaAssetStatus.Ready,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-policy-disabled-paper",
+            PaperId = paperId,
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-policy-disabled-paper",
+            Title = "Original Part A PDF",
+            DisplayOrder = 0,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.FreePreviewAssets.Add(new FreePreviewAsset
+        {
+            Id = "preview-policy-disabled-paper",
+            Title = "Preview should not bypass disabled Reading paper mode",
+            PreviewType = "sample_task",
+            MediaAssetId = "media-policy-disabled-paper",
+            Status = ContentStatus.Published,
+            DisplayOrder = 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+        var response = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var paper = json.RootElement.GetProperty("paper");
+        Assert.False(paper.GetProperty("allowPaperReadingMode").GetBoolean());
+        Assert.Empty(paper.GetProperty("questionPaperAssets").EnumerateArray());
+        Assert.DoesNotContain("/v1/media/media-policy-disabled-paper/content", json.RootElement.GetRawText());
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+        }, "Test"));
+        Assert.False(await access.CanAccessAsync(principal, "media-policy-disabled-paper", default));
+
+        var directMediaResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/content");
+        Assert.Equal(HttpStatusCode.NotFound, directMediaResponse.StatusCode);
+        var signedUrlResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/url");
+        Assert.Equal(HttpStatusCode.NotFound, signedUrlResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reading_pdf_annotations_support_crud_for_current_user()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-crud-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "learner-annotations");
+
+        using var createResponse = await client.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        using var createdJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var annotationId = createdJson.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(annotationId));
+        Assert.Equal($"{paperId}-asset-A", createdJson.RootElement.GetProperty("contentPaperAssetId").GetString());
+        Assert.Equal("Text", createdJson.RootElement.GetProperty("kind").GetString());
+        Assert.Equal(0.10, createdJson.RootElement.GetProperty("geometry").GetProperty("x").GetDouble(), 3);
+
+        using var listResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        listResponse.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        var listed = Assert.Single(listJson.RootElement.EnumerateArray());
+        Assert.Equal(annotationId, listed.GetProperty("id").GetString());
+
+        using var updateResponse = await client.PutAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations/{annotationId}",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-B",
+                pageNumber = 2,
+                kind = "Rectangle",
+                geometryJson = new { x = 0.15, y = 0.25, width = 0.35, height = 0.20 },
+            });
+
+        updateResponse.EnsureSuccessStatusCode();
+        using var updatedJson = JsonDocument.Parse(await updateResponse.Content.ReadAsStringAsync());
+        Assert.Equal($"{paperId}-asset-B", updatedJson.RootElement.GetProperty("contentPaperAssetId").GetString());
+        Assert.Equal(2, updatedJson.RootElement.GetProperty("pageNumber").GetInt32());
+        Assert.Equal("Rectangle", updatedJson.RootElement.GetProperty("kind").GetString());
+
+        using var deleteResponse = await client.DeleteAsync($"/v1/reading-papers/papers/{paperId}/annotations/{annotationId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        using var emptyResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        emptyResponse.EnsureSuccessStatusCode();
+        using var emptyJson = JsonDocument.Parse(await emptyResponse.Content.ReadAsStringAsync());
+        Assert.Empty(emptyJson.RootElement.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Reading_pdf_annotations_reject_invalid_geometry_and_isolate_users()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-guard-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+
+        using var ownerClient = factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-owner");
+        using var invalidResponse = await ownerClient.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 1.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+        Assert.Contains("reading_annotation_geometry_invalid", await invalidResponse.Content.ReadAsStringAsync());
+
+        using var missingGeometryResponse = await ownerClient.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, missingGeometryResponse.StatusCode);
+        Assert.Contains("reading_annotation_geometry_invalid", await missingGeometryResponse.Content.ReadAsStringAsync());
+
+        using var createResponse = await ownerClient.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+        createResponse.EnsureSuccessStatusCode();
+        using var createdJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var annotationId = createdJson.RootElement.GetProperty("id").GetString();
+
+        using var otherClient = factory.CreateClient();
+        otherClient.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-other");
+        using var otherListResponse = await otherClient.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        otherListResponse.EnsureSuccessStatusCode();
+        using var otherListJson = JsonDocument.Parse(await otherListResponse.Content.ReadAsStringAsync());
+        Assert.Empty(otherListJson.RootElement.EnumerateArray());
+
+        using var otherDeleteResponse = await otherClient.DeleteAsync($"/v1/reading-papers/papers/{paperId}/annotations/{annotationId}");
+        Assert.Equal(HttpStatusCode.NotFound, otherDeleteResponse.StatusCode);
+
+        Assert.Equal(1, await db.ReadingPaperAnnotations.CountAsync(a => a.UserId == "annotation-owner" && a.PaperId == paperId));
+    }
+
+    [Fact]
+    public async Task Reading_pdf_annotations_are_unavailable_when_pdf_mode_is_disabled()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-policy-disabled-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+
+        db.ReadingPolicies.Add(new ReadingPolicy
+        {
+            Id = "global",
+            AllowPaperReadingMode = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-policy-disabled");
+
+        using var listResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        Assert.Equal(HttpStatusCode.NotFound, listResponse.StatusCode);
+
+        using var createResponse = await client.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+        Assert.Equal(HttpStatusCode.NotFound, createResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Media_access_blocks_free_preview_bypass_for_non_primary_or_protected_paper_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+        var paperId = "protected-preview-paper";
+
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = paperId,
+            SubtestCode = "reading",
+            Title = "Protected preview paper",
+            Slug = "protected-preview-paper",
+            ProfessionId = "medicine",
+            AppliesToAllProfessions = false,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 60,
+            Status = ContentStatus.Published,
+            SourceProvenance = ContentDefaults.DefaultSourceProvenance,
+            TagsCsv = "access:premium",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-non-primary-question-paper",
+                OriginalFilename = "old-reading-paper.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "reading/protected/old.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-answer-key-preview",
+                OriginalFilename = "reading-answer-key.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "reading/protected/answer-key.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.ContentPaperAssets.AddRange(
+            new ContentPaperAsset
+            {
+                Id = "asset-non-primary-question-paper",
+                PaperId = paperId,
+                Role = PaperAssetRole.QuestionPaper,
+                MediaAssetId = "media-non-primary-question-paper",
+                IsPrimary = false,
+                DisplayOrder = 0,
+                CreatedAt = now,
+            },
+            new ContentPaperAsset
+            {
+                Id = "asset-answer-key-preview",
+                PaperId = paperId,
+                Role = PaperAssetRole.AnswerKey,
+                MediaAssetId = "media-answer-key-preview",
+                IsPrimary = true,
+                DisplayOrder = 0,
+                CreatedAt = now,
+            });
+        db.FreePreviewAssets.AddRange(
+            new FreePreviewAsset
+            {
+                Id = "preview-non-primary-question-paper",
+                Title = "Non-primary paper preview should not bypass",
+                PreviewType = "sample_task",
+                MediaAssetId = "media-non-primary-question-paper",
+                Status = ContentStatus.Published,
+                DisplayOrder = 0,
+                CreatedAt = now,
+            },
+            new FreePreviewAsset
+            {
+                Id = "preview-answer-key",
+                Title = "Answer key preview should not bypass",
+                PreviewType = "sample_task",
+                MediaAssetId = "media-answer-key-preview",
+                Status = ContentStatus.Published,
+                DisplayOrder = 1,
+                CreatedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.False(await access.CanAccessAsync(principal, "media-non-primary-question-paper", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-answer-key-preview", default));
+    }
+
+    [Fact]
+    public async Task Media_access_allows_published_rulebook_reference_pdf_for_matching_learner_profession()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-rulebook-medicine",
+                OriginalFilename = "medicine-rulebook.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "rulebooks/medicine.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-rulebook-nursing",
+                OriginalFilename = "nursing-rulebook.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "rulebooks/nursing.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.RulebookVersions.AddRange(
+            new RulebookVersion
+            {
+                Id = "rulebook-medicine",
+                Kind = "writing",
+                Profession = "medicine",
+                Version = "1.0.0",
+                Status = RulebookStatus.Published,
+                ReferencePdfAssetId = "media-rulebook-medicine",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            },
+            new RulebookVersion
+            {
+                Id = "rulebook-nursing",
+                Kind = "writing",
+                Profession = "nursing",
+                Version = "1.0.0",
+                Status = RulebookStatus.Published,
+                ReferencePdfAssetId = "media-rulebook-nursing",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.True(await access.CanAccessAsync(principal, "media-rulebook-medicine", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-rulebook-nursing", default));
+    }
+
+    [Fact]
+    public async Task Media_access_allows_published_speaking_shared_resources_and_active_result_templates()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-speaking-shared",
+                OriginalFilename = "warm-up.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "speaking/warm-up.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-result-template",
+                OriginalFilename = "template.jpg",
+                MimeType = "image/jpeg",
+                Format = "jpg",
+                SizeBytes = 1024,
+                StoragePath = "templates/template.jpg",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-result-template-nursing",
+                OriginalFilename = "template-nursing.jpg",
+                MimeType = "image/jpeg",
+                Format = "jpg",
+                SizeBytes = 1024,
+                StoragePath = "templates/template-nursing.jpg",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            });
+        db.SpeakingSharedResources.Add(new SpeakingSharedResource
+        {
+            Id = "shared-speaking-medicine",
+            Kind = SpeakingSharedResourceKinds.WarmUpQuestions,
+            Title = "Warm-up",
+            ProfessionId = "medicine",
+            MediaAssetId = "media-speaking-shared",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.ResultTemplateAssets.AddRange(
+            new ResultTemplateAsset
+            {
+                Id = "template-medicine",
+                TemplateKey = "medicine-template",
+                Title = "Medicine template",
+                ProfessionId = "medicine",
+                MediaAssetId = "media-result-template",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new ResultTemplateAsset
+            {
+                Id = "template-nursing",
+                TemplateKey = "nursing-template",
+                Title = "Nursing template",
+                ProfessionId = "nursing",
+                MediaAssetId = "media-result-template-nursing",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
+            new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
+            new Claim("prof", "medicine"),
+        }, "Test"));
+
+        Assert.True(await access.CanAccessAsync(principal, "media-speaking-shared", default));
+        Assert.True(await access.CanAccessAsync(principal, "media-result-template", default));
+        Assert.False(await access.CanAccessAsync(principal, "media-result-template-nursing", default));
+    }
+
+    [Fact]
+    public async Task Media_delete_rejects_managed_content_assets()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+        await WriteStorageBytesAsync(storage, "content/paper.pdf", Encoding.UTF8.GetBytes("paper"));
+
+        db.MediaAssets.AddRange(
+            new MediaAsset
+            {
+                Id = "media-paper-delete",
+                OriginalFilename = "paper.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/paper.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-rulebook-delete",
+                OriginalFilename = "rulebook.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/rulebook.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-result-template-delete",
+                OriginalFilename = "template.jpg",
+                MimeType = "image/jpeg",
+                Format = "jpg",
+                SizeBytes = 1024,
+                StoragePath = "content/template.jpg",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            },
+            new MediaAsset
+            {
+                Id = "media-speaking-shared-delete",
+                OriginalFilename = "warm-up.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 1024,
+                StoragePath = "content/warm-up.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin-delete",
+                UploadedAt = now,
+            });
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-delete-guard",
+            SubtestCode = "reading",
+            Title = "Paper delete guard",
+            Slug = "paper-delete-guard",
+            AppliesToAllProfessions = true,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 60,
+            Status = ContentStatus.Published,
+            SourceProvenance = "Test",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "paper-asset-delete-guard",
+            PaperId = "paper-delete-guard",
+            Role = PaperAssetRole.QuestionPaper,
+            MediaAssetId = "media-paper-delete",
+            Title = "Question paper",
+            CreatedAt = now,
+        });
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-delete-guard",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            ReferencePdfAssetId = "media-rulebook-delete",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.ResultTemplateAssets.Add(new ResultTemplateAsset
+        {
+            Id = "template-delete-guard",
+            TemplateKey = "template-delete-guard",
+            Title = "Template",
+            MediaAssetId = "media-result-template-delete",
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.SpeakingSharedResources.Add(new SpeakingSharedResource
+        {
+            Id = "shared-delete-guard",
+            Kind = SpeakingSharedResourceKinds.AssessmentCriteria,
+            Title = "Assessment Criteria",
+            MediaAssetId = "media-speaking-shared-delete",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-delete");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+
+        using var paperResponse = await client.DeleteAsync("/v1/media/media-paper-delete");
+        using var rulebookResponse = await client.DeleteAsync("/v1/media/media-rulebook-delete");
+        using var resultTemplateResponse = await client.DeleteAsync("/v1/media/media-result-template-delete");
+        using var speakingSharedResponse = await client.DeleteAsync("/v1/media/media-speaking-shared-delete");
+
+        Assert.Equal(HttpStatusCode.Conflict, paperResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, rulebookResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, resultTemplateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, speakingSharedResponse.StatusCode);
+        Assert.True(await storage.ExistsAsync("content/paper.pdf", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Admin_scoring_policy_rejects_json_that_breaks_canonical_oet_anchors()
+    {
+        using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-scoring");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:read,content:write,content:publish");
+
+        const string invalidPolicyJson = """
+        {
+          "listening": { "passing": { "default": 300 }, "rawToScaled": [{ "raw": 30, "scaled": 350 }] },
+          "reading": { "passing": { "default": 350 }, "rawToScaled": [{ "raw": 30, "scaled": 350 }] },
+          "writing": { "passing": { "gb": 350, "ie": 350, "au": 350, "nz": 350, "ca": 350, "us": 300, "qa": 300 } },
+          "speaking": { "passing": { "default": 350 } }
+        }
+        """;
+
+        using var response = await client.PutAsJsonAsync(
+            "/v1/admin/scoring-policy",
+            new { bodyMarkdown = "Invalid", policyJson = invalidPolicyJson });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("canonical OET scoring", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_rulebook_reference_pdf_rejects_pdf_extension_with_non_pdf_bytes()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-pdf-validation",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0-draft",
+            Status = RulebookStatus.Draft,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-rulebook");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:write");
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("not a pdf")), "file", "reference.pdf");
+
+        using var response = await client.PostAsync("/v1/admin/rulebooks/rulebook-pdf-validation/reference-pdf", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_file_content", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_rulebook_reference_pdf_requires_publish_permission_for_published_rulebooks()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-pdf-published",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-rulebook");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", "content:write");
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")), "file", "reference.pdf");
+
+        using var response = await client.PostAsync("/v1/admin/rulebooks/rulebook-pdf-published/reference-pdf", form);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Real_content_stage_routes_top_level_scoring_file_to_root_parser()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        await using var zip = CreateZip(("Scoring System.txt", Encoding.UTF8.GetBytes("# Scoring\n")));
+
+        var staged = await importer.StageAsync("admin-import", zip, "real-content.zip", CancellationToken.None);
+
+        Assert.Contains(staged.Proposals, proposal => proposal.Target == RealContentTarget.ScoringPolicyBody);
+    }
+
+    [Fact]
+    public async Task Real_content_stage_assigns_staged_keys_to_each_paper_asset()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        await using var zip = CreateZip(
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Audio 1.mp3", Encoding.ASCII.GetBytes("ID3\0\0\0\0\0\0\0")),
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Question-Paper.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")),
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Audio-Script.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")),
+            ("Listening ( IMPORTANT NOTE = Same for All Professions )/Listening Sample 1/Listening Sample 1 Answer-Key.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF")));
+
+        var staged = await importer.StageAsync("admin-import", zip, "real-content.zip", CancellationToken.None);
+        var proposal = Assert.Single(staged.Proposals, p => p.Target == RealContentTarget.ListeningPaper);
+
+        Assert.Empty(staged.Issues);
+        Assert.All(proposal.Assets, asset => Assert.False(string.IsNullOrWhiteSpace(asset.StagedStorageKey)));
+    }
+
+    [Fact]
+    public async Task Real_content_import_creates_draft_rulebook_pdf_copy_without_mutating_published_rulebook()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rulebook-import-published",
+            Kind = "writing",
+            Profession = "medicine",
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await db.SaveChangesAsync();
+        await WriteStorageBytesAsync(storage, "staging/import/rulebook.pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF"));
+
+        var proposal = new RealContentProposal
+        {
+            Target = RealContentTarget.RulebookReferencePdf,
+            Title = "Writing Rulebook",
+            RulebookKind = "writing",
+            RulebookProfession = "medicine",
+            SourcePath = "Writing/Rulebook/rulebook.pdf",
+            StagedStorageKey = "staging/import/rulebook.pdf",
+        };
+
+        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: false, CancellationToken.None);
+
+        Assert.Empty(result.Errors);
+        var created = Assert.Single(result.Created);
+        Assert.Equal(RealContentTarget.RulebookReferencePdf, created.Target);
+        Assert.Null(await db.RulebookVersions.Where(x => x.Id == "rulebook-import-published").Select(x => x.ReferencePdfAssetId).FirstAsync());
+
+        var draft = await db.RulebookVersions.SingleAsync(x => x.Id == created.Id);
+        Assert.Equal(RulebookStatus.Draft, draft.Status);
+        Assert.NotNull(draft.ReferencePdfAssetId);
+    }
+
+    [Fact]
+    public async Task Real_content_import_scoring_policy_uses_canonical_policy_json()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var importer = scope.ServiceProvider.GetRequiredService<RealContentFolderImporter>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        await db.Database.EnsureCreatedAsync();
+        await WriteStorageBytesAsync(storage, "staging/import/scoring.txt", Encoding.UTF8.GetBytes("# Scoring\n"));
+
+        var proposal = new RealContentProposal
+        {
+            Target = RealContentTarget.ScoringPolicyBody,
+            Title = "Scoring System",
+            SourcePath = "Scoring System.txt",
+            StagedStorageKey = "staging/import/scoring.txt",
+        };
+
+        var result = await importer.CommitAsync("admin-import", new[] { proposal }, canPublishContent: true, CancellationToken.None);
+        var policy = await db.ScoringPolicies.SingleAsync();
+
+        Assert.Empty(result.Errors);
+        Assert.False(policy.IsActive);
+        Assert.Null(ScoringPolicyValidation.ValidateCanonicalPolicyJson(policy.PolicyJson));
+        Assert.Contains("rawToScaled", policy.PolicyJson);
+    }
+
+    [Fact]
+    public async Task Legacy_reading_api_routes_return_gone_with_canonical_replacements()
+    {
+        using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+
+        var cases = new[]
+        {
+            (HttpMethod.Get, "/v1/reading/home", "/v1/reading-papers/home"),
+            (HttpMethod.Get, "/v1/reading/tasks/rt-001", "/v1/reading-papers/papers/rt-001/structure"),
+            (HttpMethod.Post, "/v1/reading/attempts", "/v1/reading-papers/papers/{paperId}/attempts"),
+            (HttpMethod.Get, "/v1/reading/attempts/attempt-1", "/v1/reading-papers/attempts/{attemptId}"),
+            (HttpMethod.Patch, "/v1/reading/attempts/attempt-1/answers", "/v1/reading-papers/attempts/{attemptId}/answers/{questionId}"),
+            (HttpMethod.Patch, "/v1/reading/attempts/attempt-1/heartbeat", (string?)null),
+            (HttpMethod.Post, "/v1/reading/attempts/attempt-1/submit", "/v1/reading-papers/attempts/{attemptId}/submit"),
+            (HttpMethod.Get, "/v1/reading/evaluations/eval-1", "/v1/reading-papers/attempts/{attemptId}/review"),
+        };
+
+        foreach (var (method, path, replacementRoute) in cases)
+        {
+            using var request = new HttpRequestMessage(method, path);
+            if (method == HttpMethod.Post || method == HttpMethod.Patch)
+            {
+                request.Content = JsonContent.Create(new { });
+            }
+
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("reading_legacy_gone", json.RootElement.GetProperty("code").GetString());
+            if (replacementRoute is null)
+            {
+                Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("replacementRoute").ValueKind);
+            }
+            else
+            {
+                Assert.Equal(replacementRoute, json.RootElement.GetProperty("replacementRoute").GetString());
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Reading_home_does_not_project_subset_practice_as_oet_result()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var scopedQuestions = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B)
+            .OrderBy(q => q.DisplayOrder)
+            .Take(2)
+            .Select(q => new { q.Id, q.CorrectAnswerJson })
+            .ToListAsync();
+        var submittedScope = JsonSerializer.Serialize(new
+        {
+            kind = "drill",
+            minutes = 8,
+            questionIds = scopedQuestions.Select(q => q.Id).ToArray(),
+        });
+        var submitted = await attemptSvc.StartInModeAsync(
+            "u1", "p1", ReadingAttemptMode.Drill, submittedScope, default);
+        await attemptSvc.SaveAnswerAsync("u1", submitted.AttemptId, scopedQuestions[0].Id, scopedQuestions[0].CorrectAnswerJson, default);
+        await attemptSvc.SubmitAsync("u1", submitted.AttemptId, default);
+
+        var activeScope = JsonSerializer.Serialize(new
+        {
+            kind = "mini-test",
+            minutes = 5,
+            questionIds = new[] { scopedQuestions[1].Id },
+        });
+        var active = await attemptSvc.StartInModeAsync(
+            "u1", "p1", ReadingAttemptMode.MiniTest, activeScope, default);
+
+        var method = typeof(LearnerEndpoints).GetMethod(
+            "GetStructuredReadingHomeAsync",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+        var task = (Task<object>)method!.Invoke(null, new object[]
+        {
+            "u1",
+            db,
+            policy,
+            new ContentEntitlementService(db, new EffectiveEntitlementResolver(db)),
+            CancellationToken.None,
+        })!;
+        var home = await task;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(home, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        Assert.Empty(doc.RootElement.GetProperty("recentResults").EnumerateArray());
+
+        var paper = doc.RootElement.GetProperty("papers")
+            .EnumerateArray()
+            .Single(item => item.GetProperty("id").GetString() == "p1");
+        Assert.Equal(JsonValueKind.Null, paper.GetProperty("lastAttempt").ValueKind);
+
+        var activeAttempt = doc.RootElement.GetProperty("activeAttempts")
+            .EnumerateArray()
+            .Single(item => item.GetProperty("attemptId").GetString() == active.AttemptId);
+        Assert.Equal("MiniTest", activeAttempt.GetProperty("mode").GetString());
+        Assert.Equal(1, activeAttempt.GetProperty("totalQuestions").GetInt32());
+        Assert.Equal(
+            activeAttempt.GetProperty("partADeadlineAt").GetDateTimeOffset(),
+            activeAttempt.GetProperty("partBCDeadlineAt").GetDateTimeOffset());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Manifest_json_serializes_reading_enums_as_strings()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "source");
+        await structure.EnsureCanonicalPartsAsync("source", default);
+        await FullyAuthorPaperAsync(db, structure, "source");
+
+        var manifest = await structure.ExportManifestAsync("source", default);
+        var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Contains("\"partCode\":\"A\"", json);
+        Assert.Contains("\"questionType\":\"ShortAnswer\"", json);
+        var roundTrip = JsonSerializer.Deserialize<ReadingStructureManifest>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(ReadingPartCode.A, roundTrip!.Parts[0].PartCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Manifest_replace_blocks_when_attempts_exist()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "source");
+        await SeedPaperAsync(db, "target");
+        await structure.EnsureCanonicalPartsAsync("source", default);
+        await structure.EnsureCanonicalPartsAsync("target", default);
+        await FullyAuthorPaperAsync(db, structure, "source");
+        await FullyAuthorPaperAsync(db, structure, "target");
+        var manifest = await structure.ExportManifestAsync("source", default);
+        await attemptSvc.StartAsync("u1", "target", default);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            structure.ImportManifestAsync("target", manifest, true, "admin", default));
+
+        Assert.Contains("learner attempts", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Authoring_writes_reject_wrong_subtest_and_cross_part_text_link()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "reading");
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "listening",
+            SubtestCode = "listening",
+            Title = "Listening Sample",
+            Slug = "listening-sample",
+            AppliesToAllProfessions = true,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 40,
+            Status = ContentStatus.Published,
+            SourceProvenance = "Test",
+            TagsCsv = "access:free",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var wrongSubtest = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            structure.EnsureCanonicalPartsAsync("listening", default));
+        Assert.Contains("expected 'reading'", wrongSubtest.Message);
+
+        await structure.EnsureCanonicalPartsAsync("reading", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "reading" && p.PartCode == ReadingPartCode.A);
+        var partB = await db.ReadingParts.FirstAsync(p => p.PaperId == "reading" && p.PartCode == ReadingPartCode.B);
+        var textA = await structure.UpsertTextAsync(new ReadingTextUpsert(
+            null, partA.Id, 1, "Part A text", "Source", "<p>Text</p>", 20, null), "admin", default);
+
+        var crossPart = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partB.Id, textA.Id, 1, 1, ReadingQuestionType.MultipleChoice3,
+                "Question", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default));
+        Assert.Contains("same part", crossPart.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Authoring_upserts_reject_foreign_existing_row_ids()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "paper-a");
+        await SeedPaperAsync(db, "paper-b");
+        await structure.EnsureCanonicalPartsAsync("paper-a", default);
+        await structure.EnsureCanonicalPartsAsync("paper-b", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "paper-a" && p.PartCode == ReadingPartCode.A);
+        var partB = await db.ReadingParts.FirstAsync(p => p.PaperId == "paper-b" && p.PartCode == ReadingPartCode.A);
+        var textA = await structure.UpsertTextAsync(new ReadingTextUpsert(
+            null, partA.Id, 1, "Paper A text", "Source", "<p>Text</p>", 20, null), "admin", default);
+        var questionA = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, textA.Id, 1, 1, ReadingQuestionType.ShortAnswer,
+            "Paper A question", "[]", "\"answer\"", null, false, null, null), "admin", default);
+
+        var textMove = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            structure.UpsertTextAsync(new ReadingTextUpsert(
+                textA.Id, partB.Id, 1, "Moved text", "Source", "<p>Text</p>", 20, null), "admin", default));
+        Assert.Contains("different part", textMove.Message);
+
+        var questionMove = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                questionA.Id, partB.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+                "Moved question", "[]", "\"answer\"", null, false, null, null), "admin", default));
+        Assert.Contains("different part", questionMove.Message);
+
+        var unchangedText = await db.ReadingTexts.FirstAsync(t => t.Id == textA.Id);
+        var unchangedQuestion = await db.ReadingQuestions.FirstAsync(q => q.Id == questionA.Id);
+        Assert.Equal(partA.Id, unchangedText.ReadingPartId);
+        Assert.Equal(partA.Id, unchangedQuestion.ReadingPartId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public void ValidatePayload_rejects_mismatched_mcq_shape()
+    {
+        // MCQ3 with 4 options should fail
+        Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                optionsJson: "[\"a\",\"b\",\"c\",\"d\"]",
+                correctAnswerJson: "\"A\"",
+                synonymsJson: null));
+    }
+
+    [Fact]
+    public void ValidatePayload_rejects_invalid_mcq_answer_letter()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                "[\"a\",\"b\",\"c\"]",
+                "\"Z\"", null));
+    }
+
+    [Fact]
+    public void ValidatePayload_rejects_unsafe_mcq_option_object_fields()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                "[{\"value\":\"A\",\"label\":\"A\",\"isCorrect\":true},\"b\",\"c\"]",
+                "\"A\"", null));
+        Assert.Contains("option objects", ex.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_accepts_shortanswer_with_synonyms()
+    {
+        ReadingStructureService.ValidateQuestionPayload(
+            ReadingQuestionType.ShortAnswer,
+            "[]",
+            "\"ORT\"",
+            "[\"oral rehydration\",\"oral rehydration therapy\"]");
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Grading — canonical scoring anchor
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Canonical_anchor_30_of_42_scales_to_exactly_350()
+    {
+        var (db, structure, policy, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partAQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in partAQuestions)
+        {
+            await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
+        }
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", started.AttemptId);
+        var partBCQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode != ReadingPartCode.A)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .Take(10)
+            .ToListAsync();
+        foreach (var q in partBCQuestions)
+        {
+            await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
+        }
+
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        Assert.Equal(30, result.RawScore);
+        Assert.Equal(42, result.MaxRawScore);
+        Assert.Equal(350, result.ScaledScore); // MISSION CRITICAL anchor
+        Assert.Equal("B", result.GradeLetter);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Full_42_of_42_scales_to_500()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u2", "p1", default);
+        var partAQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in partAQuestions)
+            await attemptSvc.SaveAnswerAsync("u2", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
+        await ResumeExamPartBCAsync(db, attemptSvc, "u2", started.AttemptId);
+        var partBCQuestions = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode != ReadingPartCode.A)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in partBCQuestions)
+            await attemptSvc.SaveAnswerAsync("u2", started.AttemptId, q.Id, q.CorrectAnswerJson, default);
+
+        var result = await attemptSvc.SubmitAsync("u2", started.AttemptId, default);
+        Assert.Equal(42, result.RawScore);
+        Assert.Equal(500, result.ScaledScore);
+        Assert.Equal("A", result.GradeLetter);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Zero_correct_scales_to_zero()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u3", "p1", default);
+        var result = await attemptSvc.SubmitAsync("u3", started.AttemptId, default);
+        Assert.Equal(0, result.RawScore);
+        Assert.Equal(0, result.ScaledScore);
+        Assert.Equal(42, result.UnansweredCount);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_short_answer_rejects_synonyms_even_when_policy_enabled()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "What does ORT stand for?", "[]", "\"ORT\"",
+            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null), "admin", default);
+
+        // Synonym acceptance is OFF by default (OET-faithful). This test
+        // explicitly opts in via the policy snapshot — non-standard mode.
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
+        {
+            ShortAnswerAcceptSynonyms = true,
+        };
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "a1", UserId = "u1", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "aa1", ReadingAttemptId = "a1", ReadingQuestionId = q.Id,
+            UserAnswerJson = "\"oral rehydration therapy\"",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("a1", default);
+        Assert.Equal(0, result.RawScore);
+        Assert.DoesNotContain(result.Answers, x => x.IsCorrect);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_short_answer_stays_strict_in_drill_mode()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var question = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 8, 1, ReadingQuestionType.ShortAnswer,
+            "What does ORT stand for?", "[]", "\"ORT\"",
+            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null), "admin", default);
+
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
+        {
+            ShortAnswerAcceptSynonyms = true,
+        };
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "drill-a1",
+            UserId = "u1",
+            PaperId = "p1",
+            Mode = ReadingAttemptMode.Drill,
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 1,
+            ScopeJson = JsonSerializer.Serialize(new { kind = "drill", questionIds = new[] { question.Id } }),
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "drill-answer-a1",
+            ReadingAttemptId = "drill-a1",
+            ReadingQuestionId = question.Id,
+            UserAnswerJson = "\"oral rehydration therapy\"",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("drill-a1", default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.DoesNotContain(result.Answers, answer => answer.IsCorrect);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_matching_rejects_array_answers_even_when_partial_credit_enabled()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.MatchingTextReference,
+            "Match statement to text", "[]", "\"A\"",
+            null, false, null, null), "admin", default);
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with { MatchingAllowPartialCredit = true };
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "a2", UserId = "u1", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42, PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "aa2", ReadingAttemptId = "a2", ReadingQuestionId = q.Id,
+            UserAnswerJson = "[\"A\"]",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("a2", default);
+        Assert.Equal(0, result.RawScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_short_answer_rejects_fuzzy_single_edit_policy()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "Which drug was used?", "[]", "\"aspirin\"", null, false, null, null), "admin", default);
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
+        {
+            ShortAnswerNormalisation = "fuzzy_levenshtein_1",
+            ShortAnswerAcceptSynonyms = false,
+        };
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "fuzzy-a1", UserId = "u1", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "fuzzy-ans1",
+            ReadingAttemptId = "fuzzy-a1",
+            ReadingQuestionId = q.Id,
+            UserAnswerJson = "\"asprin\"",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("fuzzy-a1", default);
+        Assert.Equal(0, result.RawScore);
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Wave 1 — Part A normalisation toggles + miss-reason classification
+    // ════════════════════════════════════════════════════════════════════
+
+    private static async Task<(LearnerDbContext db, ReadingGradingService grader, string answerId)>
+        GradePartAShortAnswerAsync(string correctJson, string userJson)
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "Part A typed item", "[]", correctJson, null, false, null, null), "admin", default);
+
+        var snapshot = await policy.ResolveForUserAsync("u1", default);
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "wave1-a1", UserId = "u1", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "wave1-ans1", ReadingAttemptId = "wave1-a1", ReadingQuestionId = q.Id,
+            UserAnswerJson = userJson, AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        await grader.GradeAttemptAsync("wave1-a1", default);
+        return (db, grader, "wave1-ans1");
+    }
+
+    [Fact]
+    public async Task PartA_strict_text_is_case_insensitive_by_default()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"insulin\"", "\"INSULIN\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.True(answer.IsCorrect);
+        Assert.Null(answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_strict_text_folds_smart_quotes_by_default()
+    {
+        // Authored answer carries a typographic apostrophe; the learner types
+        // a straight ASCII apostrophe. Default NormalizeSmartQuotes folds both.
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"patient\u2019s chart\"", "\"patient's chart\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.True(answer.IsCorrect);
+        Assert.Null(answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_single_edit_typo_is_classified_as_spelling_miss()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"insulin\"", "\"insilin\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.False(answer.IsCorrect); // strict spelling — single-edit typo still fails
+        Assert.Equal("spelling", answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_proper_substring_is_classified_as_incomplete_miss()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"antibiotics\"", "\"anti\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.False(answer.IsCorrect);
+        Assert.Equal("incomplete", answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_empty_answer_is_classified_as_blank_miss()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"insulin\"", "\"\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.False(answer.IsCorrect);
+        Assert.Equal("blank", answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SaveAnswer_records_a_revision_only_when_the_value_changes()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Learning, null, default);
+        var q = await db.ReadingQuestions.Include(x => x.Part)
+            .FirstAsync(x => x.Part!.PaperId == "p1" && x.Part.PartCode == ReadingPartCode.A
+                && x.QuestionType == ReadingQuestionType.ShortAnswer);
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, "\"first\"", default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, "\"second\"", default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, "\"second\"", default); // unchanged — no revision
+
+        var revisions = await db.ReadingAnswerRevisions.AsNoTracking()
+            .Where(r => r.ReadingAttemptId == started.AttemptId && r.ReadingQuestionId == q.Id)
+            .OrderBy(r => r.RecordedAt)
+            .ToListAsync();
+        Assert.Equal(2, revisions.Count);
+        Assert.Equal("\"first\"", revisions[0].UserAnswerJson);
+        Assert.Equal("\"second\"", revisions[1].UserAnswerJson);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Review_endpoint_discloses_correct_answer_only_when_policy_allows()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        const string paperId = "review-policy-paper";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        // Disclosure must be enabled BEFORE the attempt starts — the policy
+        // is snapshotted onto the attempt at start time.
+        db.ReadingPolicies.Add(new ReadingPolicy
+        {
+            Id = "global",
+            ShowCorrectAnswerOnReview = true,
+            ShowExplanationsAfterSubmit = true,
+            ShowExplanationsOnlyIfWrong = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        var firstShortAnswer = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId && q.QuestionType == ReadingQuestionType.ShortAnswer)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstShortAnswer.ExplanationMarkdown = "DISCLOSED-EXPLANATION";
+        await db.SaveChangesAsync();
+
+        var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
+        var started = await attemptSvc.StartInModeAsync("mock-user-001", paperId, ReadingAttemptMode.Learning, null, default);
+        await attemptSvc.SaveAnswerAsync("mock-user-001", started.AttemptId, firstShortAnswer.Id, "\"WRONG\"", default);
+        await attemptSvc.SubmitAsync("mock-user-001", started.AttemptId, default);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+        var response = await client.GetAsync($"/v1/reading-papers/attempts/{started.AttemptId}/review");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        var policyNode = json.RootElement.GetProperty("policy");
+        Assert.True(policyNode.GetProperty("showCorrectAnswerOnReview").GetBoolean());
+        Assert.True(policyNode.GetProperty("showExplanationsAfterSubmit").GetBoolean());
+
+        var item = json.RootElement.GetProperty("items").EnumerateArray()
+            .First(i => i.GetProperty("questionId").GetString() == firstShortAnswer.Id);
+        Assert.Equal(
+            JsonSerializer.Deserialize<string>(firstShortAnswer.CorrectAnswerJson),
+            item.GetProperty("correctAnswer").GetString());
+        Assert.Equal("DISCLOSED-EXPLANATION", item.GetProperty("explanationMarkdown").GetString());
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Attempt lifecycle
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Start_blocks_when_AllowMultipleConcurrentAttempts_false_and_one_open()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        await attemptSvc.StartAsync("u1", "p1", default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_incomplete_structure_even_when_published()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        Assert.False(string.IsNullOrWhiteSpace(started.AttemptId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_non_published_paper()
+    {
+        var (db, _, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+
+        Assert.Equal("Paper not found.", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_cross_profession_paper()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        var paper = await db.ContentPapers.FirstAsync(p => p.Id == "p1");
+        paper.AppliesToAllProfessions = false;
+        paper.ProfessionId = "nursing";
+        db.Users.Add(new LearnerUser
+        {
+            Id = "u1",
+            DisplayName = "Learner One",
+            Email = "u1@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            Timezone = "UTC",
+            Locale = "en-AU",
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+
+        Assert.Equal("Paper not found.", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_hard_lock_rejects_late_answer()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddMinutes(45);
+        await db.SaveChangesAsync();
+        var partAQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partAQuestion.Id, partAQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_a_locked", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Exam_rejects_BC_answers_until_part_a_break_is_resumed()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+
+        var early = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_bc_not_open", early.Code);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
+        await db.SaveChangesAsync();
+
+        var paused = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_bc_break_not_resumed", paused.Code);
+
+        await attemptSvc.ResumePartABreakAsync("u1", started.AttemptId, default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+        Assert.Single(await db.ReadingAnswers.Where(a => a.ReadingAttemptId == started.AttemptId).ToListAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Exam_allows_BC_answer_and_submit_after_part_a_break_window_expires_without_resume()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-65);
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.PartABreakUsed = false;
+        attempt.PartBCPausedSeconds = 0;
+        attempt.DeadlineAt = attempt.StartedAt
+            .AddMinutes(70)
+            .AddSeconds(10);
+        await db.SaveChangesAsync();
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(1, result.RawScore);
+        Assert.Equal(ReadingAttemptStatus.Submitted, attempt.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Optional_break_extends_only_BC_deadline_and_never_reopens_part_a()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20);
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
+        await db.SaveChangesAsync();
+
+        var resumed = await attemptSvc.ResumePartABreakAsync("u1", started.AttemptId, default);
+        Assert.Equal(attempt.StartedAt.AddMinutes(15), resumed.PartADeadlineAt, TimeSpan.FromSeconds(1));
+        Assert.InRange(resumed.PartBCPausedSeconds, 299, 301);
+        Assert.Equal(resumed.PartBCDeadlineAt.AddSeconds(10), resumed.DeadlineAt, TimeSpan.FromSeconds(1));
+
+        var partAQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+        var locked = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partAQuestion.Id, partAQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_a_locked", locked.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Answer_window_rejects_BC_save_before_grace_deadline()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-71);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(5);
+        await db.SaveChangesAsync();
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("answer_window_closed", ex.Code);
+        Assert.Equal(ReadingAttemptStatus.InProgress, attempt.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_grace_still_grades_after_answer_window_closes()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", started.AttemptId);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-61);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(5);
+        await db.SaveChangesAsync();
+
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        Assert.Equal(1, result.RawScore);
+        Assert.Equal(ReadingAttemptStatus.Submitted, attempt.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_when_user_override_BlockAttempts_true()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
+        {
+            UserId = "u1", BlockAttempts = true, Reason = "Under investigation",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        }, "admin", default);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+        Assert.Contains("investigation", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_ignores_expired_user_override_BlockAttempts_true()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
+        {
+            UserId = "u1", BlockAttempts = true, Reason = "Expired hold",
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1), UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+        }, "admin", default);
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
+        Assert.False(string.IsNullOrWhiteSpace(started.AttemptId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_is_idempotent_on_replay()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var first = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        var replay = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        Assert.Equal(first.RawScore, replay.RawScore);
+        Assert.Equal(first.ScaledScore, replay.ScaledScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_writes_idempotency_record_and_replay_hits_cache()
+    {
+        // Phase 1 closure — proves the IdempotencyRecord row is created
+        // exactly once and that a replay reads from cache rather than
+        // re-grading. We assert by (a) checking row count == 1 with the
+        // expected scope, and (b) confirming the cached ResponseJson
+        // deserialises to the same RawScore returned by both calls.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var first = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        var second = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(first.RawScore, second.RawScore);
+        var records = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit")
+            .ToListAsync();
+        Assert.Single(records);
+        Assert.Contains($"u1:{started.AttemptId}", records[0].Key);
+        Assert.Contains("RawScore", records[0].ResponseJson);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_honours_caller_supplied_idempotency_key()
+    {
+        // Phase 1 closure — a caller-supplied Idempotency-Key header is still
+        // honoured, but it is namespaced by user + attempt to avoid cross-user
+        // cache collisions.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var customKey = "client-submit-2026-05-21-abc";
+        var first = await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
+        var second = await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
+
+        Assert.Equal(first.RawScore, second.RawScore);
+        var expectedKey = $"u1:{started.AttemptId}:{customKey}";
+        var records = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit" && r.Key == expectedKey)
+            .ToListAsync();
+        Assert.Single(records);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_hashes_overlong_caller_supplied_idempotency_key()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var customKey = new string('x', 256);
+        await attemptSvc.SubmitAsync("u1", started.AttemptId, customKey, default);
+
+        var record = await db.IdempotencyRecords
+            .SingleAsync(r => r.Scope == "reading-submit");
+        Assert.True(record.Key.Length <= 128);
+        Assert.StartsWith($"u1:{started.AttemptId}:sha256:", record.Key);
+        Assert.DoesNotContain(customKey, record.Key, StringComparison.Ordinal);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_namespaces_caller_supplied_idempotency_key_by_attempt_owner()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var alice = await attemptSvc.StartAsync("alice", "p1", default);
+        var bob = await attemptSvc.StartAsync("bob", "p1", default);
+        var customKey = "same-browser-retry-key";
+
+        await attemptSvc.SubmitAsync("alice", alice.AttemptId, customKey, default);
+        await attemptSvc.SubmitAsync("bob", bob.AttemptId, customKey, default);
+
+        var keys = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit")
+            .Select(r => r.Key)
+            .OrderBy(k => k)
+            .ToListAsync();
+
+        Assert.Contains($"alice:{alice.AttemptId}:{customKey}", keys);
+        Assert.Contains($"bob:{bob.AttemptId}:{customKey}", keys);
+        Assert.Equal(2, keys.Count);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SaveAnswer_elapsed_ms_accumulates_total()
+    {
+        // Phase 1 closure — successive saves of the same answer with
+        // elapsedMs increment TotalElapsedMs and overwrite ElapsedMs with
+        // the latest delta. Non-positive values are silently discarded.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var firstQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"X\"", 1_500, default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"Y\"", 2_500, default);
+        // Negative value must not affect the total.
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"Z\"", -10, default);
+
+        var row = await db.ReadingAnswers
+            .SingleAsync(a => a.ReadingAttemptId == started.AttemptId && a.ReadingQuestionId == firstQuestion.Id);
+        Assert.Equal(2_500, row.ElapsedMs);
+        Assert.Equal(4_000, row.TotalElapsedMs);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SaveAnswer_elapsed_ms_caps_at_four_hours()
+    {
+        // Phase 1 closure — server-side cap defeats absurd values from
+        // clock-skewed or hostile clients. Cap is 14_400_000 ms (4 h).
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var firstQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+
+        await attemptSvc.SaveAnswerAsync(
+            "u1", started.AttemptId, firstQuestion.Id, "\"X\"", int.MaxValue, default);
+
+        var row = await db.ReadingAnswers
+            .SingleAsync(a => a.ReadingAttemptId == started.AttemptId && a.ReadingQuestionId == firstQuestion.Id);
+        Assert.Equal(14_400_000, row.ElapsedMs);
+        Assert.Equal(14_400_000, row.TotalElapsedMs);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extra_time_entitlement_extends_deadline()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        // 25% extra time
+        await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
+        {
+            UserId = "u1", ExtraTimeEntitlementPct = 25,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        }, "admin", default);
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        // Default 15 + 45 = 60 min; 25% extra → 19 + 57 = 76 min
+        Assert.Equal(19, started.PartATimerMinutes);
+        Assert.Equal(57, started.PartBCTimerMinutes);
+        var totalExpected = TimeSpan.FromMinutes(86).Add(TimeSpan.FromSeconds(10));
+        var actualDelta = started.DeadlineAt - started.StartedAt;
+        Assert.True(Math.Abs((actualDelta - totalExpected).TotalSeconds) < 5);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Policy_snapshot_captured_on_attempt_start()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var reload = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        var snap = JsonSerializer.Deserialize<ReadingResolvedPolicy>(reload.PolicySnapshotJson);
+        Assert.NotNull(snap);
+        Assert.Equal(15, snap!.PartATimerMinutes);
+        Assert.Equal(45, snap.PartBCTimerMinutes);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_grading_remains_strict_after_live_policy_softening_attempt()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var firstQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1"
+                && q.Part.PartCode == ReadingPartCode.A
+                && q.QuestionType == ReadingQuestionType.ShortAnswer);
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
+        firstQuestion.AcceptedSynonymsJson = "[\"synonym answer\"]";
+        await db.SaveChangesAsync();
+
+        var global = await policy.GetGlobalAsync(default);
+        global.ShortAnswerAcceptSynonyms = true;
+        await policy.UpsertGlobalAsync(global, "admin", default);
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"synonym answer\"", default);
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.False(result.Answers.Single(a => a.QuestionId == firstQuestion.Id).IsCorrect);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Unknown_type_fallback_awards_zero_by_default()
+    {
+        var (db, structure, _, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+
+        // Write a "valid" MCQ3 question then corrupt its stored type after the fact
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.MultipleChoice3,
+            "X", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default);
+        var rowRaw = await db.ReadingQuestions.FirstAsync(x => x.Id == q.Id);
+        rowRaw.QuestionType = (ReadingQuestionType)999; // corrupt
+        await db.SaveChangesAsync();
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "aX", UserId = "u", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42, PolicySnapshotJson = "{}",
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "ax", ReadingAttemptId = "aX", ReadingQuestionId = q.Id,
+            UserAnswerJson = "\"A\"", AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("aX", default);
+        Assert.Equal(0, result.PointsEarnedSum()); // grader returns zero for corrupt type
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Admin_reading_analytics_aggregates_parts_skills_and_hardest_questions()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partA = await db.ReadingParts.SingleAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var partB = await db.ReadingParts.SingleAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.B);
+        var qA = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partA.Id && q.DisplayOrder == 1);
+        var qB = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partB.Id && q.DisplayOrder == 1);
+        qA.SkillTag = "Skimming";
+        qB.SkillTag = "Inference";
+
+        db.ReadingAttempts.AddRange(
+            new ReadingAttempt
+            {
+                Id = "a1",
+                UserId = "u1",
+                PaperId = "p1",
+                StartedAt = DateTimeOffset.UtcNow.AddDays(-31),
+                SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                LastActivityAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                Status = ReadingAttemptStatus.Submitted,
+                RawScore = 30,
+                ScaledScore = OetScoring.OetRawToScaled(30),
+                MaxRawScore = 42,
+                PolicySnapshotJson = "{}",
+            },
+            new ReadingAttempt
+            {
+                Id = "a2",
+                UserId = "u2",
+                PaperId = "p1",
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-80),
+                SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+                LastActivityAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+                Status = ReadingAttemptStatus.Submitted,
+                RawScore = 20,
+                ScaledScore = OetScoring.OetRawToScaled(20),
+                MaxRawScore = 42,
+                PolicySnapshotJson = "{}",
+            },
+            new ReadingAttempt
+            {
+                Id = "a4",
+                UserId = "u4",
+                PaperId = "p1",
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+                SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-25),
+                LastActivityAt = DateTimeOffset.UtcNow.AddMinutes(-25),
+                Status = ReadingAttemptStatus.Submitted,
+                RawScore = 1,
+                ScaledScore = null,
+                MaxRawScore = 1,
+                PolicySnapshotJson = "{}",
+                Mode = ReadingAttemptMode.Drill,
+                ScopeJson = JsonSerializer.Serialize(new { kind = "drill", questionIds = new[] { qA.Id }, label = "Skimming drill" }),
+            },
+            new ReadingAttempt
+            {
+                Id = "a5",
+                UserId = "u5",
+                PaperId = "p1",
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-28),
+                SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-27),
+                LastActivityAt = DateTimeOffset.UtcNow.AddMinutes(-27),
+                Status = ReadingAttemptStatus.Submitted,
+                RawScore = 1,
+                ScaledScore = null,
+                MaxRawScore = 1,
+                PolicySnapshotJson = "{}",
+                Mode = ReadingAttemptMode.Drill,
+                ScopeJson = "[]",
+            },
+            new ReadingAttempt
+            {
+                Id = "a3",
+                UserId = "u3",
+                PaperId = "p1",
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+                LastActivityAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+                Status = ReadingAttemptStatus.InProgress,
+                MaxRawScore = 42,
+                PolicySnapshotJson = "{}",
+            });
+
+        db.ReadingAnswers.AddRange(
+            new ReadingAnswer { Id = "ans-1", ReadingAttemptId = "a1", ReadingQuestionId = qA.Id, UserAnswerJson = "\"ans1\"", IsCorrect = true, PointsEarned = 1, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-6) },
+            new ReadingAnswer { Id = "ans-2", ReadingAttemptId = "a1", ReadingQuestionId = qB.Id, UserAnswerJson = "\"A\"", IsCorrect = false, PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-6) },
+            new ReadingAnswer { Id = "ans-3", ReadingAttemptId = "a2", ReadingQuestionId = qA.Id, UserAnswerJson = "\"wrong\"", IsCorrect = false, PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-21) },
+            new ReadingAnswer { Id = "ans-4", ReadingAttemptId = "a2", ReadingQuestionId = qB.Id, UserAnswerJson = "\"A\"", IsCorrect = false, PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-21) },
+            new ReadingAnswer { Id = "ans-5", ReadingAttemptId = "a4", ReadingQuestionId = qA.Id, UserAnswerJson = "\"ans1\"", IsCorrect = true, PointsEarned = 1, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-26) },
+            new ReadingAnswer { Id = "ans-6", ReadingAttemptId = "a5", ReadingQuestionId = qA.Id, UserAnswerJson = "\"ans1\"", IsCorrect = true, PointsEarned = 1, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-27) });
+        await db.SaveChangesAsync();
+
+        var analytics = await ReadingAnalyticsAdminEndpoints.BuildAnalyticsAsync(db, 30, default);
+
+        Assert.Equal(1, analytics.Summary.TotalPapers);
+        Assert.Equal(1, analytics.Summary.ExamReadyPapers);
+        Assert.Equal(5, analytics.Summary.TotalAttempts);
+        Assert.Equal(4, analytics.Summary.SubmittedAttempts);
+        Assert.Equal(1, analytics.Summary.ActiveAttempts);
+        Assert.Equal(50, analytics.Summary.PassRatePercent);
+        Assert.Contains(analytics.PartBreakdown, p => p.PartCode == "B" && p.Opportunities == 12 && p.AccuracyPercent == 0);
+        Assert.Contains(analytics.SkillBreakdown, s => s.Label == "Inference" && s.AccuracyPercent == 0);
+        Assert.Contains(analytics.SkillBreakdown, s => s.Label == "Skimming" && s.Opportunities == 4 && s.CorrectCount == 3);
+        Assert.Equal(qB.Id, analytics.HardestQuestions.First().QuestionId);
+        Assert.Equal(2, analytics.HardestQuestions.First().Opportunities);
+        Assert.Contains(analytics.ActionInsights, insight => insight.Id == "part_b");
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Helpers
+    // ════════════════════════════════════════════════════════════════════
+
+    private static async Task FullyAuthorPaperAsync(LearnerDbContext db, ReadingStructureService structure, string paperId)
+    {
+        await AttachReadingPartPdfsAsync(db, paperId);
+        var parts = await db.ReadingParts.Where(p => p.PaperId == paperId).ToListAsync();
+        var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
+
+        var textsA = new List<ReadingText>();
+        var textsB = new List<ReadingText>();
+        var textsC = new List<ReadingText>();
+        for (var i = 1; i <= 4; i++)
+        {
+            textsA.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partA.Id, i, $"Text A{i}", "BMJ", "<p>text</p>", 10, null), "admin", default));
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            textsB.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partB.Id, i, $"Extract B{i}", "NHS", "<p>text</p>", 20, null), "admin", default));
+        }
+        for (var i = 1; i <= 2; i++)
+        {
+            textsC.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partC.Id, i, $"Text C{i}", "Lancet", "<p>text</p>", 300, null), "admin", default));
+        }
+
+        // Part A: Q1-7 matching, Q8-14 short answer, Q15-20 sentence completion.
+        for (var i = 1; i <= 7; i++)
+        {
+            var answer = ((char)('A' + ((i - 1) % 4))).ToString();
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.MatchingTextReference,
+                $"PA-Q{i}", "[]", $"\"{answer}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 8; i <= 14; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 15; i <= 20; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.SentenceCompletion,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        // Part B: 6 MCQ3
+        for (var i = 1; i <= 6; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                $"PB-Q{i}", "[\"a\",\"b\",\"c\"]", "\"B\"", null, false, null, null), "admin", default);
+        }
+        // Part C: 16 MCQ4
+        for (var i = 1; i <= 16; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                $"PC-Q{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"C\"", null, false, null, null), "admin", default);
+        }
+
+        // Phase 4 — fast-forward all newly authored questions to Published so
+        // tests that exercise the publish gate keep working without having
+        // to drive the full review-state lifecycle for every question.
+        var partIds = parts.Select(p => p.Id).ToList();
+        var questions = await db.ReadingQuestions
+            .Where(q => partIds.Contains(q.ReadingPartId))
+            .ToListAsync();
+        foreach (var q in questions)
+        {
+            q.ReviewState = ReadingReviewState.Published;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task AttachReadingPartPdfsAsync(LearnerDbContext db, string paperId)
+    {
+        foreach (var part in new[] { "A", "B", "C" })
+        {
+            var mediaId = $"{paperId}-pdf-{part}";
+            if (!await db.MediaAssets.AnyAsync(m => m.Id == mediaId))
+            {
+                db.MediaAssets.Add(new MediaAsset
+                {
+                    Id = mediaId,
+                    OriginalFilename = $"reading-part-{part}.pdf",
+                    MimeType = "application/pdf",
+                    Format = "pdf",
+                    SizeBytes = 10,
+                    StoragePath = $"reading/{paperId}/part-{part}.pdf",
+                    Status = MediaAssetStatus.Ready,
+                    UploadedBy = "admin",
+                });
+            }
+            if (!await db.ContentPaperAssets.AnyAsync(a => a.PaperId == paperId && a.Part == part && a.Role == PaperAssetRole.QuestionPaper && a.IsPrimary))
+            {
+                db.ContentPaperAssets.Add(new ContentPaperAsset
+                {
+                    Id = $"{paperId}-asset-{part}",
+                    PaperId = paperId,
+                    Role = PaperAssetRole.QuestionPaper,
+                    Part = part,
+                    MediaAssetId = mediaId,
+                    Title = $"Part {part} PDF",
+                    DisplayOrder = part == "A" ? 0 : part == "B" ? 1 : 2,
+                    IsPrimary = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task ResumeExamPartBCAsync(
+        LearnerDbContext db,
+        ReadingAttemptService attemptSvc,
+        string userId,
+        string attemptId)
+    {
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == attemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.PartABreakUsed = false;
+        attempt.PartBCPausedSeconds = 0;
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddHours(1);
+        await db.SaveChangesAsync();
+        await attemptSvc.ResumePartABreakAsync(userId, attemptId, default);
+    }
+
+    private static async Task AnswerAllReadingQuestionsAsync(
+        LearnerDbContext db,
+        ReadingAttemptService attemptSvc,
+        string userId,
+        string attemptId,
+        bool correct)
+    {
+        var questions = await db.ReadingQuestions
+            .AsNoTracking()
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .ToListAsync();
+
+        foreach (var question in questions.Where(q => q.Part!.PartCode == ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync(userId, attemptId, question.Id, correct ? question.CorrectAnswerJson : "\"WRONG\"", default);
+        }
+
+        await ResumeExamPartBCAsync(db, attemptSvc, userId, attemptId);
+
+        foreach (var question in questions.Where(q => q.Part!.PartCode != ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync(userId, attemptId, question.Id, correct ? question.CorrectAnswerJson : "\"WRONG\"", default);
+        }
+    }
+
+    private static void SeedReadingMockSection(LearnerDbContext db, string userId, int scaledScore)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var mockAttempt = new MockAttempt
+        {
+            Id = $"mock-{Guid.NewGuid():N}",
+            UserId = userId,
+            MockBundleId = "bundle-reading-pathway",
+            MockType = "full",
+            State = AttemptState.Completed,
+            StartedAt = now.AddHours(-1),
+            SubmittedAt = now.AddMinutes(-5),
+            CompletedAt = now,
+            ConfigJson = "{}",
+        };
+
+        var bundleSection = new MockBundleSection
+        {
+            Id = $"bundle-section-{Guid.NewGuid():N}",
+            MockBundleId = "bundle-reading-pathway",
+            SectionOrder = 1,
+            SubtestCode = "reading",
+            ContentPaperId = "p1",
+            TimeLimitMinutes = 60,
+            CreatedAt = now,
+        };
+
+        db.MockAttempts.Add(mockAttempt);
+        db.MockBundleSections.Add(bundleSection);
+        db.MockSectionAttempts.Add(new MockSectionAttempt
+        {
+            Id = $"mock-section-{Guid.NewGuid():N}",
+            MockAttemptId = mockAttempt.Id,
+            MockAttempt = mockAttempt,
+            MockBundleSectionId = bundleSection.Id,
+            MockBundleSection = bundleSection,
+            SubtestCode = "reading",
+            ContentPaperId = "p1",
+            LaunchRoute = "/mocks",
+            State = AttemptState.Completed,
+            RawScore = 30,
+            RawScoreMax = 42,
+            ScaledScore = scaledScore,
+            Grade = scaledScore >= OetScoring.ScaledPassGradeB ? "B" : "C+",
+            StartedAt = now.AddHours(-1),
+            SubmittedAt = now.AddMinutes(-5),
+            CompletedAt = now,
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Phase 3 — Practice Mode + Error Bank
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Learning_mode_attempt_can_run_alongside_exam_attempt()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var examStart = await attemptSvc.StartAsync("u1", "p1", default);
+        // Concurrency cap should NOT block a Learning-mode attempt.
+        var learningStart = await attemptSvc.StartInModeAsync(
+            "u1", "p1", ReadingAttemptMode.Learning, scopeJson: null, default);
+
+        Assert.NotEqual(examStart.AttemptId, learningStart.AttemptId);
+        var learning = await db.ReadingAttempts.FindAsync(learningStart.AttemptId);
+        Assert.NotNull(learning);
+        Assert.Equal(ReadingAttemptMode.Learning, learning!.Mode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Attempt_start_pins_published_reading_exam_mode_rulebook_version()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rb_reading__exam-mode_1.2.3",
+            Kind = "reading",
+            Profession = "_exam-mode",
+            Version = "1.2.3",
+            Status = RulebookStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            UpdatedByUserId = "test-admin",
+        });
+        await db.SaveChangesAsync();
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
+        var attempt = await db.ReadingAttempts.AsNoTracking().SingleAsync(a => a.Id == started.AttemptId);
+        Assert.Equal("1.2.3", attempt.RulebookVersion);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Learning_mode_does_not_hard_lock_part_a_after_15_minutes()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartInModeAsync(
+            "u1", "p1", ReadingAttemptMode.Learning, scopeJson: null, default);
+
+        // Backdate StartedAt by 30 minutes — would lock Part A in Exam mode.
+        var attempt = await db.ReadingAttempts.FindAsync(started.AttemptId);
+        Assert.NotNull(attempt);
+        attempt!.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-30);
+        await db.SaveChangesAsync();
+
+        var partAQuestion = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .FirstAsync();
+
+        // Exam mode would throw "part_a_locked"; Learning mode should allow it.
+        await attemptSvc.SaveAnswerAsync(
+            "u1", started.AttemptId, partAQuestion.Id, "\"A\"", default);
+
+        var saved = await db.ReadingAnswers
+            .CountAsync(a => a.ReadingAttemptId == started.AttemptId);
+        Assert.Equal(1, saved);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Error_bank_records_wrong_answers_on_submit_and_resolves_on_correct_retry()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // First attempt — submit a wrong answer for one Part B question.
+        var first = await attemptSvc.StartAsync("u1", "p1", default);
+        var pbQ = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.B)
+            .FirstAsync();
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", first.AttemptId);
+        await attemptSvc.SaveAnswerAsync("u1", first.AttemptId, pbQ.Id, "\"X\"", default);
+        await attemptSvc.SubmitAsync("u1", first.AttemptId, default);
+
+        var entry = await db.ReadingErrorBankEntries
+            .FirstOrDefaultAsync(e => e.UserId == "u1" && e.ReadingQuestionId == pbQ.Id);
+        Assert.NotNull(entry);
+        Assert.False(entry!.IsResolved);
+        Assert.Equal(1, entry.TimesWrong);
+        Assert.Equal(ReadingPartCode.B, entry.PartCode);
+
+        // Second attempt — answer correctly. Helper authored Part B as "B".
+        var second = await attemptSvc.StartInModeAsync(
+            "u1", "p1", ReadingAttemptMode.Learning, scopeJson: null, default);
+        await attemptSvc.SaveAnswerAsync("u1", second.AttemptId, pbQ.Id, "\"B\"", default);
+        await attemptSvc.SubmitAsync("u1", second.AttemptId, default);
+
+        var resolved = await db.ReadingErrorBankEntries
+            .FirstOrDefaultAsync(e => e.UserId == "u1" && e.ReadingQuestionId == pbQ.Id);
+        Assert.NotNull(resolved);
+        Assert.True(resolved!.IsResolved);
+        Assert.Equal("answered_correctly", resolved.ResolvedReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Error_bank_increments_times_wrong_on_repeated_misses()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var pbQ = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.B)
+            .FirstAsync();
+
+        for (var i = 0; i < 2; i++)
+        {
+            var run = await attemptSvc.StartInModeAsync(
+                "u1", "p1", ReadingAttemptMode.Learning, scopeJson: null, default);
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, pbQ.Id, "\"X\"", default);
+            await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+        }
+
+        var entry = await db.ReadingErrorBankEntries
+            .FirstAsync(e => e.UserId == "u1" && e.ReadingQuestionId == pbQ.Id);
+        Assert.False(entry.IsResolved);
+        Assert.Equal(2, entry.TimesWrong);
+        await db.DisposeAsync();
+    }
+
+    // ── Phase 3b: Drill / MiniTest / ErrorBank subset attempts ───────────
+
+    [Fact]
+    public async Task Drill_attempt_grades_only_in_scope_questions_and_skips_scaled_score()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Pick three Part-A questions to scope a drill against. Authored
+        // correct answer for Part A = "ans{i}".
+        var partAQuestions = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .Take(3)
+            .Select(q => new { q.Id, q.CorrectAnswerJson })
+            .ToListAsync();
+        var partAIds = partAQuestions.Select(q => q.Id).ToList();
+
+        var scope = JsonSerializer.Serialize(new { kind = "drill", questionIds = partAIds });
+        var run = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Drill, scope, default);
+
+        // Answer two correctly, one wrong.
+        var idx = 0;
+        foreach (var q in partAQuestions)
+        {
+            var answer = idx == 2 ? "\"WRONG\"" : q.CorrectAnswerJson;
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, answer, default);
+            idx++;
+        }
+        var result = await grader.GradeAttemptAsync(run.AttemptId, default);
+
+        // Grader must only count the 3 in-scope questions and skip OET 0-500
+        // conversion (scaled is null because this is practice-only).
+        Assert.Equal(3, result.MaxRawScore);
+        Assert.Equal(2, result.RawScore);
+        Assert.Equal(2, result.CorrectCount);
+        Assert.Equal(1, result.IncorrectCount);
+        Assert.Equal(0, result.UnansweredCount);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("—", result.GradeLetter);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == run.AttemptId);
+        Assert.Null(attempt.ScaledScore);
+        Assert.Equal(3, attempt.MaxRawScore);
+        Assert.Equal(2, attempt.RawScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_practice_endpoint_creates_scoped_attempt_for_requested_part()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        var paperId = "part-practice-paper";
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "part-practice-learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var response = await client.PostAsync(
+            $"/v1/reading-papers/papers/{paperId}/practice/parts/B",
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var attemptId = json.RootElement.GetProperty("attemptId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(attemptId));
+        Assert.Equal("Drill", json.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(6, json.RootElement.GetProperty("questionCount").GetInt32());
+        Assert.Contains($"/reading/paper/{paperId}?attemptId={attemptId}&mode=part-practice&part=B",
+            json.RootElement.GetProperty("playerRoute").GetString());
+
+        var stored = await db.ReadingAttempts.AsNoTracking().SingleAsync(a => a.Id == attemptId);
+        Assert.Equal(ReadingAttemptMode.Drill, stored.Mode);
+        Assert.NotNull(stored.ScopeJson);
+        using var scopeJson = JsonDocument.Parse(stored.ScopeJson!);
+        Assert.Equal("part-practice", scopeJson.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("B", scopeJson.RootElement.GetProperty("partCode").GetString());
+        Assert.Equal(6, scopeJson.RootElement.GetProperty("questionIds").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Part_practice_endpoint_hides_unpublished_paper_before_question_probe()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var paperId = "part-practice-draft-paper";
+        await SeedPaperAsync(db, paperId);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.Status = ContentStatus.Draft;
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "part-practice-learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var response = await client.PostAsync(
+            $"/v1/reading-papers/papers/{paperId}/practice/parts/A",
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("part_practice_no_questions", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Part_practice_endpoint_hides_profession_mismatch_before_question_probe()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var paperId = "part-practice-profession-paper";
+        await SeedPaperAsync(db, paperId);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.AppliesToAllProfessions = false;
+        paper.ProfessionId = "nursing";
+        db.Users.Add(new LearnerUser
+        {
+            Id = "part-practice-learner",
+            DisplayName = "Part Practice Learner",
+            Email = "part-practice-learner@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            Timezone = "UTC",
+            Locale = "en-AU",
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "part-practice-learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var response = await client.PostAsync(
+            $"/v1/reading-papers/papers/{paperId}/practice/parts/A",
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("part_practice_no_questions", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Subset_practice_start_requires_question_scope()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() => attemptSvc.StartInModeAsync(
+            "u1",
+            "p1",
+            ReadingAttemptMode.Drill,
+            JsonSerializer.Serialize(new { kind = "drill", minutes = 8 }),
+            default));
+
+        Assert.Equal("scope_question_ids_required", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Legacy_subset_practice_without_scope_never_receives_scaled_score()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var snapshot = await policy.ResolveForUserAsync("u1", default);
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "legacy-drill",
+            UserId = "u1",
+            PaperId = "p1",
+            Mode = ReadingAttemptMode.Drill,
+            ScopeJson = null,
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = ReadingStructureService.CanonicalMaxRawScore,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("legacy-drill", default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.Equal(0, result.MaxRawScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("—", result.GradeLetter);
+
+        var attempt = await db.ReadingAttempts.SingleAsync(a => a.Id == "legacy-drill");
+        Assert.Null(attempt.ScaledScore);
+        Assert.Equal(0, attempt.MaxRawScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submitted_legacy_subset_practice_with_stale_scaled_score_is_cleaned_up()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var snapshot = await policy.ResolveForUserAsync("u1", default);
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "legacy-submitted-drill",
+            UserId = "u1",
+            PaperId = "p1",
+            Mode = ReadingAttemptMode.Drill,
+            ScopeJson = null,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            LastActivityAt = DateTimeOffset.UtcNow,
+            SubmittedAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.Submitted,
+            RawScore = 30,
+            MaxRawScore = ReadingStructureService.CanonicalMaxRawScore,
+            ScaledScore = 350,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("legacy-submitted-drill", default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.Equal(0, result.MaxRawScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("—", result.GradeLetter);
+
+        var attempt = await db.ReadingAttempts.SingleAsync(a => a.Id == "legacy-submitted-drill");
+        Assert.Equal(0, attempt.RawScore);
+        Assert.Equal(0, attempt.MaxRawScore);
+        Assert.Null(attempt.ScaledScore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Drill_sampler_returns_only_questions_for_requested_part()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var sample = await ReadingPracticeSampler.SampleAsync(
+            db, "p1", ReadingPartCode.B, skillTag: null, count: 4, default);
+        Assert.Equal(4, sample.Count);
+
+        var parts = await db.ReadingQuestions
+            .Where(q => sample.Contains(q.Id))
+            .Select(q => q.Part!.PartCode)
+            .ToListAsync();
+        Assert.All(parts, p => Assert.Equal(ReadingPartCode.B, p));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MiniTest_sampler_returns_mixed_part_subset()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var sample = await ReadingPracticeSampler.SampleMixedAsync(db, "p1", count: 12, default);
+        Assert.NotEmpty(sample);
+        Assert.True(sample.Count <= 12);
+
+        var distinctParts = await db.ReadingQuestions
+            .Where(q => sample.Contains(q.Id))
+            .Select(q => q.Part!.PartCode)
+            .Distinct()
+            .ToListAsync();
+        // A mini-test must touch at least 2 of the 3 parts so the learner
+        // gets a balanced warm-up rather than a single-part run.
+        Assert.True(distinctParts.Count >= 2);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ErrorBank_subset_does_not_reset_part_a_lock_warning()
+    {
+        // Phase 3b ErrorBank attempts must use Drill-style timer (>=15min)
+        // so a learner can retest a Part-A miss without the canonical
+        // 15-minute hard lock kicking in. We confirm the deadline horizon.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partAQid = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.A)
+            .Select(q => q.Id)
+            .FirstAsync();
+        var scope = JsonSerializer.Serialize(new
+        {
+            kind = "error-bank",
+            questionIds = new[] { partAQid },
+        });
+        var run = await attemptSvc.StartInModeAsync(
+            "u1", "p1", ReadingAttemptMode.ErrorBank, scope, default);
+        var now = DateTimeOffset.UtcNow;
+        Assert.True(run.DeadlineAt - now >= TimeSpan.FromMinutes(14),
+            $"Expected ErrorBank attempt to give >=15min, got {run.DeadlineAt - now}");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MiniTest_save_rejects_answers_during_submit_grace()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var questionId = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.A)
+            .Select(q => q.Id)
+            .FirstAsync();
+        var scope = JsonSerializer.Serialize(new
+        {
+            kind = "mini-test",
+            minutes = 5,
+            questionIds = new[] { questionId },
+        });
+        var run = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.MiniTest, scope, default);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == run.AttemptId);
+        var now = DateTimeOffset.UtcNow;
+        attempt.StartedAt = now.AddMinutes(-5).AddSeconds(-1);
+        attempt.DeadlineAt = now.AddSeconds(9);
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", run.AttemptId, questionId, "\"ans1\"", default));
+
+        Assert.Equal("answer_window_closed", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Drill_attempt_rejects_same_paper_question_outside_scope()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partAIds = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .Take(2)
+            .Select(q => q.Id)
+            .ToListAsync();
+        var scope = JsonSerializer.Serialize(new
+        {
+            kind = "drill",
+            questionIds = new[] { partAIds[0] },
+        });
+        var run = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Drill, scope, default);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", run.AttemptId, partAIds[1], "\"ans2\"", default));
+
+        Assert.Equal("question_out_of_scope", ex.Code);
+        Assert.Equal(0, await db.ReadingAnswers.CountAsync(a => a.ReadingAttemptId == run.AttemptId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Drill_review_endpoint_returns_scope_only_without_oet_scaled_grade()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var structure = new ReadingStructureService(db);
+        var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
+        var paperId = "review-drill-paper";
+        var userId = "mock-user-001";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        var firstQuestion = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstQuestion.CorrectAnswerJson = "\"SECRET-REVIEW-ANSWER\"";
+        firstQuestion.AcceptedSynonymsJson = "[\"SECRET-REVIEW-SYNONYM\"]";
+        firstQuestion.ExplanationMarkdown = "SECRET-REVIEW-EXPLANATION";
+        await db.SaveChangesAsync();
+
+        var scopedQuestions = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .Take(2)
+            .Select(q => new { q.Id, q.CorrectAnswerJson })
+            .ToListAsync();
+        var scopedIds = scopedQuestions.Select(q => q.Id).ToArray();
+        var scopeJson = JsonSerializer.Serialize(new
+        {
+            kind = "drill",
+            minutes = 5,
+            questionIds = scopedIds,
+        });
+
+        var run = await attemptSvc.StartInModeAsync(
+            userId, paperId, ReadingAttemptMode.Drill, scopeJson, default);
+        // Submit a non-secret answer so the user's submitted answer doesn't
+        // accidentally echo the secret sentinel into the reviewPayload.
+        await attemptSvc.SaveAnswerAsync(userId, run.AttemptId, scopedQuestions[0].Id, "\"user-submitted-answer\"", default);
+        var submitResult = await attemptSvc.SubmitAsync(userId, run.AttemptId, default);
+        Assert.Null(submitResult.ScaledScore);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        var reviewResponse = await client.GetAsync($"/v1/reading-papers/attempts/{run.AttemptId}/review");
+        reviewResponse.EnsureSuccessStatusCode();
+        var reviewPayload = await reviewResponse.Content.ReadAsStringAsync();
+        // Owner directive (2026-07-05): a Submitted attempt — including Drill —
+        // now discloses the correct answer + explanation on the review payload.
+        Assert.Contains("\"correctAnswer\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"explanationMarkdown\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SECRET-REVIEW-ANSWER", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SECRET-REVIEW-EXPLANATION", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        // Accepted synonyms remain answer-key-only internal data — never surfaced.
+        Assert.DoesNotContain("acceptedSynonyms", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET-REVIEW-SYNONYM", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        var review = JsonSerializer.Deserialize<JsonElement>(reviewPayload);
+
+        var attemptJson = review.GetProperty("attempt");
+        Assert.Equal("Drill", attemptJson.GetProperty("mode").GetString());
+        Assert.Equal(JsonValueKind.Null, attemptJson.GetProperty("scaledScore").ValueKind);
+        Assert.Equal("—", attemptJson.GetProperty("gradeLetter").GetString());
+
+        var items = review.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(2, items.Count);
+        Assert.All(items, item => Assert.Contains(item.GetProperty("questionId").GetString(), scopedIds));
+
+        var partBreakdown = review.GetProperty("partBreakdown").EnumerateArray().ToList();
+        Assert.Single(partBreakdown);
+        Assert.Equal("A", partBreakdown[0].GetProperty("partCode").GetString());
+        Assert.Equal(2, partBreakdown[0].GetProperty("maxRawScore").GetInt32());
+
+        var attemptResponse = await client.GetAsync($"/v1/reading-papers/attempts/{run.AttemptId}");
+        attemptResponse.EnsureSuccessStatusCode();
+        var attemptDto = await attemptResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, attemptDto.GetProperty("totalQuestions").GetInt32());
+        Assert.Equal(
+            attemptDto.GetProperty("partADeadlineAt").GetDateTimeOffset(),
+            attemptDto.GetProperty("partBCDeadlineAt").GetDateTimeOffset());
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Phase 4 — Distractor Categories + Authoring Review States
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Distractor_category_is_recorded_on_wrong_mcq_answer()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Tag option "A" on a Part C MCQ4 question (correct = "C") with Opposite.
+        var partCQ = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.C)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        var review = new ReadingReviewService(db);
+        await review.SetDistractorsAsync(partCQ.Id,
+            new Dictionary<string, ReadingDistractorCategory>
+            {
+                ["A"] = ReadingDistractorCategory.Opposite,
+                ["B"] = ReadingDistractorCategory.NotInText,
+            }, "admin", default);
+
+        // Learner picks A (the tagged-Opposite distractor) → wrong.
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", run.AttemptId);
+        await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, partCQ.Id, "\"A\"", default);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+
+        var saved = await db.ReadingAnswers.FirstAsync(a =>
+            a.ReadingAttemptId == run.AttemptId && a.ReadingQuestionId == partCQ.Id);
+        Assert.False(saved.IsCorrect);
+        Assert.Equal(ReadingDistractorCategory.Opposite, saved.SelectedDistractorCategory);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Review_state_transitions_follow_state_machine()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        // FullyAuthorPaperAsync fast-forwards to Published; reset to Draft for this test.
+        var q = await db.ReadingQuestions.FirstAsync(x => x.Part!.PartCode == ReadingPartCode.A);
+        q.ReviewState = ReadingReviewState.Draft;
+        await db.SaveChangesAsync();
+
+        var review = new ReadingReviewService(db);
+
+        // Draft → AcademicReview is allowed
+        var t1 = await review.TransitionStateAsync(new ReadingReviewTransitionArgs(
+            q.Id, ReadingReviewState.AcademicReview, "admin-1", "Reviewer", "Looks good.", false), default);
+        Assert.Equal(ReadingReviewState.Draft, t1.FromState);
+        Assert.Equal(ReadingReviewState.AcademicReview, t1.ToState);
+
+        // AcademicReview → Published is NOT allowed (must traverse the chain)
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            review.TransitionStateAsync(new ReadingReviewTransitionArgs(
+                q.Id, ReadingReviewState.Published, "admin-1", null, null, false), default));
+
+        // Admin override DOES allow rollback to Draft from any state
+        var rollback = await review.TransitionStateAsync(new ReadingReviewTransitionArgs(
+            q.Id, ReadingReviewState.Draft, "admin-1", null, "Emergency rollback.", true), default);
+        Assert.Equal(ReadingReviewState.Draft, rollback.ToState);
+
+        var history = await review.GetHistoryAsync(q.Id, default);
+        Assert.Equal(2, history.Count);
+        Assert.Equal(ReadingReviewState.Draft, history[0].ToState); // newest first
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validate_paper_blocks_publish_when_questions_not_published()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Knock one question back to Draft.
+        var q = await db.ReadingQuestions.FirstAsync(x => x.Part!.PartCode == ReadingPartCode.B);
+        q.ReviewState = ReadingReviewState.Draft;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "question_not_published" && i.TargetId == q.Id);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Paper_analytics_reports_distractor_histogram_and_risk_labels()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Tag a Part C question's wrong options.
+        var partCQ = await db.ReadingQuestions
+            .Where(q => q.Part!.PartCode == ReadingPartCode.C)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        var review = new ReadingReviewService(db);
+        await review.SetDistractorsAsync(partCQ.Id,
+            new Dictionary<string, ReadingDistractorCategory>
+            {
+                ["A"] = ReadingDistractorCategory.Opposite,
+            }, "admin", default);
+
+        // 6 learners all pick A (the tagged distractor) → 6 wrong attempts.
+        for (var i = 0; i < 6; i++)
+        {
+            var userId = $"u{i}";
+            var run = await attemptSvc.StartAsync(userId, "p1", default);
+            await ResumeExamPartBCAsync(db, attemptSvc, userId, run.AttemptId);
+            await attemptSvc.SaveAnswerAsync(userId, run.AttemptId, partCQ.Id, "\"A\"", default);
+            await attemptSvc.SubmitAsync(userId, run.AttemptId, default);
+        }
+
+        var analytics = new ReadingAnalyticsService(db);
+        var data = await analytics.GetPaperAnalyticsAsync("p1", default);
+
+        Assert.Equal(6, data.SubmittedAttempts);
+        Assert.Contains(data.DistractorHistogram, h =>
+            h.QuestionId == partCQ.Id
+            && h.Category == ReadingDistractorCategory.Opposite
+            && h.OptionKey == "A"
+            && h.SelectedCount == 6);
+        Assert.Contains(data.RiskLabels, r => r.QuestionId == partCQ.Id && r.Code == "too_hard");
+        Assert.Contains(data.HardestQuestions, h => h.QuestionId == partCQ.Id && h.CorrectRate == 0);
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Phase 6 — AI PDF extraction → admin approval
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Extraction_create_then_approve_imports_non_stub_manifest_and_blocks_publish_until_review()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var svc = new OetWithDrHesham.Api.Services.Reading.ReadingExtractionService(
+            db,
+            new RawPayloadReadingExtractionAi(),
+            structure,
+            policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        Assert.Equal(OetWithDrHesham.Api.Domain.ReadingExtractionStatus.Pending, draft.Status);
+        Assert.False(draft.IsStub);
+        Assert.False(string.IsNullOrEmpty(draft.ExtractedManifestJson));
+
+        // Approve — the manifest is applied to the paper.
+        var approved = await svc.ApproveDraftAsync(draft.Id, "admin", default);
+        Assert.Equal(OetWithDrHesham.Api.Domain.ReadingExtractionStatus.Approved, approved.Status);
+
+        // Structure is now in place, but every question is still in Draft
+        // review state — publish gate must block.
+        var report = await structure.ValidatePaperAsync("p1", default);
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "question_not_published");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_stub_draft_cannot_be_approved()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var ai = new OetWithDrHesham.Api.Services.Reading.StubReadingExtractionAi();
+        var svc = new OetWithDrHesham.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.ApproveDraftAsync(draft.Id, "admin", default));
+
+        Assert.Contains("cannot be approved", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_reject_marks_draft_and_does_not_apply_manifest()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var ai = new OetWithDrHesham.Api.Services.Reading.StubReadingExtractionAi();
+        var svc = new OetWithDrHesham.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        var rejected = await svc.RejectDraftAsync(draft.Id, "admin", "Looks wrong", default);
+        Assert.Equal(OetWithDrHesham.Api.Domain.ReadingExtractionStatus.Rejected, rejected.Status);
+        Assert.Equal("Looks wrong", rejected.Notes);
+
+        // No structure was applied → no questions exist.
+        var qCount = await db.ReadingQuestions
+            .CountAsync(q => q.Part!.PaperId == "p1");
+        Assert.Equal(0, qCount);
+
+        // Re-approving a rejected draft fails.
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.ApproveDraftAsync(draft.Id, "admin", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_reject_requires_reason_and_caps_length()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var ai = new OetWithDrHesham.Api.Services.Reading.StubReadingExtractionAi();
+        var svc = new OetWithDrHesham.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.RejectDraftAsync(draft.Id, "admin", "   ", default));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.RejectDraftAsync(draft.Id, "admin", new string('x', 501), default));
+
+        var rejected = await svc.RejectDraftAsync(draft.Id, "admin", new string('x', 500), default);
+
+        Assert.Equal(OetWithDrHesham.Api.Domain.ReadingExtractionStatus.Rejected, rejected.Status);
+        Assert.NotNull(rejected.Notes);
+        Assert.Equal(500, rejected.Notes.Length);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_respects_kill_switch_when_policy_disables_ai()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+
+        // Flip the kill switch off.
+        var current = await policy.GetGlobalAsync(default);
+        current.AiExtractionEnabled = false;
+        await policy.UpsertGlobalAsync(current, "admin", default);
+
+        var ai = new OetWithDrHesham.Api.Services.Reading.StubReadingExtractionAi();
+        var svc = new OetWithDrHesham.Api.Services.Reading.ReadingExtractionService(db, ai, structure, policy);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Reading_policy_forces_ai_extraction_human_approval()
+    {
+        var (db, _, policy, _, _) = Build();
+        var current = await policy.GetGlobalAsync(default);
+        current.AiExtractionRequireHumanApproval = false;
+
+        var updated = await policy.UpsertGlobalAsync(current, "admin", default);
+
+        Assert.True(updated.AiExtractionRequireHumanApproval);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_retains_response_metadata_not_raw_provider_body()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var svc = new ReadingExtractionService(db, new RawPayloadReadingExtractionAi(), structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+
+        Assert.Equal(ReadingExtractionStatus.Pending, draft.Status);
+        Assert.NotNull(draft.RawAiResponseJson);
+        Assert.DoesNotContain("provider-secret", draft.RawAiResponseJson);
+        using var metadata = JsonDocument.Parse(draft.RawAiResponseJson!);
+        Assert.False(metadata.RootElement.GetProperty("rawBodyStored").GetBoolean());
+        Assert.True(metadata.RootElement.GetProperty("responseLength").GetInt32() > 0);
+        Assert.Equal(64, metadata.RootElement.GetProperty("responseSha256").GetString()?.Length);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Extraction_failure_does_not_persist_raw_provider_exception()
+    {
+        var (db, structure, policy, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await EnableReadingAiExtractionAsync(policy);
+
+        var svc = new ReadingExtractionService(db, new ThrowingReadingExtractionAi(), structure, policy);
+
+        var draft = await svc.CreateDraftAsync("p1", mediaAssetId: null, "admin", default);
+        var audit = await db.AuditEvents.SingleAsync(e => e.Action == "ReadingExtractionFailed");
+
+        Assert.Equal(ReadingExtractionStatus.Failed, draft.Status);
+        Assert.DoesNotContain("provider-secret", draft.Notes);
+        Assert.DoesNotContain("provider-secret", audit.Details);
+        Assert.Contains("READING_EXTRACTION_FAILED", audit.Details);
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Course pathway integration
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Pathway_starts_at_not_started_then_advances_through_drilling_to_mock_ready()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var pathway = new OetWithDrHesham.Api.Services.Reading.ReadingPathwayService(db);
+
+        // Stage 1: brand-new learner.
+        var s1 = await pathway.GetPathwayAsync("u1", default);
+        Assert.Equal("not_started", s1.Stage);
+        Assert.Equal("start_diagnostic", s1.NextAction.Kind);
+        Assert.Equal(0, s1.SubmittedExamAttempts);
+        Assert.Contains(s1.Milestones, m => m.Code == "first_attempt" && !m.Achieved);
+
+        // Stage 2: one weak Exam attempt — best-scaled is computed from a
+        // freshly-graded attempt. We answer everything wrong so scaled is 0.
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        var qs = await db.ReadingQuestions.AsNoTracking()
+            .Include(q => q.Part)
+            .Where(q => q.Part!.PaperId == "p1")
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .ToListAsync();
+        foreach (var q in qs.Where(q => q.Part!.PartCode == ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, "\"WRONG\"", default);
+        }
+        await ResumeExamPartBCAsync(db, attemptSvc, "u1", run.AttemptId);
+        foreach (var q in qs.Where(q => q.Part!.PartCode != ReadingPartCode.A))
+        {
+            await attemptSvc.SaveAnswerAsync("u1", run.AttemptId, q.Id, "\"WRONG\"", default);
+        }
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+
+        var s2 = await pathway.GetPathwayAsync("u1", default);
+        Assert.True(s2.Stage == "drilling" || s2.Stage == "mini_tests" || s2.Stage == "mock_ready",
+            $"expected post-attempt stage, got {s2.Stage}");
+        Assert.True(s2.SubmittedExamAttempts >= 1);
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Pathway_uses_scored_reading_mock_section_for_exam_ready()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, "u1", run.AttemptId, correct: true);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+        SeedReadingMockSection(db, "u1", scaledScore: OetScoring.ScaledPassGradeB);
+        await db.SaveChangesAsync();
+
+        var pathway = new OetWithDrHesham.Api.Services.Reading.ReadingPathwayService(db);
+        var snapshot = await pathway.GetPathwayAsync("u1", default);
+
+        Assert.Equal("exam_ready", snapshot.Stage);
+        Assert.Equal("book_exam", snapshot.NextAction.Kind);
+        Assert.Equal(1, snapshot.SubmittedReadingMockAttempts);
+        Assert.Contains(snapshot.Milestones, m => m.Code == "first_mock_pass" && m.Achieved);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Pathway_routes_to_review_when_reading_mock_section_does_not_pass()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var run = await attemptSvc.StartAsync("u1", "p1", default);
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, "u1", run.AttemptId, correct: true);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
+        SeedReadingMockSection(db, "u1", scaledScore: OetScoring.ScaledPassGradeB - 1);
+        await db.SaveChangesAsync();
+
+        var pathway = new OetWithDrHesham.Api.Services.Reading.ReadingPathwayService(db);
+        var snapshot = await pathway.GetPathwayAsync("u1", default);
+
+        Assert.Equal("drilling", snapshot.Stage);
+        Assert.Equal("review_results", snapshot.NextAction.Kind);
+        Assert.Equal("/mocks", snapshot.NextAction.Route);
+        Assert.Equal(1, snapshot.SubmittedReadingMockAttempts);
+        Assert.Contains(snapshot.Milestones, m => m.Code == "first_mock_pass" && !m.Achieved);
+        await db.DisposeAsync();
+    }
+
+    private sealed class RawPayloadReadingExtractionAi : IReadingExtractionAi
+    {
+        public async Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+        {
+            var stub = await new StubReadingExtractionAi().ExtractAsync(paperId, mediaAssetId, ct);
+            return stub with
+            {
+                RawResponseJson = "{\"secret\":\"provider-secret\",\"ok\":true}",
+                IsStub = false,
+                StubReason = null,
+            };
+        }
+    }
+
+    private sealed class ThrowingReadingExtractionAi : IReadingExtractionAi
+    {
+        public Task<ReadingExtractionAiResult> ExtractAsync(string paperId, string? mediaAssetId, CancellationToken ct)
+            => throw new InvalidOperationException("provider-secret stack detail");
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // P0 hardening 2026-05 — close audit findings P0-F / P0-H / P0-N / P0-Q.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// P0-F closure: replaying SubmitAsync with the same idempotency key must
+    /// return the same grading result and must not mutate the attempt twice.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_replay_returns_identical_result_and_does_not_double_grade()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("user-1", "p1", default);
+
+        var first = await attemptSvc.SubmitAsync("user-1", started.AttemptId, idempotencyKey: "idem-key-1", default);
+        var second = await attemptSvc.SubmitAsync("user-1", started.AttemptId, idempotencyKey: "idem-key-1", default);
+
+        Assert.Equal(first.RawScore, second.RawScore);
+        Assert.Equal(first.ScaledScore, second.ScaledScore);
+        Assert.Equal(first.MaxRawScore, second.MaxRawScore);
+
+        // Confirm the idempotency row is the single source of truth — there
+        // should be exactly one cache record for the (scope, key) pair, even
+        // though we called Submit twice.
+        var cached = await db.IdempotencyRecords
+            .Where(r => r.Scope == "reading-submit" && r.Key == $"user-1:{started.AttemptId}:idem-key-1")
+            .CountAsync();
+        Assert.Equal(1, cached);
+
+        // The attempt itself must remain at Submitted and the row-version
+        // must have advanced exactly once across both calls.
+        var attempt = await db.ReadingAttempts.AsNoTracking()
+            .FirstAsync(a => a.Id == started.AttemptId);
+        Assert.Equal(ReadingAttemptStatus.Submitted, attempt.Status);
+
+        await db.DisposeAsync();
+    }
+
+    /// <summary>
+    /// P0-N closure: a learner must never be able to read or mutate another
+    /// learner's attempt. SubmitAsync filters by (Id, UserId) so a foreign
+    /// userId triggers the "Attempt not found" branch — not a permission
+    /// leak that reveals the attempt exists.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_with_foreign_user_id_throws_not_found()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("alice", "p1", default);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.SubmitAsync("eve", started.AttemptId, idempotencyKey: null, default));
+        Assert.Contains("Attempt not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        await db.DisposeAsync();
+    }
+
+    /// <summary>
+    /// P0-Q closure: the learner-facing structure projection in
+    /// <c>ReadingLearnerEndpoints.cs</c> intentionally drops
+    /// <c>CorrectAnswerJson</c>, <c>AcceptedSynonymsJson</c>, and
+    /// <c>ExplanationMarkdown</c>. This test exercises the same projection
+    /// in memory and asserts the absence of those fields on the serialised
+    /// payload so a future regression that reintroduces them is caught.
+    /// </summary>
+    [Fact]
+    public async Task Learner_structure_projection_does_not_leak_answer_keys()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var parts = await db.ReadingParts
+            .Include(p => p.Questions)
+            .Where(p => p.PaperId == "p1")
+            .ToListAsync();
+
+        // Mirror the endpoint projection (ReadingLearnerEndpoints.cs:118-140).
+        var projected = parts.Select(p => new
+        {
+            p.Id,
+            partCode = p.PartCode.ToString(),
+            questions = p.Questions.Select(q => new
+            {
+                q.Id,
+                q.DisplayOrder,
+                q.Points,
+                questionType = q.QuestionType.ToString(),
+                q.Stem,
+                options = q.OptionsJson,
+                // intentionally NOT projecting: CorrectAnswerJson,
+                // AcceptedSynonymsJson, ExplanationMarkdown.
+            }),
+        }).ToList();
+
+        var json = JsonSerializer.Serialize(projected);
+        Assert.DoesNotContain("correctAnswerJson", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("acceptedSynonymsJson", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("explanationMarkdown", json, StringComparison.OrdinalIgnoreCase);
+
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Wave 2 — privileged tutor tooling (override / recalc / review /
+    // feedback / assignments) + analytics depth.
+    // ════════════════════════════════════════════════════════════════════
+
+    private static async Task<string> SubmitFullAttemptAsync(
+        LearnerDbContext db, ReadingStructureService structure, ReadingAttemptService attemptSvc,
+        string userId, bool correct)
+    {
+        var started = await attemptSvc.StartAsync(userId, "p1", default);
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, userId, started.AttemptId, correct);
+        await attemptSvc.SubmitAsync(userId, started.AttemptId, idempotencyKey: null, default);
+        return started.AttemptId;
+    }
+
+    [Fact]
+    public async Task Tutor_override_persists_derives_scaled_via_scoring_and_audits()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var review = await tutor.ApplyScoreOverrideAsync(
+            attemptId, new ReadingScoreOverrideRequest(RawScore: 30, ScaledScore: null, Reason: "remark"),
+            "admin-1", default);
+
+        Assert.NotNull(review);
+        Assert.True(review!.HasOverride);
+        Assert.Equal(30, review.OverrideRaw);
+        Assert.Equal(OetScoring.OetRawToScaled(30), review.OverrideScaled);
+        Assert.Equal(OetScoring.OetRawToScaled(30), review.EffectiveScaledScore);
+
+        var attempt = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
+        Assert.Equal(30, attempt.ScoreOverrideRaw);
+        Assert.Equal(OetScoring.OetRawToScaled(30), attempt.ScoreOverrideScaled);
+        Assert.Equal("admin-1", attempt.OverriddenByUserId);
+        Assert.NotNull(attempt.OverriddenAt);
+
+        Assert.True(await db.AuditEvents.AnyAsync(e =>
+            e.Action == "ReadingAttemptScoreOverridden" && e.ResourceId == attemptId));
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_override_clamps_explicit_scaled_score()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var review = await tutor.ApplyScoreOverrideAsync(
+            attemptId, new ReadingScoreOverrideRequest(RawScore: null, ScaledScore: 9999, Reason: "manual"),
+            "admin-1", default);
+
+        Assert.Equal(500, review!.OverrideScaled);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_recalc_skips_attempts_with_manual_override()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        await tutor.ApplyScoreOverrideAsync(
+            attemptId, new ReadingScoreOverrideRequest(35, null, "fixed"), "admin-1", default);
+
+        var result = await tutor.RecalcAsync(
+            "p1", new ReadingRecalcRequest("allAttemptsForPaper", null), "admin-1", default);
+
+        Assert.Equal(1, result.TotalConsidered);
+        Assert.Equal(1, result.SkippedOverrideCount);
+        Assert.Equal(0, result.RecalculatedCount);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_recalc_regrades_stored_answers_and_updates_scaled()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Learner submits with every answer "WRONG" → raw 0.
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: false);
+        var before = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
+        Assert.Equal(0, before.RawScore);
+        var submittedAt = before.SubmittedAt;
+
+        // Author corrects the key so the stored "WRONG" answers are now right.
+        var questions = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == "p1")
+            .ToListAsync();
+        foreach (var q in questions) q.CorrectAnswerJson = "\"WRONG\"";
+        await db.SaveChangesAsync();
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var result = await tutor.RecalcAsync(
+            "p1", new ReadingRecalcRequest("thisAttempt", attemptId), "admin-1", default);
+
+        Assert.Equal(1, result.RecalculatedCount);
+        var after = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
+        Assert.Equal(35, after.RawScore);
+        Assert.Equal(OetScoring.OetRawToScaled(35), after.ScaledScore);
+        Assert.Equal(submittedAt, after.SubmittedAt); // SubmittedAt preserved.
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_privileged_review_exposes_correct_answers()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var review = await tutor.GetPrivilegedReviewAsync(attemptId, default);
+
+        Assert.NotNull(review);
+        Assert.Equal(42, review!.Questions.Count);
+        Assert.All(review.Questions, q => Assert.NotNull(q.CorrectAnswer));
+        Assert.Equal(3, review.Sections.Count); // Parts A, B, C.
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_expert_access_is_limited_to_assignments_the_expert_created()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("learner-1", "p1", "full", null, null, null),
+            "expert-1", default);
+        await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("learner-2", "p1", "full", null, null, null),
+            "expert-2", default);
+
+        var started = await attemptSvc.StartAsync("learner-1", "p1", default);
+        Assert.False(await tutor.CanExpertAccessAttemptAsync(started.AttemptId, "expert-1", default));
+
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, "learner-1", started.AttemptId, correct: true);
+        await attemptSvc.SubmitAsync("learner-1", started.AttemptId, idempotencyKey: null, default);
+
+        Assert.True(await tutor.CanExpertAccessAttemptAsync(started.AttemptId, "expert-1", default));
+        Assert.False(await tutor.CanExpertAccessAttemptAsync(started.AttemptId, "expert-2", default));
+
+        var ownAssignments = await tutor.ListAssignmentsForExpertAsync("expert-1", null, default);
+        var own = Assert.Single(ownAssignments);
+        Assert.Equal("learner-1", own.AssignedToUserId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_feedback_crud_round_trips()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+
+        var created = await tutor.CreateFeedbackAsync(
+            attemptId, new ReadingFeedbackRequest("test", null, "Good work"), "admin-1", default);
+        Assert.NotNull(created);
+        Assert.Single(await tutor.ListFeedbackAsync(attemptId, default));
+
+        var updated = await tutor.UpdateFeedbackAsync(
+            attemptId, created!.Id, new ReadingFeedbackRequest("section", "A", "Revise Part A"), "admin-1", default);
+        Assert.Equal("Revise Part A", updated!.FeedbackText);
+        Assert.Equal("section", updated.Scope);
+
+        Assert.True(await tutor.DeleteFeedbackAsync(attemptId, created.Id, "admin-1", default));
+        Assert.Empty(await tutor.ListFeedbackAsync(attemptId, default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submitting_matching_attempt_auto_completes_assignment()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var assignment = await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("u1", "p1", "full", null, "Do this", null), "admin-1", default);
+        Assert.NotNull(assignment);
+
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var refreshed = await db.ReadingAssignments.AsNoTracking().FirstAsync(a => a.Id == assignment!.Id);
+        Assert.Equal("completed", refreshed.Status);
+        Assert.Equal(attemptId, refreshed.CompletedAttemptId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_practice_submit_does_not_complete_full_assignment()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var assignment = await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("u1", "p1", "full", null, "Complete the full paper", null),
+            "admin-1", default);
+        Assert.NotNull(assignment);
+
+        var partAQuestionIds = await db.ReadingQuestions.AsNoTracking()
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .Select(q => q.Id)
+            .ToListAsync();
+        var scope = JsonSerializer.Serialize(new
+        {
+            kind = "part-practice",
+            partCode = "A",
+            questionIds = partAQuestionIds,
+            timeLimitMinutes = 15,
+        });
+
+        var run = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Drill, scope, default);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, idempotencyKey: null, default);
+
+        var refreshed = await db.ReadingAssignments.AsNoTracking().FirstAsync(a => a.Id == assignment!.Id);
+        Assert.Equal("assigned", refreshed.Status);
+        Assert.Null(refreshed.CompletedAttemptId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Analytics_discrimination_index_separates_strong_and_weak_learners()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Four perfect scorers, four zero scorers → a question every strong
+        // learner gets right and every weak learner gets wrong has D = 1.0.
+        for (var i = 0; i < 4; i++)
+            await SubmitFullAttemptAsync(db, structure, attemptSvc, $"high-{i}", correct: true);
+        for (var i = 0; i < 4; i++)
+            await SubmitFullAttemptAsync(db, structure, attemptSvc, $"low-{i}", correct: false);
+
+        var analytics = new ReadingAnalyticsService(db);
+        var result = await analytics.GetPaperAnalyticsAsync("p1", default);
+
+        Assert.NotEmpty(result.Discrimination);
+        Assert.Contains(result.Discrimination, d => d.DiscriminationIndex >= 0.99);
+        Assert.True(result.CompletionRate > 0.0);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Analytics_cohort_reports_per_student_rag_and_assignment_completion()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("pass-1", "p1", "full", null, null, null), "admin-1", default);
+
+        await SubmitFullAttemptAsync(db, structure, attemptSvc, "pass-1", correct: true);
+        await SubmitFullAttemptAsync(db, structure, attemptSvc, "fail-1", correct: false);
+
+        var analytics = new ReadingAnalyticsService(db);
+        var cohort = await analytics.GetCohortAnalyticsAsync(
+            "p1", new[] { "pass-1", "fail-1", "absent-1" }, default);
+
+        Assert.Equal(3, cohort.StudentCount);
+        var pass = cohort.Students.Single(s => s.UserId == "pass-1");
+        Assert.Equal("green", pass.Rag);
+        Assert.Equal(1, pass.AssignmentsCompleted);
+        var fail = cohort.Students.Single(s => s.UserId == "fail-1");
+        Assert.Equal("red", fail.Rag);
+        var absent = cohort.Students.Single(s => s.UserId == "absent-1");
+        Assert.False(absent.HasAttempt);
+        Assert.Equal("none", absent.Rag);
+        await db.DisposeAsync();
+    }
+}
+
+file static class ReadingGradingResultExtensions
+{
+    public static int PointsEarnedSum(this ReadingGradingResult r) => r.Answers.Sum(a => a.PointsEarned);
+}

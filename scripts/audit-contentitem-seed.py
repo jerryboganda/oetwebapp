@@ -3,7 +3,7 @@
 import re
 import sys
 
-path = sys.argv[1] if len(sys.argv) > 1 else 'backend/src/OetLearner.Api/Services/SeedData.cs'
+path = sys.argv[1] if len(sys.argv) > 1 else 'backend/src/OetWithDrHesham.Api/Services/SeedData.cs'
 content = open(path).read()
 
 # Match `new ContentItem { ... }` blocks; balance braces.

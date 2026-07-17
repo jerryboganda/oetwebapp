@@ -1,7 +1,7 @@
 // Authored preview — MotionPage. An entrance-animation wrapper for a whole
 // route/page (surface="route"). Motion is forced to final state globally, so
 // children render visibly. Give it real, meaningful page-level children.
-import { MotionPage, Card, CardTitle, Button, Badge } from 'oet-prep';
+import { MotionPage, Card, CardTitle, Button, Badge } from 'oet-with-dr-hesham';
 
 export const PageEnter = () => (
   <MotionPage style={{ maxWidth: 520 }}>

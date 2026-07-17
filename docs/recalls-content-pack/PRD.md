@@ -11,7 +11,7 @@ The Recalls module ([docs/RECALLS-MODULE-PLAN.md](../RECALLS-MODULE-PLAN.md)) sh
 
 ### In scope (this PRD)
 
-- Seed-loader infrastructure that hydrates `VocabularyTerm` rows from versioned JSON files in `backend/src/OetLearner.Api/Data/SeedData/recalls/<profession>.json` at boot.
+- Seed-loader infrastructure that hydrates `VocabularyTerm` rows from versioned JSON files in `backend/src/OetWithDrHesham.Api/Data/SeedData/recalls/<profession>.json` at boot.
 - Idempotent upsert keyed on `(Term, ExamTypeCode, ProfessionId)` + content hash; never deletes learner-modified rows or learner SM-2 progress.
 - Schema additions:
   - `VocabularyTerm.OetSubtestTagsJson` (string, default `"[]"`) — matrix subtest dimension (Listening A/B/C, Reading A/B/C).

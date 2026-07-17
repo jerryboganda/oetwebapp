@@ -62,7 +62,7 @@ Legend: ✅ shipped · 🟡 partial · ❌ missing · 🔒 governance/policy onl
 These come from `AGENTS.md` MISSION-CRITICAL contracts and **must not be violated**:
 
 1. **Scoring** — every raw↔scaled conversion, every pass/fail decision routes through `OetScoring` (.NET) / `lib/scoring.ts` (TS). Mock-report payload only stores results — never recomputes.
-2. **Rulebooks** — Writing/Speaking rule citations on the mock report must come from `lib/rulebook` / `OetLearner.Api.Services.Rulebook`. No new JSON reads.
+2. **Rulebooks** — Writing/Speaking rule citations on the mock report must come from `lib/rulebook` / `OetWithDrHesham.Api.Services.Rulebook`. No new JSON reads.
 3. **AI Gateway** — any AI feedback in the mock report routes through `IAiGatewayService.BuildGroundedPrompt`. Add new feature codes (`AiFeatureCodes.MockReportInsight`, `MockRemediationDraft`) — do not bypass.
 4. **Reading authoring** — exact-match grading; learner DTOs must never expose answer keys. Already enforced; do not regress.
 5. **AudIO/files** — all audio I/O via `IFileStorage`, content-addressed SHA-256.
@@ -182,8 +182,8 @@ For each wave:
 1. `npx tsc --noEmit` clean.
 2. `npm run lint` clean.
 3. `npm test` — only added/touched suites must pass; full suite green before merge.
-4. `dotnet build backend/OetLearner.sln` clean.
-5. `dotnet test backend/OetLearner.sln` — wave-specific suites + full suite green.
+4. `dotnet build backend/OetWithDrHesham.sln` clean.
+5. `dotnet test backend/OetWithDrHesham.sln` — wave-specific suites + full suite green.
 6. Targeted Playwright smoke for any new learner page.
 7. Manual smoke against local Postgres.
 8. Rollout via feature flag `Mocks:V2:Wave{n}=true` per environment (staging first).

@@ -7,8 +7,8 @@ $ErrorActionPreference = "Stop"
 
 $stdoutLog = Join-Path $env:TEMP "oet-api-prod-probe.stdout.log"
 $stderrLog = Join-Path $env:TEMP "oet-api-prod-probe.stderr.log"
-$storageRoot = Join-Path $env:TEMP "oet-learner-prod-probe-storage"
-$appDllPath = "backend/src/OetLearner.Api/bin/Release/net10.0/OetLearner.Api.dll"
+$storageRoot = Join-Path $env:TEMP "oet-with-dr-hesham-prod-probe-storage"
+$appDllPath = "backend/src/OetWithDrHesham.Api/bin/Release/net10.0/OetWithDrHesham.Api.dll"
 $healthUrl = "http://127.0.0.1:$Port/health/ready"
 
 Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
@@ -16,9 +16,9 @@ New-Item -ItemType Directory -Path $storageRoot -Force | Out-Null
 
 $env:ASPNETCORE_ENVIRONMENT = "Production"
 $env:ASPNETCORE_URLS = "http://127.0.0.1:$Port"
-$env:ConnectionStrings__DefaultConnection = "InMemory:oet-learner-prod-probe"
+$env:ConnectionStrings__DefaultConnection = "InMemory:oet-with-dr-hesham-prod-probe"
 $env:Auth__Authority = ""
-$env:Auth__Audience = "oet-learner-api"
+$env:Auth__Audience = "oet-with-dr-hesham-api"
 $env:Auth__Issuer = "https://auth.example.local"
 $env:Auth__SigningKey = "0123456789abcdef0123456789abcdef"
 $env:Auth__RequireHttpsMetadata = "false"

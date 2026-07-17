@@ -9,14 +9,14 @@
 /app/admin/analytics/speaking/                       @speaking-team @analytics-team
 /app/admin/analytics/mocks/                          @speaking-team @analytics-team
 
-/backend/src/OetLearner.Api/Domain/Speaking*.cs      @speaking-team @backend-team
-/backend/src/OetLearner.Api/Domain/RolePlay*.cs      @speaking-team @backend-team
-/backend/src/OetLearner.Api/Domain/Interlocutor*.cs  @speaking-team @backend-team
-/backend/src/OetLearner.Api/Services/Speaking/       @speaking-team @backend-team
-/backend/src/OetLearner.Api/Endpoints/*Speaking*.cs  @speaking-team @backend-team
-/backend/src/OetLearner.Api/Endpoints/Tutor*.cs      @speaking-team @backend-team
-/backend/src/OetLearner.Api/Endpoints/AdminSpeaking* @speaking-team @backend-team
-/backend/src/OetLearner.Api/Hubs/                    @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Domain/Speaking*.cs      @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Domain/RolePlay*.cs      @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Domain/Interlocutor*.cs  @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Services/Speaking/       @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Endpoints/*Speaking*.cs  @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Endpoints/Tutor*.cs      @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Endpoints/AdminSpeaking* @speaking-team @backend-team
+/backend/src/OetWithDrHesham.Api/Hubs/                    @speaking-team @backend-team
 
 /components/domain/speaking/                         @speaking-team @design-team
 /lib/api/speaking-*.ts                               @speaking-team

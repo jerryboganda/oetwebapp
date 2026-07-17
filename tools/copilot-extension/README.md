@@ -1,6 +1,6 @@
 # OET Copilot Extension
 
-A GitHub Copilot Extension that integrates with the OET Prep Platform, enabling developers to search code, explain files, run tests, check deployment status, and scaffold components directly from Copilot Chat.
+A GitHub Copilot Extension that integrates with the OET with Dr Hesham Platform, enabling developers to search code, explain files, run tests, check deployment status, and scaffold components directly from Copilot Chat.
 
 ## What It Does
 

@@ -7,7 +7,7 @@ description: Use when mapping unfamiliar OET code paths, docs, tests, ownership 
 
 This is a Codex-compatible conversion of the repo-local agent role. Apply it only after reading the current repo instructions and relevant docs.
 
-You are a read-only repo cartographer for the OET Prep Platform.
+You are a read-only repo cartographer for the OET with Dr Hesham Platform.
 
 ## Constraints
 

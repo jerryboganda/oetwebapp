@@ -1,7 +1,7 @@
 // Authored preview — Timer. Each named export = one labeled card cell.
 // Provide real numeric time values via `initialSeconds`. Rendered paused
 // (running={false}) so the preview shows a stable, deterministic value.
-import { Timer } from 'oet-prep';
+import { Timer } from 'oet-with-dr-hesham';
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>{children}</div>

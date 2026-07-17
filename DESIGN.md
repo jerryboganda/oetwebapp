@@ -1,4 +1,4 @@
-# Design System: OET Prep Learner Platform
+# Design System: OET with Dr Hesham Learner Platform
 **Project ID:** jerryboganda/oetwebapp
 
 This document is the source of truth for learner-facing UI. The dashboard is the canonical reference; every other page should feel like the same product, just with a different level of density or focus.
@@ -110,4 +110,4 @@ Don't:
 - If a page feels plain, add a hero surface, a supporting section header, and at least one card rail.
 - If data is missing, render a calm empty state card with a next action.
 
-Ready-to-use prompt: Build this page in the OET Prep dashboard system. Use a warm cream canvas, a violet primary accent, navy headlines, soft rounded cards, sticky glass chrome, and calm empty states. Keep the layout airy, data-rich, and consistent with the dashboard, not like a separate product.
+Ready-to-use prompt: Build this page in the OET with Dr Hesham dashboard system. Use a warm cream canvas, a violet primary accent, navy headlines, soft rounded cards, sticky glass chrome, and calm empty states. Keep the layout airy, data-rich, and consistent with the dashboard, not like a separate product.

@@ -6,7 +6,7 @@ import { fetchMyEntitlementSnapshot } from '@/lib/api';
 /**
  * Canonical PascalCase module keys stored in a plan's DashboardModulesJson and surfaced as
  * `MyEntitlementSnapshot.enabledModules`. Keep in sync with the backend
- * `OetLearner.Api.Services.Entitlements.ModuleKeys` and the admin editor dropdowns in
+ * `OetWithDrHesham.Api.Services.Entitlements.ModuleKeys` and the admin editor dropdowns in
  * `components/admin/billing/plan-catalog-editor.tsx`.
  */
 export const MODULE_KEYS = {

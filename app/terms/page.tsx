@@ -7,9 +7,9 @@ import legalStyles from './terms.module.scss';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service · OET with Dr Ahmed Hesham',
+  title: 'Terms of Service · OET with Dr Hesham',
   description:
-    'The terms of service governing use of the OET with Dr Ahmed Hesham preparation platform: eligibility, billing, the Score Guarantee, AI feedback, tutor review, intellectual property, and your rights.',
+    'The terms of service governing use of the OET with Dr Hesham preparation platform: eligibility, billing, the Score Guarantee, AI feedback, tutor review, intellectual property, and your rights.',
 };
 
 const LAST_UPDATED = '26 April 2026';
@@ -28,7 +28,7 @@ const sections: LegalSection[] = [
     id: 'about',
     title: 'About these Terms',
     lead:
-      'These Terms of Service form a binding agreement between you and OET with Dr Ahmed Hesham ("we", "us", "our") covering your use of our learner platform, mobile and desktop apps, websites, and related services (together, the "Service"). By creating an account or using the Service you accept these Terms.',
+      'These Terms of Service form a binding agreement between you and OET with Dr Hesham ("we", "us", "our") covering your use of our learner platform, mobile and desktop apps, websites, and related services (together, the "Service"). By creating an account or using the Service you accept these Terms.',
     bullets: [
       <>
         These Terms apply alongside our <strong>Privacy Notice</strong>, the
@@ -43,7 +43,7 @@ const sections: LegalSection[] = [
     id: 'who-we-are',
     title: 'Who we are',
     lead:
-      'OET with Dr Ahmed Hesham is an independent OET (Occupational English Test) preparation service operated for healthcare professionals preparing to register and practise abroad.',
+      'OET with Dr Hesham is an independent OET (Occupational English Test) preparation service operated for healthcare professionals preparing to register and practise abroad.',
     callout: (
       <>
         <strong>Important:</strong> we are not affiliated with, endorsed by, or
@@ -129,7 +129,7 @@ const sections: LegalSection[] = [
       'All Service content, including practice papers, rulebooks, model answers, scoring logic, AI prompts, design system, brand marks, and software, is owned by us or our licensors and protected by copyright and other intellectual-property laws.',
       'We grant you a personal, non-transferable, non-exclusive, revocable licence to access the Service for your own OET preparation while your subscription is active.',
       <>
-        The &quot;OET with Dr Ahmed Hesham&quot; name and logo are our trademarks. The
+        The &quot;OET with Dr Hesham&quot; name and logo are our trademarks. The
         &quot;OET&quot; name is referenced under fair use to describe the test we prepare
         learners for; it remains the property of CBLA.
       </>,
@@ -214,10 +214,10 @@ export default function TermsPage() {
   return (
     <AuthScreenShell
       brandHref={AUTH_ROUTES.signIn}
-      brandLabel="OET with Dr Ahmed Hesham"
+      brandLabel="OET with Dr Hesham"
       eyebrow="Legal"
       title="Terms of Service"
-      subtitle="The rules for using the OET with Dr Ahmed Hesham preparation platform, written in plain English, organised by topic."
+      subtitle="The rules for using the OET with Dr Hesham preparation platform, written in plain English, organised by topic."
       stackClassName={shellStyles.successStackWide}
       cardClassName={shellStyles.successCardWide}
       headerClassName={shellStyles.successHeaderWide}

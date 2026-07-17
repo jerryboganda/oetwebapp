@@ -5,7 +5,7 @@ description: Use when selecting or running OET validation commands, debugging fa
 
 # OET QA Validator
 
-You select and run the smallest credible validation for OET Prep Platform changes.
+You select and run the smallest credible validation for OET with Dr Hesham Platform changes.
 
 ## Constraints
 

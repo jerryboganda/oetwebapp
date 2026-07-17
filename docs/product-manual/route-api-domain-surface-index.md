@@ -10,7 +10,7 @@ Use these labels when tracing claims in the other manuals:
 
 - `ROUTE-SNAPSHOT-2026-05-13`: `rg --files app -g page.tsx`, 304 page routes
 - `NEXT-ROUTE-HANDLERS-2026-05-13`: `rg --files app/api -g route.ts`, 2 route-handler files
-- `ENDPOINT-SNAPSHOT-2026-05-13`: endpoint-folder files under `backend/src/OetLearner.Api/Endpoints`, 50 files
+- `ENDPOINT-SNAPSHOT-2026-05-13`: endpoint-folder files under `backend/src/OetWithDrHesham.Api/Endpoints`, 50 files
 - `NAV-LEARNER`: `components/layout/sidebar.tsx`
 - `NAV-EXPERT`: `app/expert/layout.tsx`
 - `NAV-ADMIN`: `app/admin/layout.tsx`
@@ -124,7 +124,7 @@ Sponsor documentation must cover:
 
 ## Backend Endpoint Folder Files
 
-Endpoint-folder files discovered under `backend/src/OetLearner.Api/Endpoints`:
+Endpoint-folder files discovered under `backend/src/OetWithDrHesham.Api/Endpoints`:
 
 The count is 50 files: 49 route-mapping files plus one admin route-builder helper.
 
@@ -290,7 +290,7 @@ Billing operations include payment transactions, refunds, disputes, provider lif
 
 The product manuals must not dilute these engineering contracts:
 
-- OET scoring: pass/fail and raw-to-scaled logic route through `lib/scoring.ts` or `OetLearner.Api.Services.OetScoring`.
+- OET scoring: pass/fail and raw-to-scaled logic route through `lib/scoring.ts` or `OetWithDrHesham.Api.Services.OetScoring`.
 - Rulebooks: Writing, Speaking, Grammar, Pronunciation, and Conversation rule enforcement uses rulebook engine APIs, not direct UI/endpoint JSON reads.
 - AI gateway: every AI invocation is grounded and recorded through the AI gateway/usage policy path.
 - Content upload: learner content assets use `ContentPaper -> ContentPaperAsset -> MediaAsset`, source provenance, publish gates, audit events, and storage abstraction.

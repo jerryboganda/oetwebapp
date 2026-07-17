@@ -29,7 +29,7 @@
 
 ### Manual packaged validation
 
-- Installed Windows shell launch from `C:\Users\Public\OETPrepTest8\OET Prep.exe`
+- Installed Windows shell launch from `C:\Users\Public\OET with Dr HeshamTest8\OET with Dr Hesham.exe`
 - Bundled backend readiness at `http://127.0.0.1:5199/health/ready`
 
 ### Automated packaged desktop validation

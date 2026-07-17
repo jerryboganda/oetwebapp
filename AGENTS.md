@@ -1,4 +1,4 @@
-# AGENTS.md - OET Prep Platform
+# AGENTS.md - OET with Dr Hesham Platform
 
 > **Synchronized with `CLAUDE.md`.** This file is the authoritative source of truth
 > for the repository-wide agent instructions. `CLAUDE.md` and
@@ -74,9 +74,9 @@ required local validation path. See `.github/instructions/validation.instruction
 
 ## Storage Persistence
 
-All media/user files must use persistent storage at `/var/opt/oet-learner/storage`.
+All media/user files must use persistent storage at `/var/opt/oet-with-dr-hesham/storage`.
 
-- Every API-running `docker-compose*.yml` must set `Storage__LocalRootPath: /var/opt/oet-learner/storage`.
+- Every API-running `docker-compose*.yml` must set `Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage`.
 - Media/user file I/O must go through `IFileStorage` or `S3CompatibleFileStorage`.
 - Never use raw `File.*`, `Path.*`, or `Directory.*` for media/user data.
 - Never run `docker compose down -v`, `docker volume rm`, or recreate postgres or storage volumes without a verified backup and explicit approval.
@@ -93,7 +93,7 @@ All media/user files must use persistent storage at `/var/opt/oet-learner/storag
 
 ## Backend Rules
 
-- Minimal API endpoints live under `backend/src/OetLearner.Api/Endpoints/`.
+- Minimal API endpoints live under `backend/src/OetWithDrHesham.Api/Endpoints/`.
 - Services, DTOs, entities, data, security, and configuration stay in their existing backend folders.
 - Use DI, cancellation tokens where appropriate, server-side authz, and EF Core PostgreSQL patterns already present in the codebase.
 

@@ -9,15 +9,15 @@ lifecycle services, and PII guardrails on persisted webhook payloads.
 
 | File | Change |
 | ---- | ------ |
-| `backend/src/OetLearner.Api/Services/PaymentGatewayService.cs` | Added timestamp staleness check (replay protection) to `StripeGateway.VerifyStripeWebhook` and `PayPalGateway.HandleWebhookAsync` using `BillingOptions.WebhookMaxAgeSeconds`. Added `EventCategory` + `SafePayloadJson` to `WebhookProcessResult`. Recognised dispute and refund event types for both providers and normalised them (`dispute_opened`/`dispute_funds_withdrawn`/`dispute_funds_reinstated`/`dispute_won`/`dispute_lost`/`refunded`/`refund_pending`). Added strict allowlist `PaymentWebhookPiiRedactor` that drops emails/names/addresses/phones/IPs from Stripe + PayPal payloads before they leave the gateway. |
-| `backend/src/OetLearner.Api/Configuration/BillingOptions.cs` | Added `WebhookMaxAgeSeconds` (default 300) and `WebhookMaxAttempts` (default 5) to `BillingOptions`. (File not in either OWNED or SHARED list — additive properties only; coordinate with Slice A if it touches the same file.) |
-| `backend/src/OetLearner.Api/Domain/RefundEntities.cs` (NEW) | `OrderRefund` + `PaymentDispute` entities. Unique indexes on `(Gateway, GatewayRefundId)`, `IdempotencyKey`, and `(Gateway, GatewayDisputeId)`. |
-| `backend/src/OetLearner.Api/Services/Billing/RefundService.cs` (NEW) | Partial + full refund flow with idempotency, over-refund prevention, audit `BillingEvent`, wallet credit reversal, and entitlement teardown on full refund. |
-| `backend/src/OetLearner.Api/Services/Billing/DisputeService.cs` (NEW) | Captures `dispute_opened`, `funds_withdrawn`, `funds_reinstated`, `won`, `lost` signals; freezes the active subscription (`Status -> Suspended`) while the chargeback is open, reactivates on `won`, cancels on `lost`. Idempotent on `(Gateway, GatewayDisputeId)`. |
-| `backend/src/OetLearner.Api/Data/Migrations/20260504140000_AddRefundDispute.cs` (+ Designer) (NEW) | Provider-agnostic `MigrationBuilder.CreateTable` for `OrderRefunds` + `PaymentDisputes` with the unique indexes. SQLite-compatible (no PG-only types or `IF NOT EXISTS` raw SQL). |
-| `backend/src/OetLearner.Api/Data/LearnerDbContext.cs` | Added two `DbSet` registrations for the new entities (the only way EF can resolve `Set<OrderRefund>()` at runtime). Two-line additive change; documented here because the file is not on either ownership list. |
-| `backend/tests/OetLearner.Api.Tests/PaymentWebhookHardeningTests.cs` (NEW) | 7 tests: forged-signature rejection, missing-header rejection, replay rejection (stale timestamp), accepted-payload PII redaction, dispute event categorisation, refund event categorisation, default option values. |
-| `backend/tests/OetLearner.Api.Tests/RefundDisputeTests.cs` (NEW) | 8 tests: partial-refund math, full-refund wallet+entitlement reversal, idempotency on key, over-refund rejection, dispute-opened freeze, dispute-won reinstatement, dispute-lost cancellation, dispute idempotency on `(Gateway, GatewayDisputeId)`. |
+| `backend/src/OetWithDrHesham.Api/Services/PaymentGatewayService.cs` | Added timestamp staleness check (replay protection) to `StripeGateway.VerifyStripeWebhook` and `PayPalGateway.HandleWebhookAsync` using `BillingOptions.WebhookMaxAgeSeconds`. Added `EventCategory` + `SafePayloadJson` to `WebhookProcessResult`. Recognised dispute and refund event types for both providers and normalised them (`dispute_opened`/`dispute_funds_withdrawn`/`dispute_funds_reinstated`/`dispute_won`/`dispute_lost`/`refunded`/`refund_pending`). Added strict allowlist `PaymentWebhookPiiRedactor` that drops emails/names/addresses/phones/IPs from Stripe + PayPal payloads before they leave the gateway. |
+| `backend/src/OetWithDrHesham.Api/Configuration/BillingOptions.cs` | Added `WebhookMaxAgeSeconds` (default 300) and `WebhookMaxAttempts` (default 5) to `BillingOptions`. (File not in either OWNED or SHARED list — additive properties only; coordinate with Slice A if it touches the same file.) |
+| `backend/src/OetWithDrHesham.Api/Domain/RefundEntities.cs` (NEW) | `OrderRefund` + `PaymentDispute` entities. Unique indexes on `(Gateway, GatewayRefundId)`, `IdempotencyKey`, and `(Gateway, GatewayDisputeId)`. |
+| `backend/src/OetWithDrHesham.Api/Services/Billing/RefundService.cs` (NEW) | Partial + full refund flow with idempotency, over-refund prevention, audit `BillingEvent`, wallet credit reversal, and entitlement teardown on full refund. |
+| `backend/src/OetWithDrHesham.Api/Services/Billing/DisputeService.cs` (NEW) | Captures `dispute_opened`, `funds_withdrawn`, `funds_reinstated`, `won`, `lost` signals; freezes the active subscription (`Status -> Suspended`) while the chargeback is open, reactivates on `won`, cancels on `lost`. Idempotent on `(Gateway, GatewayDisputeId)`. |
+| `backend/src/OetWithDrHesham.Api/Data/Migrations/20260504140000_AddRefundDispute.cs` (+ Designer) (NEW) | Provider-agnostic `MigrationBuilder.CreateTable` for `OrderRefunds` + `PaymentDisputes` with the unique indexes. SQLite-compatible (no PG-only types or `IF NOT EXISTS` raw SQL). |
+| `backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs` | Added two `DbSet` registrations for the new entities (the only way EF can resolve `Set<OrderRefund>()` at runtime). Two-line additive change; documented here because the file is not on either ownership list. |
+| `backend/tests/OetWithDrHesham.Api.Tests/PaymentWebhookHardeningTests.cs` (NEW) | 7 tests: forged-signature rejection, missing-header rejection, replay rejection (stale timestamp), accepted-payload PII redaction, dispute event categorisation, refund event categorisation, default option values. |
+| `backend/tests/OetWithDrHesham.Api.Tests/RefundDisputeTests.cs` (NEW) | 8 tests: partial-refund math, full-refund wallet+entitlement reversal, idempotency on key, over-refund rejection, dispute-opened freeze, dispute-won reinstatement, dispute-lost cancellation, dispute idempotency on `(Gateway, GatewayDisputeId)`. |
 
 ## Goals — verification map
 
@@ -38,7 +38,7 @@ These changes are intentionally NOT applied here because the files are owned
 elsewhere or are outside this slice's bounded write surface. They are required
 to land the goals end-to-end.
 
-### `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
+### `backend/src/OetWithDrHesham.Api/Endpoints/LearnerEndpoints.cs`
 
 Return HTTP 400 (no body leak) when signature/replay verification fails, and
 keep 200 only for accepted events. Required for goal #1 (HTTP status).
@@ -64,7 +64,7 @@ keep 200 only for accepted events. Required for goal #1 (HTTP status).
    // (mirror the same change for /paypal)
 ```
 
-### `backend/src/OetLearner.Api/Services/LearnerService.cs` (`HandlePaymentWebhookAsync`)
+### `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs` (`HandlePaymentWebhookAsync`)
 
 Three additive lines; required for goals #3 and #7.
 
@@ -99,7 +99,7 @@ Three additive lines; required for goals #3 and #7.
 +  }
 ```
 
-### `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`
+### `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`
 
 Expose refund issuance and dispute listing on the admin surface:
 
@@ -116,7 +116,7 @@ Expose refund issuance and dispute listing on the admin surface:
 +          Results.Ok(await PaginateDisputesAsync(db, status, page ?? 1, pageSize ?? 20, ct)));
 ```
 
-### `backend/src/OetLearner.Api/Contracts/BillingContracts.cs`
+### `backend/src/OetWithDrHesham.Api/Contracts/BillingContracts.cs`
 
 ```diff
 +  public sealed record RefundIssueRequest(
@@ -126,7 +126,7 @@ Expose refund issuance and dispute listing on the admin surface:
 +      string? AdminNote = null);
 ```
 
-### `backend/src/OetLearner.Api/Domain/BillingEntities.cs`
+### `backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs`
 
 No structural changes required by Slice B. The existing
 `PaymentWebhookEvent.ProcessingStatus` string column accepts `dead_letter` as
@@ -144,14 +144,14 @@ a value with no schema change.
 Commands actually run:
 
 ```pwsh
-dotnet build OetLearner.sln
+dotnet build OetWithDrHesham.sln
 # Build succeeded. 0 Error(s)
 
-dotnet test tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj `
+dotnet test tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj `
   --filter 'FullyQualifiedName~RefundDispute|FullyQualifiedName~PaymentWebhookHardening'
 # Passed!  - Failed: 0, Passed: 15, Skipped: 0, Total: 15
 
-dotnet test tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj `
+dotnet test tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj `
   --no-build `
   --filter 'FullyQualifiedName~PaymentGatewaySecurityTests|FullyQualifiedName~AdminWebhookRetry|FullyQualifiedName~AdminBillingProviderLifecycleSignals'
 # Passed!  - Failed: 0, Passed: 10, Skipped: 0, Total: 10

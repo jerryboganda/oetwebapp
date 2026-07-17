@@ -90,7 +90,7 @@ Per-route desktop/tablet/mobile × auth × API × console verification is part o
 - FE-015: new shared date util + call sites
 - FE-016: `middleware.ts` → `proxy`
 
-**Edits actually applied this session:** `backend/src/OetLearner.Api/Endpoints/BillingCartEndpoints.cs`
+**Edits actually applied this session:** `backend/src/OetWithDrHesham.Api/Endpoints/BillingCartEndpoints.cs`
 (authorized `[FromServices]` boot-fix) and `.claude/launch.json` (throwaway tooling — safe to delete).
 
 ---

@@ -309,7 +309,7 @@ pub fn open_external(_app: AppHandle, url: String) -> Result<bool, String> {
 fn keyring_entry(namespace: &str, key: &str) -> Result<keyring::Entry, String> {
     let ns = sanitize_component(namespace, 64)?;
     let k = sanitize_component(key, 128)?;
-    keyring::Entry::new(&format!("com.oetprep.desktop/{ns}"), &k).map_err(|e| e.to_string())
+    keyring::Entry::new(&format!("com.oetwithdrhesham.desktop/{ns}"), &k).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -508,7 +508,7 @@ pub struct SpeakingSession {
 pub struct SpeakingAudioState(pub Mutex<HashMap<String, SpeakingSession>>);
 
 fn speaking_audio_dir() -> PathBuf {
-    std::env::temp_dir().join("oet-prep-speaking-audio")
+    std::env::temp_dir().join("oet-with-dr-hesham-speaking-audio")
 }
 
 fn now_ms() -> u64 {

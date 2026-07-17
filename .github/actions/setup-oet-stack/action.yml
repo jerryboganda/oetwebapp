@@ -1,6 +1,6 @@
 name: setup-oet-stack
 description: |
-  Composite action that prepares the OET learner-app CI environment:
+  Composite action that prepares the OET with Dr Hesham app CI environment:
   installs the .NET SDK + Node toolchain, restores caches, optionally
   starts a Postgres service container, and exposes a few sentinel env
   vars for downstream jobs.

@@ -1,4 +1,4 @@
-# OET Prep Desktop (Tauri 2) — Production-Readiness Test Plan
+# OET with Dr Hesham Desktop (Tauri 2) — Production-Readiness Test Plan
 
 **Scope:** the Tauri 2 desktop shell in `src-tauri/`, its build/CI/signing, the desktop-relevant
 frontend seams (`src-tauri/inject/desktop-bridge.js`, `types/desktop.d.ts`, the bridge consumers),
@@ -17,7 +17,7 @@ deploy, and the broad frontend audit (covered by their own suites/reports).
 ## 1. What we are testing (architecture recap)
 
 `oet-desktop.exe` (Rust/Tauri 2) shows a bundled splash, spawns two sidecars — the bundled .NET API
-(`OetLearner.Api.exe`, SQLite) and the Next.js standalone server (`node server.js`) — health-polls
+(`OetWithDrHesham.Api.exe`, SQLite) and the Next.js standalone server (`node server.js`) — health-polls
 both, then points the system WebView (WebView2 on Windows) at `http://127.0.0.1:{port}`. An injected
 `desktop-bridge.js` reproduces the `window.desktopBridge` contract (17 IPC commands) so the frontend
 runs unchanged.
@@ -66,7 +66,7 @@ runs unchanged.
 | M5 | High-DPI 125% / 150% / 175% | No clipping/blur; controls usable |
 | M6 | Tray menu → Dashboard / Study Plan / Quit | Navigates / exits |
 | M7 | Single-instance (launch twice) | Second launch focuses existing window |
-| M8 | Deep link `oet-prep://dashboard` and `oet-prep://pair?code=...` | Routes; **/pair currently 404 — see BUGLOG** |
+| M8 | Deep link `oet-with-dr-hesham://dashboard` and `oet-with-dr-hesham://pair?code=...` | Routes; **/pair currently 404 — see BUGLOG** |
 | M9 | Offline / backend-down | User-safe error surface, no raw stack trace |
 | M10 | Open external link | Opens system browser (http/https only) |
 | M11 | Secrets round-trip (set/get/delete) | Persists via Windows Credential Manager |

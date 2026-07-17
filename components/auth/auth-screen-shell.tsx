@@ -60,7 +60,7 @@ export function AuthScreenShell({
           <Link className={styles.brand} href={brandHref} aria-label={brandLabel}>
             <Image
               src="/brand/oet-with-dr-hesham-logo.png"
-              alt="OET with Dr Ahmed Hesham"
+              alt="OET with Dr Hesham"
               width={400}
               height={140}
               priority

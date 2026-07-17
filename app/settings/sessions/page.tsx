@@ -45,7 +45,7 @@ function parseDeviceLabel(userAgent: string | null): { label: string; icon: type
   if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
     return { label: 'Mobile Device', icon: Smartphone };
   }
-  if (ua.includes('oet-prep')) {
+  if (ua.includes('oet-with-dr-hesham')) {
     return { label: 'Desktop App', icon: Monitor };
   }
   if (ua.includes('chrome')) return { label: 'Chrome Browser', icon: Monitor };

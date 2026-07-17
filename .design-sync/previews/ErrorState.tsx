@@ -1,5 +1,5 @@
 // Authored preview — ErrorState. Each named export = one labeled card cell.
-import { ErrorState } from 'oet-prep';
+import { ErrorState } from 'oet-with-dr-hesham';
 
 export const LoadResultsFailed = () => (
   <div style={{ maxWidth: 520 }}>

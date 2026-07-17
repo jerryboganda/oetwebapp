@@ -54,7 +54,7 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Restore .NET dependencies
-        run: dotnet restore backend/OetLearner.sln
+        run: dotnet restore backend/OetWithDrHesham.sln
 
       - name: Run live ElevenLabs realtime STT connectivity smoke
         if: steps.gate.outputs.enabled == 'true'
@@ -75,4 +75,4 @@ jobs:
           Conversation__ElevenLabsSttModel: "scribe_v2_realtime"
           Conversation__ElevenLabsSttAudioFormat: "pcm_16000"
           Conversation__ElevenLabsSttEnableProviderLogging: "false"
-        run: dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~ConversationRealtimeElevenLabsLiveSmokeTests"
+        run: dotnet test backend/OetWithDrHesham.sln --filter "FullyQualifiedName~ConversationRealtimeElevenLabsLiveSmokeTests"

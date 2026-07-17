@@ -3,7 +3,7 @@
 - **Status:** Draft for review
 - **Date:** 2026-06-01
 - **Owner:** (pending)
-- **Scope:** Migrate the entire OET Prep Platform JS/TS toolchain from npm to pnpm in a single clean cutover.
+- **Scope:** Migrate the entire OET with Dr Hesham Platform JS/TS toolchain from npm to pnpm in a single clean cutover.
 
 ## 1. Goal
 
@@ -32,7 +32,7 @@ This is a **migration only**. No dependency upgrades, no monorepo/workspace rest
 Verified by grep/read on 2026-06-01.
 
 ### 3.1 package.json
-- `"name": "oet-prep"`, `"main": "electron/main.cjs"`, no `packageManager` field.
+- `"name": "oet-with-dr-hesham"`, `"main": "electron/main.cjs"`, no `packageManager` field.
 - Standard scripts use bare commands (`next dev`, `next build`, `vitest run`, `eslint …`, `dotnet …`) — these are package-manager-agnostic and run fine under pnpm.
 - `mobile:build` chains `npm run build && cap sync` (contains literal `npm run`).
 - Four `docker:*` scripts hardcode npm inside `node:22-alpine`:
@@ -144,7 +144,7 @@ The entire change is one branch. If any outcome is unacceptable, do not merge �
 ## 8. VPS Deploy Reminders (for the later, separate deploy step)
 
 - Override `ROUTER_IMAGE=oetwebsite-nginx-router:local` on every build/up command (the `.env.production` digest pin breaks build tags).
-- Never run `docker compose down -v` or remove protected volumes `oetwebsite_oet_postgres_data` / `oetwebsite_oet_learner_storage`.
+- Never run `docker compose down -v` or remove protected volumes `oetwebsite_oet_postgres_data` / `oetwebsite_oet_with_dr_hesham_storage`.
 
 ## 9. Open Items
 

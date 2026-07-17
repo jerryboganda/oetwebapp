@@ -1,6 +1,6 @@
 // Authored preview — CircularProgress. Each named export = one labeled card cell.
 // Real numeric `value` is essential — defaults render "NaN%".
-import { CircularProgress } from 'oet-prep';
+import { CircularProgress } from 'oet-with-dr-hesham';
 
 export const Values = () => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 32, alignItems: 'center' }}>

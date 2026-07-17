@@ -10,7 +10,7 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../f
 // We assert the cheaper of the two contracts here: the UI gate. The
 // server-side gate (POST /v1/listening/v2/attempts/{id}/advance returns
 // rejection without a recorded tech-readiness payload) is covered by
-// `backend/tests/OetLearner.Api.Tests/Listening/
+// `backend/tests/OetWithDrHesham.Api.Tests/Listening/
 // ListeningV2AdvanceEndpointTests.cs`.
 test.describe('Listening R10 readiness gate @learner @listening', () => {
   test('exam mode Start button is disabled until readiness probe succeeds', async ({ page }, testInfo) => {

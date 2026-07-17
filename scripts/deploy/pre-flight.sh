@@ -55,12 +55,12 @@ detect_destructive_migration() {
     echo "--- Destructive migration check: unchanged SHA ---"
     return 0
   fi
-  changed_migrations=$(git diff --name-only "$previous_sha" "$target_sha" -- backend/src/OetLearner.Api/Data/Migrations || true)
+  changed_migrations=$(git diff --name-only "$previous_sha" "$target_sha" -- backend/src/OetWithDrHesham.Api/Data/Migrations || true)
   if [ -z "$changed_migrations" ]; then
     echo "--- Destructive migration check: no migration files changed ---"
     return 0
   fi
-  if git diff "$previous_sha" "$target_sha" -- backend/src/OetLearner.Api/Data/Migrations \
+  if git diff "$previous_sha" "$target_sha" -- backend/src/OetWithDrHesham.Api/Data/Migrations \
       | grep -Ei 'Drop(Column|Table|Index|ForeignKey|PrimaryKey)|migrationBuilder\.Sql\("[[:space:]]*(DROP|TRUNCATE|DELETE)[[:space:]]' >/dev/null; then
     return 1
   fi

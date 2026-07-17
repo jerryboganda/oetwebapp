@@ -1,0 +1,192 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Exposes internal members (notably BackgroundJobProcessor.ProcessOnceAsync)
+      to the test project so the harness can drive a single pass of the job
+      pipeline deterministically. Production callers see the same internal
+      surface — they live in this assembly already.
+    -->
+    <InternalsVisibleTo Include="OetWithDrHesham.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
+    <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.5" />
+    <!-- OAuth2 token minting (GoogleCredential/ServiceAccountCredential) for FCM's
+         HTTP v1 send API — Google retired the legacy static server-key API in 2024,
+         so sending now requires a bearer token derived from a Firebase service
+         account. Deliberately just the auth library, not the full FirebaseAdmin SDK
+         (which bundles Firestore/Auth/RTDB clients this app doesn't use and manages
+         its own global FirebaseApp registry that doesn't fit the hot-reloadable
+         runtime-settings model used here). -->
+    <PackageReference Include="Google.Apis.Auth" Version="1.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+    <!-- BUG-007 note: EF Core 10's SQLite provider transitively pulls
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11 (advisory NU1903/GHSA-2m69-gcr7-jv3q).
+         There is no patched 2.1.x, and forcing 3.0.x breaks EF Core 10's
+         in-memory SQLite at runtime ("no such table" in tests). SQLite is NOT
+         executed in production (Postgres) or in the online desktop client, so
+         the advisory is inert here. Revisit if/when offline SQLite is enabled or
+         EF Core ships a 3.0-compatible Microsoft.Data.Sqlite. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    <!-- pgvector (.NET bindings + Npgsql.EntityFrameworkCore integration). Used by
+         WritingExemplarEmbeddingService to store and query the 1536-dim
+         text-embedding-3-small vectors with proper HNSW cosine search instead
+         of the legacy C#-side cosine over JSON arrays. The legacy EmbeddingJson
+         column remains the source of truth until BackfillFromJsonAsync runs
+         the JSON → vector population.
+         TODO(WS10.4): if `Pgvector.EntityFrameworkCore 0.3.0` does not yet
+         publish a build that targets EF Core 10 by the time this lands,
+         downgrade the EFCore package to the most recent EF Core 10–compatible
+         release (0.2.x line) or drop it entirely and rely on raw SQL via
+         `FromSql` — the `Pgvector` core package alone is enough to construct
+         the `Vector` type that Npgsql 10 already serialises natively. The
+         service has a JSON-cosine fallback so embeddings keep working either
+         way. License: Apache 2.0. -->
+    <PackageReference Include="Pgvector" Version="0.3.2" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
+    <PackageReference Include="WebPush" Version="1.0.12" />
+    <!-- Whitelist-based HTML sanitizer. Used by IHtmlSanitizer to scrub admin-authored
+         HTML (reading passages, grammar explanations, etc.) at persist time. DO NOT
+         render raw admin HTML without routing it through HtmlSanitizerService first. -->
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <!-- Polly-based HTTP resilience (retry + circuit breaker + timeout) for outbound
+         HttpClients. Used by BrevoEmailSender via AddStandardResilienceHandler() so
+         transient Brevo outages do not cascade into 5xx responses from our API. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+    <!-- Sentry error/perf monitoring (H10). Passive until Sentry:Dsn is configured at runtime:
+         Program.cs wires UseSentry() only when a DSN is present, so in tests / local dev the
+         SDK is a complete no-op and never touches the network. PII scrubbing is centralised
+         in SentryBootstrap.ScrubPii (strips email, IP, Authorization/Cookie/CSRF headers,
+         request bodies). DO NOT set SendDefaultPii=true - that flag is force-off in
+         SentryBootstrap and overriding it would ship raw user data to Sentry. -->
+    <PackageReference Include="Sentry.AspNetCore" Version="5.10.0" />
+    <!-- QuestPDF — pure-managed PDF generation (no native deps). Used by
+         IWritingPdfService to produce watermarked Writing PDFs with diagonal
+         "PRACTICE COPY" overlay, per-page footer, invisible HMAC token and
+         signed metadata. License: Community is free up to USD 1M ARR. -->
+    <PackageReference Include="QuestPDF" Version="2024.10.3" />
+    <!-- Windows-1252 / Latin-1 fallback for CSV imports from legacy Excel exports. -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
+    <!-- Stripe.net — official Stripe SDK. Used by StripeService for Checkout Sessions,
+         Billing Portal, Subscriptions, Coupons and Webhook signature verification.
+         Inactive until Billing:Stripe:SecretKey is configured at runtime. -->
+    <PackageReference Include="Stripe.net" Version="47.*" />
+    <!-- UglyToad.PdfPig — pure-managed PDF text extraction (no native deps).
+         Used by PdfPigPdfTextExtractor / AutoPdfTextExtractor to feed
+         IContentTextExtractionService and the AI Listening extraction
+         pipeline (GroundedListeningExtractionAi). License: Apache 2.0. -->
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+    <!-- Ical.Net — pure-managed iCalendar (RFC 5545) serializer. Used by
+         ClassNotificationService to generate .ics calendar invites attached
+         to live-class enrollment confirmations and T-24h reminder emails.
+         License: MIT. -->
+    <PackageReference Include="Ical.Net" Version="4.2.0" />
+    <!-- MailKit — cross-platform SMTP client (and MimeKit message model). Used
+         by SmtpEmailSender to deliver transactional mail via the Brevo SMTP
+         relay. REQUIRED over System.Net.Mail.SmtpClient because the BCL client
+         on .NET/Linux only ships SSPI auth (Negotiate/NTLM) and cannot perform
+         AUTH LOGIN/PLAIN, so it silently skips authentication against Brevo
+         (smtp-relay.brevo.com advertises only CRAM-MD5/PLAIN/LOGIN) and the
+         server rejects MAIL FROM with "5.7.0 Please authenticate first".
+         MailKit implements SASL LOGIN/PLAIN in managed code. Microsoft
+         officially recommends MailKit in place of SmtpClient. License: MIT. -->
+    <PackageReference Include="MailKit" Version="4.*" />
+    <!-- Tesseract — managed wrapper around libtesseract (native). Used by
+         WritingOcrService to OCR uploaded handwritten letters as the
+         first-pass provider before falling back to Google Cloud Vision.
+         REQUIRES native binaries at runtime (libtesseract / tesseract.exe)
+         plus a tessdata directory containing the trained language data.
+         The Docker image installs `tesseract-ocr` + `tesseract-ocr-eng`
+         apt packages. If neither the package nor the binaries are
+         provisioned, WritingOcrService degrades gracefully to zero
+         confidence so the state machine continues to GCV / manual.
+         License: Apache 2.0. -->
+    <PackageReference Include="Tesseract" Version="5.2.0" />
+  </ItemGroup>
+
+  <!--
+    OET Rulebooks are the single source of truth for AI grounding and rule-engine
+    detectors. They ship as embedded resources so the backend cannot drift from the
+    JSON files the TypeScript engine consumes. Any edit to a file in rulebooks/ is
+    picked up by the backend via a rebuild.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\rulebooks\**\*.json">
+      <LogicalName>OetRulebooks\%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- Brand assets rendered into generated PDFs (invoice header logo). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\oet-with-dr-hesham-logo.png">
+      <LogicalName>OetBrand\oet-with-dr-hesham-logo.png</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!--
+    Recalls Content Pack v1 (2026-05-05). Versioned vocabulary JSON files loaded
+    by RecallsContentSeeder at boot. Copied to publish output so the seeder finds
+    them in containerised deploys.
+  -->
+  <ItemGroup>
+    <None Include="Data\SeedData\recalls\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Recall-set tag packs (year/source dimension, 2026-05). Loaded by
+    RecallSetTagSeeder at boot to apply year/source tags to existing
+    VocabularyTerm rows. Tag-only — never creates new terms.
+  -->
+  <ItemGroup>
+    <None Include="Data\SeedData\recall-sets\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    OET 2026 27-SKU catalog manifest. Loaded by Oet2026CatalogSeeder at
+    boot (when Content:Oet2026Catalog:Enabled=true) and by the admin
+    "/admin/billing/catalog" reseed button. Idempotent — matched by Code.
+  -->
+  <ItemGroup>
+    <None Include="Data\Seeds\oet-2026-catalog.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Wave B4 — canonical Stripe product seed (§10.2). Linked from the
+    StripeProductSeeder script project so the Stripe account, the local
+    BillingProducts table (via BillingCatalogSyncStartupTask) and the CLI
+    seeder all share one source of truth.
+  -->
+  <ItemGroup>
+    <None Include="..\..\scripts\StripeProductSeeder\catalog.json" Link="Data\Seeds\stripe-product-catalog.v1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+
+</Project>

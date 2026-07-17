@@ -75,7 +75,7 @@ export default function AdminCatalogToolsPage() {
           <CardHeader>
             <CardTitle>Re-seed OET 2026 catalog</CardTitle>
             <CardDescription>
-              Loads <code>backend/src/OetLearner.Api/Data/Seeds/oet-2026-catalog.json</code> and writes 20
+              Loads <code>backend/src/OetWithDrHesham.Api/Data/Seeds/oet-2026-catalog.json</code> and writes 20
               BillingPlans + 7 BillingAddOns + matching ContentPackages. Use this after editing the manifest or
               if an admin accidentally archives a SKU.
             </CardDescription>

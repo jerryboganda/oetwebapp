@@ -626,13 +626,13 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 
 | File | Content Type | Key Data Points |
 |------|-------------|-----------------|
-| `backend/src/OetLearner.Api/Services/SeedData.cs` | Seed data | Plans (L1482-1486), add-ons (L1505-1507), coupons (L1525-1526), subscriber counts, pricing |
-| `backend/src/OetLearner.Api/Services/WalletService.cs` | Business logic | Wallet top-up tiers (L127-134), bonus multipliers |
-| `backend/src/OetLearner.Api/Domain/PrivateSpeakingEntities.cs` | Domain entities | Speaking session config (L5-49), pricing, duration, policies |
-| `backend/src/OetLearner.Api/Domain/BillingEntities.cs` | Domain entities | Score guarantee (L363-395), referral entities (L409-428) |
-| `backend/src/OetLearner.Api/Domain/Enums.cs` | Enumerations | Subscription states, review request states |
-| `backend/src/OetLearner.Api/Services/DatabaseBootstrapper.cs` | Bootstrap config | Feature flags, freeze policy (L197-220), referral program flag |
-| `backend/src/OetLearner.Api/Configuration/BillingOptions.cs` | Configuration | Stripe/PayPal gateway config |
+| `backend/src/OetWithDrHesham.Api/Services/SeedData.cs` | Seed data | Plans (L1482-1486), add-ons (L1505-1507), coupons (L1525-1526), subscriber counts, pricing |
+| `backend/src/OetWithDrHesham.Api/Services/WalletService.cs` | Business logic | Wallet top-up tiers (L127-134), bonus multipliers |
+| `backend/src/OetWithDrHesham.Api/Domain/PrivateSpeakingEntities.cs` | Domain entities | Speaking session config (L5-49), pricing, duration, policies |
+| `backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs` | Domain entities | Score guarantee (L363-395), referral entities (L409-428) |
+| `backend/src/OetWithDrHesham.Api/Domain/Enums.cs` | Enumerations | Subscription states, review request states |
+| `backend/src/OetWithDrHesham.Api/Services/DatabaseBootstrapper.cs` | Bootstrap config | Feature flags, freeze policy (L197-220), referral program flag |
+| `backend/src/OetWithDrHesham.Api/Configuration/BillingOptions.cs` | Configuration | Stripe/PayPal gateway config |
 | `components/domain/review-request-drawer.tsx` | UI component | Turnaround options (L11-14), credit costs (L44) |
 | `lib/analytics.ts` | Analytics | All tracked events (L6-170) |
 | `docs/product-strategy/01_business_requirement_and_product_thesis.md` | Strategy doc | Product thesis, exam-family strategy |

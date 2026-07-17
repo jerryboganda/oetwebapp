@@ -28,7 +28,7 @@ function createSession(overrides: Partial<AuthSession> = {}): AuthSession {
     refreshTokenExpiresAt: '2099-04-26T00:00:00.000Z',
     currentUser: {
       userId: 'auth_learner_local_001',
-      email: 'learner@oet-prep.dev',
+      email: 'learner@oet-with-dr-hesham.dev',
       role: 'learner',
       displayName: 'Learner Local',
       isEmailVerified: true,
@@ -68,7 +68,7 @@ describe('AuthProvider', () => {
       currentUser: {
         ...createSession().currentUser,
         role: 'expert',
-        email: 'expert@oet-prep.dev',
+        email: 'expert@oet-with-dr-hesham.dev',
       },
     }));
 
@@ -83,7 +83,7 @@ describe('AuthProvider', () => {
     });
 
     expect(screen.getByTestId('role')).toHaveTextContent('expert');
-    expect(screen.getByTestId('email')).toHaveTextContent('expert@oet-prep.dev');
+    expect(screen.getByTestId('email')).toHaveTextContent('expert@oet-with-dr-hesham.dev');
   });
 
   it('clears the current user after sign-out', async () => {
@@ -97,7 +97,7 @@ describe('AuthProvider', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-prep.dev');
+      expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-with-dr-hesham.dev');
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -130,7 +130,7 @@ describe('AuthProvider', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-prep.dev');
+      expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-with-dr-hesham.dev');
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));

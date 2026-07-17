@@ -22,7 +22,7 @@ is disabled in production and has no UI.
 | C    |    12 | 3-option MCQ (six per presentation) | Same MCQ rule as Part B. |
 | **Total** | **42** | | Raw score → scaled via `OetScoring.OetRawToScaled`. |
 
-**Mission-critical anchors** (`backend/src/OetLearner.Api/Services/OetScoring.cs`):
+**Mission-critical anchors** (`backend/src/OetWithDrHesham.Api/Services/OetScoring.cs`):
 - Raw 0 → scaled 0
 - Raw 30 → scaled 350 (Grade B pass)
 - Raw 42 → scaled 500
@@ -47,7 +47,7 @@ PUT /v1/expert/listening/attempts/{attemptId}/questions/{questionId}/score-overr
 ```
 
 It is **feature-flagged off by default**. See
-`backend/src/OetLearner.Api/Endpoints/ExpertEndpoints.cs` and the
+`backend/src/OetWithDrHesham.Api/Endpoints/ExpertEndpoints.cs` and the
 `Features:ListeningExpertOverride` configuration key.
 
 Defaults:
@@ -117,6 +117,6 @@ switch:
 - `PRD-LISTENING-V2.md` — full product spec.
 - `docs/LISTENING.md` — module overview.
 - `docs/LISTENING-RULEBOOK-CITATIONS.md` — rulebook references.
-- `backend/src/OetLearner.Api/Services/OetScoring.cs` — scaled-score anchors.
-- `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs` — auto-grading + override path.
-- `backend/src/OetLearner.Api/Services/Listening/ListeningStructureService.cs` — publish gate.
+- `backend/src/OetWithDrHesham.Api/Services/OetScoring.cs` — scaled-score anchors.
+- `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningGradingService.cs` — auto-grading + override path.
+- `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningStructureService.cs` — publish gate.

@@ -1,7 +1,7 @@
 {
   "projectId": "2b0accd2-624d-4274-a318-713d929560fd",
   "shape": "package",
-  "pkg": "oet-prep",
+  "pkg": "oet-with-dr-hesham",
   "globalName": "OetUI",
   "entry": "./.design-sync/build/ui-entry.ts",
   "srcDir": "components/ui",

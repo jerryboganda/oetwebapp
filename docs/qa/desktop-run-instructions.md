@@ -62,7 +62,7 @@ npm run desktop:dist
 
 Expected artifact:
 
-- [`dist/desktop/win-unpacked/OET Prep.exe`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/dist/desktop/win-unpacked/OET Prep.exe)
+- [`dist/desktop/win-unpacked/OET with Dr Hesham.exe`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/dist/desktop/win-unpacked/OET with Dr Hesham.exe)
 
 ## 6. Run Packaged Smoke Validation Directly
 
@@ -72,9 +72,9 @@ npx playwright test -c playwright.desktop.config.ts tests/e2e/desktop/electron-p
 
 ## 7. Seeded Accounts
 
-- learner: `learner@oet-prep.dev`
-- expert: `expert@oet-prep.dev`
-- admin: `admin@oet-prep.dev`
+- learner: `learner@oet-with-dr-hesham.dev`
+- expert: `expert@oet-with-dr-hesham.dev`
+- admin: `admin@oet-with-dr-hesham.dev`
 - password: `Password123!`
 
 ## Troubleshooting

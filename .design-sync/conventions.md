@@ -1,6 +1,6 @@
 # OET UI — how to build with this design system
 
-This is the **oet-prep** component library: a clinical, professional design system for an OET
+This is the **oet-with-dr-hesham** component library: a clinical, professional design system for an OET
 (Occupational English Test) exam-prep app used by nurses, doctors and pharmacists. The accent
 colour is a calm violet/indigo (`primary`); surfaces are white-ish with soft borders and the
 `shadow-clinical` elevation. Compose screens from the real components below — don't re-implement them.

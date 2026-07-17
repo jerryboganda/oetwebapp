@@ -1,7 +1,7 @@
 // Authored preview — Tabs. Controlled component (activeTab + onChange).
 // Each named export = one labeled card cell.
 import { useState } from 'react';
-import { Tabs } from 'oet-prep';
+import { Tabs } from 'oet-with-dr-hesham';
 
 export const ResultTabs = () => {
   const [active, setActive] = useState('overview');

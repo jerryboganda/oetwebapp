@@ -20,8 +20,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>OetLearner.Scripts.StripeProductSeeder</RootNamespace>
-    <AssemblyName>OetLearner.Scripts.StripeProductSeeder</AssemblyName>
+    <RootNamespace>OetWithDrHesham.Scripts.StripeProductSeeder</RootNamespace>
+    <AssemblyName>OetWithDrHesham.Scripts.StripeProductSeeder</AssemblyName>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

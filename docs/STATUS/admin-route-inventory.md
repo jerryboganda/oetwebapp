@@ -15,7 +15,7 @@ It is the canonical source for the launch readiness check that asks
 
 - **Route**: filesystem path under `app/admin/*` (Next.js).
 - **API**: matching backend endpoint group.
-- **Permission**: required `AdminPermission` (see `backend/src/OetLearner.Api/Domain/Auth/AdminPermission.cs`).
+- **Permission**: required `AdminPermission` (see `backend/src/OetWithDrHesham.Api/Domain/Auth/AdminPermission.cs`).
 - **Tests**: existing test coverage. `e2e/learner` projects skip admin specs;
   admin coverage lives in `tests/e2e/admin/` and backend xUnit suites.
 - **Status**: `done` = implemented + at least one test, `partial` =

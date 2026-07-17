@@ -105,7 +105,7 @@ OET should win on productive-skill depth, profession specificity, and review tru
 
 | Feature | Why it matters | Priority |
 | --- | --- | --- |
-| Writing revision coaching | OET learners need actionable second-pass improvement, not only one-shot scoring | Immediate |
+| Writing revision coaching | OET with Dr Hesham learners need actionable second-pass improvement, not only one-shot scoring | Immediate |
 | Profession-specific writing remediation | The product should coach nurses, doctors, pharmacists, and others differently where the communication patterns differ | Near-term |
 | Speaking role-play transcript loop | Learners need transcript-backed phrasing feedback, not only generic fluency comments | Immediate |
 | Compare-attempt analytics | Learners should see whether revisions are improving the right criteria over time | Near-term |

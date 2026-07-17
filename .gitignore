@@ -28,12 +28,12 @@ output/playwright/
 !.kilo/skills/**
 backend/**/bin/
 backend/**/obj/
-backend/src/OetLearner.Api/App_Data/
-backend/oet_learner_dev.sqlite
-backend/src/OetLearner.Api/oet_learner_dev.db
-backend/src/OetLearner.Api/oet_learner_dev.db-shm
-backend/src/OetLearner.Api/oet_learner_dev.db-wal
-backend/src/OetLearner.Api/Data/Migrations/__PendingProbe/
+backend/src/OetWithDrHesham.Api/App_Data/
+backend/oet_with_dr_hesham_dev.sqlite
+backend/src/OetWithDrHesham.Api/oet_with_dr_hesham_dev.db
+backend/src/OetWithDrHesham.Api/oet_with_dr_hesham_dev.db-shm
+backend/src/OetWithDrHesham.Api/oet_with_dr_hesham_dev.db-wal
+backend/src/OetWithDrHesham.Api/Data/Migrations/__PendingProbe/
 **/bin/
 **/obj/
 build-*.txt
@@ -190,7 +190,7 @@ OET with Dr. Ahmed Hesham ( Medicine Only )/
 *.sql.bak
 *.dump
 .db-sync/
-oet_learner_dev_backup_*.sql
+oet_with_dr_hesham_dev_backup_*.sql
 
 # Production DB sync (contains real production data/PII — NEVER commit)
 .db-sync/

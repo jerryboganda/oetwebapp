@@ -1,10 +1,10 @@
-# design-sync NOTES — oet-prep → "OET with Dr. Hesham — UI"
+# design-sync NOTES — oet-with-dr-hesham → "OET with Dr. Hesham — UI"
 
 Repo-specific gotchas for future re-syncs. Read this first.
 
 ## Build facts
 
-- **`oet-prep` is the Next.js app at repo root**, not a published component library. The
+- **`oet-with-dr-hesham` is the Next.js app at repo root**, not a published component library. The
   "design system" is `components/ui/*.tsx`. There is **no `dist/`**.
 - A **synthesized entry** at `.design-sync/build/ui-entry.ts` re-exports the 40 DS
   components (mirrors `components/ui/index.ts` EXCEPT `CardLink`, which wraps `next/link`
@@ -52,7 +52,7 @@ Repo-specific gotchas for future re-syncs. Read this first.
 
 - One file per component. **Each named export = one card cell** and must be a
   **function component** (PascalCase) returning JSX (rendered via `React.createElement`).
-- Import DS components from `'oet-prep'` (the build redirects this to the `window.OetUI`
+- Import DS components from `'oet-with-dr-hesham'` (the build redirects this to the `window.OetUI`
   bundle global). JSX automatic runtime — **no `import React`**.
 - Layout glue between components uses **inline `style={{}}`** (Tailwind utility classes are
   NOT available to the preview's own wrapper markup — only the DS components carry their

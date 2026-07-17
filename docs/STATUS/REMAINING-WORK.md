@@ -55,7 +55,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P0-002 - Backend Build Health Check
 
-- Evidence: Docker backend API build on 2026-05-29 produced `OetLearner.Api.dll`; warnings remain but no live compile error was emitted for `ConversationAsrProviderSelector.cs` / `ConversationOptions`.
+- Evidence: Docker backend API build on 2026-05-29 produced `OetWithDrHesham.Api.dll`; warnings remain but no live compile error was emitted for `ConversationAsrProviderSelector.cs` / `ConversationOptions`.
 - Remaining work: keep backend build in the final validation matrix; fix only live compiler errors, not historical stale-assets output.
 - Input required: none.
 - Recommendation: make this the first verification command after planning edits.
@@ -81,7 +81,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P0-005 - Mobile Association Files And Support Surface
 
-- Evidence: `public/.well-known/apple-app-site-association` contains `TEAM_ID.com.oetprep.learner`; `public/.well-known/assetlinks.json` contains `REPLACE_WITH_YOUR_SHA256_CERT_FINGERPRINT`.
+- Evidence: `public/.well-known/apple-app-site-association` contains `TEAM_ID.com.oetwithdrhesham.learner`; `public/.well-known/assetlinks.json` contains `REPLACE_WITH_YOUR_SHA256_CERT_FINGERPRINT`.
 - Local hardening complete: `/support` exists; `.well-known` mobile association files bypass auth middleware; `scripts/qa/validate-mobile-release-inputs.mjs` blocks placeholder or malformed association files and checks release version inputs before store packaging.
 - Remaining work: replace placeholders with production Team ID, bundle ID, and SHA-256 cert fingerprints.
 - Input required: Apple Team ID, final bundle ID, Android signing certificate fingerprint, support contact path.
@@ -133,7 +133,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-006 - Desktop Release Readiness
 
-- Local hardening complete: desktop release CI has write permission for GitHub Releases, uses the workflow token explicitly, verifies Windows Authenticode signatures when signing is required, uploads `SHA256SUMS.txt`, enforces safe remote API targets for public releases, validates Electron update metadata, registers the `oet-prep` protocol, queues cold-start deep links, and provides a packaged-smoke wrapper.
+- Local hardening complete: desktop release CI has write permission for GitHub Releases, uses the workflow token explicitly, verifies Windows Authenticode signatures when signing is required, uploads `SHA256SUMS.txt`, enforces safe remote API targets for public releases, validates Electron update metadata, registers the `oet-with-dr-hesham` protocol, queues cold-start deep links, and provides a packaged-smoke wrapper.
 - Local hardening update 2026-05-29: the desktop Speaking recorder intentionally falls back to the browser recorder until Electron native capture is implemented end-to-end, avoiding empty recordings.
 - Remaining work: prove signed Windows release, hosted update server behavior, OAuth callback, packaged desktop smoke, backend API/version compatibility evidence, macOS signing/notarization, and Linux package evidence.
 - Input required: Windows signing method, update server URL/CDN, Apple Developer ID/notarization access, Linux package targets, and final release channel.

@@ -15,7 +15,7 @@
 ## 0. Design principles
 
 1. **Scoring canonicalisation is non-negotiable.** Every raw→scaled conversion
-   routes through `lib/scoring.ts` / `OetLearner.Api.Services.OetScoring`.
+   routes through `lib/scoring.ts` / `OetWithDrHesham.Api.Services.OetScoring`.
    `30/42 ≡ 350/500` for Reading. No option below weakens this.
 2. **No answer leakage.** Learner endpoints never serialise correct answers
    or explanations. Enforced at the DTO layer, not by discipline.

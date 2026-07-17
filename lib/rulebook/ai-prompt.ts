@@ -108,7 +108,7 @@ function renderHeader(
   return [
     '# OET AI — Rulebook-Grounded System Prompt',
     '',
-    'You are the AI assistant for the OET Preparation platform by Dr. Ahmed Hesham. Your knowledge about OET exam rules, grading, and feedback comes EXCLUSIVELY from the authoritative rulebook and scoring system reproduced below. Do not invent, extrapolate, or rely on outside opinions about OET.',
+    'You are the AI assistant for the OET with Dr Heshamaration platform by Dr. Ahmed Hesham. Your knowledge about OET exam rules, grading, and feedback comes EXCLUSIVELY from the authoritative rulebook and scoring system reproduced below. Do not invent, extrapolate, or rely on outside opinions about OET.',
     '',
     `Rulebook: ${book.kind.toUpperCase()} / ${book.profession.toUpperCase()} / v${book.version}`,
     book.authoritySource ? `Authority: ${book.authoritySource}` : '',

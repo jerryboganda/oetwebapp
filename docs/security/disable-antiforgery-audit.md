@@ -2,7 +2,7 @@
 
 Review date: 2026-05-09
 
-Scope: every backend endpoint call to `DisableAntiforgery()` under `backend/src/OetLearner.Api/Endpoints`.
+Scope: every backend endpoint call to `DisableAntiforgery()` under `backend/src/OetWithDrHesham.Api/Endpoints`.
 
 ## Summary
 
@@ -14,7 +14,7 @@ Scope: every backend endpoint call to `DisableAntiforgery()` under `backend/src/
 Focused validation on 2026-05-09:
 
 ```powershell
-dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests|FullyQualifiedName~MediaEndpointSecurityTests.Upload|FullyQualifiedName~PronunciationEndpointsTests.UploadAndScore" --no-restore
+dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter "FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests|FullyQualifiedName~MediaEndpointSecurityTests.Upload|FullyQualifiedName~PronunciationEndpointsTests.UploadAndScore" --no-restore
 ```
 
 Result: 39/39 tests passed.
@@ -24,7 +24,7 @@ Result: 39/39 tests passed.
 ### Pronunciation Audio Upload
 
 - Endpoint: `POST /v1/pronunciation/drills/{drillId}/attempt/{attemptId}/audio`.
-- File: `backend/src/OetLearner.Api/Endpoints/PronunciationEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/PronunciationEndpoints.cs`.
 - Reason: accepts raw audio body or multipart form upload.
 - Authorization: pronunciation route group is learner-authenticated; service receives `http.UserId()` and validates attempt ownership.
 - Rate limiting: `PerUserWrite` on the audio upload endpoint.
@@ -34,7 +34,7 @@ Result: 39/39 tests passed.
 ### Generic Media Upload
 
 - Endpoint: `POST /v1/media/upload`.
-- File: `backend/src/OetLearner.Api/Endpoints/MediaEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/MediaEndpoints.cs`.
 - Reason: multipart `IFormFile` upload.
 - Authorization: authenticated `/v1/media` route group.
 - Rate limiting: `PerUserWrite` on upload.
@@ -44,7 +44,7 @@ Result: 39/39 tests passed.
 ### Admin Chunked Upload Part
 
 - Endpoint: `PUT /v1/admin/uploads/{uploadId}/parts/{partNumber:int}`.
-- File: `backend/src/OetLearner.Api/Endpoints/ContentPapersAdminEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/ContentPapersAdminEndpoints.cs`.
 - Reason: raw stream body for large chunked uploads.
 - Authorization: `AdminContentWrite` group policy.
 - Rate limiting: `PerUserWrite` group policy.
@@ -54,7 +54,7 @@ Result: 39/39 tests passed.
 ### Admin ZIP Import Stage
 
 - Endpoint: `POST /v1/admin/imports/zip`.
-- File: `backend/src/OetLearner.Api/Endpoints/ContentPapersAdminEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/ContentPapersAdminEndpoints.cs`.
 - Reason: multipart ZIP upload.
 - Authorization: `AdminContentWrite` group policy.
 - Rate limiting: `PerUserWrite` group policy.
@@ -64,7 +64,7 @@ Result: 39/39 tests passed.
 ### Admin User CSV Import
 
 - Endpoint: `POST /v1/admin/users/import`.
-- File: `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`.
 - Reason: multipart CSV upload.
 - Authorization: `AdminUsersWrite` endpoint policy.
 - Rate limiting: `PerUserWrite`.
@@ -74,7 +74,7 @@ Result: 39/39 tests passed.
 ### Admin Vocabulary Import Preview
 
 - Endpoint: `POST /v1/admin/vocabulary/import/preview`.
-- File: `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`.
 - Reason: multipart CSV upload for dry-run preview.
 - Authorization: `AdminContentRead` endpoint policy.
 - Rate limiting: `PerUserWrite`.
@@ -84,7 +84,7 @@ Result: 39/39 tests passed.
 ### Admin Vocabulary Import Commit
 
 - Endpoint: `POST /v1/admin/vocabulary/import`.
-- File: `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`.
 - Reason: multipart CSV upload.
 - Authorization: `AdminContentWrite` endpoint policy.
 - Rate limiting: `PerUserWrite`.
@@ -94,7 +94,7 @@ Result: 39/39 tests passed.
 ### Admin Vocabulary Import Reconcile
 
 - Endpoint: `POST /v1/admin/vocabulary/import/batches/{importBatchId}/reconcile`.
-- File: `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`.
+- File: `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`.
 - Reason: multipart reconciliation CSV upload.
 - Authorization: `AdminContentRead` endpoint policy.
 - Rate limiting: `PerUserWrite`.

@@ -1,16 +1,16 @@
 # Mobile Store Listings
 
 ## App Name
-OET Prep Learner
+OET with Dr Hesham Learner
 
 ## Short Description (80 characters max)
 Prepare for your OET exam with practice tests, AI feedback, and expert reviews.
 
 ## Full Description — Google Play Store
 
-Master the Occupational English Test with OET Prep Learner — the comprehensive preparation platform designed specifically for healthcare professionals.
+Master the Occupational English Test with OET with Dr Hesham Learner — the comprehensive preparation platform designed specifically for healthcare professionals.
 
-**Complete OET Preparation**
+**Complete OET with Dr Heshamaration**
 Practice all four subtests — Listening, Reading, Writing, and Speaking — with realistic exam-style content. Track your progress across every skill area and identify where to focus your study time.
 
 **AI-Powered Practice**
@@ -33,15 +33,15 @@ Sit full-length mock exams under timed conditions to build exam confidence. Revi
 - Exam booking guidance and preparation tips
 
 **Designed for Healthcare Professionals**
-Whether you are a nurse, doctor, pharmacist, dentist, or other healthcare professional, OET Prep Learner provides profession-specific content to help you achieve the score you need.
+Whether you are a nurse, doctor, pharmacist, dentist, or other healthcare professional, OET with Dr Hesham Learner provides profession-specific content to help you achieve the score you need.
 
 ---
 
 ## Full Description — Apple App Store
 
-Master the Occupational English Test with OET Prep Learner — your comprehensive preparation platform for healthcare professionals.
+Master the Occupational English Test with OET with Dr Hesham Learner — your comprehensive preparation platform for healthcare professionals.
 
-COMPLETE OET PREPARATION
+COMPLETE OET WITH DR HESHAMARATION
 Practice all four subtests — Listening, Reading, Writing, and Speaking — with exam-style content and real-time progress tracking.
 
 AI-POWERED PRACTICE

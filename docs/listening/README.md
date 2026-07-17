@@ -19,17 +19,17 @@ at repo root; for **rollout state** see `PROGRESS-LISTENING-V2.md`.
 
 ## Backend architecture
 
-- **Domain**: [`Domain/ListeningEntities.cs`](../../backend/src/OetLearner.Api/Domain/ListeningEntities.cs) — 5-part parts, extracts, questions, options, attempts, answers, policy, overrides, pathway progress, teacher classes.
-- **Services**: [`Services/Listening/*`](../../backend/src/OetLearner.Api/Services/Listening/) — `ListeningLearnerService` (~125 KB), `ListeningSessionService` (FSM), `ListeningGradingService`, `ListeningAnalyticsService`, `ListeningAuthoringService`, etc.
-- **Endpoints**: [`Endpoints/Listening*.cs`](../../backend/src/OetLearner.Api/Endpoints/) — learner (`/v1/listening-papers/...`), V2 FSM (`/v1/listening/v2/...`), admin authoring (`/v1/admin/papers/{id}/listening/...`), admin analytics.
+- **Domain**: [`Domain/ListeningEntities.cs`](../../backend/src/OetWithDrHesham.Api/Domain/ListeningEntities.cs) — 5-part parts, extracts, questions, options, attempts, answers, policy, overrides, pathway progress, teacher classes.
+- **Services**: [`Services/Listening/*`](../../backend/src/OetWithDrHesham.Api/Services/Listening/) — `ListeningLearnerService` (~125 KB), `ListeningSessionService` (FSM), `ListeningGradingService`, `ListeningAnalyticsService`, `ListeningAuthoringService`, etc.
+- **Endpoints**: [`Endpoints/Listening*.cs`](../../backend/src/OetWithDrHesham.Api/Endpoints/) — learner (`/v1/listening-papers/...`), V2 FSM (`/v1/listening/v2/...`), admin authoring (`/v1/admin/papers/{id}/listening/...`), admin analytics.
 - **Migrations**: `20260430071438_AddListeningModuleEntities.cs`, `20260505224742_AddListeningExtractionDraft.cs`, `20260511110000_Listening_V2_Schema.cs`, `20260521210000_AddListeningAnswerMissReason.cs`.
 
 ## Scoring path — invariant
 
 > Scaled scores ALWAYS go through `OetScoring.OetRawToScaled`.
 > Inline math (`* 350`, `/ 42`, `* 500`, `* 8.33`) anywhere in
-> `backend/src/OetLearner.Api/Services/Listening/` fails CI via
-> [`ListeningScoringPathAuditTest`](../../backend/tests/OetLearner.Api.Tests/Listening/ListeningScoringPathAuditTest.cs).
+> `backend/src/OetWithDrHesham.Api/Services/Listening/` fails CI via
+> [`ListeningScoringPathAuditTest`](../../backend/tests/OetWithDrHesham.Api.Tests/Listening/ListeningScoringPathAuditTest.cs).
 
 ## Related docs
 

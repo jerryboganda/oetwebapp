@@ -91,8 +91,8 @@ The author-supplied **letter** (`A`/`B`/`C`/`D`) is preserved alongside the ID a
 ## Cross-links
 
 - [`MOCKS-RANDOMISATION.md`](./MOCKS-RANDOMISATION.md) — the helper that this migration unblocks.
-- `backend/src/OetLearner.Api/Services/Reading/ReadingGradingService.cs`
-- `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/Reading/ReadingGradingService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningGradingService.cs`
 - `docs/mocks/PROGRESS.md` Gap Register — V2 Med #6.
 
 ## Decision

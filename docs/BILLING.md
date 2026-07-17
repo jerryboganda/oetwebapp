@@ -3,7 +3,7 @@
 > Status: living document. Owner: Billing slice (see `docs/billing-hardening/README.md`).
 > Last reviewed: 2026-05-10.
 
-This document is the canonical reference for the OET Prep billing subsystem.
+This document is the canonical reference for the OET with Dr Hesham billing subsystem.
 It describes the runtime architecture, the data model, the state machines that
 govern lifecycle transitions, the invariants the system must preserve, the
 provider integration boundary, the RBAC surface, and the PII / retention
@@ -144,14 +144,14 @@ erDiagram
 
 ### 3.2 Field-level pointers
 
-Catalog: [`backend/src/OetLearner.Api/Domain/AdminEntities.cs`](../backend/src/OetLearner.Api/Domain/AdminEntities.cs#L284)
+Catalog: [`backend/src/OetWithDrHesham.Api/Domain/AdminEntities.cs`](../backend/src/OetWithDrHesham.Api/Domain/AdminEntities.cs#L284)
 (BillingPlan / BillingPlanVersion).
 
 Catalog versioning + quote + redemption + webhook events:
-[`backend/src/OetLearner.Api/Domain/BillingEntities.cs`](../backend/src/OetLearner.Api/Domain/BillingEntities.cs#L1).
+[`backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs`](../backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs#L1).
 
 Subscription / Invoice / Wallet:
-[`backend/src/OetLearner.Api/Domain/Entities.cs`](../backend/src/OetLearner.Api/Domain/Entities.cs#L592).
+[`backend/src/OetWithDrHesham.Api/Domain/Entities.cs`](../backend/src/OetWithDrHesham.Api/Domain/Entities.cs#L592).
 
 ---
 
@@ -291,7 +291,7 @@ new provider must be written behind `IPaymentGatewayService`.
 ## 7. RBAC matrix
 
 The current granular permission set lives in
-[`backend/src/OetLearner.Api/Domain/AuthEntities.cs`](../backend/src/OetLearner.Api/Domain/AuthEntities.cs#L160)
+[`backend/src/OetWithDrHesham.Api/Domain/AuthEntities.cs`](../backend/src/OetWithDrHesham.Api/Domain/AuthEntities.cs#L160)
 (`AdminPermissions`). Billing uses a read permission plus granular write scopes.
 `billing:write` is retained as a legacy superset and `system_admin` grants everything.
 

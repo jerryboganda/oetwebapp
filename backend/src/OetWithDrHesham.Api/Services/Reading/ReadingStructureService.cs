@@ -1,0 +1,1691 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using OetWithDrHesham.Api.Data;
+using OetWithDrHesham.Api.Domain;
+using OetWithDrHesham.Api.Services.Content;
+
+namespace OetWithDrHesham.Api.Services.Reading;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Reading structure service — Slice R2
+//
+// Owns every write path for ReadingPart / ReadingText / ReadingQuestion.
+// Exposes a publish-gate validator whose results the Content Upload
+// publish flow consults before flipping a paper to Published.
+//
+// Policy ref: docs/READING-AUTHORING-POLICY.md §3 for grading strategy
+// constraints; canonical OET shape 20/6/16 is enforced here and is
+// non-configurable (invariant §11).
+// ═════════════════════════════════════════════════════════════════════════════
+
+public interface IReadingStructureService
+{
+    Task<ReadingPart> UpsertPartAsync(ReadingPartUpsert args, string adminId, CancellationToken ct);
+    Task<ReadingText> UpsertTextAsync(ReadingTextUpsert args, string adminId, CancellationToken ct);
+    Task<ReadingQuestion> UpsertQuestionAsync(ReadingQuestionUpsert args, string adminId, CancellationToken ct);
+
+    Task<bool> RemoveTextAsync(string paperId, string textId, string adminId, CancellationToken ct);
+    Task<bool> RemoveQuestionAsync(string paperId, string questionId, string adminId, CancellationToken ct);
+
+    /// <summary>Reorder within a part. <paramref name="orderedIds"/> is the
+    /// new order; entries keep their current DisplayOrder if not in the list.</summary>
+    Task ReorderTextsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct);
+    Task ReorderQuestionsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct);
+
+    /// <summary>Read the full structure for a paper — admin view, includes
+    /// correct answers + explanations.</summary>
+    Task<ReadingStructure> GetAdminStructureAsync(string paperId, CancellationToken ct);
+
+    Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct);
+    Task<ReadingPaperCloneResult> ClonePaperAsync(
+        string sourcePaperId,
+        ReadingPaperCloneRequest request,
+        string adminId,
+        CancellationToken ct);
+    Task<ReadingStructureImportResult> ImportManifestAsync(
+        string paperId,
+        ReadingStructureManifest manifest,
+        bool replaceExisting,
+        string adminId,
+        CancellationToken ct);
+
+    /// <summary>Run the publish-gate validator. Returns a structured report
+    /// that admin UI can surface row-by-row.</summary>
+    Task<ReadingValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct);
+
+    /// <summary>Ensure the three canonical parts (A/B/C) exist with default
+    /// item caps. Idempotent; safe to call after paper creation.</summary>
+    Task EnsureCanonicalPartsAsync(string paperId, CancellationToken ct);
+}
+
+// ── DTOs ──────────────────────────────────────────────────────────────────
+
+public sealed record ReadingPartUpsert(
+    string PaperId,
+    ReadingPartCode PartCode,
+    int? TimeLimitMinutes,
+    string? Instructions);
+
+public sealed record ReadingTextUpsert(
+    string? Id,
+    string ReadingPartId,
+    int DisplayOrder,
+    string Title,
+    string? Source,
+    string BodyHtml,
+    int WordCount,
+    string? TopicTag);
+
+public sealed record ReadingQuestionUpsert(
+    string? Id,
+    string ReadingPartId,
+    string? ReadingTextId,
+    int DisplayOrder,
+    int Points,
+    ReadingQuestionType QuestionType,
+    string Stem,
+    string OptionsJson,
+    string CorrectAnswerJson,
+    string? AcceptedSynonymsJson,
+    bool CaseSensitive,
+    string? ExplanationMarkdown,
+    string? SkillTag,
+    int? Difficulty = null,
+    string? EvidenceSentence = null,
+    int? ParagraphIndex = null,
+    string? DistractorRationaleJson = null,
+    string? ReadingSectionId = null,
+    string? BoxExplanationsJson = null);
+
+public sealed record ReadingStructure(
+    string PaperId,
+    IReadOnlyList<ReadingPartView> Parts);
+
+public sealed record ReadingPartView(
+    string Id, ReadingPartCode PartCode, int TimeLimitMinutes, int MaxRawScore,
+    string? Instructions,
+    IReadOnlyList<ReadingSectionView> Sections,
+    IReadOnlyList<ReadingText> Texts,
+    IReadOnlyList<ReadingQuestion> Questions);
+
+public sealed record ReadingSectionView(
+    string Id,
+    ReadingSectionCode SectionCode,
+    int DisplayOrder,
+    int MaxRawScore,
+    string? ContentPaperAssetId,
+    IReadOnlyList<ReadingQuestion> Questions);
+
+public sealed record ReadingValidationReport(
+    bool IsPublishReady,
+    IReadOnlyList<ReadingValidationIssue> Issues,
+    ReadingValidationCounts Counts);
+
+public sealed record ReadingValidationIssue(
+    string Code,
+    string Severity, // "error" | "warning"
+    string Message,
+    string? TargetId);
+
+public sealed record ReadingValidationCounts(
+    int PartACount, int PartBCount, int PartCCount, int TotalPoints);
+
+public sealed record ReadingStructureManifest(
+    IReadOnlyList<ReadingPartManifest> Parts);
+
+public sealed record ReadingPartManifest(
+    ReadingPartCode PartCode,
+    int? TimeLimitMinutes,
+    string? Instructions,
+    IReadOnlyList<ReadingTextManifest> Texts,
+    IReadOnlyList<ReadingQuestionManifest> Questions,
+    ReadingPaperAssetManifest? QuestionPaperAsset);
+
+public sealed record ReadingPaperAssetManifest(
+    string MediaAssetId,
+    string Title,
+    int DisplayOrder,
+    bool IsPrimary);
+
+public sealed record ReadingTextManifest(
+    int DisplayOrder,
+    string Title,
+    string? Source,
+    string BodyHtml,
+    int WordCount,
+    string? TopicTag);
+
+public sealed record ReadingQuestionManifest(
+    int DisplayOrder,
+    int Points,
+    ReadingQuestionType QuestionType,
+    string Stem,
+    string OptionsJson,
+    string CorrectAnswerJson,
+    string? AcceptedSynonymsJson,
+    bool CaseSensitive,
+    string? ExplanationMarkdown,
+    string? SkillTag,
+    int? ReadingTextDisplayOrder,
+    string? OptionDistractorsJson = null,
+    ReadingReviewState ReviewState = ReadingReviewState.Draft);
+
+public sealed record ReadingStructureImportResult(
+    ReadingStructure Structure,
+    ReadingValidationReport Report);
+
+public sealed record ReadingPaperCloneRequest(
+    string? Title,
+    string? Slug,
+    bool ResetReviewState = true);
+
+public sealed record ReadingPaperCloneResult(
+    string SourcePaperId,
+    string PaperId,
+    string Title,
+    string Slug,
+    ReadingStructure Structure);
+
+public sealed class ReadingStructureService : IReadingStructureService
+{
+    private readonly LearnerDbContext db;
+    private readonly IHtmlSanitizer htmlSanitizer;
+
+    /// <summary>
+    /// Primary DI constructor. Always use this in production wiring; it gives
+    /// you the full sanitizer. The secondary constructor below exists ONLY for
+    /// the legacy code paths that construct this service inline purely to call
+    /// <see cref="ValidatePaperAsync"/> (read-only). Those call sites should be
+    /// migrated to DI over time — they never hit the sanitize-on-write path, so
+    /// the no-op sanitizer in the secondary ctor is safe for them.
+    /// </summary>
+    public ReadingStructureService(LearnerDbContext db, IHtmlSanitizer htmlSanitizer)
+    {
+        this.db = db;
+        this.htmlSanitizer = htmlSanitizer;
+    }
+
+    /// <summary>
+    /// Read-only construction helper. DO NOT use this for code paths that call
+    /// <c>UpsertTextAsync</c> — it would silently skip sanitization.
+    /// </summary>
+    public ReadingStructureService(LearnerDbContext db)
+        : this(db, new NoOpHtmlSanitizer())
+    {
+    }
+
+    /// <summary>Canonical OET shape. Non-configurable invariant
+    /// (<c>docs/READING-AUTHORING-POLICY.md</c> §11).</summary>
+    public static readonly IReadOnlyDictionary<ReadingPartCode, (int Items, int Minutes)> CanonicalShape =
+        new Dictionary<ReadingPartCode, (int, int)>
+        {
+            [ReadingPartCode.A] = (20, 15),
+            [ReadingPartCode.B] = (6, 45),   // B+C share 45
+            [ReadingPartCode.C] = (16, 45),
+        };
+
+    private static readonly IReadOnlyDictionary<ReadingPartCode, int> CanonicalTextCounts =
+        new Dictionary<ReadingPartCode, int>
+        {
+            [ReadingPartCode.A] = 4,
+            [ReadingPartCode.B] = 6,
+            [ReadingPartCode.C] = 2,
+        };
+
+    private static readonly IReadOnlyDictionary<ReadingPartCode, IReadOnlyList<ReadingSectionCode>> CanonicalSectionCodes =
+        new Dictionary<ReadingPartCode, IReadOnlyList<ReadingSectionCode>>
+        {
+            [ReadingPartCode.B] = new[] { ReadingSectionCode.B1, ReadingSectionCode.B2, ReadingSectionCode.B3, ReadingSectionCode.B4, ReadingSectionCode.B5, ReadingSectionCode.B6 },
+            [ReadingPartCode.C] = new[] { ReadingSectionCode.C1, ReadingSectionCode.C2 },
+        };
+
+    private static readonly IReadOnlyDictionary<ReadingSectionCode, int> CanonicalSectionRawScores =
+        new Dictionary<ReadingSectionCode, int>
+        {
+            [ReadingSectionCode.B1] = 1,
+            [ReadingSectionCode.B2] = 1,
+            [ReadingSectionCode.B3] = 1,
+            [ReadingSectionCode.B4] = 1,
+            [ReadingSectionCode.B5] = 1,
+            [ReadingSectionCode.B6] = 1,
+            [ReadingSectionCode.C1] = 8,
+            [ReadingSectionCode.C2] = 8,
+        };
+
+    private static readonly string[] McqLetters = { "A", "B", "C", "D", "E", "F" };
+
+    /// <summary>Max raw score for a fully-assembled Reading paper.</summary>
+    public const int CanonicalMaxRawScore = 42;
+
+    public async Task EnsureCanonicalPartsAsync(string paperId, CancellationToken ct)
+    {
+        await EnsureReadingPaperAsync(paperId, ct);
+        var existing = await db.ReadingParts
+            .Where(p => p.PaperId == paperId)
+            .Select(p => p.PartCode)
+            .ToListAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (code, (items, minutes)) in CanonicalShape)
+        {
+            if (existing.Contains(code)) continue;
+            db.ReadingParts.Add(new ReadingPart
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = paperId,
+                PartCode = code,
+                TimeLimitMinutes = minutes,
+                MaxRawScore = items,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+        if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
+        await EnsureCanonicalSectionsAsync(paperId, ct);
+    }
+
+    private async Task EnsureCanonicalSectionsAsync(string paperId, CancellationToken ct)
+    {
+        var parts = await db.ReadingParts
+            .Where(p => p.PaperId == paperId)
+            .Select(p => new { p.Id, p.PartCode })
+            .ToListAsync(ct);
+
+        var partIds = parts.Select(p => p.Id).ToArray();
+        if (partIds.Length == 0)
+            return;
+
+        var existing = await db.ReadingSections
+            .Where(s => partIds.Contains(s.ReadingPartId))
+            .Select(s => new { s.ReadingPartId, s.SectionCode })
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var part in parts.Where(p => p.PartCode is ReadingPartCode.B or ReadingPartCode.C))
+        {
+            if (!CanonicalSectionCodes.TryGetValue(part.PartCode, out var sectionCodes))
+                continue;
+
+            for (var index = 0; index < sectionCodes.Count; index++)
+            {
+                var sectionCode = sectionCodes[index];
+                var alreadyExists = existing.Any(s => string.Equals(s.ReadingPartId, part.Id, StringComparison.Ordinal)
+                    && s.SectionCode == sectionCode);
+                if (alreadyExists)
+                    continue;
+
+                db.ReadingSections.Add(new ReadingSection
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    SectionCode = sectionCode,
+                    DisplayOrder = index + 1,
+                    MaxRawScore = CanonicalSectionRawScores.TryGetValue(sectionCode, out var rawScore) ? rawScore : 1,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+        }
+
+        if (db.ChangeTracker.HasChanges())
+            await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<ReadingPart> UpsertPartAsync(ReadingPartUpsert args, string adminId, CancellationToken ct)
+    {
+        await EnsureReadingPaperAsync(args.PaperId, ct);
+        var row = await db.ReadingParts
+            .FirstOrDefaultAsync(p => p.PaperId == args.PaperId && p.PartCode == args.PartCode, ct);
+        var now = DateTimeOffset.UtcNow;
+        var (_, defaultMins) = CanonicalShape[args.PartCode];
+        if (row is null)
+        {
+            row = new ReadingPart
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = args.PaperId,
+                PartCode = args.PartCode,
+                TimeLimitMinutes = args.TimeLimitMinutes ?? defaultMins,
+                MaxRawScore = CanonicalShape[args.PartCode].Items,
+                Instructions = args.Instructions,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ReadingParts.Add(row);
+        }
+        else
+        {
+            if (args.TimeLimitMinutes is int mins) row.TimeLimitMinutes = mins;
+            if (args.Instructions is not null) row.Instructions = args.Instructions;
+            row.UpdatedAt = now;
+        }
+        await WriteAuditAsync("ReadingPartUpserted", row.Id, $"{args.PartCode}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+        return row;
+    }
+
+    public async Task<ReadingText> UpsertTextAsync(ReadingTextUpsert args, string adminId, CancellationToken ct)
+    {
+        await EnsurePartBelongsToReadingPaperAsync(args.ReadingPartId, ct);
+        ReadingText? row = null;
+        if (!string.IsNullOrWhiteSpace(args.Id))
+            row = await db.ReadingTexts.FirstOrDefaultAsync(t => t.Id == args.Id, ct);
+        if (row is not null && !string.Equals(row.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Existing Reading text belongs to a different part.");
+        var now = DateTimeOffset.UtcNow;
+        if (row is null)
+        {
+            row = new ReadingText
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ReadingPartId = args.ReadingPartId,
+                DisplayOrder = args.DisplayOrder,
+                Title = args.Title.Trim(),
+                Source = args.Source,
+                BodyHtml = htmlSanitizer.SanitizePassage(args.BodyHtml),
+                WordCount = args.WordCount,
+                TopicTag = args.TopicTag,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ReadingTexts.Add(row);
+        }
+        else
+        {
+            row.ReadingPartId = args.ReadingPartId;
+            row.DisplayOrder = args.DisplayOrder;
+            row.Title = args.Title.Trim();
+            row.Source = args.Source;
+            row.BodyHtml = htmlSanitizer.SanitizePassage(args.BodyHtml);
+            row.WordCount = args.WordCount;
+            row.TopicTag = args.TopicTag;
+            row.UpdatedAt = now;
+        }
+        await WriteAuditAsync("ReadingTextUpserted", row.Id, row.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+        return row;
+    }
+
+    public async Task<ReadingQuestion> UpsertQuestionAsync(ReadingQuestionUpsert args, string adminId, CancellationToken ct)
+    {
+        await EnsurePartBelongsToReadingPaperAsync(args.ReadingPartId, ct);
+        if (!string.IsNullOrWhiteSpace(args.ReadingSectionId))
+        {
+            var section = await db.ReadingSections.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == args.ReadingSectionId, ct);
+            if (section is null)
+                throw new InvalidOperationException("Reading section not found.");
+            if (!string.Equals(section.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Reading question section must belong to the same part.");
+        }
+        if (!string.IsNullOrWhiteSpace(args.ReadingTextId))
+        {
+            var textPartId = await db.ReadingTexts.AsNoTracking()
+                .Where(t => t.Id == args.ReadingTextId)
+                .Select(t => t.ReadingPartId)
+                .FirstOrDefaultAsync(ct);
+            if (textPartId is null)
+                throw new InvalidOperationException("Reading text not found.");
+            if (!string.Equals(textPartId, args.ReadingPartId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Reading question text must belong to the same part.");
+        }
+
+        // Validate JSON shapes before writing.
+        ValidateQuestionPayload(args.QuestionType, args.OptionsJson, args.CorrectAnswerJson,
+            args.AcceptedSynonymsJson);
+
+        ReadingQuestion? row = null;
+        if (!string.IsNullOrWhiteSpace(args.Id))
+            row = await db.ReadingQuestions.FirstOrDefaultAsync(q => q.Id == args.Id, ct);
+        if (row is not null && !string.Equals(row.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Existing Reading question belongs to a different part.");
+        var now = DateTimeOffset.UtcNow;
+        if (row is null)
+        {
+            row = new ReadingQuestion
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ReadingPartId = args.ReadingPartId,
+                ReadingTextId = args.ReadingTextId,
+                DisplayOrder = args.DisplayOrder,
+                Points = Math.Max(1, args.Points),
+                QuestionType = args.QuestionType,
+                Stem = args.Stem.Trim(),
+                OptionsJson = args.OptionsJson,
+                CorrectAnswerJson = args.CorrectAnswerJson,
+                AcceptedSynonymsJson = args.AcceptedSynonymsJson,
+                CaseSensitive = args.CaseSensitive,
+                ExplanationMarkdown = args.ExplanationMarkdown,
+                SkillTag = args.SkillTag,
+                Difficulty = args.Difficulty,
+                EvidenceSentence = args.EvidenceSentence,
+                ParagraphIndex = args.ParagraphIndex,
+                DistractorRationaleJson = args.DistractorRationaleJson,
+                ReadingSectionId = args.ReadingSectionId,
+                BoxExplanationsJson = args.BoxExplanationsJson,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ReadingQuestions.Add(row);
+        }
+        else
+        {
+            row.ReadingPartId = args.ReadingPartId;
+            row.ReadingTextId = args.ReadingTextId;
+            row.DisplayOrder = args.DisplayOrder;
+            row.Points = Math.Max(1, args.Points);
+            row.QuestionType = args.QuestionType;
+            row.Stem = args.Stem.Trim();
+            row.OptionsJson = args.OptionsJson;
+            row.CorrectAnswerJson = args.CorrectAnswerJson;
+            row.AcceptedSynonymsJson = args.AcceptedSynonymsJson;
+            row.CaseSensitive = args.CaseSensitive;
+            row.ExplanationMarkdown = args.ExplanationMarkdown;
+            row.SkillTag = args.SkillTag;
+            row.Difficulty = args.Difficulty;
+            row.EvidenceSentence = args.EvidenceSentence;
+            row.ParagraphIndex = args.ParagraphIndex;
+            row.DistractorRationaleJson = args.DistractorRationaleJson;
+            row.ReadingSectionId = args.ReadingSectionId;
+            row.BoxExplanationsJson = args.BoxExplanationsJson;
+            row.UpdatedAt = now;
+        }
+        await WriteAuditAsync("ReadingQuestionUpserted", row.Id,
+            $"type={args.QuestionType} order={args.DisplayOrder}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+        return row;
+    }
+
+    public async Task<bool> RemoveTextAsync(string paperId, string textId, string adminId, CancellationToken ct)
+    {
+        await EnsureReadingPaperAsync(paperId, ct);
+        var row = await db.ReadingTexts
+            .Include(t => t.Part)
+            .FirstOrDefaultAsync(t => t.Id == textId && t.Part != null && t.Part.PaperId == paperId, ct);
+        if (row is null) return false;
+        db.ReadingTexts.Remove(row);
+        await WriteAuditAsync("ReadingTextRemoved", textId, row.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> RemoveQuestionAsync(string paperId, string questionId, string adminId, CancellationToken ct)
+    {
+        await EnsureReadingPaperAsync(paperId, ct);
+        var row = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstOrDefaultAsync(q => q.Id == questionId && q.Part != null && q.Part.PaperId == paperId, ct);
+        if (row is null) return false;
+        // ReadingAnswer has a RESTRICT FK to ReadingQuestion, so without purging the
+        // learner answers first the delete fails with a raw FK violation once anyone
+        // has answered. ReadingAnswerRevision references the question via a plain
+        // column (no FK) — purge it too so it does not dangle.
+        db.ReadingAnswers.RemoveRange(
+            await db.ReadingAnswers.Where(a => a.ReadingQuestionId == questionId).ToListAsync(ct));
+        db.ReadingAnswerRevisions.RemoveRange(
+            await db.ReadingAnswerRevisions.Where(a => a.ReadingQuestionId == questionId).ToListAsync(ct));
+        db.ReadingQuestions.Remove(row);
+        await WriteAuditAsync("ReadingQuestionRemoved", questionId, row.Stem, adminId, ct);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task ReorderTextsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct)
+    {
+        await EnsurePartBelongsToPaperAsync(paperId, partId, ct);
+        var texts = await db.ReadingTexts.Where(t => t.ReadingPartId == partId).ToListAsync(ct);
+        for (var i = 0; i < orderedIds.Count; i++)
+        {
+            var t = texts.FirstOrDefault(x => x.Id == orderedIds[i]);
+            if (t is null) continue;
+            t.DisplayOrder = i + 1;
+            t.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await WriteAuditAsync("ReadingTextsReordered", partId, null, adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ReorderQuestionsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct)
+    {
+        await EnsurePartBelongsToPaperAsync(paperId, partId, ct);
+        var qs = await db.ReadingQuestions.Where(q => q.ReadingPartId == partId).ToListAsync(ct);
+        for (var i = 0; i < orderedIds.Count; i++)
+        {
+            var q = qs.FirstOrDefault(x => x.Id == orderedIds[i]);
+            if (q is null) continue;
+            q.DisplayOrder = i + 1;
+            q.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await WriteAuditAsync("ReadingQuestionsReordered", partId, null, adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<ReadingStructure> GetAdminStructureAsync(string paperId, CancellationToken ct)
+    {
+        var parts = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == paperId)
+            .Include(p => p.Texts.OrderBy(t => t.DisplayOrder))
+            .Include(p => p.Questions.OrderBy(q => q.DisplayOrder))
+            .Include(p => p.Sections)
+            .OrderBy(p => p.PartCode)
+            .ToListAsync(ct);
+        return new ReadingStructure(paperId, parts
+            .Select(p => new ReadingPartView(
+                p.Id, p.PartCode, p.TimeLimitMinutes, p.MaxRawScore,
+                p.Instructions,
+                BuildSectionViews(p),
+                p.Texts.OrderBy(t => t.DisplayOrder).ToList(),
+                p.Questions.OrderBy(q => q.DisplayOrder).ToList()))
+            .ToList());
+    }
+
+    public async Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct)
+    {
+        var structure = await GetAdminStructureAsync(paperId, ct);
+        var primaryAssetsByPart = (await db.ContentPaperAssets.AsNoTracking()
+                .Where(asset => asset.PaperId == paperId
+                    && asset.Role == PaperAssetRole.QuestionPaper
+                    && asset.IsPrimary)
+                .OrderBy(asset => asset.DisplayOrder)
+                .Select(asset => new
+                {
+                    asset.Part,
+                    Manifest = new ReadingPaperAssetManifest(
+                        asset.MediaAssetId,
+                        asset.Title,
+                        asset.DisplayOrder,
+                        asset.IsPrimary)
+                })
+                .ToListAsync(ct))
+            .GroupBy(asset => asset.Part, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Manifest, StringComparer.OrdinalIgnoreCase);
+
+        return new ReadingStructureManifest(structure.Parts
+            .OrderBy(p => p.PartCode)
+            .Select(part =>
+            {
+                var textOrderById = part.Texts.ToDictionary(t => t.Id, t => t.DisplayOrder);
+                primaryAssetsByPart.TryGetValue(part.PartCode.ToString(), out var questionPaperAsset);
+                return new ReadingPartManifest(
+                    part.PartCode,
+                    part.TimeLimitMinutes,
+                    part.Instructions,
+                    part.Texts.OrderBy(t => t.DisplayOrder)
+                        .Select(t => new ReadingTextManifest(
+                            t.DisplayOrder,
+                            t.Title,
+                            t.Source,
+                            t.BodyHtml,
+                            t.WordCount,
+                            t.TopicTag))
+                        .ToList(),
+                    part.Questions.OrderBy(q => q.DisplayOrder)
+                        .Select(q => new ReadingQuestionManifest(
+                            q.DisplayOrder,
+                            q.Points,
+                            q.QuestionType,
+                            q.Stem,
+                            q.OptionsJson,
+                            q.CorrectAnswerJson,
+                            q.AcceptedSynonymsJson,
+                            q.CaseSensitive,
+                            q.ExplanationMarkdown,
+                            q.SkillTag,
+                            q.ReadingTextId is not null && textOrderById.TryGetValue(q.ReadingTextId, out var order)
+                                ? order
+                                : null,
+                            q.OptionDistractorsJson,
+                            q.ReviewState))
+                        .ToList(),
+                    questionPaperAsset);
+            })
+            .ToList());
+    }
+
+    public async Task<ReadingPaperCloneResult> ClonePaperAsync(
+        string sourcePaperId,
+        ReadingPaperCloneRequest request,
+        string adminId,
+        CancellationToken ct)
+    {
+        request ??= new ReadingPaperCloneRequest(null, null);
+
+        var source = await db.ContentPapers
+            .Include(p => p.Assets)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == sourcePaperId, ct)
+            ?? throw new InvalidOperationException("Source paper not found.");
+
+        if (!string.Equals(source.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Paper subtest is '{source.SubtestCode}', expected 'reading'.");
+
+        var sourceParts = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == sourcePaperId)
+            .Include(p => p.Texts)
+            .Include(p => p.Sections)
+            .Include(p => p.Questions)
+            .OrderBy(p => p.PartCode)
+            .ToListAsync(ct);
+
+        if (sourceParts.Count == 0)
+            throw new InvalidOperationException("Source paper has no Reading structure to clone.");
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        var title = string.IsNullOrWhiteSpace(request.Title)
+            ? $"{source.Title} (Draft revision)"
+            : request.Title.Trim();
+        var slug = await UniqueCloneSlugAsync(
+            string.IsNullOrWhiteSpace(request.Slug) ? $"{source.Slug}-revision" : request.Slug,
+            ct);
+
+        var clone = new ContentPaper
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            SubtestCode = source.SubtestCode,
+            Title = title,
+            Slug = slug,
+            ProfessionId = source.ProfessionId,
+            AppliesToAllProfessions = source.AppliesToAllProfessions,
+            Difficulty = source.Difficulty,
+            EstimatedDurationMinutes = source.EstimatedDurationMinutes,
+            Status = ContentStatus.Draft,
+            PublishedRevisionId = null,
+            CardType = source.CardType,
+            LetterType = source.LetterType,
+            Priority = source.Priority,
+            TagsCsv = AppendCloneTag(source.TagsCsv, source.Id),
+            SourceProvenance = source.SourceProvenance,
+            ExtractedTextJson = source.ExtractedTextJson,
+            CreatedByAdminId = adminId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            IntegrityAcknowledgedByAdminId = source.IntegrityAcknowledgedByAdminId,
+            IntegrityAcknowledgedAt = source.IntegrityAcknowledgedAt,
+        };
+        db.ContentPapers.Add(clone);
+
+        var assetIdBySourceId = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var asset in source.Assets.OrderBy(a => a.DisplayOrder))
+        {
+            var cloneAssetId = Guid.NewGuid().ToString("N");
+            db.ContentPaperAssets.Add(new ContentPaperAsset
+            {
+                Id = cloneAssetId,
+                PaperId = clone.Id,
+                Role = asset.Role,
+                Part = asset.Part,
+                MediaAssetId = asset.MediaAssetId,
+                Title = asset.Title,
+                DisplayOrder = asset.DisplayOrder,
+                IsPrimary = asset.IsPrimary,
+                CreatedAt = now,
+            });
+            assetIdBySourceId[asset.Id] = cloneAssetId;
+        }
+
+        var textIdBySourceId = new Dictionary<string, string>(StringComparer.Ordinal);
+        var sectionIdByCode = new Dictionary<ReadingSectionCode, string>();
+        string? ResolveClonedSectionId(ReadingPart sourcePart, ReadingPartCode partCode, ReadingQuestion sourceQuestion)
+        {
+            if (sourceQuestion.ReadingSectionId is not null
+                && sourcePart.Sections.FirstOrDefault(section => section.Id == sourceQuestion.ReadingSectionId) is { } sourceSection
+                && sectionIdByCode.TryGetValue(sourceSection.SectionCode, out var mappedSectionId))
+            {
+                return mappedSectionId;
+            }
+
+            var fallbackCode = TryMapFallbackSectionCode(partCode, sourceQuestion.DisplayOrder);
+            return fallbackCode is not null && sectionIdByCode.TryGetValue(fallbackCode.Value, out var fallbackSectionId)
+                ? fallbackSectionId
+                : null;
+        }
+
+        foreach (var sourcePart in sourceParts)
+        {
+            var part = new ReadingPart
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = clone.Id,
+                PartCode = sourcePart.PartCode,
+                TimeLimitMinutes = sourcePart.TimeLimitMinutes,
+                MaxRawScore = sourcePart.MaxRawScore,
+                Instructions = sourcePart.Instructions,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ReadingParts.Add(part);
+
+            foreach (var sourceText in sourcePart.Texts.OrderBy(t => t.DisplayOrder))
+            {
+                var text = new ReadingText
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    DisplayOrder = sourceText.DisplayOrder,
+                    Title = sourceText.Title,
+                    Source = sourceText.Source,
+                    BodyHtml = sourceText.BodyHtml,
+                    WordCount = sourceText.WordCount,
+                    TopicTag = sourceText.TopicTag,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.ReadingTexts.Add(text);
+                textIdBySourceId[sourceText.Id] = text.Id;
+            }
+
+            foreach (var sourceSection in sourcePart.Sections.OrderBy(s => s.DisplayOrder))
+            {
+                var clonedSection = new ReadingSection
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    SectionCode = sourceSection.SectionCode,
+                    DisplayOrder = sourceSection.DisplayOrder,
+                    MaxRawScore = sourceSection.MaxRawScore,
+                    ContentPaperAssetId = sourceSection.ContentPaperAssetId is not null && assetIdBySourceId.TryGetValue(sourceSection.ContentPaperAssetId, out var cloneAssetId)
+                        ? cloneAssetId
+                        : null,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.ReadingSections.Add(clonedSection);
+                sectionIdByCode[sourceSection.SectionCode] = clonedSection.Id;
+            }
+
+            if (sourcePart.Sections.Count == 0 && CanonicalSectionCodes.TryGetValue(sourcePart.PartCode, out var canonicalSectionCodes))
+            {
+                for (var index = 0; index < canonicalSectionCodes.Count; index++)
+                {
+                    var sectionCode = canonicalSectionCodes[index];
+                    var clonedSection = new ReadingSection
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        ReadingPartId = part.Id,
+                        SectionCode = sectionCode,
+                        DisplayOrder = index + 1,
+                        MaxRawScore = CanonicalSectionRawScores.TryGetValue(sectionCode, out var sectionScore) ? sectionScore : 1,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                    };
+                    db.ReadingSections.Add(clonedSection);
+                    sectionIdByCode[sectionCode] = clonedSection.Id;
+                }
+            }
+
+            foreach (var sourceQuestion in sourcePart.Questions.OrderBy(q => q.DisplayOrder))
+            {
+                db.ReadingQuestions.Add(new ReadingQuestion
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    ReadingTextId = sourceQuestion.ReadingTextId is not null
+                        && textIdBySourceId.TryGetValue(sourceQuestion.ReadingTextId, out var textId)
+                            ? textId
+                            : null,
+                    ReadingSectionId = ResolveClonedSectionId(sourcePart, sourcePart.PartCode, sourceQuestion),
+                    DisplayOrder = sourceQuestion.DisplayOrder,
+                    Points = sourceQuestion.Points,
+                    QuestionType = sourceQuestion.QuestionType,
+                    Stem = sourceQuestion.Stem,
+                    OptionsJson = sourceQuestion.OptionsJson,
+                    CorrectAnswerJson = sourceQuestion.CorrectAnswerJson,
+                    ParagraphIndex = sourceQuestion.ParagraphIndex,
+                    AcceptedSynonymsJson = sourceQuestion.AcceptedSynonymsJson,
+                    CaseSensitive = sourceQuestion.CaseSensitive,
+                    ExplanationMarkdown = sourceQuestion.ExplanationMarkdown,
+                    SkillTag = sourceQuestion.SkillTag,
+                    Difficulty = sourceQuestion.Difficulty,
+                    EvidenceSentence = sourceQuestion.EvidenceSentence,
+                    DistractorRationaleJson = sourceQuestion.DistractorRationaleJson,
+                    OptionDistractorsJson = sourceQuestion.OptionDistractorsJson,
+                    BoxExplanationsJson = sourceQuestion.BoxExplanationsJson,
+                    ReviewState = request.ResetReviewState ? ReadingReviewState.Draft : sourceQuestion.ReviewState,
+                    LatestReviewNote = request.ResetReviewState ? null : sourceQuestion.LatestReviewNote,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+        }
+
+        await WriteAuditAsync("ReadingPaperCloned", clone.Id,
+            $"sourcePaperId={source.Id}; resetReviewState={request.ResetReviewState}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        return new ReadingPaperCloneResult(
+            source.Id,
+            clone.Id,
+            clone.Title,
+            clone.Slug,
+            await GetAdminStructureAsync(clone.Id, ct));
+    }
+
+    public async Task<ReadingStructureImportResult> ImportManifestAsync(
+        string paperId,
+        ReadingStructureManifest manifest,
+        bool replaceExisting,
+        string adminId,
+        CancellationToken ct)
+    {
+        if (manifest is null)
+            throw new InvalidOperationException("Reading manifest is required.");
+        ValidateManifest(manifest, replaceExisting);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await EnsureCanonicalPartsAsync(paperId, ct);
+
+        if (replaceExisting)
+        {
+            var hasAttempts = await db.ReadingAttempts.AsNoTracking()
+                .AnyAsync(a => a.PaperId == paperId, ct);
+            if (hasAttempts)
+                throw new InvalidOperationException(
+                    "Cannot replace Reading structure after learner attempts exist. Retire this paper and import into a new revision instead.");
+
+            var existing = await db.ReadingParts
+                .Where(p => p.PaperId == paperId)
+                .Include(p => p.Texts)
+                .Include(p => p.Questions)
+                .ToListAsync(ct);
+            db.ReadingQuestions.RemoveRange(existing.SelectMany(p => p.Questions));
+            db.ReadingTexts.RemoveRange(existing.SelectMany(p => p.Texts));
+            var existingAssets = await db.ContentPaperAssets
+                .Where(asset => asset.PaperId == paperId && asset.Role == PaperAssetRole.QuestionPaper)
+                .ToListAsync(ct);
+            db.ContentPaperAssets.RemoveRange(existingAssets);
+            await WriteAuditAsync("ReadingStructureManifestCleared", paperId, "replaceExisting=true", adminId, ct);
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var partManifest in manifest.Parts.OrderBy(p => p.PartCode))
+        {
+            var part = await UpsertPartAsync(new ReadingPartUpsert(
+                paperId,
+                partManifest.PartCode,
+                partManifest.TimeLimitMinutes,
+                partManifest.Instructions ?? string.Empty), adminId, ct);
+
+            string? primaryQuestionPaperAssetId = null;
+            if (partManifest.QuestionPaperAsset is not null)
+            {
+                var questionPaperAsset = new ContentPaperAsset
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    PaperId = paperId,
+                    Role = PaperAssetRole.QuestionPaper,
+                    Part = part.PartCode.ToString(),
+                    MediaAssetId = partManifest.QuestionPaperAsset.MediaAssetId,
+                    Title = partManifest.QuestionPaperAsset.Title,
+                    DisplayOrder = partManifest.QuestionPaperAsset.DisplayOrder,
+                    IsPrimary = partManifest.QuestionPaperAsset.IsPrimary,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                db.ContentPaperAssets.Add(questionPaperAsset);
+                primaryQuestionPaperAssetId = questionPaperAsset.Id;
+            }
+
+            if (primaryQuestionPaperAssetId is not null)
+            {
+                var sections = await db.ReadingSections
+                    .Where(section => section.ReadingPartId == part.Id)
+                    .ToListAsync(ct);
+                foreach (var section in sections)
+                {
+                    section.ContentPaperAssetId = primaryQuestionPaperAssetId;
+                }
+            }
+
+            var textIdByDisplayOrder = new Dictionary<int, string>();
+            foreach (var textManifest in partManifest.Texts.OrderBy(t => t.DisplayOrder))
+            {
+                var text = await UpsertTextAsync(new ReadingTextUpsert(
+                    null,
+                    part.Id,
+                    textManifest.DisplayOrder,
+                    textManifest.Title,
+                    textManifest.Source,
+                    textManifest.BodyHtml,
+                    textManifest.WordCount,
+                    textManifest.TopicTag), adminId, ct);
+                textIdByDisplayOrder[text.DisplayOrder] = text.Id;
+            }
+
+            foreach (var questionManifest in partManifest.Questions.OrderBy(q => q.DisplayOrder))
+            {
+                var readingTextId = questionManifest.ReadingTextDisplayOrder is int textOrder
+                    && textIdByDisplayOrder.TryGetValue(textOrder, out var textId)
+                        ? textId
+                        : null;
+
+                await UpsertQuestionAsync(new ReadingQuestionUpsert(
+                    null,
+                    part.Id,
+                    readingTextId,
+                    questionManifest.DisplayOrder,
+                    questionManifest.Points,
+                    questionManifest.QuestionType,
+                    questionManifest.Stem,
+                    questionManifest.OptionsJson,
+                    questionManifest.CorrectAnswerJson,
+                    questionManifest.AcceptedSynonymsJson,
+                    questionManifest.CaseSensitive,
+                    questionManifest.ExplanationMarkdown,
+                    questionManifest.SkillTag), adminId, ct);
+            }
+
+            // Phase 4 — patch the metadata fields the upsert DTO doesn't carry.
+            // We do this in a second pass so we can match by (part, displayOrder)
+            // without round-tripping new IDs through the upsert path.
+            var importedQuestions = await db.ReadingQuestions
+                .Where(q => q.ReadingPartId == part.Id)
+                .ToListAsync(ct);
+            foreach (var qm in partManifest.Questions)
+            {
+                var row = importedQuestions.FirstOrDefault(q => q.DisplayOrder == qm.DisplayOrder);
+                if (row is null) continue;
+                if (qm.OptionDistractorsJson is { Length: > 0 })
+                    row.OptionDistractorsJson = qm.OptionDistractorsJson;
+                row.ReviewState = qm.ReviewState;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+
+        await WriteAuditAsync("ReadingStructureManifestImported", paperId,
+            $"replaceExisting={replaceExisting}; parts={manifest.Parts.Count}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        return new ReadingStructureImportResult(
+            await GetAdminStructureAsync(paperId, ct),
+            await ValidatePaperAsync(paperId, ct));
+    }
+
+    public async Task<ReadingValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct)
+    {
+        var issues = new List<ReadingValidationIssue>();
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+        if (paper is null)
+        {
+            return new(false,
+                new[] { new ReadingValidationIssue("paper_missing", "error", "Paper not found.", null) },
+                new(0, 0, 0, 0));
+        }
+        if (!string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new("wrong_subtest", "error",
+                $"Paper subtest is '{paper.SubtestCode}', expected 'reading'.", null));
+        }
+
+        var pdfParts = await db.ContentPaperAssets.AsNoTracking()
+            .Where(a => a.PaperId == paperId
+                && a.Role == PaperAssetRole.QuestionPaper
+                && a.IsPrimary
+                && (a.Part == "A" || a.Part == "B" || a.Part == "C")
+                && a.MediaAsset != null
+                && a.MediaAsset.Status == MediaAssetStatus.Ready
+                && (a.MediaAsset.Format == "pdf"
+                    || a.MediaAsset.MimeType == "application/pdf"
+                    || a.MediaAsset.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
+            .GroupBy(a => a.Part!)
+            .Select(g => new { Part = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        foreach (var requiredPart in new[] { "A", "B", "C" })
+        {
+            var count = pdfParts.FirstOrDefault(p => p.Part == requiredPart)?.Count ?? 0;
+            if (count != 1)
+            {
+                issues.Add(new(
+                    Code: $"part_{requiredPart}_pdf_required",
+                    Severity: "error",
+                    Message: $"Reading Part {requiredPart} requires exactly one primary QuestionPaper PDF or image asset.",
+                    TargetId: paperId));
+            }
+        }
+
+        var parts = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == paperId)
+            .Include(p => p.Questions)
+            .ToListAsync(ct);
+
+        int partA = 0, partB = 0, partC = 0, totalPoints = 0;
+        foreach (var part in parts)
+        {
+            var questionCount = part.Questions.Count;
+            var (expected, expectedMinutes) = CanonicalShape[part.PartCode];
+            var texts = await db.ReadingTexts.AsNoTracking()
+                .Where(t => t.ReadingPartId == part.Id)
+                .OrderBy(t => t.DisplayOrder)
+                .ToListAsync(ct);
+            if (part.TimeLimitMinutes != expectedMinutes)
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_time_limit",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} has a {part.TimeLimitMinutes}-minute limit, expected {expectedMinutes} minute(s).",
+                    TargetId: part.Id));
+            }
+            if (texts.Count > 0 && !HasContiguousDisplayOrders(texts.Select(t => t.DisplayOrder)))
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_text_order",
+                    Severity: "warning",
+                    Message: $"Legacy Part {part.PartCode} text display orders should be unique and contiguous from 1.",
+                    TargetId: part.Id));
+            }
+            if (!HasContiguousDisplayOrders(part.Questions.Select(q => q.DisplayOrder)))
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_question_order",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} question display orders must be unique and contiguous from 1.",
+                    TargetId: part.Id));
+            }
+            if (questionCount != expected)
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_item_count",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} has {questionCount} item(s), expected {expected}.",
+                    TargetId: part.Id));
+            }
+            switch (part.PartCode)
+            {
+                case ReadingPartCode.A: partA = questionCount; break;
+                case ReadingPartCode.B: partB = questionCount; break;
+                case ReadingPartCode.C: partC = questionCount; break;
+            }
+            var textIds = texts.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+            foreach (var q in part.Questions)
+            {
+                totalPoints += q.Points;
+                if (q.Points != 1)
+                {
+                    issues.Add(new(
+                        Code: "question_points_not_one",
+                        Severity: "error",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} is worth {q.Points} point(s), expected 1.",
+                        TargetId: q.Id));
+                }
+                if (!IsQuestionTypeAllowedForPart(part.PartCode, q.QuestionType))
+                {
+                    issues.Add(new(
+                        Code: $"part_{part.PartCode}_question_type",
+                        Severity: "error",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} uses {q.QuestionType}, which is not valid for this part.",
+                        TargetId: q.Id));
+                }
+                if (q.ReadingTextId is not null && !textIds.Contains(q.ReadingTextId))
+                {
+                    issues.Add(new(
+                        Code: $"part_{part.PartCode}_question_text_invalid",
+                        Severity: "warning",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} references a legacy text outside this part. PDF-only rendering ignores text links.",
+                        TargetId: q.Id));
+                }
+                if (part.PartCode == ReadingPartCode.A)
+                {
+                    // Part A type layout — relaxed to match real OET paper
+                    // variation. Sentence-completion always occupies Q15-20; Q1-14
+                    // hold the matching-text-reference block followed by the
+                    // short-answer block. The matching/short boundary varies
+                    // between real papers (6 or 7 matching), so we validate the
+                    // BLOCKS, not a fixed per-position type. Accepted synonyms ARE
+                    // permitted in Part A because official answer keys list real
+                    // spelling variants (e.g. neuroischemic / neuroischaemic).
+                    if (q.DisplayOrder is < 1 or > 20)
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_order",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} is outside the official 1-20 range.",
+                            TargetId: q.Id));
+                    }
+                    else
+                    {
+                        var blockOk = q.DisplayOrder <= 14
+                            ? q.QuestionType is ReadingQuestionType.MatchingTextReference or ReadingQuestionType.ShortAnswer
+                            : q.QuestionType is ReadingQuestionType.SentenceCompletion;
+                        if (!blockOk)
+                        {
+                            issues.Add(new(
+                                Code: "part_A_question_sequence",
+                                Severity: "error",
+                                Message: $"Part A question {q.DisplayOrder}: expected matching or short-answer in Q1-14 and sentence-completion in Q15-20, got {q.QuestionType}.",
+                                TargetId: q.Id));
+                        }
+                    }
+                }
+                try
+                {
+                    ValidateQuestionPayload(q.QuestionType, q.OptionsJson, q.CorrectAnswerJson, q.AcceptedSynonymsJson);
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new("question_payload_invalid", "error", ex.Message, q.Id));
+                }
+            }
+
+            // Part A text-link consistency — if ANY question has a text link all
+            // must. PDF-only mode (all null) is valid; mixed mode is not.
+            if (part.PartCode == ReadingPartCode.A)
+            {
+                var hasAnyTextLink = part.Questions.Any(q => q.ReadingTextId is not null && textIds.Contains(q.ReadingTextId));
+                if (hasAnyTextLink)
+                {
+                    foreach (var q in part.Questions.Where(x => x.ReadingTextId is null))
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_text_required",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} is missing a text link. Either all Part A questions must reference a text passage (text-linked mode) or none of them should (PDF-only mode).",
+                            TargetId: q.Id));
+                    }
+                }
+            }
+
+            if (texts.Count > 0 && part.PartCode is ReadingPartCode.B or ReadingPartCode.C)
+            {
+                var expectedPerText = part.PartCode == ReadingPartCode.B ? 1 : 8;
+                var questionsByText = part.Questions
+                    .Where(q => q.ReadingTextId is not null)
+                    .GroupBy(q => q.ReadingTextId!)
+                    .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+                foreach (var text in texts)
+                {
+                    var count = questionsByText.TryGetValue(text.Id, out var n) ? n : 0;
+                    if (count != expectedPerText)
+                    {
+                        issues.Add(new(
+                            Code: $"part_{part.PartCode}_questions_per_text",
+                            Severity: "error",
+                            Message: $"Part {part.PartCode} text {text.DisplayOrder} has {count} linked question(s), expected {expectedPerText}.",
+                            TargetId: text.Id));
+                    }
+                }
+
+                // 2026-05-27 audit fix — Reading rule R07.6 (Part C questions
+                // follow paragraph order). Surface a warning chip when authors
+                // populated the optional ParagraphIndex column but the values
+                // are not monotonically non-decreasing across DisplayOrder.
+                if (part.PartCode == ReadingPartCode.C)
+                {
+                    foreach (var text in texts)
+                    {
+                        var ordered = part.Questions
+                            .Where(q => q.ReadingTextId == text.Id && q.ParagraphIndex.HasValue)
+                            .OrderBy(q => q.DisplayOrder)
+                            .Select(q => (q.DisplayOrder, q.ParagraphIndex!.Value, q.Id))
+                            .ToArray();
+                        if (ordered.Length < 2) continue;
+                        for (var i = 1; i < ordered.Length; i++)
+                        {
+                            if (ordered[i].Item2 < ordered[i - 1].Item2)
+                            {
+                                issues.Add(new(
+                                    Code: "part_c_paragraph_order_violation",
+                                    Severity: "warning",
+                                    Message: $"Reading rule R07.6 — Part C question {ordered[i].DisplayOrder} references paragraph {ordered[i].Item2} but the preceding question references paragraph {ordered[i - 1].Item2}. Questions must follow paragraph order.",
+                                    TargetId: ordered[i].Id));
+                                break; // one warning per text is enough.
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Legacy text rows are no longer rendered in the PDF-only Reading
+            // player. Keep source warnings for old drafts only; provenance is
+            // enforced at paper/PDF-asset level by the content publish gate.
+            foreach (var t in texts.Where(x => string.IsNullOrWhiteSpace(x.Source)))
+            {
+                issues.Add(new("legacy_text_missing_source", "warning",
+                    $"Legacy text '{t.Title}' is missing a Source attribution; PDF-only learners will not see it.", t.Id));
+            }
+        }
+
+        // Ensure all 3 canonical parts exist
+        foreach (var code in CanonicalShape.Keys)
+        {
+            if (!parts.Any(p => p.PartCode == code))
+                issues.Add(new($"part_{code}_missing", "error", $"Part {code} is missing.", null));
+        }
+
+        // Total points must equal 42
+        if (totalPoints != CanonicalMaxRawScore)
+            issues.Add(new("total_points_mismatch", "error",
+                $"Total Reading points = {totalPoints}, must equal {CanonicalMaxRawScore}.", null));
+
+        // 2026-05-27 audit fix — Reading rule R04.5 (Reading Part A is stricter
+        // than Listening — any spelling error marks the answer wrong, with no
+        // exceptions). Reject any paper whose effective policy enables
+        // `fuzzy_levenshtein_1` short-answer matching for Reading. The Reading
+        // policy is a singleton row (Id = "global"); there is no per-paper
+        // override today, so we read the singleton.
+        var resolvedPolicy = await db.ReadingPolicies.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (resolvedPolicy is not null
+            && string.Equals(resolvedPolicy.ShortAnswerNormalisation, "fuzzy_levenshtein_1", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new(
+                Code: "short_answer_fuzzy_forbidden",
+                Severity: "error",
+                Message: "Reading rule R04.5 — short-answer marking must be strict; fuzzy_levenshtein_1 is forbidden. Switch the paper policy to trim_collapse_case_insensitive or exact.",
+                TargetId: paperId));
+        }
+        if (resolvedPolicy is not null && resolvedPolicy.ShortAnswerAcceptSynonyms)
+        {
+            issues.Add(new(
+                Code: "short_answer_synonyms_paper_wide",
+                Severity: "warning",
+                Message: "Reading rule R04.6 — Q8–14 and Q15–20 must come word-for-word from the text. Paper-wide synonym acceptance increases the risk of false positives; prefer per-question accepted variants only.",
+                TargetId: paperId));
+        }
+
+        // Phase 4 — every question must be Published before paper publish.
+        // Anything else surfaces as a single warning per non-published item
+        // so admins can use the validate report as a publish-readiness checklist.
+        var unpublished = parts.SelectMany(p => p.Questions)
+            .Where(q => q.ReviewState != ReadingReviewState.Published)
+            .ToList();
+        foreach (var q in unpublished)
+        {
+            issues.Add(new(
+                Code: "question_not_published",
+                Severity: "error",
+                Message: $"Question {q.DisplayOrder} is in {q.ReviewState}; advance to Published before paper publish.",
+                TargetId: q.Id));
+        }
+
+        var counts = new ReadingValidationCounts(partA, partB, partC, totalPoints);
+        var isReady = !issues.Any(i => i.Severity == "error");
+        return new ReadingValidationReport(isReady, issues, counts);
+    }
+
+    private static bool HasContiguousDisplayOrders(IEnumerable<int> orders)
+    {
+        var list = orders.OrderBy(x => x).ToList();
+        if (list.Count == 0) return true;
+        return list.SequenceEqual(Enumerable.Range(1, list.Count));
+    }
+
+    private static bool IsQuestionTypeAllowedForPart(ReadingPartCode partCode, ReadingQuestionType questionType) => partCode switch
+    {
+        ReadingPartCode.A => questionType is ReadingQuestionType.MatchingTextReference
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion,
+        ReadingPartCode.B => questionType is ReadingQuestionType.MultipleChoice3
+            or ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.FillInBlank
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion
+            or ReadingQuestionType.ShortAnswerLabeled
+            or ReadingQuestionType.MultipleChoiceFlexible,
+        ReadingPartCode.C => questionType is ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.FillInBlank
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion
+            or ReadingQuestionType.ShortAnswerLabeled
+            or ReadingQuestionType.MultipleChoiceFlexible,
+        _ => false,
+    };
+
+    private static ReadingQuestionType? ExpectedPartAQuestionType(int displayOrder) => displayOrder switch
+    {
+        >= 1 and <= 7 => ReadingQuestionType.MatchingTextReference,
+        >= 8 and <= 14 => ReadingQuestionType.ShortAnswer,
+        >= 15 and <= 20 => ReadingQuestionType.SentenceCompletion,
+        _ => null,
+    };
+
+    private static IReadOnlyList<ReadingSectionView> BuildSectionViews(ReadingPart part)
+    {
+        if (part.PartCode == ReadingPartCode.A)
+            return Array.Empty<ReadingSectionView>();
+
+        var questions = part.Questions.OrderBy(q => q.DisplayOrder).ToList();
+        var texts = part.Texts.OrderBy(t => t.DisplayOrder).ToList();
+
+        var textSectionCodes = new Dictionary<string, ReadingSectionCode>(StringComparer.Ordinal);
+        foreach (var text in texts)
+        {
+            var fallbackCode = TryMapFallbackSectionCode(part.PartCode, text.DisplayOrder);
+            if (fallbackCode is not null)
+                textSectionCodes[text.Id] = fallbackCode.Value;
+        }
+
+        var directSectionQuestions = questions
+            .Where(question => !string.IsNullOrWhiteSpace(question.ReadingSectionId))
+            .GroupBy(question => question.ReadingSectionId!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderBy(question => question.DisplayOrder).ToList(), StringComparer.Ordinal);
+
+        var fallbackSectionQuestions = questions
+            .Where(question => string.IsNullOrWhiteSpace(question.ReadingSectionId))
+            .GroupBy(question => ResolveFallbackSectionCode(part.PartCode, question, textSectionCodes))
+            .Where(group => group.Key.HasValue)
+            .ToDictionary(group => group.Key!.Value, group => group.OrderBy(question => question.DisplayOrder).ToList());
+
+        var persistedSections = part.Sections.OrderBy(section => section.DisplayOrder).ToList();
+        if (!CanonicalSectionCodes.TryGetValue(part.PartCode, out var canonicalSectionCodes))
+            return Array.Empty<ReadingSectionView>();
+
+        return canonicalSectionCodes.Select((sectionCode, index) =>
+        {
+            var persisted = persistedSections.FirstOrDefault(section => section.SectionCode == sectionCode);
+            var sectionQuestions = persisted is not null && directSectionQuestions.TryGetValue(persisted.Id, out var directQuestions)
+                ? directQuestions
+                : fallbackSectionQuestions.TryGetValue(sectionCode, out var fallbackQuestions)
+                    ? fallbackQuestions
+                    : [];
+
+            return new ReadingSectionView(
+                persisted?.Id ?? $"{part.Id}:{sectionCode}",
+                sectionCode,
+                persisted?.DisplayOrder ?? index + 1,
+                persisted?.MaxRawScore ?? CanonicalSectionRawScores[sectionCode],
+                persisted?.ContentPaperAssetId,
+                sectionQuestions);
+        }).ToList();
+    }
+
+    private static ReadingSectionCode? ResolveFallbackSectionCode(
+        ReadingPartCode partCode,
+        ReadingQuestion question,
+        IReadOnlyDictionary<string, ReadingSectionCode> textSectionCodes)
+    {
+        if (question.ReadingTextId is not null && textSectionCodes.TryGetValue(question.ReadingTextId, out var code))
+            return code;
+        return TryMapFallbackSectionCode(partCode, question.DisplayOrder);
+    }
+
+    private static ReadingSectionCode? TryMapFallbackSectionCode(ReadingPartCode partCode, int displayOrder)
+        => partCode switch
+        {
+            ReadingPartCode.B when displayOrder is >= 1 and <= 6 => (ReadingSectionCode)((int)ReadingSectionCode.B1 + displayOrder - 1),
+            ReadingPartCode.C when displayOrder is >= 1 and <= 2 => (ReadingSectionCode)((int)ReadingSectionCode.C1 + displayOrder - 1),
+            _ => null,
+        };
+
+    // ── JSON shape validation ────────────────────────────────────────────
+    //
+    // Enforces the contract on CorrectAnswerJson / OptionsJson / AcceptedSynonymsJson
+    // at write time so bad data never lands in the DB.
+
+    public static void ValidateQuestionPayload(
+        ReadingQuestionType type, string optionsJson, string correctAnswerJson, string? synonymsJson)
+    {
+        JsonElement options, correct;
+        try { options = JsonDocument.Parse(optionsJson).RootElement.Clone(); }
+        catch (JsonException) { throw new InvalidOperationException("OptionsJson is not valid JSON."); }
+        try { correct = JsonDocument.Parse(correctAnswerJson).RootElement.Clone(); }
+        catch (JsonException) { throw new InvalidOperationException("CorrectAnswerJson is not valid JSON."); }
+
+        switch (type)
+        {
+            case ReadingQuestionType.MultipleChoice3:
+            case ReadingQuestionType.MultipleChoice4:
+            case ReadingQuestionType.MultipleChoiceFlexible:
+                {
+                    if (options.ValueKind != JsonValueKind.Array)
+                        throw new InvalidOperationException("MCQ OptionsJson must be a JSON array.");
+                    var optionCount = options.GetArrayLength();
+                    if (type == ReadingQuestionType.MultipleChoice3 && optionCount != 3)
+                        throw new InvalidOperationException("MCQ3 must have exactly 3 options.");
+                    if (type == ReadingQuestionType.MultipleChoice4 && optionCount != 4)
+                        throw new InvalidOperationException("MCQ4 must have exactly 4 options.");
+                    if (type == ReadingQuestionType.MultipleChoiceFlexible && (optionCount < 2 || optionCount > McqLetters.Length))
+                        throw new InvalidOperationException($"Flexible MCQ must have between 2 and {McqLetters.Length} options.");
+                    EnsureLearnerSafeMcqOptions(options);
+                    if (correct.ValueKind != JsonValueKind.String)
+                        throw new InvalidOperationException("MCQ CorrectAnswerJson must be a single string letter.");
+                    var ans = correct.GetString() ?? string.Empty;
+                    var valid = GetMcqLetters(optionCount);
+                    if (!valid.Contains(ans, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidOperationException($"MCQ answer must be one of {string.Join(",", valid)}.");
+                    break;
+                }
+            case ReadingQuestionType.MatchingTextReference:
+                {
+                    if (correct.ValueKind != JsonValueKind.String)
+                        throw new InvalidOperationException("Matching CorrectAnswerJson must be a single string letter.");
+                    var ans = correct.GetString() ?? string.Empty;
+                    if (!new[] { "A", "B", "C", "D" }.Contains(ans, StringComparer.Ordinal))
+                        throw new InvalidOperationException("Matching answer must be one of A,B,C,D.");
+                    break;
+                }
+            case ReadingQuestionType.ShortAnswer:
+            case ReadingQuestionType.SentenceCompletion:
+            case ReadingQuestionType.FillInBlank:
+                {
+                    if (correct.ValueKind != JsonValueKind.String)
+                        throw new InvalidOperationException("Short-answer CorrectAnswerJson must be a string.");
+                    if (!string.IsNullOrWhiteSpace(synonymsJson))
+                    {
+                        try
+                        {
+                            var syns = JsonDocument.Parse(synonymsJson).RootElement;
+                            if (syns.ValueKind != JsonValueKind.Array)
+                                throw new InvalidOperationException("AcceptedSynonymsJson must be a JSON array of strings.");
+                        }
+                        catch (JsonException)
+                        {
+                            throw new InvalidOperationException("AcceptedSynonymsJson is not valid JSON.");
+                        }
+                    }
+                    break;
+                }
+            case ReadingQuestionType.ShortAnswerLabeled:
+                {
+                    if (correct.ValueKind != JsonValueKind.Object)
+                        throw new InvalidOperationException("Labeled short-answer CorrectAnswerJson must be a JSON object.");
+                    foreach (var prop in correct.EnumerateObject())
+                    {
+                        if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.String)
+                            throw new InvalidOperationException("Labeled short-answer answers must be string values keyed by label.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(synonymsJson))
+                    {
+                        try
+                        {
+                            var syns = JsonDocument.Parse(synonymsJson).RootElement;
+                            if (syns.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var item in syns.EnumerateArray())
+                                {
+                                    if (item.ValueKind != JsonValueKind.String)
+                                        throw new InvalidOperationException("AcceptedSynonymsJson must contain only strings.");
+                                }
+                            }
+                            else if (syns.ValueKind == JsonValueKind.Object)
+                            {
+                                foreach (var prop in syns.EnumerateObject())
+                                {
+                                    if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.Array)
+                                        throw new InvalidOperationException("AcceptedSynonymsJson labeled entries must map labels to arrays of strings.");
+                                    foreach (var item in prop.Value.EnumerateArray())
+                                    {
+                                        if (item.ValueKind != JsonValueKind.String)
+                                            throw new InvalidOperationException("AcceptedSynonymsJson labeled synonyms must contain only strings.");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                throw new InvalidOperationException("AcceptedSynonymsJson must be a JSON array or object.");
+                            }
+                        }
+                        catch (JsonException)
+                        {
+                            throw new InvalidOperationException("AcceptedSynonymsJson is not valid JSON.");
+                        }
+                    }
+                    break;
+                }
+            default:
+                throw new InvalidOperationException($"Unknown question type {type}.");
+        }
+    }
+
+    private static IReadOnlyList<string> GetMcqLetters(int optionCount)
+        => optionCount <= 0 ? Array.Empty<string>() : McqLetters.Take(Math.Min(optionCount, McqLetters.Length)).ToArray();
+
+    private static void EnsureLearnerSafeMcqOptions(JsonElement options)
+    {
+        foreach (var option in options.EnumerateArray())
+        {
+            if (option.ValueKind == JsonValueKind.String)
+            {
+                continue;
+            }
+
+            if (option.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("MCQ OptionsJson entries must be strings or learner-safe option objects.");
+            }
+
+            foreach (var property in option.EnumerateObject())
+            {
+                if (!LearnerSafeOptionKeys.Contains(property.Name) || property.Value.ValueKind != JsonValueKind.String)
+                {
+                    throw new InvalidOperationException("MCQ option objects may only contain string value, label, text, or title fields.");
+                }
+            }
+        }
+    }
+
+    private static readonly HashSet<string> LearnerSafeOptionKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "id",
+        "value",
+        "label",
+        "text",
+        "title",
+        "letter",
+    };
+
+    private static void ValidateManifest(ReadingStructureManifest manifest, bool replaceExisting)
+    {
+        if (manifest.Parts is null || manifest.Parts.Count == 0)
+            throw new InvalidOperationException("Reading manifest must contain at least one part.");
+
+        var duplicatePart = manifest.Parts
+            .GroupBy(p => p.PartCode)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicatePart is not null)
+            throw new InvalidOperationException($"Reading manifest contains duplicate Part {duplicatePart.Key} sections.");
+
+        if (replaceExisting)
+        {
+            foreach (var code in CanonicalShape.Keys)
+            {
+                if (!manifest.Parts.Any(p => p.PartCode == code))
+                    throw new InvalidOperationException($"Replacement manifest must include Part {code}.");
+            }
+        }
+
+        foreach (var part in manifest.Parts)
+        {
+            if (part.Texts is null)
+                throw new InvalidOperationException($"Part {part.PartCode} must include a texts array.");
+            if (part.Questions is null)
+                throw new InvalidOperationException($"Part {part.PartCode} must include a questions array.");
+            if (!CanonicalShape.ContainsKey(part.PartCode))
+                throw new InvalidOperationException($"Unsupported Reading part code {part.PartCode}.");
+            // QuestionPaperAsset is optional in manifests — PDFs are managed via the separate asset-upload flow.
+            if (part.Texts.Any(t => t.DisplayOrder <= 0))
+                throw new InvalidOperationException($"Part {part.PartCode} contains a text with an invalid display order.");
+            if (part.Questions.Any(q => q.DisplayOrder <= 0))
+                throw new InvalidOperationException($"Part {part.PartCode} contains a question with an invalid display order.");
+            if (part.Texts.GroupBy(t => t.DisplayOrder).Any(g => g.Count() > 1))
+                throw new InvalidOperationException($"Part {part.PartCode} contains duplicate text display orders.");
+            if (part.Questions.GroupBy(q => q.DisplayOrder).Any(g => g.Count() > 1))
+                throw new InvalidOperationException($"Part {part.PartCode} contains duplicate question display orders.");
+            foreach (var question in part.Questions.Where(q => q.ReadingTextDisplayOrder is not null))
+            {
+                if (!part.Texts.Any(t => t.DisplayOrder == question.ReadingTextDisplayOrder))
+                    throw new InvalidOperationException(
+                        $"Part {part.PartCode} question {question.DisplayOrder} references missing text display order {question.ReadingTextDisplayOrder}.");
+            }
+        }
+    }
+
+    private async Task EnsureReadingPaperAsync(string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+        if (paper is null)
+            throw new InvalidOperationException("Paper not found.");
+        if (!string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Paper subtest is '{paper.SubtestCode}', expected 'reading'.");
+    }
+
+    private async Task EnsurePartBelongsToReadingPaperAsync(string partId, CancellationToken ct)
+    {
+        var paperId = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.Id == partId)
+            .Select(p => p.PaperId)
+            .FirstOrDefaultAsync(ct);
+        if (paperId is null)
+            throw new InvalidOperationException("Reading part not found.");
+        await EnsureReadingPaperAsync(paperId, ct);
+    }
+
+    private async Task EnsurePartBelongsToPaperAsync(string paperId, string partId, CancellationToken ct)
+    {
+        await EnsureReadingPaperAsync(paperId, ct);
+        var exists = await db.ReadingParts.AsNoTracking()
+            .AnyAsync(p => p.Id == partId && p.PaperId == paperId, ct);
+        if (!exists)
+            throw new InvalidOperationException("Reading part does not belong to this paper.");
+    }
+
+    private async Task<string> UniqueCloneSlugAsync(string? requestedSlug, CancellationToken ct)
+    {
+        var baseSlug = NormalizeSlug(requestedSlug ?? "reading-paper-revision");
+        var slug = baseSlug;
+        var suffix = 2;
+        while (await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Slug == slug, ct))
+        {
+            slug = $"{baseSlug}-{suffix}";
+            suffix++;
+        }
+        return slug;
+    }
+
+    private static string NormalizeSlug(string value)
+    {
+        var chars = value.Trim().ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')
+            .ToArray();
+        var collapsed = string.Join('-', new string(chars)
+            .Split('-', StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(collapsed) ? "reading-paper-revision" : collapsed[..Math.Min(collapsed.Length, 180)];
+    }
+
+    private static string AppendCloneTag(string? tagsCsv, string sourcePaperId)
+    {
+        var tags = (tagsCsv ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(tag => tag.Length > 0)
+            .ToList();
+        tags.Add($"cloned-from:{sourcePaperId}");
+        return string.Join(',', tags.Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = action,
+            ResourceType = "ReadingAuthoring",
+            ResourceId = resourceId,
+            Details = details,
+        });
+        return Task.CompletedTask;
+    }
+}

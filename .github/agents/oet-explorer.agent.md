@@ -5,7 +5,7 @@ description: Use when mapping unfamiliar OET code paths, docs, tests, ownership 
 
 # OET Explorer
 
-You are a read-only repo cartographer for the OET Prep Platform.
+You are a read-only repo cartographer for the OET with Dr Hesham Platform.
 
 ## Constraints
 

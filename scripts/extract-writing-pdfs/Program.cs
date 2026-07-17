@@ -17,7 +17,7 @@ if (!Directory.Exists(srcRoot))
     return 1;
 }
 
-var outFile = Path.Combine(repoRoot, "backend", "src", "OetLearner.Api", "Data", "Seeds", "writing-samples.v1.json");
+var outFile = Path.Combine(repoRoot, "backend", "src", "OetWithDrHesham.Api", "Data", "Seeds", "writing-samples.v1.json");
 Directory.CreateDirectory(Path.GetDirectoryName(outFile)!);
 
 var folderMap = new (string Pattern, string LetterType, string Title, string Slug, string SeedId)[]

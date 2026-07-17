@@ -18,8 +18,8 @@ RUN apt-get update \
 # Create app user
 RUN groupadd --gid 10001 appgroup \
     && useradd --uid 10001 --gid appgroup --create-home --home-dir /home/appuser appuser \
-    && mkdir -p /var/opt/oet-learner/storage \
-    && chown -R appuser:appgroup /app /var/opt/oet-learner /home/appuser
+    && mkdir -p /var/opt/oet-with-dr-hesham/storage \
+    && chown -R appuser:appgroup /app /var/opt/oet-with-dr-hesham /home/appuser
 
 ENV ASPNETCORE_ENVIRONMENT=Development \
     ASPNETCORE_URLS=http://+:8080 \
@@ -27,12 +27,12 @@ ENV ASPNETCORE_ENVIRONMENT=Development \
     DOTNET_USE_POLLING_FILE_WATCHER=1
 
 # Copy project files
-COPY backend/src/OetLearner.Api/OetLearner.Api.csproj backend/src/OetLearner.Api/
+COPY backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj backend/src/OetWithDrHesham.Api/
 COPY rulebooks/ rulebooks/
 COPY backend/scripts/ backend/scripts/
 
 # Restore dependencies
-RUN dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj
+RUN dotnet restore backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj
 
 # Copy source code
 COPY backend/src/ backend/src/
@@ -40,4 +40,4 @@ COPY backend/src/ backend/src/
 EXPOSE 8080
 
 # Use dotnet watch for hot reload on file changes
-CMD ["dotnet", "watch", "--project", "backend/src/OetLearner.Api/OetLearner.Api.csproj", "run"]
+CMD ["dotnet", "watch", "--project", "backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj", "run"]

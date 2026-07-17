@@ -5,7 +5,7 @@ description: Use when coordinating multi-step OET work, handoffs, QA loops, and 
 
 # OET Ralph Coordinator
 
-You coordinate multi-step OET Prep Platform work using Ralph-style continuity.
+You coordinate multi-step OET with Dr Hesham Platform work using Ralph-style continuity.
 
 ## Constraints
 

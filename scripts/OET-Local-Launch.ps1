@@ -45,7 +45,7 @@ function Start-HiddenRunner([string]$Name, [string[]]$Lines, [string]$LogPath) {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " OET Prep Platform - Localhost Launcher " -ForegroundColor Cyan
+Write-Host " OET with Dr Hesham Platform - Localhost Launcher " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 New-Item -ItemType Directory -Force -Path $logDir, $runnerDir, $storageDir | Out-Null
@@ -102,7 +102,7 @@ if (-not $apiReady) {
     'set Bootstrap__SeedDemoData=false',
     "set ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=$databaseName;Username=postgres;Password=postgres",
     "set Storage__LocalRootPath=$storageDir",
-    'dotnet run --project backend\src\OetLearner.Api\OetLearner.Api.csproj'
+    'dotnet run --project backend\src\OetWithDrHesham.Api\OetWithDrHesham.Api.csproj'
   ) $backendLog
 }
 Wait-Http 'http://localhost:5198/health' 300

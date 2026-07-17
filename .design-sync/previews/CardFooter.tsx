@@ -1,6 +1,6 @@
 // Authored preview — CardFooter (renders a top border + horizontal actions row).
 // Each named export = one labeled card cell.
-import { Card, CardHeader, CardTitle, CardContent, CardFooter, Button } from 'oet-prep';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, Button } from 'oet-with-dr-hesham';
 
 export const ExamActions = () => (
   <Card style={{ maxWidth: 380 }}>

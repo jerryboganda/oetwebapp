@@ -1,6 +1,6 @@
 // Authored preview — Card (with its CardHeader / CardTitle / CardContent /
 // CardFooter compound parts shown in context). Each named export = one cell.
-import { Card, CardHeader, CardTitle, CardContent, CardFooter, Button, Badge } from 'oet-prep';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, Button, Badge } from 'oet-with-dr-hesham';
 
 export const ExamSection = () => (
   <Card style={{ maxWidth: 380 }}>

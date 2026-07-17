@@ -10,7 +10,7 @@ Stack: ASP.NET Core Minimal API, EF Core, PostgreSQL, SignalR, .NET 10.
 
 ## Structure
 
-Follow the layout under `backend/src/OetLearner.Api`:
+Follow the layout under `backend/src/OetWithDrHesham.Api`:
 
 - `Endpoints/` — thin Minimal API endpoint files. No business logic.
 - `Services/` — business logic and service boundaries.
@@ -33,7 +33,7 @@ immutable DTOs, nullable annotations, and cancellation tokens on async operation
 
 ## OET domain invariants (pointers — full rules live in security-ai + docs)
 
-- Scoring: keep pass/fail and scaled-score logic in `OetLearner.Api.Services.OetScoring`. Never
+- Scoring: keep pass/fail and scaled-score logic in `OetWithDrHesham.Api.Services.OetScoring`. Never
   inline thresholds. See `docs/SCORING.md`.
 - Rulebooks: route Writing/Speaking/Grammar/Pronunciation/Conversation rules through rulebook
   services. No direct rulebook JSON reads from endpoints. See `docs/RULEBOOKS.md`.

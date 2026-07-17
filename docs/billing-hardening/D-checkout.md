@@ -18,12 +18,12 @@
 
 | File | Action |
 | ---- | ------ |
-| `backend/src/OetLearner.Api/Services/Billing/SubscriptionStateMachine.cs` | NEW — pure-static legal transition table + `Transition()` enforcer |
-| `backend/src/OetLearner.Api/Services/LearnerService.Billing.cs` | NEW partial — `EnsureQuoteIsFulfillable`, `EnsureQuoteSnapshotMatchesCatalog`, `AllocateInvoiceNumberAsync` |
-| `backend/src/OetLearner.Api/Data/Migrations/20260504160000_HardenCheckout.cs` | NEW — additive, SQLite + Postgres compatible |
-| `backend/src/OetLearner.Api/Data/Migrations/20260504160000_HardenCheckout.Designer.cs` | NEW — stub designer matching the in-repo convention (see `20260504120000_HardenWalletTopUpTiers.Designer.cs`) |
-| `backend/tests/OetLearner.Api.Tests/SubscriptionStateMachineTests.cs` | NEW — 24 tests over the legal transition table |
-| `backend/tests/OetLearner.Api.Tests/CheckoutFlowHardeningTests.cs` | NEW — 12 tests: quote validators (8) + cursor pagination boundaries (3) + lenient legacy-quote case (1) |
+| `backend/src/OetWithDrHesham.Api/Services/Billing/SubscriptionStateMachine.cs` | NEW — pure-static legal transition table + `Transition()` enforcer |
+| `backend/src/OetWithDrHesham.Api/Services/LearnerService.Billing.cs` | NEW partial — `EnsureQuoteIsFulfillable`, `EnsureQuoteSnapshotMatchesCatalog`, `AllocateInvoiceNumberAsync` |
+| `backend/src/OetWithDrHesham.Api/Data/Migrations/20260504160000_HardenCheckout.cs` | NEW — additive, SQLite + Postgres compatible |
+| `backend/src/OetWithDrHesham.Api/Data/Migrations/20260504160000_HardenCheckout.Designer.cs` | NEW — stub designer matching the in-repo convention (see `20260504120000_HardenWalletTopUpTiers.Designer.cs`) |
+| `backend/tests/OetWithDrHesham.Api.Tests/SubscriptionStateMachineTests.cs` | NEW — 24 tests over the legal transition table |
+| `backend/tests/OetWithDrHesham.Api.Tests/CheckoutFlowHardeningTests.cs` | NEW — 12 tests: quote validators (8) + cursor pagination boundaries (3) + lenient legacy-quote case (1) |
 
 ## Migration `20260504160000_HardenCheckout` — verbatim DDL
 
@@ -153,11 +153,11 @@ Commands actually run from repo root:
 
 ```powershell
 # 1. Compile
-dotnet build backend/OetLearner.sln
+dotnet build backend/OetWithDrHesham.sln
 # → Build succeeded. 0 Error(s) (4 pre-existing nullable warnings, unrelated)
 
 # 2. Slice-D tests only
-dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj `
+dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj `
   --no-build `
   --filter "FullyQualifiedName~SubscriptionStateMachine|FullyQualifiedName~CheckoutFlowHardening"
 # → Passed!  - Failed: 0, Passed: 39, Skipped: 0, Total: 39
