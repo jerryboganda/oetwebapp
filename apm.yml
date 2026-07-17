@@ -10,4 +10,10 @@ dependencies:
   apm: []
   mcp: []
 
+instructions:
+  - AGENTS.md
+  - CLAUDE.md
+  - .github/copilot-instructions.md
+  - .github/instructions/*.instructions.md
+
 scripts: {}

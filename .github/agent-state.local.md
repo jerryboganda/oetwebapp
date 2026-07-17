@@ -9,43 +9,44 @@ Make the OET Prep Platform repository highly optimized for vibe coding and devel
 
 - Ran AgentRC readiness assessment and generated `reports/index.html`.
 - Raised AI-readiness maturity from **Level 0 → Level 4** and overall score from **48% → 100%**.
-- Synchronized `.github/copilot-instructions.md` with `AGENTS.md`.
+- Synchronized `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and `.claude/CLAUDE.md` to identical content.
 - Added **fast-feedback rule** to Ship-It Workflow: small quick checks only; no lengthy builds/CI unless explicitly asked.
-- Added area-specific instructions for `lib/` and `scripts/` (`.github/instructions/lib.instructions.md`, `scripts.instructions.md`).
-- Added area READMEs and `package.json` scripts for `backend/`, `lib/`, and `scripts/`.
-- Added `.vscode/mcp.json` + `.vscode/settings.json` for MCP servers and editor defaults.
-- Added Prettier formatter config (`.prettierrc`) and dependency.
-- Added OpenTelemetry API + `lib/observability/` helpers for observability surface.
-- Added governance files: `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`, `.github/dependabot.yml`.
-- Added `apm.yml`, `apm.lock.yaml`, and lightweight `.github/workflows/apm-audit.yml` for APM CI integration.
+- Added area-specific instructions for `lib/` and `scripts/`.
+- Added area READMEs and `package.json` scripts for `backend/`, `lib/`, `scripts/`.
+- Added `.vscode/mcp.json` + `.vscode/settings.json` for MCP servers/editor defaults.
+- Added Prettier config and OpenTelemetry observability helpers.
+- Added governance: `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`, `.github/dependabot.yml`.
+- Added `apm.yml`, `apm.lock.yaml`, and lightweight `.github/workflows/apm-audit.yml`.
 
 ## Files Touched
 
 - `.github/agent-state.local.md`
 - `.github/copilot-instructions.md`
 - `.github/dependabot.yml`
-- `.github/instructions/lib.instructions.md` (new)
-- `.github/instructions/scripts.instructions.md` (new)
-- `.github/workflows/apm-audit.yml` (new)
-- `.prettierrc` (new)
-- `.vscode/mcp.json` (new)
-- `.vscode/settings.json` (new)
+- `.github/instructions/lib.instructions.md`
+- `.github/instructions/scripts.instructions.md`
+- `.github/workflows/apm-audit.yml`
+- `.prettierrc`
+- `.vscode/mcp.json`
+- `.vscode/settings.json`
 - `AGENTS.md`
-- `CONTRIBUTING.md` (new)
-- `LICENSE` (new)
-- `SECURITY.md` (new)
-- `apm.lock.yaml` (new)
+- `CLAUDE.md`
+- `.claude/CLAUDE.md`
+- `CONTRIBUTING.md`
+- `LICENSE`
+- `SECURITY.md`
+- `apm.lock.yaml`
 - `apm.yml`
-- `backend/package.json` (new)
-- `lib/README.md` (new)
-- `lib/observability/index.ts` (new)
-- `lib/observability/README.md` (new)
-- `lib/package.json` (new)
+- `backend/package.json`
+- `lib/README.md`
+- `lib/observability/index.ts`
+- `lib/observability/README.md`
+- `lib/package.json`
 - `package.json`
 - `pnpm-lock.yaml`
-- `reports/index.html` (new/regenerated)
-- `scripts/README.md` (new)
-- `scripts/package.json` (new)
+- `reports/index.html`
+- `scripts/README.md`
+- `scripts/package.json`
 
 ## Validation
 
@@ -60,4 +61,4 @@ Make the OET Prep Platform repository highly optimized for vibe coding and devel
 
 ## Next Step
 
-Commit and push the final AI-readiness changes to the feature branch.
+Create a pull request from `manwara575-star-curly-tribble` to `main` and merge to deploy.
