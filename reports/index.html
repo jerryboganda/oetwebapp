@@ -1,2067 +1,1006 @@
-<!--
-  AI Readiness Report — canonical template
-  --------------------------------------------
-  This file is the single source of truth for the look & feel of the
-  reports/index.html output. The @ai-readiness-reporter agent MUST load
-  this file, substitute the {{placeholders}} with real data from
-  `agentrc readiness --json`, and write the result to reports/index.html.
-
-  Rules for the agent:
-  - Do NOT change the HTML structure, class names, CSS variables or the
-    inline <style> block. The template is intentionally fixed so every
-    consumer of this plugin gets an identical-looking report.
-  - Replace every {{placeholder}} with concrete data. Repeat the marked
-    blocks (pillar cards, plan rows, maturity rows, extra rows) for
-    each item. Remove blocks that don't apply (e.g. policy section if
-    no policy is active).
-  - Keep the file self-contained: no external CSS/JS, no network fonts.
-  - Preserve the <script type="application/json" id="raw-data"> block
-    and embed the compact AgentRC JSON inside it.
-
-  Placeholders used:
-    OET Prep Platform       repository name
-    2026-07-17           ISO date the report was generated
-    4          maturity level number (1-5)
-    Optimized      maturity level name (Functional, Documented, ...)
-    100     overall readiness as integer percent
-    A          letter grade A-F
-    {{passRatePct}}    pass rate as integer percent (or "—" if N/A)
-    {{thresholdPct}}   policy pass-rate threshold (or "—")
-    {{policyName}}     active policy name (omit policy section if none)
-    {{policySummary}}  one-paragraph summary of disabled/overridden criteria
-    {"ok": true, "status": "success", "data": {"repoPath": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble", "generatedAt": "2026-07-17T08:14:20.087Z", "isMonorepo": false, "apps": [{"name": "oet-prep", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 2, "total": 2, "passRate": 1}, {"id": "build-system", "name": "Build System", "passed": 3, "total": 3, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 2, "total": 2, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 3, "total": 3, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 2, "total": 2, "passRate": 1}, {"id": "code-quality", "name": "Code Quality", "passed": 1, "total": 1, "passRate": 1}, {"id": "observability", "name": "Observability", "passed": 1, "total": 1, "passRate": 1}, {"id": "security-governance", "name": "Security & Governance", "passed": 4, "total": 4, "passRate": 1}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 9, "total": 9, "passRate": 1}], "levels": [{"level": 1, "name": "Functional", "passed": 10, "total": 10, "passRate": 1, "achieved": true}, {"level": 2, "name": "Documented", "passed": 10, "total": 10, "passRate": 1, "achieved": true}, {"level": 3, "name": "Standardized", "passed": 6, "total": 6, "passRate": 1, "achieved": true}, {"level": 4, "name": "Optimized", "passed": 1, "total": 1, "passRate": 1, "achieved": true}, {"level": 5, "name": "Autonomous", "passed": 0, "total": 0, "passRate": 0, "achieved": false}], "achievedLevel": 4, "criteria": [{"id": "lint-config", "title": "Linting configured", "pillar": "style-validation", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "evidence": ["eslint.config.js", ".eslintrc", "biome.json", ".prettierrc"]}, {"id": "typecheck-config", "title": "Type checking configured", "pillar": "style-validation", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "evidence": ["tsconfig.json", "pyproject.toml", "mypy.ini"]}, {"id": "build-script", "title": "Build script present", "pillar": "build-system", "level": 1, "scope": "app", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "appSummary": {"passed": 1, "total": 1}, "appFailures": []}, {"id": "ci-config", "title": "CI workflow configured", "pillar": "build-system", "level": 2, "scope": "repo", "impact": "high", "effort": "medium", "status": "pass", "evidence": [".github/workflows"]}, {"id": "test-script", "title": "Test script present", "pillar": "testing", "level": 1, "scope": "app", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "appSummary": {"passed": 1, "total": 1}, "appFailures": []}, {"id": "readme", "title": "README present", "pillar": "documentation", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "evidence": ["README.md"]}, {"id": "contributing", "title": "CONTRIBUTING guide present", "pillar": "documentation", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "lockfile", "title": "Lockfile present", "pillar": "dev-environment", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass"}, {"id": "env-example", "title": "Environment example present", "pillar": "dev-environment", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "format-config", "title": "Formatter configured", "pillar": "code-quality", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "codeowners", "title": "CODEOWNERS present", "pillar": "security-governance", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "license", "title": "LICENSE present", "pillar": "security-governance", "level": 1, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "security-policy", "title": "Security policy present", "pillar": "security-governance", "level": 3, "scope": "repo", "impact": "high", "effort": "low", "status": "pass"}, {"id": "dependabot", "title": "Dependabot configured", "pillar": "security-governance", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass"}, {"id": "observability", "title": "Observability tooling present", "pillar": "observability", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass", "reason": "No observability dependencies detected (OpenTelemetry/logging)."}, {"id": "custom-instructions", "title": "Custom instructions or agent guidance", "pillar": "ai-tooling", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "reason": "Root + 10 area instruction(s) found.", "evidence": [".github/copilot-instructions.md", "AGENTS.md", ".github/instructions/admin-hallmark.instructions.md", ".github/instructions/agentic-workflow.instructions.md", ".github/instructions/backend.instructions.md", ".github/instructions/deployment.instructions.md", ".github/instructions/frontend.instructions.md", ".github/instructions/lib.instructions.md", ".github/instructions/scripts.instructions.md", ".github/instructions/security-ai.instructions.md", ".github/instructions/testing.instructions.md", ".github/instructions/validation.instructions.md"]}, {"id": "instructions-consistency", "title": "AI instruction files are consistent", "pillar": "ai-tooling", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "reason": "2 instruction files are consistent.", "evidence": [".github/copilot-instructions.md", "AGENTS.md"]}, {"id": "mcp-config", "title": "MCP configuration present", "pillar": "ai-tooling", "level": 2, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "reason": "Missing MCP (Model Context Protocol) configuration (e.g. .vscode/mcp.json).", "evidence": [".vscode/mcp.json"]}, {"id": "custom-agents", "title": "Custom AI agents configured", "pillar": "ai-tooling", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass", "reason": "No custom AI agents configured (e.g. .github/agents/, .copilot/agents/).", "evidence": [".github/agents"]}, {"id": "copilot-skills", "title": "Copilot/Claude skills present", "pillar": "ai-tooling", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass", "reason": "No Copilot or Claude skills found (e.g. .copilot/skills/, .github/skills/).", "evidence": [".github/skills"]}, {"id": "apm-config", "title": "APM package manifest present", "pillar": "ai-tooling", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "evidence": ["apm.yml"]}, {"id": "apm-locked-deps", "title": "APM dependencies locked", "pillar": "ai-tooling", "level": 3, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "evidence": ["apm.lock.yaml"]}, {"id": "apm-ci-integration", "title": "APM integrated in CI pipeline", "pillar": "ai-tooling", "level": 4, "scope": "repo", "impact": "high", "effort": "medium", "status": "pass", "evidence": [".github/workflows/*.{yml,yaml}"]}, {"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}], "extras": [{"id": "agents-doc", "title": "AGENTS.md present", "status": "pass"}, {"id": "pr-template", "title": "Pull request template present", "status": "pass"}, {"id": "pre-commit", "title": "Pre-commit hooks configured", "status": "fail", "reason": "Missing pre-commit or Husky configuration for fast feedback."}, {"id": "architecture-doc", "title": "Architecture guide present", "status": "fail", "reason": "Missing architecture documentation."}], "areaReports": [{"area": {"name": "backend", "applyTo": "backend/**", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\backend", "source": "auto", "scripts": {"build": "dotnet build OetLearner.sln", "test": "dotnet test OetLearner.sln", "run": "dotnet run --project src/OetLearner.Api/OetLearner.Api.csproj", "watch": "dotnet watch --project src/OetLearner.Api/OetLearner.Api.csproj run"}}, "criteria": [{"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 0, "total": 0, "passRate": 0}, {"id": "build-system", "name": "Build System", "passed": 1, "total": 1, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 1, "total": 1, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 1, "total": 1, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 0, "total": 0, "passRate": 0}, {"id": "code-quality", "name": "Code Quality", "passed": 0, "total": 0, "passRate": 0}, {"id": "observability", "name": "Observability", "passed": 0, "total": 0, "passRate": 0}, {"id": "security-governance", "name": "Security & Governance", "passed": 0, "total": 0, "passRate": 0}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 1, "total": 1, "passRate": 1}]}, {"area": {"name": "lib", "applyTo": "lib/**", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\lib", "source": "auto", "scripts": {"build": "cd .. && pnpm exec tsc --noEmit", "test": "cd .. && pnpm test"}}, "criteria": [{"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 0, "total": 0, "passRate": 0}, {"id": "build-system", "name": "Build System", "passed": 1, "total": 1, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 1, "total": 1, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 1, "total": 1, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 0, "total": 0, "passRate": 0}, {"id": "code-quality", "name": "Code Quality", "passed": 0, "total": 0, "passRate": 0}, {"id": "observability", "name": "Observability", "passed": 0, "total": 0, "passRate": 0}, {"id": "security-governance", "name": "Security & Governance", "passed": 0, "total": 0, "passRate": 0}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 1, "total": 1, "passRate": 1}]}, {"area": {"name": "scripts", "applyTo": "scripts/**", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\scripts", "source": "auto", "scripts": {"build": "cd .. && pnpm exec tsc --noEmit", "test": "cd .. && pnpm test"}}, "criteria": [{"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 0, "total": 0, "passRate": 0}, {"id": "build-system", "name": "Build System", "passed": 1, "total": 1, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 1, "total": 1, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 1, "total": 1, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 0, "total": 0, "passRate": 0}, {"id": "code-quality", "name": "Code Quality", "passed": 0, "total": 0, "passRate": 0}, {"id": "observability", "name": "Observability", "passed": 0, "total": 0, "passRate": 0}, {"id": "security-governance", "name": "Security & Governance", "passed": 0, "total": 0, "passRate": 0}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 1, "total": 1, "passRate": 1}]}]}} compact JSON for embedding
-    {
-  &quot;ok&quot;: true,
-  &quot;status&quot;: &quot;success&quot;,
-  &quot;data&quot;: {
-    &quot;repoPath&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble&quot;,
-    &quot;generatedAt&quot;: &quot;2026-07-17T08:14:20.087Z&quot;,
-    &quot;isMonorepo&quot;: false,
-    &quot;apps&quot;: [
-      {
-        &quot;name&quot;: &quot;oet-prep&quot;,
-        &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble&quot;
-      }
-    ],
-    &quot;pillars&quot;: [
-      {
-        &quot;id&quot;: &quot;style-validation&quot;,
-        &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-        &quot;passed&quot;: 2,
-        &quot;total&quot;: 2,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;build-system&quot;,
-        &quot;name&quot;: &quot;Build System&quot;,
-        &quot;passed&quot;: 3,
-        &quot;total&quot;: 3,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;testing&quot;,
-        &quot;name&quot;: &quot;Testing&quot;,
-        &quot;passed&quot;: 2,
-        &quot;total&quot;: 2,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;documentation&quot;,
-        &quot;name&quot;: &quot;Documentation&quot;,
-        &quot;passed&quot;: 3,
-        &quot;total&quot;: 3,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;dev-environment&quot;,
-        &quot;name&quot;: &quot;Dev Environment&quot;,
-        &quot;passed&quot;: 2,
-        &quot;total&quot;: 2,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;code-quality&quot;,
-        &quot;name&quot;: &quot;Code Quality&quot;,
-        &quot;passed&quot;: 1,
-        &quot;total&quot;: 1,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;observability&quot;,
-        &quot;name&quot;: &quot;Observability&quot;,
-        &quot;passed&quot;: 1,
-        &quot;total&quot;: 1,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;security-governance&quot;,
-        &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-        &quot;passed&quot;: 4,
-        &quot;total&quot;: 4,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;ai-tooling&quot;,
-        &quot;name&quot;: &quot;AI Tooling&quot;,
-        &quot;passed&quot;: 9,
-        &quot;total&quot;: 9,
-        &quot;passRate&quot;: 1
-      }
-    ],
-    &quot;levels&quot;: [
-      {
-        &quot;level&quot;: 1,
-        &quot;name&quot;: &quot;Functional&quot;,
-        &quot;passed&quot;: 10,
-        &quot;total&quot;: 10,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 2,
-        &quot;name&quot;: &quot;Documented&quot;,
-        &quot;passed&quot;: 10,
-        &quot;total&quot;: 10,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 3,
-        &quot;name&quot;: &quot;Standardized&quot;,
-        &quot;passed&quot;: 6,
-        &quot;total&quot;: 6,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 4,
-        &quot;name&quot;: &quot;Optimized&quot;,
-        &quot;passed&quot;: 1,
-        &quot;total&quot;: 1,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 5,
-        &quot;name&quot;: &quot;Autonomous&quot;,
-        &quot;passed&quot;: 0,
-        &quot;total&quot;: 0,
-        &quot;passRate&quot;: 0,
-        &quot;achieved&quot;: false
-      }
-    ],
-    &quot;achievedLevel&quot;: 4,
-    &quot;criteria&quot;: [
-      {
-        &quot;id&quot;: &quot;lint-config&quot;,
-        &quot;title&quot;: &quot;Linting configured&quot;,
-        &quot;pillar&quot;: &quot;style-validation&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;eslint.config.js&quot;,
-          &quot;.eslintrc&quot;,
-          &quot;biome.json&quot;,
-          &quot;.prettierrc&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;typecheck-config&quot;,
-        &quot;title&quot;: &quot;Type checking configured&quot;,
-        &quot;pillar&quot;: &quot;style-validation&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;tsconfig.json&quot;,
-          &quot;pyproject.toml&quot;,
-          &quot;mypy.ini&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;build-script&quot;,
-        &quot;title&quot;: &quot;Build script present&quot;,
-        &quot;pillar&quot;: &quot;build-system&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;app&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;appSummary&quot;: {
-          &quot;passed&quot;: 1,
-          &quot;total&quot;: 1
-        },
-        &quot;appFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;ci-config&quot;,
-        &quot;title&quot;: &quot;CI workflow configured&quot;,
-        &quot;pillar&quot;: &quot;build-system&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/workflows&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;test-script&quot;,
-        &quot;title&quot;: &quot;Test script present&quot;,
-        &quot;pillar&quot;: &quot;testing&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;app&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;appSummary&quot;: {
-          &quot;passed&quot;: 1,
-          &quot;total&quot;: 1
-        },
-        &quot;appFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;readme&quot;,
-        &quot;title&quot;: &quot;README present&quot;,
-        &quot;pillar&quot;: &quot;documentation&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;README.md&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;contributing&quot;,
-        &quot;title&quot;: &quot;CONTRIBUTING guide present&quot;,
-        &quot;pillar&quot;: &quot;documentation&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;lockfile&quot;,
-        &quot;title&quot;: &quot;Lockfile present&quot;,
-        &quot;pillar&quot;: &quot;dev-environment&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;env-example&quot;,
-        &quot;title&quot;: &quot;Environment example present&quot;,
-        &quot;pillar&quot;: &quot;dev-environment&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;format-config&quot;,
-        &quot;title&quot;: &quot;Formatter configured&quot;,
-        &quot;pillar&quot;: &quot;code-quality&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;codeowners&quot;,
-        &quot;title&quot;: &quot;CODEOWNERS present&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;license&quot;,
-        &quot;title&quot;: &quot;LICENSE present&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;security-policy&quot;,
-        &quot;title&quot;: &quot;Security policy present&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;dependabot&quot;,
-        &quot;title&quot;: &quot;Dependabot configured&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;observability&quot;,
-        &quot;title&quot;: &quot;Observability tooling present&quot;,
-        &quot;pillar&quot;: &quot;observability&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;No observability dependencies detected (OpenTelemetry/logging).&quot;
-      },
-      {
-        &quot;id&quot;: &quot;custom-instructions&quot;,
-        &quot;title&quot;: &quot;Custom instructions or agent guidance&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;Root + 10 area instruction(s) found.&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/copilot-instructions.md&quot;,
-          &quot;AGENTS.md&quot;,
-          &quot;.github/instructions/admin-hallmark.instructions.md&quot;,
-          &quot;.github/instructions/agentic-workflow.instructions.md&quot;,
-          &quot;.github/instructions/backend.instructions.md&quot;,
-          &quot;.github/instructions/deployment.instructions.md&quot;,
-          &quot;.github/instructions/frontend.instructions.md&quot;,
-          &quot;.github/instructions/lib.instructions.md&quot;,
-          &quot;.github/instructions/scripts.instructions.md&quot;,
-          &quot;.github/instructions/security-ai.instructions.md&quot;,
-          &quot;.github/instructions/testing.instructions.md&quot;,
-          &quot;.github/instructions/validation.instructions.md&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;instructions-consistency&quot;,
-        &quot;title&quot;: &quot;AI instruction files are consistent&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;2 instruction files are consistent.&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/copilot-instructions.md&quot;,
-          &quot;AGENTS.md&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;mcp-config&quot;,
-        &quot;title&quot;: &quot;MCP configuration present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;Missing MCP (Model Context Protocol) configuration (e.g. .vscode/mcp.json).&quot;,
-        &quot;evidence&quot;: [
-          &quot;.vscode/mcp.json&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;custom-agents&quot;,
-        &quot;title&quot;: &quot;Custom AI agents configured&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;No custom AI agents configured (e.g. .github/agents/, .copilot/agents/).&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/agents&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;copilot-skills&quot;,
-        &quot;title&quot;: &quot;Copilot/Claude skills present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;No Copilot or Claude skills found (e.g. .copilot/skills/, .github/skills/).&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/skills&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;apm-config&quot;,
-        &quot;title&quot;: &quot;APM package manifest present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;apm.yml&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;apm-locked-deps&quot;,
-        &quot;title&quot;: &quot;APM dependencies locked&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;apm.lock.yaml&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;apm-ci-integration&quot;,
-        &quot;title&quot;: &quot;APM integrated in CI pipeline&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 4,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/workflows/*.{yml,yaml}&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;area-readme&quot;,
-        &quot;title&quot;: &quot;Area README present&quot;,
-        &quot;pillar&quot;: &quot;documentation&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;area-build-script&quot;,
-        &quot;title&quot;: &quot;Area build script present&quot;,
-        &quot;pillar&quot;: &quot;build-system&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;area-test-script&quot;,
-        &quot;title&quot;: &quot;Area test script present&quot;,
-        &quot;pillar&quot;: &quot;testing&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;area-instructions&quot;,
-        &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      }
-    ],
-    &quot;extras&quot;: [
-      {
-        &quot;id&quot;: &quot;agents-doc&quot;,
-        &quot;title&quot;: &quot;AGENTS.md present&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;pr-template&quot;,
-        &quot;title&quot;: &quot;Pull request template present&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;pre-commit&quot;,
-        &quot;title&quot;: &quot;Pre-commit hooks configured&quot;,
-        &quot;status&quot;: &quot;fail&quot;,
-        &quot;reason&quot;: &quot;Missing pre-commit or Husky configuration for fast feedback.&quot;
-      },
-      {
-        &quot;id&quot;: &quot;architecture-doc&quot;,
-        &quot;title&quot;: &quot;Architecture guide present&quot;,
-        &quot;status&quot;: &quot;fail&quot;,
-        &quot;reason&quot;: &quot;Missing architecture documentation.&quot;
-      }
-    ],
-    &quot;areaReports&quot;: [
-      {
-        &quot;area&quot;: {
-          &quot;name&quot;: &quot;backend&quot;,
-          &quot;applyTo&quot;: &quot;backend/**&quot;,
-          &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\backend&quot;,
-          &quot;source&quot;: &quot;auto&quot;,
-          &quot;scripts&quot;: {
-            &quot;build&quot;: &quot;dotnet build OetLearner.sln&quot;,
-            &quot;test&quot;: &quot;dotnet test OetLearner.sln&quot;,
-            &quot;run&quot;: &quot;dotnet run --project src/OetLearner.Api/OetLearner.Api.csproj&quot;,
-            &quot;watch&quot;: &quot;dotnet watch --project src/OetLearner.Api/OetLearner.Api.csproj run&quot;
-          }
-        },
-        &quot;criteria&quot;: [
-          {
-            &quot;id&quot;: &quot;area-readme&quot;,
-            &quot;title&quot;: &quot;Area README present&quot;,
-            &quot;pillar&quot;: &quot;documentation&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;medium&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-build-script&quot;,
-            &quot;title&quot;: &quot;Area build script present&quot;,
-            &quot;pillar&quot;: &quot;build-system&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-test-script&quot;,
-            &quot;title&quot;: &quot;Area test script present&quot;,
-            &quot;pillar&quot;: &quot;testing&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-instructions&quot;,
-            &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-            &quot;pillar&quot;: &quot;ai-tooling&quot;,
-            &quot;level&quot;: 2,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          }
-        ],
-        &quot;pillars&quot;: [
-          {
-            &quot;id&quot;: &quot;style-validation&quot;,
-            &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;build-system&quot;,
-            &quot;name&quot;: &quot;Build System&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;testing&quot;,
-            &quot;name&quot;: &quot;Testing&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;documentation&quot;,
-            &quot;name&quot;: &quot;Documentation&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;dev-environment&quot;,
-            &quot;name&quot;: &quot;Dev Environment&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;code-quality&quot;,
-            &quot;name&quot;: &quot;Code Quality&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;observability&quot;,
-            &quot;name&quot;: &quot;Observability&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;security-governance&quot;,
-            &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;ai-tooling&quot;,
-            &quot;name&quot;: &quot;AI Tooling&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          }
-        ]
-      },
-      {
-        &quot;area&quot;: {
-          &quot;name&quot;: &quot;lib&quot;,
-          &quot;applyTo&quot;: &quot;lib/**&quot;,
-          &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\lib&quot;,
-          &quot;source&quot;: &quot;auto&quot;,
-          &quot;scripts&quot;: {
-            &quot;build&quot;: &quot;cd .. &amp;&amp; pnpm exec tsc --noEmit&quot;,
-            &quot;test&quot;: &quot;cd .. &amp;&amp; pnpm test&quot;
-          }
-        },
-        &quot;criteria&quot;: [
-          {
-            &quot;id&quot;: &quot;area-readme&quot;,
-            &quot;title&quot;: &quot;Area README present&quot;,
-            &quot;pillar&quot;: &quot;documentation&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;medium&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-build-script&quot;,
-            &quot;title&quot;: &quot;Area build script present&quot;,
-            &quot;pillar&quot;: &quot;build-system&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-test-script&quot;,
-            &quot;title&quot;: &quot;Area test script present&quot;,
-            &quot;pillar&quot;: &quot;testing&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-instructions&quot;,
-            &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-            &quot;pillar&quot;: &quot;ai-tooling&quot;,
-            &quot;level&quot;: 2,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          }
-        ],
-        &quot;pillars&quot;: [
-          {
-            &quot;id&quot;: &quot;style-validation&quot;,
-            &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;build-system&quot;,
-            &quot;name&quot;: &quot;Build System&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;testing&quot;,
-            &quot;name&quot;: &quot;Testing&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;documentation&quot;,
-            &quot;name&quot;: &quot;Documentation&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;dev-environment&quot;,
-            &quot;name&quot;: &quot;Dev Environment&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;code-quality&quot;,
-            &quot;name&quot;: &quot;Code Quality&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;observability&quot;,
-            &quot;name&quot;: &quot;Observability&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;security-governance&quot;,
-            &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;ai-tooling&quot;,
-            &quot;name&quot;: &quot;AI Tooling&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          }
-        ]
-      },
-      {
-        &quot;area&quot;: {
-          &quot;name&quot;: &quot;scripts&quot;,
-          &quot;applyTo&quot;: &quot;scripts/**&quot;,
-          &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\scripts&quot;,
-          &quot;source&quot;: &quot;auto&quot;,
-          &quot;scripts&quot;: {
-            &quot;build&quot;: &quot;cd .. &amp;&amp; pnpm exec tsc --noEmit&quot;,
-            &quot;test&quot;: &quot;cd .. &amp;&amp; pnpm test&quot;
-          }
-        },
-        &quot;criteria&quot;: [
-          {
-            &quot;id&quot;: &quot;area-readme&quot;,
-            &quot;title&quot;: &quot;Area README present&quot;,
-            &quot;pillar&quot;: &quot;documentation&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;medium&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-build-script&quot;,
-            &quot;title&quot;: &quot;Area build script present&quot;,
-            &quot;pillar&quot;: &quot;build-system&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-test-script&quot;,
-            &quot;title&quot;: &quot;Area test script present&quot;,
-            &quot;pillar&quot;: &quot;testing&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-instructions&quot;,
-            &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-            &quot;pillar&quot;: &quot;ai-tooling&quot;,
-            &quot;level&quot;: 2,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          }
-        ],
-        &quot;pillars&quot;: [
-          {
-            &quot;id&quot;: &quot;style-validation&quot;,
-            &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;build-system&quot;,
-            &quot;name&quot;: &quot;Build System&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;testing&quot;,
-            &quot;name&quot;: &quot;Testing&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;documentation&quot;,
-            &quot;name&quot;: &quot;Documentation&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;dev-environment&quot;,
-            &quot;name&quot;: &quot;Dev Environment&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;code-quality&quot;,
-            &quot;name&quot;: &quot;Code Quality&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;observability&quot;,
-            &quot;name&quot;: &quot;Observability&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;security-governance&quot;,
-            &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;ai-tooling&quot;,
-            &quot;name&quot;: &quot;AI Tooling&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          }
-        ]
-      }
-    ]
-  }
-}  pretty JSON for the <details> view
-
-  Pillar card placeholders (repeat per pillar):
-    {{pillarName}} {{pillarScore}} {{pillarRelevance}} (high|medium|low)
-    {{pillarStatus}} (good|warn|bad — drives bar + dot colour)
-    {{pillarWhat}} {{pillarWhyAi}} {{pillarCurrent}} {{pillarRecommendation}}
--->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-color-mode="dark" data-dark-theme="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Readiness — OET Prep Platform</title>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Readiness Report: manwara575-star-curly-tribble</title>
   <style>
-    :root {
-      --bg:#0f1115; --panel:#161a22; --panel-2:#1d2230; --border:#262c3a;
-      --text:#e6e9ef; --muted:#8a93a6; --accent:#6ea8ff;
-      --good:#4ade80; --warn:#fbbf24; --bad:#f87171;
+    :root, [data-theme="dark"], body.vscode-dark {
+      --color-canvas-default: #0d1117;
+      --color-canvas-subtle: #161b22;
+      --color-canvas-inset: #010409;
+      --color-border-default: #30363d;
+      --color-border-muted: #21262d;
+      --color-fg-default: #e6edf3;
+      --color-fg-muted: #8b949e;
+      --color-fg-subtle: #6e7681;
+      --color-accent-fg: #58a6ff;
+      --color-accent-emphasis: #1f6feb;
+      --color-success-fg: #3fb950;
+      --color-success-emphasis: #238636;
+      --color-danger-fg: #f85149;
+      --color-danger-emphasis: #da3633;
+      --color-attention-fg: #d29922;
+      --color-done-fg: #a371f7;
     }
-    * { box-sizing: border-box; }
-    html,body { margin:0; background:var(--bg); color:var(--text);
-      font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-    a { color: var(--accent); }
-    header { padding: 28px 32px; border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg,#141823,#0f1115); }
-    header h1 { margin: 0 0 4px; font-size: 22px; }
-    header .meta { color: var(--muted); font-size: 13px; }
-    main { max-width: 1180px; margin: 0 auto; padding: 24px 32px 80px; }
-    .panel { background:var(--panel); border:1px solid var(--border);
-      border-radius:10px; padding:20px; margin-bottom:18px; }
-    .grid { display:grid; gap:16px; }
-    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
-    .grid.cols-2 { grid-template-columns: 1fr 1fr; }
-    .kpi .num { font-size: 30px; font-weight: 700; }
-    .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
-    .badge { display:inline-block; padding:3px 10px; border-radius:999px;
-      font-size:12px; font-weight:600; }
-    .lvl-1 { background:#3a1f24; color:#f87171; }
-    .lvl-2 { background:#3b2c1d; color:#fbbf24; }
-    .lvl-3 { background:#2c3119; color:#d3e85e; }
-    .lvl-4 { background:#1d3325; color:#4ade80; }
-    .lvl-5 { background:#1c2c3d; color:#6ea8ff; }
-    .bar { height:8px; background:var(--panel-2); border-radius:4px; overflow:hidden; }
-    .bar > span { display:block; height:100%; background: var(--accent); }
-    .bar.good > span { background: var(--good); }
-    .bar.warn > span { background: var(--warn); }
-    .bar.bad  > span { background: var(--bad); }
-    table { width:100%; border-collapse:collapse; }
-    th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; }
-    th { color:var(--muted); font-weight:500; text-transform:uppercase; font-size:11px; letter-spacing:.8px; }
-    code { background:#0a0c11; padding:1px 6px; border-radius:4px; }
-    h2 { font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin:0 0 12px; }
-    .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
-    .dot.good { background:var(--good); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--bad); }
-    footer { color: var(--muted); font-size: 12px; text-align: center; padding: 20px; }
 
-    /* Pillar cards */
-    .pillar { background:var(--panel-2); border:1px solid var(--border);
-      border-radius:8px; padding:14px 16px; }
-    .pillar h3 { margin:0 0 6px; font-size:15px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .pillar .why  { color:var(--muted); font-size:13px; margin:8px 0 0; }
-    .pillar .what { font-size:13px; margin:6px 0 0; }
-    .pillar .rec  { font-size:13px; margin:8px 0 0; }
-    .rel { font-size:10px; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.6px; font-weight:600; }
-    .rel.high   { background:#1c2c3d; color:#6ea8ff; }
-    .rel.medium { background:#2c3119; color:#d3e85e; }
-    .rel.low    { background:#262c3a; color:#8a93a6; }
+    [data-theme="light"], body.vscode-light, body.vscode-high-contrast-light {
+      --color-canvas-default: #ffffff;
+      --color-canvas-subtle: #f6f8fa;
+      --color-canvas-inset: #eff2f5;
+      --color-border-default: #d0d7de;
+      --color-border-muted: #d8dee4;
+      --color-fg-default: #1f2328;
+      --color-fg-muted: #656d76;
+      --color-fg-subtle: #6e7781;
+      --color-accent-fg: #0969da;
+      --color-accent-emphasis: #0550ae;
+      --color-success-fg: #1a7f37;
+      --color-success-emphasis: #116329;
+      --color-danger-fg: #cf222e;
+      --color-danger-emphasis: #a40e26;
+      --color-attention-fg: #9a6700;
+      --color-done-fg: #8250df;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--color-canvas-default);
+      color: var(--color-fg-default);
+      padding: 24px;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    /* Header */
+    .header {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-default);
+      padding: 20px 24px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-logo { width: 32px; height: 32px; flex-shrink: 0; }
+    .header-text h1 { font-size: 20px; font-weight: 600; color: var(--color-fg-default); }
+    .header .subtitle { color: var(--color-fg-muted); font-size: 12px; }
+
+    /* Summary Cards (multi-repo) */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-default);
+      padding: 16px;
+      border-radius: 6px;
+    }
+    .card-title { font-size: 12px; color: var(--color-fg-muted); font-weight: 500; margin-bottom: 4px; }
+    .card-value { font-size: 32px; font-weight: 600; color: var(--color-accent-fg); }
+    .card-subtitle { font-size: 12px; color: var(--color-fg-subtle); margin-top: 4px; }
+
+    /* Single-repo Hero */
+    .hero {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-default);
+      padding: 24px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .hero-level {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 700; flex-shrink: 0;
+    }
+    .hero-level.level-high { background: rgba(63,185,80,0.12); border: 2px solid var(--color-success-fg); color: var(--color-success-fg); }
+    .hero-level.level-mid { background: rgba(210,153,34,0.12); border: 2px solid var(--color-attention-fg); color: var(--color-attention-fg); }
+    .hero-level.level-low { background: rgba(88,166,255,0.12); border: 2px solid var(--color-accent-fg); color: var(--color-accent-fg); }
+    .hero-info { flex: 1; }
+    .hero-name { font-size: 20px; font-weight: 600; color: var(--color-fg-default); margin-bottom: 2px; }
+    .hero-subtitle { color: var(--color-fg-muted); font-size: 14px; }
+    .hero-next { margin-top: 8px; font-size: 13px; color: var(--color-fg-subtle); }
+    .hero-next strong { color: var(--color-fg-muted); }
+
+    /* Fix First */
+    .fix-first {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-default);
+      padding: 24px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .fix-first .section-title { color: var(--color-attention-fg); }
+    .fix-list { display: grid; gap: 8px; }
+    .fix-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: var(--color-canvas-default);
+      border: 1px solid var(--color-border-muted);
+    }
+    .fix-item-icon {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; flex-shrink: 0; font-weight: 700;
+      background: rgba(248,81,73,0.12); color: var(--color-danger-fg);
+    }
+    .fix-item-text { flex: 1; min-width: 0; }
+    .fix-item-title { font-weight: 600; font-size: 13px; color: var(--color-fg-default); }
+    .fix-item-reason { font-size: 12px; color: var(--color-fg-muted); margin-top: 2px; }
+    .fix-item-badges { display: flex; gap: 6px; margin-top: 4px; }
+    .fix-badge {
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: 2em;
+      border: 1px solid transparent;
+    }
+    .fix-badge.impact-high { color: var(--color-danger-fg); background: rgba(248,81,73,0.08); border-color: rgba(248,81,73,0.2); }
+    .fix-badge.impact-medium { color: var(--color-attention-fg); background: rgba(210,153,34,0.08); border-color: rgba(210,153,34,0.2); }
+    .fix-badge.impact-low { color: var(--color-fg-muted); background: rgba(139,148,158,0.08); border-color: rgba(139,148,158,0.15); }
+    .fix-badge.effort-low { color: var(--color-success-fg); background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.2); }
+    .fix-badge.effort-medium { color: var(--color-attention-fg); background: rgba(210,153,34,0.08); border-color: rgba(210,153,34,0.2); }
+    .fix-badge.effort-high { color: var(--color-fg-muted); background: rgba(139,148,158,0.08); border-color: rgba(139,148,158,0.15); }
+
+    /* Sections */
+    .section {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-default);
+      padding: 24px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-fg-default);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--color-border-muted);
+    }
+
+    /* Pillar Grid */
+    .pillar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .pillar-card {
+      padding: 12px 16px;
+      border-radius: 6px;
+      background: var(--color-canvas-default);
+      border: 1px solid var(--color-border-muted);
+    }
+    .pillar-card.all-passing {
+      opacity: 0.7;
+    }
+    .pillar-card.has-failures {
+      border-color: var(--color-attention-fg);
+    }
+    .pillar-card.all-passing .pillar-name::before {
+      content: '\2713 ';
+      color: var(--color-success-fg);
+    }
+    .pillar-name { font-size: 13px; font-weight: 600; color: var(--color-fg-default); margin-bottom: 8px; }
+    .pillar-stats { display: flex; align-items: center; gap: 12px; }
+    .progress-bar { flex: 1; height: 8px; background: var(--color-border-muted); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+    .progress-fill.low { background: var(--color-danger-fg); }
+    .progress-fill.medium { background: var(--color-attention-fg); }
+    .progress-fill.high { background: var(--color-success-fg); }
+    .pillar-stats span { font-size: 12px; color: var(--color-fg-muted); white-space: nowrap; }
+
+    /* Repo List */
+    .repo-list { display: grid; gap: 12px; }
+    .repo-item {
+      padding: 16px;
+      border-radius: 6px;
+      background: var(--color-canvas-default);
+      border: 1px solid var(--color-border-muted);
+    }
+    .repo-item.error { border-color: var(--color-danger-emphasis); }
+    .repo-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .repo-name { font-size: 16px; font-weight: 600; color: var(--color-accent-fg); }
+    .error-message { color: var(--color-danger-fg); font-size: 13px; margin-top: 8px; }
+
+    /* Level Badges */
+    .level-badge {
+      padding: 2px 10px;
+      border-radius: 2em;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid transparent;
+    }
+    .level-0 { background: rgba(139,148,158,0.1); color: var(--color-fg-muted); border-color: var(--color-border-default); }
+    .level-1 { background: rgba(88,166,255,0.12); color: var(--color-accent-fg); border-color: rgba(88,166,255,0.3); }
+    .level-2 { background: rgba(121,192,255,0.12); color: #79c0ff; border-color: rgba(121,192,255,0.3); }
+    .level-3 { background: rgba(63,185,80,0.12); color: var(--color-success-fg); border-color: rgba(63,185,80,0.3); }
+    .level-4 { background: rgba(210,153,34,0.12); color: var(--color-attention-fg); border-color: rgba(210,153,34,0.3); }
+    .level-5 { background: rgba(163,113,247,0.12); color: var(--color-done-fg); border-color: rgba(163,113,247,0.3); }
+
+    /* Repo Pillars (expandable) */
+    .repo-pillars {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .repo-pillar {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-muted);
+      border-radius: 6px;
+      font-size: 13px;
+      overflow: hidden;
+    }
+    .repo-pillar details { cursor: pointer; }
+    .repo-pillar summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      list-style: none;
+      user-select: none;
+    }
+    .repo-pillar summary::-webkit-details-marker { display: none; }
+    .repo-pillar summary::before {
+      content: '\25B8';
+      color: var(--color-fg-subtle);
+      margin-right: 6px;
+      font-size: 10px;
+    }
+    .repo-pillar details[open] summary::before { content: '\25BE'; }
+    .repo-pillar summary:hover { background: rgba(177,186,196,0.04); }
+    .repo-pillar-name { color: var(--color-fg-muted); }
+    .repo-pillar-value { font-weight: 600; color: var(--color-fg-default); font-size: 12px; }
+    .pillar-criteria-list { padding: 4px 12px 8px; border-top: 1px solid var(--color-border-muted); }
+    .criterion-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 12px;
+      color: var(--color-fg-muted);
+    }
+    .criterion-row + .criterion-row { border-top: 1px solid rgba(33,38,45,0.5); }
+    .criterion-status {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 1px 8px;
+      border-radius: 2em;
+      border: 1px solid transparent;
+    }
+    .criterion-status.pass { color: var(--color-success-fg); background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.2); }
+    .criterion-status.fail { color: var(--color-danger-fg); background: rgba(248,81,73,0.1); border-color: rgba(248,81,73,0.2); }
+    .criterion-status.skip { color: var(--color-fg-muted); background: rgba(139,148,158,0.08); border-color: rgba(139,148,158,0.15); }
+
+    /* Level Distribution */
+    .level-distribution { display: flex; gap: 12px; margin: 8px 0 16px; align-items: flex-end; }
+    .level-bar {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      min-height: 160px;
+    }
+    .level-bar-count { font-size: 14px; font-weight: 600; color: var(--color-accent-fg); margin-bottom: 4px; }
+    .level-bar-fill {
+      width: 100%;
+      background: linear-gradient(180deg, var(--color-accent-fg), var(--color-accent-emphasis));
+      border-radius: 6px 6px 0 0;
+      transition: height 0.3s ease;
+    }
+    .level-bar-fill.empty { background: var(--color-border-muted); height: 3px !important; border-radius: 3px; }
+    .level-bar-label { margin-top: 8px; font-size: 11px; color: var(--color-fg-muted); font-weight: 500; }
+
+    /* Maturity Model */
+    .maturity-descriptions { display: grid; gap: 8px; }
+    .maturity-item {
+      padding: 10px 14px;
+      border-radius: 6px;
+      background: var(--color-canvas-default);
+      border: 1px solid var(--color-border-muted);
+    }
+    .maturity-item.has-repos { border-color: var(--color-accent-fg); }
+    .maturity-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .maturity-name { font-size: 14px; font-weight: 600; color: var(--color-fg-default); }
+    .maturity-count { margin-left: auto; font-size: 12px; color: var(--color-fg-muted); }
+    .maturity-desc { font-size: 12px; color: var(--color-fg-muted); line-height: 1.5; }
+
+    /* AI Hero */
+    .ai-hero {
+      background: var(--color-canvas-subtle);
+      border: 1px solid var(--color-border-default);
+      padding: 24px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .ai-hero::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--color-accent-fg), var(--color-done-fg), var(--color-success-fg));
+    }
+    .ai-hero .section-title { color: var(--color-fg-default); }
+    .ai-hero-subtitle { color: var(--color-fg-muted); font-size: 13px; margin-bottom: 16px; }
+    .ai-score-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+    .ai-score-ring {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; flex-shrink: 0;
+    }
+    .ai-score-ring.score-high { background: rgba(63,185,80,0.1); border: 2px solid var(--color-success-fg); color: var(--color-success-fg); }
+    .ai-score-ring.score-medium { background: rgba(210,153,34,0.1); border: 2px solid var(--color-attention-fg); color: var(--color-attention-fg); }
+    .ai-score-ring.score-low { background: rgba(248,81,73,0.1); border: 2px solid var(--color-danger-fg); color: var(--color-danger-fg); }
+    .ai-score-detail { flex: 1; }
+    .ai-score-label { font-size: 16px; font-weight: 600; color: var(--color-fg-default); margin-bottom: 2px; }
+    .ai-score-desc { color: var(--color-fg-muted); font-size: 13px; }
+    .ai-criteria-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+    .ai-criterion {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--color-canvas-default);
+      border: 1px solid var(--color-border-muted);
+      transition: border-color 0.15s;
+    }
+    .ai-criterion:hover { border-color: var(--color-border-default); }
+    .ai-criterion-icon {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; flex-shrink: 0; font-weight: 700;
+    }
+    .ai-criterion-icon.pass { background: rgba(63,185,80,0.12); color: var(--color-success-fg); }
+    .ai-criterion-icon.fail { background: rgba(248,81,73,0.12); color: var(--color-danger-fg); }
+    .ai-criterion-text { flex: 1; min-width: 0; }
+    .ai-criterion-title { font-weight: 600; font-size: 13px; color: var(--color-fg-default); }
+    .ai-criterion-reason { font-size: 12px; color: var(--color-fg-muted); margin-top: 1px; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      color: var(--color-fg-subtle);
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--color-border-muted);
+      font-size: 12px;
+    }
+    .footer a { color: var(--color-accent-fg); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Compact Maturity Progress */
+    .maturity-progress {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      align-items: stretch;
+      height: 8px;
+    }
+    .maturity-segment {
+      flex: 1;
+      border-radius: 4px;
+      background: var(--color-border-muted);
+      position: relative;
+    }
+    .maturity-segment.achieved { background: var(--color-accent-fg); }
+    .maturity-segment.current { background: var(--color-accent-fg); box-shadow: 0 0 0 2px var(--color-accent-emphasis); }
+
+    .maturity-labels {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+    .maturity-label {
+      flex: 1;
+      text-align: center;
+      font-size: 11px;
+      color: var(--color-fg-subtle);
+    }
+    .maturity-label.current { color: var(--color-accent-fg); font-weight: 600; }
+
+    /* Theme Toggle */
+    .theme-toggle {
+      margin-left: auto;
+      background: var(--color-canvas-default);
+      border: 1px solid var(--color-border-default);
+      border-radius: 6px;
+      padding: 4px 12px;
+      cursor: pointer;
+      color: var(--color-fg-muted);
+      font-size: 12px;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.15s;
+    }
+    .theme-toggle:hover {
+      border-color: var(--color-accent-fg);
+      color: var(--color-fg-default);
+    }
+    .theme-toggle-icon { font-size: 14px; }
+
+    @media (max-width: 768px) {
+      body { padding: 16px; }
+      .summary-cards { grid-template-columns: 1fr; }
+      .pillar-grid { grid-template-columns: 1fr; }
+      .ai-criteria-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>AI Readiness Report</h1>
-    <div class="meta">
-      <strong>OET Prep Platform</strong> · Assessed 2026-07-17 ·
-      <span class="badge lvl-4">L4 — Optimized</span> ·
-      Overall <strong>100%</strong> · Grade <strong>A</strong>
-      <!-- if a policy is active, append: · Policy <code>{{policyName}}</code> -->
+  <div class="container">
+    <div class="header">
+      <svg class="header-logo" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.26-1.24-.55-1.49 1.81-.2 3.71-.89 3.71-4 0-.88-.31-1.61-.82-2.17.08-.2.36-1.02-.08-2.13 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.93-.08 2.13-.51.56-.82 1.28-.82 2.17 0 3.07 1.87 3.75 3.65 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
+      </svg>
+      <div class="header-text">
+        <h1>Readiness Report: manwara575-star-curly-tribble</h1>
+        <p class="subtitle">Generated 17/07/2026, 3:06:51 pm</p>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <span class="theme-toggle-icon" id="theme-icon">&#9789;</span>
+        <span id="theme-label">Light</span>
+      </button>
     </div>
-  </header>
 
-  <main>
+    
+    <div class="hero">
+      <div class="hero-level level-high">4</div>
+      <div class="hero-info">
+        <div class="hero-name">manwara575-star-curly-tribble</div>
+        <div class="hero-subtitle">Level 4: Optimized — 23 of 23 checks passing</div>
+        <div class="hero-next">Next: <strong>Level 5 — Autonomous</strong> (0 more checks needed)</div>
+      </div>
+    </div>
+  
 
-    <!-- 1. What is AI Readiness? -->
-    <section class="panel">
-      <h2>What is AI Readiness?</h2>
-      <p>AI coding agents are only as effective as the context they receive. AgentRC measures how AI-ready a repo is across <strong>9 pillars</strong> in two categories — Repo Health and AI Setup — and maps the result to a <strong>5-level maturity model</strong>. This report is the <em>Measure</em> step in AgentRC's <em>Measure → Generate → Maintain</em> loop.</p>
-      <p style="color:var(--muted);font-size:13px;margin-top:8px">Each pillar carries an <strong>AI relevance</strong> rating (High / Medium / Low) so you can tell at a glance which gaps most directly affect Copilot's output and which are general engineering hygiene.</p>
-    </section>
+    
+    
+      <div class="section" style="border-color: var(--color-success-emphasis);">
+        <h2 class="section-title" style="color: var(--color-success-fg);">&#10003; All Checks Passing</h2>
+        <p style="color: var(--color-fg-muted); font-size: 13px;">This repository passes all readiness criteria.</p>
+      </div>
+    
 
-    <!-- 2. KPIs -->
-    <section class="grid cols-3">
-      <div class="panel kpi"><span class="lbl">Maturity</span><div class="num"><span class="badge lvl-4">L4 — Optimized</span></div></div>
-      <div class="panel kpi"><span class="lbl">Overall Score</span><div class="num">100%</div><div style="color:var(--muted);font-size:12px">Grade A</div></div>
-      <div class="panel kpi"><span class="lbl">Pass rate</span><div class="num">100%</div><div style="color:var(--muted);font-size:12px">Threshold ?</div></div>
-    </section>
+    
+    <div class="ai-hero">
+      <h2 class="section-title">AI Tooling Readiness</h2>
+      <p class="ai-hero-subtitle">How well prepared this repository is for AI-assisted development</p>
 
-    <!-- 3. Maturity progression -->
-    <section class="panel">
-      <h2>Maturity Progression</h2>
-      <table>
-        <thead><tr><th>Level</th><th>Name</th><th>Status</th></tr></thead>
-        <tbody>
-          <!-- Render levels 5 → 1. Mark the current level with "◼ You are here". Example row:
-            <tr><td>L3</td><td>Standardized</td><td>◼ You are here</td></tr>
-          -->
-        </tbody>
-      </table>
-    </section>
+      <div class="ai-score-header">
+        <div class="ai-score-ring score-high">100%</div>
+        <div class="ai-score-detail">
+          <div class="ai-score-label">Excellent</div>
+          <div class="ai-score-desc">8 of 8 AI tooling checks passing</div>
+        </div>
+      </div>
+
+      <div class="ai-criteria-grid">
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#128221; Custom instructions or agent guidance</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#128295; AI instruction files are consistent</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#128268; MCP configuration present</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#129302; Custom AI agents configured</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#9889; Copilot/Claude skills present</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#128295; APM package manifest present</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#128295; APM dependencies locked</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+          <div class="ai-criterion">
+            <div class="ai-criterion-icon pass">
+              &#10003;
+            </div>
+            <div class="ai-criterion-text">
+              <div class="ai-criterion-title">&#128295; APM integrated in CI pipeline</div>
+              <div class="ai-criterion-reason">Detected</div>
+            </div>
+          </div>
+        
+      </div>
+      
+    </div>
+  
+
+    <div class="section">
+      <h2 class="section-title">Pillar Performance</h2>
+      
+        <h3 style="font-size: 13px; font-weight: 600; color: var(--color-fg-muted); margin-bottom: 8px; margin-top: 12px;">Repo Health</h3>
+        <div class="pillar-grid">
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Style &amp; Validation</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Build System</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Testing</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Documentation</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Dev Environment</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Code Quality</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Observability</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">Security &amp; Governance</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+        </div>
+      
+        <h3 style="font-size: 13px; font-weight: 600; color: var(--color-fg-muted); margin-bottom: 8px; margin-top: 12px;">AI Setup</h3>
+        <div class="pillar-grid">
+          
+            <div class="pillar-card all-passing">
+              <div class="pillar-name">AI Tooling</div>
+              <div class="pillar-stats">
+                <div class="progress-bar">
+                  <div class="progress-fill high" style="width: 100%"></div>
+                </div>
+                <span>All passing</span>
+              </div>
+            </div>
+          
+        </div>
+      
+    </div>
+
+    
+    <div class="section">
+      <h2 class="section-title">Maturity Model</h2>
+      <div class="maturity-progress">
+        <div class="maturity-segment achieved"></div><div class="maturity-segment achieved"></div><div class="maturity-segment achieved"></div><div class="maturity-segment current"></div><div class="maturity-segment"></div>
+      </div>
+      <div class="maturity-labels">
+        <div class="maturity-label">1. Functional</div><div class="maturity-label">2. Documented</div><div class="maturity-label">3. Standardized</div><div class="maturity-label current">4. Optimized</div><div class="maturity-label">5. Autonomous</div>
+      </div>
+      
+        <div class="maturity-item has-repos">
+          <div class="maturity-header">
+            <span class="level-badge level-4">4</span>
+            <span class="maturity-name">Optimized</span>
+            <span class="maturity-count" style="color: var(--color-accent-fg);">Current</span>
+          </div>
+          <div class="maturity-desc">MCP servers, custom agents, and AI skills are set up. Agents have deep integration with project-specific tools and workflows.</div>
+        </div>
+      
+        <div class="maturity-item">
+          <div class="maturity-header">
+            <span class="level-badge level-5">5</span>
+            <span class="maturity-name">Autonomous</span>
+            <span class="maturity-count">Next</span>
+          </div>
+          <div class="maturity-desc">Full AI-native development: agents can independently plan, implement, test, and ship changes with minimal human oversight.</div>
+        </div>
+      
+    </div>
+  
+    
+
+    <div class="section">
+      <h2 class="section-title">Pillar Details</h2>
+      <div class="repo-list">
+        
+            <div class="repo-item">
+              
+              
+              <div class="repo-pillars">
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Style &amp; Validation</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">2/2</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Linting configured</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>Type checking configured</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Build System</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">2/2</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Build script present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>CI workflow configured</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Testing</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">1/1</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Test script present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Documentation</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">2/2</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>README present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>CONTRIBUTING guide present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Dev Environment</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">2/2</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Lockfile present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>Environment example present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Code Quality</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">1/1</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Formatter configured</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Observability</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">1/1</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Observability tooling present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; Security &amp; Governance</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">4/4</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>CODEOWNERS present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>LICENSE present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>Security policy present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>Dependabot configured</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+                  <div class="repo-pillar">
+                    <details>
+                      <summary>
+                        <span class="repo-pillar-name">&#10003; AI Tooling</span>
+                        <span class="repo-pillar-value" style="color: var(--color-success-fg);">8/8</span>
+                      </summary>
+                      <div class="pillar-criteria-list">
+                        
+                          <div class="criterion-row">
+                            <span>Custom instructions or agent guidance</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>AI instruction files are consistent</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>MCP configuration present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>Custom AI agents configured</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>Copilot/Claude skills present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>APM package manifest present</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>APM dependencies locked</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                          <div class="criterion-row">
+                            <span>APM integrated in CI pipeline</span>
+                            <span class="criterion-status pass">Pass</span>
+                          </div>
+                        
+                        
+                      </div>
+                    </details>
+                  </div>
+                
+              </div>
+              
+            </div>
+          
+      </div>
+    </div>
 
     
 
-    <!-- 5. Repo Health Pillars -->
-    <section class="panel">
-      <h2>Repo Health Breakdown</h2>
-      <div class="grid cols-2">
-        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Style &amp; Validation
-            <span class="rel medium">AI relevance: medium</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> Linter config (ESLint/Biome), type-checking (TypeScript)</p>
-          <p class="why"><strong>Why it matters for AI:</strong> Lint and type rules are the most explicit form of &#x27;house style&#x27; an agent can read. With them in place, Copilot generates code that passes review on the first try; without them, the agent has to guess at conventions and PRs churn on style nits.</p>
-          <p class="rec"><strong>Current state:</strong> 2 criteria passing. Linting configured, Type checking configured</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Build System
-            <span class="rel high">AI relevance: high</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> Build script in package.json, CI workflow config</p>
-          <p class="why"><strong>Why it matters for AI:</strong> An agent without a build command cannot self-verify. A canonical build script (and a CI workflow that mirrors it) lets the agent compile, catch type errors, and iterate before opening a PR ? the difference between &#x27;works on my machine&#x27; and a clean check run.</p>
-          <p class="rec"><strong>Current state:</strong> 3 criteria passing. Build script present, CI workflow configured, Area build script present</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Testing
-            <span class="rel high">AI relevance: high</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> Test script, area-scoped test scripts</p>
-          <p class="why"><strong>Why it matters for AI:</strong> Tests are the agent&#x27;s automated quality gate. With a test script the agent can run TDD loops and prove behaviour; with area-scoped tests it can run only what&#x27;s relevant and stay fast. No tests = no objective signal for the agent to know when it&#x27;s done.</p>
-          <p class="rec"><strong>Current state:</strong> 2 criteria passing. Test script present, Area test script present</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Documentation
-            <span class="rel high">AI relevance: high</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> README, CONTRIBUTING, area-scoped READMEs</p>
-          <p class="why"><strong>Why it matters for AI:</strong> Docs are the agent&#x27;s primary context source. README explains the stack, CONTRIBUTING explains the process, area READMEs explain local conventions. Repos with rich docs see dramatically better Copilot suggestions because the model is grounded in real intent instead of guessing from filenames.</p>
-          <p class="rec"><strong>Current state:</strong> 3 criteria passing. README present, CONTRIBUTING guide present, Area README present</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Dev Environment
-            <span class="rel medium">AI relevance: medium</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> Lockfile, .env.example</p>
-          <p class="why"><strong>Why it matters for AI:</strong> A lockfile pins versions so the agent&#x27;s npm install matches CI. .env.example tells the agent which env vars exist without leaking secrets. Together they make the agent&#x27;s local runs reproducible and stop it from inventing config that doesn&#x27;t apply.</p>
-          <p class="rec"><strong>Current state:</strong> 2 criteria passing. Lockfile present, Environment example present</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Code Quality
-            <span class="rel medium">AI relevance: medium</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> Formatter config (Prettier/Biome)</p>
-          <p class="why"><strong>Why it matters for AI:</strong> A formatter config means the agent&#x27;s output lands pre-formatted ? no diff noise, no review comments about whitespace. Without it, AI-generated PRs trigger style discussions that drown out real feedback.</p>
-          <p class="rec"><strong>Current state:</strong> 1 criteria passing. Formatter configured</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Observability
-            <span class="rel low">AI relevance: low</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> OpenTelemetry / Pino / Winston / Bunyan</p>
-          <p class="why"><strong>Why it matters for AI:</strong> When logging/tracing libraries are visible in the dependency graph, the agent instruments new code with the same patterns instead of console.log. Lower leverage than docs/tests because the agent only needs it for the subset of work that touches runtime instrumentation.</p>
-          <p class="rec"><strong>Current state:</strong> 1 criteria passing. Observability tooling present</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>        <div class="pillar">
-          <h3>
-            <span class="dot good"></span>
-            Security &amp; Governance
-            <span class="rel low">AI relevance: low</span>
-            <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
-          </h3>
-          <div class="bar good"><span style="width:100%"></span></div>
-          <p class="what"><strong>What it measures:</strong> LICENSE, CODEOWNERS, SECURITY.md, Dependabot</p>
-          <p class="why"><strong>Why it matters for AI:</strong> CODEOWNERS routes AI-generated PRs to the right reviewers automatically. SECURITY.md and Dependabot tell the agent how to handle vulnerability reports and dependency bumps. Important for governance, but rarely changes what code the agent writes day-to-day.</p>
-          <p class="rec"><strong>Current state:</strong> 4 criteria passing. CODEOWNERS present, LICENSE present, Security policy present, and 1 more</p>
-          <p class="rec"><strong>Recommendation:</strong> No action needed ? all criteria passing.</p>
-        </div>
-        <!-- (8 pillars):
-          Style, Build, Testing, Docs, Dev Environment, Code Quality, Observability, Security.
-
-          <div class="pillar">
-            <h3>
-              <span class="dot {{pillarStatus}}"></span>
-              {{pillarName}}
-              <span class="rel {{pillarRelevance}}">AI relevance: {{pillarRelevance}}</span>
-              <span style="margin-left:auto;color:var(--muted);font-size:13px">{{pillarScore}}%</span>
-            </h3>
-            <div class="bar {{pillarStatus}}"><span style="width:{{pillarScore}}%"></span></div>
-            <p class="what"><strong>What it measures:</strong> {{pillarWhat}}</p>
-            <p class="why"><strong>Why it matters for AI:</strong> {{pillarWhyAi}}</p>
-            <p class="rec"><strong>Current state:</strong> {{pillarCurrent}}</p>
-            <p class="rec"><strong>Recommendation:</strong> {{pillarRecommendation}}</p>
-          </div>
-        -->
-      </div>
-    </section>
-
-    <!-- 6. AI Setup Pillars -->
-    <section class="panel">
-      <h2>AI Setup Breakdown</h2>
-      <div class="grid cols-2">
-        <!-- AI Tooling pillar block — same structure as above, AI relevance is always "high". -->
-      </div>
-    </section>
-
-    <!-- 7. Extras -->
-    <section class="panel">
-      <h2>Extras (informational, do not affect score)</h2>
-      <table>
-        <thead><tr><th></th><th>Extra</th><th>Status</th></tr></thead>
-        <tbody>
-          <!-- agents-doc, pr-template, pre-commit, architecture-doc rows. Use ✅ or ◻. -->
-        </tbody>
-      </table>
-    </section>
-
-    <!-- 8. Prioritised Remediation Plan -->
-    <section class="panel">
-      <h2>Prioritised Remediation Plan</h2>
-      <h3 style="color:var(--bad)">🔴 Fix First (high impact / low effort)</h3>
-      <table><thead><tr><th>#</th><th>Finding</th><th>File / config</th><th>Why it matters</th></tr></thead><tbody><!-- rows --></tbody></table>
-      <h3 style="color:var(--warn)">🟡 Fix Next (medium impact / low effort)</h3>
-      <table><thead><tr><th>#</th><th>Finding</th><th>File / config</th><th>Why</th></tr></thead><tbody><!-- rows --></tbody></table>
-      <h3 style="color:var(--accent)">🔵 Plan (medium impact / medium effort)</h3>
-      <table><thead><tr><th>#</th><th>Finding</th><th>File / config</th><th>Why</th></tr></thead><tbody><!-- rows --></tbody></table>
-    </section>
-
-    <!-- 9. Next steps -->
-    <section class="panel">
-      <h2>Next Steps</h2>
-      <ol>
-        <li>Generate or refresh instructions: <code>agentrc instructions --output .github/copilot-instructions.md</code> (or use the <code>generate-instructions</code> skill).</li>
-        <li>Address each item under <strong>🔴 Fix First</strong>; re-run this report to confirm score improvement.</li>
-        <li>Codify org standards via a JSON policy (<code>strict.json</code>, <code>ai-only.json</code>, …) and re-run with <code>--policy</code>.</li>
-        <li>Wire <code>agentrc readiness --fail-level &lt;n&gt;</code> into CI to prevent regressions.</li>
-      </ol>
-    </section>
-
-    <!-- 10. Raw data -->
-    <details class="panel">
-      <summary style="cursor:pointer;color:var(--muted)">Raw AgentRC JSON</summary>
-      <pre style="overflow:auto;font-size:11px;color:#b8c0d2">{
-  &quot;ok&quot;: true,
-  &quot;status&quot;: &quot;success&quot;,
-  &quot;data&quot;: {
-    &quot;repoPath&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble&quot;,
-    &quot;generatedAt&quot;: &quot;2026-07-17T08:14:20.087Z&quot;,
-    &quot;isMonorepo&quot;: false,
-    &quot;apps&quot;: [
-      {
-        &quot;name&quot;: &quot;oet-prep&quot;,
-        &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble&quot;
-      }
-    ],
-    &quot;pillars&quot;: [
-      {
-        &quot;id&quot;: &quot;style-validation&quot;,
-        &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-        &quot;passed&quot;: 2,
-        &quot;total&quot;: 2,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;build-system&quot;,
-        &quot;name&quot;: &quot;Build System&quot;,
-        &quot;passed&quot;: 3,
-        &quot;total&quot;: 3,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;testing&quot;,
-        &quot;name&quot;: &quot;Testing&quot;,
-        &quot;passed&quot;: 2,
-        &quot;total&quot;: 2,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;documentation&quot;,
-        &quot;name&quot;: &quot;Documentation&quot;,
-        &quot;passed&quot;: 3,
-        &quot;total&quot;: 3,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;dev-environment&quot;,
-        &quot;name&quot;: &quot;Dev Environment&quot;,
-        &quot;passed&quot;: 2,
-        &quot;total&quot;: 2,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;code-quality&quot;,
-        &quot;name&quot;: &quot;Code Quality&quot;,
-        &quot;passed&quot;: 1,
-        &quot;total&quot;: 1,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;observability&quot;,
-        &quot;name&quot;: &quot;Observability&quot;,
-        &quot;passed&quot;: 1,
-        &quot;total&quot;: 1,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;security-governance&quot;,
-        &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-        &quot;passed&quot;: 4,
-        &quot;total&quot;: 4,
-        &quot;passRate&quot;: 1
-      },
-      {
-        &quot;id&quot;: &quot;ai-tooling&quot;,
-        &quot;name&quot;: &quot;AI Tooling&quot;,
-        &quot;passed&quot;: 9,
-        &quot;total&quot;: 9,
-        &quot;passRate&quot;: 1
-      }
-    ],
-    &quot;levels&quot;: [
-      {
-        &quot;level&quot;: 1,
-        &quot;name&quot;: &quot;Functional&quot;,
-        &quot;passed&quot;: 10,
-        &quot;total&quot;: 10,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 2,
-        &quot;name&quot;: &quot;Documented&quot;,
-        &quot;passed&quot;: 10,
-        &quot;total&quot;: 10,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 3,
-        &quot;name&quot;: &quot;Standardized&quot;,
-        &quot;passed&quot;: 6,
-        &quot;total&quot;: 6,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 4,
-        &quot;name&quot;: &quot;Optimized&quot;,
-        &quot;passed&quot;: 1,
-        &quot;total&quot;: 1,
-        &quot;passRate&quot;: 1,
-        &quot;achieved&quot;: true
-      },
-      {
-        &quot;level&quot;: 5,
-        &quot;name&quot;: &quot;Autonomous&quot;,
-        &quot;passed&quot;: 0,
-        &quot;total&quot;: 0,
-        &quot;passRate&quot;: 0,
-        &quot;achieved&quot;: false
-      }
-    ],
-    &quot;achievedLevel&quot;: 4,
-    &quot;criteria&quot;: [
-      {
-        &quot;id&quot;: &quot;lint-config&quot;,
-        &quot;title&quot;: &quot;Linting configured&quot;,
-        &quot;pillar&quot;: &quot;style-validation&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;eslint.config.js&quot;,
-          &quot;.eslintrc&quot;,
-          &quot;biome.json&quot;,
-          &quot;.prettierrc&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;typecheck-config&quot;,
-        &quot;title&quot;: &quot;Type checking configured&quot;,
-        &quot;pillar&quot;: &quot;style-validation&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;tsconfig.json&quot;,
-          &quot;pyproject.toml&quot;,
-          &quot;mypy.ini&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;build-script&quot;,
-        &quot;title&quot;: &quot;Build script present&quot;,
-        &quot;pillar&quot;: &quot;build-system&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;app&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;appSummary&quot;: {
-          &quot;passed&quot;: 1,
-          &quot;total&quot;: 1
-        },
-        &quot;appFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;ci-config&quot;,
-        &quot;title&quot;: &quot;CI workflow configured&quot;,
-        &quot;pillar&quot;: &quot;build-system&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/workflows&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;test-script&quot;,
-        &quot;title&quot;: &quot;Test script present&quot;,
-        &quot;pillar&quot;: &quot;testing&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;app&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;appSummary&quot;: {
-          &quot;passed&quot;: 1,
-          &quot;total&quot;: 1
-        },
-        &quot;appFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;readme&quot;,
-        &quot;title&quot;: &quot;README present&quot;,
-        &quot;pillar&quot;: &quot;documentation&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;README.md&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;contributing&quot;,
-        &quot;title&quot;: &quot;CONTRIBUTING guide present&quot;,
-        &quot;pillar&quot;: &quot;documentation&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;lockfile&quot;,
-        &quot;title&quot;: &quot;Lockfile present&quot;,
-        &quot;pillar&quot;: &quot;dev-environment&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;env-example&quot;,
-        &quot;title&quot;: &quot;Environment example present&quot;,
-        &quot;pillar&quot;: &quot;dev-environment&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;format-config&quot;,
-        &quot;title&quot;: &quot;Formatter configured&quot;,
-        &quot;pillar&quot;: &quot;code-quality&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;codeowners&quot;,
-        &quot;title&quot;: &quot;CODEOWNERS present&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;license&quot;,
-        &quot;title&quot;: &quot;LICENSE present&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;security-policy&quot;,
-        &quot;title&quot;: &quot;Security policy present&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;dependabot&quot;,
-        &quot;title&quot;: &quot;Dependabot configured&quot;,
-        &quot;pillar&quot;: &quot;security-governance&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;observability&quot;,
-        &quot;title&quot;: &quot;Observability tooling present&quot;,
-        &quot;pillar&quot;: &quot;observability&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;No observability dependencies detected (OpenTelemetry/logging).&quot;
-      },
-      {
-        &quot;id&quot;: &quot;custom-instructions&quot;,
-        &quot;title&quot;: &quot;Custom instructions or agent guidance&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;Root + 10 area instruction(s) found.&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/copilot-instructions.md&quot;,
-          &quot;AGENTS.md&quot;,
-          &quot;.github/instructions/admin-hallmark.instructions.md&quot;,
-          &quot;.github/instructions/agentic-workflow.instructions.md&quot;,
-          &quot;.github/instructions/backend.instructions.md&quot;,
-          &quot;.github/instructions/deployment.instructions.md&quot;,
-          &quot;.github/instructions/frontend.instructions.md&quot;,
-          &quot;.github/instructions/lib.instructions.md&quot;,
-          &quot;.github/instructions/scripts.instructions.md&quot;,
-          &quot;.github/instructions/security-ai.instructions.md&quot;,
-          &quot;.github/instructions/testing.instructions.md&quot;,
-          &quot;.github/instructions/validation.instructions.md&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;instructions-consistency&quot;,
-        &quot;title&quot;: &quot;AI instruction files are consistent&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;2 instruction files are consistent.&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/copilot-instructions.md&quot;,
-          &quot;AGENTS.md&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;mcp-config&quot;,
-        &quot;title&quot;: &quot;MCP configuration present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;Missing MCP (Model Context Protocol) configuration (e.g. .vscode/mcp.json).&quot;,
-        &quot;evidence&quot;: [
-          &quot;.vscode/mcp.json&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;custom-agents&quot;,
-        &quot;title&quot;: &quot;Custom AI agents configured&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;No custom AI agents configured (e.g. .github/agents/, .copilot/agents/).&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/agents&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;copilot-skills&quot;,
-        &quot;title&quot;: &quot;Copilot/Claude skills present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;reason&quot;: &quot;No Copilot or Claude skills found (e.g. .copilot/skills/, .github/skills/).&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/skills&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;apm-config&quot;,
-        &quot;title&quot;: &quot;APM package manifest present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;apm.yml&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;apm-locked-deps&quot;,
-        &quot;title&quot;: &quot;APM dependencies locked&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 3,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;apm.lock.yaml&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;apm-ci-integration&quot;,
-        &quot;title&quot;: &quot;APM integrated in CI pipeline&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 4,
-        &quot;scope&quot;: &quot;repo&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;medium&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;evidence&quot;: [
-          &quot;.github/workflows/*.{yml,yaml}&quot;
-        ]
-      },
-      {
-        &quot;id&quot;: &quot;area-readme&quot;,
-        &quot;title&quot;: &quot;Area README present&quot;,
-        &quot;pillar&quot;: &quot;documentation&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;medium&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;area-build-script&quot;,
-        &quot;title&quot;: &quot;Area build script present&quot;,
-        &quot;pillar&quot;: &quot;build-system&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;area-test-script&quot;,
-        &quot;title&quot;: &quot;Area test script present&quot;,
-        &quot;pillar&quot;: &quot;testing&quot;,
-        &quot;level&quot;: 1,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      },
-      {
-        &quot;id&quot;: &quot;area-instructions&quot;,
-        &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-        &quot;pillar&quot;: &quot;ai-tooling&quot;,
-        &quot;level&quot;: 2,
-        &quot;scope&quot;: &quot;area&quot;,
-        &quot;impact&quot;: &quot;high&quot;,
-        &quot;effort&quot;: &quot;low&quot;,
-        &quot;status&quot;: &quot;pass&quot;,
-        &quot;passRate&quot;: 1,
-        &quot;areaSummary&quot;: {
-          &quot;passed&quot;: 3,
-          &quot;total&quot;: 3
-        },
-        &quot;areaFailures&quot;: []
-      }
-    ],
-    &quot;extras&quot;: [
-      {
-        &quot;id&quot;: &quot;agents-doc&quot;,
-        &quot;title&quot;: &quot;AGENTS.md present&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;pr-template&quot;,
-        &quot;title&quot;: &quot;Pull request template present&quot;,
-        &quot;status&quot;: &quot;pass&quot;
-      },
-      {
-        &quot;id&quot;: &quot;pre-commit&quot;,
-        &quot;title&quot;: &quot;Pre-commit hooks configured&quot;,
-        &quot;status&quot;: &quot;fail&quot;,
-        &quot;reason&quot;: &quot;Missing pre-commit or Husky configuration for fast feedback.&quot;
-      },
-      {
-        &quot;id&quot;: &quot;architecture-doc&quot;,
-        &quot;title&quot;: &quot;Architecture guide present&quot;,
-        &quot;status&quot;: &quot;fail&quot;,
-        &quot;reason&quot;: &quot;Missing architecture documentation.&quot;
-      }
-    ],
-    &quot;areaReports&quot;: [
-      {
-        &quot;area&quot;: {
-          &quot;name&quot;: &quot;backend&quot;,
-          &quot;applyTo&quot;: &quot;backend/**&quot;,
-          &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\backend&quot;,
-          &quot;source&quot;: &quot;auto&quot;,
-          &quot;scripts&quot;: {
-            &quot;build&quot;: &quot;dotnet build OetLearner.sln&quot;,
-            &quot;test&quot;: &quot;dotnet test OetLearner.sln&quot;,
-            &quot;run&quot;: &quot;dotnet run --project src/OetLearner.Api/OetLearner.Api.csproj&quot;,
-            &quot;watch&quot;: &quot;dotnet watch --project src/OetLearner.Api/OetLearner.Api.csproj run&quot;
-          }
-        },
-        &quot;criteria&quot;: [
-          {
-            &quot;id&quot;: &quot;area-readme&quot;,
-            &quot;title&quot;: &quot;Area README present&quot;,
-            &quot;pillar&quot;: &quot;documentation&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;medium&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-build-script&quot;,
-            &quot;title&quot;: &quot;Area build script present&quot;,
-            &quot;pillar&quot;: &quot;build-system&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-test-script&quot;,
-            &quot;title&quot;: &quot;Area test script present&quot;,
-            &quot;pillar&quot;: &quot;testing&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-instructions&quot;,
-            &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-            &quot;pillar&quot;: &quot;ai-tooling&quot;,
-            &quot;level&quot;: 2,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          }
-        ],
-        &quot;pillars&quot;: [
-          {
-            &quot;id&quot;: &quot;style-validation&quot;,
-            &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;build-system&quot;,
-            &quot;name&quot;: &quot;Build System&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;testing&quot;,
-            &quot;name&quot;: &quot;Testing&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;documentation&quot;,
-            &quot;name&quot;: &quot;Documentation&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;dev-environment&quot;,
-            &quot;name&quot;: &quot;Dev Environment&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;code-quality&quot;,
-            &quot;name&quot;: &quot;Code Quality&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;observability&quot;,
-            &quot;name&quot;: &quot;Observability&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;security-governance&quot;,
-            &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;ai-tooling&quot;,
-            &quot;name&quot;: &quot;AI Tooling&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          }
-        ]
-      },
-      {
-        &quot;area&quot;: {
-          &quot;name&quot;: &quot;lib&quot;,
-          &quot;applyTo&quot;: &quot;lib/**&quot;,
-          &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\lib&quot;,
-          &quot;source&quot;: &quot;auto&quot;,
-          &quot;scripts&quot;: {
-            &quot;build&quot;: &quot;cd .. &amp;&amp; pnpm exec tsc --noEmit&quot;,
-            &quot;test&quot;: &quot;cd .. &amp;&amp; pnpm test&quot;
-          }
-        },
-        &quot;criteria&quot;: [
-          {
-            &quot;id&quot;: &quot;area-readme&quot;,
-            &quot;title&quot;: &quot;Area README present&quot;,
-            &quot;pillar&quot;: &quot;documentation&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;medium&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-build-script&quot;,
-            &quot;title&quot;: &quot;Area build script present&quot;,
-            &quot;pillar&quot;: &quot;build-system&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-test-script&quot;,
-            &quot;title&quot;: &quot;Area test script present&quot;,
-            &quot;pillar&quot;: &quot;testing&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-instructions&quot;,
-            &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-            &quot;pillar&quot;: &quot;ai-tooling&quot;,
-            &quot;level&quot;: 2,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          }
-        ],
-        &quot;pillars&quot;: [
-          {
-            &quot;id&quot;: &quot;style-validation&quot;,
-            &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;build-system&quot;,
-            &quot;name&quot;: &quot;Build System&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;testing&quot;,
-            &quot;name&quot;: &quot;Testing&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;documentation&quot;,
-            &quot;name&quot;: &quot;Documentation&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;dev-environment&quot;,
-            &quot;name&quot;: &quot;Dev Environment&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;code-quality&quot;,
-            &quot;name&quot;: &quot;Code Quality&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;observability&quot;,
-            &quot;name&quot;: &quot;Observability&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;security-governance&quot;,
-            &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;ai-tooling&quot;,
-            &quot;name&quot;: &quot;AI Tooling&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          }
-        ]
-      },
-      {
-        &quot;area&quot;: {
-          &quot;name&quot;: &quot;scripts&quot;,
-          &quot;applyTo&quot;: &quot;scripts/**&quot;,
-          &quot;path&quot;: &quot;C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\scripts&quot;,
-          &quot;source&quot;: &quot;auto&quot;,
-          &quot;scripts&quot;: {
-            &quot;build&quot;: &quot;cd .. &amp;&amp; pnpm exec tsc --noEmit&quot;,
-            &quot;test&quot;: &quot;cd .. &amp;&amp; pnpm test&quot;
-          }
-        },
-        &quot;criteria&quot;: [
-          {
-            &quot;id&quot;: &quot;area-readme&quot;,
-            &quot;title&quot;: &quot;Area README present&quot;,
-            &quot;pillar&quot;: &quot;documentation&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;medium&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-build-script&quot;,
-            &quot;title&quot;: &quot;Area build script present&quot;,
-            &quot;pillar&quot;: &quot;build-system&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-test-script&quot;,
-            &quot;title&quot;: &quot;Area test script present&quot;,
-            &quot;pillar&quot;: &quot;testing&quot;,
-            &quot;level&quot;: 1,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          },
-          {
-            &quot;id&quot;: &quot;area-instructions&quot;,
-            &quot;title&quot;: &quot;Area-specific instructions present&quot;,
-            &quot;pillar&quot;: &quot;ai-tooling&quot;,
-            &quot;level&quot;: 2,
-            &quot;scope&quot;: &quot;area&quot;,
-            &quot;impact&quot;: &quot;high&quot;,
-            &quot;effort&quot;: &quot;low&quot;,
-            &quot;status&quot;: &quot;pass&quot;
-          }
-        ],
-        &quot;pillars&quot;: [
-          {
-            &quot;id&quot;: &quot;style-validation&quot;,
-            &quot;name&quot;: &quot;Style &amp; Validation&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;build-system&quot;,
-            &quot;name&quot;: &quot;Build System&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;testing&quot;,
-            &quot;name&quot;: &quot;Testing&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;documentation&quot;,
-            &quot;name&quot;: &quot;Documentation&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          },
-          {
-            &quot;id&quot;: &quot;dev-environment&quot;,
-            &quot;name&quot;: &quot;Dev Environment&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;code-quality&quot;,
-            &quot;name&quot;: &quot;Code Quality&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;observability&quot;,
-            &quot;name&quot;: &quot;Observability&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;security-governance&quot;,
-            &quot;name&quot;: &quot;Security &amp; Governance&quot;,
-            &quot;passed&quot;: 0,
-            &quot;total&quot;: 0,
-            &quot;passRate&quot;: 0
-          },
-          {
-            &quot;id&quot;: &quot;ai-tooling&quot;,
-            &quot;name&quot;: &quot;AI Tooling&quot;,
-            &quot;passed&quot;: 1,
-            &quot;total&quot;: 1,
-            &quot;passRate&quot;: 1
-          }
-        ]
-      }
-    ]
-  }
-}</pre>
-    </details>
-    <script type="application/json" id="raw-data">{"ok": true, "status": "success", "data": {"repoPath": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble", "generatedAt": "2026-07-17T08:14:20.087Z", "isMonorepo": false, "apps": [{"name": "oet-prep", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 2, "total": 2, "passRate": 1}, {"id": "build-system", "name": "Build System", "passed": 3, "total": 3, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 2, "total": 2, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 3, "total": 3, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 2, "total": 2, "passRate": 1}, {"id": "code-quality", "name": "Code Quality", "passed": 1, "total": 1, "passRate": 1}, {"id": "observability", "name": "Observability", "passed": 1, "total": 1, "passRate": 1}, {"id": "security-governance", "name": "Security & Governance", "passed": 4, "total": 4, "passRate": 1}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 9, "total": 9, "passRate": 1}], "levels": [{"level": 1, "name": "Functional", "passed": 10, "total": 10, "passRate": 1, "achieved": true}, {"level": 2, "name": "Documented", "passed": 10, "total": 10, "passRate": 1, "achieved": true}, {"level": 3, "name": "Standardized", "passed": 6, "total": 6, "passRate": 1, "achieved": true}, {"level": 4, "name": "Optimized", "passed": 1, "total": 1, "passRate": 1, "achieved": true}, {"level": 5, "name": "Autonomous", "passed": 0, "total": 0, "passRate": 0, "achieved": false}], "achievedLevel": 4, "criteria": [{"id": "lint-config", "title": "Linting configured", "pillar": "style-validation", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "evidence": ["eslint.config.js", ".eslintrc", "biome.json", ".prettierrc"]}, {"id": "typecheck-config", "title": "Type checking configured", "pillar": "style-validation", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "evidence": ["tsconfig.json", "pyproject.toml", "mypy.ini"]}, {"id": "build-script", "title": "Build script present", "pillar": "build-system", "level": 1, "scope": "app", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "appSummary": {"passed": 1, "total": 1}, "appFailures": []}, {"id": "ci-config", "title": "CI workflow configured", "pillar": "build-system", "level": 2, "scope": "repo", "impact": "high", "effort": "medium", "status": "pass", "evidence": [".github/workflows"]}, {"id": "test-script", "title": "Test script present", "pillar": "testing", "level": 1, "scope": "app", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "appSummary": {"passed": 1, "total": 1}, "appFailures": []}, {"id": "readme", "title": "README present", "pillar": "documentation", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "evidence": ["README.md"]}, {"id": "contributing", "title": "CONTRIBUTING guide present", "pillar": "documentation", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "lockfile", "title": "Lockfile present", "pillar": "dev-environment", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass"}, {"id": "env-example", "title": "Environment example present", "pillar": "dev-environment", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "format-config", "title": "Formatter configured", "pillar": "code-quality", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "codeowners", "title": "CODEOWNERS present", "pillar": "security-governance", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "license", "title": "LICENSE present", "pillar": "security-governance", "level": 1, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "security-policy", "title": "Security policy present", "pillar": "security-governance", "level": 3, "scope": "repo", "impact": "high", "effort": "low", "status": "pass"}, {"id": "dependabot", "title": "Dependabot configured", "pillar": "security-governance", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass"}, {"id": "observability", "title": "Observability tooling present", "pillar": "observability", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass", "reason": "No observability dependencies detected (OpenTelemetry/logging)."}, {"id": "custom-instructions", "title": "Custom instructions or agent guidance", "pillar": "ai-tooling", "level": 1, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "reason": "Root + 10 area instruction(s) found.", "evidence": [".github/copilot-instructions.md", "AGENTS.md", ".github/instructions/admin-hallmark.instructions.md", ".github/instructions/agentic-workflow.instructions.md", ".github/instructions/backend.instructions.md", ".github/instructions/deployment.instructions.md", ".github/instructions/frontend.instructions.md", ".github/instructions/lib.instructions.md", ".github/instructions/scripts.instructions.md", ".github/instructions/security-ai.instructions.md", ".github/instructions/testing.instructions.md", ".github/instructions/validation.instructions.md"]}, {"id": "instructions-consistency", "title": "AI instruction files are consistent", "pillar": "ai-tooling", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "reason": "2 instruction files are consistent.", "evidence": [".github/copilot-instructions.md", "AGENTS.md"]}, {"id": "mcp-config", "title": "MCP configuration present", "pillar": "ai-tooling", "level": 2, "scope": "repo", "impact": "high", "effort": "low", "status": "pass", "reason": "Missing MCP (Model Context Protocol) configuration (e.g. .vscode/mcp.json).", "evidence": [".vscode/mcp.json"]}, {"id": "custom-agents", "title": "Custom AI agents configured", "pillar": "ai-tooling", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass", "reason": "No custom AI agents configured (e.g. .github/agents/, .copilot/agents/).", "evidence": [".github/agents"]}, {"id": "copilot-skills", "title": "Copilot/Claude skills present", "pillar": "ai-tooling", "level": 3, "scope": "repo", "impact": "medium", "effort": "medium", "status": "pass", "reason": "No Copilot or Claude skills found (e.g. .copilot/skills/, .github/skills/).", "evidence": [".github/skills"]}, {"id": "apm-config", "title": "APM package manifest present", "pillar": "ai-tooling", "level": 2, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "evidence": ["apm.yml"]}, {"id": "apm-locked-deps", "title": "APM dependencies locked", "pillar": "ai-tooling", "level": 3, "scope": "repo", "impact": "medium", "effort": "low", "status": "pass", "evidence": ["apm.lock.yaml"]}, {"id": "apm-ci-integration", "title": "APM integrated in CI pipeline", "pillar": "ai-tooling", "level": 4, "scope": "repo", "impact": "high", "effort": "medium", "status": "pass", "evidence": [".github/workflows/*.{yml,yaml}"]}, {"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass", "passRate": 1, "areaSummary": {"passed": 3, "total": 3}, "areaFailures": []}], "extras": [{"id": "agents-doc", "title": "AGENTS.md present", "status": "pass"}, {"id": "pr-template", "title": "Pull request template present", "status": "pass"}, {"id": "pre-commit", "title": "Pre-commit hooks configured", "status": "fail", "reason": "Missing pre-commit or Husky configuration for fast feedback."}, {"id": "architecture-doc", "title": "Architecture guide present", "status": "fail", "reason": "Missing architecture documentation."}], "areaReports": [{"area": {"name": "backend", "applyTo": "backend/**", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\backend", "source": "auto", "scripts": {"build": "dotnet build OetLearner.sln", "test": "dotnet test OetLearner.sln", "run": "dotnet run --project src/OetLearner.Api/OetLearner.Api.csproj", "watch": "dotnet watch --project src/OetLearner.Api/OetLearner.Api.csproj run"}}, "criteria": [{"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 0, "total": 0, "passRate": 0}, {"id": "build-system", "name": "Build System", "passed": 1, "total": 1, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 1, "total": 1, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 1, "total": 1, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 0, "total": 0, "passRate": 0}, {"id": "code-quality", "name": "Code Quality", "passed": 0, "total": 0, "passRate": 0}, {"id": "observability", "name": "Observability", "passed": 0, "total": 0, "passRate": 0}, {"id": "security-governance", "name": "Security & Governance", "passed": 0, "total": 0, "passRate": 0}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 1, "total": 1, "passRate": 1}]}, {"area": {"name": "lib", "applyTo": "lib/**", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\lib", "source": "auto", "scripts": {"build": "cd .. && pnpm exec tsc --noEmit", "test": "cd .. && pnpm test"}}, "criteria": [{"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 0, "total": 0, "passRate": 0}, {"id": "build-system", "name": "Build System", "passed": 1, "total": 1, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 1, "total": 1, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 1, "total": 1, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 0, "total": 0, "passRate": 0}, {"id": "code-quality", "name": "Code Quality", "passed": 0, "total": 0, "passRate": 0}, {"id": "observability", "name": "Observability", "passed": 0, "total": 0, "passRate": 0}, {"id": "security-governance", "name": "Security & Governance", "passed": 0, "total": 0, "passRate": 0}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 1, "total": 1, "passRate": 1}]}, {"area": {"name": "scripts", "applyTo": "scripts/**", "path": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\New OET Web App\\copilot-worktrees\\NEW OET WEB APP\\manwara575-star-curly-tribble\\scripts", "source": "auto", "scripts": {"build": "cd .. && pnpm exec tsc --noEmit", "test": "cd .. && pnpm test"}}, "criteria": [{"id": "area-readme", "title": "Area README present", "pillar": "documentation", "level": 1, "scope": "area", "impact": "medium", "effort": "low", "status": "pass"}, {"id": "area-build-script", "title": "Area build script present", "pillar": "build-system", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-test-script", "title": "Area test script present", "pillar": "testing", "level": 1, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}, {"id": "area-instructions", "title": "Area-specific instructions present", "pillar": "ai-tooling", "level": 2, "scope": "area", "impact": "high", "effort": "low", "status": "pass"}], "pillars": [{"id": "style-validation", "name": "Style & Validation", "passed": 0, "total": 0, "passRate": 0}, {"id": "build-system", "name": "Build System", "passed": 1, "total": 1, "passRate": 1}, {"id": "testing", "name": "Testing", "passed": 1, "total": 1, "passRate": 1}, {"id": "documentation", "name": "Documentation", "passed": 1, "total": 1, "passRate": 1}, {"id": "dev-environment", "name": "Dev Environment", "passed": 0, "total": 0, "passRate": 0}, {"id": "code-quality", "name": "Code Quality", "passed": 0, "total": 0, "passRate": 0}, {"id": "observability", "name": "Observability", "passed": 0, "total": 0, "passRate": 0}, {"id": "security-governance", "name": "Security & Governance", "passed": 0, "total": 0, "passRate": 0}, {"id": "ai-tooling", "name": "AI Tooling", "passed": 1, "total": 1, "passRate": 1}]}]}}</script>
-  </main>
-
-  <footer>
-    Generated by <a href="https://github.com/github/awesome-copilot/tree/main/plugins/acreadiness-cockpit">acreadiness-cockpit</a>
-    · powered by <a href="https://github.com/microsoft/agentrc">microsoft/agentrc</a>.
-  </footer>
+    <div class="footer">
+      <p>Generated with <a href="https://github.com/microsoft/agentrc">AgentRC</a> &middot; Readiness Tool</p>
+    </div>
+  </div>
+  <script>
+    function getPreferredTheme() {
+      // In VS Code webviews, body classes are injected automatically
+      if (document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light')) return 'light';
+      if (document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')) return 'dark';
+      const stored = localStorage.getItem('agentrc-report-theme');
+      if (stored) return stored;
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const icon = document.getElementById('theme-icon');
+      const label = document.getElementById('theme-label');
+      if (icon) icon.innerHTML = theme === 'dark' ? '&#9789;' : '&#9788;';
+      if (label) label.textContent = theme === 'dark' ? 'Light' : 'Dark';
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('agentrc-report-theme', next);
+      applyTheme(next);
+    }
+    applyTheme(getPreferredTheme());
+  </script>
 </body>
 </html>

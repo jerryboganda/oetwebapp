@@ -22,7 +22,7 @@ Before product catalogue, checkout, entitlement, dashboard, add-on, Tutor Book, 
 ## Lean Context Policy
 
 - Do not eager-load broad skill catalogs, prompt libraries, generated bundles, or whole-codebase docs.
-- The large vendored catalogs are intentionally disabled/archived. Do not restore `.github/skills`, broad `awesome-*` agents, or global `awesome-copilot` assets without an explicit user request.
+- The generic vendored catalogs that lived under `.github/agents/`, `.github/skills/`, and `.github/awesome-copilot/` have been removed. Only project-local OET agents (`oet-*`) remain in `.github/agents/` and a single useful skill (`acreadiness-assess`) in `.github/skills/`. Do not restore broad `awesome-*` catalogs without an explicit user request. Project-local Codex skills live under `.codex/skills/oet-*`.
 - Load a skill, agent, or doc only when the current task clearly needs it.
 - Prefer targeted searches and local file reads over Repomix or broad scans.
 
