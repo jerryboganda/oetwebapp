@@ -1,7 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, BookOpenCheck, Clock, Headphones, Mic, PenLine, PlayCircle, RotateCcw, Search, Video } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  BookOpenCheck,
+  ChevronRight,
+  Clock,
+  FolderClosed,
+  Headphones,
+  Mic,
+  PenLine,
+  PlayCircle,
+  RotateCcw,
+  Search,
+  Video,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -12,38 +26,70 @@ import { Card } from '@/components/ui/card';
 import { fetchVideoLibraryHome, toggleVideoBookmark } from '@/lib/api/videos';
 import { analytics } from '@/lib/analytics';
 import { VideoCard, videoHasProgress } from '@/components/videos/video-card';
-import type { VideoLibraryHome, VideoSummary } from '@/lib/types/videos';
+import type { VideoLibraryCategory, VideoLibraryHome, VideoSummary } from '@/lib/types/videos';
 
-type LibraryView = 'all' | 'continue' | 'saved';
-type SortKey = 'newest' | 'title' | 'duration' | 'popular';
+type LibraryView = 'browse' | 'continue' | 'saved';
 type LanguageKey = 'all' | 'en' | 'ar';
 
-// English is one shared set across every profession; Arabic sets are profession-scoped.
-// This filter lets a learner narrow the whole library to English or Arabic instruction.
 const LANGUAGE_TABS: Array<[LanguageKey, string]> = [
-  ['all', 'All languages'],
+  ['all', 'All'],
   ['en', 'English'],
   ['ar', 'العربية'],
 ];
 
-const SUBTEST_OPTIONS: Array<[string, string]> = [
-  ['listening', 'Listening'],
-  ['reading', 'Reading'],
-  ['writing', 'Writing'],
-  ['speaking', 'Speaking'],
+// The learner opens the module as four subtest cards (Listening · Reading · Writing ·
+// Speaking). Each card drills into its collections (the "Module / Sub / …" shelves),
+// and a collection drills into its videos. Order + accent theming per module below.
+type ModuleTheme = {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  iconWrap: string;   // icon tile bg + text
+  gradient: string;   // card background wash
+  hoverBorder: string;
+  accentText: string; // arrow / hover accent
+};
+
+const MODULES: ModuleTheme[] = [
+  {
+    key: 'listening',
+    label: 'Listening',
+    icon: Headphones,
+    iconWrap: 'bg-sky-100 text-sky-600 dark:bg-sky-900/50 dark:text-sky-300',
+    gradient: 'from-sky-50/80 to-surface dark:from-sky-950/30 dark:to-surface',
+    hoverBorder: 'hover:border-sky-300 dark:hover:border-sky-700',
+    accentText: 'text-sky-600 dark:text-sky-300',
+  },
+  {
+    key: 'reading',
+    label: 'Reading',
+    icon: BookOpen,
+    iconWrap: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',
+    gradient: 'from-emerald-50/80 to-surface dark:from-emerald-950/30 dark:to-surface',
+    hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-700',
+    accentText: 'text-emerald-600 dark:text-emerald-300',
+  },
+  {
+    key: 'writing',
+    label: 'Writing',
+    icon: PenLine,
+    iconWrap: 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-violet-300',
+    gradient: 'from-violet-50/80 to-surface dark:from-violet-950/30 dark:to-surface',
+    hoverBorder: 'hover:border-violet-300 dark:hover:border-violet-700',
+    accentText: 'text-violet-600 dark:text-violet-300',
+  },
+  {
+    key: 'speaking',
+    label: 'Speaking',
+    icon: Mic,
+    iconWrap: 'bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-300',
+    gradient: 'from-rose-50/80 to-surface dark:from-rose-950/30 dark:to-surface',
+    hoverBorder: 'hover:border-rose-300 dark:hover:border-rose-700',
+    accentText: 'text-rose-600 dark:text-rose-300',
+  },
 ];
 
-// Category shelves are named "Module / Sub / Sub" (e.g. "Reading / English / Sessions").
-// The learner browse view groups them into top-level module sections, each holding
-// its sub-category shelves — so the tree reads Module → subcategory → videos.
-const MODULE_ORDER: Record<string, number> = { listening: 0, reading: 1, speaking: 2, writing: 3, mocks: 4 };
-const MODULE_META: Record<string, { label: string; icon: LucideIcon }> = {
-  listening: { label: 'Listening', icon: Headphones },
-  reading: { label: 'Reading', icon: BookOpen },
-  speaking: { label: 'Speaking', icon: Mic },
-  writing: { label: 'Writing', icon: PenLine },
-  mocks: { label: 'Mocks', icon: BookOpenCheck },
-};
+const MODULE_BY_KEY = new Map(MODULES.map((m) => [m.key, m]));
 
 function moduleKeyOf(title: string): string {
   return (title.split('/')[0] ?? '').trim().toLowerCase();
@@ -75,16 +121,19 @@ function applyBookmark(home: VideoLibraryHome, videoId: string, bookmarked: bool
   };
 }
 
+function newestFirst(a: VideoSummary, b: VideoSummary) {
+  return (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '');
+}
+
 export default function VideoLibraryPage() {
   const [home, setHome] = useState<VideoLibraryHome | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [subtest, setSubtest] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [sort, setSort] = useState<SortKey>('newest');
-  const [view, setView] = useState<LibraryView>('all');
   const [language, setLanguage] = useState<LanguageKey>('all');
+  const [view, setView] = useState<LibraryView>('browse');
+  const [moduleKey, setModuleKey] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('videos_page_viewed');
@@ -92,7 +141,6 @@ export default function VideoLibraryPage() {
 
   useEffect(() => {
     let cancelled = false;
-
     void (async () => {
       setLoading(true);
       setError(null);
@@ -108,7 +156,6 @@ export default function VideoLibraryPage() {
         if (!cancelled) setLoading(false);
       }
     })();
-
     return () => {
       cancelled = true;
     };
@@ -120,7 +167,6 @@ export default function VideoLibraryPage() {
       const target = flattenVideos(current).find((video) => video.id === videoId);
       const next = !(target?.bookmarked ?? false);
       void toggleVideoBookmark(videoId).catch(() => {
-        // Roll back on failure.
         setHome((rollback) => (rollback ? applyBookmark(rollback, videoId, !next) : rollback));
       });
       return applyBookmark(current, videoId, next);
@@ -141,80 +187,283 @@ export default function VideoLibraryPage() {
     [allVideos],
   );
   const hasLanguageTags = languageCounts.en > 0 || languageCounts.ar > 0;
+  const scopedAll = useMemo(() => allVideos.filter(matchesLanguage), [allVideos, matchesLanguage]);
   const continueVideos = useMemo(
     () => (home ? home.continueWatching.filter(videoHasProgress).filter(matchesLanguage) : []),
-    [home, matchesLanguage],
-  );
-  const featuredVideos = useMemo(
-    () => (home ? home.featured.filter(matchesLanguage) : []),
     [home, matchesLanguage],
   );
   const savedVideos = useMemo(
     () => allVideos.filter((video) => video.bookmarked).filter(matchesLanguage),
     [allVideos, matchesLanguage],
   );
-  // Language-scoped total, so every surfaced count (hero + "All" tab) matches
-  // what the active language filter actually renders.
-  const scopedAll = useMemo(() => allVideos.filter(matchesLanguage), [allVideos, matchesLanguage]);
 
-  // Group the flat category shelves into top-level module sections (Reading, Listening,
-  // Speaking, Writing …) so the default browse view renders as a Module → subcategory tree.
-  const moduleGroups = useMemo(() => {
+  // Module → its collections (language-scoped, non-empty), grouped for the drill-down.
+  const modules = useMemo(() => {
     if (!home) return [];
-    const groups = new Map<string, VideoLibraryHome['categories']>();
+    const byModule = new Map<string, VideoLibraryCategory[]>();
     for (const category of home.categories) {
       const videos = language === 'all' ? category.videos : category.videos.filter(matchesLanguage);
       if (videos.length === 0) continue;
-      const scoped = { ...category, videos };
       const key = moduleKeyOf(category.title);
-      const bucket = groups.get(key);
+      const scoped = { ...category, videos };
+      const bucket = byModule.get(key);
       if (bucket) bucket.push(scoped);
-      else groups.set(key, [scoped]);
+      else byModule.set(key, [scoped]);
     }
-    return Array.from(groups.entries())
-      .sort((a, b) => (MODULE_ORDER[a[0]] ?? 99) - (MODULE_ORDER[b[0]] ?? 99) || a[0].localeCompare(b[0]))
-      .map(([key, categories]) => ({
-        key,
-        meta: MODULE_META[key] ?? { label: key ? key[0].toUpperCase() + key.slice(1) : 'Other', icon: Video },
-        categories,
-        count: categories.reduce((sum, category) => sum + category.videos.length, 0),
-      }));
+    return MODULES.map((meta) => {
+      const categories = (byModule.get(meta.key) ?? []).sort((a, b) =>
+        subTitleOf(a.title).localeCompare(subTitleOf(b.title)),
+      );
+      const videoCount = categories.reduce((sum, c) => sum + c.videos.length, 0);
+      return { meta, categories, videoCount };
+    }).filter((m) => m.videoCount > 0);
   }, [home, language, matchesLanguage]);
 
-  // A language selection is an active filter too: it routes to the flat results
-  // path (which language-filters every video, incl. uncategorized) and gets the
-  // shared empty-state / reset card — so no English/null videos leak into an
-  // Arabic view, and an empty language never renders a blank page.
-  const filtersActive =
-    Boolean(query.trim() || subtest || categoryId) || view !== 'all' || sort !== 'newest' || language !== 'all';
+  const activeModule = moduleKey ? modules.find((m) => m.meta.key === moduleKey) ?? null : null;
+  const activeCategory = useMemo(() => {
+    if (!categoryId || !activeModule) return null;
+    return activeModule.categories.find((c) => c.id === categoryId) ?? null;
+  }, [activeModule, categoryId]);
 
-  const visibleVideos = useMemo(() => {
-    let list = view === 'continue' ? continueVideos : view === 'saved' ? savedVideos : allVideos;
-    const q = query.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
+  const searchQuery = query.trim().toLowerCase();
+  const searchResults = useMemo(() => {
+    if (!searchQuery) return [];
+    return scopedAll
+      .filter(
         (video) =>
-          video.title.toLowerCase().includes(q) ||
-          (video.description ?? '').toLowerCase().includes(q) ||
-          video.tags.some((tag) => tag.toLowerCase().includes(q)),
-      );
-    }
-    if (subtest) list = list.filter((video) => video.subtestCode === subtest);
-    if (categoryId) list = list.filter((video) => video.categoryIds.includes(categoryId));
-    if (language !== 'all') list = list.filter(matchesLanguage);
-    const sorted = [...list];
-    if (sort === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title));
-    else if (sort === 'duration') sorted.sort((a, b) => a.durationSeconds - b.durationSeconds);
-    else if (sort === 'popular') sorted.sort((a, b) => b.viewCount - a.viewCount);
-    else sorted.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
-    return sorted;
-  }, [allVideos, categoryId, continueVideos, language, matchesLanguage, query, savedVideos, sort, subtest, view]);
+          video.title.toLowerCase().includes(searchQuery) ||
+          (video.description ?? '').toLowerCase().includes(searchQuery) ||
+          video.tags.some((tag) => tag.toLowerCase().includes(searchQuery)),
+      )
+      .sort(newestFirst);
+  }, [scopedAll, searchQuery]);
+
+  const goToRoot = useCallback(() => {
+    setModuleKey(null);
+    setCategoryId(null);
+  }, []);
+
+  const switchView = useCallback((next: LibraryView) => {
+    setView(next);
+    setQuery('');
+    setModuleKey(null);
+    setCategoryId(null);
+  }, []);
 
   const heroHighlights = [
     { icon: PlayCircle, label: 'Library', value: `${scopedAll.length} videos` },
     { icon: Clock, label: 'In progress', value: `${continueVideos.length} to resume` },
     { icon: BookOpenCheck, label: 'Watch on', value: 'Desktop & mobile app' },
   ];
+
+  const grid = (videos: VideoSummary[]) => (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {videos.map((video, index) => (
+        <MotionItem key={video.id} delayIndex={index}>
+          <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
+        </MotionItem>
+      ))}
+    </div>
+  );
+
+  const emptyCard = (title: string, hint: string, reset?: () => void) => (
+    <Card className="border-dashed border-border p-8 text-center shadow-sm">
+      <p className="text-sm font-semibold text-navy">{title}</p>
+      <p className="mt-2 text-sm text-muted">{hint}</p>
+      {reset && (
+        <button
+          type="button"
+          onClick={reset}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:border-primary hover:text-primary"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Back to library
+        </button>
+      )}
+    </Card>
+  );
+
+  function renderBody() {
+    if (loading) {
+      return (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-40 rounded-2xl" />
+          ))}
+        </div>
+      );
+    }
+    if (!home || allVideos.length === 0) {
+      return emptyCard('No videos published yet.', 'New video lessons will appear here as soon as they are released.');
+    }
+
+    // Search overrides the drill-down.
+    if (searchQuery) {
+      return (
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Search"
+            title={`${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`}
+            description="Matching your search across every subtest."
+            className="mb-4"
+          />
+          {searchResults.length === 0
+            ? emptyCard('No videos match your search.', 'Try a different keyword or clear the search box.', () => setQuery(''))
+            : grid(searchResults)}
+        </section>
+      );
+    }
+
+    if (view === 'continue') {
+      return (
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Continue watching"
+            title="Pick up where you stopped"
+            description="Resume at the exact second you left — progress syncs across your devices."
+            className="mb-4"
+          />
+          {continueVideos.length === 0
+            ? emptyCard('Nothing in progress.', 'Start a lesson and it will appear here to resume.', () => switchView('browse'))
+            : grid(continueVideos)}
+        </section>
+      );
+    }
+
+    if (view === 'saved') {
+      return (
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Saved"
+            title="Your saved videos"
+            description="Everything you have bookmarked, in one place."
+            className="mb-4"
+          />
+          {savedVideos.length === 0
+            ? emptyCard('No saved videos yet.', 'Tap the heart on any video to save it for later.', () => switchView('browse'))
+            : grid(savedVideos)}
+        </section>
+      );
+    }
+
+    // ── Drill-down: collection videos (level 3) ─────────────────────────────
+    if (activeModule && activeCategory) {
+      return (
+        <section className="space-y-5">
+          <Breadcrumb
+            module={activeModule.meta}
+            collection={subTitleOf(activeCategory.title)}
+            onRoot={goToRoot}
+            onModule={() => setCategoryId(null)}
+          />
+          {activeCategory.videos.length === 0
+            ? emptyCard('No videos in this collection.', 'Try another language or collection.', goToRoot)
+            : grid([...activeCategory.videos].sort(newestFirst))}
+        </section>
+      );
+    }
+
+    // ── Drill-down: a module's collections (level 2) ────────────────────────
+    if (activeModule) {
+      const Icon = activeModule.meta.icon;
+      return (
+        <section className="space-y-5">
+          <Breadcrumb module={activeModule.meta} onRoot={goToRoot} />
+          <div className="flex items-center gap-3">
+            <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${activeModule.meta.iconWrap}`}>
+              <Icon className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-2xl font-bold text-navy">{activeModule.meta.label}</h2>
+              <p className="text-xs text-muted">
+                {activeModule.categories.length} collection{activeModule.categories.length === 1 ? '' : 's'} ·{' '}
+                {activeModule.videoCount} video{activeModule.videoCount === 1 ? '' : 's'}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activeModule.categories.map((category, index) => (
+              <MotionItem key={category.id} delayIndex={index}>
+                <button
+                  type="button"
+                  onClick={() => setCategoryId(category.id)}
+                  className={`group flex w-full items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-5 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-clinical ${activeModule.meta.hoverBorder}`}
+                >
+                  <span className="flex items-center gap-4 min-w-0">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${activeModule.meta.iconWrap}`}>
+                      <FolderClosed className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-navy">{subTitleOf(category.title)}</span>
+                      <span className="text-xs text-muted">
+                        {category.videos.length} video{category.videos.length === 1 ? '' : 's'}
+                      </span>
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className={`h-5 w-5 shrink-0 text-muted transition-transform group-hover:translate-x-1 ${activeModule.meta.accentText}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </MotionItem>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // ── Drill-down: the four subtest cards (level 1 — landing) ──────────────
+    return (
+      <section className="space-y-5">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Browse by subtest"
+          title="Choose a subtest to start"
+          description="Open a subtest to see its video collections, then pick a collection to watch."
+          className="mb-1"
+        />
+        {modules.length === 0 ? (
+          emptyCard('No videos for this language.', 'Switch the language filter to see more.', () => setLanguage('all'))
+        ) : (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {modules.map((mod, index) => {
+              const Icon = mod.meta.icon;
+              return (
+                <MotionItem key={mod.meta.key} delayIndex={index}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModuleKey(mod.meta.key);
+                      setCategoryId(null);
+                    }}
+                    className={`group relative flex h-full w-full flex-col overflow-hidden rounded-3xl border border-border bg-gradient-to-br ${mod.meta.gradient} p-6 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:shadow-clinical ${mod.meta.hoverBorder}`}
+                  >
+                    <Icon
+                      className="pointer-events-none absolute -bottom-6 -right-4 h-32 w-32 opacity-[0.06]"
+                      aria-hidden="true"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className={`flex h-14 w-14 items-center justify-center rounded-2xl ${mod.meta.iconWrap}`}>
+                        <Icon className="h-7 w-7" aria-hidden="true" />
+                      </span>
+                      <ChevronRight
+                        className={`h-6 w-6 text-muted transition-transform group-hover:translate-x-1 ${mod.meta.accentText}`}
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <h3 className="mt-6 text-2xl font-bold text-navy">{mod.meta.label}</h3>
+                    <p className="mt-1 text-sm text-muted">
+                      {mod.categories.length} collection{mod.categories.length === 1 ? '' : 's'} ·{' '}
+                      {mod.videoCount} video{mod.videoCount === 1 ? '' : 's'}
+                    </p>
+                  </button>
+                </MotionItem>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <LearnerDashboardShell>
@@ -229,245 +478,115 @@ export default function VideoLibraryPage() {
 
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
-        <Card className="p-5 shadow-sm">
-          <LearnerSurfaceSectionHeader
-            eyebrow="Find a video"
-            title="Search and filter the library"
-            description="Filter by subtest or category, search titles and tags, and sort the results."
-            className="mb-4"
-          />
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search videos…"
-                  aria-label="Search videos"
-                  className="rounded-lg border border-border bg-surface py-3 pl-9 pr-4 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                />
-              </label>
-              <select
-                value={subtest}
-                onChange={(event) => setSubtest(event.target.value)}
-                aria-label="Filter by subtest"
-                className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-              >
-                <option value="">All subtests</option>
-                {SUBTEST_OPTIONS.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <select
-                value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
-                aria-label="Filter by category"
-                className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-              >
-                <option value="">All categories</option>
-                {(home?.categories ?? []).map((category) => (
-                  <option key={category.id} value={category.id}>{category.title}</option>
-                ))}
-              </select>
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as SortKey)}
-                aria-label="Sort videos"
-                className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-              >
-                <option value="newest">Newest first</option>
-                <option value="title">A – Z</option>
-                <option value="duration">Shortest first</option>
-                <option value="popular">Most watched</option>
-              </select>
+        {/* Slim toolbar: search · language · continue/saved */}
+        <Card className="p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <label className="relative w-full lg:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search all videos…"
+                aria-label="Search videos"
+                className="w-full rounded-lg border border-border bg-surface py-2.5 pl-9 pr-4 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              />
+            </label>
 
+            <div className="flex flex-wrap items-center gap-3">
               {hasLanguageTags && (
                 <div
                   role="group"
                   aria-label="Filter by instruction language"
                   className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted"
                 >
-                  {LANGUAGE_TABS.map(([key, label]) => {
-                    const count = key === 'en' ? languageCounts.en : key === 'ar' ? languageCounts.ar : null;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setLanguage(key)}
-                        aria-pressed={language === key}
-                        className={`px-3 py-3 transition-colors ${language === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
-                      >
-                        {label}
-                        {count !== null ? ` (${count})` : ''}
-                      </button>
-                    );
-                  })}
+                  {LANGUAGE_TABS.map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setLanguage(key);
+                        setModuleKey(null);
+                        setCategoryId(null);
+                      }}
+                      aria-pressed={language === key}
+                      className={`px-3 py-2 transition-colors ${language === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted">
-              {([
-                ['all', `All (${scopedAll.length})`],
-                ['continue', `Continue (${continueVideos.length})`],
-                ['saved', `Saved (${savedVideos.length})`],
-              ] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setView(key)}
-                  className={`px-3 py-2 transition-colors ${view === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
-                >
-                  {label}
-                </button>
-              ))}
+              <div className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted">
+                {([
+                  ['browse', 'Browse'],
+                  ['continue', `Continue (${continueVideos.length})`],
+                  ['saved', `Saved (${savedVideos.length})`],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => switchView(key)}
+                    aria-pressed={view === key && !searchQuery}
+                    className={`px-3 py-2 transition-colors ${view === key && !searchQuery ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </Card>
 
-        {loading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} className="h-72 rounded-2xl" />
-            ))}
-          </div>
-        ) : !home || allVideos.length === 0 ? (
-          <Card className="border-dashed border-border p-8 text-center shadow-sm">
-            <p className="text-sm font-semibold text-navy">No videos published yet.</p>
-            <p className="mt-2 text-sm text-muted">New video lessons will appear here as soon as they are released.</p>
-          </Card>
-        ) : filtersActive ? (
-          visibleVideos.length === 0 ? (
-            <Card className="border-dashed border-border p-8 text-center shadow-sm">
-              <p className="text-sm font-semibold text-navy">No videos match this view.</p>
-              <p className="mt-2 text-sm text-muted">Try clearing the search or one of the filters.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery('');
-                  setSubtest('');
-                  setCategoryId('');
-                  setSort('newest');
-                  setView('all');
-                  setLanguage('all');
-                }}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:border-primary hover:text-primary"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset filters
-              </button>
-            </Card>
-          ) : (
-            <section>
-              <LearnerSurfaceSectionHeader
-                eyebrow={view === 'continue' ? 'Continue watching' : view === 'saved' ? 'Saved videos' : 'Results'}
-                title={view === 'continue' ? 'Pick up where you stopped' : view === 'saved' ? 'Your saved videos' : `${visibleVideos.length} videos`}
-                description="Progress and completion sync across your devices."
-                className="mb-4"
-              />
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {visibleVideos.map((video, index) => (
-                  <MotionItem key={video.id} delayIndex={index}>
-                    <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
-                  </MotionItem>
-                ))}
-              </div>
-            </section>
-          )
-        ) : (
-          <div className="space-y-8">
-            {continueVideos.length > 0 && (
-              <section>
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Continue watching"
-                  title="Pick up where you stopped"
-                  description="Your most recent videos, ready to resume at the exact second you left."
-                  className="mb-4"
-                />
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {continueVideos.slice(0, 6).map((video, index) => (
-                    <MotionItem key={video.id} delayIndex={index}>
-                      <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
-                    </MotionItem>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {featuredVideos.length > 0 && (
-              <section>
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Featured"
-                  title="Hand-picked by Dr Hesham"
-                  description="Start here — the highest-impact lessons in the library."
-                  className="mb-4"
-                />
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {featuredVideos.map((video, index) => (
-                    <MotionItem key={video.id} delayIndex={index}>
-                      <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
-                    </MotionItem>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {moduleGroups.map((group) => {
-              const ModuleIcon = group.meta.icon;
-              return (
-                <section key={group.key} className="space-y-6">
-                  <div className="flex items-center gap-3 border-b border-border pb-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-lavender/40 text-primary dark:bg-violet-900/40">
-                      <ModuleIcon className="h-5 w-5" aria-hidden="true" />
-                    </span>
-                    <div>
-                      <h2 className="text-xl font-bold text-navy">{group.meta.label}</h2>
-                      <p className="text-xs text-muted">
-                        {group.count} video{group.count === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-8 md:pl-2">
-                    {group.categories.map((category) => (
-                      <div key={category.id}>
-                        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
-                          {subTitleOf(category.title)}
-                        </h3>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                          {category.videos.map((video, index) => (
-                            <MotionItem key={video.id} delayIndex={index}>
-                              <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
-                            </MotionItem>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-
-            {home.uncategorized.length > 0 && (
-              <section>
-                <LearnerSurfaceSectionHeader
-                  eyebrow="More videos"
-                  title="Everything else"
-                  className="mb-4"
-                />
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {home.uncategorized.map((video, index) => (
-                    <MotionItem key={video.id} delayIndex={index}>
-                      <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
-                    </MotionItem>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
+        {renderBody()}
       </div>
     </LearnerDashboardShell>
+  );
+}
+
+function Breadcrumb({
+  module,
+  collection,
+  onRoot,
+  onModule,
+}: {
+  module: ModuleTheme;
+  collection?: string;
+  onRoot: () => void;
+  onModule?: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onRoot}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        All subtests
+      </button>
+      <nav className="flex flex-wrap items-center gap-1.5 text-sm">
+        <button type="button" onClick={onRoot} className="font-medium text-muted transition-colors hover:text-primary">
+          Videos
+        </button>
+        <ChevronRight className="h-4 w-4 text-muted/60" aria-hidden="true" />
+        {collection ? (
+          <>
+            <button
+              type="button"
+              onClick={onModule}
+              className="font-medium text-muted transition-colors hover:text-primary"
+            >
+              {module.label}
+            </button>
+            <ChevronRight className="h-4 w-4 text-muted/60" aria-hidden="true" />
+            <span className="font-semibold text-navy">{collection}</span>
+          </>
+        ) : (
+          <span className="font-semibold text-navy">{module.label}</span>
+        )}
+      </nav>
+    </div>
   );
 }
