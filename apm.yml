@@ -1,0 +1,19 @@
+# AI Package Manifest (APM)
+# https://github.com/microsoft/apm
+name: oet-prep
+version: 0.1.0
+description: OET Prep Platform — AI-ready Next.js + ASP.NET Core application
+author: OET Prep
+license: MIT
+
+dependencies:
+  apm: []
+  mcp: []
+
+instructions:
+  - AGENTS.md
+  - CLAUDE.md
+  - .github/copilot-instructions.md
+  - .github/instructions/*.instructions.md
+
+scripts: {}
