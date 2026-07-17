@@ -15,8 +15,9 @@ Standing owner directive for **every** development/debugging task. Overrides any
 
 1. Do the task properly (correctness/root-cause still matter).
 2. Run ONE lightweight, targeted check (touched-area typecheck/build, or the single relevant test, or a quick repro). **No full-length, multi-suite test marathons.** Don't block on flaky CI (QA Smoke is chronically red — ignore it).
-3. Commit → push to `main` → deploy to production (`gh pr merge <#> --squash --admin --delete-branch`, or push `main`; pushing `main` triggers the blue/green prod deploy). Stage explicit paths, never `git add -A`. Never commit secrets/`.env*`.
-4. Report what shipped in 1–2 lines and STOP. **The owner verifies on live production** and reports back any issue. Don't linger on CI or re-test.
+3. **Fast-feedback rule:** never run lengthy builds, heavy CI flows, or full validation suites unless the user explicitly asks. Prefer small quick checks, focus on coding, and trust the user to report any errors.
+4. Commit → push to `main` → deploy to production (`gh pr merge <#> --squash --admin --delete-branch`, or push `main`; pushing `main` triggers the blue/green prod deploy). Stage explicit paths, never `git add -A`. Never commit secrets/`.env*`.
+5. Report what shipped in 1–2 lines and STOP. **The owner verifies on live production** and reports back any issue. Don't linger on CI or re-test.
 
 Only skip the auto-push if the user explicitly says "don't push" for that task.
 
