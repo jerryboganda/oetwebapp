@@ -345,10 +345,22 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the app_relaunch command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-app-relaunch",
+          "markdownDescription": "Enables the app_relaunch command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_dropped_file_info command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-dropped-file-info",
           "markdownDescription": "Enables the get_dropped_file_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the hard_reload command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-hard-reload",
+          "markdownDescription": "Enables the hard_reload command without any pre-configured scope."
         },
         {
           "description": "Enables the offline_cache_clear command without any pre-configured scope.",
@@ -417,6 +429,12 @@
           "markdownDescription": "Enables the secret_status command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_capture_protection command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-capture-protection",
+          "markdownDescription": "Enables the set_capture_protection command without any pre-configured scope."
+        },
+        {
           "description": "Enables the show_notification command without any pre-configured scope.",
           "type": "string",
           "const": "allow-show-notification",
@@ -453,10 +471,34 @@
           "markdownDescription": "Enables the speaking_audio_stop command without any pre-configured scope."
         },
         {
+          "description": "Enables the updater_check command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-updater-check",
+          "markdownDescription": "Enables the updater_check command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the updater_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-updater-install",
+          "markdownDescription": "Enables the updater_install command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the app_relaunch command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-app-relaunch",
+          "markdownDescription": "Denies the app_relaunch command without any pre-configured scope."
+        },
+        {
           "description": "Denies the get_dropped_file_info command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-dropped-file-info",
           "markdownDescription": "Denies the get_dropped_file_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the hard_reload command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-hard-reload",
+          "markdownDescription": "Denies the hard_reload command without any pre-configured scope."
         },
         {
           "description": "Denies the offline_cache_clear command without any pre-configured scope.",
@@ -525,6 +567,12 @@
           "markdownDescription": "Denies the secret_status command without any pre-configured scope."
         },
         {
+          "description": "Denies the set_capture_protection command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-capture-protection",
+          "markdownDescription": "Denies the set_capture_protection command without any pre-configured scope."
+        },
+        {
           "description": "Denies the show_notification command without any pre-configured scope.",
           "type": "string",
           "const": "deny-show-notification",
@@ -559,6 +607,18 @@
           "type": "string",
           "const": "deny-speaking-audio-stop",
           "markdownDescription": "Denies the speaking_audio_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the updater_check command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-updater-check",
+          "markdownDescription": "Denies the updater_check command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the updater_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-updater-install",
+          "markdownDescription": "Denies the updater_install command without any pre-configured scope."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",

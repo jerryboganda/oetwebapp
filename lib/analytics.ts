@@ -314,6 +314,7 @@ const TRACKED_EVENTS = [
   'page_viewed',
   // Materials library
   'materials_page_viewed',
+  'materials_searched',
   'material_file_downloaded',
 ] as const;
 
