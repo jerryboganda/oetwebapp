@@ -1,0 +1,37 @@
+name: APM Audit
+
+# Lightweight APM validation. Installs the Agent Package Manager CLI and verifies
+# the apm.yml manifest against apm.lock.yaml. Per project rule: prefer small quick
+# checks; avoid heavy builds or lengthy CI flows.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apm.yml"
+      - "apm.lock.yaml"
+      - ".github/workflows/apm-audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apm.yml"
+      - "apm.lock.yaml"
+      - ".github/workflows/apm-audit.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apm-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apm-audit:
+    name: APM manifest audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and verify APM manifest
+        uses: microsoft/apm-action@v1.10.0
