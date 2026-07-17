@@ -7,10 +7,10 @@ Use it alongside [`AGENTS.md`](../AGENTS.md) and [`README.md`](../README.md) whe
 
 The repo spans four surfaces:
 
-- Web: Next.js 15 frontend
+- Web: Next.js 16 frontend
 - API: ASP.NET Core 10 backend
-- Desktop: Electron shell
-- Mobile: Capacitor shell
+- Desktop: Tauri 2 remote-only thin client
+- Mobile: Capacitor 7 shell
 
 The repo works best when agents stay narrow, respect shared contracts, and verify changes against the real local baseline.
 
@@ -22,7 +22,7 @@ When you need repo context, read in this order:
 2. `README.md`
 3. `docs/agent-operating-model.md`
 4. Relevant domain docs such as `docs/SCORING.md`, `docs/RULEBOOKS.md`, and `docs/OET-RESULT-CARD-SPEC.md`
-5. Plan docs in `docs/plan/` and `docs/superpowers/plans/`
+5. Plan docs in `docs/superpowers/plans/`
 
 Do not create parallel instruction surfaces unless the task truly needs them.
 
@@ -70,14 +70,7 @@ If a task must touch one of these, call it out explicitly and verify the downstr
 - Keep the repo-local Codex config small and conservative.
 - Prefer docs and config before code when the goal is to establish a new operating model.
 
-## Validation Ladder
-
-Use the lightest checks first, then expand:
-
-1. Parse the config or schema you created.
-2. Check that links and file paths are correct.
-3. Verify local truth against the backend launch settings and app settings.
-4. Run lint, type-check, unit tests, and build checks when code changed.
+## Validation Ladder\n\nUse the lightest host checks first, then expand only if risk demands it:\n\n1. Parse the config or schema you created.\n2. Check that links and file paths are correct.\n3. Verify local truth against the backend launch settings and app settings.\n4. Run the smallest relevant command from pnpm exec tsc --noEmit, pnpm run lint, pnpm test, or pnpm run backend:build/ackend:test when code changed.\n5. Avoid heavy Docker builds, full CI suites, and VPS validation unless the user explicitly asks.
 5. Run E2E checks only when the change can affect runtime flows.
 
 ## Guardrails
