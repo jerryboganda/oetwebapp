@@ -92,7 +92,7 @@ export interface PushSettings {
   apnsTeamId: string;
   apnsBundleId: string;
   apnsAuthKey: string;
-  fcmServerKey: string;
+  fcmServiceAccountJson: string;
   fcmProjectId: string;
   vapidSubject: string;
   vapidPublicKey: string;
@@ -574,7 +574,7 @@ const PUSH_FIELDS: FieldDef<PushSettings>[] = [
   { key: 'apnsTeamId', label: 'APNs Team ID' },
   { key: 'apnsBundleId', label: 'APNs Bundle ID', hint: 'iOS app bundle identifier.' },
   { key: 'apnsAuthKey', label: 'APNs Auth Key (.p8 contents)', secret: true },
-  { key: 'fcmServerKey', label: 'FCM Server Key', secret: true },
+  { key: 'fcmServiceAccountJson', label: 'FCM Service Account JSON', secret: true, hint: 'Full JSON key from Firebase Console → Project Settings → Service Accounts → Generate new private key. FCM’s legacy server-key API is retired; sending now requires this.' },
   { key: 'fcmProjectId', label: 'FCM Project ID' },
 ];
 
@@ -994,7 +994,7 @@ function emptyResponse(): RuntimeSettingsResponse {
       apnsTeamId: '',
       apnsBundleId: '',
       apnsAuthKey: '',
-      fcmServerKey: '',
+      fcmServiceAccountJson: '',
       fcmProjectId: '',
       vapidSubject: '',
       vapidPublicKey: '',
@@ -1370,7 +1370,7 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
     push: {
       ...data.push,
       apnsAuthKey: maskUnexpectedSecret(data.push.apnsAuthKey),
-      fcmServerKey: maskUnexpectedSecret(data.push.fcmServerKey),
+      fcmServiceAccountJson: maskUnexpectedSecret(data.push.fcmServiceAccountJson),
       vapidPrivateKey: maskUnexpectedSecret(data.push.vapidPrivateKey),
     },
     zoom: {

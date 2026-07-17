@@ -157,6 +157,15 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
+// No backplane (AddStackExchangeRedis/AddAzureSignalR) is configured — every
+// Clients.Group(...)/Clients.User(...) send only reaches connections held by THIS
+// process. That's safe only because scripts/deploy/rollout-release.sh and
+// auto-deploy-ghcr.sh always cut over to a single active blue/green upstream
+// (api-bluegreen.conf.template selects exactly one of learner-api-blue/-green at a
+// time — blue and green are never both live simultaneously). If that ever changes to
+// true rolling/canary traffic-splitting, or a replica count >1 is added behind a real
+// load balancer, group/user sends would silently stop reaching some connections with
+// no exception or log — add a Redis backplane before making that change.
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize =
@@ -267,6 +276,23 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter($"write-{userId}", _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = perUserWritePermitLimit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+    // Caps SignalR hub negotiate/connect frequency per account. Unlike ordinary API
+    // requests, MapHub has no other rate limiting at all — a compromised or buggy
+    // client stuck in a reconnect loop could otherwise hammer the negotiate endpoint
+    // unthrottled. 30/min comfortably covers legitimate reconnect storms (flaky
+    // network, several tabs/devices reconnecting after a deploy cutover).
+    options.AddPolicy("HubConnect", httpContext =>
+    {
+        var userId = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous"
+            : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"hub-connect-{userId}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
@@ -2301,16 +2327,18 @@ app.MapMediaEndpoints();
 // ── Device Pairing (H13 scaffold) ──
 app.MapDevicePairingEndpoints();
 
-app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
-app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
-app.MapHub<OetLearner.Api.Hubs.AiAssistantHub>("/v1/ai-assistant/hub").RequireAuthorization();
-app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization();
-app.MapHub<OetLearner.Api.Hubs.SpeakingLiveRoomHub>("/v1/speaking/live-rooms/hub").RequireAuthorization();
+// "HubConnect" caps negotiate/connect frequency per account — SignalR hubs have no
+// other rate limiting, so nothing else throttles a reconnect-loop client.
+app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization().RequireRateLimiting("HubConnect");
+app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization().RequireRateLimiting("HubConnect");
+app.MapHub<OetLearner.Api.Hubs.AiAssistantHub>("/v1/ai-assistant/hub").RequireAuthorization().RequireRateLimiting("HubConnect");
+app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization().RequireRateLimiting("HubConnect");
+app.MapHub<OetLearner.Api.Hubs.SpeakingLiveRoomHub>("/v1/speaking/live-rooms/hub").RequireAuthorization().RequireRateLimiting("HubConnect");
 // Writing Module V2 hubs — submission grade events, coach hint streaming,
 // today/plan + pathway recalculate broadcasts. See Hubs/Writing*Hub.cs.
-app.MapHub<OetLearner.Api.Hubs.WritingSubmissionHub>("/hubs/writing-submissions").RequireAuthorization("LearnerOnly");
-app.MapHub<OetLearner.Api.Hubs.WritingCoachHub>("/hubs/writing-coach").RequireAuthorization("LearnerOnly");
-app.MapHub<OetLearner.Api.Hubs.WritingTodayHub>("/hubs/writing-today").RequireAuthorization("LearnerOnly");
+app.MapHub<OetLearner.Api.Hubs.WritingSubmissionHub>("/hubs/writing-submissions").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
+app.MapHub<OetLearner.Api.Hubs.WritingCoachHub>("/hubs/writing-coach").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
+app.MapHub<OetLearner.Api.Hubs.WritingTodayHub>("/hubs/writing-today").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

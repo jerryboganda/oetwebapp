@@ -73,13 +73,21 @@ export async function createAssistantConnection(
 ): Promise<HubConnection> {
   const {
     HubConnectionBuilder,
+    HttpTransportType,
     LogLevel,
   } = await import('@microsoft/signalr');
   const hubUrl = resolveHubUrl();
 
+  // `/api/backend` is a Next route handler that proxies HTTP but cannot perform a
+  // SignalR WebSocket upgrade — pinning long polling here (mirroring the
+  // notification hub) skips one guaranteed-to-fail WebSocket handshake attempt on
+  // every connect and reconnect.
+  const transport = hubUrl.startsWith('/') ? HttpTransportType.LongPolling : undefined;
+
   const connection = new HubConnectionBuilder()
     .withUrl(hubUrl, {
       accessTokenFactory: () => token,
+      ...(transport !== undefined ? { transport } : {}),
     })
     .withAutomaticReconnect({
       nextRetryDelayInMilliseconds(retryContext) {

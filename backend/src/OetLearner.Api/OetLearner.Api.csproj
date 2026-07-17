@@ -19,6 +19,14 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
     <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.5" />
+    <!-- OAuth2 token minting (GoogleCredential/ServiceAccountCredential) for FCM's
+         HTTP v1 send API — Google retired the legacy static server-key API in 2024,
+         so sending now requires a bearer token derived from a Firebase service
+         account. Deliberately just the auth library, not the full FirebaseAdmin SDK
+         (which bundles Firestore/Auth/RTDB clients this app doesn't use and manages
+         its own global FirebaseApp registry that doesn't fit the hot-reloadable
+         runtime-settings model used here). -->
+    <PackageReference Include="Google.Apis.Auth" Version="1.*" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">

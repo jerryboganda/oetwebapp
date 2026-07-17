@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Net.Sockets;
+using Google.Apis.Auth.OAuth2;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Configuration;
@@ -269,7 +270,7 @@ public static class AdminRuntimeSettingsEndpoints
                 apnsTeamId = settings.Push.ApnsTeamId,
                 apnsBundleId = settings.Push.ApnsBundleId,
                 apnsAuthKey = MaskPlainSecret(settings.Push.ApnsAuthKey),
-                fcmServerKey = MaskPlainSecret(settings.Push.FcmServerKey),
+                fcmServiceAccountJson = MaskPlainSecret(settings.Push.FcmServiceAccountJson),
                 fcmProjectId = settings.Push.FcmProjectId,
                 vapidSubject = settings.Push.VapidSubject,
                 vapidPublicKey = settings.Push.VapidPublicKey,
@@ -683,7 +684,7 @@ public static class AdminRuntimeSettingsEndpoints
                 apnsTeamId = r.ApnsTeamId,
                 apnsBundleId = r.ApnsBundleId,
                 apnsAuthKey = MaskSecret(r.ApnsAuthKeyEncrypted),
-                fcmServerKey = MaskSecret(r.FcmServerKeyEncrypted),
+                fcmServiceAccountJson = MaskSecret(r.FcmServiceAccountJsonEncrypted),
                 fcmProjectId = r.FcmProjectId,
                 vapidSubject = r.VapidSubject,
                 vapidPublicKey = r.VapidPublicKey,
@@ -882,7 +883,7 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.ApnsTeamId, v => row.ApnsTeamId = v, "push.apnsTeamId", changed)) { }
         if (TrySetPlain(d.ApnsBundleId, v => row.ApnsBundleId = v, "push.apnsBundleId", changed)) { }
         if (TrySetSecret(d.ApnsAuthKey, p, v => row.ApnsAuthKeyEncrypted = v, "push.apnsAuthKey", changed)) { }
-        if (TrySetSecret(d.FcmServerKey, p, v => row.FcmServerKeyEncrypted = v, "push.fcmServerKey", changed)) { }
+        if (TrySetSecret(d.FcmServiceAccountJson, p, v => row.FcmServiceAccountJsonEncrypted = v, "push.fcmServiceAccountJson", changed)) { }
         if (TrySetPlain(d.FcmProjectId, v => row.FcmProjectId = v, "push.fcmProjectId", changed)) { }
         if (TrySetPlain(d.VapidSubject, v => row.VapidSubject = v, "push.vapidSubject", changed)) { }
         if (TrySetPlain(d.VapidPublicKey, v => row.VapidPublicKey = v, "push.vapidPublicKey", changed)) { }
@@ -1686,11 +1687,7 @@ public static class AdminRuntimeSettingsEndpoints
                        || HasAll(settings.OAuth.FacebookAppId, settings.OAuth.FacebookAppSecret)
                 ? Ok(sectionId, "At least one OAuth provider is configured. No sign-in was attempted.", testedAt)
                 : Failed(sectionId, "Configure Google or Facebook OAuth credentials. Apple fields are stored for future use but are not an active sign-in provider yet.", testedAt),
-            "push" => HasAll(settings.Push.VapidSubject, settings.Push.VapidPublicKey, settings.Push.VapidPrivateKey)
-                      || HasAll(settings.Push.FcmProjectId, settings.Push.FcmServerKey)
-                      || HasAll(settings.Push.ApnsBundleId, settings.Push.ApnsTeamId, settings.Push.ApnsKeyId, settings.Push.ApnsAuthKey)
-                ? Ok(sectionId, "At least one push provider is configured. No notification was sent.", testedAt)
-                : Failed(sectionId, "Configure browser VAPID, FCM, or APNs credentials before enabling push.", testedAt),
+            "push" => await TestPushAsync(settings.Push, sectionId, testedAt, ct),
             "uploadscanner" => await TestUploadScannerAsync(settings.UploadScanner, env, scannerOptions, sectionId, testedAt, ct),
             "zoom" => settings.Zoom.Enabled
                       && HasAll(settings.Zoom.AccountId, settings.Zoom.ClientId, settings.Zoom.ClientSecret, settings.Zoom.HostUserId)
@@ -1775,6 +1772,54 @@ public static class AdminRuntimeSettingsEndpoints
                 : Ok(sectionId, "Web push is disabled. Enable it (with VAPID keys) to allow browser notifications.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
+    }
+
+    /// <summary>
+    /// Live, non-destructive push-config probe. For FCM, actually mints an OAuth2
+    /// access token from the service account JSON against Google's token endpoint —
+    /// this proves the JSON is well-formed AND the service account authenticates,
+    /// not just that fields are non-empty. No push notification is sent.
+    /// </summary>
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestPushAsync(
+        PushSettings push, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        var channels = new List<string>();
+
+        if (HasAll(push.VapidSubject, push.VapidPublicKey, push.VapidPrivateKey))
+        {
+            channels.Add("browser (VAPID)");
+        }
+
+        if (push.IsApnsConfigured)
+        {
+            channels.Add("iOS (APNs)");
+        }
+
+        if (push.IsFcmConfigured)
+        {
+            try
+            {
+                var credential = GoogleCredential.FromJson(push.FcmServiceAccountJson)
+                    .CreateScoped("https://www.googleapis.com/auth/firebase.messaging");
+                // GoogleCredential itself doesn't expose ITokenAccess — the underlying
+                // wrapped credential (ServiceAccountCredential, for a service-account
+                // JSON key) does.
+                if (credential.UnderlyingCredential is not ITokenAccess tokenAccess)
+                {
+                    return Failed(sectionId, "FCM service account JSON did not produce a token-capable credential.", testedAt);
+                }
+                await tokenAccess.GetAccessTokenForRequestAsync(cancellationToken: ct);
+                channels.Add("Android (FCM)");
+            }
+            catch (Exception ex)
+            {
+                return Failed(sectionId, $"FCM service account did not authenticate: {ex.Message}", testedAt);
+            }
+        }
+
+        return channels.Count > 0
+            ? Ok(sectionId, $"Configured push channels: {string.Join(", ", channels)}. No notification was sent.", testedAt)
+            : Failed(sectionId, "Configure browser VAPID keys, an FCM service account JSON + project id, or APNs credentials before enabling push.", testedAt);
     }
 
     // ── Live, non-destructive payment/Soketi probes (no money moves) ───────
@@ -2402,7 +2447,7 @@ public sealed class RuntimeSettingsPushUpdate
     public string? ApnsTeamId { get; set; }
     public string? ApnsBundleId { get; set; }
     public string? ApnsAuthKey { get; set; }
-    public string? FcmServerKey { get; set; }
+    public string? FcmServiceAccountJson { get; set; }
     public string? FcmProjectId { get; set; }
     public string? VapidSubject { get; set; }
     public string? VapidPublicKey { get; set; }

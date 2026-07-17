@@ -386,9 +386,11 @@ type NotificationBellButtonProps = ComponentPropsWithoutRef<'button'> & { open?:
 
 const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellButtonProps>(
   function NotificationBellButton({ open, className, ...buttonProps }, ref) {
-    // Only `unreadCount` is needed here — subscribe to state-only context
-    // so the bell button skips re-renders caused by action reference changes.
-    const { unreadCount } = useNotificationState();
+    // Only `unreadCount`/`connectionStatus` are needed here — subscribe to
+    // state-only context so the bell button skips re-renders caused by action
+    // reference changes.
+    const { unreadCount, connectionStatus } = useNotificationState();
+    const isDegraded = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
     return (
       <button
         ref={ref}
@@ -397,7 +399,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
           'relative inline-flex h-11 w-11 items-center justify-center rounded-lg p-2.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           className,
         )}
-        aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+        aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}${isDegraded ? ' — live updates paused' : ''}`}
         aria-expanded={open ?? buttonProps['aria-expanded']}
         {...buttonProps}
       >
@@ -406,6 +408,15 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
           <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 py-px text-[10px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
+        )}
+        {isDegraded && (
+          <span
+            className={cn(
+              'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
+              connectionStatus === 'reconnecting' ? 'bg-amber-500' : 'bg-muted/60',
+            )}
+            aria-hidden="true"
+          />
         )}
       </button>
     );

@@ -102,7 +102,7 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       apnsTeamId: 'tid',
       apnsBundleId: 'com.example',
       apnsAuthKey: '********',
-      fcmServerKey: '',
+      fcmServiceAccountJson: '',
       fcmProjectId: '',
       vapidSubject: 'mailto:support@example.com',
       vapidPublicKey: 'vapid-public',

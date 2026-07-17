@@ -1,6 +1,9 @@
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Google.Apis.Auth.OAuth2;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Settings;
 
@@ -26,10 +29,11 @@ public interface IMobilePushDispatcher
     Task SendAsync(MobilePushToken token, MobilePushPayload payload, CancellationToken cancellationToken = default);
 }
 
-public sealed class MobilePushDispatcher(HttpClient httpClient, IRuntimeSettingsProvider runtimeSettingsProvider)
+public sealed class MobilePushDispatcher(HttpClient httpClient, IRuntimeSettingsProvider runtimeSettingsProvider, IMemoryCache memoryCache)
     : IMobilePushDispatcher
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private const string FcmCredentialCacheKeyPrefix = "MobilePushDispatcher.FcmCredential:";
 
     public async Task SendAsync(MobilePushToken token, MobilePushPayload payload, CancellationToken cancellationToken = default)
     {
@@ -51,26 +55,87 @@ public sealed class MobilePushDispatcher(HttpClient httpClient, IRuntimeSettings
         throw new MobilePushDispatchException(null, $"Unsupported native push platform '{token.Platform}'.");
     }
 
+    /// <summary>
+    /// Sends via FCM's HTTP v1 API. Google retired the legacy server-key API
+    /// (<c>fcm.googleapis.com/fcm/send</c>) in June 2024 — v1 is now the only way to
+    /// send, and it authenticates with an OAuth2 bearer token minted from a Firebase
+    /// service-account key rather than a static server key.
+    /// </summary>
     private async Task SendFcmAsync(MobilePushToken token, MobilePushPayload payload, PushSettings settings, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(settings.FcmServerKey))
+        if (!settings.IsFcmConfigured)
         {
-            throw new MobilePushDispatchException(null, "FCM server key is not configured.");
+            throw new MobilePushDispatchException(null, "FCM service account / project id is not configured.");
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://fcm.googleapis.com/fcm/send");
-        request.Headers.TryAddWithoutValidation("Authorization", $"key={settings.FcmServerKey}");
+        var accessToken = await GetFcmAccessTokenAsync(settings, ct);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"https://fcm.googleapis.com/v1/projects/{Uri.EscapeDataString(settings.FcmProjectId!)}/messages:send");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Content = JsonContent(new
         {
-            to = token.Token,
-            notification = new { title = payload.Title, body = payload.Body },
-            data = ToData(payload)
+            message = new
+            {
+                token = token.Token,
+                notification = new { title = payload.Title, body = payload.Body },
+                data = ToData(payload)
+            }
         });
 
         using var response = await httpClient.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {
-            throw new MobilePushDispatchException((int)response.StatusCode, $"FCM push failed with HTTP {(int)response.StatusCode}.");
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new MobilePushDispatchException((int)response.StatusCode, $"FCM push failed with HTTP {(int)response.StatusCode}: {body}");
+        }
+    }
+
+    /// <summary>
+    /// Resolves a live OAuth2 access token for the configured Firebase service account.
+    /// The <see cref="GoogleCredential"/> instance (not just the raw token string) is
+    /// cached, keyed by a hash of the service-account JSON — <see cref="ITokenAccess.GetAccessTokenForRequestAsync"/>
+    /// already caches and refreshes the underlying bearer token internally as it nears
+    /// expiry, so reusing the same credential instance avoids re-deriving that logic here.
+    /// Hashing the JSON (rather than a fixed key) means an admin rotating the service
+    /// account in the runtime-settings UI is picked up on the next call, not after a
+    /// process restart.
+    /// </summary>
+    private async Task<string> GetFcmAccessTokenAsync(PushSettings settings, CancellationToken ct)
+    {
+        var cacheKey = FcmCredentialCacheKeyPrefix + Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(settings.FcmServiceAccountJson!)));
+
+        if (!memoryCache.TryGetValue(cacheKey, out GoogleCredential? credential) || credential is null)
+        {
+            try
+            {
+                credential = GoogleCredential.FromJson(settings.FcmServiceAccountJson)
+                    .CreateScoped("https://www.googleapis.com/auth/firebase.messaging");
+            }
+            catch (Exception ex)
+            {
+                throw new MobilePushDispatchException(null, "FCM service account JSON is malformed.", ex);
+            }
+
+            memoryCache.Set(cacheKey, credential, TimeSpan.FromHours(12));
+        }
+
+        // GoogleCredential itself doesn't expose ITokenAccess — the underlying wrapped
+        // credential (ServiceAccountCredential, for a service-account JSON key) does.
+        if (credential.UnderlyingCredential is not ITokenAccess tokenAccess)
+        {
+            throw new MobilePushDispatchException(null, "FCM service account JSON did not produce a token-capable credential.");
+        }
+
+        try
+        {
+            return await tokenAccess.GetAccessTokenForRequestAsync(cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            throw new MobilePushDispatchException(null, "Failed to obtain an FCM OAuth2 access token from the service account.", ex);
         }
     }
 

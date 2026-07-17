@@ -119,11 +119,15 @@ const MAX_TURN_SOFT_BYTES = 1_200_000;
 
 async function loadConversationHub(): Promise<ConversationHubBridge | null> {
   try {
-    const { HubConnectionBuilder, LogLevel } = await import('@microsoft/signalr');
+    const { HubConnectionBuilder, HttpTransportType, LogLevel } = await import('@microsoft/signalr');
     const { ensureFreshAccessToken } = await import('@/lib/auth-client');
     const connection = new HubConnectionBuilder()
+      // `/api/backend` is a Next route handler that proxies HTTP but cannot perform a
+      // SignalR WebSocket upgrade — pinning long polling skips one guaranteed-to-fail
+      // WebSocket handshake attempt on every connect and reconnect.
       .withUrl('/api/backend/v1/conversations/hub', {
         accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
+        transport: HttpTransportType.LongPolling,
       })
       .configureLogging(LogLevel.None)
       .withAutomaticReconnect([0, 2_000, 5_000])

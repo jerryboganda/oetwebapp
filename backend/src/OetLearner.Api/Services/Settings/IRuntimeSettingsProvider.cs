@@ -276,14 +276,27 @@ public sealed record PushSettings(
     string? ApnsTeamId,
     string? ApnsBundleId,
     string? ApnsAuthKey,
-    string? FcmServerKey,
+    /// <summary>
+    /// Full Firebase service-account JSON key. FCM's legacy server-key API was
+    /// retired by Google in 2024; sending now requires an OAuth2 token minted
+    /// from this service account against the HTTP v1 API (see MobilePushDispatcher).
+    /// </summary>
+    string? FcmServiceAccountJson,
     string? FcmProjectId,
     string? VapidSubject = null,
     string? VapidPublicKey = null,
     string? VapidPrivateKey = null,
     // ── Web push enablement (Wave 4) ───────────────────────────────
     // WebPush:Enabled master toggle. VAPID keys already live on this record.
-    bool WebPushEnabled = false);
+    bool WebPushEnabled = false)
+{
+    public bool IsFcmConfigured => !string.IsNullOrWhiteSpace(FcmServiceAccountJson) && !string.IsNullOrWhiteSpace(FcmProjectId);
+
+    public bool IsApnsConfigured => !string.IsNullOrWhiteSpace(ApnsKeyId)
+        && !string.IsNullOrWhiteSpace(ApnsTeamId)
+        && !string.IsNullOrWhiteSpace(ApnsBundleId)
+        && !string.IsNullOrWhiteSpace(ApnsAuthKey);
+}
 
 public sealed record UploadScannerSettings(
     string Provider,

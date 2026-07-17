@@ -230,6 +230,14 @@ services:
     image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-api
     restart: unless-stopped
+    # Every deploy force-recreates this router (auto-deploy-ghcr.sh/rollout-release.sh
+    # run `up -d --force-recreate`), and it proxies long-lived SignalR long-polling/WS
+    # connections (see api-bluegreen.conf.template's WS-upgrade + 300s timeouts). nginx
+    # sends a graceful SIGQUIT on stop, but Docker's ~10s default grace window is too
+    # short to let in-flight long-polling requests complete before SIGKILL severs them
+    # with no application-level close signal. 30s gives nginx's graceful shutdown a
+    # real chance to drain before the hard kill.
+    stop_grace_period: 30s
     environment:
       ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
       NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
@@ -259,6 +267,9 @@ services:
     image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-web
     restart: unless-stopped
+    # See learner-api's stop_grace_period comment — same force-recreate-on-every-deploy
+    # + proxied long-lived-connection concern applies to this router.
+    stop_grace_period: 30s
     environment:
       ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
       NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"

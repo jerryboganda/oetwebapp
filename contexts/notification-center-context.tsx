@@ -540,11 +540,38 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     }
 
     let disposed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelayMs = 1_000;
+    const MAX_RETRY_DELAY_MS = 30_000;
+
+    // withAutomaticReconnect only covers a drop AFTER a successful connection, and
+    // its own backoff table is finite ([0, 2s, 5s, 10s]) — once exhausted (or if the
+    // very first connection.start() fails, e.g. the app opens mid blue/green-deploy
+    // swap), SignalR calls onclose and permanently stops trying. Without the retry
+    // loop below, the client would silently stay on 30s polling for the rest of the
+    // tab's life. clearRetry/scheduleRetry give onclose a way back in.
+    const clearRetry = () => {
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    };
+
+    const scheduleRetry = () => {
+      clearRetry();
+      retryTimer = setTimeout(() => {
+        retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_DELAY_MS);
+        void connectHub();
+      }, retryDelayMs);
+    };
 
     // FE-022: lazy-load @microsoft/signalr so it stays out of the shared client
     // bundle on every authenticated page (this provider mounts app-wide via the
     // app shell). It is only needed once a notification hub connection is opened.
-    void (async () => {
+    const connectHub = async () => {
+      if (disposed) return;
+      clearRetry();
+
       const { HubConnectionBuilder, HttpTransportType, LogLevel } = await import('@microsoft/signalr');
       if (disposed) return;
 
@@ -572,29 +599,53 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
         setConnectionStatus('reconnecting');
       });
       connection.onreconnected(() => {
+        retryDelayMs = 1_000;
         setConnectionStatus('connected');
         void refreshFeed({ silent: true });
       });
       connection.onclose(() => {
-        if (!disposed) {
-          setConnectionStatus('disconnected');
-        }
+        if (disposed) return;
+        setConnectionStatus('disconnected');
+        // SignalR has given up (auto-reconnect exhausted or was never established).
+        // Keep trying in the background so a tab left open across a deploy — or any
+        // other transient outage — recovers real-time delivery on its own instead of
+        // requiring a manual page reload.
+        scheduleRetry();
       });
 
       try {
         await connection.start();
         if (!disposed) {
+          retryDelayMs = 1_000;
           setConnectionStatus('connected');
         }
       } catch {
         if (!disposed) {
           setConnectionStatus('disconnected');
+          scheduleRetry();
         }
       }
-    })();
+    };
+
+    // A user returning to a backgrounded/inactive tab is the single most likely
+    // moment the connection has silently died (device sleep, network change) —
+    // retry immediately instead of waiting out the backoff timer.
+    const handleVisibilityOrFocus = () => {
+      if (disposed) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (hubConnectionRef.current?.state === 'Connected') return;
+      void connectHub();
+    };
+
+    void connectHub();
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     return () => {
       disposed = true;
+      clearRetry();
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       const connection = hubConnectionRef.current;
       hubConnectionRef.current = null;
       void connection?.stop();

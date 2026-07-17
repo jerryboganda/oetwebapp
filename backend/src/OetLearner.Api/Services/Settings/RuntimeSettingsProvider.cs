@@ -355,7 +355,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             ApnsTeamId: r.ApnsTeamId,
             ApnsBundleId: r.ApnsBundleId,
             ApnsAuthKey: Unprotect(r.ApnsAuthKeyEncrypted),
-            FcmServerKey: Unprotect(r.FcmServerKeyEncrypted),
+            FcmServiceAccountJson: Unprotect(r.FcmServiceAccountJsonEncrypted),
             FcmProjectId: r.FcmProjectId,
             VapidSubject: Coalesce(r.VapidSubject, webPush.Subject),
             VapidPublicKey: Coalesce(r.VapidPublicKey, webPush.PublicKey),

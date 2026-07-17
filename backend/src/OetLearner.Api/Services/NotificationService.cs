@@ -3100,7 +3100,20 @@ public sealed class NotificationService(
             .CountAsync(item => item.AuthAccountId == authAccountId && !item.IsRead, ct);
 
         var envelope = new NotificationRealtimeEnvelope("notification.created", MapFeedItem(inboxItem), unreadCount);
-        await hubContext.Clients.Group(NotificationHub.AccountGroup(authAccountId)).SendAsync("notification", envelope, ct);
+
+        // A SignalR send failure (serialization error, hub/backplane hiccup) must not
+        // abort the rest of ProcessFanoutAsync — email and push delivery for this same
+        // event run after this call and would otherwise be skipped too. The inbox item
+        // itself is already committed (EnsureInboxItemAsync), so the learner can still
+        // see it via the REST feed/polling even if this realtime push fails outright.
+        try
+        {
+            await hubContext.Clients.Group(NotificationHub.AccountGroup(authAccountId)).SendAsync("notification", envelope, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Realtime SignalR push failed for account {AuthAccountId}; continuing with email/mobile push delivery.", authAccountId);
+        }
     }
 
     private async Task SendImmediateEmailAsync(NotificationEvent notificationEvent, CancellationToken ct)
@@ -3294,11 +3307,8 @@ public sealed class NotificationService(
             && !string.IsNullOrWhiteSpace(vapidSubject)
             && !string.IsNullOrWhiteSpace(vapidPublicKey)
             && !string.IsNullOrWhiteSpace(vapidPrivateKey);
-        var fcmConfigured = !string.IsNullOrWhiteSpace(pushSettings.FcmServerKey);
-        var apnsConfigured = !string.IsNullOrWhiteSpace(pushSettings.ApnsBundleId)
-            && !string.IsNullOrWhiteSpace(pushSettings.ApnsTeamId)
-            && !string.IsNullOrWhiteSpace(pushSettings.ApnsKeyId)
-            && !string.IsNullOrWhiteSpace(pushSettings.ApnsAuthKey);
+        var fcmConfigured = pushSettings.IsFcmConfigured;
+        var apnsConfigured = pushSettings.IsApnsConfigured;
         var hasConfiguredTarget =
             (subscriptions.Count > 0 && browserPushConfigured)
             || mobileTokens.Any(token => token.Platform == "android" && fcmConfigured)

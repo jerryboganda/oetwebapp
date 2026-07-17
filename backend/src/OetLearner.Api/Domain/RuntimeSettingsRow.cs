@@ -119,7 +119,13 @@ public class RuntimeSettingsRow
     [MaxLength(64)] public string? ApnsTeamId { get; set; }
     [MaxLength(256)] public string? ApnsBundleId { get; set; }
     public string? ApnsAuthKeyEncrypted { get; set; }
-    public string? FcmServerKeyEncrypted { get; set; }
+    /// <summary>
+    /// Full Firebase service-account JSON key (Firebase Console → Project Settings →
+    /// Service Accounts → Generate new private key). FCM's legacy server-key HTTP API
+    /// was shut down by Google in 2024 — sending now requires the HTTP v1 API, which
+    /// authenticates via an OAuth2 token minted from this service account, not a static key.
+    /// </summary>
+    public string? FcmServiceAccountJsonEncrypted { get; set; }
     [MaxLength(256)] public string? FcmProjectId { get; set; }
     [MaxLength(256)] public string? VapidSubject { get; set; }
     [MaxLength(512)] public string? VapidPublicKey { get; set; }

@@ -18,8 +18,6 @@ const AUTH_ROUTE_PREFIXES = [
   '/verify-email',
   '/mfa',
   '/auth',
-  '/privacy',
-  '/terms',
 ] as const;
 
 function isAuthRoute(pathname: string | null): boolean {
