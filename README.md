@@ -1,13 +1,13 @@
 # OET Prep Platform
 
-OET preparation platform with a Next.js 15 web app, ASP.NET Core 10 API, a Tauri 2 desktop shell (remote-only thin client), and a Capacitor 6 mobile shell.
+OET preparation platform with a Next.js 16 web app, ASP.NET Core 10 API, a Tauri 2 desktop shell (remote-only thin client), and a Capacitor 7 mobile shell.
 
 ## Stack
 
 - Frontend: Next.js App Router, React 19, TypeScript 5.9, Tailwind CSS 4, motion v12
 - Backend: ASP.NET Core 10, EF Core, PostgreSQL 17, SignalR
 - Desktop: Tauri 2 (Rust core) — a remote-only thin client (see "Desktop app" below)
-- Mobile: Capacitor 6 for iOS and Android
+- Mobile: Capacitor 7 for iOS and Android
 
 ### Rust toolchain (desktop)
 
@@ -132,9 +132,9 @@ pnpm run test:e2e:report
 
 ## Key Docs
 
-- [AGENTS.md](./AGENTS.md)
-- [Agent Operating Model](docs/agent-operating-model.md)
-- [Agentic Bootstrap Plan](docs/superpowers/plans/2026-04-19-agentic-bootstrap.md)
+- [AGENTS.md](./AGENTS.md) — always-on repo contract and source of truth
+- [CLAUDE.md](./CLAUDE.md) — Claude Code copy of the repo contract
+- [Copilot Agentic Setup](docs/copilot-agentic-setup.md) — workspace AI setup
 - [Scoring](docs/SCORING.md)
 - [Rulebooks](docs/RULEBOOKS.md)
 - [AI Usage Policy](docs/AI-USAGE-POLICY.md)
@@ -143,7 +143,8 @@ pnpm run test:e2e:report
 
 ## Working Model
 
-- Use the root AGENTS file and the operating model doc as the first stop for any agentic work.
+- Use `AGENTS.md` as the first stop for any agentic work.
 - Keep unrelated edits intact.
 - Prefer isolated worktrees for multi-file changes.
+- Prefer lightweight, targeted host checks; avoid heavy CI/build marathons unless explicitly requested.
 - Keep shared-contract surfaces tight: scoring, rulebooks, auth, backend bootstrap, and the statement-of-results card.
