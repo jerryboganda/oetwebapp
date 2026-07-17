@@ -1,46 +1,42 @@
-# Agent State - Subscriptions & Packages Admin Editor
+# Agent State — CodeGraph + Serena Max-Potential Configuration
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Goal
-Make every package card on the learner dashboard `/subscriptions` page editable from the admin panel.
-
-## Root Cause
-The `/subscriptions` page renders static `WEBSITE_PACKAGES` via `SubscriptionsCatalog`, while the existing **Catalog Storefront** editor only edits the presentation overlay for `CatalogStorefront` (used on `/catalog` and `/pricing`). The two systems were disconnected, so the storefront editor could not edit the packages the user sees under Subscriptions & Packages.
+Configure CodeGraph and Serena to maximum potential in this OET Web App worktree.
 
 ## Implemented This Run
 
-- Extended `CatalogPresentation` with a `websitePackages` overlay (`byCode` per package + `sections` overrides) in `lib/catalog-presentation.ts`.
-- Added `applyWebsitePackageOverlay` helper in `lib/catalog-website-packages.ts`.
-- Built `SubscriptionsPackagesEditor` (`components/admin/billing/subscriptions-packages-editor.tsx`) with:
-  - Searchable package selector grouped by section.
-  - Editable fields: name, package number, format line, description, meta chips, badges, feature bullets/ticks, best-for text, featured flag.
-  - Section heading overrides.
-- Created `/admin/billing/subscriptions-packages` page.
-- Added admin sidebar item and page title rule in `lib/admin-navigation.tsx`.
-- Updated `SubscriptionsCatalog` to apply the backend overlay from `catalog.presentation.websitePackages`.
-- Added cross-link from Catalog Storefront page to the new Subscriptions & Packages editor.
+- CodeGraph 1.4.1 initialized and fully rebuilt:
+  - 3,746 files, 69,828 nodes, 196,068 edges, 666 MB DB
+  - `codegraph status` reports healthy and up to date
+  - Sample query `codegraph query Program` returns symbols
+- Serena 1.5.3 project tuned and re-indexed:
+  - Renamed project to `OET Web App`
+  - Added `csharp` language (backend now symbol-aware)
+  - Added `ignored_paths` for build outputs, native artifacts, large binaries, vendored catalogs
+  - Indexed `typescript=1960` files + `csharp=1615` files
+  - Health-check passes under UTF-8 encoding
+- Seeded 6 Serena memories with project invariants and Windows encoding workaround.
+- Verified both MCP servers remain connected in Claude Code (`claude mcp list`).
 
 ## Files Touched
 
-- `lib/catalog-presentation.ts`
-- `lib/catalog-website-packages.ts`
-- `components/admin/billing/subscriptions-packages-editor.tsx` (new)
-- `app/admin/billing/subscriptions-packages/page.tsx` (new)
-- `app/admin/billing/storefront/page.tsx`
-- `components/domain/catalog/subscriptions-catalog.tsx`
-- `lib/admin-navigation.tsx`
+- `.serena/project.yml`
+- `.serena/memories/*.md` (6 new memory files)
 - `.github/agent-state.local.md`
 
-## Persistence
+## Notes
 
-The editor reuses the existing `CatalogPresentationJson` runtime-setting column (no DB migration). Admin saves via `saveAdminCatalogPresentation`; learner page reads via `fetchPublicCatalog` which returns the same JSON blob.
+- `.serena/` and `.codegraph/` are gitignored; no tracked repo files were modified.
+- CodeGraph MCP server was temporarily stopped to release the DB lock during rebuild; Claude Code automatically reconnected.
 
 ## Validation
 
-- `pnpm exec tsc --noEmit`: passed.
-- `pnpm run lint`: passed (exit 0; pre-existing warnings in unrelated files).
-- `git diff --check`: passed.
+- `codegraph status .` — healthy, up to date
+- `codegraph query --limit 5 Program` — returns expected symbols
+- `serena project health-check .` — exit 0 (with UTF-8 encoding workaround)
+- `claude mcp list` — both `serena` and `codegraph` connected
 
 ## Blockers / Remaining Risk
 
@@ -48,4 +44,4 @@ The editor reuses the existing `CatalogPresentationJson` runtime-setting column 
 
 ## Next Step
 
-Verify the merged PR deployed and the new admin editor works on production.
+Use the configured tools in future coding tasks; run Serena CLI commands with UTF-8 encoding to avoid Windows console emoji crashes.
