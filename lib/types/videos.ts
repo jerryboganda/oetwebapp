@@ -10,6 +10,9 @@
 
 export type VideoAccessTier = 'free' | 'premium';
 
+/** Instruction language of a video. `null` = unspecified (legacy content). */
+export type VideoLanguage = 'en' | 'ar';
+
 export type VideoLibraryProgress = {
   positionSeconds: number;
   percentComplete: number;
@@ -28,6 +31,7 @@ export type VideoSummary = {
   lockReason: 'subscription_required' | null;
   subtestCode: string | null;
   difficulty: string | null;
+  language: VideoLanguage | null;
   tags: string[];
   isFeatured: boolean;
   publishedAt: string | null;

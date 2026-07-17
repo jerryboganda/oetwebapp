@@ -58,7 +58,8 @@ public sealed record AdminVideoDetailDto(
     DateTimeOffset? ArchivedAt,
     long ViewCount,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? Language = null);
 
 public sealed record VideoPublishGateResult(bool CanPublish, string[] Errors, string[] Warnings);
 
@@ -150,6 +151,22 @@ public sealed class VideoLibraryAdminService(
                 .Select(p => p.Trim().ToLowerInvariant())
                 .Distinct()
                 .ToArray());
+        }
+        if (patch.Language is not null)
+        {
+            var language = patch.Language.Trim().ToLowerInvariant();
+            if (language.Length == 0)
+            {
+                video.Language = null;
+            }
+            else if (language is not ("en" or "ar"))
+            {
+                throw ApiException.Validation("invalid_language", "Language must be 'en' or 'ar'.");
+            }
+            else
+            {
+                video.Language = language;
+            }
         }
         if (patch.IsFeatured is not null) video.IsFeatured = patch.IsFeatured.Value;
         if (patch.SortOrder is not null) video.SortOrder = patch.SortOrder.Value;
@@ -514,7 +531,8 @@ public sealed class VideoLibraryAdminService(
             ArchivedAt: video.ArchivedAt,
             ViewCount: video.ViewCount,
             CreatedAt: video.CreatedAt,
-            UpdatedAt: video.UpdatedAt);
+            UpdatedAt: video.UpdatedAt,
+            Language: video.Language);
     }
 
     public static string EncodeStatusLabel(VideoEncodeStatus status) => status switch
@@ -626,6 +644,8 @@ public sealed class AdminVideoPatchRequest
     public string[]? CategoryIds { get; set; }
     public string? AccessTier { get; set; }
     public string[]? TargetProfessionIds { get; set; }
+    /// <summary>Instruction language: "en" | "ar". Omitted = unchanged; "" = clear; else set.</summary>
+    public string? Language { get; set; }
     public bool? IsFeatured { get; set; }
     public int? SortOrder { get; set; }
     /// <summary>Tri-state: omitted = unchanged; null/"" = clear; ISO string = set.</summary>

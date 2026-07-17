@@ -18,7 +18,7 @@ const STATE_PATH = path.join(STATE_DIR, 'state.json');
 const OUT_PATH = path.join(STATE_DIR, 'registration-plan.json');
 
 const MODULE_ORDER = { listening: 0, reading: 1, speaking: 2, writing: 3 };
-const PROFESSIONS = ['medicine', 'nursing', 'pharmacy', 'radiography', 'dentistry'];
+const PROFESSIONS = ['medicine', 'nursing', 'pharmacy', 'physiotherapy', 'radiography', 'dentistry'];
 
 // Default: every instructional video is premium (the course paywall). Flip specific
 // intro/teaser videos to "free" by editing the plan before registering, if desired.

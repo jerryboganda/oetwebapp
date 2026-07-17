@@ -16,6 +16,15 @@ import type { VideoLibraryHome, VideoSummary } from '@/lib/types/videos';
 
 type LibraryView = 'all' | 'continue' | 'saved';
 type SortKey = 'newest' | 'title' | 'duration' | 'popular';
+type LanguageKey = 'all' | 'en' | 'ar';
+
+// English is one shared set across every profession; Arabic sets are profession-scoped.
+// This filter lets a learner narrow the whole library to English or Arabic instruction.
+const LANGUAGE_TABS: Array<[LanguageKey, string]> = [
+  ['all', 'All languages'],
+  ['en', 'English'],
+  ['ar', 'العربية'],
+];
 
 const SUBTEST_OPTIONS: Array<[string, string]> = [
   ['listening', 'Listening'],
@@ -75,6 +84,7 @@ export default function VideoLibraryPage() {
   const [categoryId, setCategoryId] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
   const [view, setView] = useState<LibraryView>('all');
+  const [language, setLanguage] = useState<LanguageKey>('all');
 
   useEffect(() => {
     analytics.track('videos_page_viewed');
@@ -117,12 +127,35 @@ export default function VideoLibraryPage() {
     });
   }, []);
 
-  const allVideos = useMemo(() => (home ? flattenVideos(home) : []), [home]);
-  const continueVideos = useMemo(
-    () => (home ? home.continueWatching.filter(videoHasProgress) : []),
-    [home],
+  const matchesLanguage = useCallback(
+    (video: VideoSummary) => language === 'all' || video.language === language,
+    [language],
   );
-  const savedVideos = useMemo(() => allVideos.filter((video) => video.bookmarked), [allVideos]);
+
+  const allVideos = useMemo(() => (home ? flattenVideos(home) : []), [home]);
+  const languageCounts = useMemo(
+    () => ({
+      en: allVideos.filter((video) => video.language === 'en').length,
+      ar: allVideos.filter((video) => video.language === 'ar').length,
+    }),
+    [allVideos],
+  );
+  const hasLanguageTags = languageCounts.en > 0 || languageCounts.ar > 0;
+  const continueVideos = useMemo(
+    () => (home ? home.continueWatching.filter(videoHasProgress).filter(matchesLanguage) : []),
+    [home, matchesLanguage],
+  );
+  const featuredVideos = useMemo(
+    () => (home ? home.featured.filter(matchesLanguage) : []),
+    [home, matchesLanguage],
+  );
+  const savedVideos = useMemo(
+    () => allVideos.filter((video) => video.bookmarked).filter(matchesLanguage),
+    [allVideos, matchesLanguage],
+  );
+  // Language-scoped total, so every surfaced count (hero + "All" tab) matches
+  // what the active language filter actually renders.
+  const scopedAll = useMemo(() => allVideos.filter(matchesLanguage), [allVideos, matchesLanguage]);
 
   // Group the flat category shelves into top-level module sections (Reading, Listening,
   // Speaking, Writing …) so the default browse view renders as a Module → subcategory tree.
@@ -130,11 +163,13 @@ export default function VideoLibraryPage() {
     if (!home) return [];
     const groups = new Map<string, VideoLibraryHome['categories']>();
     for (const category of home.categories) {
-      if (category.videos.length === 0) continue;
+      const videos = language === 'all' ? category.videos : category.videos.filter(matchesLanguage);
+      if (videos.length === 0) continue;
+      const scoped = { ...category, videos };
       const key = moduleKeyOf(category.title);
       const bucket = groups.get(key);
-      if (bucket) bucket.push(category);
-      else groups.set(key, [category]);
+      if (bucket) bucket.push(scoped);
+      else groups.set(key, [scoped]);
     }
     return Array.from(groups.entries())
       .sort((a, b) => (MODULE_ORDER[a[0]] ?? 99) - (MODULE_ORDER[b[0]] ?? 99) || a[0].localeCompare(b[0]))
@@ -144,9 +179,14 @@ export default function VideoLibraryPage() {
         categories,
         count: categories.reduce((sum, category) => sum + category.videos.length, 0),
       }));
-  }, [home]);
+  }, [home, language, matchesLanguage]);
 
-  const filtersActive = Boolean(query.trim() || subtest || categoryId) || view !== 'all' || sort !== 'newest';
+  // A language selection is an active filter too: it routes to the flat results
+  // path (which language-filters every video, incl. uncategorized) and gets the
+  // shared empty-state / reset card — so no English/null videos leak into an
+  // Arabic view, and an empty language never renders a blank page.
+  const filtersActive =
+    Boolean(query.trim() || subtest || categoryId) || view !== 'all' || sort !== 'newest' || language !== 'all';
 
   const visibleVideos = useMemo(() => {
     let list = view === 'continue' ? continueVideos : view === 'saved' ? savedVideos : allVideos;
@@ -161,16 +201,17 @@ export default function VideoLibraryPage() {
     }
     if (subtest) list = list.filter((video) => video.subtestCode === subtest);
     if (categoryId) list = list.filter((video) => video.categoryIds.includes(categoryId));
+    if (language !== 'all') list = list.filter(matchesLanguage);
     const sorted = [...list];
     if (sort === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title));
     else if (sort === 'duration') sorted.sort((a, b) => a.durationSeconds - b.durationSeconds);
     else if (sort === 'popular') sorted.sort((a, b) => b.viewCount - a.viewCount);
     else sorted.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
     return sorted;
-  }, [allVideos, categoryId, continueVideos, query, savedVideos, sort, subtest, view]);
+  }, [allVideos, categoryId, continueVideos, language, matchesLanguage, query, savedVideos, sort, subtest, view]);
 
   const heroHighlights = [
-    { icon: PlayCircle, label: 'Library', value: `${allVideos.length} videos` },
+    { icon: PlayCircle, label: 'Library', value: `${scopedAll.length} videos` },
     { icon: Clock, label: 'In progress', value: `${continueVideos.length} to resume` },
     { icon: BookOpenCheck, label: 'Watch on', value: 'Desktop & mobile app' },
   ];
@@ -241,11 +282,35 @@ export default function VideoLibraryPage() {
                 <option value="duration">Shortest first</option>
                 <option value="popular">Most watched</option>
               </select>
+
+              {hasLanguageTags && (
+                <div
+                  role="group"
+                  aria-label="Filter by instruction language"
+                  className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted"
+                >
+                  {LANGUAGE_TABS.map(([key, label]) => {
+                    const count = key === 'en' ? languageCounts.en : key === 'ar' ? languageCounts.ar : null;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setLanguage(key)}
+                        aria-pressed={language === key}
+                        className={`px-3 py-3 transition-colors ${language === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
+                      >
+                        {label}
+                        {count !== null ? ` (${count})` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted">
               {([
-                ['all', `All (${allVideos.length})`],
+                ['all', `All (${scopedAll.length})`],
                 ['continue', `Continue (${continueVideos.length})`],
                 ['saved', `Saved (${savedVideos.length})`],
               ] as const).map(([key, label]) => (
@@ -286,6 +351,7 @@ export default function VideoLibraryPage() {
                   setCategoryId('');
                   setSort('newest');
                   setView('all');
+                  setLanguage('all');
                 }}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:border-primary hover:text-primary"
               >
@@ -330,7 +396,7 @@ export default function VideoLibraryPage() {
               </section>
             )}
 
-            {home.featured.length > 0 && (
+            {featuredVideos.length > 0 && (
               <section>
                 <LearnerSurfaceSectionHeader
                   eyebrow="Featured"
@@ -339,7 +405,7 @@ export default function VideoLibraryPage() {
                   className="mb-4"
                 />
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {home.featured.map((video, index) => (
+                  {featuredVideos.map((video, index) => (
                     <MotionItem key={video.id} delayIndex={index}>
                       <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
                     </MotionItem>

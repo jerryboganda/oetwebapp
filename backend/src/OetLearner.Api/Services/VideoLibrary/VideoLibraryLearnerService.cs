@@ -28,7 +28,8 @@ public sealed record VideoSummaryDto(
     long ViewCount,
     VideoProgressDto? Progress,
     bool Bookmarked,
-    IReadOnlyList<string> CategoryIds);
+    IReadOnlyList<string> CategoryIds,
+    string? Language = null);
 
 public sealed record VideoChapterDto(int TimeSeconds, string Title);
 public sealed record VideoCaptionDto(string LanguageCode, string Label);
@@ -408,7 +409,8 @@ public sealed class VideoLibraryLearnerService(
             ViewCount: video.ViewCount,
             Progress: progress,
             Bookmarked: bookmarked.Contains(video.Id),
-            CategoryIds: categoryIds);
+            CategoryIds: categoryIds,
+            Language: video.Language);
     }
 
     private async Task<(string? PreviousId, string? NextId)> ResolveAdjacentAsync(

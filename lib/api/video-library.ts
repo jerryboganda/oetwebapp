@@ -58,6 +58,8 @@ export type VideoEncodeStatus =
   | 'ready'
   | 'failed';
 export type VideoThumbnailMode = 'auto' | 'custom';
+/** Instruction language of a video ("en" | "ar"); null = unspecified. */
+export type VideoLanguage = 'en' | 'ar';
 
 export interface AdminVideoSummary {
   videoId: string;
@@ -104,6 +106,7 @@ export interface AdminVideoDetail {
   categoryNames: string[];
   accessTier: VideoAccessTier;
   targetProfessionIds: string[];
+  language: VideoLanguage | null;
   bunnyVideoId: string | null;
   bunnyCollectionId: string | null;
   encodeStatus: VideoEncodeStatus;
@@ -138,6 +141,8 @@ export interface AdminVideoPatch {
   categoryIds?: string[];
   accessTier?: VideoAccessTier;
   targetProfessionIds?: string[];
+  /** Instruction language: 'en' | 'ar'. Omitted = unchanged; '' = clear. */
+  language?: VideoLanguage | '' | null;
   isFeatured?: boolean;
   sortOrder?: number;
   publishAt?: string | null;

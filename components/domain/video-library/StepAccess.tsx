@@ -18,7 +18,10 @@ import {
   adminPatchVideo,
   type AdminVideoDetail,
   type VideoAccessTier,
+  type VideoLanguage,
 } from '@/lib/api/video-library';
+
+type LanguageChoice = VideoLanguage | 'unset';
 
 /** ISO string → value for a `datetime-local` input (local time, minute precision). */
 function toDatetimeLocal(iso: string | null): string {
@@ -34,6 +37,7 @@ export function StepAccess() {
   const video = wizard.entity;
 
   const [accessTier, setAccessTier] = useState<VideoAccessTier>(video.accessTier ?? 'free');
+  const [language, setLanguage] = useState<LanguageChoice>(video.language ?? 'unset');
   const [allProfessions, setAllProfessions] = useState((video.targetProfessionIds ?? []).length === 0);
   const [professionIds, setProfessionIds] = useState<string[]>(video.targetProfessionIds ?? []);
   const [isFeatured, setIsFeatured] = useState(Boolean(video.isFeatured));
@@ -60,13 +64,14 @@ export function StepAccess() {
     setError(null);
     await adminPatchVideo(video.videoId, {
       accessTier,
+      language: language === 'unset' ? '' : language,
       targetProfessionIds: allProfessions ? [] : professionIds,
       isFeatured,
       sortOrder: Number(sortOrder) || 0,
       publishAt: publishAtIso,
     });
     await wizard.refresh();
-  }, [video.videoId, accessTier, allProfessions, professionIds, isFeatured, sortOrder, publishAt, wizard]);
+  }, [video.videoId, accessTier, language, allProfessions, professionIds, isFeatured, sortOrder, publishAt, wizard]);
 
   useStepRegistration('access', { canAdvance, submit });
 
@@ -91,6 +96,18 @@ export function StepAccess() {
         options={[
           { value: 'free', label: 'Free', description: 'Every signed-in learner can watch.' },
           { value: 'premium', label: 'Premium', description: 'Requires an active subscription/entitlement.' },
+        ]}
+      />
+
+      <RadioGroup
+        name="video-language"
+        label="Instruction language"
+        value={language}
+        onChange={(value) => setLanguage(value as LanguageChoice)}
+        options={[
+          { value: 'en', label: 'English', description: 'Shown under the English filter (shared across professions).' },
+          { value: 'ar', label: 'Arabic', description: 'Shown under the Arabic filter.' },
+          { value: 'unset', label: 'Unspecified', description: 'No language tag — appears regardless of the learner filter.' },
         ]}
       />
 

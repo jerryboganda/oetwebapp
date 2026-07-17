@@ -96,6 +96,17 @@ public class LibraryVideo
     /// <summary>JSON array of profession ids; empty array = visible to all professions.</summary>
     public string ProfessionIdsJson { get; set; } = "[]";
 
+    /// <summary>
+    /// Instruction language of the video: "en" | "ar". Null = unspecified (legacy).
+    /// Independent of <see cref="ProfessionIdsJson"/> gating — purely drives the
+    /// learner English/Arabic filter and the admin language badge. Per the Course
+    /// Videos content model, English is one shared set shown to every profession
+    /// while Arabic sets are profession-scoped (Physiotherapy/Dentistry/Radiography
+    /// alias to Medicine via the profession list, not this field).
+    /// </summary>
+    [MaxLength(8)]
+    public string? Language { get; set; }
+
     public bool IsFeatured { get; set; }
     public int SortOrder { get; set; }
     public long ViewCount { get; set; }

@@ -51,6 +51,7 @@ public static class VideoLibraryEndpoints
                     detail.Summary.LockReason,
                     detail.Summary.SubtestCode,
                     detail.Summary.Difficulty,
+                    detail.Summary.Language,
                     detail.Summary.Tags,
                     detail.Summary.IsFeatured,
                     detail.Summary.PublishedAt,
