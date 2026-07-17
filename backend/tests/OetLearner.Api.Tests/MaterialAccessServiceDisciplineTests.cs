@@ -12,7 +12,8 @@ namespace OetLearner.Api.Tests;
 /// Covers the name-based discipline (profession) filter added to the Materials library
 /// (owner directive 2026-07-12): a learner sees only their own discipline's folders
 /// (Speaking/Medicine, Writing/Nursing …), while non-discipline folders (Reading, Listening …)
-/// stay visible to all. Admins and learners with no profession are unfiltered (fail-open).
+/// stay visible to all. Admins are unfiltered; a learner with no profession fails CLOSED on
+/// discipline-tagged folders (spec §7.5, profession-scoped access).
 /// </summary>
 public class MaterialAccessServiceDisciplineTests
 {
@@ -173,15 +174,20 @@ public class MaterialAccessServiceDisciplineTests
     }
 
     [Fact]
-    public async Task LearnerWithNoProfession_SeesEveryDiscipline()
+    public async Task LearnerWithNoProfession_FailsClosedOnDisciplineFolders()
     {
         await using var db = CreateDb();
         await SeedAsync(db, "learner-none", activeProfessionId: null);
         var names = await VisibleFolderNamesAsync(CreateService(db), Principal("learner-none"));
 
-        Assert.Contains("Medicine", names);
-        Assert.Contains("Nursing", names);
-        Assert.Contains("Radiography", names);
+        // Spec §7.5 (profession-scoped access): no/unknown profession fails CLOSED on every
+        // discipline-tagged folder; non-discipline folders stay visible.
+        Assert.DoesNotContain("Medicine", names);
+        Assert.DoesNotContain("Nursing", names);
+        Assert.DoesNotContain("Radiography", names);
+        Assert.Contains("Speaking", names);
+        Assert.Contains("Reading", names);
+        Assert.Contains("Benchmark", names);
     }
 
     [Fact]

@@ -250,7 +250,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": false,
       "displayOrder": 200,
-      "dashboardModules": ["BasicEnglish", "Vocabulary", "Grammar", "ListeningFoundations", "StudyPlan", "Booklet"],
+      "dashboardModules": ["BasicEnglish", "Vocabulary", "Grammar", "ListeningFoundations", "StudyPlan", "Booklet", "Recalls", "MaterialsLibrary", "VideoLibrary", "Mocks"],
       "comparisonFeatures": [
         "Fully recorded preparatory English course",
         "Essential grammar from zero, framed around OET production",

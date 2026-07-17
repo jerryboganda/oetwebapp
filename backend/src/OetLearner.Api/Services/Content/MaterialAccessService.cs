@@ -108,10 +108,17 @@ public sealed class MaterialAccessService(
         // plan actually declares a scope.
         var scopeEntitlement = IsAdmin(principal) ? null : entitlement;
 
+        // General English separation (course-materials diagram, owner directive 2026-07-18): the
+        // Basic English Course tree is its own product's materials — visible only with a Basic
+        // English grant, and a standalone Basic English holder sees ONLY that tree.
+        var basicEnglishScope = IsAdmin(principal)
+            ? BasicEnglishScope.Unfiltered
+            : ResolveBasicEnglishScope(entitlement);
+
         foreach (var folder in allFolders)
         {
             if (IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
-                && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines)
+                && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines, basicEnglishScope)
                 && (navigableFolderScope is null || navigableFolderScope.Contains(folder.Id)))
                 visibleFolderIds.Add(folder.Id);
         }
@@ -188,7 +195,16 @@ public sealed class MaterialAccessService(
         // to "all subtests, no overrides".
         var scopeEntitlement = isAdmin ? null : entitlement;
 
+        // Mirror the tree's General English gate (defence in depth alongside GetVisibleTreeAsync).
+        // Resolved BEFORE the root-level-file branch: root files can never belong to the
+        // folder-rooted Basic English tree, so an exclusively-Basic-English learner must not
+        // reach them either.
+        var basicEnglishScope = isAdmin
+            ? BasicEnglishScope.Unfiltered
+            : ResolveBasicEnglishScope(entitlement);
+
         if (!hasFolderRestriction
+            && !basicEnglishScope.ExclusivelyBasicEnglish
             && files.Any(f => f.FolderId == null && IsSubtestInScope(f.SubtestCode, scopeEntitlement)))
         {
             // Root-level files carry no folder, so no audience or discipline tag applies to them —
@@ -230,7 +246,7 @@ public sealed class MaterialAccessService(
         return files.Any(file =>
             folderDict.TryGetValue(file.FolderId!, out var folder)
             && IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
-            && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines)
+            && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines, basicEnglishScope)
             && IsSubtestInScope(file.SubtestCode, scopeEntitlement)
             && (contentFolderScope is null || contentFolderScope.Contains(folder.Id)));
     }
@@ -446,20 +462,128 @@ public sealed class MaterialAccessService(
     }
 
     /// <summary>
+    /// Folder names that mark the General English (Basic English Course) tree — matched by name
+    /// (self or ancestor), exactly like the discipline filter, because the tree has no structured
+    /// column. Course-materials diagram (owner directive 2026-07-18): the six OET professions
+    /// share Listening/Reading and split Writing/Speaking, while General English "has its own
+    /// separate materials" — so this tree is NOT part of the shared pool.
+    /// </summary>
+    internal static readonly HashSet<string> BasicEnglishFolderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Basic English Course",
+        "Basic English",
+        "General English",
+        "Academic / General English",
+    };
+
+    /// <summary>
+    /// The full module cluster the standalone basic-english plan grants — its own course modules
+    /// plus the four universally-backfilled admin toggles (migration 20260725090000 appended those
+    /// to every plan). Exclusivity means the learner's ENTIRE module set stays inside this
+    /// cluster: any other key (Listening, Writing, SpeakingSession, TutorBook, ModelLetters, …) is
+    /// evidence of another content package, so gaining Basic English on top of another product
+    /// never REMOVES access the other product granted. Keep in sync with the basic-english entry
+    /// in <c>Data/Seeds/oet-2026-catalog.json</c>.
+    /// </summary>
+    private static readonly HashSet<string> BasicEnglishCourseModules = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ModuleKeys.BasicEnglish, "Vocabulary", "Grammar", "ListeningFoundations", "StudyPlan", "Booklet",
+        ModuleKeys.Recalls, ModuleKeys.MaterialsLibrary, ModuleKeys.VideoLibrary, ModuleKeys.Mocks,
+    };
+
+    /// <summary>True when the folder or any ancestor is the General English tree root.</summary>
+    internal static bool IsBasicEnglishFolder(MaterialFolder folder, Dictionary<string, MaterialFolder> allFolders)
+    {
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            if (BasicEnglishFolderNames.Contains(current.Name?.Trim() ?? string.Empty)) return true;
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// General English visibility scope. <c>Entitled</c> — may see the Basic English tree;
+    /// <c>ExclusivelyBasicEnglish</c> — holds Basic English WITHOUT any OET subtest module
+    /// (the standalone basic-english plan), so every non-Basic-English folder is hidden.
+    /// <see cref="Unfiltered"/> (admins) sees both sides.
+    /// </summary>
+    internal readonly record struct BasicEnglishScope(bool Entitled, bool ExclusivelyBasicEnglish)
+    {
+        public static readonly BasicEnglishScope Unfiltered = new(true, false);
+
+        public bool IsFolderVisible(bool isBasicEnglishFolder) =>
+            isBasicEnglishFolder ? Entitled : !ExclusivelyBasicEnglish;
+    }
+
+    /// <summary>
+    /// Resolves the learner-side <see cref="BasicEnglishScope"/> from the entitlement snapshot.
+    /// The raw grant comes from the "BasicEnglish" plan module (fail-open on legacy empty module
+    /// lists), or the purchase-derived
+    /// <see cref="EffectiveEntitlementSnapshot.BasicEnglishUnlocked"/> bundle flag. A per-user
+    /// admin DISABLE of "BasicEnglish" strips <c>Entitled</c> but deliberately NOT
+    /// <c>ExclusivelyBasicEnglish</c>: revoking a standalone Basic English learner's only product
+    /// must fail CLOSED (they see nothing), not fall open into the whole OET pool.
+    /// Exclusivity requires every enabled module to sit inside
+    /// <see cref="BasicEnglishCourseModules"/> — a learner who ALSO holds any other package
+    /// (subtest modules, SpeakingSession, TutorBook, …) keeps the shared OET tree. A legacy
+    /// empty-module plan is never exclusive (fail-open, unchanged behaviour).
+    /// </summary>
+    internal static BasicEnglishScope ResolveBasicEnglishScope(EffectiveEntitlementSnapshot entitlement)
+    {
+        var rawGrant = entitlement.EnabledModules.Count == 0
+            || entitlement.EnabledModules.Any(m => string.Equals(m, ModuleKeys.BasicEnglish, StringComparison.OrdinalIgnoreCase))
+            || entitlement.BasicEnglishUnlocked;
+
+        var explicitlyDisabled = entitlement.DisabledModules
+            .Any(m => string.Equals(m, ModuleKeys.BasicEnglish, StringComparison.OrdinalIgnoreCase));
+
+        var exclusively = rawGrant
+            && entitlement.EnabledModules.Count > 0
+            && entitlement.EnabledModules.All(BasicEnglishCourseModules.Contains);
+
+        return new BasicEnglishScope(rawGrant && !explicitlyDisabled, exclusively);
+    }
+
+    /// <summary>
+    /// Plan-side flavour for <see cref="Billing.PlanContentAvailabilityService"/>: modules are the
+    /// plan's EXPLICIT list (that service already treats a legacy no-module plan as granting no
+    /// content module, so fail-open never reaches here). Same exclusivity rule as the learner
+    /// overload: any module outside <see cref="BasicEnglishCourseModules"/> keeps the OET tree
+    /// countable, so e.g. a session plan with BundledBasicEnglish ticked never under-counts.
+    /// </summary>
+    internal static BasicEnglishScope ResolveBasicEnglishScope(
+        IReadOnlyList<string> explicitModules, bool bundledBasicEnglish)
+    {
+        var entitled = bundledBasicEnglish
+            || explicitModules.Any(m => string.Equals(m, ModuleKeys.BasicEnglish, StringComparison.OrdinalIgnoreCase));
+        var exclusively = entitled
+            && explicitModules.Count > 0
+            && explicitModules.All(BasicEnglishCourseModules.Contains);
+        return new BasicEnglishScope(entitled, exclusively);
+    }
+
+    /// <summary>
     /// Subtest × profession content scope for a folder (access &amp; payment spec §3): the
-    /// discipline gate, the plan's IncludedSubtests axis, and its per-plan folder
-    /// include/exclude overrides. The audience, module and subscription gates are the caller's
-    /// job — an override never bypasses those. An explicit include DOES win over the discipline
-    /// and subtest scope; an exclude drops the folder. A null <paramref name="entitlement"/>
-    /// (admin) skips the plan-derived scope, and an admin's empty
-    /// <paramref name="disciplineUniverse"/> already neutralises the discipline gate.
+    /// discipline gate, the General English gate, the plan's IncludedSubtests axis, and its
+    /// per-plan folder include/exclude overrides. The audience, module and subscription gates are
+    /// the caller's job — an override never bypasses those. An explicit include DOES win over the
+    /// discipline, General English and subtest scope; an exclude drops the folder. A null
+    /// <paramref name="entitlement"/> (admin) skips the plan-derived scope, an admin's empty
+    /// <paramref name="disciplineUniverse"/> already neutralises the discipline gate, and admins
+    /// pass <see cref="BasicEnglishScope.Unfiltered"/>.
     /// </summary>
     private static bool IsContentScopeVisible(
         MaterialFolder folder,
         Dictionary<string, MaterialFolder> allFolders,
         EffectiveEntitlementSnapshot? entitlement,
         HashSet<string> disciplineUniverse,
-        HashSet<string> learnerDisciplines)
+        HashSet<string> learnerDisciplines,
+        BasicEnglishScope basicEnglishScope)
     {
         if (entitlement is not null
             && ResolveFolderOverride(folder, allFolders, entitlement.ContentOverrides) is bool decided)
@@ -467,7 +591,8 @@ public sealed class MaterialAccessService(
             return decided;
         }
 
-        return IsDisciplineVisible(folder, allFolders, disciplineUniverse, learnerDisciplines)
+        return basicEnglishScope.IsFolderVisible(IsBasicEnglishFolder(folder, allFolders))
+            && IsDisciplineVisible(folder, allFolders, disciplineUniverse, learnerDisciplines)
             && IsSubtestInScope(ResolveEffectiveSubtest(folder, allFolders), entitlement);
     }
 

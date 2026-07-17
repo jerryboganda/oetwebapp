@@ -23,4 +23,12 @@ public static class ModuleKeys
 
     /// <summary>Mock exams module (subscription-granted unlimited mocks).</summary>
     public const string Mocks = "Mocks";
+
+    /// <summary>
+    /// General English (Basic English Course) module. NOT one of the four admin dropdowns —
+    /// it is granted by the <c>basic-english</c> plan and by plans with
+    /// <see cref="Domain.BillingPlan.BundledBasicEnglish"/>, and gates the separate
+    /// Basic English materials tree (course-materials diagram, owner directive 2026-07-18).
+    /// </summary>
+    public const string BasicEnglish = "BasicEnglish";
 }

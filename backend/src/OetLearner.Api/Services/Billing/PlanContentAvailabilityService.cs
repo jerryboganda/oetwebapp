@@ -161,6 +161,13 @@ public sealed class PlanContentAvailabilityService(
 
         var (disciplineUniverse, planDisciplines) = await ResolveDisciplineSetsAsync(normalizedProfession, ct);
 
+        // General English separation — mirrors MaterialAccessService's learner gate for a PLAN:
+        // only a plan granting Basic English reaches that tree, and the standalone basic-english
+        // plan reaches ONLY that tree (course-materials diagram, owner directive 2026-07-18).
+        var basicEnglishScope = MaterialAccessService.ResolveBasicEnglishScope(
+            EffectiveEntitlementResolver.ParseDashboardModules(plan.DashboardModulesJson),
+            plan.BundledBasicEnglish);
+
         // Cohort/institution-restricted folders are deliberately NOT counted: they are not
         // reachable by buying this plan.
         var noMemberships = new HashSet<string>(StringComparer.Ordinal);
@@ -169,8 +176,11 @@ public sealed class PlanContentAvailabilityService(
         {
             if (file.FolderId is null)
             {
-                // Root-level files sit under no folder: no audience, no discipline tag.
-                return IsSubtestInScope(file.SubtestCode, allSubtests, includedSubtests);
+                // Root-level files sit under no folder: no audience, no discipline tag — but they
+                // can never belong to the folder-rooted Basic English tree, so an exclusively-
+                // Basic-English plan does not reach them.
+                return !basicEnglishScope.ExclusivelyBasicEnglish
+                    && IsSubtestInScope(file.SubtestCode, allSubtests, includedSubtests);
             }
             if (!folderDict.TryGetValue(file.FolderId, out var folder)) return false;
             if (!MaterialAccessService.IsFolderVisible(
@@ -183,7 +193,8 @@ public sealed class PlanContentAvailabilityService(
                 return decided;
             }
 
-            return MaterialAccessService.IsDisciplineVisible(folder, folderDict, disciplineUniverse, planDisciplines)
+            return basicEnglishScope.IsFolderVisible(MaterialAccessService.IsBasicEnglishFolder(folder, folderDict))
+                && MaterialAccessService.IsDisciplineVisible(folder, folderDict, disciplineUniverse, planDisciplines)
                 && IsSubtestInScope(
                     MaterialAccessService.ResolveEffectiveSubtest(folder, folderDict), allSubtests, includedSubtests)
                 && IsSubtestInScope(file.SubtestCode, allSubtests, includedSubtests);
