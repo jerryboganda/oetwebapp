@@ -13,13 +13,13 @@ if (-not $pg) {
 }
 
 Write-Host "[seed-speaking-dev] applying EF Core migrations..."
-dotnet ef database update --project backend/src/OetLearner.Api --no-build
+dotnet ef database update --project backend/src/OetWithDrHesham.Api --no-build
 
 Write-Host "[seed-speaking-dev] running the API once to trigger seeders..."
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 $logPath = Join-Path $env:TEMP "oet-seed-api.log"
 $proc = Start-Process -FilePath "dotnet" `
-    -ArgumentList @("run", "--project", "backend/src/OetLearner.Api", "--no-build", "--no-launch-profile", "--", "--urls", "http://localhost:5199") `
+    -ArgumentList @("run", "--project", "backend/src/OetWithDrHesham.Api", "--no-build", "--no-launch-profile", "--", "--urls", "http://localhost:5199") `
     -PassThru -RedirectStandardOutput $logPath
 
 try {

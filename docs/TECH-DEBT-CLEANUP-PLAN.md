@@ -1,6 +1,6 @@
 # Technical Debt Audit & Prioritized Cleanup Plan
 
-_Generated: April 2026 — scoped to the OET Prep monorepo (`app/`, `backend/`, `electron/`, mobile shells)._
+_Generated: April 2026 — scoped to the OET with Dr Hesham monorepo (`app/`, `backend/`, `electron/`, mobile shells)._
 
 ## Execution Status
 
@@ -23,9 +23,9 @@ _Generated: April 2026 — scoped to the OET Prep monorepo (`app/`, `backend/`, 
 - `npx tsc --noEmit` → **EXIT 0** ✅
 - `npm run lint` → **EXIT 0** ✅
 - `npm test` → **112/112 files, 664/664 tests passed, EXIT 0** ✅
-- `dotnet restore backend/OetLearner.sln` → **EXIT 0** ✅
-- `dotnet build backend/OetLearner.sln` → **EXIT 0, 0 errors, 4 pre-existing nullability warnings** ✅
-- `dotnet test backend/OetLearner.sln` → **585/585 passed, 0 failed, EXIT 0** ✅
+- `dotnet restore backend/OetWithDrHesham.sln` → **EXIT 0** ✅
+- `dotnet build backend/OetWithDrHesham.sln` → **EXIT 0, 0 errors, 4 pre-existing nullability warnings** ✅
+- `dotnet test backend/OetWithDrHesham.sln` → **585/585 passed, 0 failed, EXIT 0** ✅
 - `node ./scripts/check-mojibake.mjs` → **no mojibake** ✅
 
 > The plan summary previously cited "77 unit test files / 304 tests" (from `AGENTS.md`); the repo has grown to **112 files / 664 tests** plus **585 backend tests**. `AGENTS.md` updated in this session to match.
@@ -66,7 +66,7 @@ There is **no emergency debt**. The plan below is ordered by risk × leverage, n
 
 - **6 `react-hooks/exhaustive-deps` disables** in learner hot paths — `app/conversation/[sessionId]/page.tsx`, `app/writing/player/page.tsx`, `app/listening/player/[id]/page.tsx`, `app/vocabulary/quiz/page.tsx`, `app/vocabulary/flashcards/page.tsx`, `lib/hooks/use-dashboard-home.ts`. These are classic stale-closure risks. Most are justified in comments, but each deserves a targeted refactor to `useEffectEvent` (React 19), `useRef`, or stable callbacks.
 - **Community/abandoned plugin** `capacitor-secure-storage-plugin` holds sensitive auth state — security debt (see §1.1).
-- **`ai-studio-applet`** is the `package.json` `name` — legacy/placeholder, should be `oet-prep` to match product. Cosmetic.
+- **`ai-studio-applet`** is the `package.json` `name` — legacy/placeholder, should be `oet-with-dr-hesham` to match product. Cosmetic.
 - **Duplicate entry in `AGENTS.md`**: the "AI Conversation Module (MISSION CRITICAL)" paragraph is pasted twice back-to-back. Safe to delete the duplicate.
 - **Unused/stray root files**: `nul` (Windows reserved name, almost certainly from an accidental `> nul` redirection), `build_final.txt`, `tsconfig.tsbuildinfo` (should be gitignored, not committed). Verify none are in git tracking.
 - No `framer-motion` holdovers — `motion/react` migration is complete. ✅
@@ -99,7 +99,7 @@ Each wave is independently shippable with its own rollback. **Verification gate*
 
 1. Delete stray files: `nul`, `build_final.txt`. Add `tsconfig.tsbuildinfo` to `.gitignore` if tracked.
 2. De-duplicate the "AI Conversation Module" block in [AGENTS.md](AGENTS.md).
-3. Rename `package.json` → `"name": "oet-prep"`.
+3. Rename `package.json` → `"name": "oet-with-dr-hesham"`.
 4. Document Dockerfile / compose-file matrix in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 **Rollback:** trivial revert.

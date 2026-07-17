@@ -1,7 +1,7 @@
 # AI Conversation Module — MISSION CRITICAL Specification
 
 **Status:** Production-grade for the existing batch conversation path; realtime STT remains a gated rollout.
-**Authority:** Dr. Ahmed Hesham — OET Preparation Platform.
+**Authority:** Dr. Ahmed Hesham — OET with Dr Heshamaration Platform.
 **Rulebook:** `rulebooks/conversation/<profession>/rulebook.v1.json`
 **Scoring:** `lib/scoring.ts:conversationProjectedScaled()` / `OetScoring.ConversationProjectedScaled()`
 **Feature flag:** `flg-011` (`ai_conversation`).

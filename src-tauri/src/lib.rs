@@ -46,9 +46,9 @@ fn navigate_to_route(app: &AppHandle, route: &str) {
     }
 }
 
-/// oet-prep://pair?code=X → /pair?code=X on the renderer origin.
+/// oet-with-dr-hesham://pair?code=X → /pair?code=X on the renderer origin.
 fn handle_deep_link_url(app: &AppHandle, url: &str) {
-    let Some(rest) = url.strip_prefix("oet-prep://") else {
+    let Some(rest) = url.strip_prefix("oet-with-dr-hesham://") else {
         return;
     };
     let route = format!("/{}", rest.trim_start_matches('/'));
@@ -124,7 +124,7 @@ pub fn run() {
                 let _ = win.set_focus();
             }
             for arg in argv {
-                if arg.starts_with("oet-prep://") {
+                if arg.starts_with("oet-with-dr-hesham://") {
                     handle_deep_link_url(app, &arg);
                 }
             }

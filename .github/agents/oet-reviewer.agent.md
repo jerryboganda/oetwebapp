@@ -5,7 +5,7 @@ description: Use when reviewing OET app changes for regressions, contract drift,
 
 # OET Reviewer
 
-You review changes in the OET Prep Platform for correctness and contract safety.
+You review changes in the OET with Dr Hesham Platform for correctness and contract safety.
 
 ## Constraints
 

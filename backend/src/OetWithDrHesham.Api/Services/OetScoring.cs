@@ -1,0 +1,700 @@
+namespace OetWithDrHesham.Api.Services;
+
+/// <summary>
+/// ============================================================================
+/// OET Canonical Scoring — SINGLE SOURCE OF TRUTH (.NET side)
+/// ============================================================================
+///
+/// MISSION CRITICAL. Every .NET OET scoring computation MUST use this type.
+/// Mirrors <c>lib/scoring.ts</c> on the frontend; the two implementations must
+/// remain behaviourally identical.
+///
+/// Rules (verbatim from the project scoring spec):
+///
+///   LISTENING
+///     - Pass: 350/500 (Grade B)
+///     - Raw equivalent: 30/42 correct ≡ 350/500 EXACTLY
+///     - &lt;30/42 = fail; ≥30/42 = pass
+///
+///   READING
+///     - Pass: 350/500 (Grade B)
+///     - Raw equivalent: 30/42 correct ≡ 350/500 EXACTLY
+///     - &lt;30/42 = fail; ≥30/42 = pass
+///
+///   WRITING (country-dependent)
+///     - Grade B  (350/500) → UK, Ireland, Australia, New Zealand, Canada
+///     - Grade C+ (300/500) → USA, Qatar
+///
+///   SPEAKING
+///     - Pass: 350/500 (Grade B), universal (no country variation)
+///
+/// References:
+///   https://edubenchmark.com/blog/oet-score-calculator-guide/
+///   https://www.geniusclass.co.uk/oet-calculator
+/// </summary>
+public static class OetScoring
+{
+    // -----------------------------------------------------------------------
+    // Invariants / constants
+    // -----------------------------------------------------------------------
+
+    /// <summary>Max raw score on OET Listening and Reading papers.</summary>
+    public const int ListeningReadingRawMax = 42;
+
+    /// <summary>Raw-score pass threshold for OET Listening and Reading.</summary>
+    public const int ListeningReadingRawPass = 30;
+
+    /// <summary>Scaled-score pass threshold for Grade B (universal).</summary>
+    public const int ScaledPassGradeB = 350;
+
+    /// <summary>Scaled-score pass threshold for Grade C+ (USA/Qatar Writing).</summary>
+    public const int ScaledPassGradeCPlus = 300;
+
+    /// <summary>Scaled-score scale lower bound.</summary>
+    public const int ScaledMin = 0;
+
+    /// <summary>Scaled-score scale upper bound.</summary>
+    public const int ScaledMax = 500;
+
+    /// <summary>Countries whose Writing pass mark is Grade B (350/500).</summary>
+    public static readonly IReadOnlyList<string> WritingGradeBCountries = new[]
+    {
+        "GB", "IE", "AU", "NZ", "CA",
+    };
+
+    /// <summary>Countries whose Writing pass mark is Grade C+ (300/500).</summary>
+    public static readonly IReadOnlyList<string> WritingGradeCPlusCountries = new[]
+    {
+        "US", "QA",
+    };
+
+    /// <summary>Union of all countries explicitly supported for Writing.</summary>
+    public static readonly IReadOnlyList<string> SupportedWritingCountries =
+        WritingGradeBCountries.Concat(WritingGradeCPlusCountries).ToArray();
+
+    // -----------------------------------------------------------------------
+    // Country normalization
+    // -----------------------------------------------------------------------
+
+    private static readonly Dictionary<string, string> CountryAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // United Kingdom
+        ["GB"] = "GB",
+        ["UK"] = "GB",
+        ["UNITED KINGDOM"] = "GB",
+        ["BRITAIN"] = "GB",
+        ["GREAT BRITAIN"] = "GB",
+        ["ENGLAND"] = "GB",
+        ["SCOTLAND"] = "GB",
+        ["WALES"] = "GB",
+        ["NORTHERN IRELAND"] = "GB",
+
+        // Ireland
+        ["IE"] = "IE",
+        ["IRELAND"] = "IE",
+        ["REPUBLIC OF IRELAND"] = "IE",
+
+        // Australia
+        ["AU"] = "AU",
+        ["AUSTRALIA"] = "AU",
+
+        // New Zealand
+        ["NZ"] = "NZ",
+        ["NEW ZEALAND"] = "NZ",
+
+        // Canada
+        ["CA"] = "CA",
+        ["CANADA"] = "CA",
+
+        // United States
+        ["US"] = "US",
+        ["USA"] = "US",
+        ["UNITED STATES"] = "US",
+        ["UNITED STATES OF AMERICA"] = "US",
+        ["AMERICA"] = "US",
+
+        // Qatar
+        ["QA"] = "QA",
+        ["QATAR"] = "QA",
+
+        // Broad registration categories. These are intentionally conservative
+        // until a more specific regulator/country is captured downstream.
+        ["GULF COUNTRIES"] = "GB",
+        ["OTHER COUNTRIES"] = "GB",
+    };
+
+    /// <summary>
+    /// Normalize a loosely-typed country input (ISO code or English name)
+    /// into the canonical alpha-2 code used by this module. Returns
+    /// <c>null</c> if the value cannot be mapped to a supported country.
+    /// </summary>
+    public static string? NormalizeWritingCountry(string? input)
+    {
+        if (input is null) return null;
+        var key = input.Trim();
+        if (key.Length == 0) return null;
+        return CountryAliases.TryGetValue(key, out var code) ? code : null;
+    }
+
+    // -----------------------------------------------------------------------
+    // Raw ↔ Scaled conversion (Listening / Reading only)
+    // -----------------------------------------------------------------------
+
+    private static int ClampInt(double value, int min, int max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(nameof(value), "Score must be a finite number");
+        var rounded = (int)Math.Round(value, MidpointRounding.AwayFromZero);
+        if (rounded < min) return min;
+        if (rounded > max) return max;
+        return rounded;
+    }
+
+    /// <summary>
+    /// Convert an OET Listening/Reading raw correct count (0–42) to the
+    /// scaled 0–500 score.
+    ///
+    /// INVARIANTS (never break these):
+    ///   OetRawToScaled(0)  == 0
+    ///   OetRawToScaled(30) == 350   ← mission-critical anchor
+    ///   OetRawToScaled(42) == 500
+    /// </summary>
+    public static int OetRawToScaled(int rawCorrect)
+    {
+        var raw = ClampInt(rawCorrect, 0, ListeningReadingRawMax);
+
+        if (raw == ListeningReadingRawPass) return ScaledPassGradeB; // 350, exact
+        if (raw == 0) return 0;
+        if (raw == ListeningReadingRawMax) return ScaledMax; // 500
+
+        if (raw < ListeningReadingRawPass)
+        {
+            // 0 → 0, 30 → 350, linear
+            var scaled = (double)raw * ScaledPassGradeB / ListeningReadingRawPass;
+            return (int)Math.Round(scaled, MidpointRounding.AwayFromZero);
+        }
+
+        // 30 → 350, 42 → 500, linear
+        var delta = raw - ListeningReadingRawPass;
+        var span = ListeningReadingRawMax - ListeningReadingRawPass; // 12
+        var scaled2 = ScaledPassGradeB + (double)delta * (ScaledMax - ScaledPassGradeB) / span;
+        return (int)Math.Round(scaled2, MidpointRounding.AwayFromZero);
+    }
+
+    // -----------------------------------------------------------------------
+    // Grade band derivation
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Map a scaled 0–500 score to its OET grade letter.
+    ///
+    /// Bands:
+    ///   A  : 450–500
+    ///   B  : 350–449
+    ///   C+ : 300–349
+    ///   C  : 200–299
+    ///   D  : 100–199
+    ///   E  :   0– 99
+    /// </summary>
+    public static string OetGradeLetterFromScaled(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        return s switch
+        {
+            >= 450 => "A",
+            >= 350 => "B",
+            >= 300 => "C+",
+            >= 200 => "C",
+            >= 100 => "D",
+            _ => "E",
+        };
+    }
+
+    /// <summary>Human-friendly grade label, e.g. "Grade B" or "Grade C+".</summary>
+    public static string OetGradeLabel(string letter) => $"Grade {letter}";
+
+    // -----------------------------------------------------------------------
+    // Listening / Reading pass logic
+    // -----------------------------------------------------------------------
+
+    /// <summary>Determine Listening/Reading pass from raw correct count.</summary>
+    public static bool IsListeningReadingPassByRaw(int rawCorrect)
+    {
+        var raw = ClampInt(rawCorrect, 0, ListeningReadingRawMax);
+        return raw >= ListeningReadingRawPass;
+    }
+
+    /// <summary>Determine Listening/Reading pass from scaled 0–500 score.</summary>
+    public static bool IsListeningReadingPassByScaled(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        return s >= ScaledPassGradeB;
+    }
+
+    /// <summary>
+    /// Canonical Listening/Reading grading from a raw correct count.
+    /// </summary>
+    public static ListeningReadingResult GradeListeningReading(string subtest, int rawCorrect)
+    {
+        var raw = ClampInt(rawCorrect, 0, ListeningReadingRawMax);
+        var scaled = OetRawToScaled(raw);
+        var grade = OetGradeLetterFromScaled(scaled);
+        return new ListeningReadingResult(
+            subtest,
+            raw,
+            ListeningReadingRawMax,
+            scaled,
+            ScaledPassGradeB,
+            "B",
+            grade,
+            scaled >= ScaledPassGradeB);
+    }
+
+    // -----------------------------------------------------------------------
+    // Writing pass logic (country-aware)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Return the scaled Writing pass threshold for the given destination
+    /// country. Returns <c>null</c> if the country cannot be resolved —
+    /// callers MUST NOT default silently.
+    /// </summary>
+    public static WritingThreshold? GetWritingPassThreshold(string? country)
+    {
+        var code = NormalizeWritingCountry(country);
+        if (code is null) return null;
+        if (WritingGradeBCountries.Contains(code))
+            return new WritingThreshold(ScaledPassGradeB, "B", code);
+        if (WritingGradeCPlusCountries.Contains(code))
+            return new WritingThreshold(ScaledPassGradeCPlus, "C+", code);
+        return null;
+    }
+
+    /// <summary>
+    /// Determine Writing pass/fail for a scaled 0–500 score with a
+    /// mandatory destination country. If the country is missing or
+    /// unsupported, <see cref="WritingResult.Passed"/> is <c>null</c>
+    /// and <see cref="WritingResult.Reason"/> describes why.
+    /// </summary>
+    public static WritingResult GradeWriting(int scaled, string? country)
+    {
+        var resolved = GetWritingPassThreshold(country);
+        if (resolved is null)
+        {
+            var reason = string.IsNullOrWhiteSpace(country)
+                ? "country_required"
+                : "country_unsupported";
+            return new WritingResult(
+                Passed: null,
+                ScaledScore: ClampInt(scaled, ScaledMin, ScaledMax),
+                RequiredScaled: null,
+                RequiredGrade: null,
+                Grade: OetGradeLetterFromScaled(scaled),
+                Reason: reason,
+                ProvidedCountry: country,
+                SupportedCountries: SupportedWritingCountries);
+        }
+
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        return new WritingResult(
+            Passed: s >= resolved.Threshold,
+            ScaledScore: s,
+            RequiredScaled: resolved.Threshold,
+            RequiredGrade: resolved.Grade,
+            Grade: OetGradeLetterFromScaled(s),
+            Reason: null,
+            ProvidedCountry: resolved.Country,
+            SupportedCountries: SupportedWritingCountries);
+    }
+
+    // -----------------------------------------------------------------------
+    // Speaking pass logic (universal)
+    // -----------------------------------------------------------------------
+
+    /// <summary>Determine Speaking pass from a scaled 0–500 score.</summary>
+    public static bool IsSpeakingPass(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        return s >= ScaledPassGradeB;
+    }
+
+    /// <summary>Canonical Speaking grading result.</summary>
+    public static SpeakingResult GradeSpeaking(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        return new SpeakingResult(
+            s,
+            ScaledPassGradeB,
+            "B",
+            OetGradeLetterFromScaled(s),
+            s >= ScaledPassGradeB);
+    }
+
+    // -----------------------------------------------------------------------
+    // Pronunciation projection (authority: /rulebooks/pronunciation/common/assessment-criteria.json)
+    // -----------------------------------------------------------------------
+    //
+    // Pronunciation accuracy/fluency/completeness/prosody are scored 0-100 by
+    // the pronunciation ASR pipeline. The composite "overall" is projected
+    // into the OET Speaking 0-500 scale via the canonical anchor table. The
+    // projection is ADVISORY only — the authoritative Speaking scaled score
+    // still comes from expert-reviewed speaking attempts.
+    //
+    // Anchors (overall → scaled):
+    //   0 → 0
+    //   60 → 300 (C+ US/QA pass threshold)
+    //   70 → 350 (B pass — universal Speaking)
+    //   80 → 400
+    //   90 → 450
+    //   100 → 500
+    //
+    // Between anchors, piecewise-linear interpolation. This KEEPS the 70↔350
+    // anchor sacrosanct so the pronunciation engine never tells a learner
+    // they are passing when the underlying overall < 70.
+
+    /// <summary>
+    /// Project a pronunciation overall score (0-100 composite) onto the
+    /// 0-500 Speaking scaled scale. Advisory only.
+    /// </summary>
+    public static int PronunciationProjectedScaled(double overall0To100)
+    {
+        if (double.IsNaN(overall0To100)) return 0;
+        var o = Math.Clamp(overall0To100, 0.0, 100.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0,   60,  0,   300),
+            (60,  70,  300, 350),
+            (70,  80,  350, 400),
+            (80,  90,  400, 450),
+            (90,  100, 450, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (o >= f && o <= t)
+            {
+                var ratio = (o - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    /// <summary>
+    /// Project a pronunciation overall score into a full Speaking pass/fail result.
+    /// </summary>
+    public static SpeakingResult PronunciationProjectedBand(double overall0To100)
+    {
+        var scaled = PronunciationProjectedScaled(overall0To100);
+        return GradeSpeaking(scaled);
+    }
+
+    // -----------------------------------------------------------------------
+    // Conversation projection (OET Speaking rubric 4 × 0..6 → 0..500)
+    // -----------------------------------------------------------------------
+    //
+    // Advisory projection. Anchor:
+    //   0.0 → 0
+    //   3.0 → 250
+    //   4.2 → 350 (PASS — Grade B, universal)
+    //   5.0 → 417
+    //   6.0 → 500
+
+    public static int ConversationProjectedScaled(double mean0To6)
+    {
+        if (double.IsNaN(mean0To6)) return 0;
+        var m = Math.Clamp(mean0To6, 0.0, 6.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0.0, 3.0, 0,   250),
+            (3.0, 4.2, 250, 350),
+            (4.2, 5.0, 350, 417),
+            (5.0, 6.0, 417, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (m >= f && m <= t)
+            {
+                var ratio = (m - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    public static SpeakingResult ConversationProjectedBand(
+        double intelligibility06, double fluency06, double appropriateness06, double grammarExpression06)
+    {
+        var mean = (Math.Clamp(intelligibility06, 0, 6) + Math.Clamp(fluency06, 0, 6)
+                  + Math.Clamp(appropriateness06, 0, 6) + Math.Clamp(grammarExpression06, 0, 6)) / 4.0;
+        return GradeSpeaking(ConversationProjectedScaled(mean));
+    }
+
+    // -----------------------------------------------------------------------
+    // Speaking projection (full official rubric → 0–500)
+    // -----------------------------------------------------------------------
+    //
+    // Authority: docs/SPEAKING-MODULE-PLAN.md §3 Wave 1, the OET official
+    // descriptors, and the existing Conversation / Pronunciation 70 ≡ 350
+    // anchor. The full Speaking rubric has TWO criterion families:
+    //
+    //   Linguistic (4 criteria, each 0..6, max 24):
+    //     Intelligibility, Fluency, Appropriateness, Grammar/Expression.
+    //
+    //   Clinical Communication (5 criteria, each 0..3, max 15):
+    //     Relationship Building, Patient Perspective, Structure,
+    //     Information Gathering, Information Giving.
+    //
+    // Combined max = 24 + 15 = 39. The composite is normalised to a
+    // 0..100 percentage and projected via the canonical anchor table:
+    //
+    //   0   → 0
+    //   50  → 250  (developing)
+    //   70  → 350  (B pass — universal Speaking; matches Pronunciation /
+    //              Conversation anchor)
+    //   80  → 400
+    //   90  → 450
+    //   100 → 500
+    //
+    // The projection is ADVISORY — the authoritative scaled score still
+    // comes from the AI-gateway-grounded evaluation pipeline, but this
+    // function is the ONE place the rubric→scaled math lives. Endpoints
+    // and UI MUST NOT reimplement it.
+
+    /// <summary>
+    /// Speaking criterion scores for the full official rubric. Linguistic
+    /// criteria are 0–6, clinical communication criteria are 0–3.
+    /// </summary>
+    public sealed record SpeakingCriterionScores(
+        int Intelligibility,
+        int Fluency,
+        int Appropriateness,
+        int GrammarExpression,
+        int RelationshipBuilding,
+        int PatientPerspective,
+        int Structure,
+        int InformationGathering,
+        int InformationGiving);
+
+    /// <summary>Maximum scoreable points for the full Speaking rubric (24 linguistic + 15 clinical).</summary>
+    public const int SpeakingRubricMax = 24 + 15;
+
+    /// <summary>
+    /// Project full Speaking criterion scores onto the 0–500 scaled scale
+    /// using the canonical 70% ≡ 350 anchor.
+    /// </summary>
+    public static int SpeakingProjectedScaled(SpeakingCriterionScores scores)
+    {
+        var linguistic =
+            ClampInt(scores.Intelligibility,    0, 6) +
+            ClampInt(scores.Fluency,            0, 6) +
+            ClampInt(scores.Appropriateness,    0, 6) +
+            ClampInt(scores.GrammarExpression,  0, 6);
+        var clinical =
+            ClampInt(scores.RelationshipBuilding,  0, 3) +
+            ClampInt(scores.PatientPerspective,    0, 3) +
+            ClampInt(scores.Structure,             0, 3) +
+            ClampInt(scores.InformationGathering,  0, 3) +
+            ClampInt(scores.InformationGiving,     0, 3);
+        var pct = (linguistic + clinical) * 100.0 / SpeakingRubricMax;
+        return SpeakingProjectedScaledFromPercentage(pct);
+    }
+
+    /// <summary>
+    /// Project a 0–100 composite percentage onto the 0–500 scale. Exposed
+    /// for callers that already have a normalised percentage (e.g. legacy
+    /// evaluations that don't carry the per-criterion breakdown).
+    /// </summary>
+    public static int SpeakingProjectedScaledFromPercentage(double pct0To100)
+    {
+        if (double.IsNaN(pct0To100)) return 0;
+        var p = Math.Clamp(pct0To100, 0.0, 100.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0,   50,  0,   250),
+            (50,  70,  250, 350),
+            (70,  80,  350, 400),
+            (80,  90,  400, 450),
+            (90,  100, 450, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (p >= f && p <= t)
+            {
+                var ratio = (p - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    /// <summary>
+    /// Project full Speaking criterion scores into a Speaking pass/fail result.
+    /// </summary>
+    public static SpeakingResult SpeakingProjectedBand(SpeakingCriterionScores scores)
+        => GradeSpeaking(SpeakingProjectedScaled(scores));
+
+    // -----------------------------------------------------------------------
+    // Speaking readiness band (advisory, learner-facing)
+    // -----------------------------------------------------------------------
+    //
+    // Spec §10 readiness ladder. Maps a scaled 0–500 score to a typed band
+    // so endpoints and UIs never compare to 350/300 inline. Authoritative
+    // pass/fail still comes from <see cref="IsSpeakingPass"/>.
+    //
+    //   < 250            → NotReady
+    //   250 ≤ s < 300    → Developing
+    //   300 ≤ s < 350    → Borderline (just under pass line)
+    //   350 ≤ s < 420    → ExamReady (at/above pass line)
+    //   ≥ 420            → Strong
+
+    /// <summary>Advisory readiness band per Spec §10.</summary>
+    public enum SpeakingReadinessBand
+    {
+        NotReady = 0,
+        Developing = 1,
+        Borderline = 2,
+        ExamReady = 3,
+        Strong = 4,
+    }
+
+    /// <summary>Map a scaled 0–500 Speaking score to a readiness band.</summary>
+    public static SpeakingReadinessBand SpeakingReadinessBandFromScaled(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        if (s < 250) return SpeakingReadinessBand.NotReady;
+        if (s < 300) return SpeakingReadinessBand.Developing;
+        if (s < ScaledPassGradeB) return SpeakingReadinessBand.Borderline;
+        if (s < 420) return SpeakingReadinessBand.ExamReady;
+        return SpeakingReadinessBand.Strong;
+    }
+
+    /// <summary>Stable wire-format code for a <see cref="SpeakingReadinessBand"/>.</summary>
+    public static string SpeakingReadinessBandCode(SpeakingReadinessBand band) => band switch
+    {
+        SpeakingReadinessBand.NotReady   => "not_ready",
+        SpeakingReadinessBand.Developing => "developing",
+        SpeakingReadinessBand.Borderline => "borderline",
+        SpeakingReadinessBand.ExamReady  => "exam_ready",
+        SpeakingReadinessBand.Strong     => "strong",
+        _ => "not_ready",
+    };
+
+    // -----------------------------------------------------------------------
+    // Advisory tier (readiness messaging)
+    // -----------------------------------------------------------------------
+    //
+    // Centralised, UI-agnostic tiering for "how close is this learner to the
+    // OET pass line?" messaging. The 350 anchor is owned HERE — never compare
+    // scaled scores to 350/300/400 inline in endpoint or UI code (see AGENTS.md).
+    //
+    // Bands (advisory copy only; authoritative pass logic stays in
+    // <see cref="IsSpeakingPass"/> / <see cref="IsListeningReadingPassByScaled"/>
+    // / <see cref="GradeWriting"/>):
+    //   "strong"      : scaled ≥ 400 — comfortably above pass line
+    //   "passing"     : scaled ≥ 350 — at/above pass line (Grade B anchor)
+    //   "developing"  : scaled ≥ 300 — within striking distance (Grade C+)
+    //   "foundation"  : scaled < 300 — needs targeted sub-test practice first
+
+    /// <summary>Advisory readiness tier for a scaled 0–500 overall score.</summary>
+    public sealed record AdvisoryTierResult(string Tier, string Message, int PassThreshold, int OverallScore);
+
+    /// <summary>
+    /// Map a scaled 0–500 overall score to an advisory readiness tier with a
+    /// copy-ready message. Pass threshold in the payload is the universal
+    /// Grade B anchor (350); Writing country variation is not applied here —
+    /// use <see cref="GradeWriting"/> for authoritative country-aware results.
+    /// </summary>
+    public static AdvisoryTierResult AdvisoryTier(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        string tier;
+        string message;
+        if (s >= 400)
+        {
+            tier = "strong";
+            message = "You're comfortably above the OET pass line. Target consistency across all four sub-tests.";
+        }
+        else if (s >= ScaledPassGradeB)
+        {
+            tier = "passing";
+            message = "You're at or above the OET pass line. Another full mock will confirm the result is repeatable.";
+        }
+        else if (s >= ScaledPassGradeCPlus)
+        {
+            tier = "developing";
+            message = "You're within striking distance. Practise the weakest sub-test before the next full mock.";
+        }
+        else
+        {
+            tier = "foundation";
+            message = "Focus on sub-test drills first — a full mock will be more useful after targeted practice.";
+        }
+        return new AdvisoryTierResult(tier, message, ScaledPassGradeB, s);
+    }
+
+    // -----------------------------------------------------------------------
+    // Display formatting
+    // -----------------------------------------------------------------------
+
+    /// <summary>Format a scaled score as "380/500".</summary>
+    public static string FormatScaledScore(int scaled)
+        => $"{ClampInt(scaled, ScaledMin, ScaledMax)}/{ScaledMax}";
+
+    /// <summary>Format an L/R raw score as "35/42".</summary>
+    public static string FormatRawLrScore(int rawCorrect)
+        => $"{ClampInt(rawCorrect, 0, ListeningReadingRawMax)}/{ListeningReadingRawMax}";
+
+    /// <summary>
+    /// Format a combined L/R score line, e.g. "35/42 • 380/500 • Grade B".
+    /// </summary>
+    public static string FormatListeningReadingDisplay(int rawCorrect)
+    {
+        var r = GradeListeningReading("listening", rawCorrect);
+        return $"{FormatRawLrScore(r.RawCorrect)} \u2022 {FormatScaledScore(r.ScaledScore)} \u2022 {OetGradeLabel(r.Grade)}";
+    }
+}
+
+/// <summary>Writing threshold resolution result for a target country.</summary>
+public sealed record WritingThreshold(int Threshold, string Grade, string Country);
+
+/// <summary>Listening/Reading grading result.</summary>
+public sealed record ListeningReadingResult(
+    string Subtest,
+    int RawCorrect,
+    int RawMax,
+    int ScaledScore,
+    int RequiredScaled,
+    string RequiredGrade,
+    string Grade,
+    bool Passed);
+
+/// <summary>
+/// Writing grading result. When <see cref="Passed"/> is <c>null</c>, the
+/// caller must resolve the destination country before treating this as a
+/// determination. <see cref="Reason"/> is populated in that case.
+/// </summary>
+public sealed record WritingResult(
+    bool? Passed,
+    int ScaledScore,
+    int? RequiredScaled,
+    string? RequiredGrade,
+    string Grade,
+    string? Reason,
+    string? ProvidedCountry,
+    IReadOnlyList<string> SupportedCountries)
+{
+    /// <summary>Subtest identifier, always "writing".</summary>
+    public string Subtest => "writing";
+}
+
+/// <summary>Speaking grading result (country-independent).</summary>
+public sealed record SpeakingResult(
+    int ScaledScore,
+    int RequiredScaled,
+    string RequiredGrade,
+    string Grade,
+    bool Passed)
+{
+    /// <summary>Subtest identifier, always "speaking".</summary>
+    public string Subtest => "speaking";
+}

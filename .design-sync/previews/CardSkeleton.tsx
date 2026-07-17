@@ -1,6 +1,6 @@
 // Authored preview — CardSkeleton (card-shaped loading placeholder).
 // Each named export = one labeled card cell.
-import { CardSkeleton } from 'oet-prep';
+import { CardSkeleton } from 'oet-with-dr-hesham';
 
 export const Single = () => (
   <div style={{ maxWidth: 360 }}>

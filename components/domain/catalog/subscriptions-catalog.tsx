@@ -292,7 +292,7 @@ export function SubscriptionsCatalog() {
   return (
     <div className="space-y-8">
       <LearnerPageHero
-        eyebrow="OET with Dr Ahmed Hesham · 2026 portfolio"
+        eyebrow="OET with Dr Hesham · 2026 portfolio"
         title="Subscriptions & Packages"
         description="Every 2026 package from the website pricing page — full recorded courses, focused Writing & Speaking bundles, AI practice, mock exams and TutorBook — with current pricing."
         icon={Sparkles}

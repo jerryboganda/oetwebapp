@@ -13,14 +13,14 @@ on:
       - 'lib/api/speaking-*.ts'
       - 'lib/api/interlocutor-*.ts'
       - 'lib/analytics/speaking-events.ts'
-      - 'backend/src/OetLearner.Api/Domain/Speaking*.cs'
-      - 'backend/src/OetLearner.Api/Domain/RolePlay*.cs'
-      - 'backend/src/OetLearner.Api/Domain/Interlocutor*.cs'
-      - 'backend/src/OetLearner.Api/Services/Speaking/**'
-      - 'backend/src/OetLearner.Api/Endpoints/*Speaking*.cs'
-      - 'backend/src/OetLearner.Api/Endpoints/Tutor*.cs'
-      - 'backend/src/OetLearner.Api/Endpoints/AdminSpeaking*.cs'
-      - 'backend/src/OetLearner.Api/Hubs/**'
+      - 'backend/src/OetWithDrHesham.Api/Domain/Speaking*.cs'
+      - 'backend/src/OetWithDrHesham.Api/Domain/RolePlay*.cs'
+      - 'backend/src/OetWithDrHesham.Api/Domain/Interlocutor*.cs'
+      - 'backend/src/OetWithDrHesham.Api/Services/Speaking/**'
+      - 'backend/src/OetWithDrHesham.Api/Endpoints/*Speaking*.cs'
+      - 'backend/src/OetWithDrHesham.Api/Endpoints/Tutor*.cs'
+      - 'backend/src/OetWithDrHesham.Api/Endpoints/AdminSpeaking*.cs'
+      - 'backend/src/OetWithDrHesham.Api/Hubs/**'
       - '.github/workflows/speaking-ci.yml'
   push:
     branches: [main]
@@ -45,16 +45,16 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 20
     env:
-      ConnectionStrings__OetLearner: Host=localhost;Database=oet_test;Username=postgres;Password=postgres
+      ConnectionStrings__OetWithDrHesham: Host=localhost;Database=oet_test;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oet-stack
         with:
           with-postgres: "true"
       - name: Restore + build
-        run: dotnet build backend/OetLearner.sln --configuration Release --nologo
+        run: dotnet build backend/OetWithDrHesham.sln --configuration Release --nologo
       - name: Speaking-tagged tests
-        run: dotnet test backend/OetLearner.sln --configuration Release --no-build --filter "FullyQualifiedName~Speaking" --logger "trx;LogFileName=speaking.trx"
+        run: dotnet test backend/OetWithDrHesham.sln --configuration Release --no-build --filter "FullyQualifiedName~Speaking" --logger "trx;LogFileName=speaking.trx"
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -91,9 +91,9 @@ jobs:
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
       - name: Pending model changes?
         run: |
-          dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
-          dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --nologo
-          cd backend/src/OetLearner.Api
+          dotnet restore backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj --nologo
+          dotnet build backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj --configuration Release --nologo
+          cd backend/src/OetWithDrHesham.Api
           set +e
           "$HOME/.dotnet/tools/dotnet-ef" migrations has-pending-model-changes --configuration Release --no-build > /tmp/ef.out 2>&1
           ef_status=$?

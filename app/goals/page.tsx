@@ -40,7 +40,7 @@ const EXAM_FAMILY_COPY: Record<ExamFamilyCode, { label: string; scoreHint: strin
     scoreHint: 'OET scores use the 0 to 500 scale.',
     scorePlaceholder: 'e.g. 350',
     attemptsLabel: 'Previous OET Attempts',
-    studyLabel: 'Hours per week for OET prep',
+    studyLabel: 'Hours per week for OET with Dr Hesham preparation',
     helperText: 'OET remains the flagship experience, with profession-specific coaching and deeper review workflows.',
   },
   ielts: {

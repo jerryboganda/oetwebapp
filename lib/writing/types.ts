@@ -3,7 +3,7 @@
  *
  * Mirrors backend DTOs serialised by ASP.NET Core (camelCase by default).
  * Source of truth for entities lives in:
- *   backend/src/OetLearner.Api/Domain/Writing*Entities.cs
+ *   backend/src/OetWithDrHesham.Api/Domain/Writing*Entities.cs
  *
  * Wave B (WS6 endpoints) MUST serialise responses to match these shapes.
  * Wave C (WS7 pages) imports from this file; if a property is missing here,

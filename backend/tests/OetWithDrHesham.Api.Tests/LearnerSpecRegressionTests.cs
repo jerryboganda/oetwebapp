@@ -1,0 +1,1269 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetWithDrHesham.Api.Data;
+using OetWithDrHesham.Api.Domain;
+using OetWithDrHesham.Api.Services.Reading;
+using OetWithDrHesham.Api.Tests.Infrastructure;
+
+namespace OetWithDrHesham.Api.Tests;
+
+public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactory>
+{
+    private readonly TestWebApplicationFactory _factory;
+
+    public LearnerSpecRegressionTests(TestWebApplicationFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task SettingsAggregate_ExposesGoalsSection_ForInitialHydrate()
+    {
+        using var client = await CreateClientForUserAsync("settings-user");
+
+        var response = await client.GetAsync("/v1/settings");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.TryGetProperty("goals", out var goals));
+        Assert.True(goals.TryGetProperty("targetExamDate", out _));
+        Assert.True(goals.TryGetProperty("studyHoursPerWeek", out _));
+        Assert.Equal("Australia", goals.GetProperty("targetCountry").GetString());
+        Assert.True(json.RootElement.TryGetProperty("study", out var study));
+        Assert.Equal(goals.GetProperty("targetCountry").GetString(), study.GetProperty("targetCountry").GetString());
+    }
+
+    [Fact]
+    public async Task SettingsSectionEndpoints_ExposeConcreteLearnerSections()
+    {
+        using var client = await CreateClientForUserAsync("settings-section-user");
+
+        var profileResponse = await client.GetAsync("/v1/settings/profile");
+        profileResponse.EnsureSuccessStatusCode();
+        using var profileJson = JsonDocument.Parse(await profileResponse.Content.ReadAsStringAsync());
+        Assert.Equal("profile", profileJson.RootElement.GetProperty("section").GetString());
+        Assert.True(profileJson.RootElement.TryGetProperty("values", out _));
+
+        var studyResponse = await client.GetAsync("/v1/settings/study");
+        studyResponse.EnsureSuccessStatusCode();
+        using var studyJson = JsonDocument.Parse(await studyResponse.Content.ReadAsStringAsync());
+        Assert.Equal("study", studyJson.RootElement.GetProperty("section").GetString());
+        Assert.True(studyJson.RootElement.TryGetProperty("values", out _));
+    }
+
+    [Fact]
+    public async Task GoalsPatch_RejectsTargetCountryOutsidePrdList()
+    {
+        using var client = await CreateClientForUserAsync("goals-country-validation-user");
+
+        var response = await client.PatchAsJsonAsync("/v1/learner/goals/", new
+        {
+            targetCountry = "Atlantis"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("country_target_invalid", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task SettingsStudyPatch_RejectsTargetCountryOutsidePrdList()
+    {
+        using var client = await CreateClientForUserAsync("settings-country-validation-user");
+
+        var response = await client.PatchAsJsonAsync("/v1/settings/study", new
+        {
+            values = new Dictionary<string, object?>
+            {
+                ["targetCountry"] = "Atlantis"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("country_target_invalid", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task SettingsStudyPatch_CanonicalizesTargetCountryFromPrdList()
+    {
+        using var client = await CreateClientForUserAsync("settings-country-canonical-user");
+
+        var response = await client.PatchAsJsonAsync("/v1/settings/study", new
+        {
+            values = new Dictionary<string, object?>
+            {
+                ["targetCountry"] = "usa"
+            }
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("USA", json.RootElement.GetProperty("values").GetProperty("targetCountry").GetString());
+    }
+
+    [Fact]
+    public async Task MockAttemptCreation_PersistsReviewSelectionAndLaunchRoutes()
+    {
+        const string userId = "mock-route-user";
+        using var client = await CreateClientForUserAsync(userId);
+        var bundleId = await SeedPublishedFullMockBundleAsync(userId, walletCredits: 2);
+
+        var response = await client.PostAsJsonAsync("/v1/mock-attempts", new
+        {
+            bundleId,
+            mockType = "full",
+            subType = (string?)null,
+            mode = "exam",
+            profession = "Medicine",
+            includeReview = true,
+            strictTimer = true,
+            reviewSelection = "writing_and_speaking"
+        });
+        var responseBody = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, responseBody);
+
+        using var json = JsonDocument.Parse(responseBody);
+        Assert.Equal("writing_and_speaking", json.RootElement.GetProperty("config").GetProperty("reviewSelection").GetString());
+        Assert.Equal(bundleId, json.RootElement.GetProperty("config").GetProperty("bundleId").GetString());
+        Assert.True(json.RootElement.TryGetProperty("reviewReservation", out var reservation));
+        Assert.Equal(2, reservation.GetProperty("reservedCredits").GetInt32());
+        Assert.Equal(2, reservation.GetProperty("pendingCredits").GetInt32());
+
+        var sectionStates = json.RootElement.GetProperty("sectionStates");
+        Assert.Equal(4, sectionStates.GetArrayLength());
+        var sections = sectionStates.EnumerateArray().ToArray();
+        Assert.Equal(new[] { "listening", "reading", "writing", "speaking" }, sections.Select(section => section.GetProperty("subtest").GetString()).ToArray());
+        Assert.Contains("/listening/paper/mock-listening-regression", sections[0].GetProperty("launchRoute").GetString());
+        Assert.Contains("/reading/paper/mock-reading-regression", sections[1].GetProperty("launchRoute").GetString());
+        // Writing sections now use the dedicated mock-writing player route
+        // (/mocks/writing/{sectionAttemptId}?...) rather than the legacy
+        // /writing/player?taskId= format. The content paper ID is carried as
+        // the paperId query parameter.
+        Assert.Contains("/mocks/writing/", sections[2].GetProperty("launchRoute").GetString());
+        Assert.Contains("paperId=mock-writing-regression", sections[2].GetProperty("launchRoute").GetString());
+        Assert.Contains("/speaking/task/mock-speaking-regression", sections[3].GetProperty("launchRoute").GetString());
+        Assert.All(sections, section =>
+        {
+            var launchRoute = section.GetProperty("launchRoute").GetString();
+            Assert.DoesNotContain("/mocks/player/", launchRoute);
+            Assert.Contains("mockAttemptId=", launchRoute);
+            Assert.Contains("mockSectionId=", launchRoute);
+        });
+    }
+
+    [Fact]
+    public async Task BillingPlansAndListeningDrills_ExposeLearnerContracts()
+    {
+        using var client = await CreateClientForUserAsync("billing-contract-user");
+
+        var plansResponse = await client.GetAsync("/v1/billing/plans");
+        plansResponse.EnsureSuccessStatusCode();
+        using var plansJson = JsonDocument.Parse(await plansResponse.Content.ReadAsStringAsync());
+        Assert.True(plansJson.RootElement.GetProperty("items").GetArrayLength() >= 2);
+
+        // Target a current OET-2026 catalog plan (the legacy "premium-monthly"
+        // code was removed in the catalog rework). The learner's seeded
+        // subscription is on full-condensed-medicine, so this previews a real
+        // change to a different active plan.
+        var changePreviewResponse = await client.GetAsync("/v1/billing/change-preview?targetPlanId=full-nursing");
+        changePreviewResponse.EnsureSuccessStatusCode();
+        using var changePreviewJson = JsonDocument.Parse(await changePreviewResponse.Content.ReadAsStringAsync());
+        Assert.Equal("full-nursing", changePreviewJson.RootElement.GetProperty("targetPlanId").GetString());
+
+        var drillResponse = await client.GetAsync("/v1/listening/drills/listening-drill-distractor_confusion");
+        drillResponse.EnsureSuccessStatusCode();
+        using var drillJson = JsonDocument.Parse(await drillResponse.Content.ReadAsStringAsync());
+        Assert.Equal("listening-drill-distractor_confusion", drillJson.RootElement.GetProperty("drillId").GetString());
+        Assert.Contains("/listening/player/", drillJson.RootElement.GetProperty("launchRoute").GetString());
+        Assert.Contains("/listening/review/", drillJson.RootElement.GetProperty("reviewRoute").GetString());
+    }
+
+    [Fact]
+    public async Task LearnerOwnedAttempt_CannotBeFetchedByAnotherUser()
+    {
+        using var ownerClient = await CreateClientForUserAsync("attempt-owner");
+        var attemptId = await CreateWritingAttemptAsync(ownerClient, "practice");
+
+        using var otherClient = await CreateClientForUserAsync("attempt-intruder");
+        var response = await otherClient.GetAsync($"/v1/writing/attempts/{attemptId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task WritingDraftPatch_RejectsStaleDraftVersion_WithStructuredConflict()
+    {
+        using var client = await CreateClientForUserAsync("draft-version-user");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice");
+
+        var firstPatch = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = "First version of the draft.",
+            scratchpad = "Keep the letter concise.",
+            checklist = new Dictionary<string, bool> { ["Addressed the purpose clearly"] = true },
+            draftVersion = 1
+        });
+        firstPatch.EnsureSuccessStatusCode();
+
+        var stalePatch = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = "Second version sent from an out-of-date browser tab.",
+            scratchpad = "This should conflict.",
+            checklist = new Dictionary<string, bool> { ["Addressed the purpose clearly"] = true },
+            draftVersion = 1
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, stalePatch.StatusCode);
+
+        using var json = JsonDocument.Parse(await stalePatch.Content.ReadAsStringAsync());
+        Assert.Equal("draft_version_conflict", json.RootElement.GetProperty("code").GetString());
+        Assert.Contains(
+            json.RootElement.GetProperty("fieldErrors").EnumerateArray(),
+            item => item.GetProperty("field").GetString() == "draftVersion");
+    }
+
+    [Fact]
+    public async Task WritingExamDraftPatch_RejectsContentDuringReadingWindow()
+    {
+        using var client = await CreateClientForUserAsync("writing-reading-window-draft");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = "Dear Dr Smith, I am writing during the reading-only window.",
+            scratchpad = (string?)null,
+            checklist = (Dictionary<string, bool>?)null,
+            draftVersion = 1
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_reading_window_active", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task WritingExamDraftPatch_RejectsScratchpadDuringReadingWindow()
+    {
+        using var client = await CreateClientForUserAsync("writing-reading-window-scratchpad");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = (string?)null,
+            scratchpad = "Plan a sentence during the reading-only window.",
+            checklist = (Dictionary<string, bool>?)null,
+            draftVersion = 1
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_reading_window_active", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task WritingExamDraftPatch_RejectsChecklistDuringReadingWindow()
+    {
+        using var client = await CreateClientForUserAsync("writing-reading-window-checklist");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = (string?)null,
+            scratchpad = (string?)null,
+            checklist = new Dictionary<string, bool> { ["Started planning before writing time"] = true },
+            draftVersion = 1
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_reading_window_active", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task WritingExamSubmit_RejectsContentDuringReadingWindow()
+    {
+        using var client = await CreateClientForUserAsync("writing-reading-window-submit");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
+
+        var response = await client.PostAsJsonAsync($"/v1/writing/attempts/{attemptId}/submit", new
+        {
+            content = "Dear Dr Smith, I am writing during the reading-only window.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_reading_window_active", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task WritingExamAttemptCreation_ReusesInProgressAttemptForSameTaskAndContext()
+    {
+        using var client = await CreateClientForUserAsync("writing-exam-attempt-reuse");
+
+        var firstAttemptId = await CreateWritingAttemptAsync(client, "exam", mode: "exam");
+        var secondAttemptId = await CreateWritingAttemptAsync(client, "exam", mode: "exam");
+
+        Assert.Equal(firstAttemptId, secondAttemptId);
+    }
+
+    [Fact]
+    public async Task WritingExamDraftPatch_AllowsContentAfterReadingWindow()
+    {
+        using var client = await CreateClientForUserAsync("writing-reading-window-draft-allowed");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
+        await MoveAttemptStartBackAsync(attemptId, TimeSpan.FromMinutes(6));
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = "Dear Dr Smith, I am writing after the reading-only window.",
+            scratchpad = (string?)null,
+            checklist = (Dictionary<string, bool>?)null,
+            draftVersion = 1
+        });
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("saved").GetBoolean());
+    }
+
+    [Fact]
+    public async Task WritingExamSubmit_AllowsContentAfterReadingWindow()
+    {
+        using var client = await CreateClientForUserAsync("writing-reading-window-submit-allowed");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
+        await MoveAttemptStartBackAsync(attemptId, TimeSpan.FromMinutes(6));
+
+        var response = await client.PostAsJsonAsync($"/v1/writing/attempts/{attemptId}/submit", new
+        {
+            content = "Dear Dr Smith, I am writing after the reading-only window and submitting this response for evaluation.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(attemptId, json.RootElement.GetProperty("attemptId").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("evaluationId").GetString()));
+    }
+
+    [Theory]
+    [InlineData(AttemptState.Submitted)]
+    [InlineData(AttemptState.Evaluating)]
+    [InlineData(AttemptState.Completed)]
+    [InlineData(AttemptState.Failed)]
+    [InlineData(AttemptState.Abandoned)]
+    public async Task WritingDraftPatch_RejectsAlreadySubmittedAttemptStates(AttemptState state)
+    {
+        using var client = await CreateClientForUserAsync($"writing-locked-{state.ToString().ToLowerInvariant()}");
+        var attemptId = await CreateWritingAttemptAsync(client, "practice");
+        await SetAttemptStateAsync(attemptId, state);
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content = "This stale save should not reopen a submitted writing attempt.",
+            scratchpad = (string?)null,
+            checklist = (Dictionary<string, bool>?)null,
+            draftVersion = 1
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_attempt_locked", json.RootElement.GetProperty("code").GetString());
+
+        await AssertAttemptStateAsync(attemptId, state);
+    }
+
+    [Fact]
+    public async Task WritingDraftPatch_RejectsAttemptFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("writing-cross-subtest-draft");
+        var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+        var before = await ReadAttemptSnapshotAsync(listeningAttemptId);
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{listeningAttemptId}/draft", new
+        {
+            content = "This must not mutate a Listening attempt through the Writing route.",
+            scratchpad = (string?)null,
+            checklist = (Dictionary<string, bool>?)null,
+            draftVersion = 1
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(listeningAttemptId));
+    }
+
+    [Fact]
+    public async Task WritingGet_RejectsAttemptFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("writing-cross-subtest-get");
+        var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+
+        var response = await client.GetAsync($"/v1/writing/attempts/{listeningAttemptId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task WritingHeartbeat_RejectsAttemptFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("writing-cross-subtest-heartbeat");
+        var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+        var before = await ReadAttemptSnapshotAsync(listeningAttemptId);
+
+        var response = await client.PatchAsJsonAsync($"/v1/writing/attempts/{listeningAttemptId}/heartbeat", new
+        {
+            elapsedSeconds = 42,
+            deviceType = "desktop"
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(listeningAttemptId));
+    }
+
+    [Theory]
+    [InlineData("speaking")]
+    [InlineData("listening")]
+    public async Task SubtestHeartbeat_RejectsAttemptFromAnotherSubtest(string subtest)
+    {
+        using var client = await CreateClientForUserAsync($"{subtest}-cross-subtest-heartbeat");
+        var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
+        var before = await ReadAttemptSnapshotAsync(writingAttemptId);
+
+        var response = await client.PatchAsJsonAsync($"/v1/{subtest}/attempts/{writingAttemptId}/heartbeat", new
+        {
+            elapsedSeconds = 42,
+            deviceType = "desktop"
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal($"{subtest}_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(writingAttemptId));
+    }
+
+    [Fact]
+    public async Task WritingSubmit_RejectsAttemptFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("writing-cross-subtest-submit");
+        var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+        var before = await ReadAttemptSnapshotAsync(listeningAttemptId);
+
+        var response = await client.PostAsJsonAsync($"/v1/writing/attempts/{listeningAttemptId}/submit", new
+        {
+            content = "This must not queue a Writing evaluation for a Listening attempt.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(listeningAttemptId));
+        Assert.False(await HasEvaluationAsync(listeningAttemptId, "writing"));
+    }
+
+    [Fact]
+    public async Task WritingSubmit_DoesNotReplayIdempotentResponseAcrossAttempts()
+    {
+        using var client = await CreateClientForUserAsync("writing-idempotency-cross-attempt");
+        var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
+        var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+        var listeningBefore = await ReadAttemptSnapshotAsync(listeningAttemptId);
+        var idempotencyKey = Guid.NewGuid().ToString("N");
+
+        var writingSubmit = await client.PostAsJsonAsync($"/v1/writing/attempts/{writingAttemptId}/submit", new
+        {
+            content = "Dear Dr Smith, this first Writing attempt creates the idempotency record.",
+            idempotencyKey
+        });
+        writingSubmit.EnsureSuccessStatusCode();
+
+        var replayAgainstListening = await client.PostAsJsonAsync($"/v1/writing/attempts/{listeningAttemptId}/submit", new
+        {
+            content = "This must not replay the earlier Writing response for a Listening attempt.",
+            idempotencyKey
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, replayAgainstListening.StatusCode);
+        using var json = JsonDocument.Parse(await replayAgainstListening.Content.ReadAsStringAsync());
+        Assert.Equal("writing_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(listeningBefore, await ReadAttemptSnapshotAsync(listeningAttemptId));
+        Assert.False(await HasEvaluationAsync(listeningAttemptId, "writing"));
+    }
+
+    [Fact]
+    public async Task ObjectiveAttemptGet_ReturnsOwnSubtestAttempts()
+    {
+        using var client = await CreateClientForUserAsync("listening-attempt-get");
+        var attemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+
+        var response = await client.GetAsync($"/v1/listening/attempts/{attemptId}");
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(attemptId, json.RootElement.GetProperty("attemptId").GetString());
+        Assert.Equal("listening", json.RootElement.GetProperty("subtest").GetString());
+    }
+
+    [Fact]
+    public async Task ObjectiveAnswersPatch_RejectsAttemptFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("listening-answers-cross-subtest");
+        var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
+        var before = await ReadAttemptSnapshotAsync(writingAttemptId);
+
+        var response = await client.PatchAsJsonAsync($"/v1/listening/attempts/{writingAttemptId}/answers", new
+        {
+            answers = new Dictionary<string, string?>
+            {
+                ["q-1"] = "wrong route"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("listening_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(writingAttemptId));
+    }
+
+    [Fact]
+    public async Task ObjectiveAnswersPatch_RejectsCompletedAttempt()
+    {
+        using var client = await CreateClientForUserAsync("listening-answers-completed");
+        var attemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
+        var submit = await client.PostAsync($"/v1/listening/attempts/{attemptId}/submit", content: null);
+        submit.EnsureSuccessStatusCode();
+        var before = await ReadAttemptSnapshotAsync(attemptId);
+
+        var response = await client.PatchAsJsonAsync($"/v1/listening/attempts/{attemptId}/answers", new
+        {
+            answers = new Dictionary<string, string?>
+            {
+                ["q-1"] = "too late"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("objective_attempt_locked", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(attemptId));
+    }
+
+    [Fact]
+    public async Task ObjectiveSubmit_RejectsAttemptFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("listening-submit-cross-subtest");
+        var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
+        var before = await ReadAttemptSnapshotAsync(writingAttemptId);
+
+        var response = await client.PostAsync($"/v1/listening/attempts/{writingAttemptId}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("listening_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(before, await ReadAttemptSnapshotAsync(writingAttemptId));
+        Assert.False(await HasEvaluationAsync(writingAttemptId, "listening"));
+    }
+
+    [Fact]
+    public async Task ObjectiveEvaluationGet_RejectsEvaluationFromAnotherSubtest()
+    {
+        using var client = await CreateClientForUserAsync("listening-evaluation-cross-subtest");
+        var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
+        var submit = await client.PostAsJsonAsync($"/v1/writing/attempts/{writingAttemptId}/submit", new
+        {
+            content = "Dear Dr Smith, this Writing evaluation must not be readable through Listening.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+        submit.EnsureSuccessStatusCode();
+        using var submitJson = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
+        var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString();
+
+        var response = await client.GetAsync($"/v1/listening/evaluations/{evaluationId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("listening_evaluation_not_found", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task WritingLint_DerivesCaseNotesMarkersFromServerContent_WhenContentIdProvided()
+    {
+        const string contentId = "writing-lint-server-marker-regression";
+        await SeedWritingLintContentAsync(contentId,
+            "Patient requested referral after a shared decision-making discussion. Consent was documented in the notes.");
+        using var client = await CreateClientForUserAsync("writing-lint-server-marker-user");
+
+        var response = await client.PostAsJsonAsync("/v1/writing/lint", new
+        {
+            contentId,
+            letterText = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for your assessment.\n\nYours sincerely,\nDoctor",
+            letterType = "routine_referral",
+            profession = "nursing",
+            caseNotesMarkers = new
+            {
+                patientInitiatedReferral = false,
+                consentDocumented = false
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var findings = json.RootElement.GetProperty("findings").EnumerateArray().ToArray();
+        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "R09.7");
+        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "R09.8");
+        Assert.All(findings, finding =>
+        {
+            var severity = finding.GetProperty("severity");
+            Assert.Equal(JsonValueKind.String, severity.ValueKind);
+            var severityText = severity.GetString();
+            Assert.True(
+                severityText is "critical" or "major" or "minor" or "info",
+                $"Unexpected severity '{severityText}'.");
+        });
+    }
+
+    // Writing-rulebook kebab-slug parsing moved to
+    // RulebookWritingLockAuthorizationTests — the Writing rulebook is now
+    // staff-only (Expert/Admin), which needs the first-party-auth test factory.
+
+    [Fact]
+    public async Task ReadingStructure_UsesArchivedPaperPolicy_ForLearnerPlayer()
+    {
+        const string paperId = "archived-reading-structure-regression";
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            await SeedDiagnosticReadingPaperAsync(
+                db,
+                paperId,
+                "Archived Reading Structure Regression Paper",
+                "access:free",
+                priority: 100,
+                appliesToAllProfessions: true,
+                professionId: null,
+                status: ContentStatus.Archived);
+        }
+
+        var previousAllowArchived = await SetAllowArchivedReadingAttemptsAsync(false);
+        try
+        {
+            using var client = await CreateClientForUserAsync("archived-reading-structure-user");
+            var blocked = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+            Assert.Equal(HttpStatusCode.NotFound, blocked.StatusCode);
+
+            await SetAllowArchivedReadingAttemptsAsync(true);
+
+            var allowed = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/structure");
+            allowed.EnsureSuccessStatusCode();
+
+            var payload = await allowed.Content.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(payload);
+            Assert.Equal(paperId, json.RootElement.GetProperty("paper").GetProperty("id").GetString());
+            Assert.DoesNotContain("correctAnswer", payload, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await SetAllowArchivedReadingAttemptsAsync(previousAllowArchived);
+        }
+    }
+
+    [Fact]
+    public async Task CompletedEvaluation_RegeneratesTheStudyPlan()
+    {
+        using var client = await CreateClientForUserAsync("study-plan-user");
+
+        var initialPlanResponse = await client.GetAsync("/v1/study-plan");
+        initialPlanResponse.EnsureSuccessStatusCode();
+        using var initialPlanJson = JsonDocument.Parse(await initialPlanResponse.Content.ReadAsStringAsync());
+        var initialVersion = initialPlanJson.RootElement.GetProperty("version").GetInt32();
+        var initialGeneratedAt = initialPlanJson.RootElement.GetProperty("generatedAt").GetDateTimeOffset();
+
+        var attemptId = await CreateWritingAttemptAsync(client, "practice");
+        var submitResponse = await client.PostAsJsonAsync($"/v1/writing/attempts/{attemptId}/submit", new
+        {
+            content = "Dear Dr Patterson, I am writing to update you regarding Mrs Vance after her knee replacement. She recovered well and requires staple removal in 14 days.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+        submitResponse.EnsureSuccessStatusCode();
+        using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString();
+
+        await WaitForAsync(
+            async () =>
+            {
+                var response = await client.GetAsync($"/v1/writing/evaluations/{evaluationId}/summary");
+                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                return json.RootElement.GetProperty("state").GetString() == "completed";
+            },
+            "writing evaluation to complete");
+
+        await WaitForAsync(
+            async () =>
+            {
+                var response = await client.GetAsync("/v1/study-plan");
+                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                var version = json.RootElement.GetProperty("version").GetInt32();
+                var generatedAt = json.RootElement.GetProperty("generatedAt").GetDateTimeOffset();
+                return version > initialVersion || generatedAt > initialGeneratedAt;
+            },
+            "study plan regeneration to complete");
+    }
+
+    [Fact]
+    public async Task SpeakingTask_LearnerProjection_NeverLeaksInterlocutorCard()
+    {
+        // Wave 2 of docs/SPEAKING-MODULE-PLAN.md: the hidden interlocutor
+        // card is curated for tutors/admins only. Mirroring the Reading
+        // CorrectAnswerJson pattern, the learner-facing payload must never
+        // contain `interlocutorCard` at any nesting level.
+        using var client = await CreateClientForUserAsync("speaking-projection");
+
+        var listResponse = await client.GetAsync("/v1/speaking/tasks");
+        listResponse.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        AssertNoInterlocutorCard(listJson.RootElement);
+
+        var detailResponse = await client.GetAsync("/v1/speaking/tasks/st-001");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        AssertNoInterlocutorCard(detailJson.RootElement);
+
+        // Compliance flag must declare the card hidden so admins/auditors
+        // can grep this single field across the API surface.
+        Assert.True(detailJson.RootElement
+            .GetProperty("compliance")
+            .GetProperty("hiddenInterlocutorCard")
+            .GetBoolean());
+    }
+
+    private static void AssertNoInterlocutorCard(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    Assert.False(
+                        string.Equals(prop.Name, "interlocutorCard", StringComparison.OrdinalIgnoreCase),
+                        "Learner speaking projection leaked the interlocutorCard property.");
+                    AssertNoInterlocutorCard(prop.Value);
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    AssertNoInterlocutorCard(item);
+                }
+                break;
+        }
+    }
+
+    private async Task<HttpClient> CreateClientForUserAsync(string userId)
+    {
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await _factory.EnsureAiCreditsAsync(userId);
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
+        client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
+        return client;
+    }
+
+    private async Task<bool> SetAllowArchivedReadingAttemptsAsync(bool allow)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var policyService = scope.ServiceProvider.GetRequiredService<IReadingPolicyService>();
+        var current = await policyService.GetGlobalAsync(default);
+        var previous = current.AllowAttemptOnArchivedPaper;
+        current.AllowAttemptOnArchivedPaper = allow;
+        await policyService.UpsertGlobalAsync(current, "regression-test", default);
+        return previous;
+    }
+
+    private async Task<string> SeedPublishedFullMockBundleAsync(string userId, int walletCredits)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        const string provenance = "Regression test content supplied by platform owner for internal practice use.";
+        var papers = new[]
+        {
+            ("mock-listening-regression", "listening", "Listening Regression Paper", 42, false),
+            ("mock-reading-regression", "reading", "Reading Regression Paper", 60, false),
+            ("mock-writing-regression", "writing", "Writing Regression Paper", 45, true),
+            ("mock-speaking-regression", "speaking", "Speaking Regression Paper", 20, true)
+        };
+
+        foreach (var (paperId, subtest, title, duration, professionScoped) in papers)
+        {
+            if (await db.ContentPapers.AnyAsync(x => x.Id == paperId))
+            {
+                continue;
+            }
+
+            db.ContentPapers.Add(new ContentPaper
+            {
+                Id = paperId,
+                SubtestCode = subtest,
+                Title = title,
+                Slug = paperId,
+                ProfessionId = professionScoped ? "medicine" : null,
+                AppliesToAllProfessions = !professionScoped,
+                Difficulty = "standard",
+                EstimatedDurationMinutes = duration,
+                Status = ContentStatus.Published,
+                SourceProvenance = provenance,
+                CreatedByAdminId = "test-admin",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            });
+        }
+
+        const string bundleId = "mock-bundle-regression-full";
+        if (!await db.MockBundles.AnyAsync(x => x.Id == bundleId))
+        {
+            db.MockBundles.Add(new MockBundle
+            {
+                Id = bundleId,
+                Title = "Regression Full Mock",
+                Slug = "regression-full-mock",
+                MockType = "full",
+                AppliesToAllProfessions = true,
+                Status = ContentStatus.Published,
+                EstimatedDurationMinutes = 167,
+                SourceProvenance = provenance,
+                CreatedByAdminId = "test-admin",
+                UpdatedByAdminId = "test-admin",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            });
+
+            for (var index = 0; index < papers.Length; index++)
+            {
+                var (paperId, subtest, _, duration, reviewEligible) = papers[index];
+                db.MockBundleSections.Add(new MockBundleSection
+                {
+                    Id = $"mock-bundle-section-regression-{subtest}",
+                    MockBundleId = bundleId,
+                    SectionOrder = index + 1,
+                    SubtestCode = subtest,
+                    ContentPaperId = paperId,
+                    TimeLimitMinutes = duration,
+                    ReviewEligible = reviewEligible,
+                    IsRequired = true,
+                    CreatedAt = now
+                });
+            }
+        }
+
+        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
+        wallet.CreditBalance = walletCredits;
+        wallet.LastUpdatedAt = now;
+
+        await db.SaveChangesAsync();
+
+        // Attempt creation debits a mock credit — grant a test bucket first.
+        await Mocks.MockCreditTestSeeder.SeedMockCreditsAsync(db, userId);
+        return bundleId;
+    }
+
+    private async Task SeedWritingLintContentAsync(string contentId, string caseNotes)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        if (await db.ContentItems.AnyAsync(content => content.Id == contentId))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        db.ContentItems.Add(new ContentItem
+        {
+            Id = contentId,
+            ContentType = "writing_task",
+            SubtestCode = "writing",
+            ProfessionId = "medicine",
+            Title = "Server Marker Regression Task",
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 45,
+            ScenarioType = "routine_referral",
+            PublishedRevisionId = "server-marker-regression",
+            Status = ContentStatus.Published,
+            CaseNotes = caseNotes,
+            DetailJson = "{\"letterType\":\"routine_referral\"}",
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    private const string DiagnosticReadingAccessiblePaperId = "diagnostic-reading-regression";
+    private const string DiagnosticReadingInaccessiblePaperId = "diagnostic-reading-premium-regression";
+
+    private async Task SeedDiagnosticReadingPaperAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        // GetDiagnosticTaskAsync only surfaces Reading papers carrying the
+        // "diagnostic" tag (HasDiagnosticPaperTag), so the regression papers
+        // must include it alongside their access tag.
+        await SeedDiagnosticReadingPaperAsync(
+            db,
+            DiagnosticReadingInaccessiblePaperId,
+            "Premium Diagnostic Reading Regression Paper",
+            "diagnostic,access:premium",
+            priority: 2000,
+            appliesToAllProfessions: false,
+            professionId: "nursing");
+        await SeedDiagnosticReadingPaperAsync(
+            db,
+            DiagnosticReadingAccessiblePaperId,
+            "Diagnostic Reading Regression Paper",
+            "diagnostic,access:free",
+            priority: 1000,
+            appliesToAllProfessions: true,
+            professionId: null);
+
+        // Writing / Speaking / Listening diagnostic tasks are sourced from
+        // published, diagnostic-eligible ContentItems. The demo seed publishes
+        // wt-001 / st-001 / lt-001 but does not flag them diagnostic-eligible,
+        // so mark them here to mirror an authored diagnostic content set.
+        foreach (var contentId in new[] { "wt-001", "st-001", "lt-001" })
+        {
+            var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId);
+            if (item is not null && !item.IsDiagnosticEligible)
+            {
+                item.IsDiagnosticEligible = true;
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedDiagnosticReadingPaperAsync(
+        LearnerDbContext db,
+        string paperId,
+        string title,
+        string tagsCsv,
+        int priority,
+        bool appliesToAllProfessions,
+        string? professionId,
+        ContentStatus status = ContentStatus.Published)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId);
+        if (paper is null)
+        {
+            db.ContentPapers.Add(new ContentPaper
+            {
+                Id = paperId,
+                SubtestCode = "reading",
+                Title = title,
+                Slug = paperId,
+                AppliesToAllProfessions = appliesToAllProfessions,
+                ProfessionId = professionId,
+                Difficulty = "standard",
+                EstimatedDurationMinutes = 60,
+                Status = status,
+                SourceProvenance = "Regression test content supplied by platform owner for internal practice use.",
+                TagsCsv = tagsCsv,
+                Priority = priority,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            paper.Title = title;
+            paper.AppliesToAllProfessions = appliesToAllProfessions;
+            paper.ProfessionId = professionId;
+            paper.TagsCsv = tagsCsv;
+            paper.Priority = priority;
+            paper.Status = status;
+            paper.UpdatedAt = now;
+            paper.PublishedAt ??= now;
+            await db.SaveChangesAsync();
+        }
+
+        var structure = new ReadingStructureService(db);
+        var report = await structure.ValidatePaperAsync(paperId, default);
+        if (report.IsPublishReady)
+        {
+            return;
+        }
+
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorDiagnosticReadingPaperAsync(db, structure, paperId);
+    }
+
+    private static async Task FullyAuthorDiagnosticReadingPaperAsync(
+        LearnerDbContext db,
+        ReadingStructureService structure,
+        string paperId)
+    {
+        var parts = await db.ReadingParts.Where(p => p.PaperId == paperId).ToListAsync();
+        var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
+
+        var textsA = new List<ReadingText>();
+        var textsB = new List<ReadingText>();
+        var textsC = new List<ReadingText>();
+        for (var i = 1; i <= 4; i++)
+        {
+            textsA.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partA.Id, i, $"Text A{i}", "BMJ", "<p>text</p>", 10, null), "admin", default));
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            textsB.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partB.Id, i, $"Extract B{i}", "NHS", "<p>text</p>", 20, null), "admin", default));
+        }
+        for (var i = 1; i <= 2; i++)
+        {
+            textsC.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partC.Id, i, $"Text C{i}", "Lancet", "<p>text</p>", 300, null), "admin", default));
+        }
+
+        for (var i = 1; i <= 7; i++)
+        {
+            var answer = ((char)('A' + ((i - 1) % 4))).ToString();
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.MatchingTextReference,
+                $"PA-Q{i}", "[]", $"\"{answer}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 8; i <= 14; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 15; i <= 20; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.SentenceCompletion,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 1; i <= 6; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                $"PB-Q{i}", "[\"a\",\"b\",\"c\"]", "\"B\"", null, false, null, null), "admin", default);
+        }
+        for (var i = 1; i <= 16; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                $"PC-Q{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"C\"", null, false, null, null), "admin", default);
+        }
+
+        var partIds = parts.Select(p => p.Id).ToList();
+        var questions = await db.ReadingQuestions
+            .Where(q => partIds.Contains(q.ReadingPartId))
+            .ToListAsync();
+        foreach (var question in questions)
+        {
+            question.ReviewState = ReadingReviewState.Published;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<string> CreateWritingAttemptAsync(HttpClient client, string context, string mode = "timed")
+    {
+        var response = await client.PostAsJsonAsync("/v1/writing/attempts", new
+        {
+            contentId = "wt-001",
+            context,
+            mode,
+            deviceType = "desktop",
+            parentAttemptId = (string?)null
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("attemptId").GetString()
+            ?? throw new InvalidOperationException("Writing attempt id was missing.");
+    }
+
+    private async Task MoveAttemptStartBackAsync(string attemptId, TimeSpan age)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.Attempts.FirstAsync(x => x.Id == attemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.Subtract(age);
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SetAttemptStateAsync(string attemptId, AttemptState state)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.Attempts.FirstAsync(x => x.Id == attemptId);
+        attempt.State = state;
+        if (state is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
+        {
+            attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
+        }
+        if (state == AttemptState.Completed)
+        {
+            attempt.CompletedAt ??= DateTimeOffset.UtcNow;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private async Task AssertAttemptStateAsync(string attemptId, AttemptState expected)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.Attempts.AsNoTracking().FirstAsync(x => x.Id == attemptId);
+        Assert.Equal(expected, attempt.State);
+    }
+
+    private async Task<(string SubtestCode, AttemptState State, string DraftContent, string Scratchpad, string ChecklistJson, string AnswersJson, int ElapsedSeconds, DateTimeOffset? LastClientSyncAt)> ReadAttemptSnapshotAsync(string attemptId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.Attempts.AsNoTracking().FirstAsync(x => x.Id == attemptId);
+        return (attempt.SubtestCode, attempt.State, attempt.DraftContent, attempt.Scratchpad, attempt.ChecklistJson, attempt.AnswersJson, attempt.ElapsedSeconds, attempt.LastClientSyncAt);
+    }
+
+    private async Task<bool> HasEvaluationAsync(string attemptId, string subtest)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        return await db.Evaluations.AnyAsync(x => x.AttemptId == attemptId && x.SubtestCode == subtest);
+    }
+
+    private static async Task<string> CreateSpeakingAttemptAsync(HttpClient client, string context)
+    {
+        var response = await client.PostAsJsonAsync("/v1/speaking/attempts", new
+        {
+            contentId = "st-001",
+            context,
+            mode = "exam",
+            deviceType = "desktop",
+            parentAttemptId = (string?)null
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("attemptId").GetString()
+            ?? throw new InvalidOperationException("Speaking attempt id was missing.");
+    }
+
+    private static async Task<string> CreateObjectiveAttemptAsync(HttpClient client, string subtest, string contentId, string context)
+    {
+        var response = await client.PostAsJsonAsync($"/v1/{subtest}/attempts", new
+        {
+            contentId,
+            context,
+            mode = "exam",
+            deviceType = "desktop",
+            parentAttemptId = (string?)null
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var attemptId = json.RootElement.GetProperty("attemptId").GetString()
+            ?? throw new InvalidOperationException($"{subtest} attempt id was missing.");
+
+        var answersResponse = await client.PatchAsJsonAsync($"/v1/{subtest}/attempts/{attemptId}/answers", new
+        {
+            answers = new Dictionary<string, string?>
+            {
+                ["q-1"] = "answer-1",
+                ["q-2"] = "answer-2"
+            }
+        });
+        answersResponse.EnsureSuccessStatusCode();
+
+        return attemptId;
+    }
+
+    private async Task WaitForAsync(Func<Task<bool>> predicate, string reason)
+    {
+        // The hosted BackgroundService loop is stripped from the test host
+        // (see TestWebApplicationFactory.IsLongRunningHostedWorker), so queued
+        // WritingEvaluation / SpeakingEvaluation / StudyPlanRegeneration /
+        // NotificationFanout jobs never advance on their own. Drive the job
+        // pipeline deterministically before each poll so the predicate can
+        // observe the completed state — mirrors CriticalFlowsTests.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            await _factory.DrainBackgroundJobsAsync();
+
+            if (await predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        throw new TimeoutException($"Timed out waiting for {reason}. {await DescribeBackgroundStateAsync()}");
+    }
+
+    private async Task<string> DescribeBackgroundStateAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        var jobs = await db.BackgroundJobs
+            .OrderByDescending(job => job.CreatedAt)
+            .Take(5)
+            .Select(job => new
+            {
+                job.Type,
+                job.State,
+                job.StatusReasonCode,
+                job.StatusMessage,
+                job.RetryCount,
+                job.AttemptId,
+                job.ResourceId
+            })
+            .ToListAsync();
+
+        var evaluations = await db.Evaluations
+            .OrderByDescending(evaluation => evaluation.CreatedAt)
+            .Take(5)
+            .Select(evaluation => new
+            {
+                evaluation.Id,
+                evaluation.AttemptId,
+                evaluation.State,
+                evaluation.StatusReasonCode,
+                evaluation.StatusMessage,
+                evaluation.Retryable
+            })
+            .ToListAsync();
+
+        return JsonSerializer.Serialize(new { jobs, evaluations });
+    }
+}

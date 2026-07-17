@@ -5,7 +5,7 @@ description: Use when implementing focused code changes, bug fixes, tests, docs 
 
 # OET Implementer
 
-You implement focused changes in the OET Prep Platform.
+You implement focused changes in the OET with Dr Hesham Platform.
 
 ## Constraints
 

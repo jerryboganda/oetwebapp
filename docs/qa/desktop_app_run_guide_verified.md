@@ -45,7 +45,7 @@ npm run desktop:dist
 
 Expected output:
 
-- unpacked executable at [dist/desktop/win-unpacked/OET Prep.exe](C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\dist\desktop\win-unpacked\OET Prep.exe)
+- unpacked executable at [dist/desktop/win-unpacked/OET with Dr Hesham.exe](C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\dist\desktop\win-unpacked\OET with Dr Hesham.exe)
 
 ### 1a. Build packaged desktop against the same API used by the web app
 
@@ -67,7 +67,7 @@ Verified behavior after the auth fix:
 
 The verified local installed test folder is:
 
-- `C:\Users\Public\OETPrepTest8`
+- `C:\Users\Public\OET with Dr HeshamTest8`
 
 Refresh it from `dist\desktop\win-unpacked` before validating the installed shell if you need the latest package contents reflected there.
 
@@ -152,9 +152,9 @@ Check:
 
 ## Seeded Local Accounts Used in Verification
 
-- learner: `learner@oet-prep.dev`
-- expert: `expert@oet-prep.dev`
-- admin: `admin@oet-prep.dev`
+- learner: `learner@oet-with-dr-hesham.dev`
+- expert: `expert@oet-with-dr-hesham.dev`
+- admin: `admin@oet-with-dr-hesham.dev`
 - password: `Password123!`
 
 ## Verified Recovery Commands

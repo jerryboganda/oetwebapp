@@ -9,20 +9,20 @@
 
 | File | Purpose |
 | ---- | ------- |
-| `backend/src/OetLearner.Api/Services/AdminService.BillingCatalog.cs` | New partial of `AdminService` containing (a) the `BillingCatalogVersionImmutabilityInterceptor` EF SaveChanges interceptor, (b) the `BillingCouponRedemptionAtomic` static helper for race-safe coupon reservation, (c) `EvaluateCouponWindow` server-side activation/expiry guard, (d) `EnsurePlanCanStartNewSubscription` archived-plan guard, (e) `LogCatalogCodeImmutabilityViolationAsync` audit hook. |
-| `backend/src/OetLearner.Api/Data/Migrations/20260504150000_HardenCatalog.cs` (+ Designer) | Additive, SQLite-compatible migration that adds defensive indexes — `BillingCoupons (Status, EndsAt)`, `BillingCouponRedemptions (CouponId, Status)`, and `BillingCouponRedemptions (CouponCode, Status)`. All statements use `CREATE INDEX IF NOT EXISTS`, supported by both PostgreSQL 9.5+ and SQLite 3.8+. Fully reversible. |
-| `backend/tests/OetLearner.Api.Tests/CatalogVersioningHardeningTests.cs` | Regression suite for goals 1, 2, 5 and 6 (interceptor immutability, code immutability, version-summary allowlist, archived-plan snapshot integrity). Uses the existing `FirstPartyAuthTestWebApplicationFactory` (InMemory). |
-| `backend/tests/OetLearner.Api.Tests/CouponConcurrencyTests.cs` | Race-safe coupon redemption suite for goals 3 and 4. Spins up a real **SQLite in-memory** `LearnerDbContext` so EF's `ExecuteUpdateAsync` is dispatched as a single SQL statement subject to real locking — InMemory is intentionally avoided here. 32 parallel reservations × `UsageLimitTotal=5` → exactly 5 succeed; expiry / activation / inactive paths each return their structured rejection code. |
+| `backend/src/OetWithDrHesham.Api/Services/AdminService.BillingCatalog.cs` | New partial of `AdminService` containing (a) the `BillingCatalogVersionImmutabilityInterceptor` EF SaveChanges interceptor, (b) the `BillingCouponRedemptionAtomic` static helper for race-safe coupon reservation, (c) `EvaluateCouponWindow` server-side activation/expiry guard, (d) `EnsurePlanCanStartNewSubscription` archived-plan guard, (e) `LogCatalogCodeImmutabilityViolationAsync` audit hook. |
+| `backend/src/OetWithDrHesham.Api/Data/Migrations/20260504150000_HardenCatalog.cs` (+ Designer) | Additive, SQLite-compatible migration that adds defensive indexes — `BillingCoupons (Status, EndsAt)`, `BillingCouponRedemptions (CouponId, Status)`, and `BillingCouponRedemptions (CouponCode, Status)`. All statements use `CREATE INDEX IF NOT EXISTS`, supported by both PostgreSQL 9.5+ and SQLite 3.8+. Fully reversible. |
+| `backend/tests/OetWithDrHesham.Api.Tests/CatalogVersioningHardeningTests.cs` | Regression suite for goals 1, 2, 5 and 6 (interceptor immutability, code immutability, version-summary allowlist, archived-plan snapshot integrity). Uses the existing `FirstPartyAuthTestWebApplicationFactory` (InMemory). |
+| `backend/tests/OetWithDrHesham.Api.Tests/CouponConcurrencyTests.cs` | Race-safe coupon redemption suite for goals 3 and 4. Spins up a real **SQLite in-memory** `LearnerDbContext` so EF's `ExecuteUpdateAsync` is dispatched as a single SQL statement subject to real locking — InMemory is intentionally avoided here. 32 parallel reservations × `UsageLimitTotal=5` → exactly 5 succeed; expiry / activation / inactive paths each return their structured rejection code. |
 
 ### Infrastructure (one-line, additive only)
 
-`backend/src/OetLearner.Api/Data/DatabaseConfiguration.cs` — registers a single
+`backend/src/OetWithDrHesham.Api/Data/DatabaseConfiguration.cs` — registers a single
 shared `BillingCatalogVersionImmutabilityInterceptor` instance on every
 `DbContextOptionsBuilder`. Cross-database (Postgres / SQLite / InMemory). No
 schema or behaviour change for any other consumer.
 
 ```diff
-+ using OetLearner.Api.Services;
++ using OetWithDrHesham.Api.Services;
   ...
 + private static readonly BillingCatalogVersionImmutabilityInterceptor BillingCatalogVersionImmutability = new();
   ...
@@ -156,26 +156,26 @@ relative to A, B, or D.
 
 ## 4. Shared-file diffs (DIFF-ONLY — apply during integration)
 
-### `backend/src/OetLearner.Api/Domain/BillingEntities.cs`
+### `backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs`
 
 No changes required for Slice C. The existing schema is sufficient — the
 atomic reservation uses the `RedemptionCount` column directly and does not
 need a `RowVersion` because the WHERE-guarded `ExecuteUpdate` is its own
 optimistic concurrency check at the SQL level.
 
-### `backend/src/OetLearner.Api/Contracts/BillingContracts.cs`
+### `backend/src/OetWithDrHesham.Api/Contracts/BillingContracts.cs`
 
 No changes required. `AdminBillingCatalogVersionResponse.Summary` remains
 `Dictionary<string, object?>` (free-form), and the field allowlist is
 enforced by the mapper + the new regression test.
 
-### `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`
+### `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`
 
 No new endpoints required. The atomic reservation helper is consumed
 internally by the LearnerService quote flow (Slice D) — the public surface
 does not change.
 
-### `backend/src/OetLearner.Api/Services/AdminService.cs` (shared with no slice)
+### `backend/src/OetWithDrHesham.Api/Services/AdminService.cs` (shared with no slice)
 
 Recommended audit-trail upgrade for goal 2. Replace the three current
 `ThrowIfCatalogCodeChanged(...)` call sites with an
@@ -198,7 +198,7 @@ Repeat for `BillingAddOn` (`addOn.Id`, `addOn.Code`) and `BillingCoupon`
 (`coupon.Id`, `coupon.Code`). The throw still propagates a 400 to the
 client; the audit is best-effort.
 
-### `backend/src/OetLearner.Api/Services/LearnerService.cs` (Slice D)
+### `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs` (Slice D)
 
 Replace the count-then-increment block at lines ~5026–5038 (inside the
 `if (persistQuote)` branch of the quote-creation flow) with the atomic
@@ -261,27 +261,27 @@ These two changes belong to Slice D and are intentionally NOT applied here.
 Static analysis of every file owned by Slice C:
 
 ```text
-backend/src/OetLearner.Api/Services/AdminService.BillingCatalog.cs       OK (0 errors)
-backend/src/OetLearner.Api/Data/DatabaseConfiguration.cs                 OK (0 errors)
-backend/src/OetLearner.Api/Data/Migrations/20260504150000_HardenCatalog.cs            OK (0 errors)
-backend/src/OetLearner.Api/Data/Migrations/20260504150000_HardenCatalog.Designer.cs   OK (0 errors)
-backend/tests/OetLearner.Api.Tests/CatalogVersioningHardeningTests.cs    OK (0 errors)
-backend/tests/OetLearner.Api.Tests/CouponConcurrencyTests.cs             OK (0 errors)
+backend/src/OetWithDrHesham.Api/Services/AdminService.BillingCatalog.cs       OK (0 errors)
+backend/src/OetWithDrHesham.Api/Data/DatabaseConfiguration.cs                 OK (0 errors)
+backend/src/OetWithDrHesham.Api/Data/Migrations/20260504150000_HardenCatalog.cs            OK (0 errors)
+backend/src/OetWithDrHesham.Api/Data/Migrations/20260504150000_HardenCatalog.Designer.cs   OK (0 errors)
+backend/tests/OetWithDrHesham.Api.Tests/CatalogVersioningHardeningTests.cs    OK (0 errors)
+backend/tests/OetWithDrHesham.Api.Tests/CouponConcurrencyTests.cs             OK (0 errors)
 ```
 
 API project build:
 
 ```text
-$ dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj -nologo
+$ dotnet build backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj -nologo
 Build succeeded.
     0 Error(s)
 ```
 
 Test project build is currently blocked by an UNRELATED slice E compile
-error in `backend/tests/OetLearner.Api.Tests/AiQuotaMappingTests.cs` (a
+error in `backend/tests/OetWithDrHesham.Api.Tests/AiQuotaMappingTests.cs` (a
 brand-new untracked file referencing a missing
 `StubEligiblePremiumResolver` symbol). The full
-`dotnet test backend/OetLearner.sln` cannot run until slice E lands its
+`dotnet test backend/OetWithDrHesham.sln` cannot run until slice E lands its
 helper. Once it does, the two new Slice C test classes are expected to
 execute under the existing `xUnit + InMemory + SQLite` infrastructure
 without further configuration. All Slice C source (`AdminService.BillingCatalog.cs`,

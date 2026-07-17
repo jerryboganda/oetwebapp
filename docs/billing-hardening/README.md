@@ -10,14 +10,14 @@ rather than applied directly, to avoid parallel-write conflicts.
 
 | Slice | Owner files (free to edit) | Shared files (diff-only) |
 | ----- | -------------------------- | ------------------------ |
-| A — Wallet | `backend/src/OetLearner.Api/Services/WalletService.cs`, `AdminWalletTierService.cs`, `Domain/WalletTopUpTierConfig.cs`, new migration `*_HardenWallet*.cs` | `Domain/BillingEntities.cs`, `Contracts/BillingContracts.cs`, `Endpoints/LearnerEndpoints.cs`, `Endpoints/AdminEndpoints.cs` |
-| B — Payments / Webhooks / Refunds | `backend/src/OetLearner.Api/Services/PaymentGatewayService.cs`, new files `Services/Billing/RefundService.cs`, `Services/Billing/DisputeService.cs`, new migration `*_AddRefundDispute*.cs` | same shared set as A |
-| C — Catalog (Plans / Add-ons / Coupons) version history | `backend/src/OetLearner.Api/Services/AdminService.Billing.*.cs` (if exists; otherwise create), new migration `*_HardenCatalog*.cs` | same shared set |
-| D — Checkout / Quote / Subscription / Invoice flow | `backend/src/OetLearner.Api/Services/LearnerService.Billing.cs` (split out via partial if needed), new migration `*_HardenCheckout*.cs` | same shared set |
-| E — Entitlement resolver + AI quota mapping | `backend/src/OetLearner.Api/Services/AiQuotaService.cs`, `Services/EffectiveEntitlementResolver.cs` (or its current host), `lib/billing-entitlements.ts` (if exists) | same shared set |
+| A — Wallet | `backend/src/OetWithDrHesham.Api/Services/WalletService.cs`, `AdminWalletTierService.cs`, `Domain/WalletTopUpTierConfig.cs`, new migration `*_HardenWallet*.cs` | `Domain/BillingEntities.cs`, `Contracts/BillingContracts.cs`, `Endpoints/LearnerEndpoints.cs`, `Endpoints/AdminEndpoints.cs` |
+| B — Payments / Webhooks / Refunds | `backend/src/OetWithDrHesham.Api/Services/PaymentGatewayService.cs`, new files `Services/Billing/RefundService.cs`, `Services/Billing/DisputeService.cs`, new migration `*_AddRefundDispute*.cs` | same shared set as A |
+| C — Catalog (Plans / Add-ons / Coupons) version history | `backend/src/OetWithDrHesham.Api/Services/AdminService.Billing.*.cs` (if exists; otherwise create), new migration `*_HardenCatalog*.cs` | same shared set |
+| D — Checkout / Quote / Subscription / Invoice flow | `backend/src/OetWithDrHesham.Api/Services/LearnerService.Billing.cs` (split out via partial if needed), new migration `*_HardenCheckout*.cs` | same shared set |
+| E — Entitlement resolver + AI quota mapping | `backend/src/OetWithDrHesham.Api/Services/AiQuotaService.cs`, `Services/EffectiveEntitlementResolver.cs` (or its current host), `lib/billing-entitlements.ts` (if exists) | same shared set |
 | F — Frontend learner billing | `app/billing/**`, `lib/billing-types.ts`, `components/domain/billing/**` | none (frontend is independent) |
 | G — Frontend admin billing | `app/admin/billing/**`, `components/admin/billing/**` | none |
-| H — Tests | `backend/tests/OetLearner.Api.Tests/**Billing*.cs` (NEW files only — do NOT edit existing tests except to extend assertions), `app/billing/__tests__/**`, `app/admin/billing/__tests__/**` (NEW files only), `tests/e2e/billing.spec.ts` (NEW) | none |
+| H — Tests | `backend/tests/OetWithDrHesham.Api.Tests/**Billing*.cs` (NEW files only — do NOT edit existing tests except to extend assertions), `app/billing/__tests__/**`, `app/admin/billing/__tests__/**` (NEW files only), `tests/e2e/billing.spec.ts` (NEW) | none |
 | I — Docs, observability, runbook | `docs/BILLING.md` (create), `docs/runbooks/billing-incident.md` (create), `instrumentation.ts` augmentations | none |
 | J — Final integration & closure (2026-05-12) | `docs/billing-hardening/J-final-integration.md`, `Domain/Entities.cs` (Wallet.RowVersion), `Data/LearnerDbContext.cs` (append-only), `Data/Migrations/20260512100000_AddWalletRowVersion.cs`, `lib/csv-export.ts`, `lib/__tests__/csv-export-injection.test.ts`, `app/admin/audit-logs/page.tsx`, `app/admin/audit-logs/page.test.tsx` | none |
 

@@ -7,7 +7,7 @@ Last updated: 2026-06-10
 - Billing checkout return hardening was committed to `main` and deployed through GitHub Actions/GHCR.
 - A production startup crash on newly added runtime-settings payment/Soketi columns was fixed by applying PostgreSQL migrations before runtime-settings startup guards read those columns.
 - Follow-up QA showed SQLite desktop-runtime backend tests failing because the early startup migration hook ran the full production migration chain against SQLite. The hook is now PostgreSQL-only, and the historical `ExactAuthSocialPort` migration is provider-aware for additive columns.
-- Local validation after the fix: `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests"` passed 18 tests; `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime"` passed 3 tests; `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo` passed with existing warnings.
+- Local validation after the fix: `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter "FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests"` passed 18 tests; `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter "FullyQualifiedName~AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime"` passed 3 tests; `dotnet build backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj --nologo` passed with existing warnings.
 - Next step: commit/push the startup migration fix, watch GitHub Actions Build & Deploy plus QA Smoke/Speaking/SBOM to completion, then verify production health endpoints.
 
 ## Current Checkpoint - Billing Checkout Return Hardening
@@ -28,7 +28,7 @@ Last updated: 2026-06-10
 - Learner/admin APIs are wired for package catalogue, current balances, transaction audit, manual adjustment, and admin-recorded pass outcomes.
 - Checkout fulfillment grants package pools idempotently by Stripe session; Writing/Speaking queueing deducts package credits; failure paths refund; Listening/Reading use deterministic finite/unlimited allowances; full-shape mocks consume separate mock allowance.
 - Dashboard `?purchase=success` now refreshes AI package balances and shows the success banner.
-- Validation: `pnpm run backend:build` passed; `pnpm exec tsc --noEmit` passed; `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter AiPackageCreditServiceTests --nologo` passed 5 tests; scoped eslint for touched frontend/API files passed with warnings only.
+- Validation: `pnpm run backend:build` passed; `pnpm exec tsc --noEmit` passed; `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter AiPackageCreditServiceTests --nologo` passed 5 tests; scoped eslint for touched frontend/API files passed with warnings only.
 
 ## Current Operating Goal
 
@@ -59,7 +59,7 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - `pnpm exec vitest run app/catalog/page.test.tsx app/billing/page.test.tsx components/billing/addon-purchase-modal.test.tsx --reporter=dot`: passed, 8 files / 58 tests. Existing jsdom navigation notices appeared.
 - `pnpm exec vitest run app/page.test.tsx components/domain/__tests__/learner-ux-primitives.test.tsx --reporter=dot`: passed, 12 files / 52 tests. Existing jsdom navigation notices appeared.
 - `git diff --check`: passed.
-- Node manifest assertion against `backend/src/OetLearner.Api/Data/Seeds/oet-2026-catalog.json`: passed, 22 plans / 7 parent-required portfolio add-ons.
+- Node manifest assertion against `backend/src/OetWithDrHesham.Api/Data/Seeds/oet-2026-catalog.json`: passed, 22 plans / 7 parent-required portfolio add-ons.
 - Focused `dotnet test` attempts for catalog manifest/public catalog tests timed out locally before useful output. Per current rule, broad .NET/build/lint gates should run on GitHub Actions.
 - Branch `feat/oet-2026-entitlement-conformance` was pushed to origin at commit `d11b7e10`.
 - PR #38 is open at https://github.com/jerryboganda/oetwebapp/pull/38.
@@ -78,24 +78,24 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - `firefox-expert` failed because the disposable writing-submission helper called host `psql` against `localhost:5432`; QA Smoke's compose stack does not publish Postgres. The helper now falls back to `docker exec oet-desktop-postgres psql`, with env overrides for non-default containers.
 - `chromium-expert` failed during smoke stack startup because Docker Hub timed out while pulling `pgvector/pgvector:pg17`. QA Smoke now retries compose startup with cleanup before failing.
 - `pnpm exec eslint tests/e2e/fixtures/api-auth.ts`: passed.
-- `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs tests/e2e/fixtures/api-auth.ts .github/workflows/qa-smoke.yml`: passed.
+- `git diff --check -- backend/tests/OetWithDrHesham.Api.Tests/Infrastructure/TestWebApplicationFactory.cs tests/e2e/fixtures/api-auth.ts .github/workflows/qa-smoke.yml`: passed.
 - Focused `dotnet test` for `CriticalFlowsTests.BootstrapEndpoint_ReturnsLearnerProfileAndReferences` timed out locally after 3 minutes; backend proof remains delegated to GitHub Actions per the validation constraint.
 - QA Smoke run `27103739757` passed frontend typecheck/lint/unit/build and every E2E shard. Backend shards still failed after the global demo-seed pin because unrelated tests saw seeded content/entitlements.
 - Default `TestWebApplicationFactory` now keeps `Bootstrap:SeedDemoData=false`; a dedicated `SeededTestWebApplicationFactory` opts in only the demo-seed auth/critical flow tests that assert seeded rows.
 - Focused local `dotnet test` attempts for `AuthFlowsTests.SeedData_EnsuresUnifiedAuthAccountsForLearnerExpertAndAdmin` and `ContentBulkImportE2ETests.Full_pipeline_creates_papers_assets_and_dedupes_identical_content` timed out locally after 4 minutes. Stray local `dotnet` processes from those timed-out checks were stopped.
 - QA Smoke run `27105430281` passed frontend typecheck/lint/unit/build and every E2E shard. Backend build was green, but backend shards still failed.
 - Several backend failures were traced to legacy tests using `CreateAuthenticatedClient` after default demo seeding was narrowed. `TestWebApplicationFactory.CreateAuthenticatedClient` now seeds only the requested local auth identity/profile/permission row before password sign-in, without re-enabling full demo seed globally.
-- Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetLearner.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
-- `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
+- Focused local `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetWithDrHesham.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
+- `git diff --check -- backend/tests/OetWithDrHesham.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
 - Merged latest `origin/main` after PR #38 became dirty again. The merge kept main's per-host test configuration/no process-global environment mutation fix, while preserving portfolio's `SeededTestWebApplicationFactory` opt-in and authenticated-client minimal identity seed.
-- Post-merge focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetLearner.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
-- Post-merge `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
+- Post-merge focused local `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetWithDrHesham.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
+- Post-merge `git diff --check -- backend/tests/OetWithDrHesham.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
 - QA Smoke run `27106968196` passed frontend typecheck/lint/unit/build, SBOM/SCA, and every E2E shard. Backend shards still failed, dominated by first-party JWT validation 401s and EF InMemory translation for writing entitlement lookup.
 - `FirstPartyAuthTestWebApplicationFactory` now mirrors only startup-critical Auth/AuthToken/Bootstrap values before host creation, then restores them immediately after the host is built so unrelated tests do not observe process-global overrides.
 - `ResolveEligibleWritingSubscriptionAsync` now loads only positive-counter subscriptions from EF, then applies status/expiry eligibility in memory to avoid EF InMemory translation flattening while preserving active/trial and unexpired semantics.
-- Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.AdminWalletTierTests.Get_ReturnsAppsettingsFallback_WhenNoDbRows" --nologo`: passed, 1 test.
-- Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.WritingReviewEntitlementConsumptionTests.WritingReview_WithEligibleEntitlement_ConsumesOneAndSkipsWallet" --nologo`: passed, 1 test.
-- `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs backend/src/OetLearner.Api/Services/LearnerService.cs`: passed.
+- Focused local `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter "FullyQualifiedName=OetWithDrHesham.Api.Tests.AdminWalletTierTests.Get_ReturnsAppsettingsFallback_WhenNoDbRows" --nologo`: passed, 1 test.
+- Focused local `dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj --filter "FullyQualifiedName=OetWithDrHesham.Api.Tests.WritingReviewEntitlementConsumptionTests.WritingReview_WithEligibleEntitlement_ConsumesOneAndSkipsWallet" --nologo`: passed, 1 test.
+- `git diff --check -- backend/tests/OetWithDrHesham.Api.Tests/Infrastructure/TestWebApplicationFactory.cs backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`: passed.
 - QA Smoke run `27108225615` passed frontend typecheck/lint/unit/build, SBOM/SCA, and every E2E shard; backend shards failed.
 - Backend triage/focused green checks:
   - `WritingReviewEntitlementConsumptionTests.AdminCancel_OfEntitlementReview_RestoresOneEntitlement|AdminReopen_OfCancelledEntitlementReview_ReturnsToQueueNotAwaitingPayment`: red on EF InMemory translation, then green after moving admin cancel subscription eligibility filtering in memory and seeding the admin auth account required by audit FK.

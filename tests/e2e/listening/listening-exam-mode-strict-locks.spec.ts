@@ -16,7 +16,7 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../f
 // The full forward-only FSM walk (Part A -> Part B -> Part C without any
 // back affordance, V2 confirm-token two-step handshake, one-play-only
 // audio enforcement) is covered deterministically backend-side in
-// `backend/tests/OetLearner.Api.Tests/Listening/
+// `backend/tests/OetWithDrHesham.Api.Tests/Listening/
 // ListeningV2AdvanceEndpointTests.cs` and the `ListeningFsmTransitions`
 // suite. Re-asserting it from the E2E layer would need a headless
 // audio-probe shim and a 40-minute attempt-budget walk; the page

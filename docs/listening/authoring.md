@@ -89,7 +89,7 @@ segments only.
 ## TTS pipeline (Wave 4 — planned)
 
 - Synthesis uses the ElevenLabs-backed `IListeningTtsSynthesisProvider`
-  ([`Services/Listening/ElevenLabsListeningTtsSynthesisProvider.cs`](../../backend/src/OetLearner.Api/Services/Listening/ElevenLabsListeningTtsSynthesisProvider.cs)),
+  ([`Services/Listening/ElevenLabsListeningTtsSynthesisProvider.cs`](../../backend/src/OetWithDrHesham.Api/Services/Listening/ElevenLabsListeningTtsSynthesisProvider.cs)),
   selected when `Listening:TtsProvider=elevenlabs`. The dev/CI default is the
   silence `stub`.
 - Provider: ElevenLabs (the platform's only TTS vendor). It requests raw
@@ -106,7 +106,7 @@ segments only.
 
 - Original content only — do not paste real OET test items. The official
   candidate declaration forbids reuse of test content; the audit at
-  [`backend/tests/OetLearner.Api.Tests/Listening/`](../../backend/tests/OetLearner.Api.Tests/Listening/)
+  [`backend/tests/OetWithDrHesham.Api.Tests/Listening/`](../../backend/tests/OetWithDrHesham.Api.Tests/Listening/)
   has no source-content check, so this is enforced by editorial process.
 - Healthcare-generic only. Listening is not profession-specific; do not
   introduce profession-specific terminology in Part A consultations.

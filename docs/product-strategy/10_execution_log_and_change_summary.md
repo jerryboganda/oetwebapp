@@ -32,11 +32,11 @@ Completed in code:
 
 Primary files:
 
-- `backend/src/OetLearner.Api/Configuration/BillingOptions.cs`
-- `backend/src/OetLearner.Api/Services/PaymentGatewayService.cs`
-- `backend/src/OetLearner.Api/Services/WalletService.cs`
-- `backend/src/OetLearner.Api/Services/LearnerService.cs`
-- `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
+- `backend/src/OetWithDrHesham.Api/Configuration/BillingOptions.cs`
+- `backend/src/OetWithDrHesham.Api/Services/PaymentGatewayService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/WalletService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`
+- `backend/src/OetWithDrHesham.Api/Endpoints/LearnerEndpoints.cs`
 
 ### 3. Exam-family abstraction cleanup
 
@@ -49,7 +49,7 @@ Completed in code:
 
 Primary files:
 
-- `backend/src/OetLearner.Api/Services/LearnerService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`
 - `lib/api.ts`
 - `lib/mock-data.ts`
 - `app/goals/page.tsx`
@@ -66,7 +66,7 @@ Completed in code:
 
 Primary files:
 
-- `backend/src/OetLearner.Api/Services/LearnerService.cs`
+- `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`
 - `app/writing/result/page.tsx`
 - `app/speaking/results/[id]/page.tsx`
 - `lib/api.ts`

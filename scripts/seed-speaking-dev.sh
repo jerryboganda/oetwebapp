@@ -13,13 +13,13 @@ if ! pg_isready -h 127.0.0.1 -p 5432 -U postgres >/dev/null 2>&1; then
 fi
 
 echo "[seed-speaking-dev] applying EF Core migrations..."
-dotnet ef database update --project backend/src/OetLearner.Api --no-build
+dotnet ef database update --project backend/src/OetWithDrHesham.Api --no-build
 
 echo "[seed-speaking-dev] running the API once to trigger seeders..."
 # Seeders register on startup. We start the API in the background and shut it
 # down after the health endpoint reports ready.
 ASPNETCORE_ENVIRONMENT=Development \
-  dotnet run --project backend/src/OetLearner.Api --no-build --no-launch-profile -- \
+  dotnet run --project backend/src/OetWithDrHesham.Api --no-build --no-launch-profile -- \
     --urls "http://localhost:5199" \
     > /tmp/oet-seed-api.log 2>&1 &
 api_pid=$!

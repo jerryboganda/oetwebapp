@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $root = 'C:\Users\Administrator\Desktop\New OET Web App'
-$migDir = Join-Path $root 'backend\src\OetLearner.Api\Data\Migrations'
+$migDir = Join-Path $root 'backend\src\OetWithDrHesham.Api\Data\Migrations'
 $snapshot = Join-Path $migDir 'LearnerDbContextModelSnapshot.cs'
 
 $files = Get-ChildItem $migDir -Filter *.cs | Where-Object {

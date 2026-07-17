@@ -1,6 +1,6 @@
 # Scripts And Automation (`scripts/`)
 
-Build, deployment, QA, diagnostic, and local-development automation for the OET Prep Platform.
+Build, deployment, QA, diagnostic, and local-development automation for the OET with Dr Hesham Platform.
 
 ## Layout
 

@@ -258,10 +258,10 @@ curl https://app.example.com/api/health
 The stack persists:
 
 - PostgreSQL data in Docker volume `oetwebsite_oet_postgres_data`
-- **ALL media/file data** in Docker volume `oetwebsite_oet_learner_storage` (audio, images, videos, documents, PDFs, uploads, OCR output, conversation recordings, pronunciation attempts, TTS output, content paper assets, profile photos, live class recordings, writing scans — everything)
+- **ALL media/file data** in Docker volume `oetwebsite_oet_with_dr_hesham_storage` (audio, images, videos, documents, PDFs, uploads, OCR output, conversation recordings, pronunciation attempts, TTS output, content paper assets, profile photos, live class recordings, writing scans — everything)
 
 **MISSION CRITICAL**: Every `docker-compose*.yml` MUST set
-`Storage__LocalRootPath: /var/opt/oet-learner/storage` in the API environment.
+`Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage` in the API environment.
 Without this, the app defaults to `App_Data/storage` inside the container
 filesystem and ALL media data is **permanently deleted** on container rebuild.
 The backend crashes at startup in Production if this is misconfigured.
@@ -332,9 +332,9 @@ Local test URLs:
 
 Seeded local accounts:
 
-- Learner: `learner@oet-prep.dev` / `Password123!`
-- Expert: `expert@oet-prep.dev` / `Password123!`
-- Admin: `admin@oet-prep.dev` / `Password123!`
+- Learner: `learner@oet-with-dr-hesham.dev` / `Password123!`
+- Expert: `expert@oet-with-dr-hesham.dev` / `Password123!`
+- Admin: `admin@oet-with-dr-hesham.dev` / `Password123!`
 
 Notes:
 
@@ -390,7 +390,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml exec 
   -e CONFIRM_RESTORE=YES \
   -e BACKUP_FILE=/backups/oet-20260423T021700Z.dump.gpg \
   -e BACKUP_GPG_PASSPHRASE \
-  -e TARGET_DB=oet_learner_restore_check \
+  -e TARGET_DB=oet_with_dr_hesham_restore_check \
   db-backup /usr/local/bin/postgres-restore.sh
 ```
 

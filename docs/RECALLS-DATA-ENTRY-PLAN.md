@@ -29,9 +29,9 @@ Repository documents and code reviewed:
 - `docs/CONTENT-UPLOAD-PLAN.md` - content provenance, source-file import discipline, `ContentPaper` / `ContentPaperAsset` / `MediaAsset` separation, publish workflow, audit requirements.
 - `app/admin/recalls/bulk-upload/page.tsx` - current admin CSV entry surface.
 - `lib/api.ts` - current `RecallsBulkUploadRow` and `adminBulkUploadRecalls()` client contract.
-- `backend/src/OetLearner.Api/Endpoints/RecallsEndpoints.cs` - legacy admin upload endpoint at `/v1/admin/recalls/bulk-upload`, now disabled for production safety.
-- `backend/src/OetLearner.Api/Services/Recalls/RecallsService.cs` - current bulk upload behavior.
-- `backend/src/OetLearner.Api/Domain/VocabularyEntities.cs` - canonical `VocabularyTerm` storage fields and limits.
+- `backend/src/OetWithDrHesham.Api/Endpoints/RecallsEndpoints.cs` - legacy admin upload endpoint at `/v1/admin/recalls/bulk-upload`, now disabled for production safety.
+- `backend/src/OetWithDrHesham.Api/Services/Recalls/RecallsService.cs` - current bulk upload behavior.
+- `backend/src/OetWithDrHesham.Api/Domain/VocabularyEntities.cs` - canonical `VocabularyTerm` storage fields and limits.
 
 Important limitation: no extra chat attachments were available in this session. If the actual recall source documents are separate files outside the repo, they must be supplied or placed in a fixed source folder before data entry begins.
 

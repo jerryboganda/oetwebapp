@@ -237,9 +237,9 @@ The next stage is not architectural invention. It is focused evolution in five a
 
 - `app/`
 - `lib/api.ts`
-- `backend/src/OetLearner.Api/Endpoints/`
-- `backend/src/OetLearner.Api/Domain/Entities.cs`
-- `backend/src/OetLearner.Api/Domain/BillingEntities.cs`
-- `backend/src/OetLearner.Api/Domain/AdminEntities.cs`
+- `backend/src/OetWithDrHesham.Api/Endpoints/`
+- `backend/src/OetWithDrHesham.Api/Domain/Entities.cs`
+- `backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs`
+- `backend/src/OetWithDrHesham.Api/Domain/AdminEntities.cs`
 - `docs/product-manual/_audit-fact-base.md`
 - `docs/product-manual/cross-system-business-logic-and-workflows.md`

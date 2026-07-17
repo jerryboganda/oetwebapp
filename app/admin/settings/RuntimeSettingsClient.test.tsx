@@ -381,7 +381,7 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       accessTokenLifetimeSeconds: 900,
       refreshTokenLifetimeSeconds: 2592000,
       otpLifetimeSeconds: 600,
-      authenticatorIssuer: 'OET Learner',
+      authenticatorIssuer: 'OET with Dr Hesham',
     },
     webPush: {
       enabled: true,

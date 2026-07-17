@@ -9,7 +9,7 @@
 **Status:** ✅ complete.
 
 - [x] Add `Azure.AI.Inference` 1.0.0-beta.5 NuGet to
-      `OetLearner.Api.csproj` (pulled `System.ClientModel 1.4.1`,
+      `OetWithDrHesham.Api.csproj` (pulled `System.ClientModel 1.4.1`,
       `Azure.Core 1.46.1`).
 - [x] Rewrite `CopilotAiModelProvider` to use `ChatCompletionsClient`
       with `AzureKeyCredential` and `AzureAIInferenceClientOptions`
@@ -438,7 +438,7 @@ Phase 6b — registry visibility (this commit):
 
 ## Verification gate (run after every phase)
 
-1. `dotnet test backend/OetLearner.sln` — all green.
+1. `dotnet test backend/OetWithDrHesham.sln` — all green.
 2. `npx tsc --noEmit` — 0 errors.
 3. `npm run lint` — 0 errors.
 4. `npm test` — every previously-green spec still green plus new ones.

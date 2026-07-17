@@ -58,7 +58,7 @@ Both runtimes ship identical, deterministic detectors.
 
 Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
 
-### .NET — `OetLearner.Api.Services.Rulebook`
+### .NET — `OetWithDrHesham.Api.Services.Rulebook`
 
 | File | Responsibility |
 |---|---|
@@ -67,7 +67,7 @@ Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
 | `SpeakingRuleEngine.cs` | Mirror of `speaking-rules.ts`. |
 | `AiGatewayService.cs` | **The only path to any AI model.** Holds `RulebookPromptBuilder`, the grounded-prompt contract, provider registry, and the refusal logic that blocks ungrounded prompts. |
 
-Tests: `backend/tests/OetLearner.Api.Tests/RulebookEngineTests.cs` — **55 assertions**, all green.
+Tests: `backend/tests/OetWithDrHesham.Api.Tests/RulebookEngineTests.cs` — **55 assertions**, all green.
 
 ---
 

@@ -291,7 +291,7 @@ function runE2ePsql(sql: string) {
   const host = process.env.OET_PSQL_HOST ?? process.env.PGHOST ?? 'localhost';
   const port = process.env.OET_PSQL_PORT ?? process.env.PGPORT ?? '5432';
   const user = process.env.OET_PSQL_USER ?? process.env.PGUSER ?? 'postgres';
-  const database = process.env.OET_PSQL_DATABASE ?? process.env.PGDATABASE ?? 'oet_learner_dev';
+  const database = process.env.OET_PSQL_DATABASE ?? process.env.PGDATABASE ?? 'oet_with_dr_hesham_dev';
   const password = process.env.OET_PSQL_PASSWORD ?? process.env.PGPASSWORD ?? 'postgres';
 
   try {

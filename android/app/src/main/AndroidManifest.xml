@@ -35,7 +35,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="oet-prep" android:host="open" />
+                <data android:scheme="oet-with-dr-hesham" android:host="open" />
             </intent-filter>
 
         </activity>

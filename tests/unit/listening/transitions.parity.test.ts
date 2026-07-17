@@ -12,7 +12,7 @@ import {
 
 /**
  * Listening V2 FSM parity test. The TypeScript transitions table MUST stay
- * byte-for-byte identical to `backend/src/OetLearner.Api/Services/Listening/
+ * byte-for-byte identical to `backend/src/OetWithDrHesham.Api/Services/Listening/
  * ListeningFsmTransitions.cs`. If the backend table changes you MUST update
  * `lib/listening/transitions.ts` in the same PR — drift breaks the two-step
  * confirm-token protocol because the client computes the destination state

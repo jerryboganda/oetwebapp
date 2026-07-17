@@ -1,4 +1,4 @@
-# OET Learner Backend
+# OET with Dr Hesham Backend
 
 ASP.NET Core 10 + PostgreSQL learner backend for the OET web app.
 
@@ -31,7 +31,7 @@ docker compose -f docker-compose.backend.yml up --build
 First start PostgreSQL separately, then:
 
 ```bash
-dotnet run --project backend/src/OetLearner.Api/OetLearner.Api.csproj
+dotnet run --project backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj
 ```
 
 The API runs on `http://localhost:5198` by default.
@@ -51,8 +51,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:5198
 ## Useful commands
 
 ```bash
-dotnet build backend/OetLearner.sln
-dotnet test backend/OetLearner.sln
+dotnet build backend/OetWithDrHesham.sln
+dotnet test backend/OetWithDrHesham.sln
 powershell -ExecutionPolicy Bypass -File .\scripts\probe-production.ps1
 ```
 

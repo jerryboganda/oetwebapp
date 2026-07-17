@@ -3,12 +3,12 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAM_ID.com.oetprep.learner",
+        "appID": "TEAM_ID.com.oetwithdrhesham.learner",
         "paths": ["*"]
       }
     ]
   },
   "webcredentials": {
-    "apps": ["TEAM_ID.com.oetprep.learner"]
+    "apps": ["TEAM_ID.com.oetwithdrhesham.learner"]
   }
 }

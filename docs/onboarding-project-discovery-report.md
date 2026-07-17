@@ -7,7 +7,7 @@ _Discovery for the onboarding + product-tour + walkthrough system. Produced from
 - **Frontend:** Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4 (class-based dark mode via `next-themes`), motion v12 (`motion/react`) with reduced-motion profiles, `next-intl` i18n (only the Writing module is currently translated; the rest ship hard-coded English).
 - **State/data:** TanStack React Query (central `queryKeys` factory in `lib/query/hooks.ts`), Zustand stores, `apiClient`/typed helpers in `lib/api.ts`.
 - **Providers:** `app/providers.tsx` → `NextIntlClientProvider → ThemeProvider → TooltipProvider → QueryProvider → AuthProvider → (bridges) → children`.
-- **Backend:** ASP.NET Core Minimal API, EF Core, PostgreSQL, SignalR. Endpoints under `backend/src/OetLearner.Api/Endpoints`, entities in `Domain/`, `LearnerDbContext`, migrations `YYYYMMDDhhmmss_Name` (dev `AutoMigrate` true; prod manual).
+- **Backend:** ASP.NET Core Minimal API, EF Core, PostgreSQL, SignalR. Endpoints under `backend/src/OetWithDrHesham.Api/Endpoints`, entities in `Domain/`, `LearnerDbContext`, migrations `YYYYMMDDhhmmss_Name` (dev `AutoMigrate` true; prod manual).
 - **Desktop/mobile:** Electron + Capacitor.
 
 ## 2. User role map

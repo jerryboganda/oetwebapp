@@ -561,7 +561,7 @@ export const rejectListeningExtraction = (paperId: string, draftId: string, reas
 // ── Learner: course pathway snapshot ───────────────────────────────────
 //
 // Mirrors `ListeningPathwaySnapshot` from
-// `backend/src/OetLearner.Api/Services/Listening/ListeningPathwayService.cs`.
+// `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningPathwayService.cs`.
 // Surfaced at GET /v1/listening-papers/me/pathway (auth-required) and joins
 // completed-attempt, best-scaled, and mock signals into a single readiness
 // stage with one structured next-action.
@@ -614,7 +614,7 @@ export const getListeningPathway = () =>
 // ── Phase 6: per-learner Listening analytics ───────────────────────────
 //
 // Mirrors `ListeningStudentAnalyticsDto` in
-// `backend/src/OetLearner.Api/Services/Listening/ListeningAnalyticsService.cs`.
+// `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningAnalyticsService.cs`.
 // Surfaced at GET /v1/listening-papers/me/analytics.
 
 export interface ListeningPartBreakdown {

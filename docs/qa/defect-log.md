@@ -28,12 +28,12 @@
 - Fix status:
   - Resolved
 - Fix applied:
-  - `backend/src/OetLearner.Api/Services/AuthService.cs`
+  - `backend/src/OetWithDrHesham.Api/Services/AuthService.cs`
   - Added provider-safe deletion logic for recovery codes using `ExecuteDeleteAsync` for relational providers and tracked `RemoveRange` for in-memory test provider compatibility.
 - Regression coverage:
   - `tests/e2e/setup/auth.setup.ts`
   - `tests/e2e/expert/privileged-smoke.spec.ts`
-  - `dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~AuthEndpoints_BeginAndConfirmAuthenticatorSetup_EnableMfaForVerifiedExpert"`
+  - `dotnet test backend/OetWithDrHesham.sln --filter "FullyQualifiedName~AuthEndpoints_BeginAndConfirmAuthenticatorSetup_EnableMfaForVerifiedExpert"`
 
 ---
 

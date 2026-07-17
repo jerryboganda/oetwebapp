@@ -30,9 +30,9 @@ graph LR
 
 ## Backend layout
 
-- **Domain**: `backend/src/OetLearner.Api/Domain/Speaking*.cs`, `RolePlayCard*.cs`, `Interlocutor*.cs`, `PrivateSpeaking*.cs`.
-- **Services**: `backend/src/OetLearner.Api/Services/Speaking/*` (18 services + retention worker).
-- **Endpoints**: `backend/src/OetLearner.Api/Endpoints/*Speaking*.cs` + `TutorSpeakingEndpoints.cs` + `AdminSpeakingContentEndpoints.cs`.
+- **Domain**: `backend/src/OetWithDrHesham.Api/Domain/Speaking*.cs`, `RolePlayCard*.cs`, `Interlocutor*.cs`, `PrivateSpeaking*.cs`.
+- **Services**: `backend/src/OetWithDrHesham.Api/Services/Speaking/*` (18 services + retention worker).
+- **Endpoints**: `backend/src/OetWithDrHesham.Api/Endpoints/*Speaking*.cs` + `TutorSpeakingEndpoints.cs` + `AdminSpeakingContentEndpoints.cs`.
 - **Hubs**: `ConversationHub.SpeakingRoleplay.cs`, `SpeakingLiveRoomHub.cs`.
 - **AI gateway**: `Services/Rulebook/AiGatewayService.cs` (provider routing); `Services/Rulebook/AiProviderRegistry.cs` (Anthropic, OpenAI-compatible, Cloudflare).
 

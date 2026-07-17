@@ -192,4 +192,4 @@ Required checks before merge:
 - `npx tsc --noEmit`
 - `npm run lint`
 - `npm test`
-- `dotnet test backend/OetLearner.sln`
+- `dotnet test backend/OetWithDrHesham.sln`

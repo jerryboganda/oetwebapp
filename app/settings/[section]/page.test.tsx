@@ -66,7 +66,7 @@ describe('Settings section page', () => {
       section: 'profile',
       values: {
         displayName: 'Faisal Maqsood',
-        email: 'learner@oet-prep.dev',
+        email: 'learner@oet-with-dr-hesham.dev',
         professionId: 'nursing',
       },
     });

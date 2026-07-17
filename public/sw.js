@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 /**
- * OET Prep — Service Worker (L15 Offline/PWA Support)
+ * OET with Dr Hesham — Service Worker (L15 Offline/PWA Support)
  *
  * Strategy:
  *  - CACHE_FIRST for static assets (fonts, icons, CSS, JS chunks — content-hashed, immutable)
@@ -223,7 +223,7 @@ self.addEventListener('push', (event) => {
 
   try {
     const payload = event.data.json();
-    const title = payload.title || 'OET Prep';
+    const title = payload.title || 'OET with Dr Hesham';
     const options = {
       body: payload.body || '',
       icon: '/icon-192.png',

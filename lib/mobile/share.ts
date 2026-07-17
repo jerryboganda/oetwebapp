@@ -78,17 +78,17 @@ export async function triggerShare(options: ShareOptions): Promise<ShareResult> 
 
 export async function shareAppLink(): Promise<ShareResult> {
   return triggerShare({
-    title: 'OET Prep Learner',
-    text: 'Prepare for your OET exam with OET Prep Learner!',
+    title: 'OET with Dr Hesham Learner',
+    text: 'Prepare for your OET exam with OET with Dr Hesham Learner!',
     url: 'https://app.oetwithdrhesham.co.uk',
-    dialogTitle: 'Share OET Prep',
+    dialogTitle: 'Share OET with Dr Hesham',
   });
 }
 
 export async function shareAchievement(achievementTitle: string): Promise<ShareResult> {
   return triggerShare({
-    title: 'OET Prep Achievement',
-    text: `I just earned "${achievementTitle}" on OET Prep Learner!`,
+    title: 'OET with Dr Hesham Achievement',
+    text: `I just earned "${achievementTitle}" on OET with Dr Hesham Learner!`,
     url: 'https://app.oetwithdrhesham.co.uk',
     dialogTitle: 'Share Achievement',
   });
@@ -96,8 +96,8 @@ export async function shareAchievement(achievementTitle: string): Promise<ShareR
 
 export async function shareScore(subtest: string, score: number): Promise<ShareResult> {
   return triggerShare({
-    title: 'OET Prep Score',
-    text: `I scored ${score}% on ${subtest} practice with OET Prep Learner!`,
+    title: 'OET with Dr Hesham Score',
+    text: `I scored ${score}% on ${subtest} practice with OET with Dr Hesham Learner!`,
     url: 'https://app.oetwithdrhesham.co.uk',
     dialogTitle: 'Share Score',
   });

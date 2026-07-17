@@ -1,10 +1,10 @@
-# Agentic Bootstrap For OET Prep Platform
+# Agentic Bootstrap For OET with Dr Hesham Platform
 
 > This bootstrap is additive and conservative. It refreshes the repo operating docs, adds a small repo-local Codex config, and creates a shallow agent set without changing the current MCP stack.
 
 ## Objective
 
-Establish a durable operating model for Codex inside the OET Prep Platform repo so future agent work can stay narrow, safe, and consistent across web, backend, desktop, and mobile surfaces.
+Establish a durable operating model for Codex inside the OET with Dr Hesham Platform repo so future agent work can stay narrow, safe, and consistent across web, backend, desktop, and mobile surfaces.
 
 ## Decisions
 

@@ -55,7 +55,7 @@ These labels do not mean end-to-end release validation or production readiness b
 ## Keeping This Package Current
 
 - Update the route/API index whenever page routes or backend endpoint-folder files change materially.
-- Regenerate the route count from `app/**/page.tsx`, the route-handler count from `app/api/**/route.ts`, and the endpoint-folder count from `backend/src/OetLearner.Api/Endpoints/*.cs`.
+- Regenerate the route count from `app/**/page.tsx`, the route-handler count from `app/api/**/route.ts`, and the endpoint-folder count from `backend/src/OetWithDrHesham.Api/Endpoints/*.cs`.
 - Keep README, route index, and audit fact base source labels in agreement.
 - Verify all product-manual Markdown links.
 - Re-check `partial` labels for feature flags, seed data, published-content dependencies, heuristics, legacy redirects, and release-only validation gaps.

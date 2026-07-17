@@ -1,5 +1,5 @@
 # Pin project name to `oetwebsite` so docker compose uses the live volumes
-# (oetwebsite_oet_postgres_data, oetwebsite_oet_learner_storage) regardless
+# (oetwebsite_oet_postgres_data, oetwebsite_oet_with_dr_hesham_storage) regardless
 # of the working-directory the deploy is executed from. Without this, a CI
 # deploy from /opt/oetwebapp creates parallel `oetwebapp_*` volumes (empty
 # DB) and fails STEP 4 with container-name conflict against the live stack.
@@ -34,7 +34,7 @@ x-learner-api-slot: &learner-api-slot
     BREVO__APIKEY: ${BREVO__APIKEY}
     BREVO__BASEURL: ${BREVO__BASEURL:-https://api.brevo.com/v3}
     BREVO__FROMEMAIL: ${BREVO__FROMEMAIL}
-    BREVO__FROMNAME: ${BREVO__FROMNAME:-OET Learner}
+    BREVO__FROMNAME: ${BREVO__FROMNAME:-OET with Dr Hesham}
     BREVO__EMAILVERIFICATIONTEMPLATEID: ${BREVO__EMAILVERIFICATIONTEMPLATEID}
     BREVO__PASSWORDRESETTEMPLATEID: ${BREVO__PASSWORDRESETTEMPLATEID}
     BREVO__WEBHOOKSECRET: ${BREVO__WEBHOOKSECRET:-}
@@ -45,7 +45,7 @@ x-learner-api-slot: &learner-api-slot
     SMTP__PASSWORD: ${SMTP__PASSWORD:-}
     SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
     SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
-    SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
+    SMTP__FROMNAME: ${SMTP__FROMNAME:-OET with Dr Hesham}
     # Google OAuth client used by the 1:1 Speaking Google Calendar connect flow
     # (and any social Google sign-in). Bound case-insensitively to
     # ExternalAuth:Google:*. Optional — empty default keeps the app booting when
@@ -61,7 +61,7 @@ x-learner-api-slot: &learner-api-slot
     Platform__PublicWebBaseUrl: ${APP_URL}
     Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
     Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
-    Storage__LocalRootPath: /var/opt/oet-learner/storage
+    Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage
     Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-1073741824}
     Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-false}
     Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
@@ -123,7 +123,7 @@ x-learner-api-slot: &learner-api-slot
     # Must match the OET_DESKTOP/MOBILE_ATTEST_SECRET baked into the app builds.
     VideoAttestation__KeysJson: ${VIDEOATTESTATION__KEYSJSON:-}
   volumes:
-    - oet_learner_storage:/var/opt/oet-learner/storage
+    - oet_with_dr_hesham_storage:/var/opt/oet-with-dr-hesham/storage
   expose:
     - "8080"
   networks:
@@ -346,13 +346,13 @@ services:
       TZ: UTC
     volumes:
       - oet_db_backups:/backups
-      - oet_learner_storage:/media-storage:ro
+      - oet_with_dr_hesham_storage:/media-storage:ro
     networks:
       - internal
 
 volumes:
   oet_postgres_data:
-  oet_learner_storage:
+  oet_with_dr_hesham_storage:
   oet_clamav_data:
   oet_db_backups:
 

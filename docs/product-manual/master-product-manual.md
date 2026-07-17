@@ -1,4 +1,4 @@
-# OET Prep Platform Master Product Manual
+# OET with Dr Hesham Platform Master Product Manual
 
 This documentation package explains the implemented product across four portals and the platform layers that support them:
 
@@ -13,7 +13,7 @@ This documentation package explains the implemented product across four portals 
 
 ## 1. Executive Summary
 
-The OET Prep Platform is a role-based OET preparation and operations system. It serves learners preparing for the exam, experts reviewing and tutoring productive-skill work, sponsors managing learner cohorts, and admins operating the platform.
+The OET with Dr Hesham Platform is a role-based OET preparation and operations system. It serves learners preparing for the exam, experts reviewing and tutoring productive-skill work, sponsors managing learner cohorts, and admins operating the platform.
 
 Its purpose is to help healthcare professionals prepare for the OET exam through structured diagnostics, study planning, sub-test practice, mock testing, rulebook-grounded feedback, expert review, sponsor-supported cohorts, billing and entitlement controls, and operational oversight.
 
@@ -155,7 +155,7 @@ Mocks provide exam-readiness evidence through setup, player, diagnostic, simulat
 
 These rules are product behavior, not implementation trivia. The verbatim engineering wording (including the AI-gateway `PromptNotGroundedException` enforcement, the `IAiUsageRecorder` one-row-per-call rule, the publish-gate composition for each module, the Reading learner-DTO hard ban, advisory-band projection anchors, and the Statement-of-Results pixel contract) is consolidated in the [Reference Appendix, Section 1](./reference-appendix.md#1-mission-critical-hard-invariants). The bullets below are the product-facing summary; the appendix is the source of truth.
 
-- Scoring: pass/fail and raw-to-scaled logic must route through `lib/scoring.ts` or `OetLearner.Api.Services.OetScoring`; inline threshold comparisons are not the source of truth. Listening/Reading raw-to-scaled conversion anchors `30/42 == 350/500`; Writing pass is 350 for UK/IE/AU/NZ/CA and 300 for US/QA; Speaking pass is always 350.
+- Scoring: pass/fail and raw-to-scaled logic must route through `lib/scoring.ts` or `OetWithDrHesham.Api.Services.OetScoring`; inline threshold comparisons are not the source of truth. Listening/Reading raw-to-scaled conversion anchors `30/42 == 350/500`; Writing pass is 350 for UK/IE/AU/NZ/CA and 300 for US/QA; Speaking pass is always 350.
 - Rulebooks: Writing, Speaking, Grammar, Pronunciation, and Conversation enforcement must use rulebook engine APIs.
 - AI gateway: every AI call must use grounded prompt construction and usage recording, including provider failures and refusals.
 - Content upload: learner content assets must use the `ContentPaper -> ContentPaperAsset -> MediaAsset` model, source provenance, publish gates, audit events, and storage abstraction.
@@ -270,6 +270,6 @@ These rules are product behavior, not implementation trivia. The verbatim engine
 
 ## 10. Conclusion
 
-The OET Prep Platform is a four-portal preparation and operations system. Its strongest implemented themes are OET-specific workflow design, strong productive-skill review loops, server-authoritative rulebook/AI/content domains, sponsor and commercial operations, and admin governance across content, quality, billing, and audit.
+The OET with Dr Hesham Platform is a four-portal preparation and operations system. Its strongest implemented themes are OET-specific workflow design, strong productive-skill review loops, server-authoritative rulebook/AI/content domains, sponsor and commercial operations, and admin governance across content, quality, billing, and audit.
 
 The remaining weaknesses are mostly documentation drift and transitional implementation details. The manual package now treats those as explicit product facts rather than hiding them inside broad surface summaries.

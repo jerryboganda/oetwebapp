@@ -68,7 +68,7 @@ Model audio is not a publish-gate blocker today because a fresh DB must still be
 
 1. Edit the profession JSON under `rulebooks/pronunciation/<profession>/rulebook.v1.json`.
 2. Bump the `version` field on the rulebook.
-3. Run backend tests: `dotnet test backend/OetLearner.sln`.
+3. Run backend tests: `dotnet test backend/OetWithDrHesham.sln`.
 4. Run the pronunciation rulebook loader tests — these will catch schema breakage.
 5. Every admin AI draft produced against the new version will have the new `RulebookVersion` stamped on the `AiUsageRecord` row.
 

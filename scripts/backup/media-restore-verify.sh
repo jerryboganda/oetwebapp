@@ -26,7 +26,7 @@ esac
 
 restore_dir="${TARGET_MEDIA_RESTORE_DIR:-${workdir}/media-restore}"
 case "${restore_dir}" in
-    /var/opt/oet-learner/storage|/var/opt/oet-learner/storage/*|/media-storage|/media-storage/*)
+    /var/opt/oet-with-dr-hesham/storage|/var/opt/oet-with-dr-hesham/storage/*|/media-storage|/media-storage/*)
         echo "Refusing to verify media restore into live media storage: ${restore_dir}" >&2
         exit 3
         ;;

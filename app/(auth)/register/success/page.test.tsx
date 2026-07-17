@@ -15,7 +15,7 @@ describe('RegisterSuccessPage', () => {
   it('shows the success message and redirects to sign in after 10 seconds', () => {
     renderWithRouter(<RegisterSuccessPage />, {
       router: { replace: mockReplace },
-      searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
+      searchParams: new URLSearchParams({ email: 'learner@oet-with-dr-hesham.dev' }),
     });
 
     expect(screen.getByRole('heading', { name: /account created successfully/i })).toBeInTheDocument();
@@ -24,6 +24,6 @@ describe('RegisterSuccessPage', () => {
       vi.advanceTimersByTime(10000);
     });
 
-    expect(mockReplace).toHaveBeenCalledWith('/sign-in?email=learner%40oet-prep.dev');
+    expect(mockReplace).toHaveBeenCalledWith('/sign-in?email=learner%40oet-with-dr-hesham.dev');
   });
 });

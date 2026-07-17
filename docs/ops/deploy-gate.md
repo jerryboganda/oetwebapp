@@ -122,7 +122,7 @@ If rollback itself fails, page the incident commander
 ## Backups & Restore Drill
 
 - Postgres volume `oetwebsite_oet_postgres_data` is the database source of
-   truth. Learner-uploaded media lives in `oetwebsite_oet_learner_storage`, and
+   truth. Learner-uploaded media lives in `oetwebsite_oet_with_dr_hesham_storage`, and
    encrypted dumps live in `oetwebsite_oet_db_backups`.
 - A manual restore drill from a recent `pg_dump` snapshot must be performed
    at least once per quarter; record the timestamp and the operator in the

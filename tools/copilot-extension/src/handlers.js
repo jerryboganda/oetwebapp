@@ -126,10 +126,10 @@ export function NewComponent({}: Props) {
     </div>
   );
 }`,
-    endpoint: `// backend/src/OetLearner.Api/Endpoints/<Name>Endpoints.cs
+    endpoint: `// backend/src/OetWithDrHesham.Api/Endpoints/<Name>Endpoints.cs
 using Microsoft.AspNetCore.Mvc;
 
-namespace OetLearner.Api.Endpoints;
+namespace OetWithDrHesham.Api.Endpoints;
 
 public static class NewEndpoints
 {

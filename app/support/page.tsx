@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { LifeBuoy, Mail, ShieldCheck, Trash2 } from 'lucide-react';
+import { LifeBuoy, Mail, Phone, ShieldCheck, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from '@/lib/auth/support';
 
-const supportEmail = 'support@oetwithdrhesham.co.uk';
+const supportEmail = SUPPORT_EMAIL;
+const supportPhone = SUPPORT_PHONE;
 
 export default function SupportPage() {
   return (
@@ -13,18 +15,25 @@ export default function SupportPage() {
             <LifeBuoy className="h-7 w-7" />
           </div>
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-primary">Support</p>
-          <h1 className="mt-2 text-3xl font-black text-navy sm:text-4xl">We can help with your OET prep account</h1>
+          <h1 className="mt-2 text-3xl font-black text-navy sm:text-4xl">We can help with your OET with Dr Hesham account</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
             Contact support for account access, billing questions, privacy requests, or help deleting your account. Do not email passwords, payment card details, or clinical documents.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="p-5">
             <Mail className="mb-3 h-5 w-5 text-primary" />
-            <h2 className="font-semibold text-navy">Contact</h2>
+            <h2 className="font-semibold text-navy">Email</h2>
             <p className="mt-2 text-sm leading-6 text-muted">
               Email <a className="font-medium text-primary underline-offset-4 hover:underline" href={`mailto:${supportEmail}`}>{supportEmail}</a> with your account email and a short description.
+            </p>
+          </Card>
+          <Card className="p-5">
+            <Phone className="mb-3 h-5 w-5 text-primary" />
+            <h2 className="font-semibold text-navy">Phone / WhatsApp</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Call or message <a className="font-medium text-primary underline-offset-4 hover:underline" href={`tel:${supportPhone.replace(/\s/g, '')}`}>{supportPhone}</a> for urgent account or billing help.
             </p>
           </Card>
           <Card className="p-5">

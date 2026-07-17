@@ -1,6 +1,6 @@
 # Observability (`lib/observability/`)
 
-Shared observability helpers for the OET Prep Platform.
+Shared observability helpers for the OET with Dr Hesham Platform.
 
 ## Tools
 

@@ -1,5 +1,5 @@
 // MockReportPayloadV1 — formal contract mirroring backend MockReportPayloadV1 record.
-// Source of truth: backend/src/OetLearner.Api/Services/Mocks/Results/MockReportPayloadV1.cs
+// Source of truth: backend/src/OetWithDrHesham.Api/Services/Mocks/Results/MockReportPayloadV1.cs
 //
 // Consumers branch on `payloadSchemaVersion`. Reports written before the schema was
 // formalised have version === '' or undefined and fall back to the legacy MockReport

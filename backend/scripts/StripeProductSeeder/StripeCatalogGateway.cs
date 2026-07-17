@@ -1,6 +1,6 @@
 using Stripe;
 
-namespace OetLearner.Scripts.StripeProductSeeder;
+namespace OetWithDrHesham.Scripts.StripeProductSeeder;
 
 /// <summary>
 /// Production gateway backed by the Stripe.net SDK. Tests never instantiate

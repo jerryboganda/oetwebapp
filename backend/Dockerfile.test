@@ -28,9 +28,9 @@ COPY rulebooks/ rulebooks/
 # Split restore → build → test into separate cached layers so a retry reuses
 # the expensive compile and a failure cleanly distinguishes compile vs test.
 # Single MSBuild node + no shared compilation server avoids the SIGBUS.
-RUN dotnet restore backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj -maxcpucount:1
-RUN dotnet build backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+RUN dotnet restore backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj -maxcpucount:1
+RUN dotnet build backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj \
     -c Debug --no-restore --nologo -maxcpucount:1 \
     -p:UseSharedCompilation=false -p:BuildInParallel=false
-RUN dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+RUN dotnet test backend/tests/OetWithDrHesham.Api.Tests/OetWithDrHesham.Api.Tests.csproj \
     -c Debug --no-build --nologo --logger "console;verbosity=minimal"

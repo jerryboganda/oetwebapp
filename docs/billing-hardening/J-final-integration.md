@@ -34,11 +34,11 @@ Before applying the J diffs, I verified what was already live on `main` (i.e. ap
 
 ## Diffs applied in this slice
 
-### 1. `backend/src/OetLearner.Api/Domain/Entities.cs` — Wallet.RowVersion
+### 1. `backend/src/OetWithDrHesham.Api/Domain/Entities.cs` — Wallet.RowVersion
 
 Added a nullable `byte[]? RowVersion` with `[ConcurrencyCheck]`. Kept `LastUpdatedAt.IsConcurrencyToken()` intact so existing PG behaviour is unchanged. Cross-DB optimistic concurrency now works on SQLite + in-memory test providers without code change at the call sites.
 
-### 2. `backend/src/OetLearner.Api/Data/LearnerDbContext.cs` — RowVersion model config
+### 2. `backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs` — RowVersion model config
 
 Append-only addition right after the existing `Wallet.LastUpdatedAt.IsConcurrencyToken()` line:
 
@@ -52,7 +52,7 @@ modelBuilder.Entity<Wallet>()
 
 This is provider-agnostic — `IsRowVersion()` resolves to `xmin` on Postgres, a managed shadow value on SQLite, and a pass-through on the InMemory provider.
 
-### 3. `backend/src/OetLearner.Api/Data/Migrations/20260512100000_AddWalletRowVersion.cs` (NEW)
+### 3. `backend/src/OetWithDrHesham.Api/Data/Migrations/20260512100000_AddWalletRowVersion.cs` (NEW)
 
 Additive `ALTER TABLE "Wallets" ADD COLUMN IF NOT EXISTS "RowVersion" bytea NULL;`. Idempotent, reversible, sequenced after `20260511110000_Listening_V2_Schema` so the in-flight Listening V2 work doesn't collide.
 
@@ -99,7 +99,7 @@ Net: 9 of 9 gaps are live on `main`.
 
 ```pwsh
 # Backend build (Slice J files plus all transitive deps)
-dotnet build backend/OetLearner.sln
+dotnet build backend/OetWithDrHesham.sln
 # → Build succeeded. 0 Error(s).
 
 # Frontend type-check (whole repo)

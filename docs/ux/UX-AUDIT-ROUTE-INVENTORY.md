@@ -26,7 +26,7 @@
 | `/(auth)/forgot-password` | all | T0 | todo | |
 | `/(auth)/reset-password` | all | T0 | todo | |
 | `/(auth)/terms` | all | T2 | todo | Legal |
-| `/(auth)/auth/*` (OAuth/deep-link) | all | T0 | todo | Desktop `oet-prep://` scheme |
+| `/(auth)/auth/*` (OAuth/deep-link) | all | T0 | todo | Desktop `oet-with-dr-hesham://` scheme |
 | `/onboarding` | P1-P3 | T0 | todo | Goal, test date, profession |
 | `/onboarding-tour` | P1-P3 | T1 | todo | |
 

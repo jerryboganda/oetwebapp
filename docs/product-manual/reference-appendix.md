@@ -25,12 +25,12 @@ These invariants come from `AGENTS.md` and the linked domain specs. They are not
 - Listening and Reading raw-to-scaled conversion is anchored at `30/42 ≡ 350/500`.
 - Writing pass thresholds depend on country: **350** for UK/IE/AU/NZ/CA and **300** for US/QA.
 - Speaking pass threshold is always **350**.
-- All scoring access must route through `lib/scoring.ts` (TS) or `OetLearner.Api.Services.OetScoring` (.NET).
+- All scoring access must route through `lib/scoring.ts` (TS) or `OetWithDrHesham.Api.Services.OetScoring` (.NET).
 - Inline comparisons such as `score >= 350` are forbidden.
 
 ### 1.2 Rulebooks
 
-- All Writing/Speaking/Grammar/Pronunciation/Conversation rule enforcement must route through `lib/rulebook` (TS) or `OetLearner.Api.Services.Rulebook` (.NET).
+- All Writing/Speaking/Grammar/Pronunciation/Conversation rule enforcement must route through `lib/rulebook` (TS) or `OetWithDrHesham.Api.Services.Rulebook` (.NET).
 - Canonical rulebook content lives at `rulebooks/<kind>/<profession>/rulebook.v*.json`.
 - UI and endpoint code must never read those JSON files directly. Always use the engine API.
 
@@ -94,7 +94,7 @@ These invariants come from `AGENTS.md` and the linked domain specs. They are not
 
 ## 2. Configuration Options Reference
 
-These options classes live under `backend/src/OetLearner.Api/Configuration/` and are bound from configuration. They change runtime behavior, security posture, retention, or commercial behavior. Operational owners should review them per environment.
+These options classes live under `backend/src/OetWithDrHesham.Api/Configuration/` and are bound from configuration. They change runtime behavior, security posture, retention, or commercial behavior. Operational owners should review them per environment.
 
 | Options class | Bound section | Owner area | Primary impact |
 | --- | --- | --- | --- |
@@ -341,7 +341,7 @@ This matrix records which features are intended to work on each platform surface
 
 Before shipping, validate:
 
-- Build and unit tests: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`, `dotnet test backend/OetLearner.sln`.
+- Build and unit tests: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`, `dotnet test backend/OetWithDrHesham.sln`.
 - Mission-critical invariants in Section 1, including PM-001 reconciliation status if Reading review changes.
 - Per-portal smoke E2E: `npm run test:e2e:smoke` and the role-specific projects in `playwright.config.ts`.
 - Platform parity: validate the rows in Section 10 that the release touches.

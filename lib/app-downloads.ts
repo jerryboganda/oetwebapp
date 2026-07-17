@@ -10,7 +10,7 @@ export const GITHUB_RELEASES_URL = 'https://github.com/jerryboganda/oetwebapp/re
 
 export const ANDROID_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL ||
-  'https://play.google.com/store/apps/details?id=com.oetprep.learner';
+  'https://play.google.com/store/apps/details?id=com.oetwithdrhesham.learner';
 
 export const IOS_STORE_URL = process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
 

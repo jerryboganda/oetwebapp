@@ -15,7 +15,7 @@ export const SOR_FIXTURE_MEDICINE_UK: OetStatementOfResults = {
     gender: 'Female',
   },
   venue: {
-    name: 'OET Prep — Practice Mock',
+    name: 'OET with Dr Hesham — Practice Mock',
     number: 'PREP-0001',
     country: 'United Kingdom',
   },
@@ -42,7 +42,7 @@ export const SOR_FIXTURE_MEDICINE_USA: OetStatementOfResults = {
     gender: 'Male',
   },
   venue: {
-    name: 'OET Prep — Practice Mock',
+    name: 'OET with Dr Hesham — Practice Mock',
     number: 'PREP-0002',
     country: 'United States',
   },
@@ -68,7 +68,7 @@ export const SOR_FIXTURE_BORDERLINE: OetStatementOfResults = {
     name: 'Ms Priya Shah',
     candidateNumber: 'OET-500001-900001',
   },
-  venue: { name: 'OET Prep — Practice Mock', number: 'PREP-0003', country: 'Australia' },
+  venue: { name: 'OET with Dr Hesham — Practice Mock', number: 'PREP-0003', country: 'Australia' },
   test: { date: '18 Apr 2026', deliveryMode: 'OET on computer (practice)', profession: 'Nursing' },
   scores: { listening: 350, reading: 350, speaking: 350, writing: 350 },
   isPractice: true,
@@ -77,7 +77,7 @@ export const SOR_FIXTURE_BORDERLINE: OetStatementOfResults = {
 
 export const SOR_FIXTURE_PERFECT: OetStatementOfResults = {
   candidate: { name: 'Dr Aiko Tanaka', candidateNumber: 'OET-900000-000001' },
-  venue: { name: 'OET Prep — Practice Mock', number: 'PREP-9999', country: 'Ireland' },
+  venue: { name: 'OET with Dr Hesham — Practice Mock', number: 'PREP-9999', country: 'Ireland' },
   test: { date: '01 Jan 2026', deliveryMode: 'OET on computer (practice)', profession: 'Medicine' },
   scores: { listening: 500, reading: 500, speaking: 500, writing: 500 },
   isPractice: true,
@@ -86,7 +86,7 @@ export const SOR_FIXTURE_PERFECT: OetStatementOfResults = {
 
 export const SOR_FIXTURE_FAIL: OetStatementOfResults = {
   candidate: { name: 'Mr Tom Carter', candidateNumber: 'OET-100001-000002' },
-  venue: { name: 'OET Prep — Practice Mock', number: 'PREP-0004', country: 'Canada' },
+  venue: { name: 'OET with Dr Hesham — Practice Mock', number: 'PREP-0004', country: 'Canada' },
   test: { date: '05 Feb 2026', deliveryMode: 'OET on computer (practice)', profession: 'Dentistry' },
   scores: { listening: 180, reading: 220, speaking: 260, writing: 140 },
   isPractice: true,

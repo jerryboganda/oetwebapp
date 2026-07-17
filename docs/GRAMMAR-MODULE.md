@@ -26,7 +26,7 @@ Grammar is a **subscription-gated practice module**. The module drives:
 | Paid (Starter / Pro) | Unlimited | ✅ | ✅ |
 | Sponsor seat | Unlimited (via sponsor plan) | ✅ | ✅ + per-seat report |
 
-Enforced server-side by `IGrammarEntitlementService` (see `backend/src/OetLearner.Api/Services/Grammar/GrammarEntitlementService.cs`). Endpoint: `GET /v1/grammar/entitlement`. Submit endpoint (`POST /v1/grammar/lessons/{id}/submit`) returns **HTTP 402** `grammar_quota_exceeded` when the free-tier cap is hit.
+Enforced server-side by `IGrammarEntitlementService` (see `backend/src/OetWithDrHesham.Api/Services/Grammar/GrammarEntitlementService.cs`). Endpoint: `GET /v1/grammar/entitlement`. Submit endpoint (`POST /v1/grammar/lessons/{id}/submit`) returns **HTTP 402** `grammar_quota_exceeded` when the free-tier cap is hit.
 
 Re-attempts of an already-completed lesson do **not** count against the quota. Only fresh completions do.
 

@@ -49,20 +49,20 @@ jobs:
         run: dotnet tool restore
 
       - name: Restore API project
-        run: dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj
+        run: dotnet restore backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj
 
       - name: Add migration
         run: >
           dotnet ef migrations add RemoveDiagnostic
-          --project backend/src/OetLearner.Api/OetLearner.Api.csproj
-          --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj
+          --project backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj
+          --startup-project backend/src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj
 
       - name: Commit generated migration
         run: |
-          if git diff --quiet && git ls-files --others --exclude-standard backend/src/OetLearner.Api/Data/Migrations | grep -q .; then :; fi
+          if git diff --quiet && git ls-files --others --exclude-standard backend/src/OetWithDrHesham.Api/Data/Migrations | grep -q .; then :; fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add backend/src/OetLearner.Api/Data/Migrations
+          git add backend/src/OetWithDrHesham.Api/Data/Migrations
           if git diff --cached --quiet; then
             echo "No migration changes generated."
             exit 0

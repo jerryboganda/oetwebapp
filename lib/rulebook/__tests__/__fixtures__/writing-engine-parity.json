@@ -1,5 +1,5 @@
 {
-  "$schema-note": "Shared parity corpus for writing-rules.ts (TS) and WritingRuleEngine.cs (.NET). Both engines MUST produce the same set of non-info ruleIds for each fixture. See lib/rulebook/__tests__/writing-rule-fixtures.test.ts and backend/tests/OetLearner.Api.Tests/Rulebook/WritingEngineParityTests.cs.",
+  "$schema-note": "Shared parity corpus for writing-rules.ts (TS) and WritingRuleEngine.cs (.NET). Both engines MUST produce the same set of non-info ruleIds for each fixture. See lib/rulebook/__tests__/writing-rule-fixtures.test.ts and backend/tests/OetWithDrHesham.Api.Tests/Rulebook/WritingEngineParityTests.cs.",
   "fixtures": [
     {
       "id": "A-clean-routine",

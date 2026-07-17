@@ -7,7 +7,7 @@ PURPOSE OF THIS DOCUMENT
 This rulebook defines the structure, sequence, timing, permitted actions, and marking rules of the OET Reading sub-test. It
 is intended for AI platform training only — not for candidates. Rule codes: R04.3 = Section 4, Rule 3. CRITICAL rules (red)
 = facts that directly affect scoring or validity.
-THE TUTOR BOOK · OET Preparation by Dr. Ahmed Hesham · @DrAhmedHesham
+THE TUTOR BOOK · OET with Dr Heshamaration by Dr. Ahmed Hesham · @DrAhmedHesham
 
 
 ===== rulebook PAGE 2 =====

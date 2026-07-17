@@ -1,5 +1,5 @@
 // Authored preview — Button. Each named export = one labeled card cell.
-import { Button } from 'oet-prep';
+import { Button } from 'oet-with-dr-hesham';
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>{children}</div>

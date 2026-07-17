@@ -225,7 +225,7 @@ export interface ReadingValidationReport {
 
 /**
  * Mirrors `ReadingResolvedPolicy` in
- * `backend/src/OetLearner.Api/Services/Reading/ReadingPolicyService.cs:31`.
+ * `backend/src/OetWithDrHesham.Api/Services/Reading/ReadingPolicyService.cs:31`.
  *
  * Surfaced 1:1 by the backend on `POST /v1/reading-papers/papers/{id}/attempts`
  * and on the resume endpoint so the player can render the timer, accessibility
@@ -961,7 +961,7 @@ export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading-papers/home
 // ── Learner: course pathway snapshot ───────────────────────────────────
 //
 // Mirrors `ReadingPathwaySnapshot` from
-// `backend/src/OetLearner.Api/Services/Reading/ReadingPathwayService.cs`.
+// `backend/src/OetWithDrHesham.Api/Services/Reading/ReadingPathwayService.cs`.
 // Surfaced at GET /v1/reading-papers/me/pathway (auth-required) and joins
 // drilling + mock signals into a single readiness stage.
 

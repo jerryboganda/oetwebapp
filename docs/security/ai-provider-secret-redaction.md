@@ -54,14 +54,14 @@ provider credentials:
 
 | Concern | File |
 | --- | --- |
-| Encryption + projection allow-list + hint shape | `backend/src/OetLearner.Api/Endpoints/AiUsageAdminEndpoints.cs` (provider + account groups) |
-| Connectivity probe + `RedactSecrets` helper | `backend/src/OetLearner.Api/Services/Rulebook/AiProviderConnectionTester.cs` |
-| Encrypted column declaration | `backend/src/OetLearner.Api/Domain/AiProviderEntities.cs` |
+| Encryption + projection allow-list + hint shape | `backend/src/OetWithDrHesham.Api/Endpoints/AiUsageAdminEndpoints.cs` (provider + account groups) |
+| Connectivity probe + `RedactSecrets` helper | `backend/src/OetWithDrHesham.Api/Services/Rulebook/AiProviderConnectionTester.cs` |
+| Encrypted column declaration | `backend/src/OetWithDrHesham.Api/Domain/AiProviderEntities.cs` |
 
 ## Test evidence
 
 The contract above is locked down by xUnit tests in
-`backend/tests/OetLearner.Api.Tests/`:
+`backend/tests/OetWithDrHesham.Api.Tests/`:
 
 - `AiProviderConnectionTesterTests`
   - `ProviderProbe_RedactsLiveApiKeyEchoedInErrorBody` — provider

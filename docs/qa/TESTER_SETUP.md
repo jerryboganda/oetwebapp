@@ -1,10 +1,10 @@
-# OET Prep Desktop — Tester Setup & Install Guide
+# OET with Dr Hesham Desktop — Tester Setup & Install Guide
 
-This guide covers installing the **OET Prep** desktop app (Tauri 2 build) for **internal testing**,
+This guide covers installing the **OET with Dr Hesham** desktop app (Tauri 2 build) for **internal testing**,
 trusting the self-signed publisher certificate, known issues, and how to report bugs.
 
 > **Why a trust step is needed:** internal builds are signed with a **self-signed** certificate
-> ("OET Prep Internal Testing"), not a commercially-trusted one. Windows SmartScreen will warn about an
+> ("OET with Dr Hesham Internal Testing"), not a commercially-trusted one. Windows SmartScreen will warn about an
 > "unknown publisher" until you import the public certificate **once**. This is expected and safe for an
 > internal tester pool. (The public-trust upgrade path — Azure Trusted Signing — is noted at the end.)
 
@@ -39,15 +39,15 @@ You'll receive a file named **`oet-codesign.cer`** out-of-band (not from the rep
 > (Computer Configuration → Windows Settings → Security Settings → Public Key Policies).
 
 ### Step B — Install the app
-1. Run **`OET Prep_<version>_x64-setup.exe`** (NSIS).
+1. Run **`OET with Dr Hesham_<version>_x64-setup.exe`** (NSIS).
 2. It installs per-user (no admin elevation required by default).
-3. After Step A, the installer's **publisher shows "OET Prep Internal Testing"** (no "unknown publisher").
+3. After Step A, the installer's **publisher shows "OET with Dr Hesham Internal Testing"** (no "unknown publisher").
 4. Launch from the Start Menu. First launch shows a brief splash ("Starting local services…") while the
    bundled API + renderer boot, then the app loads.
 
 ### Verify the signature (optional)
 Right-click the installer → **Properties → Digital Signatures** → you should see
-"OET Prep Internal Testing" with a valid timestamp.
+"OET with Dr Hesham Internal Testing" with a valid timestamp.
 
 ---
 
@@ -55,7 +55,7 @@ Right-click the installer → **Properties → Digital Signatures** → you shou
 
 The macOS `.dmg` is **not notarized** (internal build), so Gatekeeper will block it on first open.
 
-1. Open the `.dmg`, drag **OET Prep** to Applications.
+1. Open the `.dmg`, drag **OET with Dr Hesham** to Applications.
 2. **First launch:** right-click (or Control-click) the app → **Open** → **Open** in the dialog.
    (Double-clicking will show "cannot be opened because the developer cannot be verified" — use
    right-click → Open instead.)
@@ -76,13 +76,13 @@ the check fails silently and the app runs normally. (Feed hosting is a maintaine
 
 ## 5. Known issues / limitations (this build)
 
-- **Deep-link `oet-prep://pair?code=…`** routes to `/pair`, which doesn't exist yet → 404 (BUG-002,
+- **Deep-link `oet-with-dr-hesham://pair?code=…`** routes to `/pair`, which doesn't exist yet → 404 (BUG-002,
   frontend, out of scope for this build). Tray links (Dashboard, Study Plan) work.
 - **macOS** is unvalidated (see §3).
 - Self-signed trust is **per-machine** — each tester must import the `.cer` (§2 Step A).
 - Logs for troubleshooting live at:
-  - Windows: `%APPDATA%\com.oetprep.desktop\logs\` (`backend.log`, `renderer.log`, `desktop.log`)
-  - macOS: `~/Library/Application Support/com.oetprep.desktop/logs/`
+  - Windows: `%APPDATA%\com.oetwithdrhesham.desktop\logs\` (`backend.log`, `renderer.log`, `desktop.log`)
+  - macOS: `~/Library/Application Support/com.oetwithdrhesham.desktop/logs/`
 
 ---
 
@@ -97,14 +97,14 @@ on the repo's issue tracker (or the channel the maintainer designates).
 ## 7. Maintainer handoff (not for testers)
 
 ### Code-signing certificate
-- Self-signed cert **"OET Prep Internal Testing"**, thumbprint
+- Self-signed cert **"OET with Dr Hesham Internal Testing"**, thumbprint
   `9E1D24DAB316C568A107E7EFD058786541B9DAA8`, wired in `src-tauri/tauri.dist.conf.json`
   (`bundle.windows.certificateThumbprint`) with `sha256` + RFC-3161 timestamp.
 - Local builds sign automatically (cert is in `Cert:\CurrentUser\My`). To **regenerate** (e.g., on
   expiry in 3 years):
   ```powershell
   New-SelfSignedCertificate -Type CodeSigningCert `
-    -Subject "CN=OET Prep Internal Testing" `
+    -Subject "CN=OET with Dr Hesham Internal Testing" `
     -CertStoreLocation Cert:\CurrentUser\My `
     -KeyExportPolicy Exportable -KeyUsage DigitalSignature `
     -NotAfter (Get-Date).AddYears(3)

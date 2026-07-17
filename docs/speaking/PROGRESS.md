@@ -54,7 +54,7 @@ Core Speaking engineering exists, and this pass hardens the admin/learner operat
 | `get_errors` on changed Speaking/backend/API files | Pass | No diagnostics in changed files |
 | `runTests` focused Speaking/API set | Pass | 62 passed before final server binding hardening |
 | `cmd /c npx vitest run lib/__tests__/api.test.ts` | Pass | 24/24 tests passed, including bound mock-session attempt helper |
-| `cmd /c dotnet test backend\\tests\\OetLearner.Api.Tests\\OetLearner.Api.Tests.csproj --filter FullyQualifiedName~SpeakingMockSetTests --no-restore` | Blocked (2026-05-06) | Build failed before tests due unrelated `AdminAlertService` compile errors in dirty worktree |
+| `cmd /c dotnet test backend\\tests\\OetWithDrHesham.Api.Tests\\OetWithDrHesham.Api.Tests.csproj --filter FullyQualifiedName~SpeakingMockSetTests --no-restore` | Blocked (2026-05-06) | Build failed before tests due unrelated `AdminAlertService` compile errors in dirty worktree |
 | `cmd /c npx tsc --noEmit` | Blocked (2026-05-06) | Unrelated `app/admin/alerts/page.tsx` errors: non-exported `apiRequest`, invalid `Badge variant="secondary"` |
 | `npx tsc --noEmit` (2026-05-07) | Pass | Zero TypeScript errors after upstream AdminAlerts cleanup |
 | `dotnet test --filter SpeakingMockSetTests\|SpeakingAudioRetentionWorkerTests\|SpeakingSelfPracticeFlowsTests\|AdminFlowsTests` (2026-05-07) | Pass | 64 passed, 0 failed in 2m05s |

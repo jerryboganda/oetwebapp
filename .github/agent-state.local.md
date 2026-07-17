@@ -1,64 +1,55 @@
-# Agent State — AI-Readiness / Vibe-Coding Optimization
+# Agent State - Mass Rebrand to OET with Dr Hesham
 
 Last updated: 2026-07-17
 
 ## Goal
-Make the OET Prep Platform repository highly optimized for vibe coding and development with AI agents/IDEs (GitHub Copilot, Claude Code, Codex), hitting 100% AgentRC AI-readiness.
+Rename the entire project everywhere across web, desktop, mobile, backend, docs, and deployment configs to "OET with Dr Hesham", with contact number +44 7961 725989 and support email support@oetwithdrhesham.co.uk.
 
 ## Implemented This Run
 
-- Ran AgentRC readiness assessment and generated `reports/index.html`.
-- Raised AI-readiness maturity from **Level 0 → Level 4** and overall score from **48% → 100%**.
-- Synchronized `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and `.claude/CLAUDE.md` to identical content.
-- Added **fast-feedback rule** to Ship-It Workflow: small quick checks only; no lengthy builds/CI unless explicitly asked.
-- Added area-specific instructions for `lib/` and `scripts/`.
-- Added area READMEs and `package.json` scripts for `backend/`, `lib/`, `scripts/`.
-- Added `.vscode/mcp.json` + `.vscode/settings.json` for MCP servers/editor defaults.
-- Added Prettier config and OpenTelemetry observability helpers.
-- Added governance: `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`, `.github/dependabot.yml`.
-- Added `apm.yml`, `apm.lock.yaml`, and lightweight `.github/workflows/apm-audit.yml`.
+- Rebased the rebrand onto the latest `origin/main` (which had diverged/force-pushed).
+- Replaced old brand strings across ~1,900 files:
+  - "OET Prep" / "OETPrep" / "OET with Dr Ahmed Hesham" → "OET with Dr Hesham"
+  - "OetLearner" → "OetWithDrHesham"
+  - "oet-prep" → "oet-with-dr-hesham"
+  - "com.oetprep" → "com.oetwithdrhesham"
+  - "oet-learner" / "oet_learner" / "OET Learner" → "oet-with-dr-hesham" equivalents
+  - "support@edu80.app" → "support@oetwithdrhesham.co.uk"
+- Renamed backend solution and project folders/files to `OetWithDrHesham.Api`.
+- Renamed Android Java package folder to `com/oetwithdrhesham/learner`.
+- Updated `capacitor.config.ts`, `src-tauri/tauri.conf.json`, iOS/Android manifests, Docker compose files, GitHub Actions, deployment docs, and environment examples.
+- Updated support constants and added `+44 7961 725989` phone/WhatsApp support on `app/support/page.tsx` and `app/(auth)/privacy/page.tsx`.
+- Restored grammar spec IDs (`oetpreposition-*`) that were mangled by substring replacement.
+- Preserved real account holder names and generic OET-exam references where appropriate.
 
-## Files Touched
+## Files Touched (Representative)
 
+- `package.json`, `pnpm-lock.yaml`
+- `capacitor.config.ts`, `src-tauri/tauri.conf.json`, `next.config.ts`
+- `backend/OetWithDrHesham.sln` and `backend/src/OetWithDrHesham.Api/`
+- `backend/tests/OetWithDrHesham.Api.Tests/`
+- `android/app/src/main/java/com/oetwithdrhesham/learner/`
+- `ios/App/App.xcodeproj/project.pbxproj`
+- `lib/auth/support.ts`
+- `app/support/page.tsx`, `app/(auth)/privacy/page.tsx`, `app/peer-review/page.tsx`
+- `.github/workflows/*`, `.github/actions/setup-oet-stack/action.yml`
+- `docker-compose*.yml`, `.env.production.example`
+- `AGENTS.md`, `README.md`, `DEPLOYMENT.md`, `DEPLOY-MANUAL.md`
 - `.github/agent-state.local.md`
-- `.github/copilot-instructions.md`
-- `.github/dependabot.yml`
-- `.github/instructions/lib.instructions.md`
-- `.github/instructions/scripts.instructions.md`
-- `.github/workflows/apm-audit.yml`
-- `.prettierrc`
-- `.vscode/mcp.json`
-- `.vscode/settings.json`
-- `AGENTS.md`
-- `CLAUDE.md`
-- `.claude/CLAUDE.md`
-- `CONTRIBUTING.md`
-- `LICENSE`
-- `SECURITY.md`
-- `apm.lock.yaml`
-- `apm.yml`
-- `backend/package.json`
-- `lib/README.md`
-- `lib/observability/index.ts`
-- `lib/observability/README.md`
-- `lib/package.json`
-- `package.json`
-- `pnpm-lock.yaml`
-- `reports/index.html`
-- `scripts/README.md`
-- `scripts/package.json`
 
 ## Validation
 
-- `pnpm install`: passed.
-- `pnpm run lint`: passed (exit 0; pre-existing warnings).
-- `pnpm exec tsc --noEmit`: fails on pre-existing error in `components/domain/materials/materials-browser.tsx` (unrelated to this change).
-- AgentRC re-scan: **Level 4, 100%, 27/27 criteria passing**.
+- `pnpm exec tsc --noEmit`: passed.
+- `pnpm run lint`: passed (exit 0; pre-existing warnings only).
+- `pnpm run backend:build`: succeeded (55 warnings, 0 errors).
 
 ## Blockers / Remaining Risk
 
-- `pnpm exec tsc --noEmit` has one pre-existing type error in `components/domain/materials/materials-browser.tsx` (event name not assignable to analytics union). Not introduced by this change.
+- Full backend xUnit test suite and frontend unit tests were not run per the OET owner directive's lightweight-check guidance.
+- iOS bundle ID and provisioning profile names were updated in code, but matching changes in the Apple Developer portal/certificates/provisioning profiles are manual external steps.
+- Android signing keystore aliases and Google Play store listings remain external manual steps.
+- `origin/main` had force-pushed/divergent history, so the branch was reset to `origin/main` and the rebrand reapplied as a single commit.
 
 ## Next Step
 
-Create a pull request from `manwara575-star-curly-tribble` to `main` and merge to deploy.
+Commit and force-push the rebased rebrand branch, then merge PR #125 to `main`.

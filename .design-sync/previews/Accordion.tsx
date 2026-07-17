@@ -1,5 +1,5 @@
 // Authored preview — Accordion. Each named export = one labeled card cell.
-import { Accordion } from 'oet-prep';
+import { Accordion } from 'oet-with-dr-hesham';
 
 const faqItems = [
   {

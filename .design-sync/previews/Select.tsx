@@ -1,6 +1,6 @@
 // Authored preview — Select (dropdown). options shape: { value, label, disabled? }[].
 // Each named export = one labeled card cell.
-import { Select } from 'oet-prep';
+import { Select } from 'oet-with-dr-hesham';
 
 const Column = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 400 }}>{children}</div>

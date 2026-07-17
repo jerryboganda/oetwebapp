@@ -1,4 +1,4 @@
-# OET Prep Desktop (Tauri 2) — Production-Readiness QA Report
+# OET with Dr Hesham Desktop (Tauri 2) — Production-Readiness QA Report
 
 **Branch:** `qa/desktop-production-readiness` · **Target:** Windows x64 (signed) + macOS dmg (CI,
 unsigned) · **Status:** COMPLETE — signed installer built & verified; **GO** for Windows internal
@@ -224,7 +224,7 @@ Both sidecars previously ran with `Stdio::null()`, discarding all output. Now:
 
 ### Metadata / icons / entitlements (verified)
 - **Version aligned** at `0.1.0` across `tauri.conf.json`, `Cargo.toml`, and `package.json`;
-  productName `OET Prep`, identifier `com.oetprep.desktop`.
+  productName `OET with Dr Hesham`, identifier `com.oetwithdrhesham.desktop`.
 - **Icons** present: `icon.ico`, `32x32.png`, `128x128.png`, `icon.png`.
 - **`entitlements.plist`** (macOS) grants `device.audio-input` (Speaking mic) + hardened-runtime
   allowances (`allow-jit`, `allow-unsigned-executable-memory`) for the bundled Node/.NET sidecars,
@@ -257,7 +257,7 @@ Cold-start time, idle memory, and final installer size are measured against the 
 
 ## Phase 8 — Signing & updater key (complete; feed hosting = handoff)
 
-- **Windows Authenticode (self-signed):** generated cert "OET Prep Internal Testing" (thumbprint
+- **Windows Authenticode (self-signed):** generated cert "OET with Dr Hesham Internal Testing" (thumbprint
   `9E1D24DAB316C568A107E7EFD058786541B9DAA8`), exported `.cer` (public, for testers) + `.pfx` (private,
   base64 for CI) to `~/.oet-signing/` (gitignored, never committed). Wired into
   `tauri.dist.conf.json` (`bundle.windows.certificateThumbprint` + `digestAlgorithm: sha256` +
@@ -277,15 +277,15 @@ Built locally via `pnpm run build` → `tauri-dist.cjs sync-standalone`/`stage-n
 cert in the store. (The first attempt died mid-`next build` — process killed, no error, likely
 concurrent-agent interference on the shared machine; the re-run with a clean `.next` succeeded.)
 
-- **Installer:** `src-tauri/target/release/bundle/nsis/OET Prep_0.1.0_x64-setup.exe` —
+- **Installer:** `src-tauri/target/release/bundle/nsis/OET with Dr Hesham_0.1.0_x64-setup.exe` —
   **100,234,048 bytes (95.6 MB)**.
-- **Updater artifact:** `OET Prep_0.1.0_x64-setup.exe.sig` (420 B) — minisign signature from the
+- **Updater artifact:** `OET with Dr Hesham_0.1.0_x64-setup.exe.sig` (420 B) — minisign signature from the
   production key; the bundler reported *"Finished 1 updater signature"*.
 - **Authenticode signature** (`Get-AuthenticodeSignature`):
-  - Signer: `CN=OET Prep Internal Testing`; thumbprint `9E1D24DAB316C568A107E7EFD058786541B9DAA8`.
+  - Signer: `CN=OET with Dr Hesham Internal Testing`; thumbprint `9E1D24DAB316C568A107E7EFD058786541B9DAA8`.
   - Timestamp: `DigiCert SHA256 RSA4096 Timestamp Responder` (RFC-3161 — signature outlives cert expiry).
   - Cert valid to **2029-06-25**. The build log confirms signtool signed the inner plugin DLLs **and**
-    the setup `.exe` (*"Successfully signed … OET Prep_0.1.0_x64-setup.exe"*).
+    the setup `.exe` (*"Successfully signed … OET with Dr Hesham_0.1.0_x64-setup.exe"*).
   - `Status = UnknownError` on the **build machine** = the self-signed chain isn't in its Trusted Root
     (it never imported the `.cer`). This is **expected** for self-signed and means "untrusted chain,"
     **not** a bad signature (that would be `HashMismatch`). After a tester imports the `.cer`
@@ -293,7 +293,7 @@ concurrent-agent interference on the shared machine; the re-run with a clean `.n
 - **Perf/size:** installer **95.6 MB** (bundles the .NET API + Next.js standalone + Node). Cold-start
   and idle-RSS baselines require a launched instance — see Phase 5 note (deferred to a clean VM).
 - **Download location:** local
-  `D:\Projects\oet-qa-desktop\src-tauri\target\release\bundle\nsis\OET Prep_0.1.0_x64-setup.exe`
+  `D:\Projects\oet-qa-desktop\src-tauri\target\release\bundle\nsis\OET with Dr Hesham_0.1.0_x64-setup.exe`
   (+ `.sig`). For testers, the tagged `tauri-desktop-release.yml` run produces the same artifacts and
   attaches them to a GitHub Release.
 
@@ -311,7 +311,7 @@ clean signed build/bundle.
 install → launch → core-flow → uninstall → reinstall cycle and high-DPI/multi-monitor matrix
 (M1–M12). Deliberately **not** run on the primary machine here to avoid invasive system changes and
 false failures from concurrent-agent process churn. The tester first-run in `TESTER_SETUP.md` exercises
-install + launch + cert-trust. **Known issue confirmed:** deep link `oet-prep://pair` → `/pair` 404
+install + launch + cert-trust. **Known issue confirmed:** deep link `oet-with-dr-hesham://pair` → `/pair` 404
 (BUG-002, frontend, out of scope).
 
 ## Phase 10 — Go / No-Go (final)

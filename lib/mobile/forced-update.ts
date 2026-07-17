@@ -19,7 +19,7 @@ export interface UpdateCheckResult {
 
 // ── Configuration ───────────────────────────────────────────────
 
-const DEFAULT_ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=com.oetprep.learner';
+const DEFAULT_ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=com.oetwithdrhesham.learner';
 
 function getStoreUrl(platform: 'android' | 'ios'): string | null {
   if (platform === 'android') {

@@ -1,4 +1,4 @@
-# Contributing to OET Prep Platform
+# Contributing to OET with Dr Hesham Platform
 
 Thank you for contributing. This repository is optimized for agent-assisted development (GitHub Copilot, Claude Code, Codex, and other AI IDEs).
 

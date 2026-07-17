@@ -5,7 +5,7 @@
 // Drawer sheet with the option groups only appears after the trigger is clicked.
 // We seed realistic OET filter groups + a `selected` map so the trigger shows
 // its active-state count badge and the Clear control.
-import { MobileFilterSheet } from 'oet-prep';
+import { MobileFilterSheet } from 'oet-with-dr-hesham';
 
 const groups = [
   {

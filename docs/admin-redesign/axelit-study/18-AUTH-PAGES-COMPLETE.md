@@ -152,7 +152,7 @@ Benefits:
 const credential = await navigator.credentials.get({
   publicKey: {
     challenge: await fetchChallenge(),
-    rpId: 'oet-prep.example.com',
+    rpId: 'oet-with-dr-hesham.example.com',
     userVerification: 'preferred',
   },
   mediation: 'conditional',  // "conditional UI" — auto-suggest passkey in email field
@@ -175,7 +175,7 @@ Click link → redirected to /admin
 Link valid for 15 min, single-use, expires after click
 ```
 
-Anti-phishing: include sender info in the email (`from "no-reply@oet-prep.com" via your team`) + always sign with DKIM/DMARC.
+Anti-phishing: include sender info in the email (`from "no-reply@oet-with-dr-hesham.com" via your team`) + always sign with DKIM/DMARC.
 
 ### 2.8 · OAuth / SSO buttons
 
@@ -323,7 +323,7 @@ After sign-up:
 │  [Resend email]    [Change email]       │
 │                                         │
 │  Didn't get it? Check spam, or          │
-│  contact support@oet-prep.com           │
+│  contact support@oet-with-dr-hesham.com           │
 └─────────────────────────────────────────┘
 ```
 

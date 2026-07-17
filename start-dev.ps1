@@ -1,4 +1,4 @@
-# OET Prep - Hybrid Dev Launcher (Windows)
+# OET with Dr Hesham - Hybrid Dev Launcher (Windows)
 # ─────────────────────────────────────────────────────────────────────────────
 # Database + .NET API run in Podman (containerized).
 # Next.js frontend runs NATIVELY on Windows for fast, efficient hot reload.
@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  OET Prep - Hybrid Dev (DB+API in Podman, Frontend native)" -ForegroundColor Cyan
+Write-Host "  OET with Dr Hesham - Hybrid Dev (DB+API in Podman, Frontend native)" -ForegroundColor Cyan
 Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
 
 # 1. Start containerized database + API

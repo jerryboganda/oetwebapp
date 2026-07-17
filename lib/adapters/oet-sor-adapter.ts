@@ -97,7 +97,7 @@ export function mockReportToStatementOfResults(inputs: OetSorAdapterInputs): Oet
       gender: candidate?.gender,
     },
     venue: {
-      name: 'OET Prep — Practice Mock',
+      name: 'OET with Dr Hesham — Practice Mock',
       number: `PREP-${report.id.slice(0, 6).toUpperCase()}`,
       country: country ?? 'United Kingdom',
     },

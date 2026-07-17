@@ -254,7 +254,7 @@ Rollback command pattern (run on the VPS, only after a `pg_dump` of
 
 ```bash
 docker compose exec api dotnet ef database update <PreviousMigrationName> \
-  --project /app/OetLearner.Api.csproj
+  --project /app/OetWithDrHesham.Api.csproj
 ```
 
 ---

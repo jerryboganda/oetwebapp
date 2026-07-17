@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OET with Dr Hesham",
   "version": "0.5.1",
-  "identifier": "com.oetprep.desktop",
+  "identifier": "com.oetwithdrhesham.desktop",
   "build": {
     "frontendDist": "splash"
   },
@@ -16,7 +16,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["oet-prep"]
+        "schemes": ["oet-with-dr-hesham"]
       }
     },
     "updater": {

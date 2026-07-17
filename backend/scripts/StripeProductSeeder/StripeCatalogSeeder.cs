@@ -1,4 +1,4 @@
-namespace OetLearner.Scripts.StripeProductSeeder;
+namespace OetWithDrHesham.Scripts.StripeProductSeeder;
 
 /// <summary>
 /// Reconciles the catalogue manifest against Stripe. Idempotent —

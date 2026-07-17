@@ -23,39 +23,39 @@
 ## File map
 
 **Phase 0 (grading safety, Listening)**
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs` (Evaluate MC3, l.362-402)
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs` (`LearnerQuestionDto` l.2488-2502, `MapRelationalQuestion` l.1951-1991, JSON grader path)
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningGradingService.cs` (Evaluate MC3, l.362-402)
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningLearnerService.cs` (`LearnerQuestionDto` l.2488-2502, `MapRelationalQuestion` l.1951-1991, JSON grader path)
 - Modify: `lib/listening-api.ts` (`ListeningSessionQuestionDto` ~l.126-134)
 - Modify: `components/domain/listening/BCQuestionRenderer.tsx`
 - Modify: `app/listening/player/[id]/page.tsx` (BCQuestionRenderer usage l.1758-1772)
-- Test: `backend/tests/OetLearner.Api.Tests/Listening/ListeningGradingServiceTests.cs`, `components/domain/listening/__tests__/BCQuestionRenderer.test.tsx` (create if absent)
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/Listening/ListeningGradingServiceTests.cs`, `components/domain/listening/__tests__/BCQuestionRenderer.test.tsx` (create if absent)
 
 **Phase 1 (manual inline text, Listening builder)**
 - Modify: `app/admin/content/listening/[paperId]/questions/ListeningAnswerSheetBuilder.tsx`
 - Test: `app/admin/content/listening/[paperId]/questions/ListeningAnswerSheetBuilder.test.tsx`
 
 **Phase 2 (context field + PDF gate, Listening)**
-- Modify: `backend/src/OetLearner.Api/Domain/ListeningEntities.cs` (ListeningExtract ~l.260)
-- Create: `backend/src/OetLearner.Api/Data/Migrations/<timestamp>_AddListeningExtractContextIntro.cs`
-- Modify: `backend/src/OetLearner.Api/Data/Migrations/LearnerDbContextModelSnapshot.cs`
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningAuthoringService.cs` (records l.148-220, normalize l.1093-1136, apply patch l.1662-1677)
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningBackfillService.cs` (extract projection ~l.223-243)
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs` (`ListeningExtractMetaDto` l.3350, `MapRelationalExtract` l.2002-2021, JSON extract path; inlineTextReady computation)
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningStructureService.cs` (`IsPdfBackedItem` reuse for inlineTextReady, l.949-953)
+- Modify: `backend/src/OetWithDrHesham.Api/Domain/ListeningEntities.cs` (ListeningExtract ~l.260)
+- Create: `backend/src/OetWithDrHesham.Api/Data/Migrations/<timestamp>_AddListeningExtractContextIntro.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Data/Migrations/LearnerDbContextModelSnapshot.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningAuthoringService.cs` (records l.148-220, normalize l.1093-1136, apply patch l.1662-1677)
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningBackfillService.cs` (extract projection ~l.223-243)
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningLearnerService.cs` (`ListeningExtractMetaDto` l.3350, `MapRelationalExtract` l.2002-2021, JSON extract path; inlineTextReady computation)
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningStructureService.cs` (`IsPdfBackedItem` reuse for inlineTextReady, l.949-953)
 - Modify: `lib/listening-authoring-api.ts` (extract contract l.135-160, patch l.281-297), `lib/listening-api.ts` (extract meta DTO l.157-194)
 - Modify: `app/listening/player/[id]/page.tsx` (PDF gate l.1673-1685, section map l.1688-1689)
 
 **Phase 3 (AI widening, Listening B/C)**
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningPartBCExtractionService.cs` (SystemPrompt l.329-356, ToolSchemaJson l.358-377, `BcToolAnswer` l.178, `ListeningPartBCAnswer` l.34, ValidateAndProject l.143, max_tokens l.218)
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningPartBCExtractionService.cs` (SystemPrompt l.329-356, ToolSchemaJson l.358-377, `BcToolAnswer` l.178, `ListeningPartBCAnswer` l.34, ValidateAndProject l.143, max_tokens l.218)
 - Modify: `lib/listening-authoring-api.ts` (`ListeningPartBCAnswer` l.442-458)
 - Modify: `app/admin/content/listening/[paperId]/questions/ListeningPartAiExtraction.tsx` (Row l.65, review list l.248-274, onSaveAll l.136-154)
-- Test: `backend/tests/OetLearner.Api.Tests/Listening/` (new extraction test)
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/Listening/` (new extraction test)
 
 **Phase 4 (Reading parity)**
 - Modify: `app/admin/content/reading/[paperId]/questions/ReadingAnswerSheetBuilder.tsx` (placeholders l.67-68, l.235-238, parseExisting l.119-133)
-- Modify: `backend/src/OetLearner.Api/Domain/ReadingEntities.cs` (+ migration + snapshot) for the Reading per-part/section context field
-- Modify: `backend/src/OetLearner.Api/Services/Reading/ReadingStructureService.cs` (publish gate l.1021-1045)
-- Modify: `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs` (questionPaperAssets l.72-94; inlineReady flag)
+- Modify: `backend/src/OetWithDrHesham.Api/Domain/ReadingEntities.cs` (+ migration + snapshot) for the Reading per-part/section context field
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Reading/ReadingStructureService.cs` (publish gate l.1021-1045)
+- Modify: `backend/src/OetWithDrHesham.Api/Endpoints/ReadingLearnerEndpoints.cs` (questionPaperAssets l.72-94; inlineReady flag)
 - Modify: `app/reading/paper/[paperId]/page.tsx` (PartBody PDF viewer l.1474, grid l.1469)
 - Test: `app/admin/content/reading/[paperId]/questions/ReadingAnswerSheetBuilder.test.tsx`, reading publish-gate + 4-option round-trip backend tests
 
@@ -68,8 +68,8 @@ Goal: option **letter/index** is the grading key; display text is score-neutral;
 ### Task 0.1: Grade-time legacy-answer resolver in the V2 grader
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs` (Evaluate, MC3 branch l.370-378)
-- Test: `backend/tests/OetLearner.Api.Tests/Listening/ListeningGradingServiceTests.cs`
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningGradingService.cs` (Evaluate, MC3 branch l.370-378)
+- Test: `backend/tests/OetWithDrHesham.Api.Tests/Listening/ListeningGradingServiceTests.cs`
 
 **Interfaces:**
 - Consumes: `ListeningOptionIdHelper.ResolveLegacyAnswer(string? legacyAnswer, string questionId, IReadOnlyList<string> currentOptions)` → returns `"lo-{qid}-{index}"` or null; and by index we can map to `OptionKey`.
@@ -142,8 +142,8 @@ case ListeningQuestionType.MultipleChoice3:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs \
-        backend/tests/OetLearner.Api.Tests/Listening/ListeningGradingServiceTests.cs
+git add backend/src/OetWithDrHesham.Api/Services/Listening/ListeningGradingService.cs \
+        backend/tests/OetWithDrHesham.Api.Tests/Listening/ListeningGradingServiceTests.cs
 git commit -m "fix(listening): grade Part B/C MCQ by option key/text/index so real option text is score-neutral"
 ```
 
@@ -165,7 +165,7 @@ git commit -m "fix(listening): grade Part B/C MCQ by option key/text/index so re
 ### Task 0.3: Learner submits the option key; text is display-only
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs` — in `LearnerQuestionDto` (l.2488-2502) and `MapRelationalQuestion` (l.1951-1991) emit an `optionKeys: ["A","B","C"]` array parallel to `options` (keep `options` = texts for display).
+- Modify: `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningLearnerService.cs` — in `LearnerQuestionDto` (l.2488-2502) and `MapRelationalQuestion` (l.1951-1991) emit an `optionKeys: ["A","B","C"]` array parallel to `options` (keep `options` = texts for display).
 - Modify: `lib/listening-api.ts` — `ListeningSessionQuestionDto` (~l.126-134) add `optionKeys?: string[]`.
 - Modify: `components/domain/listening/BCQuestionRenderer.tsx` — accept `optionKeys?: string[]`; the selected `value` and `onChange` payload become the **key** (`optionKeys[i]` ?? letter), while the button still renders the option text and the A/B/C badge.
 - Modify: `app/listening/player/[id]/page.tsx` (l.1758-1772) — pass `optionKeys={question.optionKeys}`; `value` compares against key.
@@ -204,7 +204,7 @@ it('submits the option key, not the display text', async () => {
 git add components/domain/listening/BCQuestionRenderer.tsx \
         components/domain/listening/__tests__/BCQuestionRenderer.test.tsx \
         lib/listening-api.ts app/listening/player/[id]/page.tsx \
-        backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs
+        backend/src/OetWithDrHesham.Api/Services/Listening/ListeningLearnerService.cs
 git commit -m "feat(listening): Part B/C card submits option key (letter); option text is display-only"
 ```
 
@@ -247,7 +247,7 @@ Goal: admins type stem + 3 option texts; placeholders gone; advanced-editor text
 ### Task 2.1: `ContextIntro` column + EF migration
 
 **Files:**
-- Modify: `backend/src/OetLearner.Api/Domain/ListeningEntities.cs` (ListeningExtract, beside `NotesBodyMarkdown` ~l.260)
+- Modify: `backend/src/OetWithDrHesham.Api/Domain/ListeningEntities.cs` (ListeningExtract, beside `NotesBodyMarkdown` ~l.260)
 - Create: migration `<timestamp>_AddListeningExtractContextIntro.cs`
 - Modify: `LearnerDbContextModelSnapshot.cs`
 
@@ -289,7 +289,7 @@ Goal: admins type stem + 3 option texts; placeholders gone; advanced-editor text
 
 ### Task 3.1: Widen the extractor tool + prompt + validation
 
-**Files:** `backend/src/OetLearner.Api/Services/Listening/ListeningPartBCExtractionService.cs` (SystemPrompt l.329-356, ToolSchemaJson l.358-377, `BcToolAnswer` l.178, `ListeningPartBCAnswer` l.34, ValidateAndProject l.143, max_tokens l.218). Test: new extraction unit test.
+**Files:** `backend/src/OetWithDrHesham.Api/Services/Listening/ListeningPartBCExtractionService.cs` (SystemPrompt l.329-356, ToolSchemaJson l.358-377, `BcToolAnswer` l.178, `ListeningPartBCAnswer` l.34, ValidateAndProject l.143, max_tokens l.218). Test: new extraction unit test.
 
 **Interfaces:**
 - Produces: `ListeningPartBCAnswer { int Number, string CorrectAnswer, string? Rationale, string? Stem, string? OptionA, string? OptionB, string? OptionC }`.
@@ -325,7 +325,7 @@ Goal: admins type stem + 3 option texts; placeholders gone; advanced-editor text
 
 ### Task 4.2: Reading per-part/section context field + migration
 
-**Files:** `backend/src/OetLearner.Api/Domain/ReadingEntities.cs` (+ migration + snapshot), Reading structure/authoring service persist/read, `ReadingLearnerEndpoints.cs` projection.
+**Files:** `backend/src/OetWithDrHesham.Api/Domain/ReadingEntities.cs` (+ migration + snapshot), Reading structure/authoring service persist/read, `ReadingLearnerEndpoints.cs` projection.
 
 - [ ] **Step 1:** Backend test — context round-trips to the learner projection for B/C.
 - [ ] **Step 2: Run/confirm fail.**
@@ -334,7 +334,7 @@ Goal: admins type stem + 3 option texts; placeholders gone; advanced-editor text
 
 ### Task 4.3: Drop the PDF for inline B/C + relax the publish gate
 
-**Files:** `backend/src/OetLearner.Api/Services/Reading/ReadingStructureService.cs` (publish gate l.1021-1045), `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs` (questionPaperAssets l.72-94 + inline-ready flag), `app/reading/paper/[paperId]/page.tsx` (PartBody PDF viewer l.1474, grid l.1469).
+**Files:** `backend/src/OetWithDrHesham.Api/Services/Reading/ReadingStructureService.cs` (publish gate l.1021-1045), `backend/src/OetWithDrHesham.Api/Endpoints/ReadingLearnerEndpoints.cs` (questionPaperAssets l.72-94 + inline-ready flag), `app/reading/paper/[paperId]/page.tsx` (PartBody PDF viewer l.1474, grid l.1469).
 
 **Interfaces:**
 - Produces: B/C part with complete inline stems+options is publish-ready without a QuestionPaper PDF; Part A still requires its PDF; learner paper page hides `<ReadingPdfViewer>` for B/C when inline-ready and widens the questions column.

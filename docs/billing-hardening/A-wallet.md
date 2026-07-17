@@ -5,7 +5,7 @@
 
 ## What changed (owned files)
 
-### `backend/src/OetLearner.Api/Services/WalletService.cs`
+### `backend/src/OetWithDrHesham.Api/Services/WalletService.cs`
 
 - `CreditAsync` and `DebitAsync` now:
   - Wrap the read-modify-write in `db.Database.BeginTransactionAsync` when the
@@ -30,14 +30,14 @@
   (`LearnerService`, mock-grant flows, etc.) compile unchanged; they delegate
   to the new overload with `idempotencyKey: null`.
 
-### `backend/src/OetLearner.Api/Domain/WalletTopUpTierConfig.cs`
+### `backend/src/OetWithDrHesham.Api/Domain/WalletTopUpTierConfig.cs`
 
 - New optional `Slug` (max 64). Stable, immutable kebab-case identifier so
   downstream catalogs / audit trails can reference a tier without depending
   on the auto-generated GUID. Backwards-compatible: existing rows tolerate
   `NULL` and the slug can be set once (then locked).
 
-### `backend/src/OetLearner.Api/Services/AdminWalletTierService.cs`
+### `backend/src/OetWithDrHesham.Api/Services/AdminWalletTierService.cs`
 
 - Added a strict `SlugRegex` (`^[a-z0-9]+(?:-[a-z0-9]+)*$`, length 2–64).
 - `AdminWalletTierInput` gained a `Slug` field.
@@ -57,7 +57,7 @@
 - `ListAsync` now projects `slug` for both `database` and `appsettings`
   sources (appsettings rows project a derived slug — see proposed diff).
 
-### `backend/src/OetLearner.Api/Data/Migrations/20260504130000_HardenWallet.cs`
+### `backend/src/OetWithDrHesham.Api/Data/Migrations/20260504130000_HardenWallet.cs`
 
 Additive PostgreSQL migration:
 
@@ -81,7 +81,7 @@ Additive PostgreSQL migration:
 > `20260413120000_AddSessionMetadataToRefreshTokens.cs` follows the same
 > pattern, so this is consistent with the project convention.
 
-### `backend/tests/OetLearner.Api.Tests/WalletHardeningTests.cs` (new)
+### `backend/tests/OetWithDrHesham.Api.Tests/WalletHardeningTests.cs` (new)
 
 12 unit tests, all passing:
 
@@ -106,7 +106,7 @@ These changes are required to surface the new functionality end-to-end but
 live in files owned by other slices. Each diff is unified-format, anchored
 on the current `main`.
 
-### Shared: `backend/src/OetLearner.Api/Domain/Entities.cs`
+### Shared: `backend/src/OetWithDrHesham.Api/Domain/Entities.cs`
 
 Add a `RowVersion` byte[] concurrency token to `Wallet` for cross-DB
 parity (PG already has `LastUpdatedAt` as the EF concurrency token; adding
@@ -114,8 +114,8 @@ parity (PG already has `LastUpdatedAt` as the EF concurrency token; adding
 without depending on caller discipline around `LastUpdatedAt`).
 
 ```diff
---- a/backend/src/OetLearner.Api/Domain/Entities.cs
-+++ b/backend/src/OetLearner.Api/Domain/Entities.cs
+--- a/backend/src/OetWithDrHesham.Api/Domain/Entities.cs
++++ b/backend/src/OetWithDrHesham.Api/Domain/Entities.cs
 @@ public class Wallet
      public int CreditBalance { get; set; }
      public string LedgerSummaryJson { get; set; } = "[]";
@@ -132,11 +132,11 @@ without depending on caller discipline around `LastUpdatedAt`).
  }
 ```
 
-### Shared: `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
+### Shared: `backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs`
 
 ```diff
---- a/backend/src/OetLearner.Api/Data/LearnerDbContext.cs
-+++ b/backend/src/OetLearner.Api/Data/LearnerDbContext.cs
+--- a/backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs
++++ b/backend/src/OetWithDrHesham.Api/Data/LearnerDbContext.cs
 @@ modelBuilder.Entity<Wallet>().Property(x => x.LastUpdatedAt).IsConcurrencyToken();
 +        modelBuilder.Entity<Wallet>()
 +            .Property(x => x.RowVersion)
@@ -151,7 +151,7 @@ without depending on caller discipline around `LastUpdatedAt`).
 +            .HasFilter("\"Slug\" IS NOT NULL");
 ```
 
-### Shared: `backend/src/OetLearner.Api/Domain/BillingEntities.cs`
+### Shared: `backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs`
 
 `WalletTransaction` should carry the idempotency key + a unique
 `(WalletId, IdempotencyKey)` index so the replay path can be enforced at
@@ -159,8 +159,8 @@ the schema level rather than relying on the parallel
 `IdempotencyRecords` table:
 
 ```diff
---- a/backend/src/OetLearner.Api/Domain/BillingEntities.cs
-+++ b/backend/src/OetLearner.Api/Domain/BillingEntities.cs
+--- a/backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs
++++ b/backend/src/OetWithDrHesham.Api/Domain/BillingEntities.cs
 @@ [Index(nameof(WalletId))]
 +[Index(nameof(WalletId), nameof(IdempotencyKey), IsUnique = true)]
  public class WalletTransaction
@@ -179,11 +179,11 @@ the schema level rather than relying on the parallel
  }
 ```
 
-### Shared: `backend/src/OetLearner.Api/Contracts/BillingContracts.cs`
+### Shared: `backend/src/OetWithDrHesham.Api/Contracts/BillingContracts.cs`
 
 ```diff
---- a/backend/src/OetLearner.Api/Contracts/BillingContracts.cs
-+++ b/backend/src/OetLearner.Api/Contracts/BillingContracts.cs
+--- a/backend/src/OetWithDrHesham.Api/Contracts/BillingContracts.cs
++++ b/backend/src/OetWithDrHesham.Api/Contracts/BillingContracts.cs
 @@ public sealed record WalletTopUpRequest(
      int Amount,
      string Gateway,
@@ -204,7 +204,7 @@ the schema level rather than relying on the parallel
 +    string? IdempotencyKey);
 ```
 
-### Shared: `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`
+### Shared: `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs`
 
 The existing admin wallet-tier endpoints already accept the
 `AdminWalletTierInput.Slug` field through model-binding (no endpoint change
@@ -212,8 +212,8 @@ needed). Slug is automatically surfaced in the response envelope via
 `AdminWalletTierService.ListAsync`.
 
 ```diff
---- a/backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs
-+++ b/backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs
+--- a/backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs
++++ b/backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs
 @@ // Wallet tier admin (existing) — no signature change required for Slice A.
 +
 +// Optional: explicit admin wallet spend endpoint that exercises the new
@@ -234,7 +234,7 @@ needed). Slug is automatically surfaced in the response envelope via
 +    .RequireAuthorization(p => p.RequireAdminPermission(AdminPermission.ManageBilling));
 ```
 
-### Shared: `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
+### Shared: `backend/src/OetWithDrHesham.Api/Endpoints/LearnerEndpoints.cs`
 
 No mandatory change. The existing `/v1/billing/wallet/top-up` endpoint
 already routes through `LearnerService.CreateWalletTopUpAsync`, which
@@ -264,10 +264,10 @@ introduces no new learner-facing endpoint.
 Commands run from repository root:
 
 ```powershell
-dotnet build backend/OetLearner.sln                                  # Build succeeded. 0 Error(s), 4 unrelated nullability warnings.
-dotnet test  backend/OetLearner.sln --no-build `
+dotnet build backend/OetWithDrHesham.sln                                  # Build succeeded. 0 Error(s), 4 unrelated nullability warnings.
+dotnet test  backend/OetWithDrHesham.sln --no-build `
     --filter "FullyQualifiedName~WalletHardeningTests"               # Passed: 12, Failed: 0, Total: 12
-dotnet test  backend/OetLearner.sln --no-build `
+dotnet test  backend/OetWithDrHesham.sln --no-build `
     --filter "FullyQualifiedName~AdminWalletTier|`
               FullyQualifiedName~WalletConcurrency|`
               FullyQualifiedName~BillingTopUpIdempotency|`

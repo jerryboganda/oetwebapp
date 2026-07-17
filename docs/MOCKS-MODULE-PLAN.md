@@ -194,7 +194,7 @@ All additions MUST follow `DESIGN.md` + the exact learner dashboard patterns:
 
 - `npx tsc --noEmit` — 0 errors.
 - Targeted vitest: `app/mocks/page.test.tsx` (new), existing `app/mocks/player/[id]/page.test.tsx`.
-- `dotnet build backend/OetLearner.sln` — 0 errors.
+- `dotnet build backend/OetWithDrHesham.sln` — 0 errors.
 - Manual smoke: simulate (a) API 404 → retry button, (b) in-progress attempt → resume card appears,
   (c) seeded DB with published bundles → per-section dots correct.
 

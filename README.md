@@ -1,4 +1,4 @@
-# OET Prep Platform
+# OET with Dr Hesham Platform
 
 OET preparation platform with a Next.js 16 web app, ASP.NET Core 10 API, a Tauri 2 desktop shell (remote-only thin client), and a Capacitor 7 mobile shell.
 
@@ -127,7 +127,7 @@ pnpm run test:e2e:report
 ## Local API Truth
 
 - The backend development host is `http://localhost:5198`
-- `backend/src/OetLearner.Api/Properties/launchSettings.json` and `backend/src/OetLearner.Api/appsettings.Development.json` both agree on port `5198`
+- `backend/src/OetWithDrHesham.Api/Properties/launchSettings.json` and `backend/src/OetWithDrHesham.Api/appsettings.Development.json` both agree on port `5198`
 - `NEXT_PUBLIC_API_BASE_URL` should point to `http://localhost:5198` for direct local development
 
 ## Key Docs

@@ -25,10 +25,10 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
  M app/admin/content/mocks/item-analysis/page.tsx
  M app/admin/onboarding/interlocutor/page.tsx
  M app/mocks/bookings/new/page.tsx
- M backend/src/OetLearner.Api/Domain/ReadingEntities.cs
- M backend/src/OetLearner.Api/Endpoints/MockAnalyticsEndpoints.cs
- M backend/src/OetLearner.Api/Services/LearnerService.cs
- M backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs
+ M backend/src/OetWithDrHesham.Api/Domain/ReadingEntities.cs
+ M backend/src/OetWithDrHesham.Api/Endpoints/MockAnalyticsEndpoints.cs
+ M backend/src/OetWithDrHesham.Api/Services/LearnerService.cs
+ M backend/src/OetWithDrHesham.Api/Services/Reading/ReadingAttemptService.cs
  M lib/api.ts
 ?? .github/CODEOWNERS
 ?? .github/PULL_REQUEST_TEMPLATE/
@@ -108,7 +108,7 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 - tracked-modified: `app/admin/analytics/mocks/page.tsx`
 - tracked-modified: `app/admin/content/mocks/item-analysis/page.tsx`
 - tracked-modified: `app/mocks/bookings/new/page.tsx`
-- tracked-modified: `backend/src/OetLearner.Api/Endpoints/MockAnalyticsEndpoints.cs`
+- tracked-modified: `backend/src/OetWithDrHesham.Api/Endpoints/MockAnalyticsEndpoints.cs`
 - untracked: `app/admin/content/mocks/[bundleId]/review-pipeline/page.tsx`
 - untracked: `components/domain/admin/MockItemAnalysisActions.tsx`
 - untracked: `components/domain/admin/MockReviewStageRail.tsx`
@@ -123,9 +123,9 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 
 ### Other
 - tracked-modified: `app/admin/onboarding/interlocutor/page.tsx`
-- tracked-modified: `backend/src/OetLearner.Api/Domain/ReadingEntities.cs`
-- tracked-modified: `backend/src/OetLearner.Api/Services/LearnerService.cs`
-- tracked-modified: `backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs`
+- tracked-modified: `backend/src/OetWithDrHesham.Api/Domain/ReadingEntities.cs`
+- tracked-modified: `backend/src/OetWithDrHesham.Api/Services/LearnerService.cs`
+- tracked-modified: `backend/src/OetWithDrHesham.Api/Services/Reading/ReadingAttemptService.cs`
 - tracked-modified: `lib/api.ts`
 - untracked: `docs/analytics/speaking-events.md`
 - untracked: `docs/dev/quickstart-speaking.md`

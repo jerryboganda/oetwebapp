@@ -1,0 +1,3283 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using OetWithDrHesham.Api.Contracts;
+using OetWithDrHesham.Api.Domain;
+using OetWithDrHesham.Api.Security;
+using OetWithDrHesham.Api.Services.Common;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace OetWithDrHesham.Api.Services;
+
+public partial class AdminService
+{
+    // ════════════════════════════════════════════
+    //  Grammar Lessons
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetGrammarLessonsAsync(
+        string? profession, string? status, string? search, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.GrammarLessons.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(profession))
+            query = query.Where(g => g.ExamTypeCode == profession);
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(g => g.Status == status);
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(g => g.Title.Contains(search) || (g.Description != null && g.Description.Contains(search)));
+
+        var total = await query.CountAsync(ct);
+        var items = await ToOrderedListDescendingAsync(query, g => g.Id, ct, skip: (page - 1) * pageSize, take: pageSize);
+
+        return new
+        {
+            total,
+            page,
+            pageSize,
+            items = items.Select(g => new
+            {
+                g.Id,
+                g.Title,
+                profession = g.ExamTypeCode,
+                g.Category,
+                g.Description,
+                difficulty = g.Level,
+                estimatedDurationMinutes = g.EstimatedMinutes,
+                g.SortOrder,
+                g.Status
+            })
+        };
+    }
+
+    public async Task<object> GetGrammarLessonDetailAsync(string lessonId, CancellationToken ct)
+    {
+        var g = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct)
+            ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
+
+        return new
+        {
+            g.Id,
+            g.Title,
+            profession = g.ExamTypeCode,
+            g.Description,
+            content = g.ContentHtml,
+            difficulty = g.Level,
+            estimatedDurationMinutes = g.EstimatedMinutes,
+            g.SortOrder,
+            g.Category,
+            g.PrerequisiteLessonId,
+            g.ExercisesJson,
+            g.Status
+        };
+    }
+
+    public async Task<object> CreateGrammarLessonAsync(
+        string adminId, string adminName, AdminGrammarLessonCreateRequest request, CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var id = $"GRM-{Guid.NewGuid():N}"[..12];
+        var entity = new GrammarLesson
+        {
+            Id = id,
+            Title = request.Title,
+            ExamTypeCode = request.ProfessionId ?? "oet",
+            Category = request.Category ?? string.Empty,
+            Description = request.Description ?? string.Empty,
+            ContentHtml = request.Content ?? string.Empty,
+            Level = request.Difficulty ?? "intermediate",
+            EstimatedMinutes = request.EstimatedDurationMinutes ?? 15,
+            SortOrder = request.SortOrder ?? 0,
+            Status = "draft"
+        };
+        db.GrammarLessons.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "GrammarLesson", id, $"Created grammar lesson: {request.Title}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id, entity.Title, entity.Status };
+    }
+
+    public async Task<object> UpdateGrammarLessonAsync(
+        string adminId, string adminName, string lessonId, AdminGrammarLessonUpdateRequest request, CancellationToken ct)
+    {
+        var entity = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct)
+            ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
+
+        if (request.Title is not null) entity.Title = request.Title;
+        if (request.ProfessionId is not null) entity.ExamTypeCode = request.ProfessionId;
+        if (request.Category is not null) entity.Category = request.Category;
+        if (request.Description is not null) entity.Description = request.Description;
+        if (request.Content is not null) entity.ContentHtml = request.Content;
+        if (request.Difficulty is not null) entity.Level = request.Difficulty;
+        if (request.EstimatedDurationMinutes is not null) entity.EstimatedMinutes = request.EstimatedDurationMinutes.Value;
+        if (request.SortOrder is not null) entity.SortOrder = request.SortOrder.Value;
+        if (request.Status is not null) entity.Status = request.Status;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "GrammarLesson", lessonId, $"Updated grammar lesson: {entity.Title}", ct);
+
+        return new { id = lessonId, entity.Status };
+    }
+
+    public async Task<object> ArchiveGrammarLessonAsync(
+        string adminId, string adminName, string lessonId, CancellationToken ct)
+    {
+        var entity = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct)
+            ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
+
+        entity.Status = "archived";
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Archived", "GrammarLesson", lessonId, $"Archived grammar lesson: {entity.Title}", ct);
+
+        return new { id = lessonId, status = "archived" };
+    }
+
+    /// <summary>
+    /// Permanently deletes an archived grammar lesson and purges all learner
+    /// progress rows for it. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeleteGrammarLessonAsync(
+        string adminId, string adminName, string lessonId, CancellationToken ct)
+    {
+        var entity = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct)
+            ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
+        if (entity.Status != "archived")
+            throw ApiException.Validation("grammar_force_delete_not_archived",
+                "Only archived grammar lessons can be permanently deleted. Archive it first.");
+
+        db.LearnerGrammarProgress.RemoveRange(
+            await db.LearnerGrammarProgress.Where(p => p.LessonId == lessonId).ToListAsync(ct));
+        db.GrammarLessons.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "GrammarLesson", lessonId,
+            $"Force-deleted grammar lesson + learner progress: {entity.Title}", ct);
+
+        return new { id = lessonId, deleted = true };
+    }
+
+    // ════════════════════════════════════════════
+    //  Vocabulary Items
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetVocabularyItemsAsync(
+        string? profession, string? category, string? status, string? search, int page, int pageSize, CancellationToken ct,
+        string? recallSet = null)
+    {
+        var query = db.VocabularyTerms.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(profession))
+            query = query.Where(v => v.ProfessionId == profession);
+        if (!string.IsNullOrWhiteSpace(category))
+            query = query.Where(v => v.Category == category);
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(v => v.Status == status);
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(v => v.Term.Contains(search) || v.Definition.Contains(search));
+
+        // Accept ANY recall-set code here, not just the 3 canonical
+        // RecallSetCodes values — admins can create custom recall-set tags
+        // (RecallSetTagsEndpoints), and restricting this filter to the
+        // canonical set silently no-ops (returns everything, unfiltered) for
+        // any custom code, which looks exactly like "the filter is broken".
+        if (!string.IsNullOrWhiteSpace(recallSet))
+        {
+            var needle = $"\"{recallSet.Trim().ToLowerInvariant()}\"";
+            query = query.Where(v => v.RecallSetCodesJson.Contains(needle));
+        }
+
+        var total = await query.CountAsync(ct);
+        var freePreviewTotal = await db.VocabularyTerms.CountAsync(v => v.IsFreePreview, ct);
+        var items = await ToOrderedListDescendingAsync(query, v => v.Id, ct, skip: (page - 1) * pageSize, take: pageSize);
+
+        return new
+        {
+            total,
+            page,
+            pageSize,
+            freePreviewTotal,
+            items = items.Select(v => new
+            {
+                v.Id,
+                v.Term,
+                v.Definition,
+                v.ProfessionId,
+                v.Category,
+                v.ExampleSentence,
+                v.AmericanSpelling,
+                v.Status,
+                v.IsFreePreview,
+                v.ExamFrequencyCount,
+                hasAudio = v.AudioMediaAssetId != null || !string.IsNullOrWhiteSpace(v.AudioUrl),
+            })
+        };
+    }
+
+    public async Task<object> GetVocabularyItemDetailAsync(string itemId, CancellationToken ct)
+    {
+        var v = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct)
+            ?? throw ApiException.NotFound("VOCABULARY_NOT_FOUND", $"Vocabulary item '{itemId}' not found.");
+
+        return new
+        {
+            v.Id,
+            v.Term,
+            v.Definition,
+            v.ExampleSentence,
+            v.ContextNotes,
+            v.ExamTypeCode,
+            v.ProfessionId,
+            v.Category,
+            v.IpaPronunciation,
+            v.AmericanSpelling,
+            v.AudioUrl,
+            v.AudioSlowUrl,
+            v.AudioSentenceUrl,
+            v.AudioMediaAssetId,
+            v.ImageUrl,
+            v.SynonymsJson,
+            v.CollocationsJson,
+            v.RelatedTermsJson,
+            v.RecallSetCodesJson,
+            v.RecallSetOccurrencesJson,
+            v.CommonMistakesJson,
+            v.SimilarSoundingJson,
+            v.SourceProvenance,
+            v.Status,
+            v.IsFreePreview,
+            v.ExamFrequencyCount,
+            v.CreatedAt,
+            v.UpdatedAt
+        };
+    }
+
+    public async Task<object> CreateVocabularyItemAsync(
+        string adminId, string adminName, AdminVocabularyItemCreateRequestV2 request, CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        ValidateVocabularyPayload(request.Term, request.Definition, request.ExampleSentence, request.Category,
+            request.Status, request.SourceProvenance, request.IpaPronunciation, request.AudioUrl);
+
+        var id = $"VOC-{Guid.NewGuid():N}"[..12];
+        var entity = new VocabularyTerm
+        {
+            Id = id,
+            Term = request.Term.Trim(),
+            Definition = request.Definition.Trim(),
+            ExampleSentence = request.ExampleSentence.Trim(),
+            ContextNotes = string.IsNullOrWhiteSpace(request.ContextNotes) ? null : request.ContextNotes.Trim(),
+            ExamTypeCode = ExamCodes.Normalize(request.ExamTypeCode),
+            ProfessionId = request.ProfessionId,
+            Category = request.Category.Trim(),
+            IpaPronunciation = request.IpaPronunciation,
+            AmericanSpelling = CleanOptional(request.AmericanSpelling),
+            AudioUrl = CleanOptional(request.AudioUrl),
+            AudioSlowUrl = CleanOptional(request.AudioSlowUrl),
+            AudioSentenceUrl = CleanOptional(request.AudioSentenceUrl),
+            AudioMediaAssetId = CleanOptional(request.AudioMediaAssetId),
+            ImageUrl = request.ImageUrl,
+            SynonymsJson = JsonSupport.Serialize(request.Synonyms ?? Array.Empty<string>()),
+            CollocationsJson = JsonSupport.Serialize(request.Collocations ?? Array.Empty<string>()),
+            RelatedTermsJson = JsonSupport.Serialize(request.RelatedTerms ?? Array.Empty<string>()),
+            RecallSetCodesJson = JsonSupport.Serialize(NormaliseRecallSetCodes(request.RecallSetCodes)),
+            CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes ?? Array.Empty<string>()),
+            SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding ?? Array.Empty<string>()),
+            SourceProvenance = request.SourceProvenance,
+            Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status,
+            IsFreePreview = request.IsFreePreview ?? false,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.VocabularyTerms.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "VocabularyTerm", id, $"Created vocabulary item: {request.Term}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id, entity.Term, entity.Status };
+    }
+
+    public async Task<object> UpdateVocabularyItemAsync(
+        string adminId, string adminName, string itemId, AdminVocabularyItemUpdateRequestV2 request, CancellationToken ct)
+    {
+        var entity = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct)
+            ?? throw ApiException.NotFound("VOCABULARY_NOT_FOUND", $"Vocabulary item '{itemId}' not found.");
+
+        if (request.Term is not null) entity.Term = request.Term.Trim();
+        if (request.Definition is not null) entity.Definition = request.Definition.Trim();
+        if (request.ExampleSentence is not null) entity.ExampleSentence = request.ExampleSentence.Trim();
+        if (request.ContextNotes is not null) entity.ContextNotes = request.ContextNotes.Trim();
+        if (request.ExamTypeCode is not null) entity.ExamTypeCode = ExamCodes.Normalize(request.ExamTypeCode);
+        if (request.ProfessionId is not null) entity.ProfessionId = request.ProfessionId;
+        if (request.Category is not null) entity.Category = request.Category;
+        if (request.IpaPronunciation is not null) entity.IpaPronunciation = request.IpaPronunciation;
+        if (request.AmericanSpelling is not null) entity.AmericanSpelling = CleanOptional(request.AmericanSpelling);
+        if (request.AudioUrl is not null) entity.AudioUrl = CleanOptional(request.AudioUrl);
+        if (request.AudioSlowUrl is not null) entity.AudioSlowUrl = CleanOptional(request.AudioSlowUrl);
+        if (request.AudioSentenceUrl is not null) entity.AudioSentenceUrl = CleanOptional(request.AudioSentenceUrl);
+        if (request.AudioMediaAssetId is not null) entity.AudioMediaAssetId = CleanOptional(request.AudioMediaAssetId);
+        if (request.ImageUrl is not null) entity.ImageUrl = request.ImageUrl;
+        if (request.Synonyms is not null) entity.SynonymsJson = JsonSupport.Serialize(request.Synonyms);
+        if (request.Collocations is not null) entity.CollocationsJson = JsonSupport.Serialize(request.Collocations);
+        if (request.RelatedTerms is not null) entity.RelatedTermsJson = JsonSupport.Serialize(request.RelatedTerms);
+        if (request.RecallSetCodes is not null) entity.RecallSetCodesJson = JsonSupport.Serialize(NormaliseRecallSetCodes(request.RecallSetCodes));
+        if (request.CommonMistakes is not null) entity.CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes);
+        if (request.SimilarSounding is not null) entity.SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding);
+        if (request.SourceProvenance is not null) entity.SourceProvenance = request.SourceProvenance;
+        if (request.IsFreePreview is not null) entity.IsFreePreview = request.IsFreePreview.Value;
+
+        if (request.Status is not null)
+        {
+            if (request.Status == "active")
+            {
+                EnforceVocabularyPublishGate(entity);
+            }
+            entity.Status = request.Status;
+        }
+
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "VocabularyTerm", itemId, $"Updated vocabulary item: {entity.Term}", ct);
+
+        return new { id = itemId, entity.Status };
+    }
+
+    private static void ValidateVocabularyPayload(
+        string term, string definition, string example, string category,
+        string? status, string? sourceProvenance, string? ipa, string? audioUrl)
+    {
+        if (string.IsNullOrWhiteSpace(term))
+            throw ApiException.Validation("VOCAB_TERM_REQUIRED", "Term is required.");
+        if (string.IsNullOrWhiteSpace(example))
+            throw ApiException.Validation("VOCAB_EXAMPLE_REQUIRED", "Example sentence is required.");
+        if (string.IsNullOrWhiteSpace(category))
+            throw ApiException.Validation("VOCAB_CATEGORY_REQUIRED", "Category is required.");
+
+        if (status == "active")
+        {
+            EnforceVocabularyPublishGate(term, definition, example, category, sourceProvenance, ipa, audioUrl);
+        }
+    }
+
+    private static void EnforceVocabularyPublishGate(VocabularyTerm e)
+        => EnforceVocabularyPublishGate(e.Term, e.Definition, e.ExampleSentence, e.Category, e.SourceProvenance, e.IpaPronunciation, e.AudioUrl);
+
+    private static IReadOnlyList<string> NormaliseRecallSetCodes(IReadOnlyList<string>? codes)
+    {
+        if (codes is null || codes.Count == 0) return Array.Empty<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>(codes.Count);
+        foreach (var raw in codes)
+        {
+            var normalised = OetWithDrHesham.Api.Domain.RecallSetCodes.Normalise(raw);
+            if (normalised is null)
+                throw ApiException.Validation("VOCAB_RECALL_SET_INVALID",
+                    $"Unknown recall-set code '{raw}'. Allowed: {string.Join(", ", OetWithDrHesham.Api.Domain.RecallSetCodes.All)}.");
+            if (seen.Add(normalised)) result.Add(normalised);
+        }
+        return result;
+    }
+
+    private static void EnforceVocabularyPublishGate(
+        string term, string definition, string example, string category,
+        string? sourceProvenance, string? ipa, string? audioUrl)
+    {
+        // All metadata fields (definition, example sentence, category,
+        // source provenance, pronunciation) are OPTIONAL for publishing —
+        // admins can publish term-only recall rows and enrich them later.
+        // The only hard requirement is a non-empty term, since a term with no
+        // text cannot be displayed or have audio generated.
+        var missing = new List<ApiFieldError>();
+        if (string.IsNullOrWhiteSpace(term)) missing.Add(new ApiFieldError("term", "REQUIRED", "Term is required."));
+
+        if (missing.Count > 0)
+            throw ApiException.Validation("VOCAB_PUBLISH_GATE",
+                "Cannot publish: vocabulary term is missing required fields.", missing);
+    }
+
+    public async Task<object> GetVocabularyCategoriesAdminAsync(
+        string? examTypeCode, string? professionId, CancellationToken ct)
+    {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
+        var query = db.VocabularyTerms.AsQueryable();
+        if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        if (!string.IsNullOrEmpty(professionId)) query = query.Where(t => t.ProfessionId == professionId);
+        var rows = await query
+            .GroupBy(t => new { t.Category, t.Status })
+            .Select(g => new { g.Key.Category, g.Key.Status, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var groups = rows
+            .GroupBy(r => r.Category)
+            .Select(g => new
+            {
+                category = g.Key,
+                active = g.Where(x => x.Status == "active").Sum(x => x.Count),
+                draft = g.Where(x => x.Status == "draft").Sum(x => x.Count),
+                archived = g.Where(x => x.Status == "archived").Sum(x => x.Count),
+                total = g.Sum(x => x.Count)
+            })
+            .OrderByDescending(x => x.total)
+            .ThenBy(x => x.category)
+            .ToList();
+
+        return new { examTypeCode, professionId, categories = groups };
+    }
+
+    /// <summary>
+    /// Admin view of the recall-set registry: canonical metadata plus per-set
+    /// counts split by status (active / draft / archived).
+    /// </summary>
+    public async Task<object> GetRecallSetsAdminAsync(
+        string? examTypeCode, string? professionId, CancellationToken ct)
+    {
+        examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
+        var query = db.VocabularyTerms.AsQueryable();
+        if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        if (!string.IsNullOrEmpty(professionId)) query = query.Where(t => t.ProfessionId == professionId);
+
+        var rows = await query
+            .Where(t => t.RecallSetCodesJson != null && t.RecallSetCodesJson != "[]")
+            .Select(t => new { t.RecallSetCodesJson, t.Status })
+            .ToListAsync(ct);
+
+        var counts = new Dictionary<string, (int active, int draft, int archived)>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            try
+            {
+                var list = System.Text.Json.JsonSerializer.Deserialize<List<string>>(row.RecallSetCodesJson) ?? new List<string>();
+                foreach (var raw in list)
+                {
+                    // Normalise case only — do NOT restrict to the 3 canonical
+                    // RecallSetCodes values here. Admins can create arbitrary
+                    // custom recall-set tags (RecallSetTagsEndpoints), and this
+                    // summary must count those too or their terms silently show
+                    // a permanent (0) count and look deleted/missing.
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    var c = raw.Trim().ToLowerInvariant();
+                    (int active, int draft, int archived) t = counts.TryGetValue(c, out var current)
+                        ? current
+                        : (0, 0, 0);
+                    counts[c] = row.Status switch
+                    {
+                        "active" => (t.active + 1, t.draft, t.archived),
+                        "draft" => (t.active, t.draft + 1, t.archived),
+                        "archived" => (t.active, t.draft, t.archived + 1),
+                        _ => t,
+                    };
+                }
+            }
+            catch { /* malformed row ignored */ }
+        }
+
+        // Read tags from the DB-managed RecallSetTags table (seeded with the
+        // 3 canonical codes on first boot; admins can add/edit/archive more
+        // from /admin/content/vocabulary/recall-set-tags). Fall back to the
+        // static RecallSetCodes.Metadata only if the table is empty so the UI
+        // never appears blank in an unseeded test environment.
+        var tagRows = await db.RecallSetTags.AsNoTracking()
+            .Where(t => t.IsActive)
+            .Where(t => t.ExamTypeCode == null
+                        || examTypeCode == null
+                        || t.ExamTypeCode == examTypeCode)
+            .OrderBy(t => t.SortOrder).ThenBy(t => t.DisplayName)
+            .ToListAsync(ct);
+
+        var sets = (tagRows.Count > 0
+            ? tagRows.Select(t => new
+            {
+                code = t.Code,
+                displayName = t.DisplayName,
+                shortLabel = t.ShortLabel ?? t.Code,
+                description = t.Description ?? string.Empty,
+                sortOrder = t.SortOrder,
+            })
+            : OetWithDrHesham.Api.Domain.RecallSetCodes.Metadata
+                .OrderBy(m => m.SortOrder)
+                .Select(m => new
+                {
+                    code = m.Code,
+                    displayName = m.DisplayName,
+                    shortLabel = (string?)m.ShortLabel,
+                    description = (string?)m.Description ?? string.Empty,
+                    sortOrder = m.SortOrder,
+                }))
+            .Select(s =>
+            {
+                var (active, draft, archived) = counts.TryGetValue(s.code, out var n) ? n : (0, 0, 0);
+                return new
+                {
+                    s.code,
+                    s.displayName,
+                    s.shortLabel,
+                    s.description,
+                    s.sortOrder,
+                    active,
+                    draft,
+                    archived,
+                    total = active + draft + archived,
+                };
+            })
+            .ToList();
+
+        return new { examTypeCode, professionId, sets };
+    }
+
+    public async Task<object> DeleteVocabularyItemAsync(
+        string adminId, string adminName, string itemId, CancellationToken ct)
+    {
+        var entity = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct)
+            ?? throw ApiException.NotFound("VOCABULARY_NOT_FOUND", $"Vocabulary item '{itemId}' not found.");
+
+        // Soft delete preferred — learner vocab lists may reference this term.
+        var referenced = await db.LearnerVocabularies.AnyAsync(lv => lv.TermId == itemId, ct);
+        if (referenced)
+        {
+            entity.Status = "archived";
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Archived", "VocabularyTerm", itemId,
+                $"Archived vocabulary item (referenced by learners): {entity.Term}", ct);
+            return new { id = itemId, archived = true, deleted = false };
+        }
+
+        db.VocabularyTerms.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Deleted", "VocabularyTerm", itemId,
+            $"Deleted vocabulary item: {entity.Term}", ct);
+
+        return new { id = itemId, archived = false, deleted = true };
+    }
+
+    public async Task<AdminVocabularyBulkDeleteResponse> DeleteVocabularyItemsBulkAsync(
+        string adminId, string adminName, AdminVocabularyBulkDeleteRequest request, CancellationToken ct)
+    {
+        var requestedIds = request.ItemIds
+            .Select(id => id.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (requestedIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_DELETE_EMPTY", "Select at least one vocabulary item to delete.");
+
+        if (requestedIds.Count > 1000)
+            throw ApiException.Validation("VOCABULARY_BULK_DELETE_LIMIT", "Bulk delete is limited to 1000 vocabulary items at a time.");
+
+        var deleted = 0;
+        var archived = 0;
+        var errors = new List<string>();
+
+        foreach (var itemId in requestedIds)
+        {
+            var entity = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct);
+            if (entity is null)
+            {
+                errors.Add($"{itemId}: not found");
+                continue;
+            }
+
+            var referenced = await db.LearnerVocabularies.AnyAsync(lv => lv.TermId == itemId, ct);
+            if (referenced)
+            {
+                entity.Status = "archived";
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+                await LogAuditAsync(adminId, adminName, "Archived", "VocabularyTerm", itemId,
+                    $"Bulk archived vocabulary item (referenced by learners): {entity.Term}", ct);
+                archived++;
+                continue;
+            }
+
+            var term = entity.Term;
+            db.VocabularyTerms.Remove(entity);
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Deleted", "VocabularyTerm", itemId,
+                $"Bulk deleted vocabulary item: {term}", ct);
+            deleted++;
+        }
+
+        return new AdminVocabularyBulkDeleteResponse(
+            TotalRequested: request.ItemIds.Count,
+            Deleted: deleted,
+            Archived: archived,
+            Failed: errors.Count,
+            Errors: errors);
+    }
+
+    // ── Bulk activate (publish) ─────────────────────────────────────────
+
+    public async Task<object> BulkActivateVocabularyAsync(
+        string adminId, string adminName, IReadOnlyList<string> itemIds, CancellationToken ct)
+    {
+        if (itemIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_ACTIVATE_EMPTY", "Select at least one vocabulary item to publish.");
+        if (itemIds.Count > 2000)
+            throw ApiException.Validation("VOCABULARY_BULK_ACTIVATE_LIMIT", "Bulk publish is limited to 2000 vocabulary items at a time.");
+
+        var ids = itemIds.Select(id => id.Trim()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+
+        var activated = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+
+        foreach (var entity in entities)
+        {
+            if (entity.Status == "active") { skipped++; continue; }
+            try
+            {
+                EnforceVocabularyPublishGate(entity);
+                entity.Status = "active";
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                activated++;
+            }
+            catch (ApiException ex)
+            {
+                errors.Add($"{entity.Term}: {ex.Message}");
+            }
+        }
+
+        if (activated > 0)
+            await db.SaveChangesAsync(ct);
+
+        return new { totalRequested = itemIds.Count, activated, skipped, failed = errors.Count, errors };
+    }
+
+    // ── Bulk free-preview toggle ────────────────────────────────────────
+
+    /// <summary>
+    /// Bulk set or clear the free-preview flag on the given vocabulary terms.
+    /// Free-preview terms are the only terms a non-subscribed learner can
+    /// access in the Recall Vocabulary Bank. Admin-curated — no automatic cap.
+    /// </summary>
+    public async Task<AdminVocabularyBulkPreviewResponse> SetVocabularyFreePreviewBulkAsync(
+        string adminId, string adminName, AdminVocabularyBulkPreviewRequest request, CancellationToken ct)
+    {
+        var errors = new List<string>();
+        var ids = (request.ItemIds ?? Array.Empty<string>())
+            .Select(id => id?.Trim() ?? string.Empty)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count > 5000)
+            throw ApiException.Validation("VOCABULARY_BULK_PREVIEW_LIMIT", "Bulk free-preview is limited to 5000 vocabulary items at a time.");
+
+        var updated = 0;
+        if (ids.Count > 0)
+        {
+            var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+            var found = entities.Select(e => e.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var missing in ids.Where(id => !found.Contains(id)))
+                errors.Add($"Item '{missing}' not found.");
+
+            foreach (var entity in entities)
+            {
+                if (entity.IsFreePreview == request.IsFreePreview) continue;
+                entity.IsFreePreview = request.IsFreePreview;
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                updated++;
+            }
+
+            if (updated > 0)
+            {
+                await db.SaveChangesAsync(ct);
+                await LogAuditAsync(adminId, adminName,
+                    request.IsFreePreview ? "EnabledFreePreview" : "DisabledFreePreview",
+                    "VocabularyTerm", "bulk",
+                    $"Bulk free-preview={request.IsFreePreview} applied to {updated} term(s). ids={string.Join(",", found.Take(50))}", ct);
+            }
+        }
+
+        var freePreviewTotal = await db.VocabularyTerms.CountAsync(t => t.IsFreePreview, ct);
+        return new AdminVocabularyBulkPreviewResponse(ids.Count, updated, errors.Count, freePreviewTotal, errors);
+    }
+
+    // ── Bulk archive ────────────────────────────────────────────────────
+
+    public async Task<object> BulkArchiveVocabularyAsync(
+        string adminId, string adminName, IReadOnlyList<string> itemIds, CancellationToken ct)
+    {
+        if (itemIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_ARCHIVE_EMPTY", "Select at least one vocabulary item to archive.");
+        if (itemIds.Count > 2000)
+            throw ApiException.Validation("VOCABULARY_BULK_ARCHIVE_LIMIT", "Bulk archive is limited to 2000 vocabulary items at a time.");
+
+        var ids = itemIds.Select(id => id.Trim()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+
+        var archived = 0;
+        var skipped = 0;
+
+        foreach (var entity in entities)
+        {
+            if (entity.Status == "archived") { skipped++; continue; }
+            entity.Status = "archived";
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            archived++;
+        }
+
+        if (archived > 0)
+            await db.SaveChangesAsync(ct);
+
+        return new { totalRequested = itemIds.Count, archived, skipped };
+    }
+
+    // ── Bulk set to draft ───────────────────────────────────────────────
+
+    public async Task<object> BulkDraftVocabularyAsync(
+        string adminId, string adminName, IReadOnlyList<string> itemIds, CancellationToken ct)
+    {
+        if (itemIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_DRAFT_EMPTY", "Select at least one vocabulary item.");
+        if (itemIds.Count > 2000)
+            throw ApiException.Validation("VOCABULARY_BULK_DRAFT_LIMIT", "Bulk draft is limited to 2000 items at a time.");
+
+        var ids = itemIds.Select(id => id.Trim()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+
+        var drafted = 0;
+        var skipped = 0;
+
+        foreach (var entity in entities)
+        {
+            if (entity.Status == "draft") { skipped++; continue; }
+            entity.Status = "draft";
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            drafted++;
+        }
+
+        if (drafted > 0)
+            await db.SaveChangesAsync(ct);
+
+        return new { totalRequested = itemIds.Count, drafted, skipped };
+    }
+
+    // ── Audio generation progress (global) ──────────────────────────────
+
+    public async Task<object> GetVocabularyAudioProgressAsync(CancellationToken ct)
+    {
+        var total = await db.VocabularyTerms.CountAsync(ct);
+
+        // "Done" means the term has a Ready audio asset that can actually be
+        // served — not merely that AudioMediaAssetId is non-null. Counting a
+        // dangling/not-ready asset as complete is what let the bar read 100%
+        // while audio was unplayable (and, inversely, freeze below 100%).
+        var ready = await db.VocabularyTerms.CountAsync(t =>
+            t.AudioMediaAssetId != null
+            && db.MediaAssets.Any(m => m.Id == t.AudioMediaAssetId && m.Status == MediaAssetStatus.Ready), ct);
+
+        // Terms that claim audio (asset id or url set) but whose asset is missing
+        // or not Ready — surfaced so the operator can distinguish "never generated"
+        // from "generated but broken".
+        var broken = await db.VocabularyTerms.CountAsync(t =>
+            (t.AudioMediaAssetId != null || (t.AudioUrl != null && t.AudioUrl != ""))
+            && !db.MediaAssets.Any(m => m.Id == t.AudioMediaAssetId && m.Status == MediaAssetStatus.Ready), ct);
+
+        var withAudio = ready;
+        var pending = total - ready;
+
+        return new
+        {
+            total,
+            withAudio,
+            pending,
+            broken,
+            percentComplete = total > 0 ? Math.Round((double)ready / total * 100, 1) : 100.0,
+        };
+    }
+
+    // ── Selection-scoped audio generation / regeneration ─────────────────
+
+    /// <summary>
+    /// Enqueue ElevenLabs audio synthesis for a specific set of vocabulary items.
+    /// Backs both the admin "Auto-generate missing audios" bulk action
+    /// (<c>ForceRegenerate=false</c> → only absent/broken audio is generated;
+    /// terms with a Ready asset are skipped) and the per-row "Regenerate audio"
+    /// button (<c>ForceRegenerate=true</c> → every found term is re-synthesised,
+    /// overwriting existing audio). With <c>DryRun=true</c> nothing is enqueued —
+    /// the counts are returned so the operator can preview cost before committing.
+    /// </summary>
+    public async Task<AdminVocabularyAudioGenerateResponse> GenerateVocabularyAudioForItemsAsync(
+        string adminId, string adminName, AdminVocabularyAudioGenerateRequest request, CancellationToken ct)
+    {
+        var requestedIds = (request.ItemIds ?? [])
+            .Select(id => id?.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var totalRequested = requestedIds.Count;
+        var batchId = $"audio-gen-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+
+        if (totalRequested == 0)
+            throw ApiException.Validation("VOCABULARY_AUDIO_GENERATE_EMPTY", "Select at least one vocabulary item.");
+        if (totalRequested > 2000)
+            throw ApiException.Validation("VOCABULARY_AUDIO_GENERATE_LIMIT", "Audio generation is limited to 2000 items at a time.");
+
+        // Non-archived terms among the requested ids. Anything absent here (deleted
+        // or archived) is reported as "not found".
+        var terms = await db.VocabularyTerms.AsNoTracking()
+            .Where(t => requestedIds.Contains(t.Id) && t.Status != "archived")
+            .ToListAsync(ct);
+
+        // Ready = has an audio asset that can actually be served. Mirrors the worker's
+        // missing-audio detection and the progress endpoint above, so "skipped" lines
+        // up with the green speaker icon the operator sees in the list.
+        var readyAssetIds = terms
+            .Where(t => !string.IsNullOrWhiteSpace(t.AudioMediaAssetId))
+            .Select(t => t.AudioMediaAssetId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var readyAssets = readyAssetIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await db.MediaAssets.AsNoTracking()
+                .Where(m => readyAssetIds.Contains(m.Id) && m.Status == MediaAssetStatus.Ready)
+                .Select(m => m.Id)
+                .ToListAsync(ct))
+                .ToHashSet(StringComparer.Ordinal);
+
+        bool HasReadyAudio(VocabularyTerm t) =>
+            !string.IsNullOrWhiteSpace(t.AudioMediaAssetId) && readyAssets.Contains(t.AudioMediaAssetId!);
+
+        var notFound = totalRequested - terms.Count;
+        var toEnqueue = new List<VocabularyTerm>();
+        var skipped = 0;
+        foreach (var t in terms)
+        {
+            if (string.IsNullOrWhiteSpace(t.Term)) { skipped++; continue; }     // nothing to synthesise
+            if (!request.ForceRegenerate && HasReadyAudio(t)) { skipped++; continue; }
+            toEnqueue.Add(t);
+        }
+
+        if (request.DryRun)
+            return new AdminVocabularyAudioGenerateResponse(totalRequested, toEnqueue.Count, skipped, notFound, true, batchId);
+
+        if (vocabularyAudioQueue is null)
+            throw ApiException.Validation("audio_queue_not_configured", "Audio generation queue is not configured.");
+
+        // Recall terms must go through ElevenLabs and require an API key (mirrors backfill).
+        if (toEnqueue.Any(IsRecallVocabularyTerm))
+        {
+            var options = conversationOptionsProvider is null ? null : await conversationOptionsProvider.GetAsync(ct);
+            if (options is null || string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+                throw ApiException.Validation(
+                    "elevenlabs_api_key_required",
+                    "Save an ElevenLabs API key in Admin Settings before generating recall audio.");
+        }
+
+        foreach (var t in toEnqueue)
+        {
+            var isRecall = IsRecallVocabularyTerm(t);
+            await vocabularyAudioQueue.EnqueueAsync(
+                new OetWithDrHesham.Api.Services.Vocabulary.VocabularyAudioJob(
+                    TermId: t.Id,
+                    Text: t.Term,
+                    Voice: null,
+                    Locale: "en-GB",
+                    BatchId: batchId,
+                    ProviderName: isRecall ? "elevenlabs" : null,
+                    ForceRegenerate: request.ForceRegenerate),
+                ct);
+        }
+
+        if (toEnqueue.Count > 0)
+            await LogAuditAsync(adminId, adminName,
+                request.ForceRegenerate ? "Regenerate Audio" : "Generate Missing Audio",
+                "VocabularyTerm", "bulk",
+                $"Batch {batchId}: enqueued {toEnqueue.Count} audio job(s) (force={request.ForceRegenerate}, skipped={skipped}, notFound={notFound}).",
+                ct);
+
+        return new AdminVocabularyAudioGenerateResponse(totalRequested, toEnqueue.Count, skipped, notFound, false, batchId);
+    }
+
+    /// <summary>
+    /// Resume audio generation for ALL terms without audio — regardless of
+    /// recall set membership. Use when the background worker stalled (e.g.
+    /// after a container restart) and the normal backfill endpoint skips
+    /// recall-set terms.
+    /// </summary>
+    public async Task<object> ResumeVocabularyAudioAsync(CancellationToken ct)
+    {
+        // Delegate to the proven batch-regeneration path. The previous
+        // hand-rolled enqueue set ProviderName=null, which the audio worker
+        // rejects for recall terms ("invalid_recall_audio_provider"), so recall
+        // audio could never be generated. EnqueueBulkRegenerationAsync forces
+        // the correct provider/voice/model, validates the ElevenLabs API key,
+        // and creates an AudioRegenerationBatch (enabling auto-resume after a
+        // container restart). ApiException (e.g. elevenlabs_api_key_required) is
+        // allowed to propagate so the admin sees a real error, not a silent stall.
+        if (voiceDesignRegeneration is null)
+            return new { enqueued = 0, skipped = "regeneration-service-not-configured" };
+
+        // Split pending (no stored audio) terms into recall vs non-recall so we
+        // run each through its correct audio pipeline.
+        var pendingTerms = await db.VocabularyTerms.AsNoTracking()
+            .Where(t => t.AudioMediaAssetId == null
+                && (t.AudioUrl == null || t.AudioUrl == "")
+                && t.Status != "archived")
+            .Select(t => new { t.RecallSetCodesJson })
+            .ToListAsync(ct);
+
+        var hasRecallPending = pendingTerms.Any(t =>
+            !string.IsNullOrWhiteSpace(t.RecallSetCodesJson) && t.RecallSetCodesJson != "[]");
+        var hasVocabPending = pendingTerms.Any(t =>
+            string.IsNullOrWhiteSpace(t.RecallSetCodesJson) || t.RecallSetCodesJson == "[]");
+
+        const string requestedBy = "vocabulary-resume-button";
+        var enqueued = 0;
+
+        // Don't spawn a second running batch when one is already in flight —
+        // repeated clicks used to pile up "running" batches that each re-enqueued
+        // the whole corpus on restart. The existing batch + reconciliation sweep
+        // will finish the work.
+        var recallBatchRunning = await db.AudioRegenerationBatches
+            .AnyAsync(b => b.AudioType == "recalls" && b.Status == "running", ct);
+        var vocabBatchRunning = await db.AudioRegenerationBatches
+            .AnyAsync(b => b.AudioType == "vocabulary" && b.Status == "running", ct);
+
+        if (hasRecallPending && !recallBatchRunning)
+        {
+            var result = await voiceDesignRegeneration.EnqueueBulkRegenerationAsync(
+                new AdminAudioRegenerateRequest(
+                    AudioType: "recalls",
+                    Scope: "missing",
+                    ModelVariant: null,
+                    VoiceId: null,
+                    Instructions: null,
+                    Speed: null,
+                    Pitch: null,
+                    Emotion: null,
+                    ProviderName: null,
+                    ForceRegenerate: false,
+                    DryRun: false),
+                requestedBy,
+                ct);
+            enqueued += result.TotalItems;
+        }
+
+        if (hasVocabPending && !vocabBatchRunning)
+        {
+            var result = await voiceDesignRegeneration.EnqueueBulkRegenerationAsync(
+                new AdminAudioRegenerateRequest(
+                    AudioType: "vocabulary",
+                    Scope: "missing",
+                    ModelVariant: null,
+                    VoiceId: null,
+                    Instructions: null,
+                    Speed: null,
+                    Pitch: null,
+                    Emotion: null,
+                    ProviderName: null,
+                    ForceRegenerate: false,
+                    DryRun: false),
+                requestedBy,
+                ct);
+            enqueued += result.TotalItems;
+        }
+
+        return new { enqueued };
+    }
+
+    // ── CSV import (RFC-4180 aware) ─────────────────────────────────────
+
+    public async Task<AdminVocabularyImportPreviewResponse> PreviewVocabularyImportAsync(
+        IFormFile file, string? importBatchId, string? recallSetCode, CancellationToken ct)
+    {
+        // Recall set tag is a required categorisation for the bulk upload —
+        // every imported row inherits this practice-collection label so the
+        // admin can filter/maintain them later. Validate that the chosen
+        // code corresponds to a known (active) row in RecallSetTags or one of
+        // the canonical static codes (in case the DB hasn't been seeded yet).
+        var normalisedRecallSetCode = await EnsureRecallSetCodeOrThrowAsync(recallSetCode, ct);
+        var batchId = NormalizeImportBatchId(importBatchId);
+        var rows = await ParseCsvAsync(file, ct);
+        var validation = await BuildVocabularyImportValidationContextAsync(ct);
+        var preview = new List<AdminVocabularyImportPreviewRow>(rows.Count);
+        var warnings = new List<string>();
+        // Maps dedupe-key → line number of FIRST occurrence so subsequent
+        // duplicates can cite where the original lives in the file.
+        var firstSeenLine = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var valid = 0; var invalid = 0; var dups = 0; var existingConflicts = 0;
+        // Split DB-duplicates into the productive case (existing word that will
+        // JOIN this recall set on commit) and the truly-redundant case (already
+        // in this set) so the preview can speak honestly instead of flashing a
+        // scary all-duplicates count.
+        var existingToTag = 0; var alreadyInSet = 0;
+
+        foreach (var r in rows)
+        {
+            var (ok, err) = ValidateCsvRow(r, batchId, validation);
+            if (ok)
+            {
+                var duplicateKey = PreviewDuplicateKey(r);
+                if (firstSeenLine.TryGetValue(duplicateKey, out var firstLine))
+                {
+                    // In-CSV duplicate. Silently deduped — first occurrence
+                    // wins; emit a warning with the stable code so admins can
+                    // see why the row was skipped. The publish path is not
+                    // affected because no DB row is written for skipped dups.
+                    // Duplicates are NOT counted as invalid — they are a
+                    // separate category and should not block dry-run/commit.
+                    dups++;
+                    err = $"duplicate-in-csv (duplicate of line {firstLine})";
+                    warnings.Add($"line {r.LineNumber}: duplicate-in-csv (duplicate of line {firstLine})");
+                    // Mark row as not-valid for display purposes but don't
+                    // count it as "invalid" — it's just a duplicate.
+                    preview.Add(new AdminVocabularyImportPreviewRow(
+                        LineNumber: r.LineNumber,
+                        Valid: false,
+                        Term: r.Term,
+                        Definition: r.Definition,
+                        Category: r.Category,
+                        ProfessionId: r.ProfessionId,
+                        AmericanSpelling: r.AmericanSpelling,
+                        ExampleSentence: r.ExampleSentence,
+                        Error: err));
+                    continue;
+                }
+                else
+                {
+                    firstSeenLine[duplicateKey] = r.LineNumber;
+                }
+            }
+            if (ok)
+            {
+                var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
+                if (existing is not null && string.IsNullOrWhiteSpace(r.ExistingId))
+                {
+                    existingConflicts++;
+                    dups++;
+                    // Will this existing word JOIN the chosen set, or is it
+                    // already in it? The first is the productive outcome.
+                    if (RecallSetCodesContains(existing.RecallSetCodesJson, normalisedRecallSetCode))
+                    {
+                        alreadyInSet++;
+                        err = $"already in the '{normalisedRecallSetCode}' set — no change on commit.";
+                    }
+                    else
+                    {
+                        existingToTag++;
+                        err = $"existing word — will be added to the '{normalisedRecallSetCode}' set on commit.";
+                    }
+                    // DB duplicates are not invalid — they get set-tagged/merged.
+                    preview.Add(new AdminVocabularyImportPreviewRow(
+                        LineNumber: r.LineNumber,
+                        Valid: false,
+                        Term: r.Term,
+                        Definition: r.Definition,
+                        Category: r.Category,
+                        ProfessionId: r.ProfessionId,
+                        AmericanSpelling: r.AmericanSpelling,
+                        ExampleSentence: r.ExampleSentence,
+                        Error: err));
+                    continue;
+                }
+                else if (existing is not null && !string.IsNullOrWhiteSpace(r.ExistingId))
+                {
+                    // Row has an Id column — will be upserted (updated) on commit.
+                }
+            }
+            if (ok) valid++; else invalid++;
+            preview.Add(new AdminVocabularyImportPreviewRow(
+                LineNumber: r.LineNumber,
+                Valid: ok,
+                Term: r.Term,
+                Definition: r.Definition,
+                Category: r.Category,
+                ProfessionId: r.ProfessionId,
+                AmericanSpelling: r.AmericanSpelling,
+                ExampleSentence: r.ExampleSentence,
+                Error: err));
+        }
+
+        // Honest summary: a recalls re-import is SUPPOSED to be mostly
+        // already-known words. Lead with the productive outcome so "VALID 0"
+        // doesn't read as a failed import.
+        if (existingToTag > 0)
+            warnings.Add($"{existingToTag} existing word(s) will be added to the '{normalisedRecallSetCode}' set on commit.");
+        if (valid > 0)
+            warnings.Add($"{valid} brand-new word(s) will be created and tagged '{normalisedRecallSetCode}'.");
+        if (alreadyInSet > 0)
+            warnings.Add($"{alreadyInSet} word(s) are already in the '{normalisedRecallSetCode}' set — no change.");
+        if (valid == 0 && existingToTag == 0 && rows.Count > 0 && invalid == 0)
+            warnings.Add($"Nothing to do: every word is already in the '{normalisedRecallSetCode}' set.");
+        if (invalid > 0)
+            warnings.Add($"{invalid} row(s) failed validation and will be skipped.");
+
+        return new AdminVocabularyImportPreviewResponse(
+            ImportBatchId: batchId,
+            TotalRows: rows.Count,
+            ValidRows: valid,
+            InvalidRows: invalid,
+            DuplicateRows: dups,
+            ExistingToTagRows: existingToTag,
+            AlreadyInSetRows: alreadyInSet,
+            Rows: preview,
+            Warnings: warnings);
+    }
+
+    public async Task<AdminVocabularyImportResponse> BulkImportVocabularyV2Async(
+        string adminId, string adminName, IFormFile file, bool dryRun, string? importBatchId, string? recallSetCode, CancellationToken ct)
+    {
+        // Mandatory recall set tag — see PreviewVocabularyImportAsync.
+        var normalisedRecallSetCode = await EnsureRecallSetCodeOrThrowAsync(recallSetCode, ct);
+        var batchId = NormalizeImportBatchId(importBatchId);
+        var fileSha256 = await ComputeFileSha256Async(file, ct);
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var rows = await ParseCsvAsync(file, ct);
+        var validation = await BuildVocabularyImportValidationContextAsync(ct);
+
+        var imported = 0; var skipped = 0; var duplicates = 0; var failed = 0;
+        var inCsvDuplicates = 0;
+        var errors = new List<string>();
+        var cleanRows = new List<CsvVocabRow>();
+        // Maps dedupe-key → line number of FIRST occurrence so subsequent
+        // duplicates can cite where the original lives in the file.
+        var firstSeenLine = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Counts every valid occurrence of each dedupe-key in this CSV so the
+        // term's ExamFrequencyCount reflects true exam repetition (the "×N"
+        // tag). In-CSV repeats feed this count instead of being discarded.
+        var occurrencesByKey = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Pre-existing DB terms whose frequency is merged on commit, keyed by
+        // dedupe-key so the full per-batch occurrence count is applied once.
+        var existingDbByKey = new Dictionary<string, VocabularyTerm>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var r in rows)
+        {
+            var (ok, err) = ValidateCsvRow(r, batchId, validation);
+            if (!ok)
+            {
+                failed++;
+                if (errors.Count < 20) errors.Add($"Row {r.LineNumber}: {err}");
+                continue;
+            }
+
+            var duplicateKey = PreviewDuplicateKey(r);
+            // Every valid row is one exam appearance of this term — including
+            // in-CSV repeats — so the "×N" frequency tag stays accurate.
+            occurrencesByKey[duplicateKey] = occurrencesByKey.GetValueOrDefault(duplicateKey) + 1;
+            if (firstSeenLine.TryGetValue(duplicateKey, out var firstLine))
+            {
+                // In-CSV duplicate. Silently dedupe the ROW — the first
+                // occurrence owns the term — but its appearance is already
+                // folded into occurrencesByKey above, so the repeat count is
+                // preserved rather than discarded.
+                // Counted under `duplicates` for API-shape parity with the
+                // preview surface, but tracked separately so the commit gate
+                // doesn't block on a class of skip the operator can't fix.
+                duplicates++;
+                inCsvDuplicates++;
+                if (errors.Count < 20)
+                    errors.Add($"Row {r.LineNumber}: duplicate-in-csv: Skipped duplicate of line {firstLine}.");
+                continue;
+            }
+            firstSeenLine[duplicateKey] = r.LineNumber;
+
+            var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
+            if (existing is not null && string.IsNullOrWhiteSpace(r.ExistingId))
+            {
+                // Defer the frequency merge to the commit section so the FULL
+                // per-batch occurrence count is applied exactly once and never
+                // on a dry run. The commit ledger keeps it idempotent: a
+                // re-committed batch id throws before any count is persisted.
+                existingDbByKey[duplicateKey] = existing;
+                duplicates++;
+                continue;
+            }
+
+            cleanRows.Add(r);
+            imported++;
+        }
+
+        skipped = duplicates + failed;
+        // Only genuinely invalid rows block the commit. BOTH duplicate classes
+        // are benign and auto-handled: in-CSV repeats are deduped (first
+        // occurrence owns the term) and pre-existing DB terms have their
+        // exam-frequency merged. A recalls CSV legitimately repeats words
+        // within the file AND re-imports words already in the bank — that is
+        // exactly how the "×N" frequency accumulates across imports — so
+        // neither duplicate class may block the dry-run/commit gate.
+        var dbDuplicates = duplicates - inCsvDuplicates;
+        var blockingSkips = failed;
+        if (dryRun)
+        {
+            if (blockingSkips == 0)
+            {
+                await UpsertVocabularyImportDryRunAsync(batchId, fileSha256, imported, ct);
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+            }
+
+            return new AdminVocabularyImportResponse(batchId, imported, skipped, duplicates, failed, errors);
+        }
+
+        await RequireMatchingVocabularyImportDryRunAsync(batchId, fileSha256, imported, ct);
+
+        if (blockingSkips > 0)
+        {
+            throw ApiException.Validation(
+                "VOCABULARY_IMPORT_NOT_CLEAN",
+                "Commit is blocked because the import no longer has a clean dry run. Re-run preview and dry run for the same batch before committing.");
+        }
+
+        await EnsureVocabularyImportCommitLedgerAvailableAsync(batchId, ct);
+
+        var importedTermIds = new List<string>(cleanRows.Count);
+        foreach (var r in cleanRows)
+        {
+            // Upsert: if the CSV has an Id column and the term exists, update it
+            if (!string.IsNullOrWhiteSpace(r.ExistingId))
+            {
+                var existingById = await db.VocabularyTerms.FirstOrDefaultAsync(
+                    t => t.Id == r.ExistingId.Trim() && t.Status != "archived", ct);
+                if (existingById is not null)
+                {
+                    UpdateVocabularyTermFromCsvRow(existingById, r, batchId, normalisedRecallSetCode,
+                        occurrencesByKey.GetValueOrDefault(PreviewDuplicateKey(r), 1));
+                    importedTermIds.Add(existingById.Id);
+                    continue;
+                }
+            }
+            var id = $"VOC-{Guid.NewGuid():N}"[..12];
+            var term = CreateVocabularyTermFromCsvRow(r, id, batchId, normalisedRecallSetCode);
+            // Record this set's occurrence count as the source of truth; the
+            // helper derives ExamFrequencyCount (= sum) and RecallSetCodesJson.
+            ApplyRecallSetOccurrence(term, normalisedRecallSetCode,
+                occurrencesByKey.GetValueOrDefault(PreviewDuplicateKey(r), 1));
+            db.VocabularyTerms.Add(term);
+            importedTermIds.Add(id);
+        }
+
+        // Record this import's recall-set occurrence count on pre-existing DB
+        // terms. Applied here — after the already-committed guard above — so it
+        // lands exactly once per committed batch (idempotent on retry). The map
+        // REPLACES this set's count (one canonical CSV per set), so re-uploading
+        // an identical set CSV is a no-op and never inflates ×N, while a word
+        // joining a NEW set grows the derived total by that set's count. A term
+        // is audited / TTS-backfilled only when its set membership or count
+        // actually changed (the backfill self-filters to missing audio).
+        var existingRetagged = 0;
+        foreach (var (key, existing) in existingDbByKey)
+        {
+            var before = ParseRecallSetOccurrences(existing.RecallSetOccurrencesJson);
+            var wasInSet = before.ContainsKey(normalisedRecallSetCode);
+            var newCount = occurrencesByKey.GetValueOrDefault(key, 1);
+            ApplyRecallSetOccurrence(existing, normalisedRecallSetCode, newCount);
+            if (!wasInSet || before.GetValueOrDefault(normalisedRecallSetCode) != newCount)
+            {
+                if (!wasInSet) existingRetagged++;
+                importedTermIds.Add(existing.Id);
+            }
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        if (!dryRun)
+        {
+            await CreateVocabularyImportCommitLedgerAsync(batchId, fileSha256, importedTermIds, ct);
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
+                $"Batch {batchId}: imported {imported} vocabulary items, {existingRetagged} existing word(s) added to set '{normalisedRecallSetCode}', skipped {skipped} (dup={duplicates} [in-csv={inCsvDuplicates}, db-merged={dbDuplicates}], failed={failed}).", ct);
+            await CommitIfOwnedAsync(tx, ct);
+
+            // Phase 3 — kick off background TTS generation for the freshly
+            // inserted terms. Skip rows that already carry audio metadata
+            // (the CSV may include AudioUrl).
+            if (vocabularyAudioQueue is not null && importedTermIds.Count > 0)
+            {
+                var newRows = await db.VocabularyTerms.AsNoTracking()
+                    .Where(t => importedTermIds.Contains(t.Id))
+                    .Select(t => new { t.Id, t.Term, t.AudioUrl, t.AudioMediaAssetId, t.RecallSetCodesJson })
+                    .ToListAsync(ct);
+                foreach (var row in newRows)
+                {
+                    if (!string.IsNullOrWhiteSpace(row.AudioUrl)
+                        || !string.IsNullOrWhiteSpace(row.AudioMediaAssetId))
+                        continue;
+                    await vocabularyAudioQueue.EnqueueAsync(
+                        new OetWithDrHesham.Api.Services.Vocabulary.VocabularyAudioJob(
+                            TermId: row.Id,
+                            Text: row.Term,
+                            Voice: null,
+                            Locale: "en-GB",
+                            BatchId: batchId,
+                            ProviderName: string.IsNullOrWhiteSpace(TryExtractRecallSetCodeFromStored(row.RecallSetCodesJson))
+                                ? null
+                                : "elevenlabs"),
+                        ct);
+                }
+            }
+        }
+
+        return new AdminVocabularyImportResponse(batchId, imported, skipped, duplicates, failed, errors);
+    }
+
+    /// <summary>
+    /// Enqueue background TTS jobs for vocabulary terms missing stored audio.
+    /// Import-batch backfills include recall-set rows and force those jobs
+    /// through ElevenLabs; platform-wide sweeps keep the older non-recall
+    /// filter to avoid accidentally spending recall TTS quota.
+    /// </summary>
+    public async Task<object> EnqueueVocabularyAudioBackfillAsync(string? batchId, CancellationToken ct)
+    {
+        if (vocabularyAudioQueue is null)
+            return new { enqueued = 0, skipped = "queue-not-configured" };
+
+        var normalised = string.IsNullOrWhiteSpace(batchId) ? null : batchId.Trim();
+        List<VocabularyTerm> rows;
+        List<VocabularyTerm> batchRows = [];
+
+        if (!string.IsNullOrEmpty(normalised))
+        {
+            normalised = NormalizeExistingImportBatchId(normalised);
+            batchRows = await GetVocabularyImportBatchRowsAsync(normalised, ct);
+            rows = batchRows
+                .Where(t => string.IsNullOrWhiteSpace(t.AudioMediaAssetId)
+                    && string.IsNullOrWhiteSpace(t.AudioUrl))
+                .OrderBy(t => t.Id, StringComparer.Ordinal)
+                .Take(5000)
+                .ToList();
+        }
+        else
+        {
+            rows = await db.VocabularyTerms.AsNoTracking()
+                .Where(t => t.AudioMediaAssetId == null
+                    && (t.AudioUrl == null || t.AudioUrl == "")
+                    && (t.RecallSetCodesJson == null || t.RecallSetCodesJson == "" || t.RecallSetCodesJson == "[]"))
+                .OrderBy(t => t.Id)
+                .Take(5000)
+                .ToListAsync(ct);
+        }
+
+        var recallRows = rows.Where(IsRecallVocabularyTerm).ToList();
+        if (recallRows.Count > 0)
+        {
+            var options = conversationOptionsProvider is null ? null : await conversationOptionsProvider.GetAsync(ct);
+            if (options is null || string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+            {
+                throw ApiException.Validation(
+                    "elevenlabs_api_key_required",
+                    "Save an ElevenLabs API key in Admin Settings before starting recall audio generation.");
+            }
+        }
+
+        AudioRegenerationBatch? recallBatch = null;
+        if (!string.IsNullOrEmpty(normalised) && batchRows.Any(IsRecallVocabularyTerm))
+        {
+            var options = await conversationOptionsProvider!.GetAsync(ct);
+            var recallAudioBatchId = RecallImportAudioBatchId(normalised);
+            recallBatch = await db.AudioRegenerationBatches.FirstOrDefaultAsync(b => b.Id == recallAudioBatchId, ct);
+            if (recallBatch is null)
+            {
+                recallBatch = new AudioRegenerationBatch
+                {
+                    Id = recallAudioBatchId,
+                    AudioType = "recalls",
+                    Scope = "missing",
+                    Status = "running",
+                    TotalItems = batchRows.Count(IsRecallVocabularyTerm),
+                    CompletedItems = CountReadyVocabularyAudio(batchRows.Where(IsRecallVocabularyTerm)),
+                    FailedItems = 0,
+                    VoiceId = string.IsNullOrWhiteSpace(options.ElevenLabsDefaultVoiceId) ? "auq43ws1oslv0tO4BDa7" : options.ElevenLabsDefaultVoiceId,
+                    ModelVariant = string.IsNullOrWhiteSpace(options.ElevenLabsModel) ? "eleven_multilingual_v2" : options.ElevenLabsModel,
+                    ProviderName = "elevenlabs",
+                    RequestedBy = "admin-vocabulary-import",
+                    StartedAt = DateTime.UtcNow,
+                };
+                db.AudioRegenerationBatches.Add(recallBatch);
+            }
+            else
+            {
+                recallBatch.Status = "running";
+                recallBatch.CompletedAt = null;
+                recallBatch.TotalItems = batchRows.Count(IsRecallVocabularyTerm);
+                recallBatch.CompletedItems = CountReadyVocabularyAudio(batchRows.Where(IsRecallVocabularyTerm));
+                recallBatch.VoiceId = string.IsNullOrWhiteSpace(options.ElevenLabsDefaultVoiceId) ? recallBatch.VoiceId : options.ElevenLabsDefaultVoiceId;
+                recallBatch.ModelVariant = string.IsNullOrWhiteSpace(options.ElevenLabsModel) ? recallBatch.ModelVariant : options.ElevenLabsModel;
+                recallBatch.ProviderName = "elevenlabs";
+            }
+            await db.SaveChangesAsync(ct);
+        }
+
+        var enqueued = 0;
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Term)) continue;
+            var isRecall = IsRecallVocabularyTerm(row);
+            await vocabularyAudioQueue.EnqueueAsync(
+                new OetWithDrHesham.Api.Services.Vocabulary.VocabularyAudioJob(
+                    TermId: row.Id,
+                    Text: row.Term,
+                    Voice: isRecall ? recallBatch?.VoiceId : null,
+                    Locale: "en-GB",
+                    BatchId: isRecall ? (recallBatch?.Id ?? normalised ?? string.Empty) : (normalised ?? string.Empty),
+                    ModelVariant: isRecall ? recallBatch?.ModelVariant : null,
+                    ProviderName: isRecall ? "elevenlabs" : null),
+                ct);
+            enqueued++;
+        }
+        return new { enqueued, batchId = normalised, audioBatchId = recallBatch?.Id, providerName = recallBatch?.ProviderName };
+    }
+
+    public async Task<object> CancelVocabularyImportAudioBackfillAsync(string importBatchId, CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        var audioBatchId = RecallImportAudioBatchId(batchId);
+        var batch = await db.AudioRegenerationBatches.FirstOrDefaultAsync(b => b.Id == audioBatchId, ct);
+        if (batch is null || batch.Status != "running")
+            return new { cancelled = false, audioBatchId };
+
+        batch.Status = "cancelled";
+        batch.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new { cancelled = true, audioBatchId };
+    }
+
+    public async Task<object> GetVocabularyImportBatchSummaryAsync(string importBatchId, CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+
+        var warnings = new List<string>();
+        var active = rows.Count(v => v.Status == "active");
+        var draft = rows.Count(v => v.Status == "draft");
+        var archived = rows.Count(v => v.Status == "archived");
+        var recallAudioBatchId = RecallImportAudioBatchId(batchId);
+        var recallAudioBatch = await db.AudioRegenerationBatches.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == recallAudioBatchId, ct);
+        var recallRows = rows.Where(IsRecallVocabularyTerm).ToList();
+        var generatedAudio = CountReadyVocabularyAudio(rows);
+        var failedAudio = recallAudioBatch?.FailedItems ?? 0;
+        var pendingAudio = recallAudioBatch is { Status: "running" }
+            ? Math.Max(0, (recallAudioBatch.TotalItems > 0 ? recallAudioBatch.TotalItems : rows.Count) - generatedAudio - failedAudio)
+            : Math.Max(0, rows.Count - generatedAudio - failedAudio);
+        var audioStatus = rows.Count == 0
+            ? "empty"
+            : generatedAudio >= rows.Count
+                ? "completed"
+                : recallAudioBatch?.Status ?? "idle";
+        if (active > 0) warnings.Add("Batch contains active rows; rollback will not modify active rows.");
+        if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct)) warnings.Add("No immutable commit ledger was found for this import batch id.");
+        if (rows.Count == 0) warnings.Add("No rows found for this import batch id.");
+
+        return new
+        {
+            importBatchId = batchId,
+            total = rows.Count,
+            draft,
+            active,
+            archived,
+            warnings,
+            audioGeneration = new
+            {
+                audioBatchId = recallAudioBatch?.Id,
+                status = audioStatus,
+                providerName = recallRows.Count > 0 ? "elevenlabs" : recallAudioBatch?.ProviderName,
+                total = rows.Count,
+                generated = generatedAudio,
+                pending = pendingAudio,
+                failed = failedAudio,
+                cancelled = string.Equals(recallAudioBatch?.Status, "cancelled", StringComparison.OrdinalIgnoreCase),
+                queued = pendingAudio,
+                recallTotal = recallRows.Count,
+                canCancel = recallAudioBatch is { Status: "running" } && pendingAudio > 0,
+            },
+            rows = rows.Select(v => new
+            {
+                v.Id,
+                v.Term,
+                v.Definition,
+                v.ExampleSentence,
+                v.ContextNotes,
+                v.ExamTypeCode,
+                v.ProfessionId,
+                v.Category,
+                v.IpaPronunciation,
+                v.AmericanSpelling,
+                v.AudioUrl,
+                v.AudioSlowUrl,
+                v.AudioSentenceUrl,
+                v.AudioMediaAssetId,
+                v.SynonymsJson,
+                v.CollocationsJson,
+                v.RelatedTermsJson,
+                v.SourceProvenance,
+                v.Status,
+                v.CreatedAt,
+                v.UpdatedAt
+            })
+        };
+    }
+
+    public async Task<(byte[] Bytes, string FileName)> ExportVocabularyImportBatchCsvAsync(string importBatchId, CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("ImportBatchId,Id,Term,Definition,ExampleSentence,ContextNotes,ExamTypeCode,ProfessionId,Category,IpaPronunciation,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,ImageUrl,SynonymsJson,CollocationsJson,RelatedTermsJson,SourceProvenance,Status,CreatedAt,UpdatedAt");
+        foreach (var row in rows)
+        {
+            builder.AppendJoin(',',
+                EscapeCsv(batchId),
+                EscapeCsv(row.Id),
+                EscapeCsv(row.Term),
+                EscapeCsv(row.Definition),
+                EscapeCsv(row.ExampleSentence),
+                EscapeCsv(row.ContextNotes),
+                EscapeCsv(row.ExamTypeCode),
+                EscapeCsv(row.ProfessionId),
+                EscapeCsv(row.Category),
+                EscapeCsv(row.IpaPronunciation),
+                EscapeCsv(row.AmericanSpelling),
+                EscapeCsv(row.AudioUrl),
+                EscapeCsv(row.AudioSlowUrl),
+                EscapeCsv(row.AudioSentenceUrl),
+                EscapeCsv(row.AudioMediaAssetId),
+                EscapeCsv(row.ImageUrl),
+                EscapeCsv(row.SynonymsJson),
+                EscapeCsv(row.CollocationsJson),
+                EscapeCsv(row.RelatedTermsJson),
+                EscapeCsv(row.SourceProvenance),
+                EscapeCsv(row.Status),
+                EscapeCsv(row.CreatedAt.ToString("O")),
+                EscapeCsv(row.UpdatedAt.ToString("O")));
+            builder.AppendLine();
+        }
+
+        return (Encoding.UTF8.GetBytes(builder.ToString()), $"vocabulary-import-{batchId}-export.csv");
+    }
+
+    public async Task<AdminVocabularyImportReconciliationResponse> ReconcileVocabularyImportBatchAsync(
+        string importBatchId,
+        IFormFile manifestFile,
+        CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct))
+            throw ApiException.Validation("VOCABULARY_IMPORT_BATCH_NOT_FOUND", "Reconciliation requires an immutable commit ledger for the import batch.");
+
+        var manifestRows = await ParseCsvAsync(manifestFile, ct);
+        var validation = await BuildVocabularyImportValidationContextAsync(ct);
+        var storedRows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+        var storedByKey = storedRows.ToDictionary(VocabularyTermDuplicateKey, StringComparer.OrdinalIgnoreCase);
+        var seenManifestKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reportRows = new List<AdminVocabularyImportReconciliationRow>();
+
+        var matched = 0;
+        var missing = 0;
+        var extra = 0;
+        var mismatched = 0;
+        var invalid = 0;
+
+        foreach (var manifestRow in manifestRows)
+        {
+            var key = PreviewDuplicateKey(manifestRow);
+            var (ok, error) = ValidateCsvRow(manifestRow, batchId, validation);
+            if (!ok)
+            {
+                invalid++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "invalid-manifest-row",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    error));
+                continue;
+            }
+
+            if (!seenManifestKeys.Add(key))
+            {
+                invalid++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "duplicate-manifest-row",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    "Duplicate row in the manifest for the same term, exam type, and profession."));
+                continue;
+            }
+
+            if (!storedByKey.TryGetValue(key, out var storedRow))
+            {
+                missing++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "missing-stored-row",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    "No committed vocabulary term was found for this manifest row."));
+                continue;
+            }
+
+            var mismatches = CompareVocabularyImportRow(manifestRow, storedRow, batchId);
+            if (mismatches.Count == 0)
+            {
+                matched++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "matched",
+                    Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                    null));
+            }
+            else
+            {
+                mismatched++;
+                reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                    manifestRow.LineNumber,
+                    key,
+                    "mismatched",
+                    mismatches,
+                    null));
+            }
+        }
+
+        foreach (var storedRow in storedRows)
+        {
+            var key = VocabularyTermDuplicateKey(storedRow);
+            if (seenManifestKeys.Contains(key)) continue;
+
+            extra++;
+            reportRows.Add(new AdminVocabularyImportReconciliationRow(
+                null,
+                key,
+                "extra-stored-row",
+                Array.Empty<AdminVocabularyImportReconciliationFieldMismatch>(),
+                "Committed vocabulary term was not present in the manifest."));
+        }
+
+        return new AdminVocabularyImportReconciliationResponse(
+            batchId,
+            manifestRows.Count,
+            storedRows.Count,
+            matched,
+            missing,
+            extra,
+            mismatched,
+            invalid,
+            missing == 0 && extra == 0 && mismatched == 0 && invalid == 0,
+            reportRows);
+    }
+
+    public async Task<AdminVocabularyImportRollbackResponse> RollbackVocabularyImportBatchAsync(
+        string adminId,
+        string adminName,
+        string importBatchId,
+        AdminVocabularyImportRollbackRequest request,
+        CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var rows = await GetVocabularyImportBatchRowsAsync(batchId, ct);
+        var errors = new List<string>();
+        var deleted = 0;
+        var archived = 0;
+        var blocked = 0;
+
+        if (request.DeleteDraftRows)
+            errors.Add("Physical deletion is disabled for vocabulary import rollback; draft rows are archived instead.");
+
+        if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct))
+        {
+            throw ApiException.Validation("VOCABULARY_IMPORT_BATCH_NOT_FOUND", "Rollback requires an immutable commit ledger for the import batch.");
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.Status != "draft")
+            {
+                blocked++;
+                if (errors.Count < 20) errors.Add($"{row.Id}: status '{row.Status}' is not draft; not rolled back.");
+                continue;
+            }
+
+            row.Status = "archived";
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            archived++;
+        }
+
+        if (deleted > 0 || archived > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Import Rollback", "VocabularyTerm", batchId,
+                $"Rolled back batch {batchId}: deleted={deleted}, archived={archived}, blocked={blocked}.", ct);
+            await CommitIfOwnedAsync(tx, ct);
+        }
+
+        return new AdminVocabularyImportRollbackResponse(batchId, rows.Count, deleted, archived, blocked, errors);
+    }
+
+    private static IReadOnlyList<string> SplitList(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+        var trimmed = raw.Trim();
+        // Auto-detect JSON array format: ["term1","term2"]
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+        {
+            try
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<string[]>(trimmed);
+                if (parsed is not null)
+                    return parsed.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToArray();
+            }
+            catch (System.Text.Json.JsonException) { /* fall through to delimiter split */ }
+        }
+        // Pipe or semicolon delimited (legacy format)
+        if (trimmed.Contains('|') || trimmed.Contains(';'))
+            return trimmed.Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // Comma-separated fallback (for plain CSV values like "term1, term2, term3")
+        if (trimmed.Contains(','))
+            return trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // Single value
+        return new[] { trimmed };
+    }
+
+    private static VocabularyTerm CreateVocabularyTermFromCsvRow(
+        CsvVocabRow row, string id, string importBatchId, string recallSetCode)
+    {
+        var examType = ExamCodes.Normalize(row.ExamTypeCode);
+        return new VocabularyTerm
+        {
+            Id = id,
+            Term = row.Term!.Trim(),
+            // Definition / ExampleSentence are optional on import; the publish
+            // gate still enforces a non-empty Definition before a row can
+            // leave draft.
+            Definition = CleanOptional(row.Definition),
+            ExampleSentence = CleanOptional(row.ExampleSentence),
+            ContextNotes = CleanOptional(row.ContextNotes),
+            ExamTypeCode = examType,
+            ProfessionId = CleanOptional(row.ProfessionId),
+            // Header-less / undeclared rows default to the "recall-term"
+            // bucket so they remain discoverable in the admin UI without
+            // forcing the uploader to pick a category up-front.
+            Category = CleanOptional(row.Category) ?? "recall-term",
+            IpaPronunciation = CleanOptional(row.IpaPronunciation),
+            AmericanSpelling = CleanOptional(row.AmericanSpelling),
+            AudioUrl = CleanOptional(row.AudioUrl),
+            AudioSlowUrl = CleanOptional(row.AudioSlowUrl),
+            AudioSentenceUrl = CleanOptional(row.AudioSentenceUrl),
+            AudioMediaAssetId = CleanOptional(row.AudioMediaAssetId),
+            ImageUrl = CleanOptional(row.ImageUrl),
+            SynonymsJson = string.IsNullOrWhiteSpace(row.SynonymsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.SynonymsRaw!)),
+            CollocationsJson = string.IsNullOrWhiteSpace(row.CollocationsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.CollocationsRaw!)),
+            RelatedTermsJson = string.IsNullOrWhiteSpace(row.RelatedTermsRaw) ? "[]" : JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!)),
+            // Apply the chosen recall-set categorisation to every imported row
+            // so admins can filter/maintain the practice-collection later.
+            RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(new[] { recallSetCode }),
+            // BuildBatchSourceProvenance(null, batchId) auto-stamps
+            // "batch={id};source=admin-vocabulary-import;date=yyyy-MM-dd"
+            // when the CSV row omits provenance.
+            SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId),
+            Status = "draft",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private static void UpdateVocabularyTermFromCsvRow(
+        VocabularyTerm existing, CsvVocabRow row, string importBatchId, string recallSetCode, int occurrences)
+    {
+        existing.Term = row.Term!.Trim();
+        if (!string.IsNullOrWhiteSpace(row.Definition))
+            existing.Definition = CleanOptional(row.Definition);
+        if (!string.IsNullOrWhiteSpace(row.ExampleSentence))
+            existing.ExampleSentence = CleanOptional(row.ExampleSentence);
+        if (!string.IsNullOrWhiteSpace(row.ContextNotes))
+            existing.ContextNotes = CleanOptional(row.ContextNotes);
+        existing.ExamTypeCode = ExamCodes.Normalize(row.ExamTypeCode);
+        if (!string.IsNullOrWhiteSpace(row.ProfessionId))
+            existing.ProfessionId = CleanOptional(row.ProfessionId);
+        if (!string.IsNullOrWhiteSpace(row.Category))
+            existing.Category = CleanOptional(row.Category) ?? existing.Category;
+        if (!string.IsNullOrWhiteSpace(row.IpaPronunciation))
+            existing.IpaPronunciation = CleanOptional(row.IpaPronunciation);
+        if (!string.IsNullOrWhiteSpace(row.AmericanSpelling))
+            existing.AmericanSpelling = CleanOptional(row.AmericanSpelling);
+        if (!string.IsNullOrWhiteSpace(row.AudioUrl))
+            existing.AudioUrl = CleanOptional(row.AudioUrl);
+        if (!string.IsNullOrWhiteSpace(row.AudioSlowUrl))
+            existing.AudioSlowUrl = CleanOptional(row.AudioSlowUrl);
+        if (!string.IsNullOrWhiteSpace(row.AudioSentenceUrl))
+            existing.AudioSentenceUrl = CleanOptional(row.AudioSentenceUrl);
+        if (!string.IsNullOrWhiteSpace(row.AudioMediaAssetId))
+            existing.AudioMediaAssetId = CleanOptional(row.AudioMediaAssetId);
+        if (!string.IsNullOrWhiteSpace(row.ImageUrl))
+            existing.ImageUrl = CleanOptional(row.ImageUrl);
+        if (!string.IsNullOrWhiteSpace(row.SynonymsRaw))
+            existing.SynonymsJson = JsonSupport.Serialize(SplitList(row.SynonymsRaw!));
+        if (!string.IsNullOrWhiteSpace(row.CollocationsRaw))
+            existing.CollocationsJson = JsonSupport.Serialize(SplitList(row.CollocationsRaw!));
+        if (!string.IsNullOrWhiteSpace(row.RelatedTermsRaw))
+            existing.RelatedTermsJson = JsonSupport.Serialize(SplitList(row.RelatedTermsRaw!));
+        // Record this set's occurrence count (source of truth); the helper
+        // derives ExamFrequencyCount (= sum across sets) and RecallSetCodesJson.
+        ApplyRecallSetOccurrence(existing, recallSetCode, occurrences);
+        existing.SourceProvenance = BuildBatchSourceProvenance(row.SourceProvenance, importBatchId);
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Adds <paramref name="recallSetCode"/> to the term's multi-tag
+    /// <see cref="VocabularyTerm.RecallSetCodesJson"/> array if not already
+    /// present. Returns true only when the code was NEWLY added — callers use
+    /// this to decide whether the appearance is a fresh exam-session membership
+    /// (bump ×N) or a redundant re-tag (leave ×N untouched).
+    /// </summary>
+    private static bool AddRecallSetCode(VocabularyTerm term, string recallSetCode)
+    {
+        var codes = new List<string>();
+        try { codes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(term.RecallSetCodesJson ?? "[]") ?? new(); } catch { }
+        if (codes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase))
+            return false;
+        codes.Add(recallSetCode);
+        term.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(codes);
+        return true;
+    }
+
+    /// <summary>
+    /// Parses the per-set occurrence map (set code → count). Case-insensitive
+    /// keys; never throws — returns an empty map on malformed/empty JSON.
+    /// </summary>
+    private static Dictionary<string, int> ParseRecallSetOccurrences(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}")
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(json);
+            return map is null
+                ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, int>(map, StringComparer.OrdinalIgnoreCase);
+        }
+        catch { return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase); }
+    }
+
+    /// <summary>
+    /// SOURCE-OF-TRUTH mutation for the recall ×N badge. REPLACES this set's
+    /// occurrence count (one canonical CSV per set → re-importing corrects the
+    /// count without inflating), then re-derives the two cached fields:
+    /// <see cref="VocabularyTerm.ExamFrequencyCount"/> = sum of the map's values,
+    /// and <see cref="VocabularyTerm.RecallSetCodesJson"/> = sorted map keys.
+    /// </summary>
+    private static void ApplyRecallSetOccurrence(VocabularyTerm term, string setCode, int occurrences)
+    {
+        if (occurrences < 1) occurrences = 1;
+        var map = ParseRecallSetOccurrences(term.RecallSetOccurrencesJson);
+        // Legacy rows created before this map existed (or a term whose map has
+        // not yet been rebuilt for every set it carries) can list codes in
+        // RecallSetCodesJson that are absent from the map. Both RecallSetCodesJson
+        // and ExamFrequencyCount below are recomputed purely from the map, so
+        // without this, replacing just ONE set's count here would silently evict
+        // the term from every OTHER set it's tagged with until that set is ALSO
+        // re-imported. Seed orphaned codes with a conservative occurrence of 1 so
+        // membership survives an incremental, one-set-at-a-time rebuild.
+        try
+        {
+            var existingCodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(term.RecallSetCodesJson ?? "[]") ?? new();
+            foreach (var orphanCode in existingCodes)
+            {
+                if (!map.ContainsKey(orphanCode)) map[orphanCode] = 1;
+            }
+        }
+        catch { /* malformed legacy JSON — nothing to preserve */ }
+        map[setCode] = occurrences;
+        var clean = map.Where(kv => kv.Value > 0)
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+        var keys = clean.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
+        term.RecallSetOccurrencesJson = System.Text.Json.JsonSerializer.Serialize(clean);
+        term.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(keys);
+        term.ExamFrequencyCount = clean.Values.Sum();
+    }
+
+    /// <summary>
+    /// True when the term's multi-tag recall-set array already contains
+    /// <paramref name="recallSetCode"/> (case-insensitive).
+    /// </summary>
+    private static bool RecallSetCodesContains(string? recallSetCodesJson, string recallSetCode)
+    {
+        try
+        {
+            var codes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(recallSetCodesJson ?? "[]") ?? new();
+            return codes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    private static string TryExtractRecallSetCodeFromStored(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return string.Empty;
+        try
+        {
+            var arr = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            return arr.FirstOrDefault() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private async Task<string> EnsureRecallSetCodeOrThrowAsync(string? recallSetCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(recallSetCode))
+        {
+            throw ApiException.Validation(
+                "RECALL_SET_CODE_REQUIRED",
+                "A practice-collection (recall set) label is required for every bulk upload. Pick one of: " +
+                string.Join(", ", OetWithDrHesham.Api.Domain.RecallSetCodes.All) +
+                ", or any custom code created in /admin/content/vocabulary/recall-set-tags.");
+        }
+        var code = recallSetCode.Trim().ToLowerInvariant();
+        var inDb = await db.RecallSetTags.AsNoTracking()
+            .AnyAsync(t => t.Code == code && t.IsActive, ct);
+        if (inDb) return code;
+        if (OetWithDrHesham.Api.Domain.RecallSetCodes.IsKnown(code))
+            return OetWithDrHesham.Api.Domain.RecallSetCodes.Normalise(code)!;
+        throw ApiException.Validation(
+            "RECALL_SET_CODE_UNKNOWN",
+            $"Recall set code '{recallSetCode}' is not active. Create or unarchive it in /admin/content/vocabulary/recall-set-tags first.");
+    }
+
+    private static async Task<string> ComputeFileSha256Async(IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        var hash = await SHA256.HashDataAsync(stream, ct);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private async Task UpsertVocabularyImportDryRunAsync(string importBatchId, string fileSha256, int imported, CancellationToken ct)
+    {
+        var payload = new VocabularyImportDryRunLedger(importBatchId, fileSha256, imported, DateTimeOffset.UtcNow);
+        await UpsertVocabularyImportLedgerAsync(VocabularyImportDryRunLedgerId(importBatchId), "admin-vocabulary-import-dry-run", importBatchId, payload, ct);
+    }
+
+    private async Task RequireMatchingVocabularyImportDryRunAsync(string importBatchId, string fileSha256, int imported, CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(r => r.Id == VocabularyImportDryRunLedgerId(importBatchId), ct);
+        if (record is null)
+            throw ApiException.Validation("VOCABULARY_IMPORT_DRY_RUN_REQUIRED", "A clean dry run for this import batch and file is required before commit.");
+
+        var ledger = JsonSupport.Deserialize<VocabularyImportDryRunLedger?>(record.ResponseJson, null);
+        if (ledger is null || ledger.FileSha256 != fileSha256 || ledger.Imported != imported)
+            throw ApiException.Validation("VOCABULARY_IMPORT_DRY_RUN_MISMATCH", "The commit file does not match the latest clean dry run for this import batch.");
+    }
+
+    private async Task EnsureVocabularyImportCommitLedgerAvailableAsync(string importBatchId, CancellationToken ct)
+    {
+        if (await VocabularyImportCommitLedgerExistsAsync(importBatchId, ct))
+            throw ApiException.Validation("VOCABULARY_IMPORT_BATCH_ALREADY_COMMITTED", "This import batch id has already been committed and cannot be reused.");
+    }
+
+    private async Task CreateVocabularyImportCommitLedgerAsync(string importBatchId, string fileSha256, IReadOnlyList<string> termIds, CancellationToken ct)
+    {
+        await EnsureVocabularyImportCommitLedgerAvailableAsync(importBatchId, ct);
+        var payload = new VocabularyImportCommitLedger(importBatchId, fileSha256, termIds.ToArray(), DateTimeOffset.UtcNow);
+        db.IdempotencyRecords.Add(new IdempotencyRecord
+        {
+            Id = VocabularyImportCommitLedgerId(importBatchId),
+            Scope = "admin-vocabulary-import-commit",
+            Key = importBatchId,
+            ResponseJson = JsonSupport.Serialize(payload),
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private async Task UpsertVocabularyImportLedgerAsync(string id, string scope, string key, object payload, CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (record is null)
+        {
+            db.IdempotencyRecords.Add(new IdempotencyRecord
+            {
+                Id = id,
+                Scope = scope,
+                Key = key,
+                ResponseJson = JsonSupport.Serialize(payload),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            return;
+        }
+
+        record.Scope = scope;
+        record.Key = key;
+        record.ResponseJson = JsonSupport.Serialize(payload);
+        record.CreatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private async Task<IReadOnlyList<string>> GetVocabularyImportCommitTermIdsAsync(string importBatchId, CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(r => r.Id == VocabularyImportCommitLedgerId(importBatchId), ct);
+        var ledger = JsonSupport.Deserialize<VocabularyImportCommitLedger?>(record?.ResponseJson, null);
+        return ledger?.TermIds ?? Array.Empty<string>();
+    }
+
+    private async Task<bool> VocabularyImportCommitLedgerExistsAsync(string importBatchId, CancellationToken ct)
+        => await db.IdempotencyRecords.AsNoTracking().AnyAsync(r => r.Id == VocabularyImportCommitLedgerId(importBatchId), ct);
+
+    private static string VocabularyImportDryRunLedgerId(string importBatchId)
+        => $"vocab-dryrun:{importBatchId}";
+
+    private static string VocabularyImportCommitLedgerId(string importBatchId)
+        => $"vocab-commit:{importBatchId}";
+
+    private async Task<List<VocabularyTerm>> GetVocabularyImportBatchRowsAsync(string importBatchId, CancellationToken ct)
+    {
+        var termIds = await GetVocabularyImportCommitTermIdsAsync(importBatchId, ct);
+        if (termIds.Count == 0) return [];
+
+        return await db.VocabularyTerms
+            .Where(v => termIds.Contains(v.Id))
+            .OrderBy(v => v.Term)
+            .ThenBy(v => v.Id)
+            .ToListAsync(ct);
+    }
+
+    private static string BuildBatchSourceProvenance(string? sourceProvenance, string importBatchId)
+    {
+        var prefix = BatchProvenancePrefix(importBatchId);
+        var compact = CleanOptional(sourceProvenance);
+        if (compact is null)
+            return $"{prefix}source=admin-vocabulary-import;date={DateTimeOffset.UtcNow:yyyy-MM-dd}";
+        return $"{prefix}{StripExistingBatchPrefix(compact)}";
+    }
+
+    private static string StripExistingBatchPrefix(string value)
+    {
+        if (!value.StartsWith("batch=", StringComparison.OrdinalIgnoreCase)) return value;
+        var delimiter = value.IndexOf(';');
+        return delimiter < 0 ? string.Empty : value[(delimiter + 1)..].TrimStart();
+    }
+
+    private static string BatchProvenancePrefix(string importBatchId)
+        => $"batch={importBatchId};";
+
+    private static string NormalizeImportBatchId(string? importBatchId)
+    {
+        if (string.IsNullOrWhiteSpace(importBatchId))
+            return $"vocab-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..31];
+        return NormalizeExistingImportBatchId(importBatchId);
+    }
+
+    private static string NormalizeExistingImportBatchId(string importBatchId)
+    {
+        var normalized = importBatchId.Trim();
+        if (normalized.Length is < 3 or > 64)
+            throw ApiException.Validation("INVALID_IMPORT_BATCH_ID", "Import batch id must be between 3 and 64 characters.");
+        if (normalized.Any(ch => !(char.IsLetterOrDigit(ch) || ch is '-' or '_' or '.' or ':')))
+            throw ApiException.Validation("INVALID_IMPORT_BATCH_ID", "Import batch id may contain only letters, numbers, dash, underscore, dot, and colon.");
+        return normalized;
+    }
+
+    private static string RecallImportAudioBatchId(string importBatchId)
+    {
+        var normalized = NormalizeExistingImportBatchId(importBatchId);
+        if (normalized.Length <= 57) return $"recall:{normalized}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized))).ToLowerInvariant();
+        return $"recall:{hash[..16]}";
+    }
+
+    private static bool IsRecallVocabularyTerm(VocabularyTerm term)
+        => !string.IsNullOrWhiteSpace(term.RecallSetCodesJson)
+           && term.RecallSetCodesJson.Trim() != "[]";
+
+    private static int CountReadyVocabularyAudio(IEnumerable<VocabularyTerm> rows)
+        => rows.Count(t => !string.IsNullOrWhiteSpace(t.AudioMediaAssetId)
+                           || !string.IsNullOrWhiteSpace(t.AudioUrl));
+
+    private static string PreviewDuplicateKey(CsvVocabRow row)
+    {
+        var key = BuildImportKey(row);
+        return $"{key.Term}|{key.ExamTypeCode}|{key.ProfessionId}";
+    }
+
+    private async Task<VocabularyTerm?> FindExistingVocabularyTermForImportAsync(ImportKey key, CancellationToken ct)
+        => await db.VocabularyTerms.FirstOrDefaultAsync(t =>
+            t.Status != "archived" &&
+            t.Term.Trim().ToLower() == key.Term &&
+            t.ExamTypeCode.Trim().ToLower() == key.ExamTypeCode &&
+            (t.ProfessionId == null ? string.Empty : t.ProfessionId.Trim().ToLower()) == key.ProfessionId,
+            ct);
+
+    private static ImportKey BuildImportKey(CsvVocabRow row)
+    {
+        var examType = string.IsNullOrWhiteSpace(row.ExamTypeCode) ? "oet" : row.ExamTypeCode!.Trim();
+        var professionId = CleanOptional(row.ProfessionId) ?? string.Empty;
+        return new ImportKey(NormalizeImportKeyPart(row.Term), NormalizeImportKeyPart(examType), NormalizeImportKeyPart(professionId));
+    }
+
+    private static string NormalizeImportKeyPart(string? value)
+        => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+
+    private sealed record ImportKey(string Term, string ExamTypeCode, string ProfessionId);
+
+    private sealed record VocabularyImportDryRunLedger(
+        string ImportBatchId,
+        string FileSha256,
+        int Imported,
+        DateTimeOffset ConfirmedAt);
+
+    private sealed record VocabularyImportCommitLedger(
+        string ImportBatchId,
+        string FileSha256,
+        IReadOnlyList<string> TermIds,
+        DateTimeOffset CommittedAt);
+
+    private sealed record CsvVocabRecord(int LineNumber, List<string> Fields);
+
+    private sealed record CsvVocabRow(
+        int LineNumber,
+        string? Term,
+        string? Definition,
+        string? ExampleSentence,
+        string? Category,
+        string? Difficulty,
+        string? ProfessionId,
+        string? ExamTypeCode,
+        string? IpaPronunciation,
+        string? AmericanSpelling,
+        string? AudioUrl,
+        string? AudioSlowUrl,
+        string? AudioSentenceUrl,
+        string? AudioMediaAssetId,
+        string? ContextNotes,
+        string? SynonymsRaw,
+        string? CollocationsRaw,
+        string? RelatedTermsRaw,
+        string? SourceProvenance,
+        string? ImageUrl,
+        string? ExistingId);
+
+    private async Task<VocabularyImportValidationContext> BuildVocabularyImportValidationContextAsync(CancellationToken ct)
+    {
+        var examTypes = await db.ExamTypes.AsNoTracking()
+            .Select(e => new { e.Code, e.Status, e.ProfessionIdsJson })
+            .ToListAsync(ct);
+        var professions = await db.Professions.AsNoTracking()
+            .Where(p => p.Status == "active")
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+
+        var examTypeCodes = examTypes
+            .Where(e => !string.Equals(e.Status, "archived", StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Code)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var knownProfessionIds = professions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var examTypeProfessionIds = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var examType in examTypes)
+        {
+            var ids = JsonSupport.Deserialize<string[]?>(examType.ProfessionIdsJson, null) ?? Array.Empty<string>();
+            var allowed = ids
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in allowed) knownProfessionIds.Add(id);
+            examTypeProfessionIds[examType.Code] = allowed;
+        }
+
+        return new VocabularyImportValidationContext(examTypeCodes, knownProfessionIds, examTypeProfessionIds);
+    }
+
+    private static (bool Ok, string? Error) ValidateCsvRow(
+        CsvVocabRow r,
+        string importBatchId,
+        VocabularyImportValidationContext validation)
+    {
+        // Term is the only hard-required field. Imported rows land as
+        // status="draft"; the publish gate enforces Definition + provenance
+        // before a row can leave draft, so optional fields here are safe.
+        if (string.IsNullOrWhiteSpace(r.Term)) return (false, "Empty 'term'.");
+        if (r.Term.Trim().Length > 128) return (false, "Term exceeds 128 characters.");
+
+        if (!string.IsNullOrWhiteSpace(r.Definition) && r.Definition!.Trim().Length > 1024)
+            return (false, "Definition exceeds 1024 characters.");
+        if (TrimmedLength(r.ExampleSentence) > 2048) return (false, "Example sentence exceeds 2048 characters.");
+        if (TrimmedLength(r.ContextNotes) > 1024) return (false, "Context notes exceed 1024 characters.");
+        if (TrimmedLength(r.ExamTypeCode) > 16) return (false, "Exam type code exceeds 16 characters.");
+        if (TrimmedLength(r.ProfessionId) > 32) return (false, "Profession id exceeds 32 characters.");
+        if (TrimmedLength(r.Category) > 64) return (false, "Category exceeds 64 characters.");
+        if (TrimmedLength(r.IpaPronunciation) > 64) return (false, "IPA pronunciation exceeds 64 characters.");
+        if (TrimmedLength(r.AmericanSpelling) > 128) return (false, "American spelling exceeds 128 characters.");
+        if (TrimmedLength(r.AudioUrl) > 256) return (false, "Audio URL exceeds 256 characters.");
+        if (TrimmedLength(r.AudioSlowUrl) > 256) return (false, "Slow audio URL exceeds 256 characters.");
+        if (TrimmedLength(r.AudioSentenceUrl) > 256) return (false, "Sentence audio URL exceeds 256 characters.");
+        if (TrimmedLength(r.AudioMediaAssetId) > 64) return (false, "Audio media asset id exceeds 64 characters.");
+
+        // SourceProvenance is optional on import. When the row supplies a
+        // value we still enforce the compact source-pointer contract. When
+        // it's missing, CreateVocabularyTermFromCsvRow stamps an auto
+        // "batch={id};source=admin-vocabulary-import;date=..." provenance via
+        // BuildBatchSourceProvenance(null, batchId), which the publish gate
+        // still requires before activation.
+        if (!string.IsNullOrWhiteSpace(r.SourceProvenance))
+        {
+            if (TrimmedLength(r.SourceProvenance) > 512) return (false, "Source provenance exceeds 512 characters.");
+            if (!HasCompactSourcePointer(r.SourceProvenance!)) return (false, "Source provenance must include a compact source pointer such as src=..., source=..., or manifest=....");
+            if (BuildBatchSourceProvenance(r.SourceProvenance, importBatchId).Length > 512) return (false, "Source provenance plus import batch id exceeds 512 characters.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(r.Category))
+        {
+            var category = r.Category!.Trim();
+            if (!ApprovedVocabularyCategories.Contains(category))
+                return (false, $"Unknown category '{category}'. Use an approved vocabulary taxonomy value or record editorial approval before import.");
+        }
+
+        var examTypeCode = ExamCodes.Normalize(r.ExamTypeCode);
+        if (!validation.ExamTypeCodes.Contains(examTypeCode))
+            return (false, $"Unknown exam type code '{examTypeCode}'.");
+
+        var professionId = CleanOptional(r.ProfessionId);
+        if (professionId is not null)
+        {
+            if (validation.ExamTypeProfessionIds.TryGetValue(examTypeCode, out var allowedForExam) && allowedForExam.Count > 0)
+            {
+                if (!allowedForExam.Contains(professionId))
+                    return (false, $"Profession id '{professionId}' is not approved for exam type '{examTypeCode}'.");
+            }
+            else if (!validation.KnownProfessionIds.Contains(professionId))
+            {
+                return (false, $"Unknown profession id '{professionId}'.");
+            }
+        }
+
+        return (true, null);
+    }
+
+    private static readonly HashSet<string> ApprovedVocabularyCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "general",
+        "medical",
+        "anatomy",
+        "pharmacology",
+        "procedures",
+        "symptoms",
+        "conditions",
+        "diagnostics",
+        "clinical_communication",
+        "communication",
+        "nursing_care",
+        "oral_health",
+        "dispensing",
+        "counselling",
+        // Singular forms (accepted alongside plural for CSV convenience)
+        "symptom",
+        "condition",
+        // Additional OET vocabulary taxonomy categories
+        "medication",
+        "nutrition",
+        "profession",
+        "descriptor",
+        "activity",
+        "function",
+        "investigation",
+        // Default category for header-less / undeclared rows imported via the
+        // term-only CSV path. The publish gate still enforces medical-category
+        // pronunciation rules separately, so this is safe to expose.
+        "recall-term"
+    };
+
+    private sealed record VocabularyImportValidationContext(
+        HashSet<string> ExamTypeCodes,
+        HashSet<string> KnownProfessionIds,
+        Dictionary<string, HashSet<string>> ExamTypeProfessionIds);
+
+    private static int TrimmedLength(string? value)
+        => string.IsNullOrWhiteSpace(value) ? 0 : value.Trim().Length;
+
+    private static bool HasCompactSourcePointer(string sourceProvenance)
+    {
+        var compact = StripExistingBatchPrefix(sourceProvenance).Trim();
+        if (compact.Length == 0 || !compact.Contains('=')) return false;
+
+        foreach (var part in compact.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var equalsIndex = part.IndexOf('=');
+            if (equalsIndex <= 0) continue;
+
+            var key = part[..equalsIndex].Trim();
+            var value = part[(equalsIndex + 1)..].Trim().Trim('"', '\'');
+            if (!IsSourcePointerKey(key) || !IsSpecificSourcePointerValue(value)) continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsSourcePointerKey(string key)
+        => key.ToLowerInvariant() is "src" or "source" or "sourcedocumentid" or "document" or "doc" or "manifest";
+
+    private static bool IsSpecificSourcePointerValue(string value)
+        => !string.IsNullOrWhiteSpace(value)
+            && value.ToLowerInvariant() is not "admin-vocabulary-import" and not "csv" and not "import" and not "unknown" and not "n/a" and not "na" and not "none" and not "null" and not "placeholder";
+
+    // Headers recognised as a valid first-row header. Keep lowercase; the
+    // matcher compares trimmed lowercase tokens. If the first record's fields
+    // contain ANY of these, the row is treated as a header row and subsequent
+    // rows are parsed by column name. Otherwise the file is treated as
+    // header-less with positional columns: 0=Term, 1=Definition, 2=Category,
+    // 3=Difficulty (all but Term optional).
+    private static readonly HashSet<string> KnownVocabularyCsvHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "term", "definition", "examplesentence", "example",
+        "category", "difficulty",
+        "professionid", "profession",
+        "examtypecode", "examtype",
+        "ipapronunciation", "ipa", "pronunciation",
+        "americanspelling", "american", "usspelling", "usvariant",
+        "audiourl", "audio",
+        "audioslowurl", "slowaudio", "audioslow",
+        "audiosentenceurl", "sentenceaudio", "audiosentence",
+        "audiomediaassetid", "audioassetid", "mediaassetid",
+        "contextnotes", "context",
+        "synonyms", "synonymscsv", "synonymsjson",
+        "collocations", "collocationscsv", "collocationsjson",
+        "relatedterms", "relatedtermscsv", "relatedtermsjson",
+        "sourceprovenance", "provenance",
+        "imageurl", "image",
+        "id",
+        "importbatchid", "status", "createdat", "updatedat",
+    };
+
+    private static async Task<List<CsvVocabRow>> ParseCsvAsync(IFormFile file, CancellationToken ct)
+    {
+        var rows = new List<CsvVocabRow>();
+        // Auto-detect encoding: try UTF-8 first (with BOM detection enabled),
+        // then fall back to Windows-1252 if the stream contains invalid UTF-8 sequences.
+        string content;
+        using (var stream = file.OpenReadStream())
+        using (var ms = new MemoryStream())
+        {
+            await stream.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+            // Check for UTF-8 BOM (EF BB BF) or UTF-16 LE BOM (FF FE)
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                content = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+            }
+            else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            {
+                content = Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+            else
+            {
+                // Try UTF-8; if it produces replacement chars, fall back to Windows-1252
+                content = Encoding.UTF8.GetString(bytes);
+                if (content.Contains('\uFFFD'))
+                {
+                    try
+                    {
+                        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                        content = Encoding.GetEncoding(1252).GetString(bytes);
+                    }
+                    catch { /* stick with UTF-8 if codepage unavailable */ }
+                }
+            }
+        }
+        // Defensively strip a leading UTF-8 BOM. StreamReader normally
+        // consumes it, but uploaders that pre-encode the file may include a
+        // literal U+FEFF as the first character.
+        if (content.Length > 0 && content[0] == '\uFEFF') content = content[1..];
+        var records = ParseVocabCsvRecords(content);
+        if (records.Count == 0)
+            throw ApiException.Validation("INVALID_CSV", "CSV file is empty.");
+
+        var firstRecord = records[0];
+        var firstFields = firstRecord.Fields.Select(h => h.Trim().ToLowerInvariant()).ToArray();
+        var looksLikeHeader = firstFields.Any(f => KnownVocabularyCsvHeaders.Contains(f));
+
+        if (looksLikeHeader)
+        {
+            var headers = firstFields;
+            int Col(params string[] names)
+            {
+                foreach (var n in names)
+                {
+                    var idx = Array.IndexOf(headers, n.ToLowerInvariant());
+                    if (idx >= 0) return idx;
+                }
+                return -1;
+            }
+
+            var ti = Col("term");
+            if (ti < 0)
+                throw ApiException.Validation("INVALID_CSV", "CSV header row must include a 'Term' column.");
+            var di = Col("definition");
+            var ei = Col("examplesentence", "example");
+            var ci = Col("category");
+            var dfi = Col("difficulty");
+            var pi = Col("professionid", "profession");
+            var exi = Col("examtypecode", "examtype");
+            var ipi = Col("ipapronunciation", "ipa", "pronunciation");
+            var usi = Col("americanspelling", "american", "usspelling", "usvariant");
+            var ai = Col("audiourl", "audio");
+            var asi = Col("audioslowurl", "slowaudio", "audioslow");
+            var ati = Col("audiosentenceurl", "sentenceaudio", "audiosentence");
+            var ami = Col("audiomediaassetid", "audioassetid", "mediaassetid");
+            var cni = Col("contextnotes", "context");
+            var sy = Col("synonyms", "synonymscsv", "synonymsjson");
+            var co = Col("collocations", "collocationscsv", "collocationsjson");
+            var rt = Col("relatedterms", "relatedtermscsv", "relatedtermsjson");
+            var sp = Col("sourceprovenance", "provenance");
+            var iu = Col("imageurl", "image");
+            var eid = Col("id");
+
+            foreach (var record in records.Skip(1))
+            {
+                var cols = record.Fields;
+                string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
+
+                rows.Add(new CsvVocabRow(
+                    LineNumber: record.LineNumber,
+                    Term: Get(ti),
+                    Definition: Get(di),
+                    ExampleSentence: Get(ei),
+                    Category: Get(ci),
+                    Difficulty: Get(dfi),
+                    ProfessionId: Get(pi),
+                    ExamTypeCode: Get(exi),
+                    IpaPronunciation: Get(ipi),
+                    AmericanSpelling: Get(usi),
+                    AudioUrl: Get(ai),
+                    AudioSlowUrl: Get(asi),
+                    AudioSentenceUrl: Get(ati),
+                    AudioMediaAssetId: Get(ami),
+                    ContextNotes: Get(cni),
+                    SynonymsRaw: Get(sy),
+                    CollocationsRaw: Get(co),
+                    RelatedTermsRaw: Get(rt),
+                    SourceProvenance: Get(sp),
+                    ImageUrl: Get(iu),
+                    ExistingId: Get(eid)));
+            }
+        }
+        else
+        {
+            // Header-less mode. Positional columns:
+            //   0 = Term (required)
+            //   1 = Definition (optional)
+            //   2 = Category (optional)
+            //   3 = Difficulty (optional)
+            // Everything else is left null; the row will be created as
+            // status="draft" with auto-stamped source provenance.
+            foreach (var record in records)
+            {
+                var cols = record.Fields;
+                string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
+
+                rows.Add(new CsvVocabRow(
+                    LineNumber: record.LineNumber,
+                    Term: Get(0),
+                    Definition: Get(1),
+                    ExampleSentence: null,
+                    Category: Get(2),
+                    Difficulty: Get(3),
+                    ProfessionId: null,
+                    ExamTypeCode: null,
+                    IpaPronunciation: null,
+                    AmericanSpelling: null,
+                    AudioUrl: null,
+                    AudioSlowUrl: null,
+                    AudioSentenceUrl: null,
+                    AudioMediaAssetId: null,
+                    ContextNotes: null,
+                    SynonymsRaw: null,
+                    CollocationsRaw: null,
+                    RelatedTermsRaw: null,
+                    SourceProvenance: null,
+                    ImageUrl: null,
+                    ExistingId: null));
+            }
+        }
+        return rows;
+    }
+
+    private static string? CleanOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<CsvVocabRecord> ParseVocabCsvRecords(string csvContent)
+    {
+        var records = new List<CsvVocabRecord>();
+        var fields = new List<string>();
+        var sb = new StringBuilder();
+        var recordLineNumber = 1;
+        var lineNumber = 1;
+        var inQuotes = false;
+
+        // Auto-detect field delimiter from first line (comma, semicolon, or tab)
+        var firstLineEnd = csvContent.IndexOfAny(new[] { '\r', '\n' });
+        var firstLine = firstLineEnd >= 0 ? csvContent[..firstLineEnd] : csvContent;
+        var commas = firstLine.Count(c => c == ',');
+        var semicolons = firstLine.Count(c => c == ';');
+        var tabs = firstLine.Count(c => c == '\t');
+        var delimiter = commas >= semicolons && commas >= tabs ? ','
+                      : semicolons >= tabs ? ';'
+                      : '\t';
+
+        void AddRecord()
+        {
+            fields.Add(sb.ToString());
+            sb.Clear();
+            if (fields.Any(field => !string.IsNullOrWhiteSpace(field)))
+                records.Add(new CsvVocabRecord(recordLineNumber, fields.ToList()));
+            fields.Clear();
+        }
+
+        for (var i = 0; i < csvContent.Length; i++)
+        {
+            var c = csvContent[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < csvContent.Length && csvContent[i + 1] == '"')
+                    {
+                        sb.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    if (c == '\r' || c == '\n')
+                    {
+                        if (c == '\r' && i + 1 < csvContent.Length && csvContent[i + 1] == '\n')
+                        {
+                            sb.Append("\r\n");
+                            i++;
+                        }
+                        else
+                        {
+                            sb.Append(c);
+                        }
+                        lineNumber++;
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+                }
+            }
+            else
+            {
+                if (c == '"') inQuotes = true;
+                else if (c == delimiter)
+                {
+                    fields.Add(sb.ToString());
+                    sb.Clear();
+                }
+                else if (c == '\r' || c == '\n')
+                {
+                    AddRecord();
+                    if (c == '\r' && i + 1 < csvContent.Length && csvContent[i + 1] == '\n') i++;
+                    lineNumber++;
+                    recordLineNumber = lineNumber;
+                }
+                else sb.Append(c);
+            }
+        }
+
+        if (inQuotes)
+            throw ApiException.Validation("INVALID_CSV", $"CSV has an unclosed quoted field starting at line {recordLineNumber}.");
+
+        if (fields.Count > 0 || sb.Length > 0)
+            AddRecord();
+
+        return records;
+    }
+
+    private static string VocabularyTermDuplicateKey(VocabularyTerm row)
+        => $"{NormalizeImportKeyPart(row.Term)}|{NormalizeImportKeyPart(row.ExamTypeCode)}|{NormalizeImportKeyPart(row.ProfessionId)}";
+
+    private static IReadOnlyList<AdminVocabularyImportReconciliationFieldMismatch> CompareVocabularyImportRow(
+        CsvVocabRow manifestRow,
+        VocabularyTerm storedRow,
+        string importBatchId)
+    {
+        // Reconciliation uses the manifest's original recall set code if
+        // stored in the row, otherwise falls back to "" so the comparison
+        // doesn't accidentally introduce a tag where the source had none.
+        var expectedRecallSet = TryExtractRecallSetCodeFromStored(storedRow.RecallSetCodesJson);
+        var expected = CreateVocabularyTermFromCsvRow(manifestRow, "expected", importBatchId, expectedRecallSet);
+        var mismatches = new List<AdminVocabularyImportReconciliationFieldMismatch>();
+
+        void Compare(string field, string? expectedValue, string? actualValue)
+        {
+            if (string.Equals(expectedValue ?? string.Empty, actualValue ?? string.Empty, StringComparison.Ordinal)) return;
+            mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch(field, expectedValue, actualValue));
+        }
+
+        Compare("term", expected.Term, storedRow.Term);
+        Compare("definition", expected.Definition, storedRow.Definition);
+        Compare("exampleSentence", expected.ExampleSentence, storedRow.ExampleSentence);
+        Compare("contextNotes", expected.ContextNotes, storedRow.ContextNotes);
+        Compare("examTypeCode", expected.ExamTypeCode, storedRow.ExamTypeCode);
+        Compare("professionId", expected.ProfessionId, storedRow.ProfessionId);
+        Compare("category", expected.Category, storedRow.Category);
+        Compare("ipaPronunciation", expected.IpaPronunciation, storedRow.IpaPronunciation);
+        Compare("americanSpelling", expected.AmericanSpelling, storedRow.AmericanSpelling);
+        Compare("audioUrl", expected.AudioUrl, storedRow.AudioUrl);
+        Compare("audioSlowUrl", expected.AudioSlowUrl, storedRow.AudioSlowUrl);
+        Compare("audioSentenceUrl", expected.AudioSentenceUrl, storedRow.AudioSentenceUrl);
+        Compare("audioMediaAssetId", expected.AudioMediaAssetId, storedRow.AudioMediaAssetId);
+        Compare("synonymsJson", expected.SynonymsJson, storedRow.SynonymsJson);
+        Compare("collocationsJson", expected.CollocationsJson, storedRow.CollocationsJson);
+        Compare("relatedTermsJson", expected.RelatedTermsJson, storedRow.RelatedTermsJson);
+        CompareSourceProvenance(manifestRow.SourceProvenance, storedRow.SourceProvenance, importBatchId, mismatches);
+        Compare("status", expected.Status, storedRow.Status);
+
+        return mismatches;
+    }
+
+    private static void CompareSourceProvenance(
+        string? manifestSourceProvenance,
+        string? storedSourceProvenance,
+        string importBatchId,
+        List<AdminVocabularyImportReconciliationFieldMismatch> mismatches)
+    {
+        if (string.IsNullOrWhiteSpace(manifestSourceProvenance))
+        {
+            var expectedPrefix = $"{BatchProvenancePrefix(importBatchId)}source=admin-vocabulary-import;date=";
+            if (storedSourceProvenance?.StartsWith(expectedPrefix, StringComparison.Ordinal) == true) return;
+            mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch("sourceProvenance", expectedPrefix + "yyyy-MM-dd", storedSourceProvenance));
+            return;
+        }
+
+        var expected = BuildBatchSourceProvenance(manifestSourceProvenance, importBatchId);
+        if (!string.Equals(expected, storedSourceProvenance, StringComparison.Ordinal))
+            mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch("sourceProvenance", expected, storedSourceProvenance));
+    }
+
+    public async Task<object> BulkImportVocabularyAsync(
+        string adminId, string adminName, IFormFile file, CancellationToken ct)
+    {
+        // Backward-compat thin wrapper: keep legacy callers non-committing.
+        // No recall set code on v1 (legacy callers don't supply one) — the v2
+        // validator throws RECALL_SET_CODE_REQUIRED, which legacy CLI/scripts
+        // can intercept and pass --recall-set-code instead.
+        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: true, importBatchId: null, recallSetCode: null, ct);
+        return new
+        {
+            importBatchId = res.ImportBatchId,
+            imported = res.Imported,
+            skipped = res.Skipped,
+            duplicates = res.Duplicates,
+            failedRows = res.FailedRows,
+            errors = res.Errors.Take(20),
+        };
+    }
+
+    // ════════════════════════════════════════════
+    //  Conversation Templates
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetConversationTemplatesAsync(
+        string? profession, string? status, string? search, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.ConversationTemplates.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(profession))
+            query = query.Where(t => t.ProfessionId == profession);
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(t => t.Status == status);
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(t => t.Title.Contains(search) || t.Scenario.Contains(search));
+
+        var total = await query.CountAsync(ct);
+        var items = await ToOrderedListDescendingAsync(query, t => t.CreatedAt, ct, skip: (page - 1) * pageSize, take: pageSize);
+
+        return new
+        {
+            total, page, pageSize,
+            items = items.Select(t => new
+            {
+                t.Id, t.Title, t.TaskTypeCode, t.ProfessionId, t.Difficulty,
+                estimatedDurationSeconds = t.EstimatedDurationSeconds,
+                t.Status, t.PublishedAtUtc, t.CreatedAt, t.UpdatedAt,
+            })
+        };
+    }
+
+    public async Task<object> GetConversationTemplateDetailAsync(string templateId, CancellationToken ct)
+    {
+        var t = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+
+        return new
+        {
+            t.Id, t.Title, t.TaskTypeCode, t.ProfessionId, t.Scenario, t.RoleDescription,
+            t.PatientContext, t.ExpectedOutcomes, t.Difficulty,
+            estimatedDurationSeconds = t.EstimatedDurationSeconds,
+            objectives = JsonSupport.Deserialize<string[]>(t.ObjectivesJson, Array.Empty<string>()),
+            expectedRedFlags = JsonSupport.Deserialize<string[]>(t.ExpectedRedFlagsJson, Array.Empty<string>()),
+            keyVocabulary = JsonSupport.Deserialize<string[]>(t.KeyVocabularyJson, Array.Empty<string>()),
+            patientVoice = JsonSupport.Deserialize<Dictionary<string, object?>>(t.PatientVoiceJson, new Dictionary<string, object?>()),
+            t.Status, t.PublishedAtUtc, t.CreatedAt, t.UpdatedAt,
+            t.CreatedByUserId, t.UpdatedByUserId,
+        };
+    }
+
+    public async Task<object> CreateConversationTemplateAsync(
+        string adminId, string adminName, AdminConversationTemplateCreateRequest request, CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var id = $"CVT-{Guid.NewGuid():N}"[..12];
+        var now = DateTimeOffset.UtcNow;
+        var entity = new ConversationTemplate
+        {
+            Id = id,
+            Title = request.Title,
+            TaskTypeCode = string.IsNullOrWhiteSpace(request.TaskTypeCode) ? "oet-roleplay" : request.TaskTypeCode,
+            ProfessionId = request.ProfessionId,
+            Scenario = request.Scenario,
+            RoleDescription = request.RoleDescription,
+            PatientContext = request.PatientContext,
+            ExpectedOutcomes = request.ExpectedOutcomes,
+            ObjectivesJson = JsonSupport.Serialize(request.Objectives ?? Array.Empty<string>()),
+            ExpectedRedFlagsJson = JsonSupport.Serialize(request.ExpectedRedFlags ?? Array.Empty<string>()),
+            KeyVocabularyJson = JsonSupport.Serialize(request.KeyVocabulary ?? Array.Empty<string>()),
+            PatientVoiceJson = request.PatientVoice is null ? "{}" : JsonSupport.Serialize(request.PatientVoice),
+            Difficulty = request.Difficulty ?? "medium",
+            EstimatedDurationSeconds = request.EstimatedDurationSeconds ?? 300,
+            Status = "draft",
+            CreatedAt = now,
+            UpdatedAt = now,
+            CreatedByUserId = adminId,
+            UpdatedByUserId = adminId,
+        };
+        db.ConversationTemplates.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "ConversationTemplate", id, $"Created conversation template: {request.Title}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id, entity.Title, entity.Status };
+    }
+
+    public async Task<object> UpdateConversationTemplateAsync(
+        string adminId, string adminName, string templateId, AdminConversationTemplateUpdateRequest request, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+
+        if (request.Title is not null) entity.Title = request.Title;
+        if (request.TaskTypeCode is not null) entity.TaskTypeCode = request.TaskTypeCode;
+        if (request.ProfessionId is not null) entity.ProfessionId = request.ProfessionId;
+        if (request.Scenario is not null) entity.Scenario = request.Scenario;
+        if (request.RoleDescription is not null) entity.RoleDescription = request.RoleDescription;
+        if (request.PatientContext is not null) entity.PatientContext = request.PatientContext;
+        if (request.ExpectedOutcomes is not null) entity.ExpectedOutcomes = request.ExpectedOutcomes;
+        if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
+        if (request.EstimatedDurationSeconds is not null) entity.EstimatedDurationSeconds = request.EstimatedDurationSeconds.Value;
+        if (request.Objectives is not null) entity.ObjectivesJson = JsonSupport.Serialize(request.Objectives);
+        if (request.ExpectedRedFlags is not null) entity.ExpectedRedFlagsJson = JsonSupport.Serialize(request.ExpectedRedFlags);
+        if (request.KeyVocabulary is not null) entity.KeyVocabularyJson = JsonSupport.Serialize(request.KeyVocabulary);
+        if (request.PatientVoice is not null) entity.PatientVoiceJson = JsonSupport.Serialize(request.PatientVoice);
+        if (request.Status is not null) entity.Status = request.Status;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "ConversationTemplate", templateId, $"Updated conversation template: {entity.Title}", ct);
+
+        return new { id = templateId, entity.Status };
+    }
+
+    public async Task<object> PublishConversationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+
+        var issues = new List<string>();
+        if (string.IsNullOrWhiteSpace(entity.Title)) issues.Add("title_required");
+        if (string.IsNullOrWhiteSpace(entity.Scenario)) issues.Add("scenario_required");
+        if (string.IsNullOrWhiteSpace(entity.RoleDescription)) issues.Add("role_description_required");
+        if (string.IsNullOrWhiteSpace(entity.PatientContext)) issues.Add("patient_context_required");
+        var objectives = JsonSupport.Deserialize<string[]>(entity.ObjectivesJson, Array.Empty<string>());
+        if (objectives.Length < 3) issues.Add("objectives_min_3");
+        if (entity.EstimatedDurationSeconds <= 0) issues.Add("duration_required");
+        if (!new[] { "oet-roleplay", "oet-handover" }.Contains(entity.TaskTypeCode, StringComparer.OrdinalIgnoreCase))
+            issues.Add("task_type_invalid");
+        if (issues.Count > 0)
+            throw ApiException.Validation("PUBLISH_GATE_FAILED", string.Join(", ", issues));
+
+        entity.Status = "published";
+        entity.PublishedAtUtc = DateTimeOffset.UtcNow;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Published", "ConversationTemplate", templateId, $"Published conversation template: {entity.Title}", ct);
+
+        return new { id = templateId, status = "published", publishedAtUtc = entity.PublishedAtUtc };
+    }
+
+    public async Task<object> ArchiveConversationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+
+        entity.Status = "archived";
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Archived", "ConversationTemplate", templateId, $"Archived conversation template: {entity.Title}", ct);
+
+        return new { id = templateId, status = "archived" };
+    }
+
+    /// <summary>
+    /// Permanently deletes an archived conversation template and purges all learner
+    /// conversation sessions for it. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeleteConversationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+        if (entity.Status != "archived")
+            throw ApiException.Validation("conversation_force_delete_not_archived",
+                "Only archived conversation templates can be permanently deleted. Archive it first.");
+
+        db.ConversationSessions.RemoveRange(
+            await db.ConversationSessions.Where(s => s.TemplateId == templateId).ToListAsync(ct));
+        db.ConversationTemplates.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "ConversationTemplate", templateId,
+            $"Force-deleted conversation template + learner sessions: {entity.Title}", ct);
+
+        return new { id = templateId, deleted = true };
+    }
+
+    // ════════════════════════════════════════════
+    //  Pronunciation Drills
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetPronunciationDrillsAsync(
+        string? profession, string? difficulty, string? status, string? search, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.PronunciationDrills.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(profession))
+            query = query.Where(d => d.Profession == profession);
+        if (!string.IsNullOrWhiteSpace(difficulty))
+            query = query.Where(d => d.Difficulty == difficulty);
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(d => d.Status == status);
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(d => d.Label.Contains(search) || d.TargetPhoneme.Contains(search));
+
+        var total = await query.CountAsync(ct);
+        var items = await ToOrderedListDescendingAsync(query, d => d.Id, ct, skip: (page - 1) * pageSize, take: pageSize);
+
+        return new
+        {
+            total,
+            page,
+            pageSize,
+            items = items.Select(d => new
+            {
+                d.Id,
+                word = d.Label,
+                label = d.Label,
+                phoneticTranscription = d.TargetPhoneme,
+                targetPhoneme = d.TargetPhoneme,
+                d.Profession,
+                d.Focus,
+                d.PrimaryRuleId,
+                d.AudioModelUrl,
+                d.AudioModelAssetId,
+                d.Difficulty,
+                d.Status,
+                d.OrderIndex,
+                d.UpdatedAt
+            })
+        };
+    }
+
+    public async Task<object> GetPronunciationDrillDetailAsync(string drillId, CancellationToken ct)
+    {
+        var d = await db.PronunciationDrills.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("DRILL_NOT_FOUND", $"Pronunciation drill '{drillId}' not found.");
+
+        return new
+        {
+            d.Id,
+            word = d.Label,
+            label = d.Label,
+            phoneticTranscription = d.TargetPhoneme,
+            targetPhoneme = d.TargetPhoneme,
+            d.Profession,
+            d.Focus,
+            d.PrimaryRuleId,
+            audioUrl = d.AudioModelUrl,
+            d.AudioModelUrl,
+            d.AudioModelAssetId,
+            d.ExampleWordsJson,
+            d.MinimalPairsJson,
+            d.SentencesJson,
+            d.TipsHtml,
+            d.Difficulty,
+            d.Status,
+            d.OrderIndex,
+            d.CreatedAt,
+            d.UpdatedAt
+        };
+    }
+
+    public async Task<object> CreatePronunciationDrillAsync(
+        string adminId, string adminName, AdminPronunciationDrillCreateRequest request, CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var id = $"PRN-{Guid.NewGuid():N}"[..12];
+        var entity = new PronunciationDrill
+        {
+            Id = id,
+            Label = request.Word,
+            TargetPhoneme = request.PhoneticTranscription ?? "",
+            Profession = string.IsNullOrWhiteSpace(request.Profession) ? "all" : request.Profession!,
+            Focus = string.IsNullOrWhiteSpace(request.Focus) ? "phoneme" : request.Focus!,
+            PrimaryRuleId = request.PrimaryRuleId,
+            AudioModelUrl = request.AudioUrl,
+            AudioModelAssetId = request.AudioModelAssetId,
+            ExampleWordsJson = request.ExampleWordsJson ?? "[]",
+            MinimalPairsJson = request.MinimalPairsJson ?? "[]",
+            SentencesJson = request.SentencesJson ?? "[]",
+            TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml),
+            Difficulty = request.Difficulty ?? "medium",
+            Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status!,
+            OrderIndex = request.OrderIndex ?? 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.PronunciationDrills.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "PronunciationDrill", id, $"Created pronunciation drill: {request.Word}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id, word = entity.Label, entity.Status };
+    }
+
+    public async Task<object> UpdatePronunciationDrillAsync(
+        string adminId, string adminName, string drillId, AdminPronunciationDrillUpdateRequest request, CancellationToken ct)
+    {
+        var entity = await db.PronunciationDrills.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("DRILL_NOT_FOUND", $"Pronunciation drill '{drillId}' not found.");
+
+        if (request.Word is not null) entity.Label = request.Word;
+        if (request.PhoneticTranscription is not null) entity.TargetPhoneme = request.PhoneticTranscription;
+        if (request.Profession is not null) entity.Profession = request.Profession;
+        if (request.Focus is not null) entity.Focus = request.Focus;
+        if (request.PrimaryRuleId is not null) entity.PrimaryRuleId = request.PrimaryRuleId;
+        if (request.AudioUrl is not null) entity.AudioModelUrl = request.AudioUrl;
+        if (request.AudioModelAssetId is not null) entity.AudioModelAssetId = request.AudioModelAssetId;
+        if (request.ExampleWordsJson is not null) entity.ExampleWordsJson = request.ExampleWordsJson;
+        if (request.MinimalPairsJson is not null) entity.MinimalPairsJson = request.MinimalPairsJson;
+        if (request.SentencesJson is not null) entity.SentencesJson = request.SentencesJson;
+        if (request.TipsHtml is not null) entity.TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml);
+        if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
+        if (request.Status is not null)
+        {
+            if (request.Status == "active")
+            {
+                // Publish gate: require minimum content.
+                if (string.IsNullOrWhiteSpace(entity.TargetPhoneme)
+                    || string.IsNullOrWhiteSpace(entity.Label)
+                    || string.IsNullOrWhiteSpace(entity.TipsHtml)
+                    || JsonSupport.Deserialize(entity.ExampleWordsJson, new List<string>()).Count < 3
+                    || JsonSupport.Deserialize(entity.SentencesJson, new List<string>()).Count < 1)
+                {
+                    throw ApiException.Validation("DRILL_PUBLISH_GATE",
+                        "Cannot publish: drill requires phoneme, label, tips, at least 3 example words, and at least 1 sentence.");
+                }
+            }
+            entity.Status = request.Status;
+        }
+        if (request.OrderIndex.HasValue) entity.OrderIndex = request.OrderIndex.Value;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "PronunciationDrill", drillId, $"Updated pronunciation drill: {entity.Label}", ct);
+
+        return new { id = drillId, entity.Status };
+    }
+
+    public async Task<object> ArchivePronunciationDrillAsync(
+        string adminId, string adminName, string drillId, CancellationToken ct)
+    {
+        var entity = await db.PronunciationDrills.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("DRILL_NOT_FOUND", $"Pronunciation drill '{drillId}' not found.");
+
+        entity.Status = "archived";
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Archived", "PronunciationDrill", drillId, $"Archived pronunciation drill: {entity.Label}", ct);
+
+        return new { id = drillId, status = "archived" };
+    }
+
+    /// <summary>
+    /// Permanently deletes an archived pronunciation drill and purges all learner
+    /// attempts and assessments for it. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeletePronunciationDrillAsync(
+        string adminId, string adminName, string drillId, CancellationToken ct)
+    {
+        var entity = await db.PronunciationDrills.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("DRILL_NOT_FOUND", $"Pronunciation drill '{drillId}' not found.");
+        if (entity.Status != "archived")
+            throw ApiException.Validation("pronunciation_force_delete_not_archived",
+                "Only archived pronunciation drills can be permanently deleted. Archive it first.");
+
+        db.PronunciationAttempts.RemoveRange(
+            await db.PronunciationAttempts.Where(a => a.DrillId == drillId).ToListAsync(ct));
+        db.PronunciationAssessments.RemoveRange(
+            await db.PronunciationAssessments.Where(a => a.DrillId == drillId).ToListAsync(ct));
+        db.PronunciationDrills.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "PronunciationDrill", drillId,
+            $"Force-deleted pronunciation drill + learner attempts/assessments: {entity.Label}", ct);
+
+        return new { id = drillId, deleted = true };
+    }
+
+    // ════════════════════════════════════════════
+    //  Notification Templates
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetNotificationTemplatesAsync(
+        string? channel, string? category, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.NotificationTemplates.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(channel))
+            query = query.Where(n => n.Channel == channel);
+        if (!string.IsNullOrWhiteSpace(category))
+            query = query.Where(n => n.Category == category);
+
+        var total = await query.CountAsync(ct);
+        var items = await ToOrderedListDescendingAsync(query, n => n.UpdatedAt, ct, skip: (page - 1) * pageSize, take: pageSize);
+
+        return new
+        {
+            total,
+            page,
+            pageSize,
+            items = items.Select(n => new
+            {
+                n.Id,
+                n.EventKey,
+                n.Channel,
+                n.Category,
+                n.SubjectTemplate,
+                n.IsActive,
+                n.UpdatedAt
+            })
+        };
+    }
+
+    public async Task<object> GetNotificationTemplateDetailAsync(string templateId, CancellationToken ct)
+    {
+        var n = await db.NotificationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("NOTIFICATION_TEMPLATE_NOT_FOUND", $"Notification template '{templateId}' not found.");
+
+        return new
+        {
+            n.Id,
+            n.EventKey,
+            n.Channel,
+            n.Category,
+            n.SubjectTemplate,
+            n.BodyTemplate,
+            n.IsActive,
+            n.CreatedAt,
+            n.UpdatedAt
+        };
+    }
+
+    public async Task<object> CreateNotificationTemplateAsync(
+        string adminId, string adminName, AdminNotificationTemplateCreateRequest request, CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var id = $"NTF-{Guid.NewGuid():N}"[..12];
+        var now = DateTimeOffset.UtcNow;
+        var entity = new NotificationTemplate
+        {
+            Id = id,
+            EventKey = request.EventKey,
+            Channel = request.Channel,
+            Category = request.Category,
+            SubjectTemplate = request.SubjectTemplate,
+            BodyTemplate = request.BodyTemplate,
+            IsActive = request.IsActive,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.NotificationTemplates.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "NotificationTemplate", id, $"Created notification template: {request.EventKey}/{request.Channel}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id, entity.EventKey, entity.Channel, entity.IsActive };
+    }
+
+    public async Task<object> UpdateNotificationTemplateAsync(
+        string adminId, string adminName, string templateId, AdminNotificationTemplateUpdateRequest request, CancellationToken ct)
+    {
+        var entity = await db.NotificationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("NOTIFICATION_TEMPLATE_NOT_FOUND", $"Notification template '{templateId}' not found.");
+
+        if (request.SubjectTemplate is not null) entity.SubjectTemplate = request.SubjectTemplate;
+        if (request.BodyTemplate is not null) entity.BodyTemplate = request.BodyTemplate;
+        if (request.IsActive is not null) entity.IsActive = request.IsActive.Value;
+        if (request.Category is not null) entity.Category = request.Category;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "NotificationTemplate", templateId, $"Updated notification template: {entity.EventKey}/{entity.Channel}", ct);
+
+        return new { id = templateId, entity.IsActive };
+    }
+
+    public async Task<object> DeleteNotificationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.NotificationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("NOTIFICATION_TEMPLATE_NOT_FOUND", $"Notification template '{templateId}' not found.");
+
+        db.NotificationTemplates.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Deleted", "NotificationTemplate", templateId, $"Deleted notification template: {entity.EventKey}/{entity.Channel}", ct);
+
+        return new { id = templateId, deleted = true };
+    }
+
+    // ════════════════════════════════════════════
+    //  Free Tier Management
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetFreeTierConfigAsync(CancellationToken ct)
+    {
+        var config = await db.FreeTierConfigs.FirstOrDefaultAsync(ct);
+        if (config is null)
+        {
+            config = new FreeTierConfig
+            {
+                Id = $"FTC-{Guid.NewGuid():N}"[..12],
+                Enabled = true,
+                MaxWritingAttempts = 3,
+                MaxSpeakingAttempts = 3,
+                MaxReadingAttempts = 5,
+                MaxListeningAttempts = 5,
+                MaxSpeakingMockSets = 1,
+                TrialDurationDays = 7,
+                ShowUpgradePrompts = true,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            db.FreeTierConfigs.Add(config);
+            await db.SaveChangesAsync(ct);
+        }
+
+        return new
+        {
+            config.Id,
+            config.Enabled,
+            config.MaxWritingAttempts,
+            config.MaxSpeakingAttempts,
+            config.MaxReadingAttempts,
+            config.MaxListeningAttempts,
+            config.MaxSpeakingMockSets,
+            config.TrialDurationDays,
+            config.ShowUpgradePrompts,
+            config.UpdatedAt
+        };
+    }
+
+    public async Task<object> UpdateFreeTierConfigAsync(
+        string adminId, string adminName, AdminFreeTierConfigUpdateRequest request, CancellationToken ct)
+    {
+        var config = await db.FreeTierConfigs.FirstOrDefaultAsync(ct);
+        if (config is null)
+        {
+            config = new FreeTierConfig
+            {
+                Id = $"FTC-{Guid.NewGuid():N}"[..12],
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            db.FreeTierConfigs.Add(config);
+        }
+
+        config.Enabled = request.Enabled;
+        config.MaxWritingAttempts = request.MaxWritingAttempts;
+        config.MaxSpeakingAttempts = request.MaxSpeakingAttempts;
+        config.MaxReadingAttempts = request.MaxReadingAttempts;
+        config.MaxListeningAttempts = request.MaxListeningAttempts;
+        // Wave 3 — nullable in the request keeps backward compatibility
+        // with admin clients that still post the legacy 7-field payload.
+        if (request.MaxSpeakingMockSets is int mockSets)
+        {
+            config.MaxSpeakingMockSets = Math.Max(0, mockSets);
+        }
+        config.TrialDurationDays = request.TrialDurationDays;
+        config.ShowUpgradePrompts = request.ShowUpgradePrompts;
+        config.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "FreeTierConfig", config.Id, "Updated free tier configuration", ct);
+
+        return new
+        {
+            config.Id,
+            config.Enabled,
+            config.MaxWritingAttempts,
+            config.MaxSpeakingAttempts,
+            config.MaxReadingAttempts,
+            config.MaxListeningAttempts,
+            config.MaxSpeakingMockSets,
+            config.TrialDurationDays,
+            config.ShowUpgradePrompts,
+            config.UpdatedAt
+        };
+    }
+
+    public async Task<object> GetFreeTierUsageStatsAsync(int page, int pageSize, CancellationToken ct)
+    {
+        var config = await db.FreeTierConfigs.FirstOrDefaultAsync(ct);
+        var trialDays = config?.TrialDurationDays ?? 7;
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-trialDays);
+
+        var freeUsersQuery = db.Set<ApplicationUserAccount>()
+            .Where(u => u.Role == "learner" && u.DeletedAt == null && u.CreatedAt >= cutoff);
+
+        var totalFreeUsers = await freeUsersQuery.CountAsync(ct);
+
+        var recentSignups = await freeUsersQuery
+            .OrderByDescending(u => u.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new
+            {
+                u.Id,
+                u.Email,
+                u.CreatedAt
+            })
+            .ToListAsync(ct);
+
+        return new
+        {
+            totalFreeUsers,
+            trialDurationDays = trialDays,
+            enabled = config?.Enabled ?? true,
+            page,
+            pageSize,
+            users = recentSignups
+        };
+    }
+}

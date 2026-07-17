@@ -51,7 +51,7 @@ export async function isBiometricAvailable(): Promise<boolean> {
 }
 
 export async function authenticateWithBiometrics(
-  reason = 'Verify your identity to access OET Prep'
+  reason = 'Verify your identity to access OET with Dr Hesham'
 ): Promise<BiometricResult> {
   const plugin = await getBiometricPlugin();
   if (!plugin) {
@@ -61,7 +61,7 @@ export async function authenticateWithBiometrics(
   try {
     await plugin.verifyIdentity({
       reason,
-      title: 'OET Prep Authentication',
+      title: 'OET with Dr Hesham Authentication',
       subtitle: 'Biometric verification required',
       description: reason,
       negativeButtonText: 'Use Password',

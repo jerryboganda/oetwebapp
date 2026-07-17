@@ -39,7 +39,7 @@ export default function PeerReviewPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow OET learners." />
+      <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow learners preparing for OET with Dr Hesham." />
 
       <MotionSection className="max-w-4xl mx-auto space-y-6">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}

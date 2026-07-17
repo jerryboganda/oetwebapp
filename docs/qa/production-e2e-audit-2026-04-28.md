@@ -2,7 +2,7 @@
 
 ## Scope
 
-This audit records the production E2E readiness state for the OET Prep Platform on 28 April 2026.
+This audit records the production E2E readiness state for the OET with Dr Hesham Platform on 28 April 2026.
 
 The completed pass covered production health, unauthenticated browser QA, credentialed learner, tutor/expert, admin, sponsor, and expired-account smoke coverage. Dedicated synthetic production accounts are now configured for sponsor and expired-account scans, with secrets stored only outside Git.
 

@@ -30,7 +30,7 @@ describe('ExternalAuthCallbackPage', () => {
         refreshTokenExpiresAt: '2099-04-26T00:00:00.000Z',
         currentUser: {
           userId: 'expert-001',
-          email: 'expert@oet-prep.dev',
+          email: 'expert@oet-with-dr-hesham.dev',
           role: 'expert',
           displayName: 'Expert One',
           isEmailVerified: true,
@@ -65,7 +65,7 @@ describe('ExternalAuthCallbackPage', () => {
         refreshTokenExpiresAt: '2099-04-26T00:00:00.000Z',
         currentUser: {
           userId: 'learner-001',
-          email: 'learner@oet-prep.dev',
+          email: 'learner@oet-with-dr-hesham.dev',
           role: 'learner',
           displayName: 'Learner One',
           isEmailVerified: true,

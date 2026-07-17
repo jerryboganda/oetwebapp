@@ -69,7 +69,7 @@ Every Speaking-module env key, grouped by subsystem. Defaults are listed; requir
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `ConnectionStrings__OetLearner` | yes | — | EF Core connection string. |
+| `ConnectionStrings__OetWithDrHesham` | yes | — | EF Core connection string. |
 
 ## Local dev quick-start
 

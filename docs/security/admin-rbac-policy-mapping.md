@@ -2,7 +2,7 @@
 
 Review date: 2026-05-09
 
-Scope: granular admin authorization policies registered in `backend/src/OetLearner.Api/Program.cs` and applied through endpoint `RequireAuthorization(...)`, `WithAdminRead(...)`, and `WithAdminWrite(...)` calls.
+Scope: granular admin authorization policies registered in `backend/src/OetWithDrHesham.Api/Program.cs` and applied through endpoint `RequireAuthorization(...)`, `WithAdminRead(...)`, and `WithAdminWrite(...)` calls.
 
 ## Policy Model
 

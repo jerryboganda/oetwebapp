@@ -1,5 +1,5 @@
 // Authored preview — ConfidenceBadge. Each named export = one labeled card cell.
-import { ConfidenceBadge } from 'oet-prep';
+import { ConfidenceBadge } from 'oet-with-dr-hesham';
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>{children}</div>

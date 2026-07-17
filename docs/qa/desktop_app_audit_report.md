@@ -69,7 +69,7 @@
 - Local unsigned Windows packaging requires:
   - `ELECTRON_ALLOW_UNSIGNED_WINDOWS_BUILD=true`
 - Verified installed test folder:
-  - `C:\Users\Public\OETPrepTest8`
+  - `C:\Users\Public\OET with Dr HeshamTest8`
 
 ## Product Surfaces Confirmed in the Desktop Renderer
 
@@ -128,7 +128,7 @@
 ### Historical user-facing blocker
 
 - Installed packaged shell showed:
-  - `OET Prep failed to start`
+  - `OET with Dr Hesham failed to start`
 - Startup blocker:
   - `Timed out waiting for the backend at http://127.0.0.1:5199/health/ready`
 
@@ -145,7 +145,7 @@
 ### Packaged backend readiness failure
 
 - The packaged backend runs on SQLite.
-- [BackgroundJobProcessor.cs](C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\backend\src\OetLearner.Api\Services\BackgroundJobProcessor.cs) ordered queued jobs by `DateTimeOffset` in SQL.
+- [BackgroundJobProcessor.cs](C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\backend\src\OetWithDrHesham.Api\Services\BackgroundJobProcessor.cs) ordered queued jobs by `DateTimeOffset` in SQL.
 - EF Core SQLite could not translate that ordering.
 - Background startup processing failed, readiness never became healthy, and Electron timed out.
 

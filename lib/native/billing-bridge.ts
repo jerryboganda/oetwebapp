@@ -180,7 +180,7 @@ const IOS_GLOBAL_COPY: MobileBillingCopy = {
   ctaLabel: 'Manage on website',
   messageTitle: 'Manage your subscription on the web',
   messageBody:
-    'Purchases and subscription changes for OET with Dr Ahmed Hesham are handled on our website. Visit oetwithdrhesham.co.uk on any device to continue.',
+    'Purchases and subscription changes for OET with Dr Hesham are handled on our website. Visit oetwithdrhesham.co.uk on any device to continue.',
 };
 
 export function buildBillingContext(

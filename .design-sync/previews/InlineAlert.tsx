@@ -1,5 +1,5 @@
 // Authored preview — InlineAlert. Each named export = one labeled card cell.
-import { InlineAlert, Button } from 'oet-prep';
+import { InlineAlert, Button } from 'oet-with-dr-hesham';
 
 export const Variants = () => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 460 }}>

@@ -1,0 +1,277 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using OetWithDrHesham.Api.Configuration;
+using OetWithDrHesham.Api.Data;
+using OetWithDrHesham.Api.Domain;
+using OetWithDrHesham.Api.Services.Conversation;
+using OetWithDrHesham.Api.Services.Rulebook;
+using OetWithDrHesham.Api.Services.Voice;
+
+namespace OetWithDrHesham.Api.Tests;
+
+/// <summary>
+/// Phase 6b — covers <see cref="AiProviderRegistry.ListByCategoryAsync"/>
+/// and the <see cref="AiVoiceProviderSeeder"/> backfill rules.
+/// </summary>
+public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
+{
+    private readonly SqliteConnection _connection;
+    private readonly DbContextOptions<LearnerDbContext> _options;
+    private readonly EphemeralDataProtectionProvider _dpProvider = new();
+
+    public AiVoiceProviderSeederTests()
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+        _options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+        using var seed = new LearnerDbContext(_options);
+        seed.Database.EnsureCreated();
+    }
+
+    public async ValueTask DisposeAsync() => await _connection.DisposeAsync();
+
+    // ─── BuildSeeds (pure) ────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildSeeds_AllConfigured_EmitsSixRows()
+    {
+        var conv = new ConversationOptions
+        {
+            AzureSpeechKey = "k", AzureSpeechRegion = "uksouth", AzureLocale = "en-GB",
+            ElevenLabsApiKey = "ek",
+            ElevenLabsSttApiKey = "esk",
+            WhisperApiKey = "wk", WhisperBaseUrl = "https://api.openai.com/v1",
+        };
+        var pron = new PronunciationOptions
+        {
+            AzureSpeechKey = "pk", AzureSpeechRegion = "uksouth", AzureLocale = "en-GB",
+            GeminiApiKey = "gk", GeminiModel = "gemini-3.5-flash",
+        };
+
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
+
+        // ElevenLabs is the only TTS provider — azure-tts is no longer seeded.
+        Assert.Equal(6, seeds.Count);
+        Assert.DoesNotContain(seeds, s => s.Code == "azure-tts");
+        Assert.Contains(seeds, s => s.Code == "elevenlabs-tts" && s.Category == AiProviderCategory.Tts);
+        Assert.Contains(seeds, s => s.Code == "azure-asr" && s.Category == AiProviderCategory.Asr);
+        Assert.Contains(seeds, s => s.Code == "elevenlabs-stt" && s.Category == AiProviderCategory.Asr && s.Dialect == AiProviderDialect.ElevenLabsStt);
+        Assert.Contains(seeds, s => s.Code == "whisper-asr" && s.Category == AiProviderCategory.Asr);
+        Assert.Contains(seeds, s => s.Code == "azure-phoneme" && s.Category == AiProviderCategory.Phoneme);
+        Assert.Contains(seeds, s => s.Code == "gemini-pronunciation-audio" && s.Category == AiProviderCategory.Phoneme && s.Dialect == AiProviderDialect.GeminiNative);
+    }
+
+    [Fact]
+    public void BuildSeeds_NoneConfigured_EmitsEmptyList()
+    {
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(new ConversationOptions(), new PronunciationOptions());
+        Assert.Empty(seeds);
+    }
+
+    [Fact]
+    public void BuildSeeds_OnlyAzure_EmitsAsrAndPhoneme()
+    {
+        var conv = new ConversationOptions
+        {
+            AzureSpeechKey = "k", AzureSpeechRegion = "uksouth",
+        };
+        var pron = new PronunciationOptions
+        {
+            AzureSpeechKey = "pk", AzureSpeechRegion = "uksouth",
+        };
+
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
+
+        // Azure TTS is no longer seeded — only ASR + phoneme remain for Azure.
+        Assert.Equal(2, seeds.Count);
+        Assert.DoesNotContain(seeds, s => s.Code == "azure-tts");
+        Assert.Contains(seeds, s => s.Code == "azure-asr");
+        Assert.Contains(seeds, s => s.Code == "azure-phoneme");
+    }
+
+    [Fact]
+    public void BuildSeeds_OnlyElevenLabsStt_EmitsDistinctAsrRow()
+    {
+        var conv = new ConversationOptions
+        {
+            ElevenLabsSttApiKey = "esk",
+            ElevenLabsSttModel = "scribe_v2_realtime",
+        };
+
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, new PronunciationOptions());
+
+        var row = Assert.Single(seeds);
+        Assert.Equal("elevenlabs-stt", row.Code);
+        Assert.Equal(AiProviderCategory.Asr, row.Category);
+        Assert.Equal(AiProviderDialect.ElevenLabsStt, row.Dialect);
+        Assert.Equal("scribe_v2_realtime", row.DefaultModel);
+    }
+
+    [Fact]
+    public void BuildSeeds_OnlyGeminiPronunciation_EmitsPhonemeRow()
+    {
+        var pron = new PronunciationOptions
+        {
+            GeminiApiKey = "gk",
+            GeminiModel = "gemini-3.5-flash",
+        };
+
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(new ConversationOptions(), pron);
+
+        var row = Assert.Single(seeds);
+        Assert.Equal("gemini-pronunciation-audio", row.Code);
+        Assert.Equal(AiProviderCategory.Phoneme, row.Category);
+        Assert.Equal(AiProviderDialect.GeminiNative, row.Dialect);
+        Assert.Equal("gemini-3.5-flash", row.DefaultModel);
+    }
+
+    // ─── Seeder hosted service ────────────────────────────────────────────
+
+    [Fact]
+    public async Task Seeder_InsertsRowsForConfiguredProviders()
+    {
+        var sp = BuildServiceProvider(
+            new ConversationOptions
+            {
+                AzureSpeechKey = "k", AzureSpeechRegion = "uksouth",
+                ElevenLabsApiKey = "ek",
+            },
+            new PronunciationOptions());
+
+        var seeder = new AiVoiceProviderSeeder(sp, NullLogger<AiVoiceProviderSeeder>.Instance);
+        await seeder.StartAsync(default);
+
+        await using var db = new LearnerDbContext(_options);
+        var rows = await db.AiProviders.AsNoTracking().ToListAsync();
+        Assert.Equal(2, rows.Count);  // azure-asr, elevenlabs-tts
+        Assert.All(rows, r => Assert.True(r.IsActive));
+        Assert.All(rows, r => Assert.Equal(string.Empty, r.EncryptedApiKey));
+    }
+
+    [Fact]
+    public async Task Seeder_IsIdempotent_DoesNotOverwriteExistingRows()
+    {
+        // Pre-seed an admin-edited row.
+        await using (var db = new LearnerDbContext(_options))
+        {
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = "fixed-id",
+                Code = "azure-tts",
+                Name = "Admin-edited Azure TTS",
+                Category = AiProviderCategory.Tts,
+                Dialect = AiProviderDialect.AzureTts,
+                BaseUrl = "https://custom.example",
+                EncryptedApiKey = "secret-blob",
+                ApiKeyHint = "abcd",
+                DefaultModel = "custom-voice",
+                AllowedModelsCsv = string.Empty,
+                IsActive = true,
+                FailoverPriority = 99,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sp = BuildServiceProvider(
+            new ConversationOptions { AzureSpeechKey = "k", AzureSpeechRegion = "uksouth" },
+            new PronunciationOptions());
+        var seeder = new AiVoiceProviderSeeder(sp, NullLogger<AiVoiceProviderSeeder>.Instance);
+        await seeder.StartAsync(default);
+
+        await using var verify = new LearnerDbContext(_options);
+        var azureTts = await verify.AiProviders.AsNoTracking().FirstAsync(r => r.Code == "azure-tts");
+        Assert.Equal("Admin-edited Azure TTS", azureTts.Name);
+        Assert.Equal("https://custom.example", azureTts.BaseUrl);
+        Assert.Equal("secret-blob", azureTts.EncryptedApiKey);
+        Assert.Equal(99, azureTts.FailoverPriority);
+
+        // azure-asr was not pre-existing — should still get inserted.
+        Assert.True(await verify.AiProviders.AnyAsync(r => r.Code == "azure-asr"));
+    }
+
+    [Fact]
+    public async Task Seeder_NoConfig_InsertsNothing()
+    {
+        var sp = BuildServiceProvider(new ConversationOptions(), new PronunciationOptions());
+        var seeder = new AiVoiceProviderSeeder(sp, NullLogger<AiVoiceProviderSeeder>.Instance);
+        await seeder.StartAsync(default);
+
+        await using var db = new LearnerDbContext(_options);
+        Assert.Empty(await db.AiProviders.AsNoTracking().ToListAsync());
+    }
+
+    // ─── Registry.ListByCategoryAsync ─────────────────────────────────────
+
+    [Fact]
+    public async Task ListByCategoryAsync_FiltersByCategoryAndActive()
+    {
+        await using (var db = new LearnerDbContext(_options))
+        {
+            db.AiProviders.AddRange(
+                Row("text-1", AiProviderCategory.TextChat, isActive: true, priority: 0),
+                Row("text-2", AiProviderCategory.TextChat, isActive: true, priority: 1),
+                Row("tts-1", AiProviderCategory.Tts, isActive: true, priority: 0),
+                Row("tts-disabled", AiProviderCategory.Tts, isActive: false, priority: 1),
+                Row("asr-1", AiProviderCategory.Asr, isActive: true, priority: 0));
+            await db.SaveChangesAsync();
+        }
+
+        await using var ctx = new LearnerDbContext(_options);
+        var registry = new AiProviderRegistry(ctx, _dpProvider);
+
+        var ttsRows = await registry.ListByCategoryAsync(AiProviderCategory.Tts, default);
+        var asrRows = await registry.ListByCategoryAsync(AiProviderCategory.Asr, default);
+        var phonemeRows = await registry.ListByCategoryAsync(AiProviderCategory.Phoneme, default);
+
+        Assert.Single(ttsRows);
+        Assert.Equal("tts-1", ttsRows[0].Code);
+        Assert.Single(asrRows);
+        Assert.Equal("asr-1", asrRows[0].Code);
+        Assert.Empty(phonemeRows);
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────
+
+    private IServiceProvider BuildServiceProvider(ConversationOptions conv, PronunciationOptions pron)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(_options);
+        services.AddScoped(sp => new LearnerDbContext(sp.GetRequiredService<DbContextOptions<LearnerDbContext>>()));
+        services.AddSingleton(Options.Create(pron));
+        services.AddSingleton<IConversationOptionsProvider>(new StubConversationOptionsProvider(conv));
+        return services.BuildServiceProvider();
+    }
+
+    private static AiProvider Row(string code, AiProviderCategory category, bool isActive, int priority)
+        => new()
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = code,
+            Name = code,
+            Category = category,
+            Dialect = AiProviderDialect.OpenAiCompatible,
+            BaseUrl = "https://example",
+            EncryptedApiKey = string.Empty,
+            ApiKeyHint = string.Empty,
+            DefaultModel = string.Empty,
+            AllowedModelsCsv = string.Empty,
+            IsActive = isActive,
+            FailoverPriority = priority,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private sealed class StubConversationOptionsProvider(ConversationOptions opts) : IConversationOptionsProvider
+    {
+        public Task<ConversationOptions> GetAsync(CancellationToken ct = default) => Task.FromResult(opts);
+        public void Invalidate() { }
+    }
+}

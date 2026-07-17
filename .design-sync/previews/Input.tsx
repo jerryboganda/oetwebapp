@@ -1,6 +1,6 @@
 // Authored preview — Input (text input with label / placeholder / hint / error).
 // Each named export = one labeled card cell.
-import { Input } from 'oet-prep';
+import { Input } from 'oet-with-dr-hesham';
 
 const Column = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 400 }}>{children}</div>

@@ -70,7 +70,7 @@ Gaps #1 and #2 were implemented; gap #3 turned out not to need code changes (see
 - Wired into `EffectiveEntitlementResolver` (`EffectiveEntitlementSnapshot.SpeakingPracticeAccessEnabled`) alongside the existing `SpeakingAddonsEnabled` pattern.
 - Enforced in `SpeakingSessionService.FinishWarmupAsync`: an **eligible** subscription whose plan disables this flag is blocked (403 `speaking_practice_not_included`) before any credit is touched. No-subscription / free accounts (today's a-la-carte AI-credit buyers) are **never** blocked — the gate only applies to a resolved, eligible plan that explicitly disables it, preserving all existing purchase behavior.
 - Admin UI: `app/admin/billing/page.tsx` gained a "Speaking Practice Card Access" checkbox next to the existing add-on flags, with explanatory copy distinguishing it from AI Speaking Credits and Human Tutor Speaking.
-- Tests: `backend/tests/OetLearner.Api.Tests/Speaking/SpeakingPracticeAccessGateTests.cs` (4 new tests — blocked/allowed/no-subscription-never-blocked/no-resolver-wired-regression-safe).
+- Tests: `backend/tests/OetWithDrHesham.Api.Tests/Speaking/SpeakingPracticeAccessGateTests.cs` (4 new tests — blocked/allowed/no-subscription-never-blocked/no-resolver-wired-regression-safe).
 
 ### Gap 1 — pricing packages now expose 4 distinct, labeled quotas
 
@@ -85,7 +85,7 @@ Gaps #1 and #2 were implemented; gap #3 turned out not to need code changes (see
 
 ### Migration
 
-- `backend/src/OetLearner.Api/Data/Migrations/20260715090000_AddSpeakingPricingEntitlementFields.cs` — hand-written, raw-SQL `ADD COLUMN IF NOT EXISTS`, following the team's established pattern (does not touch the EF model snapshot, matching the documented WS6 decision in `docs/speaking/PROGRESS.md`).
+- `backend/src/OetWithDrHesham.Api/Data/Migrations/20260715090000_AddSpeakingPricingEntitlementFields.cs` — hand-written, raw-SQL `ADD COLUMN IF NOT EXISTS`, following the team's established pattern (does not touch the EF model snapshot, matching the documented WS6 decision in `docs/speaking/PROGRESS.md`).
 
 ### Validation performed
 

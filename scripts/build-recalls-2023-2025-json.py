@@ -1,7 +1,7 @@
 import re, json, pathlib, sys
 
 src = pathlib.Path(r"C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\_extracted\recalls-2023-2025.txt")
-dst = pathlib.Path(r"C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\backend\src\OetLearner.Api\Data\SeedData\recall-sets\recalls-2023-2025.json")
+dst = pathlib.Path(r"C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App\backend\src\OetWithDrHesham.Api\Data\SeedData\recall-sets\recalls-2023-2025.json")
 
 text = src.read_text(encoding="utf-8")
 

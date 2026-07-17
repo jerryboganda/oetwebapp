@@ -35,7 +35,7 @@ pnpm run dev
 | **Frontend** | http://localhost:3000 | Native (Windows) |
 | **API** | http://localhost:8080 | Podman |
 | **Swagger** | http://localhost:8080/swagger | Podman |
-| **Database** | `localhost:5433` (user `oet_user`, db `oet_learner`) | Podman |
+| **Database** | `localhost:5433` (user `oet_user`, db `oet_with_dr_hesham`) | Podman |
 
 ## 🔥 Hot Reload
 
@@ -56,7 +56,7 @@ podman compose -f docker-compose.hotreload.yml down
 podman compose -f docker-compose.hotreload.yml --env-file .env.docker-local up -d --force-recreate learner-api
 
 # Database shell
-podman exec -it oet-hotreload-postgres psql -U oet_user -d oet_learner
+podman exec -it oet-hotreload-postgres psql -U oet_user -d oet_with_dr_hesham
 ```
 
 ## 🆘 Troubleshooting
@@ -84,4 +84,4 @@ another project already using 5432. Inside the compose network the API still use
 
 ---
 
-**Default login (dev):** `expert@oet-prep.local` / `DevPassword123!` (from `.env.docker-local`).
+**Default login (dev):** `expert@oet-with-dr-hesham.local` / `DevPassword123!` (from `.env.docker-local`).

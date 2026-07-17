@@ -1,7 +1,7 @@
 // Authored preview — Modal. OVERLAY component (single-card mode, already
 // configured). Rendered in its OPEN state — pass open + onClose so AnimatePresence
 // mounts the dialog. Each named export = one labeled card cell (full-card each).
-import { Modal, Button, InlineAlert } from 'oet-prep';
+import { Modal, Button, InlineAlert } from 'oet-with-dr-hesham';
 
 export const Confirmation = () => (
   <Modal open={true} onClose={() => {}} title="Submit for marking?">

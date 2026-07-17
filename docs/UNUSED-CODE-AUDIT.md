@@ -1,4 +1,4 @@
-# Unused Code Audit — OET Prep Platform
+# Unused Code Audit — OET with Dr Hesham Platform
 
 **Date:** 2026-04-23 (original audit) · **Closure updates:** 2026-04-24, 2026-04-25
 **Tools used:** `tsc --noUnusedLocals --noUnusedParameters`, `ts-prune`, `depcheck`, manual grep

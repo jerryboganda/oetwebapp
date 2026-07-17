@@ -1,13 +1,13 @@
 import { trace, Tracer } from "@opentelemetry/api";
 
 /**
- * Observability helpers for the OET Prep Platform.
+ * Observability helpers for the OET with Dr Hesham Platform.
  *
  * Sentry is the primary error/performance tool (configured in sentry.*.config.ts).
  * OpenTelemetry is available for future custom tracing and AI-agent instrumentation.
  */
 
-const TRACER_NAME = "oet-prep";
+const TRACER_NAME = "oet-with-dr-hesham";
 
 export function getTracer(): Tracer {
   return trace.getTracer(TRACER_NAME);

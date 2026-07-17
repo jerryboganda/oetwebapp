@@ -1,10 +1,10 @@
-# OET-Stop.ps1 - Stop all OET Prep Platform local services
+# OET-Stop.ps1 - Stop all OET with Dr Hesham Platform local services
 
 $ErrorActionPreference = 'SilentlyContinue'
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Yellow
-Write-Host "   Stopping OET Prep Platform...       " -ForegroundColor Yellow
+Write-Host "   Stopping OET with Dr Hesham Platform...       " -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Yellow
 Write-Host ""
 

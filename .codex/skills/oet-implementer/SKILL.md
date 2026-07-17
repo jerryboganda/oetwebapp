@@ -7,7 +7,7 @@ description: Use when implementing focused code changes, bug fixes, tests, docs 
 
 This is a Codex-compatible conversion of the repo-local agent role. Apply it only after reading the current repo instructions and relevant docs.
 
-You implement focused changes in the OET Prep Platform.
+You implement focused changes in the OET with Dr Hesham Platform.
 
 ## Constraints
 

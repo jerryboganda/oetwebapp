@@ -62,7 +62,7 @@ Make every byte of the real Listening sample data **end-to-end compatible** with
 
 ## 6. Acceptance criteria
 
-1. Add UglyToad.PdfPig 0.1.10+ NuGet to `OetLearner.Api`. New `PdfPigPdfTextExtractor : IPdfTextExtractor`. DI swap in `Program.cs`. Existing `NoOpPdfTextExtractor` stays for tests.
+1. Add UglyToad.PdfPig 0.1.10+ NuGet to `OetWithDrHesham.Api`. New `PdfPigPdfTextExtractor : IPdfTextExtractor`. DI swap in `Program.cs`. Existing `NoOpPdfTextExtractor` stays for tests.
 2. Optional Azure Document Intelligence analyzer (`IPdfDocumentAnalyzer`) behind `PdfExtractionOptions.AzureDocIntelEndpoint` config — skipped (returns empty) when unconfigured. New service writes a sibling `OcrUsageRecord` (or a structured log line) for cost telemetry; does NOT use `AiUsageRecord`.
 3. `AiCredentialResolver.PlatformOnlyFeatures` includes `AdminListeningDraft`, `AdminPronunciationDraft`, `AdminVocabularyDraft`, `AdminConversationDraft`. Backfilled in `docs/AI-USAGE-POLICY.md` §5.
 4. Player auto-seeks `audio.currentTime` to the first un-completed extract's `audioStartMs / 1000` on section enter. Pause / advance soft-fired when `audio.currentTime * 1000 >= audioEndMs` (only when `modePolicy.canScrub` is false → exam mode). Manual scrub still works in practice mode.

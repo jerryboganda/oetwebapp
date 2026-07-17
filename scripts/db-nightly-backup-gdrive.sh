@@ -9,8 +9,8 @@
 set -euo pipefail
 
 PG_CONTAINER=oet-postgres
-PG_USER=oet_learner
-PG_DB=oet_learner
+PG_USER=oet_with_dr_hesham
+PG_DB=oet_with_dr_hesham
 
 LOCAL_DIR=/root/backups/nightly
 REMOTE_NAME="${GDRIVE_REMOTE:-gdrive}"

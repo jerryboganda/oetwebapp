@@ -37,7 +37,7 @@ where they are, gated as today.
 ## Current behaviour (three pruning layers, all keyed on "has a file")
 
 1. **`MaterialAccessService.GetVisibleTreeAsync`**
-   (`backend/src/OetLearner.Api/Services/Content/MaterialAccessService.cs`)
+   (`backend/src/OetWithDrHesham.Api/Services/Content/MaterialAccessService.cs`)
    computes `visibleFolderIds` (folders that pass `IsFolderVisible`: published +
    all ancestors published + audience matches), then further filters root
    folders to `foldersWithContent.Contains(f.Id)`.

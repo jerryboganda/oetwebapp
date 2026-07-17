@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the entire OET Prep Platform JS/TS toolchain from npm to pnpm in one clean cutover, fully validated on the Windows host (and a local Docker image build) before any VPS deploy.
+**Goal:** Migrate the entire OET with Dr Hesham Platform JS/TS toolchain from npm to pnpm in one clean cutover, fully validated on the Windows host (and a local Docker image build) before any VPS deploy.
 
 **Architecture:** Pin `pnpm@10.33.0` via corepack + the `package.json` `packageManager` field so local, Docker, and CI all use the identical version. Keep pnpm's strict isolated `node_modules`; fix any phantom-dependency errors by adding the real dependency. Replace `package-lock.json` with `pnpm-lock.yaml`. Convert 2 Dockerfiles, 6 CI workflows, the `docker:*`/`mobile:build` package scripts, host scripts, and AI-direction docs. Leave `.tools/autoskills/**` (already pnpm) untouched.
 
@@ -819,7 +819,7 @@ Then open a PR titled `chore: migrate repo from npm to pnpm`. Do NOT deploy to t
 ## Post-merge VPS deploy reminders (separate later step — NOT part of this plan)
 
 - Override `ROUTER_IMAGE=oetwebsite-nginx-router:local` on every build/up command (the `.env.production` digest pin breaks Docker build tags).
-- Never run `docker compose down -v` or remove the protected volumes `oetwebsite_oet_postgres_data` / `oetwebsite_oet_learner_storage`.
+- Never run `docker compose down -v` or remove the protected volumes `oetwebsite_oet_postgres_data` / `oetwebsite_oet_with_dr_hesham_storage`.
 - Verify the production `Dockerfile` build on the VPS uses the committed `pnpm-lock.yaml` and that `corepack enable` succeeds in the build image (`node:20-alpine` ships corepack).
 
 ---

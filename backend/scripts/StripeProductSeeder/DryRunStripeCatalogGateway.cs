@@ -1,4 +1,4 @@
-namespace OetLearner.Scripts.StripeProductSeeder;
+namespace OetWithDrHesham.Scripts.StripeProductSeeder;
 
 /// <summary>
 /// In-memory gateway used by <c>--dry-run</c> and by the test suite. Treats

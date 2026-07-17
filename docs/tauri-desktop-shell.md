@@ -17,7 +17,7 @@ oet-desktop (Rust core)
  │   └─ navigates to https://app.oetwithdrhesham.co.uk (the live web app)
  ├─ navigation guard  → HTTPS + trusted origin only; other links → system browser
  ├─ initialization_script → injects window.desktopBridge (inject/desktop-bridge.js)
- ├─ tray (Dashboard / Study Plan / Quit) · deep link (oet-prep://) · single-instance
+ ├─ tray (Dashboard / Study Plan / Quit) · deep link (oet-with-dr-hesham://) · single-instance
  └─ updater (tauri-plugin-updater, minisign + GitHub latest.json)
 ```
 

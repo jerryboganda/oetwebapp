@@ -8,7 +8,7 @@
  * `__fixtures__/writing-engine-parity.json`.
  *
  * The same fixture file is consumed by the .NET sibling test
- * `backend/tests/OetLearner.Api.Tests/Rulebook/WritingEngineParityTests.cs`,
+ * `backend/tests/OetWithDrHesham.Api.Tests/Rulebook/WritingEngineParityTests.cs`,
  * which runs `WritingRuleEngine.Lint(...)` and asserts the SAME expected set
  * — making the docblock claim ("Behaviour MUST match the TypeScript engine")
  * mechanically enforceable.

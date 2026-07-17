@@ -63,7 +63,7 @@ describe('useDashboardHome', () => {
   function createAuthValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
     return {
       session: null,
-      user: { userId: 'user-1', email: 'learner@oet-prep.dev', role: 'learner', displayName: 'Learner', isEmailVerified: true, isAuthenticatorEnabled: false, requiresEmailVerification: false, requiresMfa: false, emailVerifiedAt: null, authenticatorEnabledAt: null },
+      user: { userId: 'user-1', email: 'learner@oet-with-dr-hesham.dev', role: 'learner', displayName: 'Learner', isEmailVerified: true, isAuthenticatorEnabled: false, requiresEmailVerification: false, requiresMfa: false, emailVerifiedAt: null, authenticatorEnabledAt: null },
       loading: false,
       error: null,
       pendingMfaChallenge: null,
@@ -194,7 +194,7 @@ describe('useDashboardHome', () => {
     await waitFor(() => expect(result.current.data.profile?.id).toBe('user-1'));
 
     authValue = createAuthValue({
-      user: { ...authValue.user!, userId: 'user-2', email: 'other@oet-prep.dev' },
+      user: { ...authValue.user!, userId: 'user-2', email: 'other@oet-with-dr-hesham.dev' },
     });
     rerender();
 

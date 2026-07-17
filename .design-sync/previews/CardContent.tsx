@@ -1,6 +1,6 @@
 // Authored preview — CardContent (the Card body region).
 // Each named export = one labeled card cell.
-import { Card, CardHeader, CardTitle, CardContent } from 'oet-prep';
+import { Card, CardHeader, CardTitle, CardContent } from 'oet-with-dr-hesham';
 
 export const Paragraph = () => (
   <Card style={{ maxWidth: 400 }}>

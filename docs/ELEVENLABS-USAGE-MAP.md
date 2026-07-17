@@ -138,16 +138,16 @@ These are the main code areas, written in plain language.
 
 | Area | What it does | File |
 | --- | --- | --- |
-| ElevenLabs caller | Sends text to ElevenLabs and gets MP3 audio back. | `backend/src/OetLearner.Api/Services/Conversation/Tts/ElevenLabsConversationTtsProvider.cs` |
-| Voice chooser | Decides whether to use ElevenLabs, Azure, another service, mock, or no voice. | `backend/src/OetLearner.Api/Services/Conversation/Tts/ConversationTtsProviderSelector.cs` |
-| Conversation use | Uses the chosen voice service for AI conversation opening and replies. | `backend/src/OetLearner.Api/Hubs/ConversationHub.cs` |
-| Admin settings API | Saves ElevenLabs key, model, and voice settings. | `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs` |
+| ElevenLabs caller | Sends text to ElevenLabs and gets MP3 audio back. | `backend/src/OetWithDrHesham.Api/Services/Conversation/Tts/ElevenLabsConversationTtsProvider.cs` |
+| Voice chooser | Decides whether to use ElevenLabs, Azure, another service, mock, or no voice. | `backend/src/OetWithDrHesham.Api/Services/Conversation/Tts/ConversationTtsProviderSelector.cs` |
+| Conversation use | Uses the chosen voice service for AI conversation opening and replies. | `backend/src/OetWithDrHesham.Api/Hubs/ConversationHub.cs` |
+| Admin settings API | Saves ElevenLabs key, model, and voice settings. | `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs` |
 | Admin settings page | Lets admin choose ElevenLabs and enter its key, voice, and model. | `app/admin/content/conversation/settings/page.tsx` |
-| Admin preview | Lets admin make a short voice sample. | `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs` |
-| Recalls audio | Uses the same voice system to make vocabulary audio. | `backend/src/OetLearner.Api/Services/Recalls/RecallsTtsService.cs` |
-| Audio storage | Saves conversation audio files safely. | `backend/src/OetLearner.Api/Services/Conversation/ConversationAudioService.cs` |
-| Provider list | Names ElevenLabs as a text-to-speech provider. | `backend/src/OetLearner.Api/Domain/AiProviderEntities.cs` |
-| Seeder test | Tests that ElevenLabs can be added to the provider list. | `backend/tests/OetLearner.Api.Tests/AiVoiceProviderSeederTests.cs` |
+| Admin preview | Lets admin make a short voice sample. | `backend/src/OetWithDrHesham.Api/Endpoints/AdminEndpoints.cs` |
+| Recalls audio | Uses the same voice system to make vocabulary audio. | `backend/src/OetWithDrHesham.Api/Services/Recalls/RecallsTtsService.cs` |
+| Audio storage | Saves conversation audio files safely. | `backend/src/OetWithDrHesham.Api/Services/Conversation/ConversationAudioService.cs` |
+| Provider list | Names ElevenLabs as a text-to-speech provider. | `backend/src/OetWithDrHesham.Api/Domain/AiProviderEntities.cs` |
+| Seeder test | Tests that ElevenLabs can be added to the provider list. | `backend/tests/OetWithDrHesham.Api.Tests/AiVoiceProviderSeederTests.cs` |
 | Realtime STT plan | Tracks server-mediated ElevenLabs Scribe implementation. | `docs/ELEVENLABS-REALTIME-STT-PRD.md` |
 | Realtime STT progress | Tracks what is complete and what remains. | `docs/ELEVENLABS-REALTIME-STT-PROGRESS.md` |
 

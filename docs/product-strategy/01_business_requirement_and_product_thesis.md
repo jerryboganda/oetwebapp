@@ -10,7 +10,7 @@ This file is a reset of the product thesis as of April 4, 2026.
 
 ## Source-of-truth hierarchy
 
-1. Code in `app/`, `lib/`, `backend/src/OetLearner.Api/`, `electron/`, and test suites.
+1. Code in `app/`, `lib/`, `backend/src/OetWithDrHesham.Api/`, `electron/`, and test suites.
 2. Product-manual audit files in `docs/product-manual/`.
 3. Refreshed product-strategy docs in this folder.
 4. Older strategy assumptions only where they still match code or current market sources.
@@ -30,7 +30,7 @@ Verified in code today:
 
 ## Product thesis
 
-OET Prep should operate as an outcome-oriented exam-preparation platform for high-stakes English tests, with OET as the flagship premium product and multi-exam expansion as the scale path.
+OET with Dr Hesham should operate as an outcome-oriented exam-preparation platform for high-stakes English tests, with OET as the flagship premium product and multi-exam expansion as the scale path.
 
 The product wins when it helps serious candidates do five things better than official-only or content-only alternatives:
 

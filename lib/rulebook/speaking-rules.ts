@@ -5,7 +5,7 @@
  *
  * Consumes a transcript of turns plus optional audio-timing metadata and
  * produces `LintFinding[]` tied to rulebook rule IDs. Pure and
- * unit-testable. Mirrors backend/src/OetLearner.Api/Services/SpeakingRules.cs.
+ * unit-testable. Mirrors backend/src/OetWithDrHesham.Api/Services/SpeakingRules.cs.
  * ============================================================================
  */
 

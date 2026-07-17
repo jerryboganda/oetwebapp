@@ -1,5 +1,5 @@
 // Authored preview — Stepper. Each named export = one labeled card cell.
-import { Stepper } from 'oet-prep';
+import { Stepper } from 'oet-with-dr-hesham';
 
 const examSteps = [
   { id: 'instructions', label: 'Instructions' },

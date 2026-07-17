@@ -1,4 +1,4 @@
-﻿# OET-Launch.ps1 - Start the full OET Prep Platform locally
+﻿# OET-Launch.ps1 - Start the full OET with Dr Hesham Platform locally
 # Starts PostgreSQL, backend API, and frontend dev server.
 
 $ErrorActionPreference = 'Stop'
@@ -13,7 +13,7 @@ $logDir = Join-Path $projectRoot '.local-deploy\logs'
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   OET Prep Platform - Local Launcher  " -ForegroundColor Cyan
+Write-Host "   OET with Dr Hesham Platform - Local Launcher  " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -122,10 +122,10 @@ if (-not $pgReady) {
 Write-Host "       PostgreSQL is running on localhost:5432" -ForegroundColor Green
 
 try {
-    $dbExists = & "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='oet_learner_dev';" 2>$null
+    $dbExists = & "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='oet_with_dr_hesham_dev';" 2>$null
     if (($dbExists | Out-String).Trim() -ne '1') {
-        & "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE oet_learner_dev;" 2>$null | Out-Null
-        Write-Host "       Created database oet_learner_dev" -ForegroundColor Green
+        & "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE oet_with_dr_hesham_dev;" 2>$null | Out-Null
+        Write-Host "       Created database oet_with_dr_hesham_dev" -ForegroundColor Green
     }
 } catch {}
 
@@ -307,7 +307,7 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Frontend:  http://localhost:3000" -ForegroundColor White
 Write-Host "  Backend:   http://localhost:5198" -ForegroundColor White
-Write-Host "  Database:  localhost:5432/oet_learner_dev" -ForegroundColor White
+Write-Host "  Database:  localhost:5432/oet_with_dr_hesham_dev" -ForegroundColor White
 Write-Host ""
 Write-Host "  To stop: Double-click 'Stop OET App' on desktop" -ForegroundColor DarkGray
 Write-Host ""

@@ -1,9 +1,9 @@
 # AI Package Manifest (APM)
 # https://github.com/microsoft/apm
-name: oet-prep
+name: oet-with-dr-hesham
 version: 0.1.0
-description: OET Prep Platform — AI-ready Next.js + ASP.NET Core application
-author: OET Prep
+description: OET with Dr Hesham Platform — AI-ready Next.js + ASP.NET Core application
+author: OET with Dr Hesham
 license: MIT
 
 dependencies:

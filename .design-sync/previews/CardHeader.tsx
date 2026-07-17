@@ -1,6 +1,6 @@
 // Authored preview — CardHeader (shown inside a Card, its only valid context).
 // Each named export = one labeled card cell.
-import { Card, CardHeader, CardTitle, CardContent, Badge } from 'oet-prep';
+import { Card, CardHeader, CardTitle, CardContent, Badge } from 'oet-with-dr-hesham';
 
 export const ListeningSection = () => (
   <Card style={{ maxWidth: 380 }}>

@@ -2,11 +2,11 @@
   "name": "@oet/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "ASP.NET Core 10 backend for the OET Prep Platform",
+  "description": "ASP.NET Core 10 backend for the OET with Dr Hesham Platform",
   "scripts": {
-    "build": "dotnet build OetLearner.sln",
-    "test": "dotnet test OetLearner.sln",
-    "run": "dotnet run --project src/OetLearner.Api/OetLearner.Api.csproj",
-    "watch": "dotnet watch --project src/OetLearner.Api/OetLearner.Api.csproj run"
+    "build": "dotnet build OetWithDrHesham.sln",
+    "test": "dotnet test OetWithDrHesham.sln",
+    "run": "dotnet run --project src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj",
+    "watch": "dotnet watch --project src/OetWithDrHesham.Api/OetWithDrHesham.Api.csproj run"
   }
 }

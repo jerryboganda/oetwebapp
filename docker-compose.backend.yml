@@ -3,17 +3,17 @@ services:
     # See docker-compose.local.yml — pgvector/pgvector:pg17 ships the `vector`
     # extension required by Writing V2 migration 20260612120000.
     image: pgvector/pgvector:pg17
-    container_name: oet-learner-postgres
+    container_name: oet-with-dr-hesham-postgres
     environment:
-      POSTGRES_DB: oet_learner_dev
+      POSTGRES_DB: oet_with_dr_hesham_dev
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - '5432:5432'
     volumes:
-      - oet_learner_pgdata:/var/lib/postgresql/data
+      - oet_with_dr_hesham_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d oet_learner_dev']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d oet_with_dr_hesham_dev']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -22,25 +22,25 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: oet-learner-api
+    container_name: oet-with-dr-hesham-api
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=oet_learner_dev;Username=postgres;Password=postgres
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=oet_with_dr_hesham_dev;Username=postgres;Password=postgres
       Auth__UseDevelopmentAuth: 'true'
       Platform__PublicApiBaseUrl: http://localhost:5198
       Billing__CheckoutBaseUrl: http://localhost:3000/billing/checkout
       Bootstrap__AutoMigrate: 'true'
       Bootstrap__SeedDemoData: 'true'
-      Storage__LocalRootPath: /var/opt/oet-learner/storage
+      Storage__LocalRootPath: /var/opt/oet-with-dr-hesham/storage
     ports:
       - '5198:8080'
     volumes:
-      - oet_learner_storage:/var/opt/oet-learner/storage
+      - oet_with_dr_hesham_storage:/var/opt/oet-with-dr-hesham/storage
 
 volumes:
-  oet_learner_pgdata:
-  oet_learner_storage:
+  oet_with_dr_hesham_pgdata:
+  oet_with_dr_hesham_storage:
