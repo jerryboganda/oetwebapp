@@ -1,14 +1,47 @@
 'use client';
 
 import { useMemo, useState, useCallback } from 'react';
-import { Folder, Search, X, ChevronRight, Home, SearchX, FolderOpen } from 'lucide-react';
+import {
+  Folder, Search, X, ChevronRight, Home, SearchX, FolderOpen, Download, Loader2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { analytics } from '@/lib/analytics';
+import { fetchAuthorizedBlob } from '@/lib/api';
 import {
-  flattenFiles, searchFiles, folderStats, resolveTrail, formatBytes,
+  flattenFiles, searchFiles, folderStats, resolveTrail, formatBytes, collectFolderFiles,
 } from '@/lib/materials-tree';
 import type { LearnerMaterialFolderDto } from '@/lib/materials-api';
 import { MaterialFileRow } from './material-file-row';
+
+/**
+ * Zip every file beneath a folder (preserving sub-folder structure) and hand the
+ * learner a single archive — the "download the whole folder at once" option.
+ * Files are fetched sequentially so a large section doesn't open dozens of
+ * parallel authorised requests.
+ */
+async function downloadFolderAsZip(folder: LearnerMaterialFolderDto): Promise<void> {
+  const entries = collectFolderFiles(folder);
+  if (entries.length === 0) return;
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+  for (const { file, relativePath } of entries) {
+    const blob = await fetchAuthorizedBlob(file.downloadUrl);
+    zip.file(relativePath, blob);
+  }
+  const archive = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(archive);
+  try {
+    const safeName = folder.name.replace(/[/\\:*?"<>|]/g, '-').trim() || 'materials';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeName}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
 
@@ -20,28 +53,59 @@ function FolderCard({
   onOpen: (id: string) => void;
 }) {
   const stats = useMemo(() => folderStats(folder), [folder]);
+  const [zipping, setZipping] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handleDownload = useCallback(async () => {
+    if (zipping || stats.files === 0) return;
+    setZipping(true);
+    setError(false);
+    try {
+      await downloadFolderAsZip(folder);
+      analytics.track('material_folder_downloaded', { folderId: folder.id, files: stats.files });
+    } catch {
+      setError(true);
+    } finally {
+      setZipping(false);
+    }
+  }, [folder, stats.files, zipping]);
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(folder.id)}
-      className="group flex items-center gap-3 rounded-xl border border-border/60 bg-surface/70 px-3 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/[0.03] hover:shadow-sm sm:px-4"
-    >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
-        <Folder className="h-5 w-5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-navy" title={folder.name}>
-          {folder.name}
+    <div className="group flex items-center gap-3 rounded-xl border border-border/60 bg-surface/70 px-3 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/[0.03] hover:shadow-sm sm:px-4">
+      <button
+        type="button"
+        onClick={() => onOpen(folder.id)}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+          <Folder className="h-5 w-5" />
         </span>
-        <span className="mt-0.5 block text-[11px] text-muted">
-          {stats.folders > 0 && `${stats.folders} folder${stats.folders === 1 ? '' : 's'} · `}
-          {stats.files} file{stats.files === 1 ? '' : 's'}
-          {stats.bytes > 0 && ` · ${formatBytes(stats.bytes)}`}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-navy" title={folder.name}>
+            {folder.name}
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted">
+            {stats.folders > 0 && `${stats.folders} folder${stats.folders === 1 ? '' : 's'} · `}
+            {stats.files} file{stats.files === 1 ? '' : 's'}
+            {stats.bytes > 0 && ` · ${formatBytes(stats.bytes)}`}
+            {error && <span className="ml-1 font-semibold text-red-500">· download failed</span>}
+          </span>
         </span>
-      </span>
+      </button>
+      {stats.files > 0 && (
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={zipping}
+          title={zipping ? 'Preparing zip…' : `Download all ${stats.files} files as a zip`}
+          aria-label={`Download folder ${folder.name} as a zip`}
+          className="pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-dark transition-colors hover:bg-primary/20 disabled:opacity-50"
+        >
+          {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </button>
+      )}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-    </button>
+    </div>
   );
 }
 

@@ -316,6 +316,7 @@ const TRACKED_EVENTS = [
   'materials_page_viewed',
   'materials_searched',
   'material_file_downloaded',
+  'material_folder_downloaded',
 ] as const;
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];

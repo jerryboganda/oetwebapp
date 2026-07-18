@@ -90,6 +90,43 @@ export function searchFiles(index: FlatFile[], query: string): FlatFile[] {
   return index.filter((entry) => terms.every((t) => entry.haystack.includes(t)));
 }
 
+export interface FolderFileEntry {
+  file: LearnerMaterialFileDto;
+  /** Path of the file *inside* the downloaded folder, e.g. 'Benchmark Exams/Test 5.pdf'. */
+  relativePath: string;
+}
+
+/**
+ * Collect every file beneath a folder for a "download whole folder" zip,
+ * each tagged with its path relative to that folder so the archive keeps the
+ * original sub-folder structure. De-duplicates colliding names within a folder.
+ */
+export function collectFolderFiles(
+  folder: LearnerMaterialFolderDto,
+  prefix = '',
+): FolderFileEntry[] {
+  const out: FolderFileEntry[] = [];
+  const used = new Set<string>();
+  for (const file of folder.files ?? []) {
+    let name = buildDownloadFilename(file);
+    if (used.has(name.toLowerCase())) {
+      const dot = name.lastIndexOf('.');
+      const base = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : '';
+      let n = 2;
+      while (used.has(`${base} (${n})${ext}`.toLowerCase())) n += 1;
+      name = `${base} (${n})${ext}`;
+    }
+    used.add(name.toLowerCase());
+    out.push({ file, relativePath: prefix ? `${prefix}/${name}` : name });
+  }
+  for (const sub of folder.folders ?? []) {
+    const safe = sub.name.replace(/[/\\]/g, '-').trim() || 'folder';
+    out.push(...collectFolderFiles(sub, prefix ? `${prefix}/${safe}` : safe));
+  }
+  return out;
+}
+
 /** Resolve a folder-id trail into the folder objects it points at. */
 export function resolveTrail(
   folders: LearnerMaterialFolderDto[],
