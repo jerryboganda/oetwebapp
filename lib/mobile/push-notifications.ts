@@ -32,13 +32,13 @@ function loadPushModule(): Promise<PushModule> {
   return pushModulePromise;
 }
 
-// Firebase/FCM isn't provisioned yet for the native apps (no google-services.json in
-// the Android project, no FCM server key configured on the backend). The native
-// register() call invokes FirebaseMessaging.getInstance() unconditionally; with no
-// FirebaseApp initialized, that throws, and Capacitor's Bridge rethrows it as an
-// uncaught RuntimeException on the main thread — killing the whole app the instant
-// the user grants the notification permission. Flip this once Firebase is set up.
-const FCM_REGISTRATION_ENABLED = false;
+// Firebase/FCM is now provisioned: google-services.json is in the Android project
+// and a service account is configured on the backend (see MobilePushDispatcher).
+// Before that, the native register() call invoked FirebaseMessaging.getInstance()
+// unconditionally with no FirebaseApp initialized, which threw and crashed the
+// whole app the instant the user granted the notification permission — this flag
+// existed solely to gate that crash off until Firebase was actually set up.
+const FCM_REGISTRATION_ENABLED = true;
 
 // ── Permission Check ────────────────────────────────────────────
 
