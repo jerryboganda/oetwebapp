@@ -32,13 +32,17 @@ function loadPushModule(): Promise<PushModule> {
   return pushModulePromise;
 }
 
-// Firebase/FCM is now provisioned: google-services.json is in the Android project
-// and a service account is configured on the backend (see MobilePushDispatcher).
-// Before that, the native register() call invoked FirebaseMessaging.getInstance()
-// unconditionally with no FirebaseApp initialized, which threw and crashed the
-// whole app the instant the user granted the notification permission — this flag
-// existed solely to gate that crash off until Firebase was actually set up.
-const FCM_REGISTRATION_ENABLED = true;
+// Firebase/FCM is now provisioned on the backend and in the Android *source*
+// (google-services.json is committed), BUT the currently-installed APKs were built
+// before that file existed. google-services.json is processed at Gradle build time
+// into baked-in Android resources — it is NOT fetched at runtime, so already-built
+// APKs cannot initialize FirebaseApp no matter what this remote JS bundle says. This
+// app loads its JS remotely (capacitor.config.ts server.url), so flipping this flag
+// takes effect on already-installed apps immediately — before they've been rebuilt
+// with the new google-services.json, that reintroduces the exact crash this flag
+// was added to prevent. Flip to true only once a new Android build (with
+// google-services.json baked in) has shipped and users have updated.
+const FCM_REGISTRATION_ENABLED = false;
 
 // ── Permission Check ────────────────────────────────────────────
 

@@ -66,7 +66,11 @@ describe('push-notifications', () => {
   });
 
   describe('registerPushNotifications', () => {
-    it('registers for push and returns a cleanup function', async () => {
+    // FCM registration is gated off (FCM_REGISTRATION_ENABLED = false) until a new
+    // Android build with google-services.json baked in has shipped — the currently
+    // installed APKs would crash on native register() otherwise. See
+    // lib/mobile/push-notifications.ts for details.
+    it('requests permission but does not call native register()', async () => {
       mockPushNotifications.requestPermissions.mockResolvedValue({ receive: 'granted' });
       mockPushNotifications.register.mockResolvedValue(undefined);
       mockPushNotifications.addListener.mockResolvedValue({ remove: vi.fn() });
@@ -76,8 +80,8 @@ describe('push-notifications', () => {
       });
 
       expect(mockPushNotifications.requestPermissions).toHaveBeenCalled();
-      expect(mockPushNotifications.register).toHaveBeenCalled();
-      expect(mockPushNotifications.addListener).toHaveBeenCalledTimes(4);
+      expect(mockPushNotifications.register).not.toHaveBeenCalled();
+      expect(mockPushNotifications.addListener).not.toHaveBeenCalled();
       expect(typeof cleanup).toBe('function');
     });
 
@@ -86,26 +90,6 @@ describe('push-notifications', () => {
       const cleanup = await registerPushNotifications();
       expect(mockPushNotifications.register).not.toHaveBeenCalled();
       expect(typeof cleanup).toBe('function');
-    });
-
-    it('invokes onRegistration handler when token arrives', async () => {
-      const onRegistration = vi.fn();
-      let registrationCallback: ((token: { value: string }) => void) | undefined;
-
-      mockPushNotifications.requestPermissions.mockResolvedValue({ receive: 'granted' });
-      mockPushNotifications.register.mockResolvedValue(undefined);
-      mockPushNotifications.addListener.mockImplementation(async (event: string, cb: unknown) => {
-        if (event === 'registration') {
-          registrationCallback = cb as typeof registrationCallback;
-        }
-        return { remove: vi.fn() };
-      });
-
-      await registerPushNotifications({ onRegistration });
-
-      expect(registrationCallback).toBeDefined();
-      registrationCallback!({ value: 'test-token-123' });
-      expect(onRegistration).toHaveBeenCalledWith({ value: 'test-token-123' });
     });
   });
 
