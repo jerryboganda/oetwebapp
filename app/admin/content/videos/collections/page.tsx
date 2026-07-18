@@ -13,7 +13,7 @@
  * answers 503 `bunny_not_configured`, which renders a setup EmptyState.
  */
 
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -21,7 +21,6 @@ import {
   ExternalLink,
   Layers,
   Loader2,
-  Pencil,
   Plus,
   Settings,
   Trash2,
@@ -49,6 +48,12 @@ import { Modal } from '@/components/ui/modal';
 import { ApiError } from '@/lib/api';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
+import {
+  buildCollectionTree,
+  CollectionTree,
+  PATH_SEP,
+  splitCollectionPath,
+} from '@/components/domain/video-library/CollectionTree';
 import {
   adminBunnyDeleteCollectionVideo,
   adminCreateCollection,
@@ -118,8 +123,11 @@ export default function AdminVideoCollectionsPage() {
   const [videos, setVideos] = useState<AdminCollectionVideo[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(false);
 
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newParent, setNewParent] = useState('');
   const [creating, setCreating] = useState(false);
 
   const [renaming, setRenaming] = useState<AdminCollection | null>(null);
@@ -138,12 +146,35 @@ export default function AdminVideoCollectionsPage() {
 
   const [importingId, setImportingId] = useState<string | null>(null);
 
+  // Multi-select + drag-and-drop for fast reorganising.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const dragIdsRef = useRef<string[]>([]);
+
+  const seededExpand = useRef(false);
+
   const loadCollections = useCallback(async () => {
     setLoadingCollections(true);
     try {
       const list = await adminListCollections({ itemsPerPage: 100 });
       setCollections(list.items);
       setNotConfigured(false);
+      // On the first load, open every folder so the tree reads as a full map.
+      // Later refreshes respect whatever the admin has since collapsed.
+      if (!seededExpand.current) {
+        seededExpand.current = true;
+        const folders = new Set<string>();
+        for (const c of list.items) {
+          const segs = splitCollectionPath(c.name);
+          let path = '';
+          for (let i = 0; i < segs.length - 1; i += 1) {
+            path = path ? `${path}${PATH_SEP}${segs[i]}` : segs[i];
+            folders.add(path);
+          }
+        }
+        setExpanded(folders);
+      }
     } catch (err) {
       if (isNotConfigured(err)) {
         setNotConfigured(true);
@@ -178,7 +209,42 @@ export default function AdminVideoCollectionsPage() {
   function selectCollection(collection: AdminCollection) {
     setSelected(collection);
     setVideos([]);
+    setSelectedIds(new Set());
     void loadVideos(collection.collectionId);
+  }
+
+  function toggleVideoSelected(bunnyVideoId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(bunnyVideoId)) next.delete(bunnyVideoId);
+      else next.add(bunnyVideoId);
+      return next;
+    });
+  }
+
+  /** Move one or many videos into a target folder (null = ungrouped), then refresh. */
+  async function moveVideos(ids: string[], targetCollectionId: string | null) {
+    if (ids.length === 0) return;
+    let ok = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await adminMoveCollectionVideo(id, targetCollectionId);
+        ok += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed === 0) {
+      setToast({ variant: 'success', message: ok === 1 ? 'Video moved.' : `${ok} videos moved.` });
+    } else {
+      setToast({
+        variant: 'error',
+        message: `Moved ${ok}, but ${failed} failed. Try again.`,
+      });
+    }
+    setSelectedIds(new Set());
+    await refreshSelected();
   }
 
   async function refreshSelected() {
@@ -186,21 +252,53 @@ export default function AdminVideoCollectionsPage() {
     if (selected) await loadVideos(selected.collectionId);
   }
 
+  function openCreate(parentPath = '') {
+    setNewParent(parentPath);
+    setNewName('');
+    setCreateOpen(true);
+  }
+
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     if (!newName.trim() || creating) return;
+    // The full collection name is "Parent / Child" — Bunny stays flat, but the
+    // tree reads the "/" segments back into nested folders.
+    const childSegments = splitCollectionPath(newName);
+    const child = childSegments.length > 0 ? childSegments.join(PATH_SEP) : newName.trim();
+    const fullName = newParent ? `${newParent}${PATH_SEP}${child}` : child;
     setCreating(true);
     try {
-      await adminCreateCollection(newName.trim());
+      await adminCreateCollection(fullName);
       setToast({ variant: 'success', message: 'Collection created.' });
       setNewName('');
+      setNewParent('');
       setCreateOpen(false);
+      // Reveal the freshly created folder by expanding its whole ancestor chain.
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        const segs = splitCollectionPath(fullName);
+        let path = '';
+        for (let i = 0; i < segs.length - 1; i += 1) {
+          path = path ? `${path}${PATH_SEP}${segs[i]}` : segs[i];
+          next.add(path);
+        }
+        return next;
+      });
       await loadCollections();
     } catch (err) {
       setToast({ variant: 'error', message: errorMessage(err, 'Create failed.') });
     } finally {
       setCreating(false);
     }
+  }
+
+  function toggleFolder(path: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
   }
 
   function openRename(collection: AdminCollection) {
@@ -272,15 +370,46 @@ export default function AdminVideoCollectionsPage() {
     if (!moving || moveBusy) return;
     setMoveBusy(true);
     try {
-      await adminMoveCollectionVideo(moving.bunnyVideoId, moveTarget || null);
-      setToast({ variant: 'success', message: 'Video moved.' });
+      await moveVideos([moving.bunnyVideoId], moveTarget || null);
       setMoving(null);
-      await refreshSelected();
-    } catch (err) {
-      setToast({ variant: 'error', message: errorMessage(err, 'Move failed.') });
     } finally {
       setMoveBusy(false);
     }
+  }
+
+  function openBulkMove() {
+    setMoveTarget('');
+    setBulkMoveOpen(true);
+  }
+
+  async function handleBulkMove(event: FormEvent) {
+    event.preventDefault();
+    if (selectedIds.size === 0 || moveBusy) return;
+    setMoveBusy(true);
+    try {
+      await moveVideos(Array.from(selectedIds), moveTarget || null);
+      setBulkMoveOpen(false);
+    } finally {
+      setMoveBusy(false);
+    }
+  }
+
+  // ── Drag-and-drop: drag a video card (or the whole selection) onto a folder ──
+  function handleVideoDragStart(video: AdminCollectionVideo) {
+    // Dragging a card that's part of the current selection carries the whole set;
+    // dragging an unselected card carries just that one.
+    dragIdsRef.current = selectedIds.has(video.bunnyVideoId)
+      ? Array.from(selectedIds)
+      : [video.bunnyVideoId];
+  }
+
+  async function handleDropOnCollection(target: AdminCollection) {
+    const ids = dragIdsRef.current.filter(Boolean);
+    dragIdsRef.current = [];
+    setDropTargetId(null);
+    if (ids.length === 0) return;
+    if (target.collectionId === selected?.collectionId) return; // already here
+    await moveVideos(ids, target.collectionId);
   }
 
   async function handleBunnyDelete() {
@@ -298,8 +427,29 @@ export default function AdminVideoCollectionsPage() {
     }
   }
 
+  const tree = buildCollectionTree(collections);
+
+  // Every existing path (folders + collections) can serve as a parent for a new
+  // sub-folder, so the admin can nest without retyping the whole path.
+  const folderOptions = (() => {
+    const paths = new Set<string>();
+    for (const c of collections) {
+      const segs = splitCollectionPath(c.name);
+      let path = '';
+      for (const seg of segs) {
+        path = path ? `${path}${PATH_SEP}${seg}` : seg;
+        paths.add(path);
+      }
+    }
+    return Array.from(paths)
+      .sort((a, b) => a.localeCompare(b))
+      .map((p) => ({ value: p, label: p }));
+  })();
+
   const moveOptions = collections
     .filter((c) => c.collectionId !== selected?.collectionId)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map((c) => ({ value: c.collectionId, label: c.name }));
 
   return (
@@ -332,9 +482,9 @@ export default function AdminVideoCollectionsPage() {
             <Card>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-bold text-admin-fg-strong">Collections</h2>
+                  <h2 className="text-sm font-bold text-admin-fg-strong">Folders</h2>
                   {canWrite ? (
-                    <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
+                    <Button size="sm" variant="primary" onClick={() => openCreate()}>
                       <Plus className="mr-1 h-4 w-4" /> New
                     </Button>
                   ) : null}
@@ -351,53 +501,21 @@ export default function AdminVideoCollectionsPage() {
                     description="Create a collection to start organising your Bunny videos."
                   />
                 ) : (
-                  <ul className="space-y-1">
-                    {collections.map((collection) => {
-                      const active = selected?.collectionId === collection.collectionId;
-                      return (
-                        <li key={collection.collectionId}>
-                          <div
-                            className={`group flex items-center gap-2 rounded-admin border px-3 py-2 ${
-                              active
-                                ? 'border-admin-primary bg-admin-primary-tint'
-                                : 'border-admin-border bg-admin-bg-surface hover:bg-admin-bg-subtle'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => selectCollection(collection)}
-                              className="min-w-0 flex-1 text-left"
-                            >
-                              <p className="truncate text-sm font-semibold text-admin-fg-strong">{collection.name}</p>
-                              <p className="mt-0.5 text-xs text-admin-fg-muted">
-                                {collection.videoCount} video{collection.videoCount === 1 ? '' : 's'} · {formatBytes(collection.totalSizeBytes)}
-                              </p>
-                            </button>
-                            {canWrite ? (
-                              <button
-                                type="button"
-                                onClick={() => openRename(collection)}
-                                className="rounded p-1 text-admin-fg-muted hover:text-admin-fg-strong"
-                                aria-label={`Rename ${collection.name}`}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            ) : null}
-                            {canSystemAdmin ? (
-                              <button
-                                type="button"
-                                onClick={() => setDeletingCollection(collection)}
-                                className="rounded p-1 text-admin-fg-muted hover:text-[var(--admin-danger)]"
-                                aria-label={`Delete ${collection.name}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            ) : null}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <CollectionTree
+                    nodes={tree}
+                    selectedId={selected?.collectionId ?? null}
+                    expanded={expanded}
+                    onToggle={toggleFolder}
+                    onSelect={selectCollection}
+                    onRename={openRename}
+                    onDelete={setDeletingCollection}
+                    canWrite={canWrite}
+                    canSystemAdmin={canSystemAdmin}
+                    formatBytes={formatBytes}
+                    dropTargetId={dropTargetId}
+                    onDropCollection={canWrite ? handleDropOnCollection : undefined}
+                    onDragOverCollection={setDropTargetId}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -408,35 +526,85 @@ export default function AdminVideoCollectionsPage() {
                 {!selected ? (
                   <EmptyState
                     icon={<Layers className="h-6 w-6" />}
-                    title="Select a collection"
-                    description="Pick a collection on the left to see the videos inside it."
-                  />
-                ) : loadingVideos ? (
-                  <div className="flex items-center gap-2 py-10 text-sm text-admin-fg-muted">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading videos…
-                  </div>
-                ) : videos.length === 0 ? (
-                  <EmptyState
-                    icon={<Layers className="h-6 w-6" />}
-                    title="No videos in this collection"
-                    description="Upload to this collection from Bunny, or move existing videos here."
+                    title="Select a folder"
+                    description="Pick a folder on the left to see the videos inside it."
                   />
                 ) : (
                   <>
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <h2 className="truncate text-sm font-bold text-admin-fg-strong">{selected.name}</h2>
-                      <span className="shrink-0 text-xs text-admin-fg-muted">{videos.length} shown</span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {canWrite ? (
+                          <Button size="sm" variant="outline" onClick={() => openCreate(selected.name)}>
+                            <Plus className="mr-1 h-3.5 w-3.5" /> New sub-folder
+                          </Button>
+                        ) : null}
+                        <span className="text-xs text-admin-fg-muted">{videos.length} shown</span>
+                      </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+
+                    {loadingVideos ? (
+                      <div className="flex items-center gap-2 py-10 text-sm text-admin-fg-muted">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading videos…
+                      </div>
+                    ) : videos.length === 0 ? (
+                      <EmptyState
+                        icon={<Layers className="h-6 w-6" />}
+                        title="No videos in this folder"
+                        description="Upload to this folder from Bunny, move existing videos here, or add a sub-folder above."
+                      />
+                    ) : (
+                      <>
+                      {canWrite ? (
+                        selectedIds.size > 0 ? (
+                          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-admin border border-admin-primary bg-admin-primary-tint px-3 py-2">
+                            <span className="text-sm font-semibold text-admin-fg-strong">
+                              {selectedIds.size} selected
+                            </span>
+                            <div className="ml-auto flex items-center gap-2">
+                              <Button size="sm" variant="primary" onClick={openBulkMove}>
+                                <ArrowRightLeft className="mr-1 h-3.5 w-3.5" /> Move selected
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mb-3 text-xs text-admin-fg-muted">
+                            Tip: drag a video onto a folder on the left to move it, or tick videos to move several at once.
+                          </p>
+                        )
+                      ) : null}
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {videos.map((video) => {
                         const encode = ENCODE_BADGE[video.encodeStatus];
                         const importing = importingId === video.bunnyVideoId;
+                        const checked = selectedIds.has(video.bunnyVideoId);
                         return (
                           <div
                             key={video.bunnyVideoId}
-                            className="flex flex-col overflow-hidden rounded-admin border border-admin-border bg-admin-bg-surface"
+                            draggable={canWrite}
+                            onDragStart={canWrite ? () => handleVideoDragStart(video) : undefined}
+                            className={`flex flex-col overflow-hidden rounded-admin border bg-admin-bg-surface ${
+                              checked ? 'border-admin-primary ring-1 ring-admin-primary' : 'border-admin-border'
+                            } ${canWrite ? 'cursor-grab active:cursor-grabbing' : ''}`}
                           >
                             <div className="relative aspect-video bg-admin-bg-subtle">
+                              {canWrite ? (
+                                <label
+                                  className="absolute left-1.5 top-1.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded bg-black/50"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 cursor-pointer accent-[var(--admin-primary)]"
+                                    checked={checked}
+                                    onChange={() => toggleVideoSelected(video.bunnyVideoId)}
+                                    aria-label={`Select ${video.title || 'video'}`}
+                                  />
+                                </label>
+                              ) : null}
                               {video.thumbnailUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
@@ -512,7 +680,9 @@ export default function AdminVideoCollectionsPage() {
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                      </>
+                    )}
                   </>
                 )}
               </CardContent>
@@ -521,22 +691,36 @@ export default function AdminVideoCollectionsPage() {
         )}
       </AdminOperationsLayout>
 
-      {/* ── New collection ── */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New collection" size="sm">
+      {/* ── New collection / sub-folder ── */}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New folder" size="sm">
         <form className="space-y-4" onSubmit={handleCreate}>
+          <NativeSelect
+            label="Parent folder"
+            value={newParent}
+            onChange={(e) => setNewParent(e.target.value)}
+            placeholder="Top level (no parent)"
+            options={folderOptions}
+          />
           <Input
-            label="Collection name"
+            label="Folder name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. Speaking role-plays"
+            placeholder="e.g. Listening"
             autoFocus
           />
+          <p className="rounded-admin bg-admin-bg-subtle px-3 py-2 text-xs text-admin-fg-muted">
+            Will be created as{' '}
+            <span className="font-semibold text-admin-fg-strong">
+              {(newParent ? `${newParent}${PATH_SEP}` : '') + (newName.trim() || '…')}
+            </span>
+            . Pick a parent to nest it — e.g. Parent “Medicine / Arabic”, name “Listening”.
+          </p>
           <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={!newName.trim() || creating}>
-              Create collection
+              Create folder
             </Button>
           </div>
         </form>
@@ -565,12 +749,16 @@ export default function AdminVideoCollectionsPage() {
           <form className="space-y-4" onSubmit={handleMove}>
             <p className="text-sm text-admin-fg-muted line-clamp-2">{moving.title || 'Untitled'}</p>
             <NativeSelect
-              label="Destination collection"
+              label="Destination folder"
               value={moveTarget}
               onChange={(e) => setMoveTarget(e.target.value)}
-              placeholder="No collection (ungrouped)"
+              placeholder="No folder (ungrouped)"
               options={moveOptions}
             />
+            <p className="text-xs text-admin-fg-muted">
+              Folders are listed by full path (e.g. “Medicine / Arabic / Listening”) so you can drop the
+              video straight into the right sub-test.
+            </p>
             <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
               <Button type="button" variant="ghost" onClick={() => setMoving(null)}>
                 Cancel
@@ -581,6 +769,31 @@ export default function AdminVideoCollectionsPage() {
             </div>
           </form>
         ) : null}
+      </Modal>
+
+      {/* ── Move several videos at once ── */}
+      <Modal open={bulkMoveOpen} onClose={() => setBulkMoveOpen(false)} title="Move selected videos" size="sm">
+        <form className="space-y-4" onSubmit={handleBulkMove}>
+          <p className="text-sm text-admin-fg-muted">
+            Moving <span className="font-semibold text-admin-fg-strong">{selectedIds.size}</span> video
+            {selectedIds.size === 1 ? '' : 's'} into the folder you pick.
+          </p>
+          <NativeSelect
+            label="Destination folder"
+            value={moveTarget}
+            onChange={(e) => setMoveTarget(e.target.value)}
+            placeholder="No folder (ungrouped)"
+            options={moveOptions}
+          />
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            <Button type="button" variant="ghost" onClick={() => setBulkMoveOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={moveBusy}>
+              Move {selectedIds.size} video{selectedIds.size === 1 ? '' : 's'}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* ── Delete collection ── */}
