@@ -594,6 +594,12 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingInvoiceEvidenceAsync(invoiceId, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        admin.MapGet("/billing/invoices/{invoiceId}/download", async (string invoiceId, AdminService service, CancellationToken ct) =>
+        {
+            var file = await service.GetBillingInvoiceDownloadAsync(invoiceId, ct);
+            return Results.File(file.Stream, file.ContentType, fileDownloadName: file.FileName);
+        }).WithAdminRead("AdminBillingRead");
+
         admin.MapGet("/billing/payment-transactions", async (AdminService service, CancellationToken ct,
             string? status, string? gateway, string? transactionType, string? search, int? page, int? pageSize)
             => Results.Ok(await service.GetBillingPaymentTransactionsAsync(status, gateway, transactionType, search, page ?? 1, pageSize ?? 20, ct)))

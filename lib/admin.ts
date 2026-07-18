@@ -1,5 +1,6 @@
 import {
   apiClient,
+  fetchAuthorizedObjectUrl,
   fetchAdminAIConfig,
   fetchAdminCohortAnalysis,
   fetchAdminAuditLogDetail,
@@ -763,6 +764,15 @@ export async function getAdminBillingInvoiceData(params?: Parameters<typeof fetc
       plan: toStringValue(item.plan),
     })),
   };
+}
+
+/**
+ * Fetches an admin-scoped invoice PDF as an authorized blob URL. Any billing admin can
+ * download any learner's invoice (unlike the learner-facing `downloadInvoice`, which is
+ * scoped to the signed-in learner). Caller must `URL.revokeObjectURL` when done.
+ */
+export async function downloadAdminBillingInvoice(invoiceId: string): Promise<string> {
+  return fetchAuthorizedObjectUrl(`/v1/admin/billing/invoices/${encodeURIComponent(invoiceId)}/download`);
 }
 
 export async function getAdminBillingInvoiceEvidenceData(invoiceId: string): Promise<AdminBillingInvoiceEvidence> {

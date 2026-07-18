@@ -2,7 +2,7 @@
 
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Trash2, Users } from 'lucide-react';
+import { Activity, AlertTriangle, CreditCard, DollarSign, Download, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Trash2, Users } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -56,6 +56,7 @@ import {
   getAdminBillingCouponVersionHistoryData,
   getAdminBillingEntitlementDiagnosticsData,
   getAdminBillingInvoiceEvidenceData,
+  downloadAdminBillingInvoice,
   getAdminBillingInvoiceData,
   getAdminBillingPaymentTransactionData,
   getAdminBillingPlanData,
@@ -643,6 +644,7 @@ export default function BillingPage() {
   const [invoiceEvidence, setInvoiceEvidence] = useState<AdminBillingInvoiceEvidence | null>(null);
   const [invoiceEvidenceStatus, setInvoiceEvidenceStatus] = useState<PageStatus>('empty');
   const invoiceEvidenceRequestRef = useRef(0);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [professionCatalog, setProfessionCatalog] = useState<ProfessionCatalogEntry[]>(PROFESSION_CATALOG_FALLBACK);
 
@@ -1616,7 +1618,11 @@ export default function BillingPage() {
       key: 'actions',
       header: '',
       render: (invoice) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-2" aria-label={`Download PDF for invoice ${invoice.id}`} disabled={downloadingInvoiceId === invoice.id} onClick={() => handleDownloadInvoice(invoice.id)}>
+            <Download className="h-4 w-4" />
+            {downloadingInvoiceId === invoice.id ? 'Downloading…' : 'PDF'}
+          </Button>
           <Button variant="outline" size="sm" className="gap-2" aria-label={`View evidence for invoice ${invoice.id}`} onClick={() => openInvoiceEvidence(invoice)}>
             <FileSearch className="h-4 w-4" />
             Evidence
@@ -1995,10 +2001,16 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <Button variant="outline" size="sm" className="w-full gap-2" aria-label={`View evidence for invoice ${invoice.id}`} onClick={() => openInvoiceEvidence(invoice)}>
-        <FileSearch className="h-4 w-4" />
-        Evidence
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="flex-1 gap-2" aria-label={`Download PDF for invoice ${invoice.id}`} disabled={downloadingInvoiceId === invoice.id} onClick={() => handleDownloadInvoice(invoice.id)}>
+          <Download className="h-4 w-4" />
+          {downloadingInvoiceId === invoice.id ? 'Downloading…' : 'PDF'}
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1 gap-2" aria-label={`View evidence for invoice ${invoice.id}`} onClick={() => openInvoiceEvidence(invoice)}>
+          <FileSearch className="h-4 w-4" />
+          Evidence
+        </Button>
+      </div>
     </div>
   );
 
@@ -2389,6 +2401,27 @@ export default function BillingPage() {
     setInvoiceEvidenceTarget(null);
     setInvoiceEvidence(null);
     setInvoiceEvidenceStatus('empty');
+  }
+
+  async function handleDownloadInvoice(invoiceId: string) {
+    if (downloadingInvoiceId) return;
+    setDownloadingInvoiceId(invoiceId);
+    let objectUrl: string | null = null;
+    try {
+      objectUrl = await downloadAdminBillingInvoice(invoiceId);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `${invoiceId}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setToast({ variant: 'success', message: 'Invoice download started.' });
+    } catch {
+      setToast({ variant: 'error', message: 'Unable to download that invoice.' });
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setDownloadingInvoiceId(null);
+    }
   }
 
   async function handleSavePlan() {
@@ -3063,6 +3096,16 @@ export default function BillingPage() {
               <h2 className="mt-3 text-lg font-semibold text-admin-fg-strong">{invoiceEvidence?.invoice.userName ?? invoiceEvidenceTarget.userName}</h2>
               <p className="mt-1 break-words font-mono text-xs text-muted">{invoiceEvidenceTarget.id}</p>
               <p className="mt-1 text-sm text-muted">{invoiceEvidence?.invoice.description ?? invoiceEvidenceTarget.plan}</p>
+              <Button
+                variant="primary"
+                size="sm"
+                className="mt-3 gap-2"
+                disabled={downloadingInvoiceId === invoiceEvidenceTarget.id}
+                onClick={() => handleDownloadInvoice(invoiceEvidenceTarget.id)}
+              >
+                <Download className="h-4 w-4" />
+                {downloadingInvoiceId === invoiceEvidenceTarget.id ? 'Downloading…' : 'Download invoice PDF'}
+              </Button>
             </div>
 
             {invoiceEvidenceStatus === 'loading' ? (

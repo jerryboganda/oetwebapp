@@ -6651,6 +6651,37 @@ public partial class AdminService(
             .ToList();
     }
 
+    /// <summary>
+    /// Renders any learner's invoice as a branded PDF for admin download. Unlike the
+    /// learner-facing <see cref="LearnerService.GetInvoiceDownloadAsync"/>, this is not
+    /// scoped to the caller — it resolves the invoice's owning learner for the bill-to block.
+    /// </summary>
+    public async Task<GeneratedDownloadFile> GetBillingInvoiceDownloadAsync(string invoiceId, CancellationToken ct)
+    {
+        var normalizedInvoiceId = invoiceId.Trim();
+        var invoice = await db.Invoices.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == normalizedInvoiceId, ct)
+            ?? throw ApiException.NotFound("billing_invoice_not_found", "Billing invoice not found.");
+
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == invoice.UserId)
+            .Select(u => new { u.DisplayName, u.Email })
+            .FirstOrDefaultAsync(ct);
+
+        var pdf = new InvoicePdfService().Generate(new InvoicePdfModel(
+            InvoiceId: invoice.Id,
+            Number: invoice.Number,
+            IssuedAt: invoice.IssuedAt,
+            Amount: invoice.Amount,
+            Currency: invoice.Currency,
+            Status: invoice.Status,
+            Description: invoice.Description,
+            BillToName: user?.DisplayName ?? invoice.UserId,
+            BillToEmail: user?.Email ?? string.Empty));
+
+        return new GeneratedDownloadFile(new MemoryStream(pdf.Bytes), "application/pdf", pdf.Filename);
+    }
+
     public async Task<AdminBillingInvoiceEvidenceResponse> GetBillingInvoiceEvidenceAsync(string invoiceId, CancellationToken ct)
     {
         var normalizedInvoiceId = invoiceId.Trim();
