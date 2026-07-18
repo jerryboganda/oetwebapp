@@ -97,7 +97,7 @@ export function VideoCard({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant="muted">{SUBTEST_LABELS[video.subtestCode ?? ''] ?? 'General'}</Badge>
             {video.language && (
-              <Badge variant="info">{video.language === 'ar' ? 'العربية' : 'English'}</Badge>
+              <Badge variant="info">{video.language === 'ar' ? 'Arabic' : 'English'}</Badge>
             )}
             {video.difficulty && <span className="text-xs font-semibold text-muted">{labelFor(video.difficulty)}</span>}
           </div>

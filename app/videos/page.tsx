@@ -34,7 +34,7 @@ type LanguageKey = 'all' | 'en' | 'ar';
 const LANGUAGE_TABS: Array<[LanguageKey, string]> = [
   ['all', 'All'],
   ['en', 'English'],
-  ['ar', 'العربية'],
+  ['ar', 'Arabic'],
 ];
 
 // The learner opens the module as four subtest cards (Listening · Reading · Writing ·
