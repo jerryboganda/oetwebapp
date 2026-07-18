@@ -71,6 +71,9 @@ public sealed class UserAccessAllocationService(
         var folderIds = await db.UserMaterialFolderAccesses.AsNoTracking()
             .Where(x => x.UserId == userId).Select(x => x.FolderId).ToListAsync(ct);
 
+        var videoIds = await db.UserVideoAccesses.AsNoTracking()
+            .Where(x => x.UserId == userId).Select(x => x.VideoId).ToListAsync(ct);
+
         var recallSetCodes = await db.UserRecallSetAccesses.AsNoTracking()
             .Where(x => x.UserId == userId).Select(x => x.RecallSetCode).ToListAsync(ct);
 
@@ -90,7 +93,8 @@ public sealed class UserAccessAllocationService(
             moduleOverrides,
             folderIds,
             recallSetCodes,
-            learner.AccessExpiresAt);
+            learner.AccessExpiresAt,
+            videoIds);
     }
 
     public async Task<UserAccessDto> GrantPackageAsync(
@@ -340,6 +344,22 @@ public sealed class UserAccessAllocationService(
             }
         }
 
+        if (request.VideoIds is not null)
+        {
+            var existing = await db.UserVideoAccesses.Where(x => x.UserId == userId).ToListAsync(ct);
+            db.UserVideoAccesses.RemoveRange(existing);
+            foreach (var videoId in request.VideoIds.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct())
+            {
+                db.UserVideoAccesses.Add(new UserVideoAccess
+                {
+                    Id = $"uva_{Guid.NewGuid():N}",
+                    UserId = userId,
+                    VideoId = videoId.Trim(),
+                    CreatedAt = now,
+                });
+            }
+        }
+
         if (request.RecallSetCodes is not null)
         {
             var existing = await db.UserRecallSetAccesses.Where(x => x.UserId == userId).ToListAsync(ct);
@@ -475,7 +495,8 @@ public record UserAccessDto(
     IReadOnlyList<UserAccessModuleDto> ModuleOverrides,
     IReadOnlyList<string> MaterialFolderIds,
     IReadOnlyList<string> RecallSetCodes,
-    DateTimeOffset? AccessExpiresAt);
+    DateTimeOffset? AccessExpiresAt,
+    IReadOnlyList<string> VideoIds);
 
 public record UserAccessSubscriptionDto(
     string Id,

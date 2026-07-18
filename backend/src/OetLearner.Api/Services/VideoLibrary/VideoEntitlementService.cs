@@ -58,6 +58,7 @@ public sealed record VideoEntitlementResult(
     string Reason,        // "admin" | "free_tier" | "plan_grants_video_library" | "addon_grants_video_library"
                           // | "no_active_subscription" | "subscription_frozen" | "subscription_expired" | "plan_does_not_grant"
                           // | "plan_does_not_grant_subtest" | "profession_mismatch" | "plan_excludes_video"
+                          // | "not_in_user_allocation"
     string? CurrentTier); // null | "free" | "premium" | "trial" | "frozen" | "expired" | "admin"
 
 /// <summary>Resolved-once grant context for evaluating many videos.</summary>
@@ -91,7 +92,12 @@ public sealed record VideoAccessContext(
     // An explicit include beats the subtest/profession scope AND an exclude; neither ever
     // bypasses the module / subscription gate.
     IReadOnlySet<string>? VideoIncludes = null,
-    IReadOnlySet<string>? VideoExcludes = null);
+    IReadOnlySet<string>? VideoExcludes = null,
+    // Per-USER video allocation allow-list (Domain.UserVideoAccess). Null = no per-user
+    // restriction (fail-open). When non-null, ONLY videos whose id is in this set unlock —
+    // an admin-set restriction WITHIN the plan grant that wins over the plan-level content
+    // includes/excludes (it is the more specific, per-learner decision). Admins bypass it.
+    IReadOnlySet<string>? UserAllowedVideoIds = null);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
@@ -158,6 +164,10 @@ public sealed class VideoEntitlementService(
                 PlanGrantsPremium: false, AddOnGrantsPremium: false, CurrentTier: null);
         }
 
+        // Per-user video allocation allow-list — resolved once for every authenticated,
+        // non-admin path (null = no restriction, fail-open).
+        var userAllowedVideoIds = await LoadAllowedVideoIdsAsync(userId, ct);
+
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
         if (!entitlement.HasEligibleSubscription)
         {
@@ -170,7 +180,8 @@ public sealed class VideoEntitlementService(
                 HasEligibleSubscription: false, Frozen: frozen, Expired: expired,
                 PlanGrantsPremium: false, AddOnGrantsPremium: false,
                 CurrentTier: frozen ? "frozen" : expired ? "expired" : "free",
-                ProfessionId: entitlement.ProfessionId);
+                ProfessionId: entitlement.ProfessionId,
+                UserAllowedVideoIds: userAllowedVideoIds);
         }
 
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
@@ -223,7 +234,23 @@ public sealed class VideoEntitlementService(
             GrantedSubtests: grantedSubtests,
             ProfessionId: entitlement.ProfessionId,
             VideoIncludes: entitlement.ContentOverrides.VideoIncludes,
-            VideoExcludes: entitlement.ContentOverrides.VideoExcludes);
+            VideoExcludes: entitlement.ContentOverrides.VideoExcludes,
+            UserAllowedVideoIds: userAllowedVideoIds);
+    }
+
+    /// <summary>
+    /// Per-user Video Library allow-list (<see cref="Domain.UserVideoAccess"/>). Returns null
+    /// when the learner has NO rows (fail-open — inherit the module's full grant). Any rows
+    /// restrict the learner to exactly those video ids. Mirrors the same helper in
+    /// <see cref="VideoLibraryLearnerService"/> so listing and the playback gate agree.
+    /// </summary>
+    private async Task<HashSet<string>?> LoadAllowedVideoIdsAsync(string userId, CancellationToken ct)
+    {
+        var ids = await db.UserVideoAccesses.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .Select(x => x.VideoId)
+            .ToListAsync(ct);
+        return ids.Count == 0 ? null : ids.ToHashSet(StringComparer.Ordinal);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -231,6 +258,14 @@ public sealed class VideoEntitlementService(
         if (context.IsAdmin)
         {
             return new VideoEntitlementResult(true, "admin", "admin");
+        }
+
+        // Per-user allocation (Domain.UserVideoAccess): the outermost restriction, applied even
+        // over a plan-level content include — it is the more specific, per-learner decision. Null
+        // set = no restriction (fail-open). Admins already bypassed above.
+        if (context.UserAllowedVideoIds is { Count: > 0 } && !context.UserAllowedVideoIds.Contains(video.Id))
+        {
+            return new VideoEntitlementResult(false, "not_in_user_allocation", context.CurrentTier);
         }
 
         // Content scope (spec §3): an explicit per-plan include wins over the exclude list and over

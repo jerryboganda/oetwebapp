@@ -123,6 +123,31 @@ public static class VideoLibraryAdminEndpoints
         })
         .WithAdminRead("AdminContentRead");
 
+        // ── Allocation picker source ────────────────────────────────────────
+        // Lightweight list for the per-user "Videos scope" allocator (admin Add-User /
+        // edit-user panel). Returns every non-archived video with just the axes the
+        // grouped tree needs — section (SubtestCode), language, profession — so the
+        // client can group by Section → Language without paging or heavy summary joins.
+        admin.MapGet("/videos/allocatable", async (
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var videos = await db.LibraryVideos.AsNoTracking()
+                .Where(v => v.Status != ContentStatus.Archived)
+                .OrderBy(v => v.SortOrder)
+                .ThenBy(v => v.Title)
+                .Select(v => new { v.Id, v.Title, v.SubtestCode, v.Language, v.ProfessionIdsJson })
+                .ToListAsync(ct);
+
+            return Results.Ok(videos.Select(v => new AdminAllocatableVideoDto(
+                Id: v.Id,
+                Title: v.Title,
+                SubtestCode: v.SubtestCode,
+                Language: v.Language,
+                ProfessionIds: VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson))));
+        })
+        .WithAdminRead("AdminContentRead");
+
         admin.MapPost("/videos", async (
             HttpContext http,
             AdminVideoCreateRequest request,

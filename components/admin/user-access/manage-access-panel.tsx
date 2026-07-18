@@ -17,7 +17,9 @@ import {
   fetchAdminAddons,
   fetchAdminBillingPlans,
   fetchAdminRecallSetTags,
+  fetchAllocatableVideos,
   isModuleEnabled,
+  type AllocatableVideo,
   type RecallSetTagDto,
   type UserAccess,
 } from '@/lib/user-access';
@@ -25,6 +27,7 @@ import { PackageList } from './package-list';
 import { AddonPicker } from './addon-picker';
 import { ModuleToggles } from './module-toggles';
 import { FolderScopePicker } from './folder-scope-picker';
+import { VideoScopePicker } from './video-scope-picker';
 import { RecallSetPicker } from './recall-set-picker';
 
 interface ManageAccessPanelProps {
@@ -41,6 +44,7 @@ interface ManageAccessPanelProps {
   addons?: AdminBillingAddOn[];
   recallSets?: RecallSetTagDto[];
   folderTree?: MaterialFolderDto[];
+  videos?: AllocatableVideo[];
   disabled?: boolean;
 }
 
@@ -68,14 +72,16 @@ export function ManageAccessPanel({
   addons: addonsProp,
   recallSets: recallSetsProp,
   folderTree: folderTreeProp,
+  videos: videosProp,
   disabled,
 }: ManageAccessPanelProps) {
   const [plans, setPlans] = useState<AdminBillingPlan[]>(plansProp ?? []);
   const [addons, setAddons] = useState<AdminBillingAddOn[]>(addonsProp ?? []);
   const [recallSets, setRecallSets] = useState<RecallSetTagDto[]>(recallSetsProp ?? []);
   const [folderTree, setFolderTree] = useState<MaterialFolderDto[]>(folderTreeProp ?? []);
+  const [videos, setVideos] = useState<AllocatableVideo[]>(videosProp ?? []);
   const [isLoadingOptions, setIsLoadingOptions] = useState<boolean>(
-    !plansProp || !addonsProp || !recallSetsProp || !folderTreeProp,
+    !plansProp || !addonsProp || !recallSetsProp || !folderTreeProp || !videosProp,
   );
   const [busySubscriptionId, setBusySubscriptionId] = useState<string | null>(null);
   const [packageError, setPackageError] = useState<string | null>(null);
@@ -84,9 +90,10 @@ export function ManageAccessPanel({
   const needsAddons = !addonsProp;
   const needsRecallSets = !recallSetsProp;
   const needsFolderTree = !folderTreeProp;
+  const needsVideos = !videosProp;
 
   useEffect(() => {
-    if (!needsPlans && !needsAddons && !needsRecallSets && !needsFolderTree) {
+    if (!needsPlans && !needsAddons && !needsRecallSets && !needsFolderTree && !needsVideos) {
       return;
     }
 
@@ -95,17 +102,19 @@ export function ManageAccessPanel({
     async function loadMissingOptions() {
       setIsLoadingOptions(true);
       try {
-        const [plansResult, addonsResult, recallSetsResult, folderTreeResult] = await Promise.all([
+        const [plansResult, addonsResult, recallSetsResult, folderTreeResult, videosResult] = await Promise.all([
           needsPlans ? fetchAdminBillingPlans() : Promise.resolve(plansProp ?? []),
           needsAddons ? fetchAdminAddons() : Promise.resolve(addonsProp ?? []),
           needsRecallSets ? fetchAdminRecallSetTags() : Promise.resolve(recallSetsProp ?? []),
           needsFolderTree ? adminListMaterialFolders() : Promise.resolve(folderTreeProp ?? []),
+          needsVideos ? fetchAllocatableVideos() : Promise.resolve(videosProp ?? []),
         ]);
         if (cancelled) return;
         setPlans(plansResult);
         setAddons(addonsResult);
         setRecallSets(recallSetsResult);
         setFolderTree(folderTreeResult);
+        setVideos(videosResult);
       } catch (error) {
         console.error('Failed to load access picker options', error);
       } finally {
@@ -121,9 +130,10 @@ export function ManageAccessPanel({
     // retrigger a fetch, not its identity (arrays are recreated on every
     // parent render), otherwise this effect would refetch in a loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsPlans, needsAddons, needsRecallSets, needsFolderTree]);
+  }, [needsPlans, needsAddons, needsRecallSets, needsFolderTree, needsVideos]);
 
   const materialsEnabled = isModuleEnabled(value.moduleOverrides, 'MaterialsLibrary');
+  const videosEnabled = isModuleEnabled(value.moduleOverrides, 'VideoLibrary');
   const recallsEnabled = isModuleEnabled(value.moduleOverrides, 'Recalls');
   const professionDisplay = learnerProfessionLabel?.trim() || learnerProfessionId?.trim() || null;
 
@@ -212,10 +222,30 @@ export function ManageAccessPanel({
       {materialsEnabled ? (
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-navy">Materials Library scope</h3>
+          <p className="text-xs text-muted">
+            Tick a section to grant it all, or drill down to specific folders. Nothing ticked = the learner
+            gets every folder their plan grants.
+          </p>
           <FolderScopePicker
             folderTree={folderTree}
             selectedIds={value.materialFolderIds}
             onChange={(materialFolderIds) => onChange({ ...value, materialFolderIds })}
+            disabled={disabled || isLoadingOptions}
+          />
+        </section>
+      ) : null}
+
+      {videosEnabled ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-navy">Videos scope</h3>
+          <p className="text-xs text-muted">
+            Tick a Section → Language group to grant it all, or drill down to individual videos. Nothing
+            ticked = the learner gets every video their plan grants (for their profession).
+          </p>
+          <VideoScopePicker
+            videos={videos}
+            selectedIds={value.videoIds}
+            onChange={(videoIds) => onChange({ ...value, videoIds })}
             disabled={disabled || isLoadingOptions}
           />
         </section>

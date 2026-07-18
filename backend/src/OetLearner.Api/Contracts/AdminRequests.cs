@@ -319,7 +319,8 @@ public record AdminUserAccessScopeRequest(
     List<string>? MaterialFolderIds,
     List<string>? RecallSetCodes,
     DateTimeOffset? AccessExpiresAt,
-    bool ClearAccessExpiry);
+    bool ClearAccessExpiry,
+    List<string>? VideoIds = null);
 
 // ── Billing ──
 

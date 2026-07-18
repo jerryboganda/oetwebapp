@@ -123,6 +123,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
       await putUserAccessScope(created.id, {
         modules: access.moduleOverrides,
         materialFolderIds: access.materialFolderIds,
+        videoIds: access.videoIds,
         recallSetCodes: access.recallSetCodes,
         accessExpiresAt: access.accessExpiresAt,
         clearAccessExpiry: !access.accessExpiresAt,

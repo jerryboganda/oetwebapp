@@ -12,6 +12,7 @@ public partial class LearnerDbContext
 {
     public DbSet<UserModuleOverride> UserModuleOverrides => Set<UserModuleOverride>();
     public DbSet<UserMaterialFolderAccess> UserMaterialFolderAccesses => Set<UserMaterialFolderAccess>();
+    public DbSet<UserVideoAccess> UserVideoAccesses => Set<UserVideoAccess>();
     public DbSet<UserRecallSetAccess> UserRecallSetAccesses => Set<UserRecallSetAccess>();
 
     partial void OnModelCreatingUserAccess(ModelBuilder modelBuilder)
@@ -22,6 +23,11 @@ public partial class LearnerDbContext
         });
 
         modelBuilder.Entity<UserMaterialFolderAccess>(e =>
+        {
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<UserVideoAccess>(e =>
         {
             e.HasIndex(x => x.UserId);
         });

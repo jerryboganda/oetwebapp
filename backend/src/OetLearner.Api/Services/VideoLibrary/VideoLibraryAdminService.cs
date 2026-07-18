@@ -22,6 +22,15 @@ public sealed record AdminVideoSummaryDto(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? PublishAt);
 
+/// <summary>Lightweight video row for the per-user allocation picker: just the
+/// axes the grouped tree needs (section = SubtestCode, language, profession).</summary>
+public sealed record AdminAllocatableVideoDto(
+    string Id,
+    string Title,
+    string? SubtestCode,
+    string? Language,
+    IReadOnlyList<string> ProfessionIds);
+
 public sealed record AdminVideoCaptionDto(Guid Id, string LanguageCode, string Label, bool SyncedToBunny);
 public sealed record AdminVideoAttachmentDto(Guid Id, string Title, string MediaAssetId, int SortOrder);
 

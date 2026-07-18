@@ -406,6 +406,7 @@ export default function UserDetailPage() {
       const saved = await putUserAccessScope(user.id, {
         modules: access.moduleOverrides,
         materialFolderIds: access.materialFolderIds,
+        videoIds: access.videoIds,
         recallSetCodes: access.recallSetCodes,
         accessExpiresAt: access.accessExpiresAt,
         clearAccessExpiry: !access.accessExpiresAt,

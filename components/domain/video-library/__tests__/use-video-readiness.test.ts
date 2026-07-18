@@ -9,6 +9,7 @@ function makeVideo(overrides: Partial<AdminVideoDetail> = {}): AdminVideoDetail 
     title: 'Reading strategies',
     description: 'A long enough description of the video content.',
     subtestCode: 'reading',
+    language: null,
     tagsCsv: 'reading, strategy',
     difficulty: 'core',
     categoryIds: ['cat-1'],

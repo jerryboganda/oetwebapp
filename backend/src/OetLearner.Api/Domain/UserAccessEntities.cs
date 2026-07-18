@@ -64,6 +64,32 @@ public class UserMaterialFolderAccess
 }
 
 /// <summary>
+/// Per-user allow-list of Video Library videos. When a learner has ANY rows, the
+/// Video Library home/detail and the playback entitlement gate are RESTRICTED to
+/// those video ids — a restriction WITHIN what the module + profession + plan
+/// already grant. No rows == inherit (all videos the module grants) unchanged.
+/// Enforced in <see cref="Services.VideoLibrary.VideoLibraryLearnerService"/>
+/// (listing) and <see cref="Services.VideoLibrary.VideoEntitlementService"/> (gate).
+/// </summary>
+[Index(nameof(UserId), nameof(VideoId), IsUnique = true)]
+public class UserVideoAccess
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    /// <summary>References <see cref="LearnerUser.Id"/>.</summary>
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    /// <summary>References <see cref="LibraryVideo.Id"/>.</summary>
+    [MaxLength(64)]
+    public string VideoId { get; set; } = default!;
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
 /// Per-user allow-list of Recall sets. When a learner has ANY rows, recall /
 /// vocabulary queries are RESTRICTED to those set codes. No rows == inherit
 /// (all sets the module grants). Enforced in

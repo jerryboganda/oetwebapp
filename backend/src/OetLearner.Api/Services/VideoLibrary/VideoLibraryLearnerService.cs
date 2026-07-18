@@ -297,7 +297,14 @@ public sealed class VideoLibraryLearnerService(
         if (video is null) return null;
 
         var profession = await ResolveProfessionAsync(userId, ct);
-        return IsProfessionVisible(video.ProfessionIdsJson, profession) ? video : null;
+        if (!IsProfessionVisible(video.ProfessionIdsJson, profession)) return null;
+
+        // Per-user video allocation (allow-list). No rows = unchanged (fail-open);
+        // any rows restrict this learner to exactly those videos.
+        var allowed = await LoadAllowedVideoIdsAsync(userId, ct);
+        if (allowed is not null && !allowed.Contains(video.Id)) return null;
+
+        return video;
     }
 
     // ── Internals ──────────────────────────────────────────────────────────
@@ -310,8 +317,29 @@ public sealed class VideoLibraryLearnerService(
             .Where(v => v.Status == ContentStatus.Published
                 && (v.PublishAt == null || v.PublishAt <= now))
             .ToListAsync(ct);
+        // Per-user video allocation (allow-list). Null = no restriction (fail-open).
+        var allowed = await LoadAllowedVideoIdsAsync(userId, ct);
         // ProfessionIdsJson is a JSON column — filter client-side (never LINQ into JSON).
-        return published.Where(v => IsProfessionVisible(v.ProfessionIdsJson, profession)).ToList();
+        return published
+            .Where(v => IsProfessionVisible(v.ProfessionIdsJson, profession))
+            .Where(v => allowed is null || allowed.Contains(v.Id))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Per-user Video Library allow-list (<see cref="Domain.UserVideoAccess"/>). Returns null
+    /// when the learner has NO rows — meaning "no restriction, inherit the module's full grant"
+    /// (fail-open, mirroring the Materials folder allow-list). Any rows restrict the learner to
+    /// exactly those video ids.
+    /// </summary>
+    private async Task<HashSet<string>?> LoadAllowedVideoIdsAsync(string userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return null;
+        var ids = await db.UserVideoAccesses.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .Select(x => x.VideoId)
+            .ToListAsync(ct);
+        return ids.Count == 0 ? null : ids.ToHashSet(StringComparer.Ordinal);
     }
 
     private async Task<string?> ResolveProfessionAsync(string userId, CancellationToken ct)

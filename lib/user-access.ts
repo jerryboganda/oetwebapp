@@ -61,6 +61,8 @@ export interface UserAccess {
   addOns: UserAccessAddOn[];
   moduleOverrides: UserAccessModuleOverride[];
   materialFolderIds: string[];
+  /** Per-user Video Library allow-list (video ids). Empty = inherit the module's full grant. */
+  videoIds: string[];
   recallSetCodes: string[];
   accessExpiresAt: string | null;
 }
@@ -71,6 +73,7 @@ export function createEmptyUserAccess(): UserAccess {
     addOns: [],
     moduleOverrides: MODULE_KEYS.map((moduleKey) => ({ moduleKey, enabled: false })),
     materialFolderIds: [],
+    videoIds: [],
     recallSetCodes: [],
     accessExpiresAt: null,
   };
@@ -146,6 +149,7 @@ export async function grantUserAddon(userId: string, payload: GrantUserAddonPayl
 export interface PutUserAccessScopePayload {
   modules: UserAccessModuleOverride[];
   materialFolderIds: string[];
+  videoIds: string[];
   recallSetCodes: string[];
   accessExpiresAt?: string | null;
   clearAccessExpiry?: boolean;
@@ -171,4 +175,25 @@ export async function fetchAdminAddons(): Promise<AdminBillingAddOn[]> {
 
 export async function fetchAdminRecallSetTags(): Promise<RecallSetTagDto[]> {
   return adminListRecallSetTags();
+}
+
+// ── Video allocation options ─────────────────────────────────────────────
+//
+// Lightweight video rows for the per-user "Videos scope" allocator, grouped in
+// the picker by Section (subtestCode) → Language (en/ar). Backed by
+// GET /v1/admin/video-library/videos/allocatable.
+
+export interface AllocatableVideo {
+  id: string;
+  title: string;
+  /** OET section: 'listening' | 'reading' | 'writing' | 'speaking' | null (uncategorized). */
+  subtestCode: string | null;
+  /** 'en' | 'ar' | null (unspecified). */
+  language: string | null;
+  /** Empty = visible to all professions. */
+  professionIds: string[];
+}
+
+export async function fetchAllocatableVideos(): Promise<AllocatableVideo[]> {
+  return apiClient.get<AllocatableVideo[]>('/v1/admin/video-library/videos/allocatable');
 }
