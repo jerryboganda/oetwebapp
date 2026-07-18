@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react';
 import { NextIntlClientProvider, type AbstractIntlMessages } from 'next-intl';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
+import { AccessibilityProvider } from '@/contexts/accessibility-context';
 import { MobileRuntimeBridge } from '@/components/mobile/mobile-runtime-bridge';
 import { RuntimeLifecycleBridge } from '@/components/runtime/runtime-lifecycle-bridge';
 import { QueryProvider } from '@/components/providers/query-provider';
@@ -94,24 +95,34 @@ export function AppProviders({
             <AuthProvider>
               <RuntimeLifecycleBridge />
               <MobileRuntimeBridge />
-              <AuthenticatedNotificationCenter>
-                {children}
-              </AuthenticatedNotificationCenter>
               {/*
-                Shell-only update UI (returns null on the website): the
-                top-center Reload + Check-for-updates cluster and the
-                non-dismissible forced-update overlay. Mounted here so they
-                inherit Theme + Tooltip context.
+                AccessibilityProvider reads the learner's saved Settings →
+                Accessibility preferences (large text, high contrast, reduce
+                motion, keyboard hints) and applies them to <html> + the
+                motion/react MotionConfig. It sits inside AuthProvider (it needs
+                the user id to read the settings cache) and wraps the visible app
+                + shell so the preferences affect everything the learner sees.
               */}
-              <ShellControls />
-              <DesktopAutoUpdater />
-              <ForcedUpdateOverlay />
-              {/*
-                Global sonner toaster — rendered once at the root so any
-                `toast()` call anywhere in the tree surfaces in the same anchor.
-                Theme is read from next-themes inside the component.
-              */}
-              <Toaster />
+              <AccessibilityProvider>
+                <AuthenticatedNotificationCenter>
+                  {children}
+                </AuthenticatedNotificationCenter>
+                {/*
+                  Shell-only update UI (returns null on the website): the
+                  top-center Reload + Check-for-updates cluster and the
+                  non-dismissible forced-update overlay. Mounted here so they
+                  inherit Theme + Tooltip context.
+                */}
+                <ShellControls />
+                <DesktopAutoUpdater />
+                <ForcedUpdateOverlay />
+                {/*
+                  Global sonner toaster — rendered once at the root so any
+                  `toast()` call anywhere in the tree surfaces in the same anchor.
+                  Theme is read from next-themes inside the component.
+                */}
+                <Toaster />
+              </AccessibilityProvider>
             </AuthProvider>
           </QueryProvider>
         </TooltipProvider>

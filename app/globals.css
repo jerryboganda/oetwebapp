@@ -603,6 +603,79 @@
 }
 
 /* ------------------------------------------------------------------------- *
+ * Accessibility preferences (Settings → Accessibility)
+ *
+ * Driven by <html> classes / attributes set by contexts/accessibility-context.tsx
+ * from the learner's saved accessibility settings. Kept UNLAYERED (outside
+ * @layer base) on purpose so these overrides win over Tailwind's base layer
+ * without needing !important everywhere. Reduce-motion mirrors the existing
+ * @media (prefers-reduced-motion: reduce) block so the in-app toggle behaves
+ * identically to the OS setting.
+ * ------------------------------------------------------------------------- */
+
+/* Large text — scale the rem base so all rem-based sizing grows proportionally
+   (16px → 18px). Tailwind sizing is rem-based, so this reflows the whole app. */
+html.a11y-large-text {
+  font-size: 112.5%;
+}
+
+/* High contrast — darken/lighten muted text against the active theme, strengthen
+   borders, underline inline links, and make focus rings unmistakable. Split by
+   theme so the muted override never becomes invisible in dark mode. */
+:root:not(.dark).a11y-high-contrast {
+  --color-muted: #1f2937;
+}
+:root.dark.a11y-high-contrast {
+  --color-muted: #e2e8f0;
+}
+:root.a11y-high-contrast {
+  --color-border: #475569;
+  --color-border-hover: #334155;
+}
+html.a11y-high-contrast a:not([class*="bg-"]):not([role="button"]) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+html.a11y-high-contrast *:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Reduce motion — class-based mirror of the prefers-reduced-motion block above,
+   so the learner's in-app toggle collapses CSS animation/transition too (the
+   motion/react components are handled by MotionConfig in the provider). */
+html.a11y-reduce-motion {
+  scroll-behavior: auto;
+  --surface-blur: 0px;
+  --pressable-transition-duration: 1ms;
+  --pressable-active-scale: 1;
+  --page-enter-duration: 1ms;
+  --page-enter-distance: 0px;
+}
+html.a11y-reduce-motion *,
+html.a11y-reduce-motion *::before,
+html.a11y-reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+html.a11y-reduce-motion .pressable:hover,
+html.a11y-reduce-motion .pressable:active {
+  transform: none !important;
+}
+
+/* Keyboard hints — always-visible, prominent focus outlines so keyboard users
+   can see focus everywhere, and reveal opt-in [data-kbd-hint] affordances. */
+html[data-keyboard-hints='true'] *:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+html[data-keyboard-hints='true'] [data-kbd-hint] {
+  display: inline-flex;
+}
+
+/* ------------------------------------------------------------------------- *
  * Writing V2 annotation overlay
  *
  * Inline ProseMirror decorations rendered by `AnnotationsExtension` in
