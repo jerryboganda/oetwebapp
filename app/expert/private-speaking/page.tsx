@@ -626,8 +626,8 @@ export default function ExpertPrivateSpeakingPage() {
 
       {/* ── Cancel Confirmation Dialog ────────────── */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl">
+        <div className="overlay-safe-area fixed inset-0 z-50 flex items-center justify-center bg-navy/40 backdrop-blur-sm">
+          <div className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl">
             <h3 className="text-lg font-bold text-navy mb-2">Cancel Session</h3>
             <p className="text-sm text-muted mb-4">
               Are you sure you want to cancel the session on{' '}

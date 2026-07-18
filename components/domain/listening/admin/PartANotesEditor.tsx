@@ -163,7 +163,8 @@ export function PartANotesEditor({
     <div
       className={cn(
         'flex flex-col',
-        fullscreen && 'fixed inset-0 z-[60] m-0 gap-1.5 overflow-auto bg-surface p-4',
+        fullscreen &&
+          'fixed inset-0 z-[60] m-0 gap-1.5 overflow-auto bg-surface p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]',
       )}
       data-fullscreen={fullscreen ? 'true' : 'false'}
     >

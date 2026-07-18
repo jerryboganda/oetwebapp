@@ -1042,15 +1042,15 @@ function LiveSpeakingTaskContent() {
       {/* Modals */}
       <AnimatePresence>
         {showStopConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
+          <div className="overlay-safe-area fixed inset-0 z-[100] flex items-center justify-center">
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-navy/80 backdrop-blur-sm"
               onClick={() => setShowStopConfirm(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -1058,7 +1058,7 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-stop-dialog-title"
-              className="relative bg-surface border border-border rounded-2xl p-8 max-w-md w-full shadow-2xl"
+              className="relative max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
             >
               <AlertCircle className="w-8 h-8 text-danger mb-4" aria-hidden />
               <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
@@ -1078,15 +1078,15 @@ function LiveSpeakingTaskContent() {
         )}
 
         {showSubmitConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
+          <div className="overlay-safe-area fixed inset-0 z-[100] flex items-center justify-center">
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-navy/80 backdrop-blur-sm"
               onClick={() => setShowSubmitConfirm(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -1094,7 +1094,7 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-submit-dialog-title"
-              className="relative bg-surface border border-border rounded-2xl p-8 max-w-md w-full shadow-2xl"
+              className="relative max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
             >
               <CheckCircle2 className="w-8 h-8 text-success mb-4" aria-hidden />
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>

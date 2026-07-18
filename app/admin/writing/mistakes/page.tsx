@@ -156,7 +156,7 @@ export default function AdminWritingMistakesPage() {
 
       {editing ? (
         <aside role="dialog" aria-modal="true" aria-label="Mistake editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
-          <div className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto bg-surface p-5 shadow-2xl">
+          <div className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto bg-surface p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
             <header className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-navy">{editing.id ? 'Edit mistake' : 'New mistake'}</h2>
               <Button variant="ghost" onClick={() => setEditing(null)}>Close</Button>

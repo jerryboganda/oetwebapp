@@ -845,13 +845,13 @@ export default function AdminPrivateSpeakingPage() {
       {/* ── Booking action modals ─────────────────── */}
       {bookingModal && activeBooking && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-navy/50 backdrop-blur-sm p-4"
+          className="overlay-safe-area fixed inset-0 z-50 flex items-center justify-center bg-navy/50 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           onClick={closeBookingModal}
         >
           <div
-            className="w-full max-w-lg rounded-admin-lg border border-admin-border bg-admin-bg-surface shadow-lg p-6"
+            className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto rounded-admin-lg border border-admin-border bg-admin-bg-surface shadow-lg p-6"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">

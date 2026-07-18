@@ -203,7 +203,7 @@ export function WritingReadingWindowOverlay({
       aria-describedby={descriptionId}
     >
       {/* Header — countdown + instructions */}
-      <header className="w-full max-w-4xl px-4 pt-8 pb-4 text-center select-none">
+      <header className="w-full max-w-4xl px-4 pt-[calc(2rem+env(safe-area-inset-top))] pb-4 text-center select-none">
         <p className="text-xs font-bold uppercase tracking-wider text-white/60">
           Reading time
         </p>
@@ -265,7 +265,7 @@ export function WritingReadingWindowOverlay({
 
       {/* Skip — practice only; absent (not disabled) in strict modes */}
       {allowSkip ? (
-        <footer className="w-full max-w-4xl px-4 pb-8 pt-2 text-center select-none">
+        <footer className="w-full max-w-4xl px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-2 text-center select-none">
           <button
             type="button"
             onClick={() => onSkip?.()}
