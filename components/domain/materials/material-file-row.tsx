@@ -93,10 +93,10 @@ export function MaterialFileRow({
   }, [downloading, file]);
 
   return (
-    <div className="group rounded-xl border border-border/50 bg-surface/70 px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-primary/[0.03] sm:px-4 sm:py-3">
+    <div className="group rounded-2xl border border-border/50 bg-surface/70 px-3 py-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-md motion-reduce:hover:translate-y-0 sm:px-4 sm:py-3">
       <div className="flex items-center gap-3">
-        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone)}>
-          <Icon className="h-4.5 w-4.5" />
+        <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 motion-reduce:group-hover:scale-100', tone)}>
+          <Icon className="h-[18px] w-[18px]" />
         </span>
 
         <div className="min-w-0 flex-1">

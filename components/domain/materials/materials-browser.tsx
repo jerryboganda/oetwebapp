@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import {
-  Folder, Search, X, ChevronRight, Home, SearchX, FolderOpen, Download, Loader2,
+  Folder, FolderTree, FileText, HardDrive, Search, X, ChevronRight, Home, SearchX,
+  FolderOpen, Download, Loader2, Headphones, BookOpen, PenLine, Mic, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { analytics } from '@/lib/analytics';
@@ -44,15 +45,89 @@ async function downloadFolderAsZip(folder: LearnerMaterialFolderDto): Promise<vo
 }
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
+type Subtest = (typeof SUBTESTS)[number];
+
+/**
+ * Each OET subtest owns a signature colour + icon so the library reads at a
+ * glance — a learner spots "Listening" by its blue headphones before reading a
+ * single label. Folders whose name doesn't map to a subtest fall back to the
+ * app's violet so nested folders stay cohesive.
+ */
+interface SectionSkin {
+  Icon: LucideIcon;
+  tile: string;   // gradient + foreground for the icon tile
+  bar: string;    // left accent bar
+  ring: string;   // hover border colour
+  glow: string;   // hover background wash
+}
+
+const SECTION_SKINS: Record<Subtest, SectionSkin> = {
+  listening: {
+    Icon: Headphones,
+    tile: 'from-blue-500/20 to-blue-500/5 text-blue-600 dark:text-blue-300',
+    bar: 'bg-blue-500', ring: 'hover:border-blue-400/60', glow: 'hover:bg-blue-500/[0.04]',
+  },
+  reading: {
+    Icon: BookOpen,
+    tile: 'from-emerald-500/20 to-emerald-500/5 text-emerald-600 dark:text-emerald-300',
+    bar: 'bg-emerald-500', ring: 'hover:border-emerald-400/60', glow: 'hover:bg-emerald-500/[0.04]',
+  },
+  writing: {
+    Icon: PenLine,
+    tile: 'from-amber-500/20 to-amber-500/5 text-amber-600 dark:text-amber-300',
+    bar: 'bg-amber-500', ring: 'hover:border-amber-400/60', glow: 'hover:bg-amber-500/[0.04]',
+  },
+  speaking: {
+    Icon: Mic,
+    tile: 'from-purple-500/20 to-purple-500/5 text-purple-600 dark:text-purple-300',
+    bar: 'bg-purple-500', ring: 'hover:border-purple-400/60', glow: 'hover:bg-purple-500/[0.04]',
+  },
+};
+
+const DEFAULT_SKIN: SectionSkin = {
+  Icon: Folder,
+  tile: 'from-primary/20 to-primary/5 text-primary',
+  bar: 'bg-primary', ring: 'hover:border-primary/40', glow: 'hover:bg-primary/[0.03]',
+};
+
+const PILL_ACTIVE: Record<Subtest, string> = {
+  listening: 'bg-blue-500 text-white shadow-sm shadow-blue-500/25',
+  reading: 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25',
+  writing: 'bg-amber-500 text-white shadow-sm shadow-amber-500/25',
+  speaking: 'bg-purple-500 text-white shadow-sm shadow-purple-500/25',
+};
+
+function matchSubtest(name: string): Subtest | null {
+  const n = name.toLowerCase();
+  return SUBTESTS.find((s) => n.includes(s)) ?? null;
+}
+
+function skinFor(name: string): SectionSkin {
+  const s = matchSubtest(name);
+  return s ? SECTION_SKINS[s] : DEFAULT_SKIN;
+}
+
+/** Small icon + value chip for folder-card metadata (folders / files / size). */
+function MetaChip({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted">
+      <Icon className="h-3 w-3 opacity-70" />
+      {children}
+    </span>
+  );
+}
 
 function FolderCard({
   folder,
   onOpen,
+  index,
 }: {
   folder: LearnerMaterialFolderDto;
   onOpen: (id: string) => void;
+  index: number;
 }) {
   const stats = useMemo(() => folderStats(folder), [folder]);
+  const skin = useMemo(() => skinFor(folder.name), [folder.name]);
   const [zipping, setZipping] = useState(false);
   const [error, setError] = useState(false);
 
@@ -70,28 +145,54 @@ function FolderCard({
     }
   }, [folder, stats.files, zipping]);
 
+  const { Icon } = skin;
+
   return (
-    <div className="group flex items-center gap-3 rounded-xl border border-border/60 bg-surface/70 px-3 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/[0.03] hover:shadow-sm sm:px-4">
+    <div
+      style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
+      className={cn(
+        'group relative flex items-center gap-3 overflow-hidden rounded-2xl border border-border/60 bg-surface/70 pl-4 pr-3 py-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0',
+        'animate-in fade-in slide-in-from-bottom-2 fill-mode-both motion-reduce:animate-none',
+        skin.ring, skin.glow,
+      )}
+    >
+      {/* Signature accent bar — the section's colour spine */}
+      <span
+        aria-hidden
+        className={cn(
+          'absolute inset-y-0 left-0 w-1 origin-top scale-y-100 rounded-r-full opacity-70 transition-all duration-200 group-hover:opacity-100',
+          skin.bar,
+        )}
+      />
+
       <button
         type="button"
         onClick={() => onOpen(folder.id)}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
-          <Folder className="h-5 w-5" />
+        <span
+          className={cn(
+            'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-inner transition-transform duration-200 group-hover:scale-105 motion-reduce:group-hover:scale-100',
+            skin.tile,
+          )}
+        >
+          <Icon className="h-[22px] w-[22px]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-navy" title={folder.name}>
+          <span className="block truncate text-[15px] font-bold text-navy" title={folder.name}>
             {folder.name}
           </span>
-          <span className="mt-0.5 block text-[11px] text-muted">
-            {stats.folders > 0 && `${stats.folders} folder${stats.folders === 1 ? '' : 's'} · `}
-            {stats.files} file{stats.files === 1 ? '' : 's'}
-            {stats.bytes > 0 && ` · ${formatBytes(stats.bytes)}`}
-            {error && <span className="ml-1 font-semibold text-red-500">· download failed</span>}
+          <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {stats.folders > 0 && (
+              <MetaChip icon={FolderTree}>{stats.folders} folder{stats.folders === 1 ? '' : 's'}</MetaChip>
+            )}
+            <MetaChip icon={FileText}>{stats.files} file{stats.files === 1 ? '' : 's'}</MetaChip>
+            {stats.bytes > 0 && <MetaChip icon={HardDrive}>{formatBytes(stats.bytes)}</MetaChip>}
+            {error && <span className="text-[11px] font-semibold text-red-500">· download failed</span>}
           </span>
         </span>
       </button>
+
       {stats.files > 0 && (
         <button
           type="button"
@@ -99,12 +200,12 @@ function FolderCard({
           disabled={zipping}
           title={zipping ? 'Preparing zip…' : `Download all ${stats.files} files as a zip`}
           aria-label={`Download folder ${folder.name} as a zip`}
-          className="pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-dark transition-colors hover:bg-primary/20 disabled:opacity-50"
+          className="pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary-dark transition-colors hover:bg-primary/20 disabled:opacity-50"
         >
           {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         </button>
       )}
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-navy" />
     </div>
   );
 }
@@ -115,6 +216,16 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
   const [subtest, setSubtest] = useState<string | null>(null);
 
   const index = useMemo(() => flattenFiles(folders), [folders]);
+
+  /** Live per-subtest file counts, surfaced as badges on the filter pills. */
+  const subtestCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const entry of index) {
+      const code = entry.file.subtestCode?.toLowerCase();
+      if (code) counts[code] = (counts[code] ?? 0) + 1;
+    }
+    return counts;
+  }, [index]);
 
   const open = useCallback((id: string) => {
     setTrail((t) => [...t, id]);
@@ -127,6 +238,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
 
   const crumbs = useMemo(() => resolveTrail(folders, trail), [folders, trail]);
   const current = crumbs.length > 0 ? crumbs[crumbs.length - 1] : null;
+  const atRoot = crumbs.length === 0;
 
   const visibleFolders = current ? current.folders ?? [] : folders;
   const visibleFiles = useMemo(() => {
@@ -149,16 +261,16 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
   return (
     <div className="space-y-4">
       {/* Search + filters */}
-      <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/70 p-3 sm:p-4">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+      <div className="space-y-3 rounded-2xl border border-border/60 bg-gradient-to-b from-surface/90 to-surface/60 p-3 shadow-sm sm:p-4">
+        <div className="group relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted transition-colors group-focus-within:text-primary" />
           <input
             type="search"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder={`Search ${index.length} files…`}
             aria-label="Search materials"
-            className="w-full rounded-xl border border-border bg-background-light py-2.5 pl-9 pr-9 text-sm text-navy placeholder:text-muted focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-xl border border-border bg-background-light py-3 pl-11 pr-10 text-[15px] text-navy shadow-inner placeholder:text-muted focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {query && (
             <button
@@ -167,7 +279,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
               aria-label="Clear search"
               className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted transition-colors hover:bg-muted/10 hover:text-navy"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -177,29 +289,41 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
             type="button"
             onClick={() => setSubtest(null)}
             className={cn(
-              'rounded-full px-3 py-1 text-[11px] font-semibold capitalize transition-colors',
+              'rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize transition-all',
               subtest === null
-                ? 'bg-primary text-white'
+                ? 'bg-navy text-white shadow-sm'
                 : 'bg-muted/10 text-muted hover:bg-muted/20 hover:text-navy',
             )}
           >
             All
           </button>
-          {SUBTESTS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSubtest((cur) => (cur === s ? null : s))}
-              className={cn(
-                'rounded-full px-3 py-1 text-[11px] font-semibold capitalize transition-colors',
-                subtest === s
-                  ? 'bg-primary text-white'
-                  : 'bg-muted/10 text-muted hover:bg-muted/20 hover:text-navy',
-              )}
-            >
-              {s}
-            </button>
-          ))}
+          {SUBTESTS.map((s) => {
+            const active = subtest === s;
+            const count = subtestCounts[s];
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSubtest((cur) => (cur === s ? null : s))}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize transition-all',
+                  active ? PILL_ACTIVE[s] : 'bg-muted/10 text-muted hover:bg-muted/20 hover:text-navy',
+                )}
+              >
+                {s}
+                {count ? (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums',
+                      active ? 'bg-white/25 text-white' : 'bg-muted/15 text-muted',
+                    )}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -230,7 +354,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
               onClick={() => goTo(0)}
               className={cn(
                 'flex items-center gap-1 rounded-md px-1.5 py-1 font-semibold transition-colors',
-                crumbs.length === 0 ? 'text-navy' : 'text-muted hover:bg-primary/5 hover:text-primary',
+                atRoot ? 'text-navy' : 'text-muted hover:bg-primary/5 hover:text-primary',
               )}
             >
               <Home className="h-3 w-3" />
@@ -256,15 +380,31 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
           </nav>
 
           {visibleFolders.length > 0 && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {visibleFolders.map((f) => (
-                <FolderCard key={f.id} folder={f} onOpen={open} />
-              ))}
+            <div className="space-y-2">
+              <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+                {atRoot ? 'Sections' : 'Folders'}
+                <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/70">
+                  {visibleFolders.length}
+                </span>
+              </p>
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                {visibleFolders.map((f, i) => (
+                  <FolderCard key={f.id} folder={f} onOpen={open} index={i} />
+                ))}
+              </div>
             </div>
           )}
 
           {visibleFiles.length > 0 && (
             <div className="space-y-2">
+              {visibleFolders.length > 0 && (
+                <p className="px-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-muted">
+                  Files
+                  <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/70">
+                    {visibleFiles.length}
+                  </span>
+                </p>
+              )}
               {visibleFiles.map((f) => (
                 <MaterialFileRow key={f.id} file={f} />
               ))}
