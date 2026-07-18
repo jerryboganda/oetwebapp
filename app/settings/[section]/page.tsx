@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Accessibility,
@@ -12,11 +13,9 @@ import {
   BriefcaseMedical,
   Calendar,
   CalendarClock,
-  Captions,
   Clock3,
   Contrast,
   Database,
-  FileText,
   Globe2,
   Headphones,
   Keyboard,
@@ -241,56 +240,19 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
     ],
   },
   privacy: {
-    title: 'Privacy',
-    description: 'Manage how recordings, transcripts, and learner evidence are stored or shared.',
+    title: 'Privacy & Data',
+    description: 'Review and manage the recordings and data we hold about you.',
     eyebrow: 'Privacy Controls',
     icon: Shield,
     accent: 'rose',
-    helperBadge: 'Sensitive Data',
-    helperCardTitle: 'Evidence privacy',
-    helperCardBody: 'Control how your writing and speaking evidence is stored and who can access it.',
-    fields: [
-      {
-        key: 'storeRecordings',
-        label: 'Store speaking recordings',
-        type: 'toggle',
-        description: 'Keep recordings available for transcript review and tutor feedback.',
-        icon: Database,
-        primaryTag: 'Storage',
-        secondaryTag: 'Audio evidence',
-        secondaryTagTone: 'muted',
-      },
-      {
-        key: 'storeTranscripts',
-        label: 'Store transcripts',
-        type: 'toggle',
-        description: 'Retain generated transcripts for later review and comparison.',
-        icon: Captions,
-        primaryTag: 'Transcript',
-        secondaryTag: 'Review support',
-        secondaryTagTone: 'muted',
-      },
-      {
-        key: 'allowExpertAccess',
-        label: 'Allow tutor reviewers to access evidence',
-        type: 'toggle',
-        description: 'Required when you request human review on writing or speaking attempts.',
-        icon: ShieldCheck,
-        primaryTag: 'Reviewer Access',
-        secondaryTag: 'Human review',
-        secondaryTagTone: 'muted',
-      },
-      {
-        key: 'consentHistoryNote',
-        label: 'Consent history note',
-        type: 'textarea',
-        description: 'Short note explaining learner consent or export/delete expectations.',
-        icon: FileText,
-        primaryTag: 'Consent',
-        secondaryTag: 'Learner note',
-        secondaryTagTone: 'muted',
-      },
-    ],
+    helperBadge: 'Your Data',
+    helperCardTitle: 'Recordings & data',
+    helperCardBody: 'Your speaking recordings are auto-deleted on a retention schedule and only accessed by reviewers with an audited reason. You can review or delete individual recordings yourself, and request full erasure of your account and data at any time.',
+    // No toggles here: recording retention, consent, and reviewer access are
+    // governed by the compliance system (consent records + retention workers +
+    // audited access) and surfaced through the real controls below, not by
+    // free-standing preference switches that would give a false sense of control.
+    fields: [],
   },
   notifications: {
     title: 'Notifications',
@@ -985,6 +947,51 @@ function SettingsSectionForm({
   );
 }
 
+/**
+ * Privacy section body. The learner's recordings, consent, and reviewer access
+ * are governed by the compliance system (consent records + retention workers +
+ * audited access), so instead of disconnected preference toggles this points to
+ * the real controls: the My-Recordings page (review + delete individual
+ * recordings) and account deletion (full erasure).
+ */
+function PrivacyControlsCard() {
+  return (
+    <div className="rounded-[2rem] border border-border bg-surface p-6 sm:p-8 shadow-sm relative overflow-hidden">
+      <div className="flex items-start gap-5 relative z-10">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50">
+          <ShieldCheck className="h-6 w-6 text-rose-700" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-4">
+          <div>
+            <h3 className="text-xl font-black tracking-tight text-navy">Your recordings &amp; data</h3>
+            <p className="mt-1.5 max-w-2xl text-sm font-medium leading-relaxed text-muted">
+              Speaking recordings from live tutor sessions are automatically deleted on a retention schedule, and
+              any reviewer access is logged with a reason. You can review or delete individual recordings yourself,
+              and request full erasure of your account and data whenever you like.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/speaking/recordings"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-primary-dark"
+            >
+              <Database className="h-4 w-4" />
+              Manage my recordings
+            </Link>
+            <Link
+              href="/settings/danger-zone"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-5 py-2.5 text-sm font-black text-danger shadow-sm transition hover:bg-danger/20"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete my account &amp; data
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DangerZoneDeleteSection() {
   const { signOut } = useAuth();
   const router = useRouter();
@@ -1091,7 +1098,7 @@ export default function LearnerSettingsSectionPage() {
   const section = toSectionId(params?.section);
   const queryUserId = user?.userId ?? 'current';
   const draftKey = `${queryUserId}:${section ?? 'invalid'}`;
-  const loadsRemoteData = Boolean(section && section !== 'notifications' && section !== 'danger-zone');
+  const loadsRemoteData = Boolean(section && section !== 'notifications' && section !== 'danger-zone' && section !== 'privacy');
   const sectionQuery = useQuery({
     queryKey: queryKeys.settings.section(queryUserId, section ?? 'invalid'),
     queryFn: () => fetchSettingsSection(section as EditableSettingsSectionId),
@@ -1280,6 +1287,22 @@ export default function LearnerSettingsSectionPage() {
               />
 
               <DangerZoneDeleteSection />
+            </div>
+          ) : null}
+
+          {!loading && section === 'privacy' && config ? (
+            <div className="space-y-5 sm:space-y-8 relative z-20">
+              <SettingsSectionHelperCard
+                accent={config.accent}
+                helperBadge={config.helperBadge}
+                icon={config.icon}
+                title={config.helperCardTitle}
+                body={config.helperCardBody}
+                configuredFieldCount={0}
+                totalFieldCount={0}
+              />
+
+              <PrivacyControlsCard />
             </div>
           ) : null}
 

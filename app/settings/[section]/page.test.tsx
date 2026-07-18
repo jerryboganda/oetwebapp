@@ -37,6 +37,12 @@ vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({ user: null, signOut: vi.fn() }),
 }));
 
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...props}>{children}</a>
+  ),
+}));
+
 import SettingsSectionPage from './page';
 import { renderWithRouter } from '@/tests/test-utils';
 
@@ -91,34 +97,25 @@ describe('Settings section page', () => {
     expect(container.querySelector('.bg-blue-50.text-blue-700')).toBeTruthy();
   });
 
-  it('renders the privacy section with toggle states, helper copy, and rose accents', async () => {
-    mockFetchSettingsSection.mockResolvedValue({
-      section: 'privacy',
-      values: {
-        storeRecordings: true,
-        storeTranscripts: false,
-        allowExpertAccess: true,
-        consentHistoryNote: '',
-      },
-    });
-
+  it('renders the privacy section pointing to the real recordings/data controls, not disconnected toggles', async () => {
+    // Privacy no longer fetches or renders preference toggles: recording
+    // retention/consent/reviewer access are governed by the compliance system,
+    // so this section points to the real My-Recordings + account-deletion controls.
     const { container } = renderSection('privacy');
 
-    /* Wait for async data to load */
-    expect(await screen.findByText('Review and update your privacy settings.')).toBeInTheDocument();
+    /* Hero description derived from the section title */
+    expect(await screen.findByText('Review and update your privacy & data settings.')).toBeInTheDocument();
     /* Helper card content */
-    expect(await screen.findByText('Evidence privacy')).toBeInTheDocument();
-    expect(screen.getAllByText('Sensitive Data').length).toBeGreaterThan(0);
-    /* Field tags */
-    expect(screen.getByText('Storage')).toBeInTheDocument();
-    expect(screen.getByText('Transcript')).toBeInTheDocument();
-    expect(screen.getByText('Reviewer Access')).toBeInTheDocument();
-    expect(screen.getByText('Consent')).toBeInTheDocument();
-    /* Toggle states: storeRecordings=On, storeTranscripts=Off, allowExpertAccess=On */
-    expect(screen.getByRole('switch', { name: 'Toggle Store speaking recordings' })).toBeChecked();
-    expect(screen.getByRole('switch', { name: 'Toggle Store transcripts' })).not.toBeChecked();
-    expect(screen.getByRole('switch', { name: 'Toggle Allow tutor reviewers to access evidence' })).toBeChecked();
-    expect(container).toHaveTextContent('2/4 configured');
+    expect(await screen.findByText('Recordings & data')).toBeInTheDocument();
+    expect(screen.getAllByText('Your Data').length).toBeGreaterThan(0);
+    /* Real controls replace the old disconnected toggles */
+    expect(screen.getByText('Your recordings & data')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Manage my recordings/i })).toHaveAttribute('href', '/speaking/recordings');
+    expect(screen.getByRole('link', { name: /Delete my account & data/i })).toHaveAttribute('href', '/settings/danger-zone');
+    /* The old fake toggles are gone */
+    expect(screen.queryByRole('switch', { name: 'Toggle Store speaking recordings' })).toBeNull();
+    /* No remote fetch for the informational privacy section */
+    expect(mockFetchSettingsSection).not.toHaveBeenCalled();
     /* Rose-themed accent for privacy section */
     expect(container.querySelector('.bg-rose-50.text-rose-700')).toBeTruthy();
   });
