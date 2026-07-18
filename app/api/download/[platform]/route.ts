@@ -16,11 +16,12 @@ import { GITHUB_RELEASES_URL } from '@/lib/app-downloads';
 const GITHUB_RELEASES_API =
   'https://api.github.com/repos/jerryboganda/oetwebapp/releases?per_page=20';
 
-type PlatformKey = 'windows' | 'mac';
+type PlatformKey = 'windows' | 'mac' | 'android';
 
 const ASSET_MATCHERS: Record<PlatformKey, (name: string) => boolean> = {
   windows: (name) => name.toLowerCase().endsWith('-setup.exe') || name.toLowerCase().endsWith('.exe'),
   mac: (name) => name.toLowerCase().endsWith('.dmg'),
+  android: (name) => name.toLowerCase().endsWith('.apk'),
 };
 
 interface GithubAsset {

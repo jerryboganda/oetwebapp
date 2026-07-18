@@ -16,6 +16,7 @@ export const GITHUB_RELEASES_URL = 'https://github.com/jerryboganda/oetwebapp/re
  */
 export const WINDOWS_DOWNLOAD_URL = '/api/download/windows';
 export const MAC_DOWNLOAD_URL = '/api/download/mac';
+export const ANDROID_DOWNLOAD_URL = '/api/download/android';
 
 export const ANDROID_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL ||

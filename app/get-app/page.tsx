@@ -15,7 +15,7 @@ import {
   Video,
 } from 'lucide-react';
 import {
-  ANDROID_STORE_URL,
+  ANDROID_DOWNLOAD_URL,
   detectVisitorOs,
   IOS_STORE_URL,
   MAC_DOWNLOAD_URL,
@@ -28,7 +28,7 @@ const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 const OS_CTA: Partial<Record<DesktopOsKind, { label: string; href: string }>> = {
   windows: { label: 'Download for Windows', href: WINDOWS_DOWNLOAD_URL },
   mac: { label: 'Download for Mac', href: MAC_DOWNLOAD_URL },
-  android: { label: 'Get the Android app', href: ANDROID_STORE_URL },
+  android: { label: 'Download the Android app', href: ANDROID_DOWNLOAD_URL },
 };
 
 const FEATURES = [
@@ -84,7 +84,6 @@ export default function GetAppPage() {
           {heroCta && (
             <a
               href={heroCta.href}
-              {...(visitorOs === 'android' ? { target: '_blank', rel: 'noreferrer' } : {})}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white hover:bg-primary-dark"
             >
               <MonitorDown className="h-5 w-5" />
@@ -119,17 +118,15 @@ export default function GetAppPage() {
           </a>
 
           <a
-            href={ANDROID_STORE_URL}
-            target="_blank"
-            rel="noreferrer"
+            href={ANDROID_DOWNLOAD_URL}
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
             <Smartphone className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">Android</h2>
-              <p className="mt-1 text-xs text-muted">Google Play / signed APK</p>
+              <p className="mt-1 text-xs text-muted">Signed APK (.apk) — latest release</p>
             </div>
-            <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Get the app</span>
+            <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Download</span>
           </a>
 
           {IOS_STORE_URL ? (
