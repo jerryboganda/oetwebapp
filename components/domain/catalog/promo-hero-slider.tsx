@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
+import { useLowBandwidthMode } from '@/hooks/use-media-preferences';
 import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,7 @@ export function PromoHeroSlider({ className }: { className?: string }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const lowBandwidth = useLowBandwidthMode();
 
   const goTo = useCallback((next: number) => {
     setIndex(((next % SLIDE_COUNT) + SLIDE_COUNT) % SLIDE_COUNT);
@@ -38,14 +40,15 @@ export function PromoHeroSlider({ className }: { className?: string }) {
     return () => mq.removeEventListener?.('change', update);
   }, []);
 
-  // Autoplay — suspended while paused or when reduced motion is requested.
+  // Autoplay — suspended while paused, when reduced motion is requested, or in
+  // low-bandwidth mode (auto-rotation keeps fetching slide media on slow links).
   useEffect(() => {
-    if (paused || reducedMotion) return;
+    if (paused || reducedMotion || lowBandwidth) return;
     const timer = window.setInterval(() => {
       setIndex((current) => (current + 1) % SLIDE_COUNT);
     }, AUTOPLAY_MS);
     return () => window.clearInterval(timer);
-  }, [paused, reducedMotion]);
+  }, [paused, reducedMotion, lowBandwidth]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'ArrowRight') {

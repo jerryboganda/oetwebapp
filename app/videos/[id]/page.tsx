@@ -26,6 +26,7 @@ import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import type { VideoDetail } from '@/lib/types/videos';
 import { PlayerLockScreen } from '@/components/videos/player-lock-screen';
 import { VideoPlayer, type VideoPlayerHandle } from '@/components/videos/video-player';
+import { useLowBandwidthMode } from '@/hooks/use-media-preferences';
 
 const SUBTEST_LABELS: Record<string, string> = {
   writing: 'Writing',
@@ -56,6 +57,7 @@ export default function VideoDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<VideoPlayerHandle | null>(null);
+  const lowBandwidth = useLowBandwidthMode();
 
   // Runtime kind is stamped pre-paint on <html data-runtime-kind>, but reading
   // it during SSR is impossible — resolve after mount to avoid hydration drift.
@@ -208,6 +210,7 @@ export default function VideoDetailPage() {
                     initialProgress={video.progress}
                     chapters={video.chapters}
                     onProgressPersisted={handleProgressPersisted}
+                    lowBandwidth={lowBandwidth}
                   />
                 )}
               </div>

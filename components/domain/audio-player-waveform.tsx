@@ -7,6 +7,7 @@ import { Play, Pause, FastForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select } from '@/components/ui/form-controls';
 import { fetchAuthorizedObjectUrl, isApiError } from '@/lib/api';
+import { useLearnerMediaPreferences } from '@/hooks/use-media-preferences';
 
 interface AudioPlayerWaveformProps {
   audioUrl: string;
@@ -21,6 +22,9 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
   const objectUrlRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const { playbackSpeed: preferredPlaybackRate } = useLearnerMediaPreferences();
+  // Once the learner adjusts speed manually, stop overriding it with the saved default.
+  const userAdjustedRateRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
@@ -147,6 +151,16 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
     };
   }, []);
 
+  // Apply the learner's saved default playback speed once the waveform is ready,
+  // unless they've manually changed it during this session (userAdjustedRateRef).
+  useEffect(() => {
+    if (userAdjustedRateRef.current) return;
+    setPlaybackRate(preferredPlaybackRate);
+    if (isReady && waveSurferRef.current) {
+      waveSurferRef.current.setPlaybackRate(preferredPlaybackRate);
+    }
+  }, [preferredPlaybackRate, isReady]);
+
   // Handle external seek request
   useEffect(() => {
     if (seekToTime !== null && seekToTime !== undefined && waveSurferRef.current && isReady) {
@@ -165,6 +179,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
 
   const handleRateChange = (rate: string) => {
     const numRate = parseFloat(rate);
+    userAdjustedRateRef.current = true;
     setPlaybackRate(numRate);
     if (waveSurferRef.current) {
       waveSurferRef.current.setPlaybackRate(numRate);

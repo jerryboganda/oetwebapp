@@ -365,16 +365,6 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
         ],
       },
       {
-        key: 'showTranscriptPrompts',
-        label: 'Show transcript prompts when available',
-        type: 'toggle',
-        description: 'Reveal transcript support hints on listening and speaking review surfaces.',
-        icon: Captions,
-        primaryTag: 'Transcript Help',
-        secondaryTag: 'Review cue',
-        secondaryTagTone: 'muted',
-      },
-      {
         key: 'lowBandwidthMode',
         label: 'Low-bandwidth mode',
         type: 'toggle',

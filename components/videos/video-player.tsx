@@ -83,6 +83,8 @@ export interface VideoPlayerProps {
   initialProgress: VideoLibraryProgress | null;
   chapters: VideoChapter[];
   onProgressPersisted?: (progress: { percentComplete: number; completed: boolean; positionSeconds: number }) => void;
+  /** When true, pin the lowest available quality instead of adaptive ABR (Settings → Audio → Low-bandwidth). */
+  lowBandwidth?: boolean;
 }
 
 /**
@@ -92,7 +94,7 @@ export interface VideoPlayerProps {
  * watermark survives fullscreen (the CONTAINER fullscreens, not the video).
  */
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
-  { videoId, userId, durationSeconds, initialProgress, chapters, onProgressPersisted },
+  { videoId, userId, durationSeconds, initialProgress, chapters, onProgressPersisted, lowBandwidth = false },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -300,6 +302,21 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+
+  // Low-bandwidth mode: once quality levels are known, pin the lowest instead of
+  // letting adaptive bitrate climb — video is the heaviest media on slow links.
+  // Only acts while quality is still on Auto (-1), so a manual pick is respected.
+  useEffect(() => {
+    if (!lowBandwidth || qualityLevels.length === 0 || currentQuality !== -1) return;
+    let lowest: HlsQualityLevel | null = null;
+    for (const level of qualityLevels) {
+      if (level.height > 0 && (lowest === null || level.height < lowest.height)) lowest = level;
+    }
+    if (lowest) {
+      engineRef.current?.setQuality(lowest.index);
+      setCurrentQuality(lowest.index);
+    }
+  }, [lowBandwidth, qualityLevels, currentQuality]);
 
   const refreshCaptionTracks = useCallback(() => {
     const video = videoRef.current;
