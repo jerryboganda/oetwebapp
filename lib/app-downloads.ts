@@ -8,6 +8,15 @@
  */
 export const GITHUB_RELEASES_URL = 'https://github.com/jerryboganda/oetwebapp/releases/latest';
 
+/**
+ * Direct-download endpoints that resolve the latest desktop installer asset and
+ * redirect the browser straight to the file (see app/api/download/[platform]).
+ * Use these for the download CTAs so a click starts the download instead of
+ * sending the user to the GitHub releases page.
+ */
+export const WINDOWS_DOWNLOAD_URL = '/api/download/windows';
+export const MAC_DOWNLOAD_URL = '/api/download/mac';
+
 export const ANDROID_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL ||
   'https://play.google.com/store/apps/details?id=com.oetprep.learner';

@@ -17,16 +17,17 @@ import {
 import {
   ANDROID_STORE_URL,
   detectVisitorOs,
-  GITHUB_RELEASES_URL,
   IOS_STORE_URL,
+  MAC_DOWNLOAD_URL,
+  WINDOWS_DOWNLOAD_URL,
   type DesktopOsKind,
 } from '@/lib/app-downloads';
 
 const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 
 const OS_CTA: Partial<Record<DesktopOsKind, { label: string; href: string }>> = {
-  windows: { label: 'Download for Windows', href: GITHUB_RELEASES_URL },
-  mac: { label: 'Download for Mac', href: GITHUB_RELEASES_URL },
+  windows: { label: 'Download for Windows', href: WINDOWS_DOWNLOAD_URL },
+  mac: { label: 'Download for Mac', href: MAC_DOWNLOAD_URL },
   android: { label: 'Get the Android app', href: ANDROID_STORE_URL },
 };
 
@@ -83,8 +84,7 @@ export default function GetAppPage() {
           {heroCta && (
             <a
               href={heroCta.href}
-              target="_blank"
-              rel="noreferrer"
+              {...(visitorOs === 'android' ? { target: '_blank', rel: 'noreferrer' } : {})}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white hover:bg-primary-dark"
             >
               <MonitorDown className="h-5 w-5" />
@@ -95,9 +95,7 @@ export default function GetAppPage() {
 
         <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <a
-            href={GITHUB_RELEASES_URL}
-            target="_blank"
-            rel="noreferrer"
+            href={WINDOWS_DOWNLOAD_URL}
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
             <Laptop className="h-8 w-8 text-primary" />
@@ -109,9 +107,7 @@ export default function GetAppPage() {
           </a>
 
           <a
-            href={GITHUB_RELEASES_URL}
-            target="_blank"
-            rel="noreferrer"
+            href={MAC_DOWNLOAD_URL}
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
             <Apple className="h-8 w-8 text-primary" />
