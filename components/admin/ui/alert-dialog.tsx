@@ -53,6 +53,7 @@ const AlertDialogContent = React.forwardRef<
       className={cn(
         'fixed left-[50%] top-[50%] z-[var(--admin-z-modal)] grid w-full max-w-lg',
         'translate-x-[-50%] translate-y-[-50%] gap-4 p-6',
+        'max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto',
         'border border-[var(--admin-border-default)] bg-[var(--admin-bg-elevated)]',
         'shadow-[var(--admin-shadow-lg)] rounded-[var(--admin-radius-xl)]',
         'font-[var(--admin-font-body)] text-[var(--admin-fg-default)]',

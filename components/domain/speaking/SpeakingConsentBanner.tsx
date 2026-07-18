@@ -134,10 +134,10 @@ export function SpeakingConsentBanner({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-navy/60 p-4 sm:items-center"
+      className="overlay-safe-area fixed inset-0 z-50 flex items-end justify-center bg-navy/60 sm:items-center"
       data-testid="speaking-consent-banner"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl">
+      <div className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl">
         <div className="mb-4 flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
           <div>

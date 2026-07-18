@@ -260,7 +260,7 @@ const DrawerContent = React.forwardRef<
             ref={ref as React.Ref<HTMLDivElement>}
             className={cn(
               'fixed inset-x-0 bottom-0 z-[var(--admin-z-modal)] mt-24 flex flex-col',
-              'max-h-[85vh] gap-4 p-6 pt-3',
+              'max-h-[85vh] gap-4 p-6 pt-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))]',
               'rounded-t-[var(--admin-radius-xl)] border-t border-[var(--admin-border-default)]',
               'bg-[var(--admin-bg-elevated)] shadow-[var(--admin-shadow-lg)]',
               'font-[var(--admin-font-body)] text-[var(--admin-fg-default)]',

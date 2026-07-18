@@ -193,6 +193,16 @@
     padding-right: env(safe-area-inset-right);
   }
 
+  /* Full-screen overlay backdrop padding that keeps a centered/edge panel clear
+     of the notch, Android status bar, and gesture nav bar (edge-to-edge). Use in
+     place of a plain `p-4` on the overlay's fixed inset-0 flex container. */
+  .overlay-safe-area {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
   .keyboard-safe-bottom {
     bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset, 0px));
   }

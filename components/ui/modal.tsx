@@ -270,7 +270,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
     <AnimatePresence initial={false} mode={presenceMode} onExitComplete={handleExitComplete}>
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(0.5rem,env(safe-area-inset-top))] sm:items-center sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-[max(1rem,env(safe-area-inset-top))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby={title ? titleId : undefined}
@@ -288,7 +288,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           <motion.div
             ref={dialogRef}
             className={cn(
-              'relative flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100dvh-1.5rem)]',
+              'relative flex max-h-[calc(100dvh-1rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]',
               sizeStyles[size],
               className,
             )}

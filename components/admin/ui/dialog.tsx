@@ -56,6 +56,9 @@ const dialogContentVariants = cva(
   [
     'fixed left-[50%] top-[50%] z-[var(--admin-z-modal)] grid w-full',
     'translate-x-[-50%] translate-y-[-50%] gap-4 p-6',
+    // Edge-to-edge safe fit: never taller than the visible viewport minus the
+    // status bar / gesture nav insets, and scroll internally when it would be.
+    'max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto',
     'border border-[var(--admin-border-default)] bg-[var(--admin-bg-elevated)]',
     'shadow-[var(--admin-shadow-lg)] rounded-[var(--admin-radius-xl)]',
     'font-[var(--admin-font-body)] text-[var(--admin-fg-default)]',
@@ -76,9 +79,10 @@ const dialogContentVariants = cva(
         lg: 'max-w-2xl',
         xl: 'max-w-4xl',
         fullscreen: [
-          'w-screen h-screen max-w-none',
+          'w-screen h-screen max-h-none max-w-none',
           'left-0 top-0 translate-x-0 translate-y-0',
           'rounded-none border-0',
+          'pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]',
         ],
       },
     },

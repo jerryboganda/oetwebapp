@@ -63,7 +63,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
         className="flex-1 bg-navy/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="flex h-full w-full max-w-md flex-col overflow-hidden bg-surface shadow-xl">
+      <div className="flex h-full w-full max-w-md flex-col overflow-hidden bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-xl">
         <header className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="cart-drawer-title" className="text-lg font-semibold text-navy">
             Your cart

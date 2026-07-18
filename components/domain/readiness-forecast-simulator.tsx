@@ -38,8 +38,8 @@ export function ReadinessForecastSimulator({ open, onClose, initialForecast }: R
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/30 backdrop-blur-sm p-4">
-      <div className="bg-surface rounded-3xl shadow-xl border border-border max-w-lg w-full p-6 sm:p-8">
+    <div className="overlay-safe-area fixed inset-0 z-50 flex items-center justify-center bg-navy/30 backdrop-blur-sm">
+      <div className="bg-surface rounded-3xl shadow-xl border border-border max-w-lg w-full p-6 sm:p-8 max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">

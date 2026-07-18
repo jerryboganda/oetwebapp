@@ -71,11 +71,11 @@ export function AddonPurchaseModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
+      className="overlay-safe-area fixed inset-0 z-50 flex items-center justify-center bg-navy/40"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl border border-border"
+        className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-3">
