@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from 'recharts';
-import { Shield, Target, TrendingUp, BarChart3 } from 'lucide-react';
+import { Shield, Target, TrendingUp, BarChart3, Scale, ClipboardCheck } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
+import { CardSkeleton } from '@/components/ui/skeleton';
 import { Select } from '@/components/ui/form-controls';
 import {
   ExpertRouteHero,
@@ -14,8 +15,13 @@ import {
 } from '@/components/domain/expert-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import {
+  fetchMySpeakingTutorConsistency,
+  type SpeakingTutorConsistency,
+} from '@/lib/api/speaking-compliance';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
+type ConsistencyStatus = AsyncStatus | 'empty';
 
 interface ScoringDistribution {
   criterion: string;
@@ -57,6 +63,35 @@ export default function ScoringQualityPage() {
   const [days, setDays] = useState('30');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Scoring consistency is a separate, self-scoped endpoint that takes no
+  // time-window parameter, so it loads independently of the `days` selector.
+  const [consistency, setConsistency] = useState<SpeakingTutorConsistency | null>(null);
+  const [consistencyStatus, setConsistencyStatus] = useState<ConsistencyStatus>('loading');
+  const [consistencyError, setConsistencyError] = useState<string | null>(null);
+  const [consistencyRetry, setConsistencyRetry] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadConsistency() {
+      try {
+        setConsistencyStatus('loading');
+        const result = await fetchMySpeakingTutorConsistency();
+        if (cancelled) return;
+        setConsistency(result);
+        const hasSamples = result.calibrationSamples > 0 || result.tutorAssessmentsScored > 0;
+        setConsistencyStatus(hasSamples ? 'success' : 'empty');
+      } catch {
+        if (!cancelled) {
+          setConsistencyError('Unable to load your scoring consistency data.');
+          setConsistencyStatus('error');
+        }
+      }
+    }
+    loadConsistency();
+    return () => { cancelled = true; };
+  }, [consistencyRetry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +212,68 @@ export default function ScoringQualityPage() {
           </>
         )}
       </AsyncStateWrapper>
+
+      {/* Scoring consistency (self-scoped tutor-consistency endpoint) */}
+      <div className="mt-6">
+        <ExpertRouteSectionHeader
+          title="Scoring Consistency"
+          description="How closely your marking tracks the gold-standard calibration set and the AI marker. All-time figures for your account — not affected by the window above."
+        />
+        <div className="mt-4">
+          <AsyncStateWrapper
+            status={consistencyStatus}
+            errorMessage={consistencyError ?? undefined}
+            onRetry={() => setConsistencyRetry((c) => c + 1)}
+            loadingContent={<CardSkeleton />}
+            emptyContent={
+              <Card>
+                <CardContent className="py-10 text-center">
+                  <p className="text-sm font-medium text-navy">No scored sessions yet</p>
+                  <p className="text-xs text-muted mt-1">
+                    Your consistency report appears once you have completed a calibration set or finalised a scored assessment.
+                  </p>
+                </CardContent>
+              </Card>
+            }
+          >
+            {consistency && (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {consistency.calibrationSamples > 0 && (
+                    <ExpertRouteSummaryCard
+                      label="Avg Error vs Gold"
+                      value={consistency.meanAbsoluteErrorVsGold.toFixed(2)}
+                      hint="per criterion"
+                      icon={<Scale className="w-5 h-5" />}
+                    />
+                  )}
+                  {consistency.tutorAssessmentsScored > 0 && (
+                    <ExpertRouteSummaryCard
+                      label="Avg Error vs AI"
+                      value={consistency.meanAbsoluteErrorVsAi.toFixed(2)}
+                      hint="per criterion"
+                      icon={<Target className="w-5 h-5" />}
+                    />
+                  )}
+                  <ExpertRouteSummaryCard
+                    label="Calibration Samples"
+                    value={consistency.calibrationSamples}
+                    icon={<ClipboardCheck className="w-5 h-5" />}
+                  />
+                  <ExpertRouteSummaryCard
+                    label="Assessments Scored"
+                    value={consistency.tutorAssessmentsScored}
+                    icon={<BarChart3 className="w-5 h-5" />}
+                  />
+                </div>
+                <p className="text-xs text-muted mt-3">
+                  Errors are mean absolute differences averaged across the nine Speaking criteria — lower means your scoring sits closer to the reference.
+                </p>
+              </>
+            )}
+          </AsyncStateWrapper>
+        </div>
+      </div>
     </ExpertRouteWorkspace>
   );
 }

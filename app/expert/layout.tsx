@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavGroup, NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones, Video, ClipboardList, BookOpen, AudioLines, Scale, Gauge, StickyNote, BookMarked, MessagesSquare } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones, Video, ClipboardList, BookOpen, AudioLines, Scale, Gauge, StickyNote, BookMarked, MessagesSquare, GraduationCap } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -32,6 +32,7 @@ const expertToolsNavItems: NavItem[] = [
   { href: '/expert/annotation-templates', label: 'Annotation Templates', icon: <StickyNote className="w-5 h-5" />, matchPrefix: '/expert/annotation-templates' },
   { href: '/expert/rubric-reference', label: 'Rubric Guide', icon: <BookMarked className="w-5 h-5" />, matchPrefix: '/expert/rubric-reference' },
   { href: '/expert/ask-an-expert', label: 'Ask a Tutor', icon: <MessagesSquare className="w-5 h-5" />, matchPrefix: '/expert/ask-an-expert' },
+  { href: '/expert/training', label: 'Training', icon: <GraduationCap className="w-5 h-5" />, matchPrefix: '/expert/training' },
 ];
 
 const onboardingNavItem: NavItem = {
@@ -120,6 +121,10 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
 
   if (pathname.startsWith('/expert/ask-an-expert')) {
     return 'Ask a Tutor';
+  }
+
+  if (pathname.startsWith('/expert/training')) {
+    return 'Training';
   }
 
   if (pathname.startsWith('/expert/settings')) {

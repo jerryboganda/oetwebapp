@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardList, GraduationCap, UserMinus, UserPlus } from 'lucide-react';
+import { BookOpen, CheckCircle2, ClipboardList, GraduationCap, UserMinus, UserPlus } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
@@ -198,6 +199,13 @@ export default function AdminInterlocutorOnboardingPage() {
       breadcrumbs={BREADCRUMBS}
       eyebrow="Onboarding"
       icon={<GraduationCap className="h-5 w-5" />}
+      actions={(
+        <Button variant="primary" size="sm" asChild>
+          <Link href="/admin/onboarding/interlocutor/modules">
+            <BookOpen className="mr-1.5 h-4 w-4" />Manage training modules
+          </Link>
+        </Button>
+      )}
       kpis={status === 'success' && data ? (
         <KpiStrip className="lg:grid-cols-4">
           <KpiTile

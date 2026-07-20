@@ -417,6 +417,13 @@ export default function SpeakingReviewWorkspace() {
     return `${base}/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`;
   }, [reviewRequestId]);
 
+  // Deletion is NOT nested under the review: the backend exposes it as
+  // /v1/expert/speaking/voice-notes/{voiceNoteId} (SpeakingReviewVoiceNoteEndpoints).
+  const speakingVoiceNoteDeleteBase = useMemo(() => {
+    const base = (env.apiBaseUrl || '').replace(/\/$/, '');
+    return `${base}/v1/expert/speaking/voice-notes`;
+  }, []);
+
   const loadVoiceNotes = useCallback(async () => {
     if (!speakingVoiceNotesUrl) return;
     setVoiceNotesLoading(true);
@@ -562,7 +569,7 @@ export default function SpeakingReviewWorkspace() {
     setDeletingVoiceNoteId(noteId);
     try {
       const headers = await buildAuthHeaders();
-      const response = await fetch(`${speakingVoiceNotesUrl}/${encodeURIComponent(noteId)}`, {
+      const response = await fetch(`${speakingVoiceNoteDeleteBase}/${encodeURIComponent(noteId)}`, {
         method: 'DELETE',
         headers,
         credentials: 'include',
@@ -592,7 +599,7 @@ export default function SpeakingReviewWorkspace() {
     } finally {
       setDeletingVoiceNoteId(null);
     }
-  }, [buildAuthHeaders, reviewRequestId, speakingVoiceNotesUrl]);
+  }, [buildAuthHeaders, reviewRequestId, speakingVoiceNoteDeleteBase, speakingVoiceNotesUrl]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

@@ -263,6 +263,28 @@ export async function fetchSpeakingTutorConsistency(tutorId?: string): Promise<u
   return apiClient.get<unknown>(`/v1/expert/speaking/analytics/tutor-consistency${qs}`);
 }
 
+/**
+ * Shape returned by GET /v1/expert/speaking/analytics/tutor-consistency.
+ * Errors are averaged per-criterion (the backend divides the 9-criterion
+ * totals by 9). The route takes no time-window parameter — figures are
+ * all-time for the tutor.
+ */
+export interface SpeakingTutorConsistency {
+  tutorId: string | null;
+  meanAbsoluteErrorVsGold: number;
+  meanAbsoluteErrorVsAi: number;
+  calibrationSamples: number;
+  tutorAssessmentsScored: number;
+}
+
+/**
+ * Self-scoped variant: omitting `tutorId` makes the endpoint fall back to the
+ * calling tutor's own id, so an expert can read their own consistency report.
+ */
+export async function fetchMySpeakingTutorConsistency(): Promise<SpeakingTutorConsistency> {
+  return apiClient.get<SpeakingTutorConsistency>('/v1/expert/speaking/analytics/tutor-consistency');
+}
+
 export async function fetchSpeakingContentDifficulty(professionId?: string): Promise<unknown> {
   const qs = professionId ? `?professionId=${encodeURIComponent(professionId)}` : '';
   return apiClient.get<unknown>(`/v1/admin/speaking/analytics/content-difficulty${qs}`);
