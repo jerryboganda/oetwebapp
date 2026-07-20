@@ -323,7 +323,7 @@ export function Sidebar({
         <ul className="mb-4 flex flex-col gap-1.5">
           <li>
             <Link
-              href="/settings"
+              href={activeWorkspaceRole === 'expert' ? '/expert/settings' : '/settings'}
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
             >
@@ -333,7 +333,7 @@ export function Sidebar({
           </li>
           <li>
             <a
-              href="mailto:support@edu80.app?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
+              href="mailto:support@oetwithdrhesham.co.uk?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
             >

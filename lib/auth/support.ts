@@ -1,4 +1,4 @@
-export const SUPPORT_EMAIL = "support@edu80.app";
+export const SUPPORT_EMAIL = "support@oetwithdrhesham.co.uk";
 
 export function buildSupportMailto(email?: string) {
   const subject = "Need help with my OET account";

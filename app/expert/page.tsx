@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 import { fetchExpertDashboard, isApiError } from '@/lib/api';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 import type { ExpertDashboardData, ReviewRequest } from '@/lib/types/expert';
 
@@ -128,6 +129,7 @@ function EmptyDraftState({ actionLabel, onAction }: { actionLabel: string; onAct
 export default function ExpertDashboardPage() {
   const router = useRouter();
   const { expert } = useExpertAuth();
+  const { user: authUser } = useCurrentUser();
   const [dashboard, setDashboard] = useState<ExpertDashboardData | null>(null);
   const [status, setStatus] = useState<AsyncStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -245,17 +247,19 @@ export default function ExpertDashboardPage() {
               )}
             />
 
-            <InlineAlert
-              variant="warning"
-              title="Recommended security step"
-              action={(
-                <Button variant="primary" size="sm" onClick={() => router.push('/mfa/setup?next=/expert')}>
-                  Set up MFA
-                </Button>
-              )}
-            >
-              Multi-factor authentication is recommended for privileged access. You can keep working without it, but enabling an authenticator app adds a much stronger layer of account protection.
-            </InlineAlert>
+            {authUser && !authUser.isAuthenticatorEnabled && (
+              <InlineAlert
+                variant="warning"
+                title="Recommended security step"
+                action={(
+                  <Button variant="primary" size="sm" onClick={() => router.push('/mfa/setup?next=/expert')}>
+                    Set up MFA
+                  </Button>
+                )}
+              >
+                Multi-factor authentication is recommended for privileged access. You can keep working without it, but enabling an authenticator app adds a much stronger layer of account protection.
+              </InlineAlert>
+            )}
 
             <section className="space-y-4">
               <LearnerSurfaceSectionHeader

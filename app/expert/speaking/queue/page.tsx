@@ -9,10 +9,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Headphones, Mic, RefreshCw, Sparkles, Unlock, UserCheck } from 'lucide-react';
 
-import { ExpertDashboardShell } from '@/components/layout';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,6 +30,13 @@ import {
 } from '@/lib/api/speaking-assessments';
 
 const FILTER_KEYS = ['profession', 'age'] as const;
+
+// Written by the assess page (sessionStorage + ?flash=) right before it
+// redirects back here after a successful submission.
+const FLASH_STORAGE_KEY = 'speakingQueueFlash';
+const FLASH_MESSAGES: Record<string, { variant: 'success'; message: string }> = {
+  'assessment-submitted': { variant: 'success', message: 'Assessment submitted successfully.' },
+};
 
 const AGE_PRESETS: { id: string; label: string }[] = [
   { id: 'child', label: 'Child (0–11)' },
@@ -68,6 +74,7 @@ function formatRelative(iso: string): string {
 
 export default function SpeakingQueuePage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [items, setItems] = useState<TutorQueueItem[]>([]);
@@ -112,6 +119,36 @@ export default function SpeakingQueuePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Surface the flash message handed off by the assess page, then clear it so
+  // it only shows once (both the sessionStorage key and the ?flash= param).
+  useEffect(() => {
+    const queryFlash = searchParams?.get('flash');
+    let flash = queryFlash;
+    try {
+      const stored = window.sessionStorage.getItem(FLASH_STORAGE_KEY);
+      if (stored) {
+        flash = flash ?? stored;
+        window.sessionStorage.removeItem(FLASH_STORAGE_KEY);
+      }
+    } catch {
+      // sessionStorage unavailable — fall back to the query param alone.
+    }
+
+    if (flash) {
+      const message = FLASH_MESSAGES[flash];
+      if (message) {
+        setToast(message);
+      }
+    }
+
+    if (queryFlash && searchParams) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('flash');
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
 
   const handleFilterChange = useCallback((groupId: string, optionId: string) => {
     setSelectedFilters((prev) => {
@@ -258,8 +295,11 @@ export default function SpeakingQueuePage() {
   );
 
   return (
-    <ExpertDashboardShell pageTitle="Speaking review queue" subtitle="Claim sessions and submit tutor assessments">
-      <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
+      <header>
+        <h1 className="text-2xl font-bold tracking-tight text-navy">Speaking review queue</h1>
+        <p className="mt-1 text-sm text-muted">Claim sessions and submit tutor assessments.</p>
+      </header>
         <Card padding="md" className="flex flex-wrap items-center gap-3">
           <Mic className="h-5 w-5 text-primary" aria-hidden />
           <div className="flex-1">
@@ -307,14 +347,13 @@ export default function SpeakingQueuePage() {
           />
         )}
 
-        {toast && (
-          <Toast
-            variant={toast.variant === 'info' ? 'info' : toast.variant === 'success' ? 'success' : 'error'}
-            message={toast.message}
-            onClose={() => setToast(null)}
-          />
-        )}
-      </div>
-    </ExpertDashboardShell>
+      {toast && (
+        <Toast
+          variant={toast.variant === 'info' ? 'info' : toast.variant === 'success' ? 'success' : 'error'}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </div>
   );
 }

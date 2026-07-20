@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { MessageSquareText, CheckCircle2, Clock, Send, ChevronRight, RefreshCw } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -128,7 +129,13 @@ export default function AskAnExpertPage() {
                       </Button>
                     )}
                     {thread.hasExpertAnswer && (
-                      <ChevronRight className="w-5 h-5 text-muted flex-shrink-0" />
+                      <Link
+                        href={`/community/threads/${encodeURIComponent(thread.id)}`}
+                        className="flex flex-shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        aria-label={`Open thread: ${thread.title}`}
+                      >
+                        View thread <ChevronRight className="w-4 h-4" />
+                      </Link>
                     )}
                   </div>
 

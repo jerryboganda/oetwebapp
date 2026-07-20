@@ -20,7 +20,10 @@ type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type ModalMode = 'create' | 'edit';
 
-const SUBTESTS = ['writing', 'speaking', 'reading', 'listening'];
+// Only writing + speaking have expert-marked criteria (see CRITERIA below);
+// reading/listening are auto-graded, so offering them left the criterion
+// dropdown empty and the backend without a valid criterion code.
+const SUBTESTS = ['writing', 'speaking'];
 const CRITERIA: Record<string, string[]> = {
   writing: ['overall_task_fulfilment', 'appropriateness_of_language', 'comprehension_of_stimulus', 'linguistic_features_(grammar_and_cohesion)', 'linguistic_features_(vocabulary)', 'presentation_features'],
   // OET Speaking — 9 criteria (4 linguistic + 5 clinical-communication).

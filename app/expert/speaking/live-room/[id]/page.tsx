@@ -45,6 +45,51 @@ export default function ExpertSpeakingLiveRoomPage() {
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
 
+  // "Kept on your device only" — notes live in localStorage keyed by room id
+  // so they survive refresh/navigation without ever touching the server.
+  const notesStorageKey = liveRoomId ? `expert-live-room-notes-${liveRoomId}` : null;
+  const notesLoadedRef = useRef(false);
+  const notesRef = useRef('');
+
+  useEffect(() => {
+    if (!notesStorageKey) return;
+    try {
+      const saved = window.localStorage.getItem(notesStorageKey);
+      if (saved !== null) {
+        setPrivateNotes(saved);
+        notesRef.current = saved;
+      }
+    } catch {
+      // localStorage unavailable (private mode) — notes stay in memory only.
+    }
+    notesLoadedRef.current = true;
+  }, [notesStorageKey]);
+
+  // Debounced save on change; the unmount cleanup below flushes the latest value.
+  useEffect(() => {
+    notesRef.current = privateNotes;
+    if (!notesStorageKey || !notesLoadedRef.current) return;
+    const timer = setTimeout(() => {
+      try {
+        window.localStorage.setItem(notesStorageKey, privateNotes);
+      } catch {
+        // Ignore quota/unavailable errors — best-effort local persistence.
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [notesStorageKey, privateNotes]);
+
+  useEffect(() => {
+    if (!notesStorageKey) return;
+    return () => {
+      try {
+        window.localStorage.setItem(notesStorageKey, notesRef.current);
+      } catch {
+        // Ignore — see above.
+      }
+    };
+  }, [notesStorageKey]);
+
   useEffect(() => {
     if (!liveRoomId) return;
     let cancelled = false;
@@ -177,8 +222,8 @@ export default function ExpertSpeakingLiveRoomPage() {
           aria-label="Tutor private notes"
         />
         <p className="mt-1 text-xs text-muted">
-          Notes are local to this device. Use the review screen after the session for
-          formal feedback that the learner will see.
+          Notes are saved on this device only (per room) and restored when you return.
+          Use the review screen after the session for formal feedback that the learner will see.
         </p>
       </section>
     </div>

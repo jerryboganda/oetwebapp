@@ -14,7 +14,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, RotateCcw, Scale } from 'lucide-react';
 
-import { ExpertDashboardShell } from '@/components/layout';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -206,7 +205,7 @@ export default function SpeakingModerationCasePage() {
   const isClosed = status === 'finalized' || status === 'reattempt_requested';
 
   return (
-    <ExpertDashboardShell>
+    <>
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 md:p-6">
         <div>
           <Button variant="ghost" size="sm" onClick={() => router.push('/expert/speaking/moderation')}>
@@ -323,6 +322,6 @@ export default function SpeakingModerationCasePage() {
       {toast && (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </ExpertDashboardShell>
+    </>
   );
 }

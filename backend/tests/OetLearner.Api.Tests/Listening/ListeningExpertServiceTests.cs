@@ -143,13 +143,57 @@ public class ListeningExpertServiceTests
 
         // Act — page 1, size 2
         var result = await svc.GetAttemptsPagedAsync(
-            "expert-1", page: 1, pageSize: 2, learnerId: null, paperId: null, CancellationToken.None);
+            "expert-1", page: 1, pageSize: 2, learnerId: null, paperId: null, search: null, CancellationToken.None);
 
         // Assert
         Assert.Equal(5, result.Total);
         Assert.Equal(1, result.Page);
         Assert.Equal(2, result.PageSize);
         Assert.Equal(2, result.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetAttemptsPagedAsync_SearchMatchesDisplayNameCaseInsensitively_OrExactUserId()
+    {
+        // Arrange — two learners with distinct display names, one attempt each.
+        await using var db = NewDb();
+        db.Set<ContentPaper>().Add(SeedPaper());
+        var alice = SeedUser("user-alice");
+        alice.DisplayName = "Alice Hamdan";
+        alice.Email = "alice@test.com";
+        var bob = SeedUser("user-bob");
+        bob.DisplayName = "Bob Youssef";
+        bob.Email = "bob@test.com";
+        db.Users.AddRange(alice, bob);
+        db.ListeningAttempts.Add(SeedAttempt(id: "attempt-alice", userId: alice.Id));
+        db.ListeningAttempts.Add(SeedAttempt(id: "attempt-bob", userId: bob.Id));
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+
+        // Act + Assert — case-insensitive display-name fragment.
+        var byName = await svc.GetAttemptsPagedAsync(
+            "expert-1", page: 1, pageSize: 20, learnerId: null, paperId: null, search: "aLiCe", CancellationToken.None);
+        var nameHit = Assert.Single(byName.Items);
+        Assert.Equal("attempt-alice", nameHit.AttemptId);
+
+        // Exact user id also matches through the same search param.
+        var byId = await svc.GetAttemptsPagedAsync(
+            "expert-1", page: 1, pageSize: 20, learnerId: null, paperId: null, search: "user-bob", CancellationToken.None);
+        var idHit = Assert.Single(byId.Items);
+        Assert.Equal("attempt-bob", idHit.AttemptId);
+
+        // No match — empty page, zero total.
+        var miss = await svc.GetAttemptsPagedAsync(
+            "expert-1", page: 1, pageSize: 20, learnerId: null, paperId: null, search: "nobody", CancellationToken.None);
+        Assert.Empty(miss.Items);
+        Assert.Equal(0, miss.Total);
+
+        // The legacy exact learnerId filter still works unchanged.
+        var byLearnerId = await svc.GetAttemptsPagedAsync(
+            "expert-1", page: 1, pageSize: 20, learnerId: alice.Id, paperId: null, search: null, CancellationToken.None);
+        var learnerHit = Assert.Single(byLearnerId.Items);
+        Assert.Equal("attempt-alice", learnerHit.AttemptId);
     }
 
     [Fact]

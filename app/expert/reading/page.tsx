@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, ClipboardList, ExternalLink, RefreshCw, Search } from 'lucide-react';
-import { ExpertDashboardShell } from '@/components/layout/expert-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   listReadingAssignments,
@@ -83,7 +82,7 @@ export default function ExpertReadingQueuePage() {
   const openCount = assignments.filter((assignment) => assignment.status === 'assigned').length;
 
   return (
-    <ExpertDashboardShell pageTitle="Reading queue" workspaceClassName="space-y-6">
+    <div className="space-y-6">
       <header className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">Reading tutor panel</p>
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -185,7 +184,7 @@ export default function ExpertReadingQueuePage() {
           </div>
         )}
       </section>
-    </ExpertDashboardShell>
+    </div>
   );
 }
 

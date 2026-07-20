@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BarChart3, ClipboardList, Eye, Mic, MessageSquareText } from 'lucide-react';
-import { ExpertDashboardShell } from '@/components/layout/expert-dashboard-shell';
+import { BarChart3, ClipboardList, Eye } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
 type HubCard = {
@@ -20,9 +19,9 @@ const hubCards: HubCard[] = [
     icon: <ClipboardList className="h-5 w-5 text-primary" />,
   },
   {
-    href: '/expert/speaking/assess',
+    href: '/expert/speaking/queue',
     title: 'Assess sessions',
-    description: 'Open the scoring workspace for sessions you are actively reviewing.',
+    description: 'Claim a session from the queue to open its scoring workspace.',
     icon: <Eye className="h-5 w-5 text-primary" />,
   },
   {
@@ -31,36 +30,24 @@ const hubCards: HubCard[] = [
     description: 'Resolve double-marked Speaking sessions and request reattempts when needed.',
     icon: <BarChart3 className="h-5 w-5 text-primary" />,
   },
-  {
-    href: '/expert/speaking/live-room',
-    title: 'Live room',
-    description: 'Jump into the live-tutor room flow for real-time speaking support.',
-    icon: <Mic className="h-5 w-5 text-primary" />,
-  },
-  {
-    href: '/expert/speaking/queue',
-    title: 'Speaking workflow',
-    description: 'Follow the queue → assess → moderate flow without leaving the Speaking portal.',
-    icon: <MessageSquareText className="h-5 w-5 text-primary" />,
-  },
 ];
 
 export default function ExpertSpeakingPage() {
   return (
-    <ExpertDashboardShell pageTitle="Speaking" workspaceClassName="space-y-6">
+    <div className="space-y-6">
       <header className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">Expert speaking portal</p>
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-navy">Speaking workflow hub</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted">
-            Move from queue to assessment to moderation in one place, then open the live room when a learner needs real-time support.
+            Move from queue to assessment to moderation in one place. Live rooms are entered from their session, not from here.
           </p>
         </div>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {hubCards.map((card) => (
-          <Card key={card.href} className="h-full overflow-hidden">
+          <Card key={card.title} className="h-full overflow-hidden">
             <Link href={card.href} className="flex h-full flex-col gap-3 p-5 hover:bg-primary/5">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
                 {card.icon}
@@ -74,6 +61,6 @@ export default function ExpertSpeakingPage() {
           </Card>
         ))}
       </section>
-    </ExpertDashboardShell>
+    </div>
   );
 }

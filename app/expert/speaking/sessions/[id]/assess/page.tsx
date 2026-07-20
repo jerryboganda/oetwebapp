@@ -20,7 +20,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, ListChecks, Loader2, Save, Scale, Send } from 'lucide-react';
 
-import { ExpertDashboardShell } from '@/components/layout';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -266,32 +265,27 @@ export default function AssessSpeakingSessionPage() {
 
   if (loading) {
     return (
-      <ExpertDashboardShell pageTitle="Loading assessment…">
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-32 w-full" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Skeleton className="h-96 w-full" />
-            <Skeleton className="h-96 w-full" />
-          </div>
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-32 w-full" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-96 w-full" />
+          <Skeleton className="h-96 w-full" />
         </div>
-      </ExpertDashboardShell>
+      </div>
     );
   }
 
   if (errorMsg) {
     return (
-      <ExpertDashboardShell pageTitle="Error">
-        <InlineAlert variant="error" title="Failed to load session" action={
-          <Button onClick={() => void load()} size="sm" variant="outline">Try again</Button>
-        }>
-          {errorMsg}
-        </InlineAlert>
-      </ExpertDashboardShell>
+      <InlineAlert variant="error" title="Failed to load session" action={
+        <Button onClick={() => void load()} size="sm" variant="outline">Try again</Button>
+      }>
+        {errorMsg}
+      </InlineAlert>
     );
   }
 
   return (
-    <ExpertDashboardShell pageTitle="Assess speaking session" subtitle={`Session ${sessionId.slice(0, 8)}…`}>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <Button variant="ghost" size="sm" onClick={() => router.push('/expert/speaking/queue')}>
@@ -299,6 +293,11 @@ export default function AssessSpeakingSessionPage() {
             Back to queue
           </Button>
         </div>
+
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight text-navy">Assess speaking session</h1>
+          <p className="mt-1 text-sm text-muted">Session {sessionId.slice(0, 8)}…</p>
+        </header>
 
         {/* Top: AI reference column (read-only). Pinned full-width on top. */}
         <div className="grid gap-4 md:grid-cols-2">
@@ -374,6 +373,5 @@ export default function AssessSpeakingSessionPage() {
 
         {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
       </div>
-    </ExpertDashboardShell>
   );
 }

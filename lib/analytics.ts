@@ -201,6 +201,7 @@ const TRACKED_EVENTS = [
   'exam_simulation_viewed',
   'feedback_guide_viewed',
   // Expert extended events
+  'expert_ai_prefill_applied',
   'expert_ai_prefill_viewed',
   'expert_ask_an_expert_viewed',
   'expert_mobile_review_opened',

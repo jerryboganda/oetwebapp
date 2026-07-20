@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Activity, CheckCircle2, Send } from 'lucide-react';
 
 import {
@@ -104,7 +105,13 @@ export default function ExpertSpeakingCalibrationPage() {
       render: (row) => (
         <div className="flex flex-col">
           <span className="font-bold">{row.title}</span>
-          <span className="text-[10px] uppercase tracking-widest text-muted">attempt {row.sourceAttemptId}</span>
+          <Link
+            href={`/expert/queue?search=${encodeURIComponent(row.sourceAttemptId)}`}
+            className="text-[10px] uppercase tracking-widest text-primary hover:underline"
+            aria-label={`Find attempt ${row.sourceAttemptId} in the review queue`}
+          >
+            attempt {row.sourceAttemptId}
+          </Link>
         </div>
       ),
     },
@@ -176,7 +183,14 @@ export default function ExpertSpeakingCalibrationPage() {
             <p className="mb-3 text-sm text-muted">{activeSample.description}</p>
           )}
           <p className="mb-4 text-xs text-muted">
-            Listen to the linked attempt ({activeSample.sourceAttemptId}) in the expert review console, then enter your rubric below.
+            Listen to the linked attempt (
+            <Link
+              href={`/expert/queue?search=${encodeURIComponent(activeSample.sourceAttemptId)}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {activeSample.sourceAttemptId}
+            </Link>
+            ) in the expert review console, then enter your rubric below.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">

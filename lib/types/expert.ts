@@ -616,6 +616,22 @@ export interface ListeningExpertAttemptSummary {
 }
 
 /**
+ * A review this expert has already submitted. Mirrors the backend
+ * `ListeningExpertMyReviewSummary` record (GET /v1/expert/listening/my-reviews).
+ */
+export interface ListeningExpertMyReviewSummary {
+  feedbackId: string;
+  attemptId: string;
+  paperId: string;
+  paperTitle: string;
+  learnerId: string;
+  learnerDisplayName: string;
+  rawScoreOverride: number | null;
+  submittedAt: string;
+  updatedAt: string | null;
+}
+
+/**
  * Per-option distractor breakdown surfaced on the tutor/expert review for MCQ
  * (Part B/C) items. Mirrors the backend `ListeningExpertOptionAnalysisItem`
  * record (camelCased on the wire) and the learner review's option-analysis

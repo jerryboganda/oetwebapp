@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Contracts.Classes;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Classes;
@@ -883,7 +884,7 @@ public sealed class LiveClassService(
         return (recording.TranscriptText, recording.ProcessedAt);
     }
 
-    public async Task<IReadOnlyList<LiveClassAttendance>> GetSessionAttendanceForTutorAsync(
+    public async Task<IReadOnlyList<TutorAttendanceLineDto>> GetSessionAttendanceForTutorAsync(
         string sessionId,
         string tutorUserId,
         CancellationToken ct)
@@ -899,10 +900,26 @@ public sealed class LiveClassService(
             throw ApiException.Forbidden("live_class_not_assigned", "This live class is assigned to another tutor.");
         }
 
-        return await db.LiveClassAttendances.AsNoTracking()
+        var rows = await db.LiveClassAttendances.AsNoTracking()
             .Where(attendance => attendance.ClassSessionId == sessionId)
             .OrderBy(attendance => attendance.JoinedAt)
             .ToListAsync(ct);
+
+        // Attendance rows only carry the learner's user id — resolve display
+        // names in one batched lookup (same dictionary pattern as
+        // ListeningExpertService) so the tutor console can show real names.
+        var userIds = rows.Select(row => row.UserId).Distinct().ToList();
+        var displayNames = await db.Users.AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .Select(user => new { user.Id, user.DisplayName })
+            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, ct);
+
+        return rows.Select(row => new TutorAttendanceLineDto(
+            row.UserId,
+            displayNames.GetValueOrDefault(row.UserId),
+            row.JoinedAt,
+            row.LeftAt,
+            row.DurationSeconds)).ToList();
     }
 
     // ── Tutor-portal object-level authorization ──────────────────────────
@@ -926,6 +943,91 @@ public sealed class LiveClassService(
             .FirstOrDefaultAsync(ct)
             ?? throw ApiException.Validation("tutor_profile_required", "Set up your tutor profile before creating live classes.");
         return await CreateAdminClassAsync(request with { TutorProfileId = profileId }, tutorUserId, actorName, ct);
+    }
+
+    /// <summary>
+    /// Update class-level metadata of a tutor-owned live class. Ownership is
+    /// enforced inline (LiveClass.TutorProfile.ExpertUserId — the same owner
+    /// model as EnsureTutorOwnsClassAsync): a missing class surfaces NotFound,
+    /// a class owned by another tutor surfaces Forbidden. Null request fields
+    /// are left unchanged (partial PATCH, mirroring UpdateSessionAsync);
+    /// explicit empty strings clear the optional AR/cover fields.
+    /// </summary>
+    public async Task<LiveClassDetailDto> UpdateTutorClassAsync(
+        string classId,
+        TutorClassUpdateRequest request,
+        string tutorUserId,
+        string actorName,
+        CancellationToken ct)
+    {
+        var liveClass = await db.LiveClasses
+            .Include(item => item.Sessions)
+            .Include(item => item.TutorProfile)
+            .FirstOrDefaultAsync(item => item.Id == classId, ct)
+            ?? throw ApiException.NotFound("live_class_not_found", "Live class not found.");
+
+        if (liveClass.TutorProfile?.ExpertUserId != tutorUserId)
+        {
+            throw ApiException.Forbidden("live_class_not_assigned", "This live class is assigned to another tutor.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Title))
+        {
+            liveClass.Title = request.Title.Trim();
+        }
+
+        if (request.TitleAr is not null)
+        {
+            liveClass.TitleAr = NormalizeOptional(request.TitleAr);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            liveClass.Description = request.Description.Trim();
+        }
+
+        if (request.DescriptionAr is not null)
+        {
+            liveClass.DescriptionAr = NormalizeOptional(request.DescriptionAr);
+        }
+
+        if (request.CoverImageUrl is not null)
+        {
+            liveClass.CoverImageUrl = NormalizeOptional(request.CoverImageUrl);
+        }
+
+        if (request.CreditCost.HasValue)
+        {
+            liveClass.CreditCost = Math.Max(0, request.CreditCost.Value);
+        }
+
+        if (request.DefaultCapacity.HasValue)
+        {
+            liveClass.DefaultCapacity = Math.Max(1, request.DefaultCapacity.Value);
+        }
+
+        if (request.DefaultDurationMinutes.HasValue)
+        {
+            liveClass.DefaultDurationMinutes = Math.Clamp(request.DefaultDurationMinutes.Value, 15, 360);
+        }
+
+        if (request.Tags is not null)
+        {
+            liveClass.TagsJson = JsonSerializer.Serialize(
+                request.Tags
+                    .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                    .Select(tag => tag.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                JsonOptions);
+        }
+
+        var now = timeProvider.GetUtcNow();
+        liveClass.UpdatedAt = now;
+        WriteAudit(tutorUserId, actorName, "LiveClassUpdated", "LiveClass", liveClass.Id,
+            new { liveClass.Title, liveClass.CreditCost, liveClass.DefaultCapacity, liveClass.DefaultDurationMinutes });
+        await db.SaveChangesAsync(ct);
+        return MapDetail(liveClass, [], now);
     }
 
     /// <summary>Throws Forbidden unless the class is owned by <paramref name="tutorUserId"/>.</summary>

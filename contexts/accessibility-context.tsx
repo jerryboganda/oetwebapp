@@ -82,10 +82,13 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   // immediately; the server fetch below reconciles it.
   const [cached] = useState<AccessibilityPreferences>(readCachedPreferences);
 
+  // `/v1/settings/*` is learner-only server-side (experts have no Users row and
+  // get a 403), so only learners fetch the section — other roles keep the
+  // localStorage mirror without generating 403 noise on every page.
   const sectionQuery = useQuery({
     queryKey: queryKeys.settings.section(queryUserId, 'accessibility'),
     queryFn: () => fetchSettingsSection('accessibility'),
-    enabled: isAuthenticated && !loading,
+    enabled: isAuthenticated && !loading && user?.role === 'learner',
     staleTime: 60_000,
     retry: false,
   });

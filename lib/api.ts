@@ -574,7 +574,16 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
         return undefined as T;
       }
 
-      return (await response.json()) as T;
+      // Some endpoints legitimately return 200 with an empty body (e.g. the
+      // expert private-speaking profile returns Results.Ok(null), which
+      // ASP.NET writes as no content). Treat that as undefined instead of
+      // failing JSON parsing and burning the retry budget on a phantom
+      // "network error".
+      const text = await response.text();
+      if (!text) {
+        return undefined as T;
+      }
+      return JSON.parse(text) as T;
     } catch (err) {
       if (err instanceof ApiError) {
         throw err;
@@ -10852,6 +10861,12 @@ export async function cancelExpertPrivateSpeakingSession(bookingId: string, reas
   return apiRequest(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason: reason || null }),
+  });
+}
+
+export async function markExpertPrivateSpeakingNoShow(bookingId: string): Promise<{ noShow: boolean }> {
+  return apiRequest<{ noShow: boolean }>(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/mark-no-show`, {
+    method: 'POST',
   });
 }
 

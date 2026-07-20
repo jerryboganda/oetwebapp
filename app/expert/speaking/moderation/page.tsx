@@ -17,7 +17,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { RefreshCw, Scale, Users } from 'lucide-react';
 
-import { ExpertDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -154,8 +153,7 @@ export default function SpeakingModerationQueuePage() {
   );
 
   return (
-    <ExpertDashboardShell>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" aria-hidden />
@@ -205,7 +203,6 @@ export default function SpeakingModerationQueuePage() {
             <DataTable data={items} columns={columns} keyExtractor={(row) => row.caseId} />
           </Card>
         )}
-      </div>
-    </ExpertDashboardShell>
+    </div>
   );
 }

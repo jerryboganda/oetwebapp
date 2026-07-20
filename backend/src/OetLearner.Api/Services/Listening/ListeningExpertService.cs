@@ -132,7 +132,7 @@ public sealed record ListeningExpertMyReviewSummary(
 public interface IListeningExpertService
 {
     Task<ListeningExpertAttemptsPagedResponse> GetAttemptsPagedAsync(
-        string expertId, int page, int pageSize, string? learnerId, string? paperId, CancellationToken ct);
+        string expertId, int page, int pageSize, string? learnerId, string? paperId, string? search, CancellationToken ct);
 
     Task<ListeningExpertMyReviewsPagedResponse> GetMyReviewsPagedAsync(
         string expertId, int page, int pageSize, CancellationToken ct);
@@ -161,7 +161,7 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
     // ── Paginated attempt list ────────────────────────────────────────────────
 
     public async Task<ListeningExpertAttemptsPagedResponse> GetAttemptsPagedAsync(
-        string expertId, int page, int pageSize, string? learnerId, string? paperId, CancellationToken ct)
+        string expertId, int page, int pageSize, string? learnerId, string? paperId, string? search, CancellationToken ct)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
@@ -175,6 +175,31 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
 
         if (!string.IsNullOrWhiteSpace(paperId))
             query = query.Where(a => a.PaperId == paperId);
+
+        // Free-text learner search: case-insensitive display-name match (ILike
+        // on Postgres, with the same provider fallbacks ContentSearchService
+        // uses) OR an exact user-id hit. Composes with — and never replaces —
+        // the exact `learnerId` filter above.
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            var pattern = ToContainsPattern(term);
+            if (db.Database.IsNpgsql())
+            {
+                query = query.Where(a => a.UserId == term
+                    || db.Users.Any(u => u.Id == a.UserId && EF.Functions.ILike(u.DisplayName, pattern, @"\")));
+            }
+            else if (db.Database.IsInMemory())
+            {
+                query = query.Where(a => a.UserId == term
+                    || db.Users.Any(u => u.Id == a.UserId && u.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)));
+            }
+            else
+            {
+                query = query.Where(a => a.UserId == term
+                    || db.Users.Any(u => u.Id == a.UserId && EF.Functions.Like(u.DisplayName, pattern, @"\")));
+            }
+        }
 
         var total = await query.CountAsync(ct);
 
@@ -563,6 +588,17 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
     {
         try { return JsonSerializer.Deserialize<T>(json, JsonOpts); }
         catch { return default; }
+    }
+
+    /// <summary>Escapes LIKE wildcards and wraps the term for a contains match
+    /// (same escaping as ContentSearchService.ToContainsPattern).</summary>
+    private static string ToContainsPattern(string value)
+    {
+        var escaped = value
+            .Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal);
+        return $"%{escaped}%";
     }
 
     // ── WORK-STREAM 7a: distractor / speaker-attitude surfacing ───────────────

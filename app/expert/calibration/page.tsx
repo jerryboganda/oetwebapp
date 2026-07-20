@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle, Clock, GraduationCap, Inbox, MessageSquare, Settings, Sparkles } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -23,7 +24,20 @@ import type { CalibrationCase, CalibrationNote } from '@/lib/types/expert';
 type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 
 const FILTER_GROUPS: FilterGroup[] = [
-  { id: 'profession', label: 'Profession', options: [{ id: 'nursing', label: 'Nursing' }, { id: 'medicine', label: 'Medicine' }, { id: 'dentistry', label: 'Dentistry' }] },
+  // Full production profession set (see lib/types/expert.ts Profession) — keep in
+  // sync with the professions that actually receive benchmark cases.
+  {
+    id: 'profession',
+    label: 'Profession',
+    options: [
+      { id: 'medicine', label: 'Medicine' },
+      { id: 'nursing', label: 'Nursing' },
+      { id: 'dentistry', label: 'Dentistry' },
+      { id: 'pharmacy', label: 'Pharmacy' },
+      { id: 'physiotherapy', label: 'Physiotherapy' },
+      { id: 'radiography', label: 'Radiography' },
+    ],
+  },
   { id: 'subTest', label: 'Sub-test', options: [{ id: 'writing', label: 'Writing' }, { id: 'speaking', label: 'Speaking' }] },
   { id: 'status', label: 'Status', options: [{ id: 'pending', label: 'Pending' }, { id: 'draft', label: 'Draft' }, { id: 'completed', label: 'Completed' }] },
 ];
@@ -158,7 +172,7 @@ export default function CalibrationCenterPage() {
           void loadData();
         }}
         errorMessage={errorMessage ?? undefined}
-        emptyContent={<EmptyState icon={<Inbox className="h-12 w-12 text-muted" />} title="No calibration cases" description="There are no benchmark cases available right now." />}
+        emptyContent={<EmptyState icon={<Inbox className="h-12 w-12 text-muted" />} title="No calibration cases" description="There are no benchmark cases available right now." action={{ label: 'Speaking calibration', onClick: () => router.push('/expert/calibration/speaking') }} />}
       >
         <div className="space-y-6">
           <ExpertRouteHero
@@ -172,7 +186,14 @@ export default function CalibrationCenterPage() {
               { icon: Clock, label: 'Open cases', value: String(openCount) },
               { icon: GraduationCap, label: 'Total benchmarks', value: String(cases.length) },
             ]}
-            aside={<ExpertRouteFreshnessBadge value={notes[0]?.createdAt} />}
+            aside={(
+              <div className="space-y-3">
+                <ExpertRouteFreshnessBadge value={notes[0]?.createdAt} />
+                <Button variant="outline" onClick={() => router.push('/expert/calibration/speaking')}>
+                  Speaking calibration
+                </Button>
+              </div>
+            )}
           />
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

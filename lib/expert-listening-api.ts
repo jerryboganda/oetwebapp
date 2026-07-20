@@ -2,6 +2,7 @@ import { apiClient } from './api';
 import type {
   ListeningExpertAttemptSummary,
   ListeningExpertBundle,
+  ListeningExpertMyReviewSummary,
   SubmitListeningFeedbackRequest,
 } from './types/expert';
 
@@ -10,21 +11,36 @@ import type {
 // of this client module can import them from a single surface.
 export type {
   ListeningExpertAnswerItem,
+  ListeningExpertMyReviewSummary,
   ListeningExpertOptionAnalysisItem,
 } from './types/expert';
 
 export async function getListeningExpertAttempts(params?: {
   page?: number;
-  learnerId?: string;
+  /** Name-or-id match applied server-side to learner display name and id. */
+  search?: string;
   paperId?: string;
 }): Promise<{ items: ListeningExpertAttemptSummary[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.page != null) qs.set('page', String(params.page));
-  if (params?.learnerId) qs.set('learnerId', params.learnerId);
+  if (params?.search) qs.set('search', params.search);
   if (params?.paperId) qs.set('paperId', params.paperId);
   const query = qs.toString() ? `?${qs.toString()}` : '';
   return apiClient.get<{ items: ListeningExpertAttemptSummary[]; total: number }>(
     `/v1/expert/listening/attempts${query}`,
+  );
+}
+
+export async function getListeningExpertMyReviews(params?: {
+  page?: number;
+  pageSize?: number;
+}): Promise<{ items: ListeningExpertMyReviewSummary[]; total: number; page: number; pageSize: number }> {
+  const qs = new URLSearchParams();
+  if (params?.page != null) qs.set('page', String(params.page));
+  if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize));
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  return apiClient.get<{ items: ListeningExpertMyReviewSummary[]; total: number; page: number; pageSize: number }>(
+    `/v1/expert/listening/my-reviews${query}`,
   );
 }
 

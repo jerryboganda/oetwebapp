@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { AlertOctagon, AlertTriangle, Clock, CheckCircle2, Inbox } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { AlertOctagon, AlertTriangle, ChevronRight, Clock, CheckCircle2, Inbox, RefreshCw } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { apiClient } from '@/lib/api';
+import { apiClient, isApiError } from '@/lib/api';
 
 interface QueueItem {
   assignmentId: string; reviewRequestId: string; attemptId: string; subtestCode: string;
@@ -31,11 +33,24 @@ const PRIORITY_CONFIG: Record<string, { icon: typeof AlertOctagon; color: string
 export default function QueuePriorityPage() {
   const [data, setData] = useState<QueueData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await apiRequest<QueueData>('/v1/expert/queue-priority'));
+    } catch (err) {
+      setError(isApiError(err) ? err.userMessage : 'Failed to load the priority queue. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     analytics.track('expert_queue_priority_viewed');
-    apiRequest<QueueData>('/v1/expert/queue-priority').then(setData).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    void load();
+  }, [load]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,6 +62,14 @@ export default function QueuePriorityPage() {
 
         {loading ? (
           <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+        ) : error ? (
+          <Card className="p-8 text-center">
+            <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-warning" />
+            <p className="font-medium">{error}</p>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => void load()}>
+              <RefreshCw className="w-4 h-4 mr-1" /> Retry
+            </Button>
+          </Card>
         ) : !data || data.items.length === 0 ? (
           <Card className="p-8 text-center text-muted"><Inbox className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>No assigned reviews in your queue.</p></Card>
         ) : (
@@ -66,27 +89,34 @@ export default function QueuePriorityPage() {
                 const Icon = cfg.icon;
                 return (
                   <MotionItem key={item.assignmentId}>
-                    <Card className={`p-4 border ${cfg.bg}`}>
-                      <div className="flex items-start gap-3">
-                        <Icon className={`w-5 h-5 mt-0.5 flex-shrink-0 ${cfg.color}`} />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'default' : 'outline'} className="uppercase text-[10px]">{item.priority}</Badge>
-                            <span className="text-sm font-medium capitalize">{item.subtestCode}</span>
-                            {item.isResubmission && <Badge variant="outline" className="text-[10px]">Re-submission</Badge>}
-                            {item.turnaround === 'express' && <Badge className="text-[10px] bg-lavender text-primary dark:bg-primary/20 dark:text-primary">Express</Badge>}
+                    <Link
+                      href={`/expert/review/${encodeURIComponent(item.reviewRequestId)}`}
+                      className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      aria-label={`Open ${item.subtestCode} review ${item.reviewRequestId}`}
+                    >
+                      <Card className={`p-4 border transition-colors hover:border-primary/40 ${cfg.bg}`}>
+                        <div className="flex items-start gap-3">
+                          <Icon className={`w-5 h-5 mt-0.5 flex-shrink-0 ${cfg.color}`} />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant={item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'default' : 'outline'} className="uppercase text-[10px]">{item.priority}</Badge>
+                              <span className="text-sm font-medium capitalize">{item.subtestCode}</span>
+                              {item.isResubmission && <Badge variant="outline" className="text-[10px]">Re-submission</Badge>}
+                              {item.turnaround === 'express' && <Badge className="text-[10px] bg-lavender text-primary dark:bg-primary/20 dark:text-primary">Express</Badge>}
+                            </div>
+                            <div className="mt-2 space-y-1">
+                              {item.reasons.map((reason, i) => <p key={i} className="text-sm text-muted">• {reason}</p>)}
+                            </div>
+                            <div className="flex gap-4 mt-2 text-xs text-muted">
+                              <span><Clock className="w-3 h-3 inline mr-1" />{item.slaRemainingHours}h SLA remaining</span>
+                              <span>Waiting: {item.hoursWaiting}h</span>
+                              {item.daysToExam !== null && <span>Exam: {item.daysToExam}d away</span>}
+                            </div>
                           </div>
-                          <div className="mt-2 space-y-1">
-                            {item.reasons.map((reason, i) => <p key={i} className="text-sm text-muted">• {reason}</p>)}
-                          </div>
-                          <div className="flex gap-4 mt-2 text-xs text-muted">
-                            <span><Clock className="w-3 h-3 inline mr-1" />{item.slaRemainingHours}h SLA remaining</span>
-                            <span>Waiting: {item.hoursWaiting}h</span>
-                            {item.daysToExam !== null && <span>Exam: {item.daysToExam}d away</span>}
-                          </div>
+                          <ChevronRight className="w-5 h-5 mt-0.5 flex-shrink-0 text-muted" />
                         </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </Link>
                   </MotionItem>
                 );
               })}

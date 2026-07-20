@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
-import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones, Video, ClipboardList } from 'lucide-react';
+import type { NavGroup, NavItem } from '@/components/layout/sidebar';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones, Video, ClipboardList, BookOpen, AudioLines, Scale, Gauge, StickyNote, BookMarked, MessagesSquare } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -20,6 +20,18 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/expert/private-speaking' },
   { href: '/expert/messages', label: 'Messages', icon: <MessageSquare className="w-5 h-5" />, matchPrefix: '/expert/messages' },
   { href: '/expert/compensation', label: 'Compensation', icon: <DollarSign className="w-5 h-5" />, matchPrefix: '/expert/compensation' },
+  // New review surfaces appended AFTER the original 12 items so the index-based
+  // mobile nav slices above stay stable.
+  { href: '/expert/reading', label: 'Reading Queue', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/expert/reading' },
+  { href: '/expert/speaking/queue', label: 'Speaking Reviews', icon: <AudioLines className="w-5 h-5" />, matchPrefix: '/expert/speaking/queue' },
+  { href: '/expert/speaking/moderation', label: 'Moderation', icon: <Scale className="w-5 h-5" />, matchPrefix: '/expert/speaking/moderation' },
+  { href: '/expert/scoring-quality', label: 'Scoring Quality', icon: <Gauge className="w-5 h-5" />, matchPrefix: '/expert/scoring-quality' },
+];
+
+const expertToolsNavItems: NavItem[] = [
+  { href: '/expert/annotation-templates', label: 'Annotation Templates', icon: <StickyNote className="w-5 h-5" />, matchPrefix: '/expert/annotation-templates' },
+  { href: '/expert/rubric-reference', label: 'Rubric Guide', icon: <BookMarked className="w-5 h-5" />, matchPrefix: '/expert/rubric-reference' },
+  { href: '/expert/ask-an-expert', label: 'Ask a Tutor', icon: <MessagesSquare className="w-5 h-5" />, matchPrefix: '/expert/ask-an-expert' },
 ];
 
 const onboardingNavItem: NavItem = {
@@ -82,6 +94,38 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
     return 'Listening Reviews';
   }
 
+  if (pathname.startsWith('/expert/reading')) {
+    return 'Reading Queue';
+  }
+
+  if (pathname.startsWith('/expert/speaking/moderation')) {
+    return 'Moderation';
+  }
+
+  if (pathname.startsWith('/expert/speaking/queue')) {
+    return 'Speaking Reviews';
+  }
+
+  if (pathname.startsWith('/expert/scoring-quality')) {
+    return 'Scoring Quality';
+  }
+
+  if (pathname.startsWith('/expert/annotation-templates')) {
+    return 'Annotation Templates';
+  }
+
+  if (pathname.startsWith('/expert/rubric-reference')) {
+    return 'Rubric Guide';
+  }
+
+  if (pathname.startsWith('/expert/ask-an-expert')) {
+    return 'Ask a Tutor';
+  }
+
+  if (pathname.startsWith('/expert/settings')) {
+    return 'Settings';
+  }
+
   return undefined;
 }
 
@@ -93,8 +137,22 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   const showOnboarding = expert?.isOnboardingComplete === false;
 
   const navItems = useMemo(() => {
-    if (!showOnboarding) return expertNavItems;
-    return [expertNavItems[0], onboardingNavItem, ...expertNavItems.slice(1)];
+    const base = showOnboarding
+      ? [expertNavItems[0], onboardingNavItem, ...expertNavItems.slice(1)]
+      : expertNavItems;
+    return [...base, ...expertToolsNavItems];
+  }, [showOnboarding]);
+
+  // Desktop sidebar renders grouped: the main workspace cluster plus a Tools
+  // cluster (templates, rubric guide, community answers).
+  const navGroups = useMemo<NavGroup[]>(() => {
+    const workspaceItems = showOnboarding
+      ? [expertNavItems[0], onboardingNavItem, ...expertNavItems.slice(1)]
+      : expertNavItems;
+    return [
+      { label: 'Workspace', items: workspaceItems },
+      { label: 'Tools', items: expertToolsNavItems },
+    ];
   }, [showOnboarding]);
 
   const mobileNavItems = useMemo(() => {
@@ -107,17 +165,21 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
     const sections: MobileMenuSection[] = [
       {
         label: 'Review',
-        items: [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3]],
+        items: [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[12], expertNavItems[13], expertNavItems[14]],
       },
       {
         label: 'Performance',
-        items: [expertNavItems[4], expertNavItems[5], expertNavItems[6], expertNavItems[7]],
+        items: [expertNavItems[4], expertNavItems[5], expertNavItems[6], expertNavItems[7], expertNavItems[15]],
+      },
+      {
+        label: 'Tools',
+        items: expertToolsNavItems,
       },
     ];
     if (showOnboarding) {
       sections[0] = {
         label: 'Review',
-        items: [expertNavItems[0], onboardingNavItem, expertNavItems[1], expertNavItems[2], expertNavItems[3]],
+        items: [expertNavItems[0], onboardingNavItem, expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[12], expertNavItems[13], expertNavItems[14]],
       };
     }
     return sections;
@@ -165,6 +227,7 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
     <ExpertDashboardShell
       pageTitle={pageTitle}
       navItems={navItems}
+      navGroups={navGroups}
       mobileNavItems={mobileNavItems}
       mobileMenuSections={mobileMenuSections}
       userSummary={{ displayName: expert?.displayName, email: expert?.email }}

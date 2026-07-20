@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Contracts.Classes;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
@@ -136,6 +137,109 @@ public sealed class LiveClassTutorOwnershipTests
         await service.EnsureTutorOwnsClassAsync(created.Id, ownerId, Ct);
         var ex = await Assert.ThrowsAsync<ApiException>(
             () => service.EnsureTutorOwnsClassAsync(created.Id, attackerId, Ct));
+        Assert.Equal("live_class_not_assigned", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task UpdateTutorClass_ForeignTutorBlocked_OwnerSucceeds_MissingClassNotFound()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var (classId, _, ownerId, attackerId) = await SeedOwnedClassAsync(db, now);
+        var service = CreateService(db, now);
+        var request = new TutorClassUpdateRequest(
+            Title: "Renamed Class",
+            TitleAr: null,
+            Description: "Updated description.",
+            DescriptionAr: null,
+            CoverImageUrl: null,
+            CreditCost: 3,
+            DefaultCapacity: 25,
+            DefaultDurationMinutes: 90,
+            Tags: ["speaking", "b2"]);
+
+        // A foreign tutor is rejected before any mutation happens.
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => service.UpdateTutorClassAsync(classId, request, attackerId, "Attacker Tutor", Ct));
+        Assert.Equal(StatusCodes.Status403Forbidden, ex.StatusCode);
+        Assert.Equal("live_class_not_assigned", ex.ErrorCode);
+        Assert.Equal("Owned Class", (await db.LiveClasses.AsNoTracking().FirstAsync(lc => lc.Id == classId, Ct)).Title);
+
+        // The owner's patch applies and returns the detail DTO shape.
+        var detail = await service.UpdateTutorClassAsync(classId, request, ownerId, "Owner Tutor", Ct);
+        Assert.Equal("Renamed Class", detail.Title);
+        Assert.Equal(3, detail.CreditCost);
+        Assert.Equal(25, detail.DefaultCapacity);
+        Assert.Equal(90, detail.DefaultDurationMinutes);
+        Assert.Contains("speaking", detail.Tags);
+
+        var stored = await db.LiveClasses.AsNoTracking().FirstAsync(lc => lc.Id == classId, Ct);
+        Assert.Equal("Renamed Class", stored.Title);
+        Assert.Equal("Updated description.", stored.Description);
+        Assert.Equal(3, stored.CreditCost);
+        Assert.Equal(25, stored.DefaultCapacity);
+        Assert.Equal(90, stored.DefaultDurationMinutes);
+
+        // Null fields are "no change": a patch that only bumps capacity keeps the rest.
+        var partial = new TutorClassUpdateRequest(null, null, null, null, null, null, DefaultCapacity: 30, null, null);
+        var afterPartial = await service.UpdateTutorClassAsync(classId, partial, ownerId, "Owner Tutor", Ct);
+        Assert.Equal(30, afterPartial.DefaultCapacity);
+        Assert.Equal("Renamed Class", afterPartial.Title);
+
+        // An unknown class id surfaces NotFound.
+        var missing = await Assert.ThrowsAsync<ApiException>(
+            () => service.UpdateTutorClassAsync($"LC-{Guid.NewGuid():N}", request, ownerId, "Owner Tutor", Ct));
+        Assert.Equal(StatusCodes.Status404NotFound, missing.StatusCode);
+        Assert.Equal("live_class_not_found", missing.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SessionAttendance_PopulatesLearnerDisplayNames()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var (_, sessionId, ownerId, attackerId) = await SeedOwnedClassAsync(db, now);
+        db.Users.Add(new LearnerUser
+        {
+            Id = "learner-known",
+            DisplayName = "Known Learner",
+            Email = "known@test.com",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        db.LiveClassAttendances.AddRange(
+            new LiveClassAttendance
+            {
+                Id = $"LCA-{Guid.NewGuid():N}",
+                ClassSessionId = sessionId,
+                UserId = "learner-known",
+                JoinedAt = now.AddMinutes(-30),
+                LeftAt = now,
+                DurationSeconds = 1800,
+            },
+            new LiveClassAttendance
+            {
+                Id = $"LCA-{Guid.NewGuid():N}",
+                ClassSessionId = sessionId,
+                UserId = "learner-ghost", // no Users row — name stays null
+                JoinedAt = now.AddMinutes(-20),
+                DurationSeconds = 1200,
+            });
+        await db.SaveChangesAsync(Ct);
+        var service = CreateService(db, now);
+
+        var rows = await service.GetSessionAttendanceForTutorAsync(sessionId, ownerId, Ct);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("Known Learner", rows[0].DisplayName);
+        Assert.Equal("learner-known", rows[0].UserId);
+        Assert.Equal(1800, rows[0].DurationSeconds);
+        Assert.Null(rows[1].DisplayName);
+        Assert.Equal("learner-ghost", rows[1].UserId);
+
+        // Ownership is still enforced on the attendance read.
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => service.GetSessionAttendanceForTutorAsync(sessionId, attackerId, Ct));
         Assert.Equal("live_class_not_assigned", ex.ErrorCode);
     }
 

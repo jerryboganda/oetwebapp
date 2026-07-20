@@ -128,16 +128,12 @@ public static class TutorEndpoints
             LiveClassService service,
             CancellationToken ct) =>
         {
-            // Class-level patches are routed through PublishClassAsync (status
-            // toggles only at this wave). Tutor-owned mutation of title/body
-            // lives behind the admin endpoint until plan §9.4 v2 lands. Until
-            // then we surface a 501 so the frontend can opt the route off.
-            _ = classId;
-            _ = request;
-            _ = http;
-            _ = service;
-            _ = ct;
-            return Results.StatusCode(StatusCodes.Status501NotImplemented);
+            // Ownership is enforced inside UpdateTutorClassAsync (missing class
+            // → 404, foreign tutor's class → 403 live_class_not_assigned), the
+            // same LiveClass.TutorProfile.ExpertUserId owner model the sibling
+            // session endpoints guard with EnsureTutorOwns*Async.
+            var userId = GetRequiredUserId(http);
+            return Results.Ok(await service.UpdateTutorClassAsync(classId, request, userId, GetActorName(http), ct));
         });
 
         tutor.MapPost("/classes/{classId}/sessions", async (
@@ -188,14 +184,9 @@ public static class TutorEndpoints
             CancellationToken ct) =>
         {
             var userId = GetRequiredUserId(http);
-            var rows = await service.GetSessionAttendanceForTutorAsync(sessionId, userId, ct);
-            var dtos = rows.Select(row => new TutorAttendanceLineDto(
-                row.UserId,
-                null,
-                row.JoinedAt,
-                row.LeftAt,
-                row.DurationSeconds)).ToList();
-            return Results.Ok(dtos);
+            // The service resolves learner display names (attendance rows only
+            // carry user ids) and returns the wire DTOs directly.
+            return Results.Ok(await service.GetSessionAttendanceForTutorAsync(sessionId, userId, ct));
         });
 
         return app;

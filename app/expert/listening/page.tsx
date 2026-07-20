@@ -8,14 +8,18 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { isApiError } from '@/lib/api';
-import { getListeningExpertAttempts } from '@/lib/expert-listening-api';
-import type { ListeningExpertAttemptSummary } from '@/lib/types/expert';
+import { getListeningExpertAttempts, getListeningExpertMyReviews } from '@/lib/expert-listening-api';
+import type { ListeningExpertAttemptSummary, ListeningExpertMyReviewSummary } from '@/lib/types/expert';
 
 const PAGE_SIZE = 20;
 
+type ListeningTab = 'attempts' | 'my-reviews';
+
 export default function ExpertListeningAttemptsPage() {
   const router = useRouter();
+  const [tab, setTab] = useState<ListeningTab>('attempts');
   const [items, setItems] = useState<ListeningExpertAttemptSummary[]>([]);
+  const [reviews, setReviews] = useState<ListeningExpertMyReviewSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -40,24 +44,36 @@ export default function ExpertListeningAttemptsPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getListeningExpertAttempts({
-        page,
-        ...(debouncedSearch ? { learnerId: debouncedSearch } : {}),
-      });
-      setItems(result.items);
-      setTotal(result.total);
+      if (tab === 'attempts') {
+        const result = await getListeningExpertAttempts({
+          page,
+          ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        });
+        setItems(result.items);
+        setTotal(result.total);
+      } else {
+        const result = await getListeningExpertMyReviews({ page, pageSize: PAGE_SIZE });
+        setReviews(result.items);
+        setTotal(result.total);
+      }
     } catch (err) {
       setError(
-        isApiError(err) ? err.userMessage : 'Failed to load attempts.',
+        isApiError(err) ? err.userMessage : tab === 'attempts' ? 'Failed to load attempts.' : 'Failed to load your reviews.',
       );
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page]);
+  }, [debouncedSearch, page, tab]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const switchTab = (next: ListeningTab) => {
+    if (next === tab) return;
+    setTab(next);
+    setPage(1);
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -74,28 +90,53 @@ export default function ExpertListeningAttemptsPage() {
               Listening Attempts
             </h1>
             <p className="text-sm text-muted">
-              {total} submitted attempt{total !== 1 ? 's' : ''}
+              {total} submitted {tab === 'attempts' ? 'attempt' : 'review'}{total !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by learner name..."
-            className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm text-navy placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
-        </div>
+        {/* Search (attempts view only — my-reviews is unfiltered) */}
+        {tab === 'attempts' && (
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by learner name..."
+              className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm text-navy placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2" role="tablist" aria-label="Listening review views">
+        <Button
+          size="sm"
+          variant={tab === 'attempts' ? 'primary' : 'outline'}
+          role="tab"
+          aria-selected={tab === 'attempts'}
+          onClick={() => switchTab('attempts')}
+        >
+          Attempts
+        </Button>
+        <Button
+          size="sm"
+          variant={tab === 'my-reviews' ? 'primary' : 'outline'}
+          role="tab"
+          aria-selected={tab === 'my-reviews'}
+          onClick={() => switchTab('my-reviews')}
+        >
+          My reviews
+        </Button>
       </div>
 
       {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        {tab === 'attempts' ? (
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -182,6 +223,85 @@ export default function ExpertListeningAttemptsPage() {
             )}
           </tbody>
         </table>
+        ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
+              <th className="px-4 py-3">Learner</th>
+              <th className="px-4 py-3">Paper</th>
+              <th className="px-4 py-3">Reviewed</th>
+              <th className="px-4 py-3">Score override</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b border-border">
+                    {Array.from({ length: 5 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <Skeleton className="h-4 rounded" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : reviews.map((review) => (
+                  <tr
+                    key={review.feedbackId}
+                    className="border-b border-border transition-colors hover:bg-background-light"
+                  >
+                    <td className="px-4 py-3 font-medium text-navy">
+                      {review.learnerDisplayName}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {review.paperTitle}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {new Date(review.updatedAt ?? review.submittedAt).toLocaleDateString(
+                        undefined,
+                        {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        },
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {review.rawScoreOverride != null ? (
+                        <Badge variant="warning">{review.rawScoreOverride} (manual)</Badge>
+                      ) : (
+                        <span className="text-xs text-muted">None</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          router.push(
+                            `/expert/review/listening/${review.attemptId}`,
+                          )
+                        }
+                      >
+                        View
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+
+            {!loading && reviews.length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-12 text-center text-muted"
+                >
+                  You have not submitted any listening reviews yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        )}
       </div>
 
       {/* Pagination */}

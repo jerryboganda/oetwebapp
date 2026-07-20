@@ -266,7 +266,7 @@ export function TopNav({
                         <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
                         <div className="grid grid-cols-2 gap-2">
                           <Link
-                            href="/settings"
+                            href={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
                             onClick={handleMobileItemClick}
                             className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >

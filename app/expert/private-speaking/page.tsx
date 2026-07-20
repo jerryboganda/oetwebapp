@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { ExpertRouteHero, ExpertRouteSectionHeader } from '@/components/domain/expert-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Calendar, Clock, Video, Star, Plus, Trash2, Pencil, X, Link2, Unlink, Download } from 'lucide-react';
+import { Calendar, Clock, Video, Star, Plus, Trash2, Pencil, X, Link2, Unlink, Download, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   type LiveClassJoinToken,
@@ -22,6 +23,7 @@ import {
   connectExpertPrivateSpeakingGoogleCalendar,
   disconnectExpertPrivateSpeakingCalendar,
   downloadExpertPrivateSpeakingCalendarInvite,
+  markExpertPrivateSpeakingNoShow,
 } from '@/lib/api';
 import { safeZoomUrl } from '@/lib/zoom-url';
 
@@ -58,6 +60,7 @@ function StatusBadge({ status }: { status: string }) {
     InProgress: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
     Completed: 'bg-background-light text-muted',
     Cancelled: 'bg-red-100 text-red-600',
+    NoShow: 'bg-red-100 text-red-600',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] ?? 'bg-background-light text-muted'}`}>
@@ -74,6 +77,10 @@ export default function ExpertPrivateSpeakingPage() {
   const [calendarStatus, setCalendarStatus] = useState<PrivateSpeakingCalendarStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Distinguishes "profile GET failed" from "profile GET succeeded with null"
+  // so a null profile renders the empty state, never the failure banner.
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
   const [calendarBusy, setCalendarBusy] = useState(false);
   // True while we wait for the tutor to finish Google's OAuth consent in the
   // separate tab; drives a short poll of the calendar status.
@@ -93,6 +100,9 @@ export default function ExpertPrivateSpeakingPage() {
   const [cancelTarget, setCancelTarget] = useState<ExpertSession | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+
+  // Mark learner no-show state
+  const [markingNoShowId, setMarkingNoShowId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -160,21 +170,37 @@ export default function ExpertPrivateSpeakingPage() {
 
   async function loadData() {
     setLoading(true);
-    try {
-      const [profileData, sessionData, calendarData] = await Promise.all([
-        fetchExpertPrivateSpeakingProfile(),
-        fetchExpertPrivateSpeakingSessions(),
-        fetchExpertPrivateSpeakingCalendarStatus(),
-      ]);
-      // Backend returns `null` when the expert has not yet created a tutor profile.
-      setProfile(profileData ? (profileData as TutorProfile) : null);
-      setSessions(sessionData as ExpertSession[]);
-      setCalendarStatus(calendarData);
-    } catch {
-      setError('Failed to load your private speaking data.');
-    } finally {
-      setLoading(false);
+    // Settle each request independently: a null profile is a valid 200 (the
+    // expert has no tutor profile yet), and one failing call must not poison
+    // the others or masquerade as a missing profile.
+    const [profileResult, sessionResult, calendarResult] = await Promise.allSettled([
+      fetchExpertPrivateSpeakingProfile(),
+      fetchExpertPrivateSpeakingSessions(),
+      fetchExpertPrivateSpeakingCalendarStatus(),
+    ]);
+
+    if (profileResult.status === 'fulfilled') {
+      // Backend returns `null` (empty 200) when the expert has not yet been
+      // provisioned a tutor profile.
+      setProfile(profileResult.value ? (profileResult.value as TutorProfile) : null);
+      setProfileLoadFailed(false);
+    } else {
+      setProfileLoadFailed(true);
     }
+    if (sessionResult.status === 'fulfilled') {
+      setSessions((sessionResult.value ?? []) as ExpertSession[]);
+    }
+    if (calendarResult.status === 'fulfilled') {
+      setCalendarStatus(calendarResult.value ?? null);
+    }
+
+    const anyFailed = [profileResult, sessionResult, calendarResult].some(
+      (result) => result.status === 'rejected'
+    );
+    if (anyFailed) {
+      setError('Failed to load your private speaking data.');
+    }
+    setLoading(false);
   }
 
   async function loadAvailability() {
@@ -257,6 +283,25 @@ export default function ExpertPrivateSpeakingPage() {
       setError('Failed to cancel session.');
     } finally {
       setCancelling(false);
+    }
+  }
+
+  // Mirrors the admin mark-no-show flow (window.confirm gate). Only offered
+  // for scheduled sessions whose slot is already in the past — the backend
+  // additionally enforces the Confirmed/ZoomCreated/InProgress state gate.
+  async function handleMarkNoShow(session: ExpertSession) {
+    if (!window.confirm('Mark the learner as a no-show for this session? The session is forfeited per policy (no refund) and this cannot be undone.')) return;
+    setMarkingNoShowId(session.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await markExpertPrivateSpeakingNoShow(session.id);
+      setNotice('Session marked as a learner no-show.');
+      await loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to mark the session as a no-show.');
+    } finally {
+      setMarkingNoShowId(null);
     }
   }
 
@@ -359,18 +404,46 @@ export default function ExpertPrivateSpeakingPage() {
     );
   }
 
+  if (!profile && profileLoadFailed) {
+    // The profile request itself failed — we don't know whether a profile
+    // exists, so show a retryable error instead of the "not set up" state.
+    return (
+      <div className="space-y-4">
+        <ExpertRouteHero
+          title="Private Speaking Sessions"
+          description="Manage your private speaking sessions and availability."
+        />
+        <InlineAlert variant="error">
+          {error ?? 'Failed to load your private speaking data.'}
+          <button onClick={() => void loadData()} className="ml-2 underline text-sm">Try again</button>
+        </InlineAlert>
+      </div>
+    );
+  }
+
   if (!profile) {
     return (
       <div className="space-y-4">
         <ExpertRouteHero
           title="Private Speaking Sessions"
-          description="Your tutor profile is not set up yet. Please contact an admin to get started."
+          description="Offer one-to-one speaking practice once your tutor profile is set up."
         />
-        <div
-          role="status"
-          className="rounded-2xl border border-dashed border-border bg-surface p-5 text-sm text-muted"
-        >
-          You are not currently available for private speaking sessions.
+        <div role="status" className="rounded-2xl border border-dashed border-border bg-surface p-6">
+          <h2 className="text-base font-bold text-navy">Your tutor profile is not set up yet</h2>
+          <p className="mt-2 text-sm text-navy">
+            You are not currently bookable for private speaking sessions. To get started:
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-navy">
+            <li>
+              <Link
+                href="/expert/onboarding"
+                className="font-semibold text-primary underline underline-offset-2 hover:opacity-80"
+              >
+                Complete your tutor onboarding (profile + rates)
+              </Link>
+            </li>
+            <li>Then contact an admin to activate your private speaking tutor profile.</li>
+          </ul>
         </div>
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
       </div>
@@ -406,6 +479,13 @@ export default function ExpertPrivateSpeakingPage() {
         <InlineAlert variant="warning" className="mb-2">
           {error}
           <button onClick={() => setError(null)} className="ml-2 underline text-sm">Dismiss</button>
+        </InlineAlert>
+      )}
+
+      {notice && (
+        <InlineAlert variant="success" className="mb-2">
+          {notice}
+          <button onClick={() => setNotice(null)} className="ml-2 underline text-sm">Dismiss</button>
         </InlineAlert>
       )}
 
@@ -463,6 +543,12 @@ export default function ExpertPrivateSpeakingPage() {
               {upcomingSessions.map(session => {
                 const start = new Date(session.sessionStartUtc);
                 const isStartingSoon = start.getTime() - Date.now() < 15 * 60 * 1000;
+                // Scheduled slot fully elapsed but the booking never completed —
+                // offer the tutor-side "learner no-show" action (backend also
+                // gates on Confirmed/ZoomCreated/InProgress).
+                const slotEnded = start.getTime() + session.durationMinutes * 60_000 < Date.now();
+                const canMarkNoShow = slotEnded
+                  && ['Confirmed', 'ZoomCreated', 'InProgress'].includes(session.status);
                 return (
                   <div key={session.id} className="rounded-2xl border border-border bg-surface p-5">
                     <div className="flex items-center justify-between">
@@ -491,6 +577,15 @@ export default function ExpertPrivateSpeakingPage() {
                           className="flex items-center gap-1.5 px-3 py-2 border border-border text-muted hover:text-navy rounded-lg text-sm font-medium transition-colors">
                           <Download className="w-4 h-4" /> Calendar
                         </button>
+                        {canMarkNoShow && (
+                          <button
+                            onClick={() => handleMarkNoShow(session)}
+                            disabled={markingNoShowId === session.id}
+                            className="flex items-center gap-1.5 px-3 py-2 border border-danger/30 text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            <UserX className="w-4 h-4" /> {markingNoShowId === session.id ? 'Marking…' : 'Mark learner no-show'}
+                          </button>
+                        )}
                         <button
                           onClick={() => setCancelTarget(session)}
                           className="flex items-center gap-1.5 px-3 py-2 border border-danger/30 text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"

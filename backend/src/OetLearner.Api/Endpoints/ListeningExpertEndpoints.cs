@@ -14,6 +14,8 @@ public static class ListeningExpertEndpoints
 
         // GET /v1/expert/listening/attempts
         // Returns paginated list of submitted listening attempts the expert can review.
+        // `search` matches the learner display name case-insensitively (or an exact
+        // user id); `learnerId` remains the exact-id filter it always was.
         group.MapGet("/attempts", async (
             HttpContext http,
             IListeningExpertService service,
@@ -21,10 +23,11 @@ public static class ListeningExpertEndpoints
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
             [FromQuery] string? learnerId = null,
-            [FromQuery] string? paperId = null) =>
+            [FromQuery] string? paperId = null,
+            [FromQuery] string? search = null) =>
         {
             var expertId = http.ListeningExpertId();
-            var result = await service.GetAttemptsPagedAsync(expertId, page, pageSize, learnerId, paperId, ct);
+            var result = await service.GetAttemptsPagedAsync(expertId, page, pageSize, learnerId, paperId, search, ct);
             return Results.Ok(result);
         });
 

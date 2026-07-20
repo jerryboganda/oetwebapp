@@ -369,6 +369,9 @@ export default function ReviewQueuePage() {
               <div className="space-y-3">
                 <ExpertRouteFreshnessBadge value={lastUpdatedAt} />
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => router.push('/expert/queue-priority')}>
+                    Priority view
+                  </Button>
                   <Button variant="outline" onClick={() => router.push('/expert/learners')}>
                     Learners
                   </Button>
