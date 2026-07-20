@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -23,6 +24,11 @@ namespace OetLearner.Api.Endpoints;
 public static class ContentPapersAdminEndpoints
 {
     private const long BulkZipRequestLimitBytes = 1024L * 1024 * 1024;
+    private const int ExportRowLimit = 2000;
+
+    /// <summary>RFC 4180 cell: quote always, doubling any embedded quotes.</summary>
+    private static string CsvCell(string? value)
+        => $"\"{(value ?? string.Empty).Replace("\"", "\"\"")}\"";
 
     public static IEndpointRouteBuilder MapContentPapersAdminEndpoints(this IEndpointRouteBuilder app)
     {
@@ -47,6 +53,41 @@ public static class ContentPapersAdminEndpoints
             var total = await svc.CountAsync(query, ct);
             http.Response.Headers["X-Total-Count"] = total.ToString();
             return Results.Ok(rows.Select(ProjectPaper));
+        });
+
+        // Export the selected papers (or the whole filtered set when no ids are
+        // given) as JSON or CSV for offline review. Read-only, so it inherits
+        // the group's AdminContentRead policy.
+        group.MapGet("/export", async (
+            IContentPaperService svc, CancellationToken ct,
+            string? format, string? ids) =>
+        {
+            var wanted = (ids ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var rows = await svc.ListAsync(new ContentPaperQuery(Page: 1, PageSize: ExportRowLimit), ct);
+            var selected = (wanted.Count == 0 ? rows : rows.Where(p => wanted.Contains(p.Id))).ToList();
+
+            if (!string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Ok(selected.Select(ProjectPaper));
+            }
+
+            var csv = new StringBuilder();
+            csv.AppendLine("id,title,subtestCode,professionId,status,tagsCsv,updatedAt");
+            foreach (var paper in selected)
+            {
+                csv.Append(CsvCell(paper.Id)).Append(',')
+                   .Append(CsvCell(paper.Title)).Append(',')
+                   .Append(CsvCell(paper.SubtestCode)).Append(',')
+                   .Append(CsvCell(paper.AppliesToAllProfessions ? "all" : paper.ProfessionId)).Append(',')
+                   .Append(CsvCell(paper.Status.ToString())).Append(',')
+                   .Append(CsvCell(paper.TagsCsv)).Append(',')
+                   .Append(CsvCell(paper.UpdatedAt.ToString("o")))
+                   .AppendLine();
+            }
+            return Results.Text(csv.ToString(), "text/csv");
         });
 
         group.MapGet("/{id}", async (string id, IContentPaperService svc, CancellationToken ct) =>

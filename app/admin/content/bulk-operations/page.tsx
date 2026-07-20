@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { TableSkeleton } from '@/components/admin/ui/skeleton';
-import { apiClient } from '@/lib/api';
+import { apiClient, fetchAuthorizedBlob } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
@@ -40,6 +40,50 @@ interface ContentPaper {
   status: 'draft' | 'published' | 'retired';
   updatedAt: string;
   tags: string[];
+}
+
+/**
+ * Wire shape of GET /v1/admin/papers (see ContentPapersAdminEndpoints.ProjectPaper).
+ * The route returns a BARE ARRAY — the total lives in the X-Total-Count header —
+ * and uses different field names to this page's display model, so responses are
+ * normalised through `toContentPaper` rather than consumed directly.
+ */
+interface AdminPaperWire {
+  id: string;
+  title: string;
+  subtestCode?: string | null;
+  professionId?: string | null;
+  appliesToAllProfessions?: boolean;
+  status?: string | null;
+  updatedAt?: string | null;
+  tagsCsv?: string | null;
+}
+
+// Backend ContentStatus has no "retired" member; Archived is the retired state.
+function normalizePaperStatus(status: string | null | undefined): ContentPaper['status'] {
+  switch ((status ?? '').toLowerCase()) {
+    case 'published':
+      return 'published';
+    case 'archived':
+      return 'retired';
+    default:
+      return 'draft';
+  }
+}
+
+function toContentPaper(row: AdminPaperWire): ContentPaper {
+  return {
+    id: row.id,
+    title: row.title,
+    subSkill: row.subtestCode ?? '—',
+    profession: row.appliesToAllProfessions ? 'All' : (row.professionId ?? '—'),
+    status: normalizePaperStatus(row.status),
+    updatedAt: row.updatedAt ?? '',
+    tags: (row.tagsCsv ?? '')
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean),
+  };
 }
 
 interface BulkResult {
@@ -79,11 +123,10 @@ export default function AdminBulkOperationsPage() {
   const loadPapers = useCallback(async () => {
     setPageStatus('loading');
     try {
-      const data = await apiClient.get<{ items: ContentPaper[]; totalCount: number }>(
-        '/v1/admin/papers?pageSize=500'
-      );
-      setPapers(data.items ?? []);
-      setPageStatus(data.items?.length ? 'success' : 'empty');
+      const rows = await apiClient.get<AdminPaperWire[]>('/v1/admin/papers?pageSize=500');
+      const items = (Array.isArray(rows) ? rows : []).map(toContentPaper);
+      setPapers(items);
+      setPageStatus(items.length ? 'success' : 'empty');
     } catch {
       setPageStatus('error');
       setToast({ variant: 'error', message: 'Failed to load content papers.' });
@@ -122,10 +165,13 @@ export default function AdminBulkOperationsPage() {
       setBulkProgress(`Processing ${ids.length} papers…`);
       setBulkResult(null);
       try {
-        const result = await apiClient.post<BulkResult>(
-          `/v1/admin/papers/bulk-${action}`,
-          { paperIds: ids }
-        );
+        // One unified route: POST /v1/admin/papers/bulk {action, ids, reason}.
+        // "retire" is this page's label for the backend's `archive` action —
+        // ContentStatus has no Retired member.
+        const result = await apiClient.post<BulkResult>('/v1/admin/papers/bulk', {
+          action: action === 'retire' ? 'archive' : 'publish',
+          ids,
+        });
         setBulkResult(result);
         setToast({
           variant: result.failed > 0 ? 'error' : 'success',
@@ -164,14 +210,32 @@ export default function AdminBulkOperationsPage() {
       .filter(Boolean);
     if (tags.length === 0) return;
 
+    const ids = Array.from(selectedKeys);
     setIsBulkRunning(true);
-    setBulkProgress(`Tagging ${selectedKeys.size} papers…`);
+    setBulkProgress(`Tagging ${ids.length} papers…`);
     try {
-      await apiClient.post('/v1/admin/papers/bulk-tag', {
-        paperIds: Array.from(selectedKeys),
-        tags,
-      });
-      setToast({ variant: 'success', message: `Tagged ${selectedKeys.size} papers.` });
+      // There is no bulk-tag route; tags are applied per paper through
+      // PUT /v1/admin/papers/{id}, which is a partial patch (only non-null
+      // fields are written), so sending tagsCsv alone touches nothing else.
+      // Tags are merged into the paper's existing set rather than replacing it.
+      let failed = 0;
+      for (const [index, id] of ids.entries()) {
+        setBulkProgress(`Tagging ${index + 1} of ${ids.length}…`);
+        const existing = papers.find((paper) => paper.id === id)?.tags ?? [];
+        const merged = Array.from(new Set([...existing, ...tags]));
+        try {
+          await apiClient.put(`/v1/admin/papers/${encodeURIComponent(id)}`, {
+            tagsCsv: merged.join(','),
+          });
+        } catch {
+          failed += 1;
+        }
+      }
+      setToast(
+        failed > 0
+          ? { variant: 'error', message: `Tagged ${ids.length - failed} of ${ids.length}; ${failed} failed.` }
+          : { variant: 'success', message: `Tagged ${ids.length} papers.` }
+      );
       setSelectedKeys(new Set());
       setIsTagModalOpen(false);
       setTagInput('');
@@ -188,9 +252,10 @@ export default function AdminBulkOperationsPage() {
     setIsBulkRunning(true);
     setBulkProgress(`Exporting ${selectedKeys.size} papers as ${format.toUpperCase()}…`);
     try {
-      const blob = await apiClient.request<Blob>(
-        `/v1/admin/papers/export?format=${format}&ids=${Array.from(selectedKeys).join(',')}`,
-        { method: 'GET', headers: { Accept: format === 'json' ? 'application/json' : 'text/csv' } }
+      // apiClient JSON-parses every response, so a file download has to go
+      // through the authorized-blob helper instead.
+      const blob = await fetchAuthorizedBlob(
+        `/v1/admin/papers/export?format=${format}&ids=${encodeURIComponent(Array.from(selectedKeys).join(','))}`
       );
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
