@@ -57,10 +57,17 @@ public class ExpertCompensationService(LearnerDbContext db, ILogger<ExpertCompen
         var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            // Resolve the real subtest via the earning's ReviewRequest rather
+            // than emitting a literal "unknown". Left-join semantics: an earning
+            // whose review row is missing keeps the "unknown" fallback instead
+            // of dropping the row.
             .Select(e => new ExpertEarningItemResponse(
                 e.Id,
                 e.ReviewRequestId,
-                "unknown",
+                db.ReviewRequests
+                    .Where(r => r.Id == e.ReviewRequestId)
+                    .Select(r => r.SubtestCode)
+                    .FirstOrDefault() ?? "unknown",
                 e.AmountMinorUnits,
                 e.Currency,
                 e.Status,

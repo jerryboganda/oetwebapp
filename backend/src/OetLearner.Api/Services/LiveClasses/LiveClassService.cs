@@ -941,8 +941,42 @@ public sealed class LiveClassService(
             .Where(profile => profile.ExpertUserId == tutorUserId)
             .Select(profile => (string?)profile.Id)
             .FirstOrDefaultAsync(ct)
-            ?? throw ApiException.Validation("tutor_profile_required", "Set up your tutor profile before creating live classes.");
+            ?? await ProvisionClassHostProfileAsync(tutorUserId, ct);
         return await CreateAdminClassAsync(request with { TutorProfileId = profileId }, tutorUserId, actorName, ct);
+    }
+
+    /// <summary>
+    /// PrivateSpeakingTutorProfile doubles as the class-owner anchor
+    /// (LiveClass.TutorProfileId), but it is normally admin-provisioned for the
+    /// 1:1 private-speaking marketplace — so without this fallback no tutor
+    /// could ever create a class ("tutor_profile_required" with no self-serve
+    /// path to satisfy it). Provision a minimal INACTIVE profile: IsActive=false
+    /// keeps the tutor out of learner 1:1 discovery (which filters on IsActive)
+    /// until an admin activates them, while unblocking class hosting.
+    /// </summary>
+    private async Task<string> ProvisionClassHostProfileAsync(string tutorUserId, CancellationToken ct)
+    {
+        var expert = await db.ExpertUsers.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == tutorUserId, ct)
+            ?? throw ApiException.Validation("tutor_profile_required", "Set up your tutor profile before creating live classes.");
+
+        var now = timeProvider.GetUtcNow();
+        var profile = new PrivateSpeakingTutorProfile
+        {
+            Id = $"pstp-{Guid.NewGuid():N}",
+            ExpertUserId = tutorUserId,
+            DisplayName = expert.DisplayName,
+            Timezone = string.IsNullOrWhiteSpace(expert.Timezone) ? "UTC" : expert.Timezone,
+            SpecialtiesJson = string.IsNullOrWhiteSpace(expert.SpecialtiesJson) ? "[]" : expert.SpecialtiesJson,
+            IsActive = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.PrivateSpeakingTutorProfiles.Add(profile);
+        WriteAudit(tutorUserId, expert.DisplayName, "ClassHostProfileProvisioned", "PrivateSpeakingTutorProfile", profile.Id,
+            new { profile.ExpertUserId, profile.IsActive });
+        await db.SaveChangesAsync(ct);
+        return profile.Id;
     }
 
     /// <summary>
@@ -1180,7 +1214,10 @@ public sealed class LiveClassService(
             session.EnrolledCount,
             session.Status.ToString(),
             isEnrolled,
-            (isEnrolled || includeJoinAvailabilityWithoutEnrollment) && IsJoinWindowOpen(session, now),
+            // Join also requires the Zoom meeting to exist: the join-token
+            // endpoint rejects with zoom_meeting_not_ready otherwise, so a
+            // time-only flag showed a Join button that could only fail.
+            (isEnrolled || includeJoinAvailabilityWithoutEnrollment) && IsJoinWindowOpen(session, now) && session.ZoomMeetingId is not null,
             liveClass.CreditCost);
 
     private static bool IsJoinWindowOpen(LiveClassSession session, DateTimeOffset now)

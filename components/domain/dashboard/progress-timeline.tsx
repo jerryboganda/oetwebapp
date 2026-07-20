@@ -7,16 +7,18 @@ import { apiClient } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// Field names mirror the backend LearnerProgressTrendResponse contract
+// (Contracts/LearnerActionResponses.cs) as serialized in camelCase.
 interface ProgressPoint {
-  weekLabel: string;
+  period: string;
+  averageScore: number;
   attemptCount: number;
-  score: number;
 }
 
 interface LearnerProgressTrendResponse {
   points: ProgressPoint[];
   projectedScore: number | null;
-  projectedDate: string | null;
+  projectedAt: string | null;
   generatedAt: string;
 }
 
@@ -27,7 +29,7 @@ export function ProgressTimeline() {
   useEffect(() => {
     let cancelled = false;
     apiClient
-      .get<LearnerProgressTrendResponse>('/v1/learner/progress/trend')
+      .get<LearnerProgressTrendResponse>('/v1/learner/actions/progress/trend')
       .then((res) => {
         if (!cancelled) setData(res);
       })
@@ -87,7 +89,7 @@ export function ProgressTimeline() {
               const heightPercent = (point.attemptCount / maxAttempts) * 100;
               return (
                 <motion.div
-                  key={point.weekLabel}
+                  key={point.period}
                   className="group relative flex flex-1 flex-col items-center"
                   style={{ height: '100%' }}
                   initial={{ scaleY: 0 }}
@@ -101,7 +103,7 @@ export function ProgressTimeline() {
                     />
                   </div>
                   <span className="mt-1 text-[10px] text-muted truncate w-full text-center">
-                    {point.weekLabel}
+                    {point.period}
                   </span>
 
                   {/* Tooltip on hover */}
@@ -113,11 +115,11 @@ export function ProgressTimeline() {
             })}
           </div>
 
-          {data.projectedScore != null && data.projectedDate && (
+          {data.projectedScore != null && data.projectedAt && (
             <p className="mt-3 flex items-center gap-1.5 text-sm text-muted">
               <TrendingUp className="h-4 w-4 text-emerald-500" />
               Projected: ~{data.projectedScore} by{' '}
-              {new Date(data.projectedDate).toLocaleDateString(undefined, {
+              {new Date(data.projectedAt).toLocaleDateString(undefined, {
                 month: 'short',
                 day: 'numeric',
               })}

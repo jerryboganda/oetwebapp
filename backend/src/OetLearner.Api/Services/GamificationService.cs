@@ -204,34 +204,139 @@ public class GamificationService(LearnerDbContext db)
 
     public async Task<object> GetLeaderboardAsync(string? examTypeCode, string period, CancellationToken ct)
     {
-        var query = db.LeaderboardEntries
-            .Where(e => e.Period == period && e.OptedIn);
-        if (!string.IsNullOrEmpty(examTypeCode))
-            query = query.Where(e => e.ExamTypeCode == examTypeCode);
+        var ranked = await BuildRankedLeaderboardAsync(examTypeCode, period, ct);
 
-        var entries = await query.OrderBy(e => e.Rank).Take(100).ToListAsync(ct);
-        return entries.Select(e => new
+        return ranked.Take(100).Select(r => new
         {
-            rank = e.Rank,
-            displayName = e.DisplayName,
-            xp = e.XP,
-            examTypeCode = e.ExamTypeCode,
-            period = e.Period,
-            periodStart = e.PeriodStart
+            rank = r.Rank,
+            displayName = r.DisplayName,
+            xp = r.Xp,
+            // Additive aliases — same value as `xp`/the learner's level, exposed
+            // under the names the leaderboard UI reads. `xp` is retained so the
+            // existing wire contract is unchanged.
+            totalXp = r.Xp,
+            level = r.Level,
+            examTypeCode = r.ExamTypeCode,
+            period = NormalisePeriod(period),
+            periodStart = PeriodStart(period)
         });
     }
 
     public async Task<object> GetLeaderboardPositionAsync(string userId, string? examTypeCode, string period, CancellationToken ct)
     {
-        var query = db.LeaderboardEntries.Where(e => e.UserId == userId && e.Period == period);
-        if (!string.IsNullOrEmpty(examTypeCode))
-            query = query.Where(e => e.ExamTypeCode == examTypeCode);
+        var ranked = await BuildRankedLeaderboardAsync(examTypeCode, period, ct);
+        var mine = ranked.FirstOrDefault(r => r.UserId == userId);
 
-        var entry = await query.FirstOrDefaultAsync(ct);
-        if (entry == null) return new { rank = (int?)null, xp = 0L, optedIn = false };
-        return new { rank = entry.Rank, xp = entry.XP, optedIn = entry.OptedIn };
+        if (mine is null)
+        {
+            // Not opted in (or no XP row yet) — no rank to report. Surface the
+            // learner's own XP anyway so the UI can show progress before opt-in.
+            var ownXp = await db.LearnerXPs.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId, ct);
+            var own = ownXp is null ? 0L : PeriodXp(ownXp, period);
+            return new { rank = (int?)null, xp = own, totalXp = own, level = ownXp?.Level ?? 1, optedIn = false };
+        }
+
+        return new { rank = (int?)mine.Rank, xp = mine.Xp, totalXp = mine.Xp, level = mine.Level, optedIn = true };
     }
 
+    /// <summary>
+    /// Builds the live leaderboard ordered by the requested period's XP.
+    /// <para>
+    /// <see cref="LeaderboardEntry"/> is used purely as the opt-in registry —
+    /// its own XP/Rank columns are never maintained (rows are only ever written
+    /// by <see cref="SetLeaderboardOptInAsync"/>), so the standings are computed
+    /// from <see cref="LearnerXP"/>, which is the table
+    /// <see cref="AwardXpAsync"/> actually updates. Opt-in is a single
+    /// learner-level choice, so <c>Period</c> is deliberately not part of the
+    /// gate — otherwise "monthly"/"alltime" would always be empty, because
+    /// opt-in only ever writes a "weekly" row.
+    /// </para>
+    /// </summary>
+    private async Task<List<RankedLeaderboardRow>> BuildRankedLeaderboardAsync(
+        string? examTypeCode, string period, CancellationToken ct)
+    {
+        var registry = db.LeaderboardEntries.AsNoTracking().Where(e => e.OptedIn);
+        if (!string.IsNullOrEmpty(examTypeCode))
+            registry = registry.Where(e => e.ExamTypeCode == examTypeCode);
+
+        var joined = await (from e in registry
+                            join x in db.LearnerXPs.AsNoTracking() on e.UserId equals x.UserId
+                            select new
+                            {
+                                e.UserId,
+                                e.DisplayName,
+                                e.ExamTypeCode,
+                                Xp = x,
+                            }).ToListAsync(ct);
+
+        return joined
+            // A learner may hold more than one registry row (one per exam type);
+            // collapse to a single standing so they cannot occupy two ranks.
+            .GroupBy(r => r.UserId)
+            .Select(g => g.First())
+            .Select(r => new RankedLeaderboardRow(
+                r.UserId,
+                r.DisplayName,
+                r.ExamTypeCode,
+                PeriodXp(r.Xp, period),
+                r.Xp.Level,
+                0))
+            .OrderByDescending(r => r.Xp)
+            .ThenBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select((r, i) => r with { Rank = i + 1 })
+            .ToList();
+    }
+
+    private sealed record RankedLeaderboardRow(
+        string UserId, string DisplayName, string ExamTypeCode, long Xp, int Level, int Rank);
+
+    private static string NormalisePeriod(string? period) =>
+        (period ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "monthly" => "monthly",
+            "alltime" => "alltime",
+            _ => "weekly",
+        };
+
+    /// <summary>
+    /// Reads the bucket for the requested period, treating a bucket whose
+    /// period has already rolled over as zero. <see cref="AwardXpAsync"/> resets
+    /// the weekly/monthly buckets lazily (only when XP is next awarded), so a
+    /// learner who has been inactive since last week still carries last week's
+    /// <c>WeeklyXP</c> on their row — counting it would rank stale scores.
+    /// </summary>
+    private static long PeriodXp(LearnerXP xp, string period)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return NormalisePeriod(period) switch
+        {
+            "alltime" => xp.TotalXP,
+            "monthly" => xp.MonthStartDate.Year == today.Year && xp.MonthStartDate.Month == today.Month
+                ? xp.MonthlyXP
+                : 0L,
+            _ => xp.WeekStartDate >= today.AddDays(-(int)today.DayOfWeek) ? xp.WeeklyXP : 0L,
+        };
+    }
+
+    private static DateOnly PeriodStart(string period)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return NormalisePeriod(period) switch
+        {
+            "alltime" => DateOnly.MinValue,
+            "monthly" => new DateOnly(today.Year, today.Month, 1),
+            _ => today.AddDays(-(int)today.DayOfWeek),
+        };
+    }
+
+    /// <summary>
+    /// Records the learner's leaderboard opt-in choice. The row acts purely as
+    /// the opt-in registry (see <see cref="BuildRankedLeaderboardAsync"/>): the
+    /// <c>XP</c>, <c>Rank</c> and <c>PeriodStart</c> columns are vestigial —
+    /// nothing maintains them and no read path consults them. Standings come
+    /// from <see cref="LearnerXP"/>.
+    /// </summary>
     public async Task<object> SetLeaderboardOptInAsync(string userId, bool optedIn, CancellationToken ct)
     {
         var entries = await db.LeaderboardEntries.Where(e => e.UserId == userId).ToListAsync(ct);
@@ -248,7 +353,7 @@ public class GamificationService(LearnerDbContext db)
                 Period = "weekly",
                 PeriodStart = DateOnly.FromDateTime(DateTime.UtcNow),
                 XP = 0,
-                Rank = 9999,
+                Rank = 0,
                 OptedIn = optedIn
             });
         }

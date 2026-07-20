@@ -9,9 +9,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// Field names mirror the backend LearnerReadinessBlockerResponse contract
+// (Contracts/LearnerActionResponses.cs) as serialized in camelCase.
 interface ReadinessBlocker {
-  subtestCode: string;
-  criterionCode: string;
+  subTest: string;
+  criterion: string;
   currentScore: number;
   targetScore: number;
   gap: number;
@@ -81,7 +83,7 @@ export function ReadinessBlockers() {
   useEffect(() => {
     let cancelled = false;
     apiClient
-      .get<LearnerReadinessBlockersResponse>('/v1/learner/readiness/blockers')
+      .get<LearnerReadinessBlockersResponse>('/v1/learner/actions/readiness/blockers')
       .then((res) => {
         if (!cancelled) setData(res);
       })
@@ -139,9 +141,9 @@ export function ReadinessBlockers() {
               ) : (
                 <ul className="mt-3 space-y-3">
                   {topBlockers.map((blocker) => {
-                    const Icon = subtestIcons[blocker.subtestCode.toLowerCase()] ?? BookOpen;
+                    const Icon = subtestIcons[blocker.subTest.toLowerCase()] ?? BookOpen;
                     return (
-                      <li key={`${blocker.subtestCode}-${blocker.criterionCode}`} className="flex items-start gap-3">
+                      <li key={`${blocker.subTest}-${blocker.criterion}`} className="flex items-start gap-3">
                         <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm text-navy leading-snug">{blocker.recommendation}</p>

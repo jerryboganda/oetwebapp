@@ -84,8 +84,12 @@ export default function LeaderboardPage() {
     staleTime: 30_000,
     enabled: queriesEnabled,
   });
+  // The backend returns a bare JSON array (it never wrapped in { entries }),
+  // so reading `.entries` here left the board permanently empty. Accept the
+  // array, tolerating a wrapped shape if the contract ever changes.
+  const rawLeaderboard = leaderboardQuery.data as LeaderboardEntry[] | { entries?: LeaderboardEntry[] } | undefined;
   const entries = boundedEntries(
-    ((leaderboardQuery.data as { entries?: LeaderboardEntry[] } | undefined)?.entries ?? []),
+    Array.isArray(rawLeaderboard) ? rawLeaderboard : (rawLeaderboard?.entries ?? []),
   );
   const myPos = (positionQuery.data ?? null) as MyPosition | null;
   const loading = queriesEnabled && (leaderboardQuery.isPending || positionQuery.isPending);

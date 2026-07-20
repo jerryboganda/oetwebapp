@@ -107,6 +107,36 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
     return 'Speaking Reviews';
   }
 
+  // Checked before the generic '/expert/speaking' case below, which would
+  // otherwise also swallow '/expert/speaking-room' (a separate mocks route).
+  if (pathname.startsWith('/expert/speaking-room')) {
+    return 'Mock Room';
+  }
+
+  if (pathname.startsWith('/expert/speaking/sessions')) {
+    return 'Assess Session';
+  }
+
+  if (pathname.startsWith('/expert/speaking/live-room')) {
+    return 'Live Room';
+  }
+
+  if (pathname.startsWith('/expert/speaking/exam')) {
+    return 'Speaking Exam';
+  }
+
+  if (pathname.startsWith('/expert/speaking')) {
+    return 'Speaking';
+  }
+
+  if (pathname.startsWith('/expert/mocks/bookings')) {
+    return 'Mock Bookings';
+  }
+
+  if (pathname.startsWith('/expert/ai-prefill')) {
+    return 'AI Pre-Fill';
+  }
+
   if (pathname.startsWith('/expert/scoring-quality')) {
     return 'Scoring Quality';
   }

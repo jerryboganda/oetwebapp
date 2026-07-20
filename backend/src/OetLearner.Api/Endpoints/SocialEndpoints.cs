@@ -70,11 +70,17 @@ public static class SocialEndpoints
             var existing = await db.Referrals.AnyAsync(r => r.ReferredUserId == http.UserId(), ct);
             if (existing) return Results.BadRequest(new { error = "ALREADY_REFERRED" });
 
+            // Referral.ReferredEmail is NOT NULL — leaving it unset made every
+            // call to this endpoint fail on SaveChanges with a 23502 violation.
+            var referredUser = await db.Users.FindAsync([http.UserId()], ct);
+            if (referredUser == null) return Results.BadRequest(new { error = "INVALID_CODE" });
+
             db.Referrals.Add(new Referral
             {
                 Id = $"ref-{Guid.NewGuid():N}",
                 ReferrerUserId = code.UserId,
                 ReferredUserId = http.UserId(),
+                ReferredEmail = referredUser.Email,
                 Status = "pending",
                 CreditAmount = 10,
                 CreatedAt = DateTimeOffset.UtcNow,

@@ -76,24 +76,61 @@ public static class MockBookingEndpoints
                 throw ApiException.Validation("invalid_timezone", $"Unknown timezone '{tzId}'.");
             }
 
+            // `bundleId` sizes the slot: a mock that runs for N minutes needs N
+            // minutes clear, not just the 30-minute grid cell it starts in. An
+            // unknown id is rejected rather than silently ignored.
+            MockBundle? requestedBundle = null;
+            if (!string.IsNullOrWhiteSpace(bundleId))
+            {
+                requestedBundle = await db.MockBundles.AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == bundleId, ct)
+                    ?? throw ApiException.NotFound("bundle_not_found", "Mock bundle not found.");
+            }
+
+            var requestedMinutes = requestedBundle is { EstimatedDurationMinutes: > 0 }
+                ? requestedBundle.EstimatedDurationMinutes
+                : SlotMinutes;
+
             // Compute window bounds in UTC so we can fetch any colliding bookings in one query.
             var windowStartLocal = new DateTime(startDate.Year, startDate.Month, startDate.Day, 0, 0, 0, DateTimeKind.Unspecified);
             var windowStartUtc = TimeZoneInfo.ConvertTimeToUtc(windowStartLocal, tz);
             var windowEndUtc = windowStartUtc.AddDays(AvailabilityWindowDays);
 
-            var bookedStarts = await db.MockBookings.AsNoTracking()
-                .Where(b => b.Status != MockBookingStatuses.Cancelled
-                            && b.ScheduledStartAt >= windowStartUtc
-                            && b.ScheduledStartAt < windowEndUtc)
-                .Select(b => b.ScheduledStartAt)
-                .ToListAsync(ct);
+            // A booking that starts before the window can still run into it, so
+            // look back by the longest mock we could collide with.
+            var longestBundleMinutes = await db.MockBundles.AsNoTracking()
+                .Select(b => (int?)b.EstimatedDurationMinutes)
+                .MaxAsync(ct) ?? 0;
+            var lookback = TimeSpan.FromMinutes(Math.Max(longestBundleMinutes, SlotMinutes));
 
-            var bookedSet = new HashSet<DateTimeOffset>(bookedStarts);
+            var busy = await (
+                from b in db.MockBookings.AsNoTracking()
+                join bu in db.MockBundles.AsNoTracking() on b.MockBundleId equals bu.Id into bundleJoin
+                from bu in bundleJoin.DefaultIfEmpty()
+                where b.Status != MockBookingStatuses.Cancelled
+                      && b.ScheduledStartAt >= windowStartUtc - lookback
+                      && b.ScheduledStartAt < windowEndUtc
+                select new
+                {
+                    b.ScheduledStartAt,
+                    Minutes = bu != null ? bu.EstimatedDurationMinutes : 0,
+                }).ToListAsync(ct);
+
+            var busySpans = busy
+                .Select(x => (
+                    Start: x.ScheduledStartAt,
+                    End: x.ScheduledStartAt.AddMinutes(x.Minutes > 0 ? x.Minutes : SlotMinutes)))
+                .ToList();
 
             var slots = new List<object>();
             for (var dayOffset = 0; dayOffset < AvailabilityWindowDays; dayOffset++)
             {
                 var dayLocalDate = startDate.AddDays(dayOffset);
+
+                // Latest instant the mock may still be running on this local day.
+                var closingLocal = new DateTime(dayLocalDate.Year, dayLocalDate.Month, dayLocalDate.Day, 0, 0, 0, DateTimeKind.Unspecified)
+                    .AddHours(WorkingHourEndExclusive);
+
                 for (var hour = WorkingHourStart; hour < WorkingHourEndExclusive; hour++)
                 {
                     for (var minute = 0; minute < 60; minute += SlotMinutes)
@@ -111,15 +148,22 @@ public static class MockBookingEndpoints
                         }
 
                         var startAt = new DateTimeOffset(utcStart, TimeSpan.Zero);
-                        var endAt = startAt.AddMinutes(SlotMinutes);
+                        var endAt = startAt.AddMinutes(requestedMinutes);
 
-                        var isBlocked = bookedSet.Contains(startAt);
+                        // Half-open overlap: [start, end) against each busy span.
+                        var isTaken = busySpans.Any(s => s.Start < endAt && startAt < s.End);
+                        var overrunsDay = localStart.AddMinutes(requestedMinutes) > closingLocal;
+
+                        var blockedReason = isTaken
+                            ? "slot_taken"
+                            : overrunsDay ? "outside_working_hours" : null;
+
                         slots.Add(new
                         {
                             startAt,
                             endAt,
-                            isAvailable = !isBlocked,
-                            blockedReason = isBlocked ? "slot_taken" : null,
+                            isAvailable = blockedReason is null,
+                            blockedReason,
                         });
                     }
                 }
@@ -172,10 +216,11 @@ public static class MockBookingEndpoints
                 return Results.Ok(cached);
             }
 
-            // Slot collision check — any non-cancelled booking on the exact slot blocks creation.
-            var slotTaken = await db.MockBookings.AsNoTracking()
-                .AnyAsync(b => b.ScheduledStartAt == scheduledStartAt
-                               && b.Status != MockBookingStatuses.Cancelled, ct);
+            // Slot collision check — any non-cancelled booking whose span overlaps
+            // this mock's span blocks creation. Matches /availability exactly, so
+            // a slot shown as free cannot be rejected here (and vice versa).
+            var slotTaken = await HasOverlappingBookingAsync(
+                db, scheduledStartAt, bundle.EstimatedDurationMinutes, excludeBookingId: null, ct);
             if (slotTaken)
             {
                 throw ApiException.Conflict("slot_taken", "That slot is no longer available.");
@@ -196,6 +241,10 @@ public static class MockBookingEndpoints
                 CreatedAt = now,
                 UpdatedAt = now,
             };
+            // Same internal room route the MockService creator stamps — without
+            // it, bookings made through this endpoint had no joinUrl and the
+            // learner's "join" affordances render nothing.
+            booking.ZoomJoinUrl = $"/mocks/speaking-room/{Uri.EscapeDataString(booking.Id)}";
             db.MockBookings.Add(booking);
 
             db.AuditEvents.Add(new AuditEvent
@@ -291,11 +340,14 @@ public static class MockBookingEndpoints
                 throw ApiException.Validation("invalid_request", "scheduledStartAt must be in the future.");
             }
 
-            // Slot collision check on the new target.
-            var slotTaken = await db.MockBookings.AsNoTracking()
-                .AnyAsync(b => b.Id != booking.Id
-                               && b.ScheduledStartAt == newStart
-                               && b.Status != MockBookingStatuses.Cancelled, ct);
+            // Slot collision check on the new target, span-aware and excluding
+            // the booking being moved.
+            var bookingMinutes = await db.MockBundles.AsNoTracking()
+                .Where(b => b.Id == booking.MockBundleId)
+                .Select(b => (int?)b.EstimatedDurationMinutes)
+                .FirstOrDefaultAsync(ct) ?? 0;
+            var slotTaken = await HasOverlappingBookingAsync(
+                db, newStart, bookingMinutes, booking.Id, ct);
             if (slotTaken)
             {
                 throw ApiException.Conflict("slot_taken", "That slot is no longer available.");
@@ -414,6 +466,52 @@ public static class MockBookingEndpoints
     private static string UserId(HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
+
+    /// <summary>
+    /// True when a mock of <paramref name="minutes"/> starting at
+    /// <paramref name="startAt"/> would overlap a live booking.
+    /// <para>
+    /// A booking occupies its whole span — start plus its bundle's estimated
+    /// duration — not just the instant it starts, so a three-hour mock reserves
+    /// three hours rather than its first half-hour. Bundles with no recorded
+    /// duration fall back to the <see cref="SlotMinutes"/> grid cell.
+    /// </para>
+    /// </summary>
+    /// <param name="excludeBookingId">Booking to ignore (the row being moved).</param>
+    private static async Task<bool> HasOverlappingBookingAsync(
+        LearnerDbContext db,
+        DateTimeOffset startAt,
+        int minutes,
+        string? excludeBookingId,
+        CancellationToken ct)
+    {
+        var endAt = startAt.AddMinutes(minutes > 0 ? minutes : SlotMinutes);
+
+        // A booking starting before us can still run into our span, so look back
+        // by the longest mock on record. Anything starting at/after our end
+        // cannot overlap, which bounds the upper side exactly.
+        var longestBundleMinutes = await db.MockBundles.AsNoTracking()
+            .Select(b => (int?)b.EstimatedDurationMinutes)
+            .MaxAsync(ct) ?? 0;
+        var lookback = TimeSpan.FromMinutes(Math.Max(longestBundleMinutes, SlotMinutes));
+
+        var candidates = await (
+            from b in db.MockBookings.AsNoTracking()
+            join bu in db.MockBundles.AsNoTracking() on b.MockBundleId equals bu.Id into bundleJoin
+            from bu in bundleJoin.DefaultIfEmpty()
+            where b.Status != MockBookingStatuses.Cancelled
+                  && (excludeBookingId == null || b.Id != excludeBookingId)
+                  && b.ScheduledStartAt >= startAt - lookback
+                  && b.ScheduledStartAt < endAt
+            select new
+            {
+                b.ScheduledStartAt,
+                Minutes = bu != null ? bu.EstimatedDurationMinutes : 0,
+            }).ToListAsync(ct);
+
+        return candidates.Any(c =>
+            startAt < c.ScheduledStartAt.AddMinutes(c.Minutes > 0 ? c.Minutes : SlotMinutes));
+    }
 
     /// <summary>
     /// Learner-facing projection. Mirrors the shape used by
