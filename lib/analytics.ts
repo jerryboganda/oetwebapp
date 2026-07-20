@@ -327,13 +327,18 @@ type AnalyticsProvider = (event: string, properties?: EventProperties) => Promis
 const MAX_BUFFER_SIZE = 1000;
 const ANALYTICS_EVENTS_PATH = '/v1/analytics/events';
 
-function readCookie(name: string): string | null {
+/**
+ * Cookie value exactly as stored. Deliberately not decoded: the CSRF token is
+ * compared byte-for-byte against the raw Cookie header server-side, so a
+ * decoded value would fail to match.
+ */
+function readRawCookie(name: string): string | null {
   if (typeof document === 'undefined') {
     return null;
   }
 
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[1]) : null;
+  return match ? match[1] : null;
 }
 
 class AnalyticsService {
@@ -358,28 +363,45 @@ class AnalyticsService {
 
     this.transportInitialized = true;
     this.setProvider(async (event, properties) => {
-      const accessToken = await ensureFreshAccessToken();
-      if (!accessToken) {
-        return;
-      }
-
-      const csrfToken = readCookie('oet_csrf');
-
-      const response = await fetch(`${env.apiBaseUrl}${ANALYTICS_EVENTS_PATH}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'X-OET-Client-Platform': 'web',
-          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
-        },
-        body: JSON.stringify({
-          eventName: event,
-          properties,
-        }),
+      const body = JSON.stringify({
+        eventName: event,
+        properties,
       });
 
-      if (!response.ok) {
+      const send = async () => {
+        const accessToken = await ensureFreshAccessToken();
+        if (!accessToken) {
+          return null;
+        }
+
+        // Send the cookie value verbatim: the proxy compares it byte-for-byte
+        // against the raw Cookie header without decoding, so a decoded token
+        // would never match.
+        const csrfToken = readRawCookie('oet_csrf');
+
+        return fetch(`${env.apiBaseUrl}${ANALYTICS_EVENTS_PATH}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'X-OET-Client-Platform': 'web',
+            ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+          },
+          body,
+        });
+      };
+
+      let response = await send();
+
+      // A token refresh rotates the CSRF cookie, so an event fired while that
+      // was in flight can carry a superseded token and be rejected. Both
+      // credentials are re-read on the retry. Without this the event is lost
+      // silently, because callers discard transport rejections.
+      if (response && (response.status === 401 || response.status === 403)) {
+        response = await send();
+      }
+
+      if (response && !response.ok) {
         throw new Error(`Analytics event submission failed with status ${response.status}.`);
       }
     });
