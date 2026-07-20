@@ -1800,6 +1800,15 @@ public static class AdminEndpoints
             => Results.Ok(await service.DeleteNotificationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
             .WithAdminWrite("AdminSystemAdmin");
 
+        admin.MapPatch("/notification-templates/{templateId}/status", async (string templateId, HttpContext http, AdminNotificationTemplateStatusRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetNotificationTemplateStatusAsync(http.AdminId(), http.AdminName(), templateId, request, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
+        // Sends the template to the acting admin's own inbox (the UI posts no body).
+        admin.MapPost("/notification-templates/{templateId}/test-send", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SendNotificationTemplateTestAsync(http.AdminId(), http.AdminName(), templateId, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         // ── Free Tier Management ────────────────────────────
 
         admin.MapGet("/free-tier", async (AdminService service, CancellationToken ct)

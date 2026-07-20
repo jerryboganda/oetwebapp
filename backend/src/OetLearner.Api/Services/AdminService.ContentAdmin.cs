@@ -6,6 +6,7 @@ using OetLearner.Api.Security;
 using OetLearner.Api.Services.Common;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace OetLearner.Api.Services;
 
@@ -3070,16 +3071,7 @@ public partial class AdminService
             total,
             page,
             pageSize,
-            items = items.Select(n => new
-            {
-                n.Id,
-                n.EventKey,
-                n.Channel,
-                n.Category,
-                n.SubjectTemplate,
-                n.IsActive,
-                n.UpdatedAt
-            })
+            items = items.Select(MapNotificationTemplate)
         };
     }
 
@@ -3088,18 +3080,134 @@ public partial class AdminService
         var n = await db.NotificationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
             ?? throw ApiException.NotFound("NOTIFICATION_TEMPLATE_NOT_FOUND", $"Notification template '{templateId}' not found.");
 
-        return new
+        return MapNotificationTemplate(n);
+    }
+
+    /// <summary>
+    /// Shape consumed by the admin templates page. Everything here is derived from
+    /// real columns: <c>status</c> from <see cref="NotificationTemplate.IsActive"/>,
+    /// <c>name</c> from Description (the entity has no name column, so it falls back
+    /// to the event key), and <c>variables</c> parsed out of the template bodies.
+    /// The original PascalCase fields are retained for existing callers.
+    /// </summary>
+    private static object MapNotificationTemplate(NotificationTemplate n) => new
+    {
+        n.Id,
+        name = string.IsNullOrWhiteSpace(n.Description) ? n.EventKey : n.Description,
+        n.EventKey,
+        n.Channel,
+        n.Category,
+        n.Locale,
+        n.Version,
+        status = n.IsActive ? ActiveTemplateStatus : InactiveTemplateStatus,
+        n.SubjectTemplate,
+        n.BodyTemplate,
+        textTemplate = n.TextTemplate ?? string.Empty,
+        htmlTemplate = n.HtmlTemplate ?? string.Empty,
+        variables = ExtractTemplateVariables(n),
+        n.IsActive,
+        n.CreatedAt,
+        n.UpdatedAt
+    };
+
+    private const string ActiveTemplateStatus = "active";
+    private const string InactiveTemplateStatus = "inactive";
+
+    private static readonly Regex TemplateVariableRegex = new(
+        @"\{\{\s*([A-Za-z0-9_][A-Za-z0-9_.]*)\s*\}\}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Placeholders such as <c>{{firstName}}</c> are declared inline in the template
+    /// text; there is no variables column, so they are parsed on read. Order of first
+    /// appearance is preserved so the preview form is stable between loads.
+    /// </summary>
+    private static IReadOnlyList<string> ExtractTemplateVariables(NotificationTemplate n)
+    {
+        var found = new List<string>();
+        foreach (var source in new[] { n.SubjectTemplate, n.BodyTemplate, n.TextTemplate, n.HtmlTemplate })
         {
-            n.Id,
-            n.EventKey,
-            n.Channel,
-            n.Category,
-            n.SubjectTemplate,
-            n.BodyTemplate,
-            n.IsActive,
-            n.CreatedAt,
-            n.UpdatedAt
+            if (string.IsNullOrEmpty(source)) continue;
+            foreach (Match match in TemplateVariableRegex.Matches(source))
+            {
+                var name = match.Groups[1].Value;
+                if (!found.Contains(name, StringComparer.Ordinal)) found.Add(name);
+            }
+        }
+        return found;
+    }
+
+    public async Task<object> SetNotificationTemplateStatusAsync(
+        string adminId, string adminName, string templateId,
+        AdminNotificationTemplateStatusRequest request, CancellationToken ct)
+    {
+        var isActive = (request.Status ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            ActiveTemplateStatus => true,
+            InactiveTemplateStatus => false,
+            _ => throw ApiException.Validation(
+                "notification_template_invalid_status",
+                $"Unsupported notification template status '{request.Status}'.",
+                [new ApiFieldError("status", "invalid_status", "Use active or inactive.")])
         };
+
+        var entity = await db.NotificationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("NOTIFICATION_TEMPLATE_NOT_FOUND", $"Notification template '{templateId}' not found.");
+
+        entity.IsActive = isActive;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, isActive ? "Activated" : "Deactivated", "NotificationTemplate", templateId,
+            $"Set notification template {entity.EventKey}/{entity.Channel} to {(isActive ? ActiveTemplateStatus : InactiveTemplateStatus)}", ct);
+
+        return MapNotificationTemplate(entity);
+    }
+
+    /// <summary>
+    /// Sends the stored template to the acting admin's own inbox. The admin UI posts
+    /// no body, so the caller's account email is the only possible target.
+    /// </summary>
+    public async Task<object> SendNotificationTemplateTestAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.NotificationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("NOTIFICATION_TEMPLATE_NOT_FOUND", $"Notification template '{templateId}' not found.");
+
+        // Only email has a delivery path here. An in-app or push test would need a
+        // target device or session that this endpoint has no way to choose, so fail
+        // explicitly rather than reporting a delivery that never happened.
+        if (!string.Equals(entity.Channel, "email", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "notification_template_test_channel_unsupported",
+                $"Test send is only available for email templates; '{entity.EventKey}' is a {entity.Channel} template.",
+                [new ApiFieldError("channel", "unsupported_channel", "Only email templates can be test-sent.")]);
+        }
+
+        var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == adminId, ct);
+        if (account is null || string.IsNullOrWhiteSpace(account.Email))
+        {
+            throw ApiException.Validation(
+                "notification_template_test_no_recipient",
+                "Your admin account has no email address on file to receive the test send.");
+        }
+
+        var subject = string.IsNullOrWhiteSpace(entity.SubjectTemplate) ? entity.EventKey : entity.SubjectTemplate;
+        var textBody = string.IsNullOrWhiteSpace(entity.TextTemplate) ? entity.BodyTemplate : entity.TextTemplate;
+        var htmlBody = string.IsNullOrWhiteSpace(entity.HtmlTemplate) ? null : entity.HtmlTemplate;
+
+        // Unresolved {{placeholders}} go out verbatim: this is a rendering preview,
+        // and substituting invented values would misrepresent the template. Provider
+        // failures propagate, so a disabled or misconfigured mailer surfaces as an
+        // error instead of a false "Test notification sent".
+        await notifications.SendRenderedEmailAsync(
+            account.Email, $"[Test] {subject}", textBody ?? string.Empty, htmlBody, ct);
+
+        await LogAuditAsync(adminId, adminName, "TestSent", "NotificationTemplate", templateId,
+            $"Sent test of notification template {entity.EventKey}/{entity.Channel} to {account.Email}", ct);
+
+        return new { id = templateId, sentTo = account.Email, entity.Channel };
     }
 
     public async Task<object> CreateNotificationTemplateAsync(

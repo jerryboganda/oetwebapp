@@ -1322,6 +1322,22 @@ public sealed class NotificationService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Sends an already-rendered message to one recipient. Used by the admin
+    /// notification-template test-send, where the subject and body come from the
+    /// stored template rather than the notification catalog, so
+    /// <see cref="SendTestEmailAsync"/> (which requires a catalog event key) does
+    /// not apply. Propagates provider failures — callers must not report success
+    /// when the mail provider is disabled, misconfigured or unreachable.
+    /// </summary>
+    public Task SendRenderedEmailAsync(
+        string recipientEmail,
+        string subject,
+        string textBody,
+        string? htmlBody,
+        CancellationToken ct)
+        => emailSender.SendAsync(new EmailMessage(recipientEmail, subject, textBody, htmlBody), ct);
+
     public async Task<AdminNotificationProofTriggerResponse> TriggerProofNotificationAsync(
         string adminId,
         string adminName,

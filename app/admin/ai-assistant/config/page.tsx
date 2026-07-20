@@ -71,8 +71,17 @@ export default function AiAssistantConfigPage() {
     if (!config) return;
     try {
       setSaving(true);
-      await apiClient.post('/v1/admin/ai-assistant/config', config);
-      setToast({ variant: 'success', message: 'Configuration saved successfully' });
+      // Only the model and tool grants have storage in this schema; the
+      // response reports exactly what was applied so the toast never implies
+      // that token caps or rate limits were persisted when they were not.
+      const result = await apiClient.post<{ applied?: string[]; message?: string }>(
+        '/v1/admin/ai-assistant/config',
+        config
+      );
+      setToast({
+        variant: 'success',
+        message: result?.message ?? 'Configuration saved successfully',
+      });
     } catch {
       setToast({ variant: 'error', message: 'Failed to save configuration' });
     } finally {

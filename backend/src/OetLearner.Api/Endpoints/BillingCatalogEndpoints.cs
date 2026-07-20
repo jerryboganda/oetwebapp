@@ -22,8 +22,50 @@ public static class BillingCatalogEndpoints
         adminCatalog.MapGet("/products/{code}", AdminGetProductByCode)
             .RequireAuthorization("AdminBillingRead");
 
+        // Admin product editor. Mapped at /v1/admin/billing/products because that
+        // is the path the deployed admin UI calls (app/admin/billing/products);
+        // the group above is /v1/admin/billing/catalog and stays as-is.
+        var adminProducts = v1.MapGroup("/admin/billing/products");
+        adminProducts.MapGet("/", AdminListProducts)
+            .RequireAuthorization("AdminBillingRead");
+        adminProducts.MapGet("/{code}", AdminGetProduct)
+            .RequireAuthorization("AdminBillingRead");
+        adminProducts.MapPut("/{code}", AdminUpdateProduct)
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
         return app;
     }
+
+    private static async Task<Ok<AdminProductListResponse>> AdminListProducts(
+        [FromQuery] string? status,
+        [FromQuery] string? search,
+        IBillingCatalogService catalog,
+        CancellationToken ct)
+    {
+        var items = await catalog.ListAdminProductsAsync(status, search, ct);
+        return TypedResults.Ok(new AdminProductListResponse(items));
+    }
+
+    private static async Task<Results<Ok<AdminCatalogProductDto>, NotFound>> AdminGetProduct(
+        string code,
+        IBillingCatalogService catalog,
+        CancellationToken ct)
+    {
+        var product = await catalog.GetAdminProductByCodeAsync(code, ct);
+        return product is null ? TypedResults.NotFound() : TypedResults.Ok(product);
+    }
+
+    private static async Task<Results<Ok<AdminCatalogProductDto>, NotFound>> AdminUpdateProduct(
+        string code,
+        [FromBody] AdminCatalogProductUpdateRequest request,
+        IBillingCatalogService catalog,
+        CancellationToken ct)
+    {
+        var product = await catalog.UpdateAdminProductAsync(code, request, ct);
+        return product is null ? TypedResults.NotFound() : TypedResults.Ok(product);
+    }
+
+    private sealed record AdminProductListResponse(IReadOnlyList<AdminCatalogProductDto> Items);
 
     private static async Task<Ok<CatalogResponse>> GetProducts(
         [FromQuery] string? country,

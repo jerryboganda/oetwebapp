@@ -829,6 +829,9 @@ public record AdminNotificationTemplateUpdateRequest(
     bool? IsActive,
     string? Category);
 
+/// <summary>Status toggle from the admin templates table. Status is "active" or "inactive".</summary>
+public record AdminNotificationTemplateStatusRequest(string Status);
+
 // ── Free Tier ──
 
 public record AdminFreeTierConfigUpdateRequest(
