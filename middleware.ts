@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 // Duplicated here because Edge runtime cannot import browser-only modules
 const AUTH_COOKIE = 'oet_auth';
 const CSRF_COOKIE = 'oet_csrf';
-const CSRF_HEADER = 'x-csrf-token';
 const NONCE_HEADER = 'x-nonce';
 
 /** Generate a hex CSRF token using Web Crypto (Edge Runtime compatible). */
@@ -192,9 +191,6 @@ function isSponsorPortalEnabled(): boolean {
   return process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED === 'true';
 }
 
-/** Mutation methods that require CSRF validation */
-const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
 /**
  * Capture affiliate / agent attribution from URL params and persist as a cookie.
  * Phase 8 cookie-attribution: `?ref=CODE` or `?agent=CODE` sets `oet_affiliate`
@@ -258,20 +254,10 @@ export function middleware(request: NextRequest) {
   }
 
   // ── CSRF double-submit cookie pattern ──
-  // For API proxy mutation requests, verify the CSRF header matches the cookie.
-  if (pathname.startsWith('/api/backend/') && CSRF_METHODS.has(request.method)) {
-    const csrfCookie = request.cookies.get(CSRF_COOKIE)?.value;
-    const csrfHeader = request.headers.get(CSRF_HEADER);
-    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
-      return withCsp(
-        NextResponse.json(
-          { error: 'CSRF_VALIDATION_FAILED', message: 'Missing or invalid CSRF token' },
-          { status: 403 },
-        ),
-      );
-    }
-  }
-
+  // Enforcement for /api/backend/* lives in the proxy route handler
+  // (validateProxyCsrf in lib/backend-proxy.ts), NOT here — see the note on
+  // config.matcher below. This middleware only issues the cookie.
+  //
   // Ensure every authenticated response has a CSRF cookie
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   const existingCsrf = request.cookies.get(CSRF_COOKIE);
@@ -291,6 +277,12 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // NOTE: `/api` is excluded here, so this middleware NEVER runs for
+    // /api/backend/*. Anything those requests need — CSRF validation, origin
+    // checks, auth — must live in app/api/backend/[...path]/route.ts, which
+    // enforces them via validateRequestOrigin/validateProxyCsrf. Adding a
+    // guard to the middleware for an /api path is dead code.
+    //
     // Skip:
     //  - /api routes (proxied separately)
     //  - Next.js internal static + image optimizer paths
