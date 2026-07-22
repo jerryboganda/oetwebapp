@@ -81,7 +81,16 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
             />
             <div className="flex flex-col items-center gap-2">
               {isMobileShell() ? (
-                <Button variant="primary" onClick={() => void performMobileUpdate()}>Update in store</Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    void performMobileUpdate(state.storeUrl).then((handled) => {
+                      if (!handled) setState({ phase: 'error', error: 'No update download is configured for this device.' });
+                    });
+                  }}
+                >
+                  Update now
+                </Button>
               ) : (
                 <Button variant="primary" onClick={() => void startDesktopInstall()}>Update now</Button>
               )}

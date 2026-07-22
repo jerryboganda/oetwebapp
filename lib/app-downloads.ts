@@ -20,7 +20,7 @@ export const ANDROID_DOWNLOAD_URL = '/api/download/android';
 
 export const ANDROID_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL ||
-  'https://play.google.com/store/apps/details?id=com.oetprep.learner';
+  ANDROID_DOWNLOAD_URL;
 
 export const IOS_STORE_URL = process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
 

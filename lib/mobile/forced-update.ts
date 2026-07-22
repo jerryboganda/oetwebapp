@@ -19,11 +19,11 @@ export interface UpdateCheckResult {
 
 // ── Configuration ───────────────────────────────────────────────
 
-const DEFAULT_ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=com.oetprep.learner';
+const DEFAULT_ANDROID_UPDATE_URL = 'https://app.oetwithdrhesham.co.uk/api/download/android';
 
 function getStoreUrl(platform: 'android' | 'ios'): string | null {
   if (platform === 'android') {
-    return process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL || DEFAULT_ANDROID_STORE_URL;
+    return process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL || DEFAULT_ANDROID_UPDATE_URL;
   }
 
   return process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
@@ -52,8 +52,15 @@ export async function getAppVersion(): Promise<AppVersionInfo | null> {
 // ── Version Comparison ──────────────────────────────────────────
 
 export function compareVersions(current: string, latest: string): number {
-  const currentParts = current.split('.').map(Number);
-  const latestParts = latest.split('.').map(Number);
+  const parse = (value: string): number[] | null => {
+    const core = value.trim().replace(/^v/i, '').split(/[-+]/, 1)[0];
+    if (!/^\d+(?:\.\d+){0,3}$/.test(core)) return null;
+    return core.split('.').map(Number);
+  };
+  const currentParts = parse(current);
+  const latestParts = parse(latest);
+  // Malformed server/client input must fail open rather than forcing an update.
+  if (!currentParts || !latestParts) return 0;
   const maxLength = Math.max(currentParts.length, latestParts.length);
 
   for (let i = 0; i < maxLength; i++) {
@@ -146,21 +153,32 @@ export async function checkForUpdate(
 
 // ── Store Redirect ──────────────────────────────────────────────
 
-export async function openAppStore(): Promise<void> {
+export async function openAppStore(overrideUrl?: string | null): Promise<boolean> {
   const platform = Capacitor.getPlatform() as 'android' | 'ios';
-  const storeUrl = getStoreUrl(platform);
+  const storeUrl = overrideUrl || getStoreUrl(platform);
 
   if (!storeUrl) {
-    return;
+    return false;
   }
 
   try {
+    // Let the native plugin open the real Play/App Store app when the target is
+    // an official store listing. Server-provided GitHub/direct-download URLs use
+    // the browser fallback instead.
+    if (/^(?:https:\/\/play\.google\.com\/|https:\/\/apps\.apple\.com\/)/i.test(storeUrl)) {
+      const { AppUpdate } = await import('@capawesome/capacitor-app-update');
+      await AppUpdate.openAppStore();
+      return true;
+    }
     const { Browser } = await import('@capacitor/browser');
     await Browser.open({ url: storeUrl });
+    return true;
   } catch {
     // Fallback: try window.open
     if (typeof window !== 'undefined') {
-      window.open(storeUrl, '_blank', 'noopener,noreferrer');
+      const opened = window.open(storeUrl, '_blank', 'noopener,noreferrer');
+      return opened !== null;
     }
+    return false;
   }
 }

@@ -15,6 +15,7 @@ import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { ShellControls } from '@/components/shell/ShellControls';
 import { ForcedUpdateOverlay } from '@/components/shell/ForcedUpdateOverlay';
 import { DesktopAutoUpdater } from '@/components/shell/DesktopAutoUpdater';
+import { MobileAutoUpdater } from '@/components/shell/MobileAutoUpdater';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
 
@@ -115,6 +116,7 @@ export function AppProviders({
                 */}
                 <ShellControls />
                 <DesktopAutoUpdater />
+                <MobileAutoUpdater />
                 <ForcedUpdateOverlay />
                 {/*
                   Global sonner toaster — rendered once at the root so any

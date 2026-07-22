@@ -24,6 +24,30 @@ export interface UpdateState {
   error?: string;
 }
 
+interface NativeRelease {
+  version: string;
+  downloadUrl: string;
+}
+
+let desktopCheckInFlight: Promise<UpdateState> | null = null;
+let desktopInstallInFlight: Promise<UpdateState> | null = null;
+
+async function fetchNativeRelease(platform: 'android' | 'ios'): Promise<NativeRelease | null> {
+  try {
+    const response = await fetch(`/api/releases/native?platform=${platform}`, {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as Partial<NativeRelease>;
+    if (typeof data.version !== 'string' || typeof data.downloadUrl !== 'string') return null;
+    return { version: data.version, downloadUrl: data.downloadUrl };
+  } catch {
+    return null;
+  }
+}
+
 /** True when the current desktop shell exposes the manual updater bridge. */
 export function isDesktopUpdaterAvailable(): boolean {
   return typeof window !== 'undefined'
@@ -44,27 +68,39 @@ export function isMobileShell(): boolean {
 export async function checkForUpdates(): Promise<UpdateState> {
   try {
     if (isDesktopUpdaterAvailable()) {
-      const result = await window.desktopBridge!.updater!.check();
-      return {
-        phase: result.available ? 'available' : 'uptodate',
-        version: result.version,
-        currentVersion: result.currentVersion,
-        notes: result.notes ?? null,
-      };
+      if (!desktopCheckInFlight) {
+        desktopCheckInFlight = window.desktopBridge!.updater!.check()
+          .then((result) => ({
+            phase: result.available ? 'available' : 'uptodate',
+            version: result.version,
+            currentVersion: result.currentVersion,
+            notes: result.notes ?? null,
+          } satisfies UpdateState))
+          .finally(() => {
+            desktopCheckInFlight = null;
+          });
+      }
+      return await desktopCheckInFlight;
     }
 
     if (isMobileShell()) {
       const identity = await resolveClientIdentity();
       const platform = identity.platform === 'ios' ? 'ios' : 'android';
-      const policy = await fetchAppReleasePolicy(platform);
+      const [policy, nativeRelease] = await Promise.all([
+        fetchAppReleasePolicy(platform),
+        fetchNativeRelease(platform),
+      ]);
       const current = identity.version ?? '0.0.0';
+      const latest = nativeRelease && compareVersions(policy.latestVersion, nativeRelease.version) < 0
+        ? nativeRelease.version
+        : policy.latestVersion;
       const outdated =
-        policy.forceUpdate || compareVersions(current, policy.latestVersion) < 0;
+        policy.forceUpdate || compareVersions(current, latest) < 0;
       return {
         phase: outdated ? 'available' : 'uptodate',
-        version: policy.latestVersion,
+        version: latest,
         currentVersion: identity.version ?? undefined,
-        storeUrl: policy.storeUrl,
+        storeUrl: policy.storeUrl ?? nativeRelease?.downloadUrl ?? null,
       };
     }
 
@@ -101,14 +137,21 @@ export async function installDesktopUpdate(): Promise<UpdateState> {
   if (!isDesktopUpdaterAvailable()) {
     return { phase: 'error', error: 'Desktop updater is unavailable.' };
   }
-  try {
-    const result = await window.desktopBridge!.updater!.install();
-    return result.ok
-      ? { phase: 'ready' }
-      : { phase: 'error', error: result.error ?? 'Update install failed.' };
-  } catch (error) {
-    return { phase: 'error', error: error instanceof Error ? error.message : 'Update install failed.' };
+  if (!desktopInstallInFlight) {
+    desktopInstallInFlight = (async () => {
+      try {
+        const result = await window.desktopBridge!.updater!.install();
+        return result.ok
+          ? { phase: 'ready' as const }
+          : { phase: 'error' as const, error: result.error ?? 'Update install failed.' };
+      } catch (error) {
+        return { phase: 'error' as const, error: error instanceof Error ? error.message : 'Update install failed.' };
+      }
+    })().finally(() => {
+      desktopInstallInFlight = null;
+    });
   }
+  return await desktopInstallInFlight;
 }
 
 /** Restarts the desktop app into the freshly installed version. */
@@ -121,14 +164,14 @@ export async function relaunchDesktop(): Promise<void> {
  * Mobile update action: try Android's IMMEDIATE in-app update first, then fall
  * back to opening the platform store listing (the iOS path always).
  */
-export async function performMobileUpdate(): Promise<void> {
+export async function performMobileUpdate(storeUrl?: string | null): Promise<boolean> {
   try {
     const { tryAndroidImmediateUpdate } = await import('@/lib/mobile/android-immediate-update');
     const handled = await tryAndroidImmediateUpdate();
-    if (handled) return;
+    if (handled) return true;
   } catch {
     // Fall through to the store redirect.
   }
   const { openAppStore } = await import('@/lib/mobile/forced-update');
-  await openAppStore();
+  return await openAppStore(storeUrl);
 }

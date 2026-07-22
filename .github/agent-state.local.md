@@ -1,51 +1,31 @@
-# Agent State - Subscriptions & Packages Admin Editor
+# Agent State - Native App Update Hardening
 
-Last updated: 2026-07-16
+Last updated: 2026-07-22
 
 ## Goal
-Make every package card on the learner dashboard `/subscriptions` page editable from the admin panel.
 
-## Root Cause
-The `/subscriptions` page renders static `WEBSITE_PACKAGES` via `SubscriptionsCatalog`, while the existing **Catalog Storefront** editor only edits the presentation overlay for `CatalogStorefront` (used on `/catalog` and `/pricing`). The two systems were disconnected, so the storefront editor could not edit the packages the user sees under Subscriptions & Packages.
+Make desktop and mobile update discovery, download, and installation reliable and fail-safe while preserving the product name `OET with Dr. Hesham`.
 
-## Implemented This Run
+## Implemented
 
-- Extended `CatalogPresentation` with a `websitePackages` overlay (`byCode` per package + `sections` overrides) in `lib/catalog-presentation.ts`.
-- Added `applyWebsitePackageOverlay` helper in `lib/catalog-website-packages.ts`.
-- Built `SubscriptionsPackagesEditor` (`components/admin/billing/subscriptions-packages-editor.tsx`) with:
-  - Searchable package selector grouped by section.
-  - Editable fields: name, package number, format line, description, meta chips, badges, feature bullets/ticks, best-for text, featured flag.
-  - Section heading overrides.
-- Created `/admin/billing/subscriptions-packages` page.
-- Added admin sidebar item and page title rule in `lib/admin-navigation.tsx`.
-- Updated `SubscriptionsCatalog` to apply the backend overlay from `catalog.presentation.websitePackages`.
-- Added cross-link from Catalog Storefront page to the new Subscriptions & Packages editor.
-
-## Files Touched
-
-- `lib/catalog-presentation.ts`
-- `lib/catalog-website-packages.ts`
-- `components/admin/billing/subscriptions-packages-editor.tsx` (new)
-- `app/admin/billing/subscriptions-packages/page.tsx` (new)
-- `app/admin/billing/storefront/page.tsx`
-- `components/domain/catalog/subscriptions-catalog.tsx`
-- `lib/admin-navigation.tsx`
-- `.github/agent-state.local.md`
-
-## Persistence
-
-The editor reuses the existing `CatalogPresentationJson` runtime-setting column (no DB migration). Admin saves via `saveAdminCatalogPresentation`; learner page reads via `fetchPublicCatalog` which returns the same JSON blob.
+- Added a stable, validated desktop updater feed backed by signed GitHub releases, with a GitHub fallback endpoint.
+- Deduplicated desktop checks/installs so automatic and forced-update flows cannot race.
+- Added automatic mobile checks on launch, resume, reconnect, and a four-hour interval.
+- Added trusted native-release discovery and a signed Android APK fallback when Google Play in-app update is unavailable.
+- Wired the Capacitor app-update plugin into Android and iOS native projects.
+- Made missing update targets visible errors instead of silent no-ops.
+- Updated desktop and Android release workflows to publish and verify their updater artifacts.
 
 ## Validation
 
+- Focused updater tests: 14 passed.
 - `pnpm exec tsc --noEmit`: passed.
-- `pnpm run lint`: passed (exit 0; pre-existing warnings in unrelated files).
 - `git diff --check`: passed.
 
-## Blockers / Remaining Risk
+## External Requirement
 
-- None.
+iOS App Store distribution still requires Apple signing/App Store Connect credentials and a live listing; those repository secrets are not configured. The iOS app now contains the update plugin and automatic detection path, but an installable iOS release cannot be truthfully published until those credentials exist.
 
 ## Next Step
 
-Verify the merged PR deployed and the new admin editor works on production.
+Push `main`, publish fresh signed Windows and Android releases, then verify the production updater endpoints and release workflows.

@@ -23,7 +23,7 @@ import { useAppVersionGate } from '@/app/providers/AppVersionGateProvider';
  * the backend prevents from ever triggering) offers a hard reload.
  */
 export function ForcedUpdateOverlay() {
-  const { blocked } = useAppVersionGate();
+  const { blocked, policy } = useAppVersionGate();
   const [runtime] = useState(() => (typeof window === 'undefined' ? 'web' : getAppRuntimeKind()));
   const [state, setState] = useState<UpdateState>({ phase: 'idle' });
   // Safety valve: if the required update can't be obtained (already on the newest
@@ -136,7 +136,17 @@ export function ForcedUpdateOverlay() {
           title="Update required"
           subtitle="A newer version of the app is required to continue. Update now to keep going."
         >
-          <Button variant="primary" fullWidth onClick={() => void performMobileUpdate()}>Update now</Button>
+          <Button
+            variant="primary"
+            fullWidth
+            onClick={() => {
+              void performMobileUpdate(policy?.storeUrl).then((handled) => {
+                if (!handled) setState({ phase: 'error', error: 'No update download is configured for this device.' });
+              });
+            }}
+          >
+            Update now
+          </Button>
         </Panel>
       );
     }

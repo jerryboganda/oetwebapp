@@ -29,7 +29,15 @@ vi.mock('@capacitor/browser', () => ({
   Browser: mockBrowser,
 }));
 
-import { getAppVersion, checkForUpdate, openAppStore } from '@/lib/mobile/forced-update';
+const mockNativeAppUpdate = {
+  openAppStore: vi.fn(),
+};
+
+vi.mock('@capawesome/capacitor-app-update', () => ({
+  AppUpdate: mockNativeAppUpdate,
+}));
+
+import { compareVersions, getAppVersion, checkForUpdate, openAppStore } from '@/lib/mobile/forced-update';
 
 describe('forced-update', () => {
   beforeEach(() => {
@@ -118,13 +126,33 @@ describe('forced-update', () => {
     });
   });
 
+  describe('compareVersions', () => {
+    it('compares numeric segments and safely ignores prerelease/build suffixes', () => {
+      expect(compareVersions('1.9.0', '1.10.0')).toBe(-1);
+      expect(compareVersions('v1.3.3+42', '1.3.3')).toBe(0);
+      expect(compareVersions('1.3.4-beta.1', '1.3.3')).toBe(1);
+    });
+
+    it('fails open for malformed version input', () => {
+      expect(compareVersions('unknown', '1.3.3')).toBe(0);
+      expect(compareVersions('1.x.0', '1.3.3')).toBe(0);
+    });
+  });
+
   describe('openAppStore', () => {
-    it('opens the Play Store URL for Android', async () => {
+    it('opens the signed Android download fallback when Play is not configured', async () => {
       mockBrowser.open.mockResolvedValue(undefined);
-      await openAppStore();
+      await expect(openAppStore()).resolves.toBe(true);
       expect(mockBrowser.open).toHaveBeenCalledWith({
-        url: expect.stringContaining('play.google.com'),
+        url: 'https://app.oetwithdrhesham.co.uk/api/download/android',
       });
+    });
+
+    it('uses the native store app for an official server-provided listing', async () => {
+      mockNativeAppUpdate.openAppStore.mockResolvedValue(undefined);
+      await expect(openAppStore('https://play.google.com/store/apps/details?id=com.oetprep.learner')).resolves.toBe(true);
+      expect(mockNativeAppUpdate.openAppStore).toHaveBeenCalledOnce();
+      expect(mockBrowser.open).not.toHaveBeenCalled();
     });
   });
 });

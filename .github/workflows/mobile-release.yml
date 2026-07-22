@@ -25,6 +25,9 @@ concurrency:
   group: mobile-release
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '22'
   JAVA_VERSION: '21'
@@ -143,6 +146,7 @@ jobs:
         with:
           name: android-release-aab-${{ inputs.version }}
           path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload APK
@@ -150,9 +154,62 @@ jobs:
         with:
           name: android-release-apk-${{ inputs.version }}
           path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
           retention-days: 90
 
   # ── iOS Release IPA ────────────────────────────────────────────
+  publish-android:
+    name: Publish signed Android release
+    needs: android-release
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: android-release-*-${{ inputs.version }}
+          path: artifacts
+          merge-multiple: true
+
+      - name: Stage versioned release assets
+        run: |
+          set -euo pipefail
+          test -s artifacts/app-release.apk
+          test -s artifacts/app-release.aab
+          mv artifacts/app-release.apk "OET-with-Dr-Hesham-${{ inputs.version }}.apk"
+          mv artifacts/app-release.aab "OET-with-Dr-Hesham-${{ inputs.version }}.aab"
+          sha256sum OET-with-Dr-Hesham-* > SHA256SUMS.txt
+
+      - name: Create GitHub mobile release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}-mobile-android
+          target_commitish: ${{ github.sha }}
+          name: OET with Dr. Hesham v${{ inputs.version }} (Android)
+          make_latest: false
+          files: |
+            OET-with-Dr-Hesham-${{ inputs.version }}.apk
+            OET-with-Dr-Hesham-${{ inputs.version }}.aab
+            SHA256SUMS.txt
+          body: |
+            Signed Android release for OET with Dr. Hesham.
+
+            The app discovers this release automatically and uses the APK as a
+            fallback when Google Play in-app update is unavailable.
+
+      - name: Verify published APK
+        run: |
+          set -euo pipefail
+          url="https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-mobile-android/OET-with-Dr-Hesham-${{ inputs.version }}.apk"
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --location --range 0-0 "$url" -o /dev/null; then exit 0; fi
+            sleep $((attempt * 3))
+          done
+          exit 1
+
   ios-release:
     name: iOS Release
     if: inputs.platform == 'ios' || inputs.platform == 'both'

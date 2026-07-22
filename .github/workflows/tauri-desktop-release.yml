@@ -6,9 +6,10 @@ name: Tauri Desktop Release
 # a tiny bundled splash). See docs/tauri-desktop-shell.md.
 #
 # Triggers:
-#  - Manual: workflow_dispatch with version + allow_unsigned inputs.
+#  - Manual: workflow_dispatch with version + allow_unsigned inputs; successful
+#    signed builds publish the same updater feed as tag runs.
 #  - Tag push: v*.*.*-tauri-desktop (e.g. v1.2.0-tauri-desktop) builds and uploads
-#    artifacts. Publishing updater feeds / GitHub Releases stays a manual step.
+#    artifacts and publishes the updater feed/GitHub Release automatically.
 #
 # Required repository secrets:
 #  - TAURI_SIGNING_PRIVATE_KEY           — minisign private key for updater artifacts
@@ -243,7 +244,7 @@ jobs:
     # Run on tag push even if a build leg failed (e.g. macOS), as long as the
     # run wasn't cancelled. The Windows installer is required (the latest.json
     # step fails if its artifact is missing); the macOS dmg is best-effort.
-    if: github.event_name == 'push' && !cancelled()
+    if: ${{ !cancelled() && (github.event_name == 'push' || inputs.allow_unsigned != true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -253,8 +254,13 @@ jobs:
         id: version
         shell: bash
         run: |
-          tag="${{ github.ref_name }}"; v="${tag#v}"; v="${v%-tauri-desktop}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${{ github.ref_name }}"; v="${tag#v}"; v="${v%-tauri-desktop}"
+          else
+            v="${{ inputs.version }}"; tag="v${v}-tauri-desktop"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -271,7 +277,7 @@ jobs:
             echo "Missing Windows installer (.exe) or signature (.sig) in artifacts." >&2
             exit 1
           fi
-          base_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          base_url="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}"
           # GitHub release assets replace spaces with dots in the asset name.
           asset_name=$(basename "$exe" | tr ' ' '.')
           win_sig=$(cat "$sig")
@@ -305,7 +311,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           name: OET with Dr. Hesham Desktop ${{ steps.version.outputs.version }}
           files: |
             artifacts/**/*-setup.exe
@@ -319,5 +327,27 @@ jobs:
 
             Install + certificate-trust steps: `docs/qa/TESTER_SETUP.md`.
 
-            **Auto-update:** copy `latest.json`, the `*-setup.exe`, and its `.sig`
-            to the prod feed at `/desktop/updates/` (see TESTER_SETUP §7).
+            **Auto-update:** the signed `latest.json` and updater artifacts are
+            consumed automatically through `/desktop/updates/latest.json`.
+
+      - name: Verify published updater feed and artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          feed="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/latest.json"
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --location "$feed" -o published-latest.json; then break; fi
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep $((attempt * 3))
+          done
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const feed = JSON.parse(fs.readFileSync('published-latest.json', 'utf8'));
+          if (feed.version !== '${{ steps.version.outputs.version }}') throw new Error('Published updater version mismatch');
+          const win = feed.platforms?.['windows-x86_64'];
+          if (!win?.signature || win.signature.length < 64) throw new Error('Published Windows updater signature is missing');
+          if (!win.url?.startsWith('https://github.com/${{ github.repository }}/releases/download/')) throw new Error('Published updater URL is untrusted');
+          console.log(win.url);
+          NODE
+          artifact_url=$(node -p "require('./published-latest.json').platforms['windows-x86_64'].url")
+          curl --fail --silent --show-error --location --range 0-0 "$artifact_url" -o /dev/null
