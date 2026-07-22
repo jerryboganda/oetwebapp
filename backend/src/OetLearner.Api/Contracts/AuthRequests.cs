@@ -11,6 +11,7 @@ public record RegisterRequest(
     string? ExamTypeId = null,
     string? ProfessionId = null,
     string? CountryTarget = null,
+    DateOnly? TargetExamDate = null,
     bool? AgreeToTerms = null,
     bool? AgreeToPrivacy = null,
     bool? MarketingOptIn = null,

@@ -99,6 +99,17 @@ public sealed class AuthService(
         var professionId = RequireTrimmed(request.ProfessionId, "profession_required", "Profession is required.");
         var countryTarget = TargetCountryOptions.Canonicalize(request.CountryTarget);
 
+        if (request.TargetExamDate is null)
+        {
+            throw ApiException.Validation("target_exam_date_required", "Your target OET exam date is required.");
+        }
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        if (request.TargetExamDate.Value < today)
+        {
+            throw ApiException.Validation("target_exam_date_in_past", "Your target OET exam date must be today or later.");
+        }
+        var targetExamDate = request.TargetExamDate.Value;
+
         if (string.IsNullOrWhiteSpace(firstName))
         {
             throw ApiException.Validation("first_name_required", "First name is required.");
@@ -177,6 +188,7 @@ public sealed class AuthService(
             ProfessionId = signupSelection.Profession.Id,
             SessionId = string.Empty,
             CountryTarget = countryTarget,
+            TargetExamDate = targetExamDate,
             MobileNumber = mobileNumber,
             AgreeToTerms = request.AgreeToTerms ?? false,
             AgreeToPrivacy = request.AgreeToPrivacy ?? false,

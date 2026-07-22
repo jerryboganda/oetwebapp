@@ -726,6 +726,7 @@ public class AuthFlowsTests
             professionId = "nursing",
             sessionId = "session-oet-nursing-apr",
             countryTarget = "Australia",
+            targetExamDate = "2030-01-01",
             agreeToTerms = true,
             agreeToPrivacy = true,
             marketingOptIn = false
@@ -813,6 +814,47 @@ public class AuthFlowsTests
                 countryTarget: "Atlantis")));
 
         Assert.Equal("country_target_invalid", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AuthService_RegisterLearner_RejectsMissingTargetExamDate()
+    {
+        var harness = CreateAuthServiceHarness();
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => harness.Service.RegisterLearnerAsync(
+            CreateLearnerRegisterRequest(
+                email: $"learner-{Guid.NewGuid():N}@example.test") with { TargetExamDate = null }));
+
+        Assert.Equal("target_exam_date_required", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AuthService_RegisterLearner_RejectsTargetExamDateInThePast()
+    {
+        var harness = CreateAuthServiceHarness();
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => harness.Service.RegisterLearnerAsync(
+            CreateLearnerRegisterRequest(
+                email: $"learner-{Guid.NewGuid():N}@example.test",
+                targetExamDate: DateOnly.FromDateTime(harness.Now.UtcDateTime.AddDays(-1)))));
+
+        Assert.Equal("target_exam_date_in_past", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AuthService_RegisterLearner_PersistsTargetExamDateOnRegistrationProfile()
+    {
+        var harness = CreateAuthServiceHarness();
+        var email = $"learner-{Guid.NewGuid():N}@example.test";
+        var targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(4));
+
+        await harness.Service.RegisterLearnerAsync(
+            CreateLearnerRegisterRequest(email: email, targetExamDate: targetExamDate));
+
+        await using var readDb = new LearnerDbContext(harness.DbOptions);
+        var account = await readDb.ApplicationUserAccounts.SingleAsync(x => x.Email == email);
+        var registrationProfile = await readDb.LearnerRegistrationProfiles.SingleAsync(x => x.ApplicationUserAccountId == account.Id);
+        Assert.Equal(targetExamDate, registrationProfile.TargetExamDate);
     }
 
     [Fact]
@@ -1165,6 +1207,7 @@ public class AuthFlowsTests
                 "examTypeId",
                 "professionId",
                 "countryTarget",
+                "targetExamDate",
                 "agreeToTerms",
                 "agreeToPrivacy",
                 "marketingOptIn",
@@ -1936,6 +1979,7 @@ public class AuthFlowsTests
         string examTypeId = "oet",
         string professionId = "nursing",
         string countryTarget = "Australia",
+        DateOnly? targetExamDate = null,
         bool agreeToTerms = true,
         bool agreeToPrivacy = true,
         bool marketingOptIn = true,
@@ -1951,6 +1995,7 @@ public class AuthFlowsTests
             examTypeId,
             professionId,
             countryTarget,
+            targetExamDate ?? DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
             agreeToTerms,
             agreeToPrivacy,
             marketingOptIn,
