@@ -79,6 +79,7 @@ export interface RegisterLearnerInput {
   examTypeId: string;
   professionId: string;
   countryTarget: string;
+  targetExamDate: string;
   agreeToTerms: boolean;
   agreeToPrivacy: boolean;
   marketingOptIn: boolean;

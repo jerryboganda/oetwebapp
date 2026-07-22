@@ -88,6 +88,7 @@ export function RegisterForm() {
       confirmPassword: '',
       countryTarget: '',
       email: externalEmail,
+      examDate: '',
       examTypeId: '',
       firstName: externalFirstName,
       lastName: externalLastName,
@@ -166,7 +167,7 @@ export function RegisterForm() {
     const fields =
       step === 1
         ? (['firstName', 'lastName', 'email', 'mobileNumber'] as const)
-        : (['examTypeId', 'professionId', 'countryTarget'] as const);
+        : (['examTypeId', 'professionId', 'countryTarget', 'examDate'] as const);
 
     const isValid = await form.trigger(fields);
     if (isValid) {
@@ -199,6 +200,7 @@ export function RegisterForm() {
           examTypeId: values.examTypeId,
           professionId: values.professionId,
           countryTarget: values.countryTarget,
+          targetExamDate: values.examDate,
           agreeToTerms: values.agreeToTerms,
           agreeToPrivacy: values.agreeToPrivacy,
           marketingOptIn: values.marketingOptIn,
@@ -417,6 +419,18 @@ export function RegisterForm() {
                 ))}
               </select>
               <p className={styles.fieldHint}>{errors.countryTarget?.message}</p>
+            </div>
+
+            <div className={styles.field}>
+              <label htmlFor="examDate">Target Exam Date</label>
+              <input
+                id="examDate"
+                type="date"
+                className={styles.input}
+                min={new Date().toISOString().slice(0, 10)}
+                {...form.register('examDate')}
+              />
+              <p className={styles.fieldHint}>{errors.examDate?.message}</p>
             </div>
           </>
         ) : null}

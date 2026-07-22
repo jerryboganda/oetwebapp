@@ -11,6 +11,16 @@ export const signupPayloadSchema = z
       .min(2, "Select your target country")
       .refine(isTargetCountry, "Select a valid target country"),
     email: z.email("Enter a valid email address"),
+    examDate: z
+      .string()
+      .min(1, "Select your target exam date")
+      .refine((value) => {
+        const parsed = new Date(`${value}T00:00:00`);
+        if (Number.isNaN(parsed.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return parsed >= today;
+      }, "Target exam date must be today or later"),
     examTypeId: z.string().min(1, "Select an exam"),
     firstName: z.string().min(2, "First name is required"),
     lastName: z.string().min(2, "Last name is required"),

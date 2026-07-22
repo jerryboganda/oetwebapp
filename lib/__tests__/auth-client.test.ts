@@ -186,6 +186,7 @@ describe('auth-client', () => {
       examTypeId: 'oet',
       professionId: 'nursing',
       countryTarget: 'Australia',
+      targetExamDate: '2030-01-01',
       agreeToTerms: true,
       agreeToPrivacy: true,
       marketingOptIn: false,

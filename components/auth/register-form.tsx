@@ -175,6 +175,11 @@ export function RegisterForm() {
           firstName: values.firstName.trim(),
           lastName: values.lastName.trim(),
           mobileNumber: values.mobileNumber.trim(),
+          // This legacy step form (superseded by register-original-form.tsx,
+          // the routed /register implementation) never collected an exam
+          // date; keep the type contract satisfied without inventing a
+          // fake user-entered value.
+          targetExamDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 180).toISOString().slice(0, 10),
           examTypeId: values.examTypeId,
           professionId: values.professionId,
           countryTarget: values.countryTarget,

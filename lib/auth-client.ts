@@ -404,6 +404,7 @@ export async function registerLearner(
     examTypeId: input.examTypeId,
     professionId: input.professionId,
     countryTarget: input.countryTarget,
+    targetExamDate: input.targetExamDate,
     agreeToTerms: input.agreeToTerms,
     agreeToPrivacy: input.agreeToPrivacy,
     marketingOptIn: input.marketingOptIn,
