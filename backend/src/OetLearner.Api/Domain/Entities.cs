@@ -82,6 +82,12 @@ public class LearnerGoal
     public string ProfessionId { get; set; } = default!;
 
     public DateOnly? TargetExamDate { get; set; }
+
+    /// <summary>True once a real candidate- or admin-supplied exam date has
+    /// been recorded (registration, admin Add-User, or the /goals form).
+    /// False for the lazy "+3 months" placeholder <see cref="CreateDefaultGoal"/>
+    /// stamps on first touch — used to force the onboarding exam-date gate.</summary>
+    public bool TargetExamDateSetByUser { get; set; }
     public string? OverallGoal { get; set; }
     public int? TargetWritingScore { get; set; }
     public int? TargetSpeakingScore { get; set; }

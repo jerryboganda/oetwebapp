@@ -35,6 +35,12 @@ public class LearnerRegistrationProfile
     [MaxLength(64)]
     public string CountryTarget { get; set; } = default!;
 
+    /// <summary>Candidate's target OET exam date, collected at registration
+    /// (or backfilled by an admin's Add-User form). Read once by
+    /// <c>LearnerService.CreateDefaultGoal</c>'s callers the first time the
+    /// learner's <see cref="LearnerGoal"/> row is lazily created.</summary>
+    public DateOnly? TargetExamDate { get; set; }
+
     [MaxLength(32)]
     public string MobileNumber { get; set; } = default!;
 
