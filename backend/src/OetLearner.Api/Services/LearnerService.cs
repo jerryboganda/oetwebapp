@@ -7962,8 +7962,29 @@ public partial class LearnerService(
                   || coupon.Id.ToLower() == normalized, cancellationToken);
       }
 
+      /// <summary>TutorBook packages ("tutor-book" plan, "tutor-book-addon" add-on) are
+      /// manual-grant-only per owner directive 2026-07-22: no self-checkout, admins grant
+      /// access per-user from the "Manage access" panel (<see cref="UserAccessAllocationService"/>).
+      /// Every purchase entry point resolves its target through
+      /// <see cref="FindPurchasableBillingPlanAsync"/>/<see cref="FindPurchasableBillingAddOnAsync"/>,
+      /// so gating here blocks quote building, plan changes, and cart add-ons in one place.</summary>
+      private static readonly HashSet<string> ManualGrantOnlyPlanCodes = new(StringComparer.OrdinalIgnoreCase) { "tutor-book" };
+      private static readonly HashSet<string> ManualGrantOnlyAddOnCodes = new(StringComparer.OrdinalIgnoreCase) { "tutor-book-addon" };
+
+      private static void EnsureNotManualGrantOnly(string code)
+      {
+          if (ManualGrantOnlyPlanCodes.Contains(code) || ManualGrantOnlyAddOnCodes.Contains(code))
+          {
+              throw ApiException.Validation(
+                  "manual_grant_only",
+                  "This package is granted manually by an admin — it cannot be purchased directly. Please contact support to enable it on your account.",
+                  [new ApiFieldError("priceId", "manual_grant_only", "Contact support to enable this package.")]);
+          }
+      }
+
       private async Task<BillingPlan?> FindPurchasableBillingPlanAsync(string planCode, CancellationToken cancellationToken)
       {
+          if (!string.IsNullOrWhiteSpace(planCode)) EnsureNotManualGrantOnly(planCode.Trim());
           var plan = await FindBillingPlanAsync(planCode, cancellationToken);
           return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible && !plan.IsDraft
               ? plan
@@ -8025,6 +8046,7 @@ public partial class LearnerService(
 
       private async Task<BillingAddOn?> FindPurchasableBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
       {
+          if (!string.IsNullOrWhiteSpace(addOnCode)) EnsureNotManualGrantOnly(addOnCode.Trim());
           var addOn = await FindBillingAddOnAsync(addOnCode, cancellationToken);
           return addOn is not null && addOn.Status == BillingAddOnStatus.Active
               ? addOn

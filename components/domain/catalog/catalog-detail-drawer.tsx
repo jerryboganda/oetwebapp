@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, Clock, Layers, ShoppingCart, Tag } from 'lucide-react';
+import { CheckCircle2, Clock, Layers, MessageCircleQuestion, ShoppingCart, Tag } from 'lucide-react';
 import { Drawer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
@@ -126,6 +126,13 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
               <div className="flex items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-sm font-semibold text-success">
                 <CheckCircle2 className="h-4 w-4" /> This package is active on your account
               </div>
+            ) : plan.code === 'tutor-book' ? (
+              <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border bg-background-light px-4 py-3 text-center">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-muted">
+                  <MessageCircleQuestion className="h-4 w-4" /> Contact admin to enable
+                </span>
+                <span className="text-xs text-muted">TutorBook access is manual, per user — it isn&apos;t sold through self-checkout.</span>
+              </div>
             ) : (
               <button
                 type="button"
@@ -137,7 +144,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             )}
             <p className="mt-2 text-center text-xs text-muted">
               <Clock className="mr-1 inline h-3 w-3" />
-              Secure checkout · {formatAccessDuration(plan.accessDurationDays)}
+              {plan.code === 'tutor-book' ? 'Permanent access' : 'Secure checkout'} · {formatAccessDuration(plan.accessDurationDays)}
             </p>
           </div>
         </div>

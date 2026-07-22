@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Sparkles, Tag as TagIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock, MessageCircleQuestion, Sparkles, Tag as TagIcon } from 'lucide-react';
 import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
@@ -92,14 +92,25 @@ export default function PackageDetailPage() {
               {plan.originalPrice !== null && plan.originalPrice !== undefined && plan.originalPrice > plan.price && (
                 <div className="mt-1 text-sm text-white/70 line-through">was £{plan.originalPrice.toFixed(0)}</div>
               )}
-              <button
-                type="button"
-                onClick={() => router.push(`/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`)}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4A44F] px-5 py-2.5 text-sm font-bold text-[#0E2841] shadow-sm transition-colors hover:bg-[#bf8e3d]"
-              >
-                Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
-              </button>
-              <p className="mt-2 text-[10px] text-white/60">Charged in GBP. No auto-renewal.</p>
+              {plan.code === 'tutor-book' ? (
+                <div className="mt-4 flex flex-col items-center gap-1 rounded-lg border border-dashed border-white/30 bg-white/5 px-5 py-2.5 text-center">
+                  <span className="inline-flex items-center gap-2 text-sm font-bold text-white">
+                    <MessageCircleQuestion className="h-4 w-4" /> Contact admin to enable
+                  </span>
+                  <span className="text-[10px] text-white/60">Manual access only — not sold through self-checkout</span>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`)}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4A44F] px-5 py-2.5 text-sm font-bold text-[#0E2841] shadow-sm transition-colors hover:bg-[#bf8e3d]"
+                  >
+                    Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
+                  </button>
+                  <p className="mt-2 text-[10px] text-white/60">Charged in GBP. No auto-renewal.</p>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -167,7 +178,31 @@ export default function PackageDetailPage() {
               <AddonGroup title="Extra private speaking sessions" addons={speakingAddons} onSelect={setModalAddOn} />
             )}
             {tutorBookAddon && (
-              <AddonGroup title="The Tutor Book (£32, discount for enrolled students)" addons={[tutorBookAddon]} onSelect={setModalAddOn} />
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
+                  The Tutor Book (£32, discount for enrolled students)
+                </h3>
+                <div className="mt-3 max-w-sm rounded-2xl border border-border bg-surface p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-bold">{tutorBookAddon.name}</h4>
+                      {tutorBookAddon.description && <p className="mt-1 text-xs text-muted">{tutorBookAddon.description}</p>}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold">£{tutorBookAddon.price.toFixed(0)}</div>
+                      {tutorBookAddon.originalPrice != null && tutorBookAddon.originalPrice > tutorBookAddon.price && (
+                        <div className="text-xs text-muted line-through">was £{tutorBookAddon.originalPrice.toFixed(0)}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-col items-center gap-1 rounded-lg border border-dashed border-border bg-background-light px-3 py-2 text-center">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted">
+                      <MessageCircleQuestion className="h-3.5 w-3.5" /> Contact admin to enable
+                    </span>
+                    <span className="text-[10px] text-muted">Manual access only — not sold through self-checkout</span>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </section>

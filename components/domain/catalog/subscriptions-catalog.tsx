@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { CheckCircle2, ShoppingCart, Sparkles } from 'lucide-react';
+import { CheckCircle2, MessageCircleQuestion, ShoppingCart, Sparkles } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { CatalogEntitlementSummary } from './catalog-sections';
 import { PromoHeroSlider } from './promo-hero-slider';
@@ -181,6 +181,16 @@ function SubscriptionPackageCard({
             <span className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-2.5 text-sm font-semibold text-success">
               <CheckCircle2 className="h-4 w-4" /> Active on your account
             </span>
+          ) : pkg.section === 'tutorbook' ? (
+            <div
+              className="flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-border bg-background-light px-4 py-2.5 text-center"
+              title="TutorBook access is granted manually, per user, from the admin panel — it isn't sold through self-checkout."
+            >
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-muted">
+                <MessageCircleQuestion className="h-4 w-4" /> Contact admin to enable
+              </span>
+              <span className="text-[11px] text-muted">Manual access only — no self-checkout for TutorBook</span>
+            </div>
           ) : (
             <button
               type="button"
