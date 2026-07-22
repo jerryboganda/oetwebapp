@@ -16,6 +16,10 @@ interface VideoScopePickerProps {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
+  /** Overrides the default "nothing selected" footer copy (per-user allocation wording). */
+  emptyHint?: string;
+  /** Overrides the default "N allocated" footer copy. Receives the selection count. */
+  selectedHint?: (count: number) => string;
 }
 
 interface LanguageGroup {
@@ -113,7 +117,14 @@ function TriStateCheckbox({
  * selected video ids (empty = no restriction — the learner gets everything the
  * Videos module grants).
  */
-export function VideoScopePicker({ videos, selectedIds, onChange, disabled }: VideoScopePickerProps) {
+export function VideoScopePicker({
+  videos,
+  selectedIds,
+  onChange,
+  disabled,
+  emptyHint,
+  selectedHint,
+}: VideoScopePickerProps) {
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -280,8 +291,10 @@ export function VideoScopePicker({ videos, selectedIds, onChange, disabled }: Vi
 
       <p className="text-xs text-muted">
         {selectedIds.length === 0
-          ? 'Nothing selected — the learner gets every video their plan grants (for their profession).'
-          : `${selectedIds.length} video${selectedIds.length === 1 ? '' : 's'} allocated — the learner sees only these.`}
+          ? (emptyHint ?? 'Nothing selected — the learner gets every video their plan grants (for their profession).')
+          : (selectedHint ?? ((count) => `${count} video${count === 1 ? '' : 's'} allocated — the learner sees only these.`))(
+              selectedIds.length,
+            )}
       </p>
     </div>
   );

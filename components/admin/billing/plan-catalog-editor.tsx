@@ -22,6 +22,11 @@ import {
   PROFESSION_CATALOG_FALLBACK,
   type ProfessionCatalogEntry,
 } from '@/lib/api/professions';
+import {
+  PlanVideoOverrides,
+  EMPTY_PLAN_VIDEO_OVERRIDES,
+  type PlanVideoOverridesValue,
+} from './plan-video-overrides';
 
 interface AdminPlanRow {
   id: string;
@@ -63,8 +68,7 @@ const DELIVERY_METHOD_OPTIONS = [
 ];
 const MANUAL_DELIVERY_METHODS = ['manual_web', 'telegram', 'manual_material'];
 const DEFAULT_ACCESS_DURATION_DAYS = 180;
-const CONTENT_OVERRIDES_PLACEHOLDER =
-  '{\n  "videos": { "include": [], "exclude": [] },\n  "materialFolders": { "include": [], "exclude": [] }\n}';
+const MATERIAL_OVERRIDES_PLACEHOLDER = '{\n  "include": [],\n  "exclude": []\n}';
 
 // 'all' is a billing-only pseudo-profession (every discipline tab); the rest come from the
 // canonical SignupProfessionCatalog so this list can never drift from registration again.
@@ -132,7 +136,8 @@ interface FormState {
   deliveryMethod: string;
   telegramInviteUrl: string;
   deliveryInstructions: string;
-  contentOverridesJson: string;
+  videoOverrides: PlanVideoOverridesValue;
+  materialOverridesJson: string;
   invoiceDownloads: boolean;
   entitlements: Record<string, unknown>;
 }
@@ -144,13 +149,15 @@ function emptyForm(): FormState {
     displayOrder: '0', isVisible: true, isRenewable: true, status: 'active',
     subtests: [], modules: [...DEFAULT_NEW_PLAN_MODULES], profession: 'all',
     accessDurationDays: String(DEFAULT_ACCESS_DURATION_DAYS), deliveryMethod: 'automatic_web',
-    telegramInviteUrl: '', deliveryInstructions: '', contentOverridesJson: '',
+    telegramInviteUrl: '', deliveryInstructions: '',
+    videoOverrides: { ...EMPTY_PLAN_VIDEO_OVERRIDES }, materialOverridesJson: '',
     invoiceDownloads: false, entitlements: {},
   };
 }
 
 function toForm(row: AdminPlanRow): FormState {
   const ent = (row.entitlements ?? {}) as Record<string, unknown>;
+  const { videoOverrides, materialOverridesJson } = parseContentOverrides(row.contentOverridesJson);
   return {
     id: row.id,
     code: row.code ?? '',
@@ -173,7 +180,8 @@ function toForm(row: AdminPlanRow): FormState {
     deliveryMethod: (row.deliveryMethod && row.deliveryMethod.trim()) || 'automatic_web',
     telegramInviteUrl: row.telegramInviteUrl ?? '',
     deliveryInstructions: row.deliveryInstructions ?? '',
-    contentOverridesJson: prettyJsonOrRaw(row.contentOverridesJson),
+    videoOverrides,
+    materialOverridesJson,
     invoiceDownloads: ent.invoiceDownloadsAvailable === true,
     entitlements: ent,
   };
@@ -184,19 +192,47 @@ function intOr(v: string, fallback = 0): number {
   return Number.isFinite(n) ? Math.max(0, Math.round(n)) : fallback;
 }
 
-// Round-trips the stored overrides into the textarea. Unparseable stored JSON is shown
-// verbatim rather than discarded, so an admin can see and repair what is actually persisted.
-function prettyJsonOrRaw(value: string | null | undefined): string {
-  if (!value || !value.trim()) return '';
+/**
+ * Splits the stored ContentOverridesJson blob (shape: {videos:{include,exclude},
+ * materialFolders:{include,exclude}}) into the video picker's structured arrays and a raw
+ * textarea string for the materialFolders node only. Unparseable stored JSON is dumped into the
+ * material textarea verbatim rather than discarded, so an admin can see and repair what is
+ * actually persisted; the video picker just starts empty in that case.
+ */
+function parseContentOverrides(raw: string | null | undefined): {
+  videoOverrides: PlanVideoOverridesValue;
+  materialOverridesJson: string;
+} {
+  const empty = { videoOverrides: { ...EMPTY_PLAN_VIDEO_OVERRIDES }, materialOverridesJson: '' };
+  if (!raw || !raw.trim()) return empty;
   try {
-    return JSON.stringify(JSON.parse(value), null, 2);
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return empty;
+    const root = parsed as Record<string, unknown>;
+
+    const videoOverrides: PlanVideoOverridesValue = { include: [], exclude: [] };
+    const videosNode = root.videos;
+    if (videosNode && typeof videosNode === 'object' && !Array.isArray(videosNode)) {
+      const node = videosNode as Record<string, unknown>;
+      if (Array.isArray(node.include)) {
+        videoOverrides.include = node.include.filter((v): v is string => typeof v === 'string');
+      }
+      if (Array.isArray(node.exclude)) {
+        videoOverrides.exclude = node.exclude.filter((v): v is string => typeof v === 'string');
+      }
+    }
+
+    const materialNode = root.materialFolders ?? root.material_folders;
+    const materialOverridesJson = materialNode ? JSON.stringify(materialNode, null, 2) : '';
+
+    return { videoOverrides, materialOverridesJson };
   } catch {
-    return value;
+    return { videoOverrides: { ...EMPTY_PLAN_VIDEO_OVERRIDES }, materialOverridesJson: raw };
   }
 }
 
 /** Null = valid (empty is valid and means "no overrides"); string = the message to show. */
-function contentOverridesError(raw: string): string | null {
+function materialOverridesError(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   let parsed: unknown;
@@ -206,25 +242,34 @@ function contentOverridesError(raw: string): string | null {
     return error instanceof Error ? `Invalid JSON — ${error.message}` : 'Invalid JSON.';
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return 'Must be a JSON object, e.g. {"videos":{"exclude":["<id>"]}}.';
+    return 'Must be a JSON object, e.g. {"exclude":["<folder-id>"]}.';
   }
-  for (const [node, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (node !== 'videos' && node !== 'materialFolders') {
-      return `Unknown key "${node}". Only "videos" and "materialFolders" are read.`;
+  for (const [listName, list] of Object.entries(parsed as Record<string, unknown>)) {
+    if (listName !== 'include' && listName !== 'exclude') {
+      return `"${listName}" is not read. Use "include" or "exclude".`;
     }
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      return `"${node}" must be an object with "include" and/or "exclude" arrays.`;
-    }
-    for (const [listName, list] of Object.entries(value as Record<string, unknown>)) {
-      if (listName !== 'include' && listName !== 'exclude') {
-        return `"${node}.${listName}" is not read. Use "include" or "exclude".`;
-      }
-      if (!Array.isArray(list) || list.some((item) => typeof item !== 'string')) {
-        return `"${node}.${listName}" must be an array of id strings.`;
-      }
+    if (!Array.isArray(list) || list.some((item) => typeof item !== 'string')) {
+      return `"${listName}" must be an array of folder id strings.`;
     }
   }
   return null;
+}
+
+/** Recombines the video picker state + the raw materialFolders textarea into one
+ * ContentOverridesJson blob. Empty string = no overrides at all. */
+function buildContentOverridesJson(videoOverrides: PlanVideoOverridesValue, materialOverridesRaw: string): string {
+  const overrides: Record<string, unknown> = {};
+  if (videoOverrides.include.length > 0 || videoOverrides.exclude.length > 0) {
+    const videos: Record<string, string[]> = {};
+    if (videoOverrides.include.length > 0) videos.include = videoOverrides.include;
+    if (videoOverrides.exclude.length > 0) videos.exclude = videoOverrides.exclude;
+    overrides.videos = videos;
+  }
+  const trimmedMaterial = materialOverridesRaw.trim();
+  if (trimmedMaterial) {
+    overrides.materialFolders = JSON.parse(trimmedMaterial);
+  }
+  return Object.keys(overrides).length > 0 ? JSON.stringify(overrides) : '';
 }
 
 export interface PlanCatalogEditorProps {
@@ -282,9 +327,9 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
   const isManualDelivery = MANUAL_DELIVERY_METHODS.includes(form.deliveryMethod);
 
   // Live parse feedback while typing; handleSave re-checks so an invalid blob can never be sent.
-  const overridesError = useMemo(
-    () => contentOverridesError(form.contentOverridesJson),
-    [form.contentOverridesJson],
+  const materialsOverridesError = useMemo(
+    () => materialOverridesError(form.materialOverridesJson),
+    [form.materialOverridesJson],
   );
 
   const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -321,8 +366,8 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
 
     // Invalid JSON must never reach the API: the backend silently ignores overrides it cannot
     // parse, so a typo here would look saved but grant nothing.
-    const overridesProblem = contentOverridesError(form.contentOverridesJson);
-    if (overridesProblem) { setFeedback({ tone: 'error', message: `Content overrides: ${overridesProblem}` }); return; }
+    const overridesProblem = materialOverridesError(form.materialOverridesJson);
+    if (overridesProblem) { setFeedback({ tone: 'error', message: `Material folder overrides: ${overridesProblem}` }); return; }
 
     // Validated rather than defaulted: intOr('') is 0, and a silent 0 would expire every new
     // buyer's access the instant they paid.
@@ -345,8 +390,6 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
     // Preserve unknown entitlement keys; just toggle the invoice-downloads flag.
     const entitlements = { ...form.entitlements, invoiceDownloadsAvailable: form.invoiceDownloads };
 
-    const trimmedOverrides = form.contentOverridesJson.trim();
-
     const payload = {
       name,
       description: form.description.trim(),
@@ -366,7 +409,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       // Empty string, not undefined: clearing a stale invite link has to be expressible.
       telegramInviteUrl,
       deliveryInstructions: form.deliveryInstructions.trim(),
-      contentOverridesJson: trimmedOverrides ? JSON.stringify(JSON.parse(trimmedOverrides)) : '',
+      contentOverridesJson: buildContentOverridesJson(form.videoOverrides, form.materialOverridesJson),
       includedSubtestsJson: JSON.stringify(form.subtests),
       dashboardModulesJson: JSON.stringify(form.modules),
       entitlementsJson: JSON.stringify(entitlements),
@@ -588,22 +631,36 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
           </div>
 
           <div className="rounded-2xl border border-border bg-background-light/50 p-4">
-            <p className="mb-1 text-sm font-semibold text-navy">Content overrides (advanced)</p>
+            <p className="mb-1 text-sm font-semibold text-navy">Video overrides</p>
             <p className="mb-3 text-xs text-muted">
-              Escape hatch only. The subtests and the buyer’s profession already decide what this plan unlocks; use
-              this to add or remove specific items on top. Leave blank for no overrides. An <code>include</code> wins
-              over both the subtest/profession scope and an <code>exclude</code>, but never over a module disabled above.
+              The subtests above and the buyer’s profession already decide which videos this plan reaches; use this to
+              add or remove specific videos on top — e.g. give this plan a genuinely different video set from another
+              plan that shares the same subtests. Never overrides the Videos module toggle above: if that’s disabled,
+              nothing here unlocks anything.
+            </p>
+            <PlanVideoOverrides
+              value={form.videoOverrides}
+              onChange={(videoOverrides) => setField('videoOverrides', videoOverrides)}
+              disabled={!canWrite}
+            />
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background-light/50 p-4">
+            <p className="mb-1 text-sm font-semibold text-navy">Material folder overrides (advanced)</p>
+            <p className="mb-3 text-xs text-muted">
+              Escape hatch only. Leave blank for no overrides. An <code>include</code> wins over both the
+              subtest/profession scope and an <code>exclude</code>, but never over a module disabled above.
             </p>
             <Textarea
               label="Overrides JSON"
-              value={form.contentOverridesJson}
-              onChange={(e) => setField('contentOverridesJson', e.target.value)}
-              rows={7}
+              value={form.materialOverridesJson}
+              onChange={(e) => setField('materialOverridesJson', e.target.value)}
+              rows={5}
               spellCheck={false}
               className="font-mono text-xs"
-              placeholder={CONTENT_OVERRIDES_PLACEHOLDER}
-              error={overridesError ?? undefined}
-              hint={overridesError ? undefined : 'Valid. Ids are video ids and material folder ids.'}
+              placeholder={MATERIAL_OVERRIDES_PLACEHOLDER}
+              error={materialsOverridesError ?? undefined}
+              hint={materialsOverridesError ? undefined : 'Valid. Ids are material folder ids.'}
             />
           </div>
 
