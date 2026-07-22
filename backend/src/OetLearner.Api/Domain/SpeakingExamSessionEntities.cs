@@ -68,6 +68,18 @@ public class SpeakingExamSession
     [MaxLength(64)]
     public string? MockSetId { get; set; }
 
+    /// <summary>Set when this AI exam was launched from the Mock Center's
+    /// Speaking Gateway (2026-07 7-day AI/tutor rule) instead of the
+    /// standalone Speaking hub. Links back to the specific
+    /// <c>MockAttempt</c>/<c>MockSectionAttempt</c> so completion can write
+    /// the mock section's evidence and the mock report can tell an
+    /// AI-graded Speaking section apart from a human-marked one.</summary>
+    [MaxLength(64)]
+    public string? MockAttemptId { get; set; }
+
+    [MaxLength(64)]
+    public string? MockSectionId { get; set; }
+
     /// <summary>The two role-play cards for this exam. The candidate is the
     /// doctor in both. Resolved at create time and pinned.</summary>
     [MaxLength(64)]
