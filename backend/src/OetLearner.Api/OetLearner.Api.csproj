@@ -96,7 +96,7 @@
          ClassNotificationService to generate .ics calendar invites attached
          to live-class enrollment confirmations and T-24h reminder emails.
          License: MIT. -->
-    <PackageReference Include="Ical.Net" Version="4.2.0" />
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
     <!-- MailKit — cross-platform SMTP client (and MimeKit message model). Used
          by SmtpEmailSender to deliver transactional mail via the Brevo SMTP
          relay. REQUIRED over System.Net.Mail.SmtpClient because the BCL client
