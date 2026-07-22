@@ -163,7 +163,7 @@ public partial class LearnerService(
     public async Task<object> GetBootstrapAsync(string userId, CancellationToken cancellationToken)
     {
         var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
-        var onboarding = BuildOnboardingStateDto(profile.User);
+        var onboarding = BuildOnboardingStateDto(profile.User, examDateRequired: !profile.Goal.TargetExamDateSetByUser);
         var goals = GoalDto(profile.Goal);
         var readiness = await GetReadinessForLoadedProfileAsync(profile, cancellationToken);
         var freeze = await GetFreezeStatusForLoadedUserAsync(profile.User, cancellationToken);
@@ -297,10 +297,14 @@ public partial class LearnerService(
     public async Task<object> GetOnboardingStateAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await EnsureUserAsync(userId, cancellationToken);
-        return BuildOnboardingStateDto(user);
+        var examDateSetByUser = await db.Goals.AsNoTracking()
+            .Where(g => g.UserId == userId)
+            .Select(g => (bool?)g.TargetExamDateSetByUser)
+            .SingleOrDefaultAsync(cancellationToken) ?? false;
+        return BuildOnboardingStateDto(user, examDateRequired: !examDateSetByUser);
     }
 
-    private static object BuildOnboardingStateDto(LearnerUser user) => new
+    private static object BuildOnboardingStateDto(LearnerUser user, bool examDateRequired) => new
     {
         completed = user.OnboardingCompleted,
         currentStep = user.OnboardingCurrentStep,
@@ -309,7 +313,8 @@ public partial class LearnerService(
         startedAt = user.OnboardingStartedAt,
         completedAt = user.OnboardingCompletedAt,
         checkpoint = user.OnboardingCompleted ? "goals" : "welcome",
-        resumeRoute = user.OnboardingCompleted ? "/dashboard" : "/onboarding"
+        resumeRoute = user.OnboardingCompleted ? "/dashboard" : "/onboarding",
+        examDateRequired
     };
 
     public async Task<object> StartOnboardingAsync(string userId, CancellationToken cancellationToken)
@@ -492,7 +497,11 @@ public partial class LearnerService(
 
         goal.ExamFamilyCode = examFamilyCode;
         if (!string.IsNullOrWhiteSpace(request.ProfessionId)) goal.ProfessionId = request.ProfessionId;
-        if (request.TargetExamDate.HasValue) goal.TargetExamDate = request.TargetExamDate;
+        if (request.TargetExamDate.HasValue)
+        {
+            goal.TargetExamDate = request.TargetExamDate;
+            goal.TargetExamDateSetByUser = true;
+        }
         if (request.OverallGoal is not null) goal.OverallGoal = request.OverallGoal;
         if (request.TargetWritingScore.HasValue) goal.TargetWritingScore = request.TargetWritingScore;
         if (request.TargetSpeakingScore.HasValue) goal.TargetSpeakingScore = request.TargetSpeakingScore;

@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
@@ -53,6 +55,90 @@ public class LearnerGoalExamDateTests : IClassFixture<TestWebApplicationFactory>
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var goal = await db.Goals.SingleAsync(g => g.UserId == userId);
         Assert.False(goal.TargetExamDateSetByUser);
+    }
+
+    [Fact]
+    public async Task OnboardingState_ExamDateRequired_WhenNoConfirmedGoal()
+    {
+        var userId = "examdate-onboarding-required";
+        await SeedLearnerWithoutRegistrationProfileAsync(userId);
+
+        using var client = CreateDebugClient(userId);
+        var response = await client.GetAsync("/v1/learner/onboarding/state");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("examDateRequired").GetBoolean());
+    }
+
+    [Fact]
+    public async Task OnboardingState_ExamDateNotRequired_WhenGoalConfirmed()
+    {
+        var userId = "examdate-onboarding-confirmed";
+        var registeredDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(60));
+        await SeedLearnerWithRegistrationProfileAsync(userId, registeredDate);
+
+        using var client = CreateDebugClient(userId);
+        // Trigger lazy goal creation first (mirrors real traffic: /v1/settings
+        // is hit long before onboarding state on a fresh session).
+        (await client.GetAsync("/v1/settings")).EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/v1/learner/onboarding/state");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("examDateRequired").GetBoolean());
+    }
+
+    [Fact]
+    public async Task PatchGoals_SetsExamDateSetByUser_WhenTargetExamDateProvided()
+    {
+        var userId = "examdate-patch-goals";
+        await SeedLearnerWithoutRegistrationProfileAsync(userId);
+
+        using var client = CreateDebugClient(userId);
+        // Establish the lazy placeholder goal first (TargetExamDateSetByUser=false).
+        (await client.GetAsync("/v1/settings")).EnsureSuccessStatusCode();
+
+        var newExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(120));
+        var patchResponse = await client.PatchAsJsonAsync("/v1/learner/goals/", new { targetExamDate = newExamDate });
+        patchResponse.EnsureSuccessStatusCode();
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var goal = await db.Goals.SingleAsync(g => g.UserId == userId);
+        Assert.Equal(newExamDate, goal.TargetExamDate);
+        Assert.True(goal.TargetExamDateSetByUser);
+    }
+
+    [Fact]
+    public async Task SpeakingAccess_ReturnsRequiresAiOnlyTrue_WhenExamUnder7Days()
+    {
+        var userId = "examdate-speaking-access-soon";
+        await SeedLearnerWithRegistrationProfileAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2)));
+
+        using var client = CreateDebugClient(userId);
+        (await client.GetAsync("/v1/settings")).EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/v1/mocks/speaking-access");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("requiresAiOnly").GetBoolean());
+    }
+
+    [Fact]
+    public async Task SpeakingAccess_ReturnsRequiresAiOnlyFalse_WhenExam7OrMoreDaysAway()
+    {
+        var userId = "examdate-speaking-access-later";
+        await SeedLearnerWithRegistrationProfileAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(14)));
+
+        using var client = CreateDebugClient(userId);
+        (await client.GetAsync("/v1/settings")).EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/v1/mocks/speaking-access");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("requiresAiOnly").GetBoolean());
     }
 
     private async Task SeedLearnerWithRegistrationProfileAsync(string userId, DateOnly targetExamDate)
