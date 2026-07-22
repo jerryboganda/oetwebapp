@@ -5438,6 +5438,7 @@ public partial class LearnerService(
                 {
                     User = user,
                     RegisteredTargetCountry = registration == null ? null : registration.CountryTarget,
+                    RegisteredTargetExamDate = registration == null ? (DateOnly?)null : registration.TargetExamDate,
                     Goal = loadedGoal,
                     Settings = loadedSettings,
                     Wallet = loadedWallet
@@ -5468,6 +5469,7 @@ public partial class LearnerService(
                 loaded.User.Id,
                 loaded.User.ActiveProfessionId,
                 registeredTargetCountry,
+                loaded.RegisteredTargetExamDate,
                 now);
             db.Goals.Add(goal);
             changed = true;
@@ -5720,11 +5722,12 @@ public partial class LearnerService(
         var now = DateTimeOffset.UtcNow;
         var changed = false;
         var registeredTargetCountry = await ResolveRegisteredTargetCountryAsync(userId, cancellationToken);
+        var registeredTargetExamDate = await ResolveRegisteredTargetExamDateAsync(userId, cancellationToken);
 
         var goal = await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (goal is null)
         {
-            goal = CreateDefaultGoal(userId, user.ActiveProfessionId, registeredTargetCountry, now);
+            goal = CreateDefaultGoal(userId, user.ActiveProfessionId, registeredTargetCountry, registeredTargetExamDate, now);
             db.Goals.Add(goal);
             changed = true;
         }
@@ -5790,6 +5793,15 @@ public partial class LearnerService(
         return TargetCountryOptions.TryCanonicalize(registeredTargetCountry, out var canonical)
             ? canonical
             : "Australia";
+    }
+
+    private async Task<DateOnly?> ResolveRegisteredTargetExamDateAsync(string userId, CancellationToken cancellationToken)
+    {
+        return await db.LearnerRegistrationProfiles
+            .AsNoTracking()
+            .Where(x => x.LearnerUserId == userId)
+            .Select(x => x.TargetExamDate)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 
     private static bool ShouldRestoreRegisteredTargetCountry(LearnerGoal goal, string registeredTargetCountry)
@@ -5931,13 +5943,14 @@ public partial class LearnerService(
         };
     }
 
-    private static LearnerGoal CreateDefaultGoal(string userId, string? professionId, string targetCountry, DateTimeOffset now)
+    private static LearnerGoal CreateDefaultGoal(string userId, string? professionId, string targetCountry, DateOnly? registeredTargetExamDate, DateTimeOffset now)
         => new()
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             ProfessionId = string.IsNullOrWhiteSpace(professionId) ? "nursing" : professionId,
-            TargetExamDate = DateOnly.FromDateTime(now.UtcDateTime.AddMonths(3)),
+            TargetExamDate = registeredTargetExamDate ?? DateOnly.FromDateTime(now.UtcDateTime.AddMonths(3)),
+            TargetExamDateSetByUser = registeredTargetExamDate.HasValue,
             OverallGoal = "Build a strong OET foundation and stay ready for exam day.",
             TargetWritingScore = 350,
             TargetSpeakingScore = 350,
