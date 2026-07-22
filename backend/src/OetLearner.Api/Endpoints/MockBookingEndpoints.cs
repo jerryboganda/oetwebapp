@@ -232,6 +232,12 @@ public static class MockBookingEndpoints
                 Id = $"mb-{Guid.NewGuid():N}",
                 UserId = userId,
                 MockBundleId = bundle.Id,
+                // Set when booking was reached from an in-progress mock attempt's
+                // Speaking Gateway (2026-07-22 7-day AI/tutor rule) — lets
+                // RequireProductiveSectionEvidenceAsync's hasBooking check find
+                // this booking for that specific attempt. Null for a standalone
+                // ahead-of-time booking made outside any active mock.
+                MockAttemptId = string.IsNullOrWhiteSpace(body.MockAttemptId) ? null : body.MockAttemptId,
                 ScheduledStartAt = scheduledStartAt,
                 TimezoneIana = timezoneIana,
                 Status = MockBookingStatuses.Scheduled,
@@ -549,7 +555,9 @@ public sealed record MockBookingCreateBody(
     string? BundleId,
     DateTimeOffset? ScheduledStartAt,
     string? Timezone,
-    bool? ConsentToRecording);
+    bool? ConsentToRecording,
+    string? MockAttemptId = null,
+    string? MockSectionId = null);
 
 /// <summary>Request body for <c>PATCH /v1/mocks/bookings/{bookingId}/reschedule</c>.</summary>
 public sealed record MockBookingRescheduleBody(DateTimeOffset? ScheduledStartAt);

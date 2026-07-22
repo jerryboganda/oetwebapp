@@ -7,7 +7,7 @@
 // availability so the learner immediately sees the updated grid.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CalendarDays,
   CheckCircle2,
@@ -86,6 +86,9 @@ function isSpeakingBundle(bundle: MockBundleOption): boolean {
 
 export default function NewMockBookingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mockAttemptId = searchParams?.get('mockAttemptId') ?? undefined;
+  const mockSectionId = searchParams?.get('mockSectionId') ?? undefined;
 
   const timezone = useMemo(() => {
     try {
@@ -198,6 +201,8 @@ export default function NewMockBookingPage() {
         scheduledStartAt: selectedSlot,
         timezone,
         consentToRecording: true,
+        mockAttemptId,
+        mockSectionId,
       });
       analytics.track('mock_booking_created', {
         bundleId: selectedBundle.bundleId,
@@ -218,7 +223,7 @@ export default function NewMockBookingPage() {
       }
       setSubmitting(false);
     }
-  }, [consent, loadAvailability, router, selectedBundle, selectedSlot, timezone]);
+  }, [consent, loadAvailability, router, selectedBundle, selectedSlot, timezone, mockAttemptId, mockSectionId]);
 
   const dateIndex = dateRange.findIndex((day) => toDateInputValue(day) === date);
   const canShiftBackward = dateIndex > 0;
