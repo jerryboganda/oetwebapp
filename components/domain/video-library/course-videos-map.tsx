@@ -29,14 +29,17 @@ export function CourseVideosMap({ onAdvanced }: { onAdvanced: () => void }) {
       {!data && !error ? <div className="flex items-center gap-2 text-sm text-admin-fg-muted"><Loader2 className="h-4 w-4 animate-spin" />Loading course map…</div> : null}
       {error ? <EmptyState icon={<BookOpen className="h-6 w-6" />} title="Course map unavailable" description={error} /> : null}
       {data ? <div className="space-y-5">
+        {data.unmapped.length > 0 ? <div role="alert" className="rounded-admin border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">{data.unmapped.length} canonical video{data.unmapped.length === 1 ? '' : 's'} need language/subtest alignment before they can appear in the course map.</div> : null}
         <div role="list" aria-label="Course video professions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {data.professions.map((profession) => (
-            <button key={profession.id} type="button" role="listitem" onClick={() => setSelectedId(profession.id)}
-              className={`rounded-admin border p-4 text-left transition ${selectedId === profession.id ? 'border-admin-primary bg-admin-primary-tint ring-1 ring-admin-primary' : 'border-admin-border bg-admin-bg-surface hover:border-admin-primary'}`}>
-              <Stethoscope className="mb-3 h-5 w-5 text-admin-primary" />
-              <span className="block text-sm font-bold text-admin-fg-strong">{profession.label}</span>
-              <span className="mt-1 block text-xs text-admin-fg-muted">{profession.languages.reduce((n, l) => n + l.sections.reduce((x, s) => x + s.count, 0), 0)} projected videos</span>
-            </button>
+            <div key={profession.id} role="listitem">
+              <button type="button" aria-label={`Open ${profession.label}`} onClick={() => setSelectedId(profession.id)}
+                className={`h-full w-full rounded-admin border p-4 text-left transition ${selectedId === profession.id ? 'border-admin-primary bg-admin-primary-tint ring-1 ring-admin-primary' : 'border-admin-border bg-admin-bg-surface hover:border-admin-primary'}`}>
+                <Stethoscope className="mb-3 h-5 w-5 text-admin-primary" />
+                <span className="block text-sm font-bold text-admin-fg-strong">{profession.label}</span>
+                <span className="mt-1 block text-xs text-admin-fg-muted">{profession.languages.reduce((n, l) => n + l.sections.reduce((x, s) => x + s.count, 0), 0)} projected videos</span>
+              </button>
+            </div>
           ))}
         </div>
 

@@ -132,7 +132,7 @@ public sealed class MaterialAccessService(
             .Where(f => contentFolderScope is null
                 ? (f.FolderId == null || visibleFolderIds.Contains(f.FolderId))
                 : (f.FolderId != null && visibleFolderIds.Contains(f.FolderId) && contentFolderScope.Contains(f.FolderId)))
-            .Where(f => IsSubtestInScope(f.SubtestCode, scopeEntitlement))
+            .Where(f => IsMaterialFileSubtestInScope(f, folderDict, scopeEntitlement))
             .ToList();
 
         var rootFolders = allFolders
@@ -247,7 +247,7 @@ public sealed class MaterialAccessService(
             folderDict.TryGetValue(file.FolderId!, out var folder)
             && IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds)
             && IsContentScopeVisible(folder, folderDict, scopeEntitlement, disciplineUniverse, learnerDisciplines, basicEnglishScope)
-            && IsSubtestInScope(file.SubtestCode, scopeEntitlement)
+            && IsMaterialFileSubtestInScope(file, folderDict, scopeEntitlement)
             && (contentFolderScope is null || contentFolderScope.Contains(folder.Id)));
     }
 
@@ -599,9 +599,10 @@ public sealed class MaterialAccessService(
             return decided;
         }
 
-        return basicEnglishScope.IsFolderVisible(IsBasicEnglishFolder(folder, allFolders))
+        var isBasicEnglish = IsBasicEnglishFolder(folder, allFolders);
+        return basicEnglishScope.IsFolderVisible(isBasicEnglish)
             && IsDisciplineVisible(folder, allFolders, disciplineUniverse, learnerDisciplines)
-            && IsSubtestInScope(ResolveEffectiveSubtest(folder, allFolders), entitlement);
+            && (isBasicEnglish || IsSubtestInScope(ResolveEffectiveSubtest(folder, allFolders), entitlement));
     }
 
     /// <summary>
@@ -641,6 +642,20 @@ public sealed class MaterialAccessService(
         if (entitlement is null || entitlement.AllSubtestsIncluded) return true;
         if (string.IsNullOrWhiteSpace(subtestCode)) return true;
         return entitlement.IncludedSubtests.Contains(subtestCode.Trim());
+    }
+
+    internal static bool IsMaterialFileSubtestInScope(
+        MaterialFile file,
+        Dictionary<string, MaterialFolder> allFolders,
+        EffectiveEntitlementSnapshot? entitlement)
+    {
+        if (file.FolderId is not null
+            && allFolders.TryGetValue(file.FolderId, out var folder)
+            && IsBasicEnglishFolder(folder, allFolders))
+        {
+            return true;
+        }
+        return IsSubtestInScope(file.SubtestCode, entitlement);
     }
 
     /// <summary>Nearest SubtestCode walking up from the folder (folders inherit their parent's

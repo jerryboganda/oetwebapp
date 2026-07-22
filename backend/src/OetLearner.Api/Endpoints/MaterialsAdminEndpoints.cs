@@ -99,8 +99,8 @@ public static class MaterialsAdminEndpoints
             {
                 var scopedFolders = folders.Where(folder =>
                 {
-                    var scope = ResolveCourseScope(folder, byId);
-                    return string.Equals(ResolveCourseSubtest(folder, byId), subtest, StringComparison.OrdinalIgnoreCase)
+                    var scope = CourseContentMatrix.ResolveMaterialScope(folder, byId);
+                    return string.Equals(CourseContentMatrix.ResolveMaterialSubtest(folder, byId), subtest, StringComparison.OrdinalIgnoreCase)
                         && (scope.Kind == MaterialScopeKinds.Shared
                             || (scope.Kind == MaterialScopeKinds.Profession
                                 && string.Equals(scope.ProfessionId, professionId, StringComparison.OrdinalIgnoreCase)));
@@ -138,12 +138,23 @@ public static class MaterialsAdminEndpoints
                 sections = CourseContentMatrix.Subtests.Select(s => ProjectSection(p.Id, s)),
             });
 
-            var generalFolders = folders.Where(f => ResolveCourseScope(f, byId).Kind == MaterialScopeKinds.GeneralEnglish).ToList();
+            var generalFolders = folders.Where(f => CourseContentMatrix.ResolveMaterialScope(f, byId).Kind == MaterialScopeKinds.GeneralEnglish).ToList();
             var generalIds = generalFolders.Select(f => f.Id).ToHashSet(StringComparer.Ordinal);
             var generalFiles = files.Where(f => f.FolderId is not null && generalIds.Contains(f.FolderId)).ToList();
+            var scopeByFolder = folders.ToDictionary(f => f.Id, f => CourseContentMatrix.ResolveMaterialScope(f, byId), StringComparer.Ordinal);
+            var unmappedFolderIds = scopeByFolder.Where(pair => pair.Value.Kind is null).Select(pair => pair.Key).ToList();
+            var unmappedFileIds = files.Where(f => f.FolderId is null || !scopeByFolder.TryGetValue(f.FolderId, out var scope) || scope.Kind is null)
+                .Select(f => f.Id).ToList();
 
             return Results.Ok(new
             {
+                canonicalCounts = new
+                {
+                    totalFolders = folders.Count,
+                    totalFiles = files.Count,
+                    mediaAssets = files.Select(f => f.MediaAssetId).Distinct(StringComparer.Ordinal).Count(),
+                },
+                unmapped = new { folderIds = unmappedFolderIds, fileIds = unmappedFileIds },
                 professions = professionNodes,
                 generalEnglish = new
                 {
@@ -222,7 +233,12 @@ public static class MaterialsAdminEndpoints
             }
             if (dto.Description != null) folder.Description = dto.Description.Trim();
             if (dto.SubtestCode != null) folder.SubtestCode = dto.SubtestCode.Trim().ToLowerInvariant();
-            if (dto.ScopeKind != null) folder.ScopeKind = dto.ScopeKind.Trim().ToLowerInvariant();
+            if (dto.ScopeKind != null)
+            {
+                var scopeKind = dto.ScopeKind.Trim().ToLowerInvariant();
+                folder.ScopeKind = scopeKind.Length == 0 ? null : scopeKind;
+                if (folder.ScopeKind is null) folder.ProfessionId = null;
+            }
             if (dto.ProfessionId != null) folder.ProfessionId = dto.ProfessionId.Trim().ToLowerInvariant();
             if (!TryNormalizeScope(folder, out var scopeError))
                 return Results.BadRequest(new { code = "invalid_material_scope", message = scopeError });
@@ -749,42 +765,6 @@ public static class MaterialsAdminEndpoints
         return true;
     }
 
-    private static (string? Kind, string? ProfessionId) ResolveCourseScope(
-        MaterialFolder folder, Dictionary<string, MaterialFolder> allFolders)
-    {
-        var current = folder;
-        var guard = 0;
-        while (current is not null && guard++ < 64)
-        {
-            if (MaterialScopeKinds.IsValid(current.ScopeKind)) return (current.ScopeKind, current.ProfessionId);
-            if (MaterialAccessService.BasicEnglishFolderNames.Contains(current.Name?.Trim() ?? string.Empty))
-                return (MaterialScopeKinds.GeneralEnglish, null);
-            var profession = CourseContentMatrix.Professions.FirstOrDefault(p =>
-                string.Equals(p.Id, current.Name?.Trim(), StringComparison.OrdinalIgnoreCase)
-                || string.Equals(p.Label, current.Name?.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (profession is not null) return (MaterialScopeKinds.Profession, profession.Id);
-            if (current.ParentFolderId is null) break;
-            allFolders.TryGetValue(current.ParentFolderId, out current);
-        }
-        var subtest = ResolveCourseSubtest(folder, allFolders);
-        return subtest is "listening" or "reading" ? (MaterialScopeKinds.Shared, null) : (null, null);
-    }
-
-    private static string? ResolveCourseSubtest(MaterialFolder folder, Dictionary<string, MaterialFolder> allFolders)
-    {
-        var current = folder;
-        var guard = 0;
-        while (current is not null && guard++ < 64)
-        {
-            var explicitCode = current.SubtestCode?.Trim().ToLowerInvariant();
-            if (CourseContentMatrix.Subtests.Contains(explicitCode ?? string.Empty)) return explicitCode;
-            var byName = current.Name?.Trim().ToLowerInvariant();
-            if (CourseContentMatrix.Subtests.Contains(byName ?? string.Empty)) return byName;
-            if (current.ParentFolderId is null) break;
-            allFolders.TryGetValue(current.ParentFolderId, out current);
-        }
-        return null;
-    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────

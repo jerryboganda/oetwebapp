@@ -1,3 +1,5 @@
+using OetLearner.Api.Domain;
+
 namespace OetLearner.Api.Services.Content;
 
 /// <summary>
@@ -19,6 +21,10 @@ public static class CourseContentMatrix
     ];
 
     public static readonly IReadOnlyList<string> Subtests = ["listening", "reading", "writing", "speaking"];
+    private static readonly HashSet<string> GeneralEnglishFolderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Basic English Course", "Basic English", "General English", "Academic / General English",
+    };
 
     public static bool IsProfession(string? value) =>
         Professions.Any(p => string.Equals(p.Id, value?.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -48,7 +54,14 @@ public static class CourseContentMatrix
     {
         var lang = language?.Trim().ToLowerInvariant();
         var section = subtest?.Trim().ToLowerInvariant();
-        var normalized = targets.Select(x => x.Trim().ToLowerInvariant()).Where(IsProfession).Distinct().Order().ToArray();
+        var supplied = targets.Select(x => x.Trim().ToLowerInvariant()).Where(x => x.Length > 0).Distinct().ToArray();
+        var normalized = supplied.Where(IsProfession).Order().ToArray();
+
+        if (normalized.Length != supplied.Length)
+        {
+            message = "Video profession targets contain an unsupported profession id.";
+            return false;
+        }
 
         if (lang is not ("en" or "ar") || !Subtests.Contains(section ?? string.Empty))
         {
@@ -76,7 +89,9 @@ public static class CourseContentMatrix
 
     public static bool VideoAppearsFor(string professionId, string? language, string? subtest, IReadOnlyCollection<string> targets)
     {
-        if ((professionId is "dentistry" or "radiography") && (subtest is "writing" or "speaking")) return false;
+        professionId = professionId.Trim().ToLowerInvariant();
+        var section = subtest?.Trim().ToLowerInvariant();
+        if ((professionId is "dentistry" or "radiography") && (section is "writing" or "speaking")) return false;
         if (!TryValidateVideo(language, subtest, targets, out _)) return false;
         return targets.Count == 0 || targets.Contains(professionId, StringComparer.OrdinalIgnoreCase);
     }
@@ -84,10 +99,48 @@ public static class CourseContentMatrix
     public static string VideoSourceLabel(string? language, string? subtest, IReadOnlyCollection<string> targets)
     {
         if (string.Equals(language, "en", StringComparison.OrdinalIgnoreCase)) return "Shared English";
-        if (subtest is "listening" or "reading") return "Shared Arabic";
+        if (subtest?.Trim().ToLowerInvariant() is "listening" or "reading") return "Shared Arabic";
         if (targets.Contains("nursing", StringComparer.OrdinalIgnoreCase)) return "Nursing Arabic";
         if (targets.Contains("pharmacy", StringComparer.OrdinalIgnoreCase)) return "Pharmacy Arabic";
         return "Medicine Arabic (shared with Physiotherapy)";
+    }
+
+    public static (string? Kind, string? ProfessionId) ResolveMaterialScope(
+        MaterialFolder folder, IReadOnlyDictionary<string, MaterialFolder> allFolders)
+    {
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            if (MaterialScopeKinds.IsValid(current.ScopeKind)) return (current.ScopeKind, current.ProfessionId);
+            if (GeneralEnglishFolderNames.Contains(current.Name?.Trim() ?? string.Empty))
+                return (MaterialScopeKinds.GeneralEnglish, null);
+            var profession = Professions.FirstOrDefault(p =>
+                string.Equals(p.Id, current.Name?.Trim(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.Label, current.Name?.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (profession is not null) return (MaterialScopeKinds.Profession, profession.Id);
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+        var subtest = ResolveMaterialSubtest(folder, allFolders);
+        return subtest is "listening" or "reading" ? (MaterialScopeKinds.Shared, null) : (null, null);
+    }
+
+    public static string? ResolveMaterialSubtest(
+        MaterialFolder folder, IReadOnlyDictionary<string, MaterialFolder> allFolders)
+    {
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            var explicitCode = current.SubtestCode?.Trim().ToLowerInvariant();
+            if (Subtests.Contains(explicitCode ?? string.Empty)) return explicitCode;
+            var byName = current.Name?.Trim().ToLowerInvariant();
+            if (Subtests.Contains(byName ?? string.Empty)) return byName;
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+        return null;
     }
 }
 

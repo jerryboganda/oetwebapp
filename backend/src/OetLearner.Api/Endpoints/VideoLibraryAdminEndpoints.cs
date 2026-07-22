@@ -164,10 +164,10 @@ public static class VideoLibraryAdminEndpoints
         // nodes by design; no Bunny video or LibraryVideo record is duplicated.
         admin.MapGet("/course-map", async (LearnerDbContext db, CancellationToken ct) =>
         {
-            var videos = await db.LibraryVideos.AsNoTracking()
-                .Where(v => v.Status != ContentStatus.Archived)
+            var allVideos = await db.LibraryVideos.AsNoTracking()
                 .OrderBy(v => v.SortOrder).ThenBy(v => v.Title)
                 .ToListAsync(ct);
+            var videos = allVideos.Where(v => v.Status != ContentStatus.Archived).ToList();
             var parsed = videos.Select(v => new
             {
                 Video = v,
@@ -176,6 +176,16 @@ public static class VideoLibraryAdminEndpoints
 
             return Results.Ok(new
             {
+                canonicalCounts = new
+                {
+                    totalVideos = allVideos.Count,
+                    activeVideos = videos.Count,
+                    archivedVideos = allVideos.Count - videos.Count,
+                    bunnyVideoIds = allVideos.Count(v => !string.IsNullOrWhiteSpace(v.BunnyVideoId)),
+                },
+                unmapped = parsed.Where(row => !CourseContentMatrix.TryValidateVideo(
+                        row.Video.Language, row.Video.SubtestCode, row.Targets, out _))
+                    .Select(row => new { canonicalVideoId = row.Video.Id, row.Video.Title }),
                 professions = CourseContentMatrix.Professions.Select(profession => new
                 {
                     profession.Id,
@@ -198,7 +208,7 @@ public static class VideoLibraryAdminEndpoints
                                     language,
                                     sourceLabel = CourseContentMatrix.VideoSourceLabel(language, subtest, row.Targets),
                                     status = row.Video.Status.ToString(),
-                                    encodeStatus = row.Video.EncodeStatus.ToString(),
+                                    encodeStatus = VideoLibraryAdminService.EncodeStatusLabel(row.Video.EncodeStatus),
                                     bunnyVideoId = row.Video.BunnyVideoId,
                                 }).ToList();
                             return new

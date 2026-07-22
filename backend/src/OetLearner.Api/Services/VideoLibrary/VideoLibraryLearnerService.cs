@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Settings;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.VideoLibrary;
 
@@ -385,8 +386,14 @@ public sealed class VideoLibraryLearnerService(
 
     private static bool IsCourseProfessionVisible(LibraryVideo video, string? normalizedProfession)
     {
-        if ((normalizedProfession is "dentistry" or "radiography")
-            && (video.SubtestCode is "writing" or "speaking")) return false;
+        if (CourseContentMatrix.IsProfession(normalizedProfession)
+            && !string.IsNullOrWhiteSpace(video.Language)
+            && !string.IsNullOrWhiteSpace(video.SubtestCode))
+        {
+            return CourseContentMatrix.VideoAppearsFor(
+                normalizedProfession!, video.Language, video.SubtestCode,
+                VideoLibraryAdminService.ParseProfessionIds(video.ProfessionIdsJson));
+        }
         return IsProfessionVisible(video.ProfessionIdsJson, normalizedProfession);
     }
 
@@ -476,12 +483,16 @@ public sealed class VideoLibraryLearnerService(
             .Where(v => siblingIds.Contains(v.Id)
                 && v.Status == ContentStatus.Published
                 && (v.PublishAt == null || v.PublishAt <= now))
-            .Select(v => new { v.Id, v.ProfessionIdsJson, v.SubtestCode })
+            .Select(v => new { v.Id, v.ProfessionIdsJson, v.SubtestCode, v.Language })
             .ToListAsync(ct);
         var profession = await ResolveProfessionAsync(userId, ct);
         var visibleIds = visibleSiblings
-            .Where(v => !((profession is "dentistry" or "radiography") && (v.SubtestCode is "writing" or "speaking"))
-                && IsProfessionVisible(v.ProfessionIdsJson, profession))
+            .Where(v => CourseContentMatrix.IsProfession(profession)
+                && !string.IsNullOrWhiteSpace(v.Language)
+                && !string.IsNullOrWhiteSpace(v.SubtestCode)
+                    ? CourseContentMatrix.VideoAppearsFor(profession!, v.Language, v.SubtestCode,
+                        VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson))
+                    : IsProfessionVisible(v.ProfessionIdsJson, profession))
             .Select(v => v.Id)
             .ToHashSet(StringComparer.Ordinal);
 

@@ -101,6 +101,8 @@ export interface MaterialCourseMapSection {
   folders: MaterialCourseMapFolder[]; files: MaterialCourseMapItem[];
 }
 export interface MaterialCourseMap {
+  canonicalCounts: { totalFolders: number; totalFiles: number; mediaAssets: number };
+  unmapped: { folderIds: string[]; fileIds: string[] };
   professions: { id: string; label: string; sections: MaterialCourseMapSection[] }[];
   generalEnglish: { id: string; label: string; folderCount: number; fileCount: number; folders: MaterialCourseMapFolder[]; files: MaterialCourseMapItem[] };
 }
@@ -159,7 +161,7 @@ export function adminUpdateMaterialFolder(
     name?: string;
     description?: string | null;
     subtestCode?: string | null;
-    scopeKind?: MaterialScopeKind | null;
+    scopeKind?: MaterialScopeKind | '' | null;
     professionId?: string | null;
     audienceMode?: MaterialAudienceMode;
     sortOrder?: number;

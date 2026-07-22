@@ -124,6 +124,25 @@ function flattenFolders(folders: MaterialFolderDto[], depth = 0): FlatFolder[] {
   return out;
 }
 
+function findFolder(folders: MaterialFolderDto[], id: string): MaterialFolderDto | null {
+  for (const folder of folders) {
+    if (folder.id === id) return folder;
+    const nested = findFolder(folder.folders ?? [], id);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function findFile(folders: MaterialFolderDto[], id: string): MaterialFileDto | null {
+  for (const folder of folders) {
+    const file = folder.files?.find((item) => item.id === id);
+    if (file) return file;
+    const nested = findFile(folder.folders ?? [], id);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 /** Breadcrumb path for a folder id, e.g. "Medicine Profession / Reading / Reading 1". */
 function buildFolderPath(flat: FlatFolder[], id: string | null): string {
   if (!id) return 'Root (no folder)';
@@ -347,7 +366,7 @@ export default function AdminMaterialsPage() {
           name: folderForm.name.trim(),
           description: folderForm.description || null,
           subtestCode: folderForm.subtestCode || null,
-          scopeKind: folderForm.scopeKind || null,
+          scopeKind: folderForm.scopeKind,
           professionId: folderForm.scopeKind === 'profession' ? folderForm.professionId : null,
           audienceMode: folderForm.audienceMode,
         });
@@ -618,8 +637,71 @@ export default function AdminMaterialsPage() {
     ));
   }
 
+  function openCourseCreateFolder(professionId: string | null, professionLabel: string, subtestCode: string | null) {
+    const isGeneralEnglish = professionId === null;
+    const isShared = subtestCode === 'listening' || subtestCode === 'reading';
+    const sectionLabel = subtestCode ? `${subtestCode[0].toUpperCase()}${subtestCode.slice(1)}` : '';
+    setEditingFolder(null);
+    setParentFolderIdForNew(null);
+    setFolderForm({
+      ...defaultFolderForm,
+      name: isGeneralEnglish ? 'General English' : isShared ? sectionLabel : `${professionLabel} ${sectionLabel}`,
+      subtestCode: subtestCode ?? '',
+      scopeKind: isGeneralEnglish ? 'general_english' : isShared ? 'shared' : 'profession',
+      professionId: !isGeneralEnglish && !isShared ? professionId ?? '' : '',
+    });
+    setViewMode('tree');
+    setFolderModalOpen(true);
+  }
 
-  if (viewMode === 'course') return <CourseMaterialsMap onAdvanced={() => setViewMode('tree')} />;
+  function openCourseEditFolder(folderId: string) {
+    const folder = findFolder(tree, folderId);
+    if (!folder) {
+      setToast({ variant: 'error', message: 'The canonical folder could not be loaded. Refresh and try again.' });
+      setViewMode('tree');
+      return;
+    }
+    setSelectedFolder(folder);
+    setViewMode('tree');
+    openEditFolder(folder);
+  }
+
+  function openCourseAddFile(folderId: string, subtestCode: string) {
+    const folder = findFolder(tree, folderId);
+    if (!folder) {
+      setToast({ variant: 'error', message: 'Create or refresh the destination folder before uploading a file.' });
+      setViewMode('tree');
+      return;
+    }
+    setSelectedFolder(folder);
+    setEditingFile(null);
+    setFileForm({ ...defaultFileForm, folderId, subtestCode });
+    setUploadFile(null);
+    setUploadProgress(0);
+    setViewMode('tree');
+    setFileModalOpen(true);
+  }
+
+  function openCourseEditFile(fileId: string) {
+    const file = findFile(tree, fileId);
+    if (!file) {
+      setToast({ variant: 'error', message: 'The canonical file could not be loaded. Refresh and try again.' });
+      setViewMode('tree');
+      return;
+    }
+    setSelectedFolder(file.folderId ? findFolder(tree, file.folderId) : null);
+    setViewMode('tree');
+    openEditFile(file);
+  }
+
+
+  if (viewMode === 'course') return <CourseMaterialsMap
+    onAdvanced={() => setViewMode('tree')}
+    onCreateFolder={openCourseCreateFolder}
+    onAddFile={openCourseAddFile}
+    onEditFolder={openCourseEditFolder}
+    onEditFile={openCourseEditFile}
+  />;
 
   return (
     <AdminCatalogLayout
