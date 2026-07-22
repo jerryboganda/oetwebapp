@@ -26,6 +26,68 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         _client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
     }
 
+    // ── User creation ────────────────────────────────
+
+    [Fact]
+    public async Task AdminCreateUser_Throws_WhenLearnerMissingTargetExamDate()
+    {
+        var response = await _client.PostAsJsonAsync("/v1/admin/users", new
+        {
+            name = "No Exam Date",
+            email = $"no-examdate-{Guid.NewGuid():N}@example.test",
+            role = "learner",
+            professionId = "nursing",
+            sendInvite = true
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("target_exam_date_required", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task AdminCreateUser_Throws_WhenTargetExamDateInPast()
+    {
+        var response = await _client.PostAsJsonAsync("/v1/admin/users", new
+        {
+            name = "Past Exam Date",
+            email = $"past-examdate-{Guid.NewGuid():N}@example.test",
+            role = "learner",
+            professionId = "nursing",
+            targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            sendInvite = true
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("target_exam_date_in_past", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task AdminCreateUser_PersistsTargetExamDate_ForLearner()
+    {
+        var email = $"examdate-{Guid.NewGuid():N}@example.test";
+        var targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(4));
+
+        var response = await _client.PostAsJsonAsync("/v1/admin/users", new
+        {
+            name = "Has Exam Date",
+            email,
+            role = "learner",
+            professionId = "nursing",
+            targetExamDate,
+            sendInvite = true
+        });
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var userId = json.RootElement.GetProperty("id").GetString();
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var profile = await db.LearnerRegistrationProfiles.SingleAsync(p => p.LearnerUserId == userId);
+        Assert.Equal(targetExamDate, profile.TargetExamDate);
+    }
+
     // ── Content ────────────────────────────────
 
     [Fact]

@@ -258,6 +258,7 @@ public record AdminUserProfileUpdateRequest(
     string? ProfessionId,
     string? ExamTypeId,
     string? CountryTarget,
+    DateOnly? TargetExamDate,
     string? Timezone,
     string? Locale,
     bool? MarketingOptIn,
@@ -279,6 +280,7 @@ public record AdminUserCreateRequest(
     string Role,
     string? ProfessionId,
     string? MobileNumber,
+    DateOnly? TargetExamDate,
     string? Password,
     bool SendInvite);
 

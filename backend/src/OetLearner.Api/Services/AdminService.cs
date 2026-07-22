@@ -3229,6 +3229,19 @@ public partial class AdminService(
             throw ApiException.Validation("profession_not_allowed", "Admin accounts cannot be assigned a profession.");
         }
 
+        if (role == ApplicationUserRoles.Learner)
+        {
+            if (request.TargetExamDate is null)
+            {
+                throw ApiException.Validation("target_exam_date_required", "A target exam date is required for learner accounts.");
+            }
+            var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+            if (request.TargetExamDate.Value < today)
+            {
+                throw ApiException.Validation("target_exam_date_in_past", "The target exam date must be today or later.");
+            }
+        }
+
         var usePassword = !string.IsNullOrWhiteSpace(request.Password);
         if (usePassword && request.Password!.Trim().Length < 8)
         {
@@ -3329,10 +3342,12 @@ public partial class AdminService(
             $"Created {role}: {email} ({(usePassword ? "password set" : "invite email")})", ct);
         await CommitIfOwnedAsync(tx, ct);
 
-        // Persist phone (and split name) into the learner registration profile via the
-        // existing profile updater, which create-fills required defaults. Best-effort:
-        // a profile failure must not undo an otherwise-created account.
-        if (role == ApplicationUserRoles.Learner && !string.IsNullOrWhiteSpace(request.MobileNumber))
+        // Persist phone, exam date (and split name) into the learner registration
+        // profile via the existing profile updater, which create-fills required
+        // defaults. Best-effort: a profile failure must not undo an otherwise-
+        // created account. Runs for every learner (not only when a phone number
+        // was given) so the mandatory TargetExamDate always lands.
+        if (role == ApplicationUserRoles.Learner)
         {
             var (firstName, lastName) = SplitDisplayName(displayName);
             try
@@ -3341,10 +3356,17 @@ public partial class AdminService(
                     DisplayName: null,
                     FirstName: firstName,
                     LastName: lastName,
-                    MobileNumber: request.MobileNumber!.Trim(),
+                    MobileNumber: string.IsNullOrWhiteSpace(request.MobileNumber) ? null : request.MobileNumber.Trim(),
                     ProfessionId: professionId,
                     ExamTypeId: null,
-                    CountryTarget: null,
+                    // UpdateUserProfileAsync's registration-profile creation branch
+                    // requires a non-null CountryTarget — without one the whole
+                    // profile row (and this TargetExamDate) silently fails to be
+                    // created (caught below as non-fatal). No country field exists
+                    // on the admin Add-User form, so default it the same way the
+                    // rest of the codebase does when nothing was registered.
+                    CountryTarget: "Australia",
+                    TargetExamDate: request.TargetExamDate,
                     Timezone: null,
                     Locale: null,
                     MarketingOptIn: null,
@@ -3712,6 +3734,7 @@ public partial class AdminService(
                || payload.ProfessionId is not null
                || payload.ExamTypeId is not null
                || payload.CountryTarget is not null
+               || payload.TargetExamDate is not null
                || payload.MarketingOptIn is not null
                || payload.AgreeToTerms is not null
                || payload.AgreeToPrivacy is not null;
@@ -3903,6 +3926,7 @@ public partial class AdminService(
                     ProfessionId = defaultProfession.Id,
                     SessionId = string.Empty,
                     CountryTarget = defaultCountry,
+                    TargetExamDate = request.TargetExamDate,
                     MobileNumber = Clean(request.MobileNumber) ?? string.Empty,
                     AgreeToTerms = request.AgreeToTerms ?? false,
                     AgreeToPrivacy = request.AgreeToPrivacy ?? false,
@@ -3972,6 +3996,8 @@ public partial class AdminService(
                 if (mobile is not null) { registration.MobileNumber = mobile; changes.Add("mobileNumber"); }
 
                 if (requestedCountryTarget is not null) { registration.CountryTarget = requestedCountryTarget; changes.Add("countryTarget"); }
+
+                if (request.TargetExamDate is not null) { registration.TargetExamDate = request.TargetExamDate; changes.Add("targetExamDate"); }
 
                 if (request.MarketingOptIn is { } marketing && registration.MarketingOptIn != marketing)
                 { registration.MarketingOptIn = marketing; changes.Add($"marketingOptIn→{marketing}"); }
