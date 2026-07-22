@@ -2192,6 +2192,7 @@ app.MapMockReadinessEndpoints();
 app.MapReadinessEndpoints();
 app.MapAdminReadinessEndpoints();
 app.MapMockBookingEndpoints();
+app.MapMockSpeakingGatewayEndpoints();
 app.MapLearnerActionsEndpoints();
 app.MapExpertEndpoints();
 app.MapExpertMessagingEndpoints();
