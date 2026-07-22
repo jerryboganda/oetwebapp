@@ -7,11 +7,14 @@ import type { ReactNode } from 'react';
 import type { UserRole } from '@/lib/types/auth';
 import { useAuth } from '@/contexts/auth-context';
 import { defaultRouteForRole, roleSatisfiesRequired } from '@/lib/auth-routes';
+import { useExamDateGate } from '@/hooks/use-exam-date-gate';
 
 interface AuthGuardProps {
   children: ReactNode;
   requiredRole?: UserRole;
 }
+
+const EXAM_DATE_EXEMPT_PATHS = ['/goals', '/onboarding', '/onboarding-tour'];
 
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const router = useRouter();
@@ -34,6 +37,13 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     nextPath === '/mfa/setup' ||
     nextPath.startsWith('/auth/callback/');
 
+  const examDateGateEnabled =
+    !isAuthRoute &&
+    isAuthenticated &&
+    role === 'learner' &&
+    !EXAM_DATE_EXEMPT_PATHS.some((path) => nextPath === path || nextPath.startsWith(`${path}/`));
+  const examDateRequired = useExamDateGate(examDateGateEnabled);
+
   useEffect(() => {
     if (isAuthRoute) {
       return;
@@ -55,14 +65,21 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
     if (requiredRole && !roleSatisfiesRequired(role, requiredRole)) {
       router.replace(role ? defaultRouteForRole(role) : '/');
+      return;
     }
-  }, [isAuthenticated, isAuthRoute, loading, nextPath, pendingMfaChallenge, requiredRole, role, router]);
+
+    if (examDateGateEnabled && examDateRequired) {
+      router.replace('/goals?required=examDate');
+    }
+  }, [isAuthenticated, isAuthRoute, loading, nextPath, pendingMfaChallenge, requiredRole, role, router, examDateGateEnabled, examDateRequired]);
 
   if (isAuthRoute) {
     return <>{children}</>;
   }
 
-  if (loading || pendingMfaChallenge || !isAuthenticated || (requiredRole && !roleSatisfiesRequired(role, requiredRole))) {
+  const blockedOnExamDate = examDateGateEnabled && examDateRequired === true;
+
+  if (loading || pendingMfaChallenge || !isAuthenticated || (requiredRole && !roleSatisfiesRequired(role, requiredRole)) || blockedOnExamDate) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background-light px-6">
         <div className="flex flex-col items-center gap-4 text-center text-muted">

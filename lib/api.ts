@@ -1346,7 +1346,15 @@ export async function fetchUserProfile(): Promise<UserProfile> {
   };
 }
 
-export async function fetchOnboardingState(): Promise<{ completed: boolean; currentStep: number; stepCount: number; canSkip: boolean; checkpoint: string; resumeRoute: string; }> {
+export async function fetchMockSpeakingAccess(): Promise<{ requiresAiOnly: boolean; daysUntilExam: number | null }> {
+  const data = await apiRequest<ApiRecord>('/v1/mocks/speaking-access');
+  return {
+    requiresAiOnly: Boolean(data.requiresAiOnly),
+    daysUntilExam: data.daysUntilExam === null || data.daysUntilExam === undefined ? null : Number(data.daysUntilExam),
+  };
+}
+
+export async function fetchOnboardingState(): Promise<{ completed: boolean; currentStep: number; stepCount: number; canSkip: boolean; checkpoint: string; resumeRoute: string; examDateRequired: boolean; }> {
   const data = await apiRequest<ApiRecord>('/v1/learner/onboarding/state');
   return {
     completed: Boolean(data.completed),
@@ -1355,6 +1363,7 @@ export async function fetchOnboardingState(): Promise<{ completed: boolean; curr
     canSkip: Boolean(data.canSkip),
     checkpoint: data.checkpoint ?? 'welcome',
     resumeRoute: data.resumeRoute ?? '/onboarding',
+    examDateRequired: Boolean(data.examDateRequired),
   };
 }
 
@@ -3329,6 +3338,8 @@ export async function createMockBookingV2(payload: {
   scheduledStartAt: string;
   timezone: string;
   consentToRecording: boolean;
+  mockAttemptId?: string;
+  mockSectionId?: string;
 }): Promise<MockBooking> {
   const response = await apiRequest<ApiRecord>('/v1/mocks/bookings', {
     method: 'POST',

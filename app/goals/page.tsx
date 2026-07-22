@@ -14,6 +14,7 @@ import { useAnalytics } from '@/hooks/use-analytics';
 import { type ExamFamilyCode, type SubTest } from '@/lib/mock-data';
 import { fetchExamFamilies, fetchUserProfile, updateUserProfile } from '@/lib/api';
 import { TARGET_COUNTRY_OPTIONS, isTargetCountry } from '@/lib/auth/target-countries';
+import { resetExamDateGateCache } from '@/hooks/use-exam-date-gate';
 import { useEffect, useMemo, useState } from 'react';
 
 const SUB_TESTS: SubTest[] = ['Writing', 'Speaking', 'Reading', 'Listening'];
@@ -78,7 +79,13 @@ const goalSchema = z.object({
   examFamilyCode: z.enum(['oet', 'ielts', 'pte']),
   ieltsPathway: z.enum(['academic', 'general']).optional(),
   profession: z.string().min(1, 'Please select your profession'),
-  examDate: z.string().optional(),
+  examDate: z
+    .string()
+    .min(1, 'Your target exam date is required')
+    .refine((value) => {
+      const parsed = new Date(`${value}T00:00:00`);
+      return !Number.isNaN(parsed.getTime());
+    }, 'Enter a valid date'),
   examMode: z.union([z.enum(['paper', 'computer', 'home', 'unsure']), z.literal('')]).optional(),
   confidence: z.union([z.enum(['beginner', 'intermediate', 'advanced', 'unsure']), z.literal('')]).optional(),
   targetWriting: scoreField,
@@ -260,7 +267,7 @@ export default function GoalSetupPage() {
         examFamilyCode: data.examFamilyCode as ExamFamilyCode,
         ieltsPathway: data.ieltsPathway,
         profession: data.profession,
-        examDate: data.examDate || null,
+        examDate: data.examDate,
         targetScores,
         previousAttempts: data.previousAttempts === '' || data.previousAttempts === undefined ? 0 : Number(data.previousAttempts),
         weakSubTests: (data.weakSubTests ?? []) as SubTest[],
@@ -271,6 +278,7 @@ export default function GoalSetupPage() {
         goalsComplete: true,
       });
 
+      resetExamDateGateCache();
       if (data.examMode) track('welcome_exam_mode_set', { mode: data.examMode });
       if (data.confidence) track('welcome_confidence_set', { level: data.confidence });
       track('goals_saved', { examFamilyCode: data.examFamilyCode });
@@ -355,7 +363,6 @@ export default function GoalSetupPage() {
               <Input
                 label="Exam Date"
                 type="date"
-                hint="Leave blank if not yet scheduled"
                 {...register('examDate')}
                 error={errors.examDate?.message}
               />
