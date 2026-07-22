@@ -90,6 +90,7 @@ export interface CreateAdminUserPayload {
   email: string;
   role: 'learner';
   professionId: string;
+  targetExamDate: string;
   mobileNumber?: string;
   password?: string;
   sendInvite: boolean;

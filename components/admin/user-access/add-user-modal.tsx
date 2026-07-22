@@ -41,6 +41,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
   const [email, setEmail] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [professionId, setProfessionId] = useState('');
+  const [targetExamDate, setTargetExamDate] = useState('');
   const [loginSetup, setLoginSetup] = useState<LoginSetupMode>('invite');
   const [password, setPassword] = useState('');
   const [access, setAccess] = useState<UserAccess>(initialAccess());
@@ -54,6 +55,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
     setEmail('');
     setMobileNumber('');
     setProfessionId('');
+    setTargetExamDate('');
     setLoginSetup('invite');
     setPassword('');
     setAccess(initialAccess());
@@ -84,6 +86,10 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
       setError('Please select a profession.');
       return;
     }
+    if (!targetExamDate) {
+      setError("Please set the candidate's target exam date.");
+      return;
+    }
     if (loginSetup === 'password' && password.length < 10) {
       setError('Password must be at least 10 characters long.');
       return;
@@ -96,6 +102,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
         email: trimmedEmail,
         role: 'learner',
         professionId,
+        targetExamDate,
         mobileNumber: mobileNumber.trim() || undefined,
         password: loginSetup === 'password' ? password : undefined,
         sendInvite: loginSetup === 'invite',
@@ -165,6 +172,14 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
             value={professionId}
             onChange={(event) => setProfessionId(event.target.value)}
             options={[{ value: '', label: 'Select a profession...' }, ...professionOptions]}
+            disabled={isSubmitting}
+          />
+          <Input
+            label="Target Exam Date"
+            type="date"
+            value={targetExamDate}
+            onChange={(event) => setTargetExamDate(event.target.value)}
+            min={new Date().toISOString().slice(0, 10)}
             disabled={isSubmitting}
           />
         </div>
