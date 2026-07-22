@@ -1194,25 +1194,48 @@ public sealed class MockService(
         payload["generatedAt"] = row.report.GeneratedAt;
         payload["studyPlanUpdateCta"] = new { label = "Update study plan", route = "/study-plan" };
         payload["isOfficialScore"] = false;
-        // Speaking & Writing mock sections are graded by a HUMAN examiner — never
-        // by AI. Only Reading & Listening are machine-scored (deterministic answer
-        // keys). Tailor the trust-boundary copy so we never claim S/W are AI-scored.
-        var hasHumanMarkedSection = await db.MockSectionAttempts.AsNoTracking()
-            .AnyAsync(s => s.MockAttemptId == row.attempt.Id
-                && (s.SubtestCode == "writing" || s.SubtestCode == "speaking"), ct);
-        payload["aiTrustBoundary"] = hasHumanMarkedSection
-            ? new
+        // Writing mock sections are always graded by a HUMAN examiner — never by
+        // AI. Speaking used to be human-marked-only too, but the 2026-07-22
+        // 7-day AI/tutor gate lets a mock's Speaking section be completed by
+        // the AI exam instead (forced when the candidate's exam is under 7
+        // days away, optional otherwise). Tailor the trust-boundary copy so it
+        // never claims AI-graded Speaking was "marked by a human examiner".
+        var hasWritingSection = await db.MockSectionAttempts.AsNoTracking()
+            .AnyAsync(s => s.MockAttemptId == row.attempt.Id && s.SubtestCode == "writing", ct);
+        var hasSpeakingSection = await db.MockSectionAttempts.AsNoTracking()
+            .AnyAsync(s => s.MockAttemptId == row.attempt.Id && s.SubtestCode == "speaking", ct);
+        var speakingWasAiGraded = hasSpeakingSection && await db.SpeakingExamSessions.AsNoTracking()
+            .AnyAsync(e => e.MockAttemptId == row.attempt.Id
+                && e.Mode == SpeakingExamMode.Ai
+                && e.State == SpeakingExamState.Completed, ct);
+
+        if (hasWritingSection || (hasSpeakingSection && !speakingWasAiGraded))
+        {
+            payload["aiTrustBoundary"] = new
             {
                 disclaimer = "Reading & Listening are auto-scored against the official answer key; Speaking & Writing are marked by a human examiner, not AI. Treat this as practice guidance, not an official exam result.",
                 provenanceLabel = "Human-marked Speaking/Writing · auto-scored Reading/Listening",
                 methodLabel = "Examiner-marked mock exam"
-            }
-            : new
+            };
+        }
+        else if (hasSpeakingSection && speakingWasAiGraded)
+        {
+            payload["aiTrustBoundary"] = new
+            {
+                disclaimer = "Reading & Listening are auto-scored against the official answer key; Speaking was scored by AI (your exam was inside the 7-day window, or you chose AI). Treat this as practice guidance, not an official exam result.",
+                provenanceLabel = "AI-scored Speaking · auto-scored Reading/Listening",
+                methodLabel = "AI-assisted mock exam"
+            };
+        }
+        else
+        {
+            payload["aiTrustBoundary"] = new
             {
                 disclaimer = "Reading & Listening mock scores are auto-scored against the official answer key and should be treated as practice guidance, not official exam results.",
                 provenanceLabel = "Auto-scored mock estimate",
                 methodLabel = "Auto-scored mock exam"
             };
+        }
         await SeedMockRemediationStudyPlanAsync(userId, row.attempt, row.report, payload, ct);
         await EnrichMockReportPayloadAsync(row.attempt, row.report, payload, ct);
         return payload;
@@ -3268,7 +3291,11 @@ public sealed class MockService(
             // diagnostic / practice / direct review.
             "listening" => $"/listening/paper/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
             "writing" => $"/mocks/writing/{Uri.EscapeDataString(sectionAttemptId ?? section.ContentPaperId)}?{query}",
-            "speaking" => $"/speaking/task/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
+            // Speaking routes through the AI/tutor gateway (2026-07-22 owner
+            // rule) instead of straight to the self-record task player — the
+            // gateway decides AI-only vs AI-or-tutor from the candidate's
+            // TargetExamDate and forwards this same query string onward.
+            "speaking" => $"/mocks/speaking/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
             _ => $"/mocks/player/{Uri.EscapeDataString(attemptId)}"
         };
     }
