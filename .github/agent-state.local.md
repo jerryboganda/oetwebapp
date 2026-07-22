@@ -28,4 +28,4 @@ iOS App Store distribution still requires Apple signing/App Store Connect creden
 
 ## Next Step
 
-Push `main`, publish fresh signed Windows and Android releases, then verify the production updater endpoints and release workflows.
+Desktop `0.6.6` and Android `1.3.4` are published. Their production discovery endpoints return the new versions, signatures/digests, and downloadable artifacts. No code-side release work remains; configure Apple signing/App Store Connect credentials before publishing iOS.
