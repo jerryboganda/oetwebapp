@@ -153,6 +153,60 @@ internal static class VideoLibraryAdminAnalyticsEndpoints
         })
         .WithAdminWrite("AdminContentWrite");
 
+        // Merge a duplicate/fragmented category into a canonical one: every video
+        // membership moves to the target (duplicates dropped, not stacked), then
+        // the now-empty source category is deleted. Fixes shelves that got split
+        // by inconsistent on-disk folder naming at upload time (e.g. "Arabic /
+        // Workshops" vs "Workshops / Arabic / Listening ...") without ever
+        // touching individual videos by hand.
+        admin.MapPost("/categories/{categoryId}/merge", async (
+            string categoryId,
+            AdminVideoCategoryMergeRequest request,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var targetId = request.TargetCategoryId?.Trim();
+            if (string.IsNullOrWhiteSpace(targetId) || string.Equals(targetId, categoryId, StringComparison.Ordinal))
+            {
+                return Results.BadRequest(new { code = "invalid_target", message = "Pick a different category to merge into." });
+            }
+
+            var source = await db.VideoCategories.FirstOrDefaultAsync(c => c.Id == categoryId, ct);
+            var target = await db.VideoCategories.FirstOrDefaultAsync(c => c.Id == targetId, ct);
+            if (source is null || target is null)
+            {
+                return Results.NotFound(new { code = "category_not_found", message = "Category not found." });
+            }
+
+            var sourceItems = await db.VideoCategoryItems.Where(i => i.CategoryId == categoryId).ToListAsync(ct);
+            var targetVideoIds = await db.VideoCategoryItems.AsNoTracking()
+                .Where(i => i.CategoryId == targetId)
+                .Select(i => new { i.VideoId, i.SortOrder })
+                .ToListAsync(ct);
+            var targetVideoSet = targetVideoIds.Select(i => i.VideoId).ToHashSet(StringComparer.Ordinal);
+            var nextSortOrder = (targetVideoIds.Count == 0 ? -1 : targetVideoIds.Max(i => i.SortOrder)) + 1;
+
+            var movedCount = 0;
+            foreach (var item in sourceItems)
+            {
+                if (!targetVideoSet.Add(item.VideoId))
+                {
+                    // Already a member of the target — drop the redundant row.
+                    db.VideoCategoryItems.Remove(item);
+                    continue;
+                }
+                item.CategoryId = targetId;
+                item.SortOrder = nextSortOrder++;
+                movedCount++;
+            }
+
+            db.VideoCategories.Remove(source);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { mergedVideoCount = movedCount, targetCategoryId = targetId });
+        })
+        .WithAdminWrite("AdminContentWrite");
+
         admin.MapPut("/categories/order", async (
             AdminOrderedIdsRequest request,
             LearnerDbContext db,
@@ -412,3 +466,4 @@ internal static class VideoLibraryAdminAnalyticsEndpoints
 
 public sealed record AdminVideoCategoryRequest(string? Title, string? Description);
 public sealed record AdminVideoCategoryPatchRequest(string? Title, string? Description, bool? IsActive, string? Status);
+public sealed record AdminVideoCategoryMergeRequest(string? TargetCategoryId);

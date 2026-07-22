@@ -8,7 +8,7 @@
  */
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, FolderTree, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, FolderTree, GitMerge, Pencil, Plus, Trash2 } from 'lucide-react';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { Button, buttonVariants } from '@/components/admin/ui/button';
@@ -34,6 +34,7 @@ import {
   adminCreateVideoCategory,
   adminDeleteVideoCategory,
   adminListVideoCategories,
+  adminMergeVideoCategory,
   adminOrderVideoCategories,
   adminPatchVideoCategory,
   type AdminVideoCategory,
@@ -60,6 +61,10 @@ export default function AdminVideoCategoriesPage() {
   const [deleting, setDeleting] = useState<AdminVideoCategory | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [orderBusy, setOrderBusy] = useState(false);
+
+  const [merging, setMerging] = useState<AdminVideoCategory | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,6 +151,31 @@ export default function AdminVideoCategoriesPage() {
     } finally {
       setDeleteBusy(false);
       setDeleting(null);
+    }
+  }
+
+  function openMerge(category: AdminVideoCategory) {
+    setMerging(category);
+    setMergeTargetId('');
+  }
+
+  async function handleMergeConfirm(event: FormEvent) {
+    event.preventDefault();
+    if (!merging || !mergeTargetId || mergeBusy) return;
+    setMergeBusy(true);
+    try {
+      const targetTitle = categories.find((c) => c.id === mergeTargetId)?.title ?? 'the target category';
+      const result = await adminMergeVideoCategory(merging.id, mergeTargetId);
+      setToast({
+        variant: 'success',
+        message: `Merged ${result.mergedVideoCount} video${result.mergedVideoCount === 1 ? '' : 's'} into "${targetTitle}". "${merging.title}" was removed.`,
+      });
+      setMerging(null);
+      await load();
+    } catch (err) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Merge failed.' });
+    } finally {
+      setMergeBusy(false);
     }
   }
 
@@ -242,6 +272,15 @@ export default function AdminVideoCategoriesPage() {
             <Button size="sm" variant="outline" onClick={() => openEdit(row)} aria-label={`Edit ${row.title}`}>
               <Pencil className="mr-1 h-4 w-4" /> Edit
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => openMerge(row)}
+              disabled={categories.length < 2}
+              aria-label={`Merge ${row.title} into another category`}
+            >
+              <GitMerge className="mr-1 h-4 w-4" /> Merge
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => setDeleting(row)} aria-label={`Delete ${row.title}`}>
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -326,6 +365,47 @@ export default function AdminVideoCategoriesPage() {
               </Button>
               <Button type="submit" variant="primary" disabled={savingEdit}>
                 Save category
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(merging)} onClose={() => setMerging(null)} title="Merge category" size="md">
+        {merging ? (
+          <form className="space-y-4" onSubmit={handleMergeConfirm}>
+            <p className="text-sm text-admin-fg-default">
+              Move all {merging.videoCount} video{merging.videoCount === 1 ? '' : 's'} from{' '}
+              <span className="font-semibold text-admin-fg-strong">&ldquo;{merging.title}&rdquo;</span> into another
+              category, then remove this one. Use this to fold duplicate shelves (e.g. the same folder saved under
+              a different word order) back into a single category.
+            </p>
+            <label className="block text-sm font-semibold text-admin-fg-strong">
+              Merge into
+              <select
+                value={mergeTargetId}
+                onChange={(e) => setMergeTargetId(e.target.value)}
+                required
+                className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-admin-accent"
+              >
+                <option value="" disabled>
+                  Choose a target category…
+                </option>
+                {categories
+                  .filter((c) => c.id !== merging.id)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title} ({c.videoCount} video{c.videoCount === 1 ? '' : 's'})
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+              <Button type="button" variant="ghost" onClick={() => setMerging(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={!mergeTargetId || mergeBusy}>
+                Merge category
               </Button>
             </div>
           </form>

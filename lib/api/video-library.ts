@@ -507,6 +507,13 @@ export function adminOrderVideoCategories(orderedIds: string[]): Promise<AdminVi
   return apiClient.put<AdminVideoCategory[]>(`${BASE}/categories/order`, { orderedIds });
 }
 
+export function adminMergeVideoCategory(
+  id: string,
+  targetCategoryId: string,
+): Promise<{ mergedVideoCount: number; targetCategoryId: string }> {
+  return apiClient.post(`${BASE}/categories/${encodeURIComponent(id)}/merge`, { targetCategoryId });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Analytics
 // ─────────────────────────────────────────────────────────────────────────────
