@@ -279,7 +279,9 @@ jobs:
           fi
           base_url="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}"
           # GitHub release assets replace spaces with dots in the asset name.
-          asset_name=$(basename "$exe" | tr ' ' '.')
+          # GitHub turns whitespace into dots and collapses adjacent dots in
+          # release asset names (for example `Dr. Hesham` becomes `Dr.Hesham`).
+          asset_name=$(basename "$exe" | sed -E 's/[[:space:]]+/./g; s/\.+/./g')
           win_sig=$(cat "$sig")
           platforms="    \"windows-x86_64\": {\n      \"signature\": \"${win_sig}\",\n      \"url\": \"${base_url}/${asset_name}\"\n    }"
 
