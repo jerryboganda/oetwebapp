@@ -313,18 +313,78 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(1, await _db.SpeakingExamSessions.CountAsync());
     }
 
-    // ── No AI for MOCK Speaking (2026-06-29 owner rule) ──────────────────────
+    // ── Full Mock Speaking 7-day AI/tutor gate (2026-07-22 owner rule) ───────
+    // Supersedes the old unconditional "mock Speaking always needs a
+    // live-tutor booking" rule: under 7 days to the candidate's target exam,
+    // only AI is allowed; 7+ days out, either mode is allowed.
+
+    private async Task SeedGoalAsync(DateOnly targetExamDate)
+    {
+        _db.Goals.Add(new LearnerGoal
+        {
+            Id = Guid.NewGuid(),
+            UserId = UserId,
+            ProfessionId = "medicine",
+            TargetExamDate = targetExamDate,
+            TargetExamDateSetByUser = true,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+    }
 
     [Fact]
-    public async Task CreateExam_WithMockSetId_InAiMode_IsRejected()
+    public async Task CreateExam_MockLaunch_RequiresAi_WhenExamLessThan7DaysAway()
     {
-        // A mock-set Speaking exam must be human-marked via a live-tutor booking.
-        // AI mode is forbidden — the guard fires before card resolution / wallet,
-        // so no seeding is needed.
+        await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3)));
+
         var ex = await Assert.ThrowsAsync<ApiException>(() =>
             _exams.CreateExamAsync(UserId,
-                new CreateSpeakingExamRequest("ai", MockSetId: "sms-anything", ProfessionId: "medicine"), default));
-        Assert.Equal("SPEAKING_MOCK_REQUIRES_LIVE_TUTOR", ex.ErrorCode);
+                new CreateSpeakingExamRequest("live_tutor", MockAttemptId: "mock_attempt_1", ProfessionId: "medicine", BookingId: "psb-mock-3"), default));
+        Assert.Equal("SPEAKING_MOCK_REQUIRES_AI", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExam_MockLaunch_AllowsAi_WhenExamLessThan7DaysAway()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync();
+        await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3)));
+
+        var exam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("ai", MockAttemptId: "mock_attempt_1", MockSectionId: "mock_section_1", ProfessionId: "medicine"), default);
+
+        Assert.Equal("ai", exam.Mode);
+    }
+
+    [Fact]
+    public async Task CreateExam_MockLaunch_AllowsEitherMode_WhenExam7OrMoreDaysAway()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync();
+        await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)));
+
+        var aiExam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("ai", MockAttemptId: "mock_attempt_2", ProfessionId: "medicine"), default);
+        Assert.Equal("ai", aiExam.Mode);
+
+        var tutorExam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("live_tutor", MockAttemptId: "mock_attempt_3", ProfessionId: "medicine", BookingId: "psb-mock-4"), default);
+        Assert.Equal("live_tutor", tutorExam.Mode);
+    }
+
+    [Fact]
+    public async Task CreateExam_MockLaunch_PersistsMockAttemptAndSectionId()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync();
+        await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)));
+
+        var exam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("ai", MockAttemptId: "mock_attempt_9", MockSectionId: "mock_section_9", ProfessionId: "medicine"), default);
+
+        var stored = await _db.SpeakingExamSessions.SingleAsync(e => e.Id == exam.ExamId);
+        Assert.Equal("mock_attempt_9", stored.MockAttemptId);
+        Assert.Equal("mock_section_9", stored.MockSectionId);
     }
 
     [Fact]

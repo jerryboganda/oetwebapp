@@ -61,18 +61,29 @@ public sealed class SpeakingExamService(
 
         var mode = SpeakingExamModes.Parse(req.Mode);
 
-        // ── No AI for MOCK Speaking (2026-06-29 owner rule) ───────────────────
-        // A Speaking exam launched from a curated Mock Set (or a full mock
-        // bundle) is a MOCK: it must be marked by a human examiner via a
-        // live-tutor booking, never by AI. Reject an AI-mode mock launch up
-        // front with a clear error rather than letting it fall through to the
-        // AI wallet pre-check (which would surface a misleading 402). The
-        // LiveTutor branch below then requires a BookingId, so mock ⇒ booked.
-        var isMockLaunch = !string.IsNullOrWhiteSpace(req.MockSetId);
-        if (isMockLaunch && mode != SpeakingExamMode.LiveTutor)
+        // ── Full Mock Speaking 7-day AI/tutor gate (2026-07-22 owner rule) ────
+        // Supersedes the old unconditional "mock Speaking always needs a
+        // live-tutor booking" rule. Inside ANY mock with a Speaking section
+        // (Full/Diagnostic/FinalReadiness/standalone Sub/Part): if the
+        // candidate's target exam is under 7 days away, a live-tutor booking
+        // can't reliably be arranged in time, so only AI is allowed. At 7+
+        // days out, either mode is allowed — the candidate's choice.
+        var isMockLaunch = !string.IsNullOrWhiteSpace(req.MockSetId) || !string.IsNullOrWhiteSpace(req.MockAttemptId);
+        if (isMockLaunch)
         {
-            throw ApiException.Validation("SPEAKING_MOCK_REQUIRES_LIVE_TUTOR",
-                "Mock Speaking exams are marked by a human examiner. Start this mock as a live-tutor booking.");
+            var targetExamDate = await db.Goals.AsNoTracking()
+                .Where(g => g.UserId == userId)
+                .Select(g => (DateOnly?)g.TargetExamDate)
+                .SingleOrDefaultAsync(ct);
+            var daysUntilExam = targetExamDate is null
+                ? (int?)null
+                : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
+
+            if (daysUntilExam is not null && daysUntilExam.Value < 7 && mode != SpeakingExamMode.Ai)
+            {
+                throw ApiException.Validation("SPEAKING_MOCK_REQUIRES_AI",
+                    "Your exam is less than 7 days away — this mock's Speaking section must be completed as an AI exam.");
+            }
         }
 
         var (cardA, cardB, professionId) = await ResolveCardsAsync(req, ct);
@@ -118,6 +129,8 @@ public sealed class SpeakingExamService(
             Mode = mode,
             State = SpeakingExamState.Intro,
             MockSetId = string.IsNullOrWhiteSpace(req.MockSetId) ? null : req.MockSetId,
+            MockAttemptId = string.IsNullOrWhiteSpace(req.MockAttemptId) ? null : req.MockAttemptId,
+            MockSectionId = string.IsNullOrWhiteSpace(req.MockSectionId) ? null : req.MockSectionId,
             CardAId = cardA.Id,
             CardBId = cardB.Id,
             BookingId = string.IsNullOrWhiteSpace(req.BookingId) ? null : req.BookingId,
@@ -912,6 +925,8 @@ public sealed class SpeakingExamService(
             CurrentSessionId: currentSessionId,
             CurrentCard: card,
             Clock: new SpeakingExamClock(stage, now, stageStart, stageEnds, secondsRemaining, expired),
-            CompletedAt: exam.CompletedAt);
+            CompletedAt: exam.CompletedAt,
+            MockAttemptId: exam.MockAttemptId,
+            MockSectionId: exam.MockSectionId);
     }
 }

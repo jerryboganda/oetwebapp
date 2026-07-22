@@ -17,7 +17,9 @@ public record CreateSpeakingExamRequest(
     string Mode,
     string? MockSetId = null,
     string? ProfessionId = null,
-    string? BookingId = null);
+    string? BookingId = null,
+    string? MockAttemptId = null,
+    string? MockSectionId = null);
 
 /// <summary>POST /v1/speaking/exams/{id}/start-card has no body; the server
 /// starts whichever card's discussion phase is current.</summary>
@@ -47,7 +49,9 @@ public record SpeakingExamDetail(
     string? CurrentSessionId,
     object? CurrentCard,
     SpeakingExamClock Clock,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    string? MockAttemptId,
+    string? MockSectionId);
 
 /// <summary>One card's result inside the exam report.</summary>
 public record SpeakingExamCardResult(
