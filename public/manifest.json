@@ -1,6 +1,6 @@
 {
-  "name": "OET Prep — Learner Platform",
-  "short_name": "OET Prep",
+  "name": "OET with Dr. Hesham",
+  "short_name": "OET with Dr. Hesham",
   "description": "Prepare for the OET with personalised practice, AI feedback, and expert review.",
   "start_url": "/dashboard",
   "scope": "/",

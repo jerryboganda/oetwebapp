@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>OET Prep Learner</string>
+	<string>OET with Dr. Hesham</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,11 +23,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>OET Prep Learner needs microphone access to record speaking responses.</string>
+	<string>OET with Dr. Hesham needs microphone access to record speaking responses.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>OET Prep Learner needs camera access for profile photos and document scanning.</string>
+	<string>OET with Dr. Hesham needs camera access for profile photos and document scanning.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>OET Prep Learner uses Face ID for secure login authentication.</string>
+	<string>OET with Dr. Hesham uses Face ID for secure login authentication.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

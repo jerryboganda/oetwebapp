@@ -10,6 +10,6 @@
 <plist version="1.0">
   <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>OET with Dr Hesham records your voice for Speaking practice and exams.</string>
+    <string>OET with Dr. Hesham records your voice for Speaking practice and exams.</string>
   </dict>
 </plist>

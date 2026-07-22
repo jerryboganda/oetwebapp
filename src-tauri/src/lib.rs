@@ -1,4 +1,4 @@
-// OET with Dr Hesham desktop shell (Tauri 2) — remote-only thin client.
+// OET with Dr. Hesham desktop shell (Tauri 2) — remote-only thin client.
 //
 // The window loads a tiny bundled splash, which probes reachability and then
 // navigates to the live web app over HTTPS. No frontend source, .NET backend, or
@@ -92,7 +92,7 @@ fn is_allowed_origin(url: &Url, remote_base: &str) -> bool {
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let dashboard = MenuItemBuilder::with_id("dashboard", "Dashboard").build(app)?;
     let study_plan = MenuItemBuilder::with_id("study-plan", "Study Plan").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit OET with Dr Hesham").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit OET with Dr. Hesham").build(app)?;
     let menu = MenuBuilder::new(app)
         .items(&[&dashboard, &study_plan, &quit])
         .build()?;
@@ -217,7 +217,7 @@ pub fn run() {
             #[cfg_attr(not(windows), allow(unused_mut))]
             let mut builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .title("OET with Dr Hesham")
+                    .title("OET with Dr. Hesham")
                     .inner_size(1440.0, 980.0)
                     .min_inner_size(1200.0, 800.0)
                     .initialization_script(bridge_script(&remote_url))
@@ -373,7 +373,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building OET with Dr Hesham desktop");
+        .expect("error while building OET with Dr. Hesham desktop");
 
     app.run(|_handle, _event| {});
 }

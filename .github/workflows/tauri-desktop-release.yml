@@ -293,7 +293,7 @@ jobs:
           {
             echo '{'
             echo "  \"version\": \"${{ steps.version.outputs.version }}\","
-            echo "  \"notes\": \"OET with Dr Hesham desktop ${{ steps.version.outputs.version }}\","
+            echo "  \"notes\": \"OET with Dr. Hesham desktop ${{ steps.version.outputs.version }}\","
             echo "  \"pub_date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
             echo '  "platforms": {'
             printf '%b\n' "$platforms"
@@ -306,7 +306,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: OET Prep Desktop ${{ steps.version.outputs.version }}
+          name: OET with Dr. Hesham Desktop ${{ steps.version.outputs.version }}
           files: |
             artifacts/**/*-setup.exe
             artifacts/**/*-setup.exe.sig
@@ -315,7 +315,7 @@ jobs:
             artifacts/**/*.app.tar.gz.sig
             latest.json
           body: |
-            Internal-testing build of the OET Prep desktop shell (Tauri 2).
+            Internal-testing build of the OET with Dr. Hesham desktop shell (Tauri 2).
 
             Install + certificate-trust steps: `docs/qa/TESTER_SETUP.md`.
 

@@ -4,7 +4,7 @@ name = "oet-desktop"
 # (v*.*.*-tauri-desktop) at build time by tauri-desktop-release.yml. Do NOT rely on
 # this value for the released version; v0.6.1 is the latest shipped release.
 version = "0.5.1"
-description = "OET with Dr Hesham desktop shell (Tauri 2, remote-only thin client)"
+description = "OET with Dr. Hesham desktop shell (Tauri 2, remote-only thin client)"
 edition = "2021"
 
 [lib]
