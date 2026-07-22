@@ -9,7 +9,7 @@
  * `/speaking` (private speaking booking).
  */
 import { useCallback, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, GraduationCap, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,9 @@ import {
 
 export default function SpeakingExamLauncherPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mockAttemptId = searchParams?.get('mockAttemptId') ?? undefined;
+  const mockSectionId = searchParams?.get('mockSectionId') ?? undefined;
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creditMessage, setCreditMessage] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export default function SpeakingExamLauncherPage() {
     setError(null);
     setCreditMessage(null);
     try {
-      const exam = await createSpeakingExam({ mode: 'ai' });
+      const exam = await createSpeakingExam({ mode: 'ai', mockAttemptId, mockSectionId });
       router.push(`/speaking/exam/${exam.examId}`);
     } catch (err) {
       // No AI credits: the wallet can't fund the exam (backend pre-flight throws
@@ -57,7 +60,7 @@ export default function SpeakingExamLauncherPage() {
       }
       setStarting(false);
     }
-  }, [router, starting]);
+  }, [router, starting, mockAttemptId, mockSectionId]);
 
   return (
     <div className="mx-auto max-w-xl px-4 py-10">

@@ -30,7 +30,7 @@ import {
   startSpeakingExamCard,
   type SpeakingExamDetail,
 } from '@/lib/api/speaking-exams';
-import { ApiError } from '@/lib/api';
+import { ApiError, completeMockSection } from '@/lib/api';
 
 const POLL_INTERVAL_MS = 3_000;
 
@@ -65,6 +65,7 @@ export default function SpeakingExamPage() {
 
   const examRef = useRef<SpeakingExamDetail | null>(null);
   examRef.current = exam;
+  const mockSectionCompletedRef = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!examId) return;
@@ -73,6 +74,21 @@ export default function SpeakingExamPage() {
       setExam(detail);
       setFetchedAt(Date.now());
       setLoadError(null);
+      if (detail.state === 'completed' && detail.mockAttemptId && detail.mockSectionId && !mockSectionCompletedRef.current) {
+        mockSectionCompletedRef.current = true;
+        try {
+          await completeMockSection(detail.mockAttemptId, detail.mockSectionId, {
+            contentAttemptId: detail.examId,
+            rawScore: null,
+            rawScoreMax: null,
+            scaledScore: null,
+            grade: null,
+            evidence: { source: 'ai_speaking_exam', examId: detail.examId },
+          });
+        } catch (mockErr) {
+          console.warn('Could not mark mock speaking section complete', mockErr);
+        }
+      }
       if (detail.state === 'completed' || detail.state === 'expired' || detail.state === 'cancelled') {
         router.replace(`/speaking/exam/${examId}/results`);
       }

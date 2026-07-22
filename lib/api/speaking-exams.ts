@@ -69,6 +69,8 @@ export interface SpeakingExamDetail {
   currentCard?: ExamCandidateCard | null;
   clock: SpeakingExamClock;
   completedAt?: string | null;
+  mockAttemptId?: string | null;
+  mockSectionId?: string | null;
 }
 
 export interface CreateSpeakingExamInput {
@@ -76,6 +78,8 @@ export interface CreateSpeakingExamInput {
   mockSetId?: string | null;
   professionId?: string | null;
   bookingId?: string | null;
+  mockAttemptId?: string | null;
+  mockSectionId?: string | null;
 }
 
 export interface SpeakingExamCriterionScore {
