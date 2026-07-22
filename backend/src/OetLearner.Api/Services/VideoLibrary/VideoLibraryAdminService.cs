@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.VideoLibrary;
 
@@ -181,6 +182,13 @@ public sealed class VideoLibraryAdminService(
                 video.Language = language;
             }
         }
+        if (patch.Language is not null || patch.SubtestCode is not null || patch.TargetProfessionIds is not null)
+        {
+            var targets = ParseProfessionIds(video.ProfessionIdsJson);
+            if (!string.IsNullOrWhiteSpace(video.Language) && !string.IsNullOrWhiteSpace(video.SubtestCode)
+                && !CourseContentMatrix.TryValidateVideo(video.Language, video.SubtestCode, targets, out var matrixError))
+                throw ApiException.Validation("invalid_course_video_scope", matrixError);
+        }
         if (patch.IsFeatured is not null) video.IsFeatured = patch.IsFeatured.Value;
         if (patch.SortOrder is not null) video.SortOrder = patch.SortOrder.Value;
         if (patch.BunnyCollectionId is not null)
@@ -330,6 +338,8 @@ public sealed class VideoLibraryAdminService(
             errors.Add("Video title is required.");
         if (!ValidAccessTiers.Contains(video.AccessTier?.Trim().ToLowerInvariant() ?? string.Empty, StringComparer.Ordinal))
             errors.Add("Access tier must be 'free' or 'premium'.");
+        if (!CourseContentMatrix.TryValidateVideo(video.Language, video.SubtestCode, ParseProfessionIds(video.ProfessionIdsJson), out var matrixError))
+            errors.Add(matrixError);
 
         var settings = (await settingsProvider.GetAsync(ct)).BunnyStream;
         if (!settings.IsConfigured)

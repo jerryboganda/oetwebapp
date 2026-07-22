@@ -12,6 +12,7 @@ import { apiClient } from './api';
 
 export type MaterialAudienceMode = 'Inherit' | 'Everyone' | 'Restricted';
 export type MaterialStatus = 'Draft' | 'Published' | 'Archived';
+export type MaterialScopeKind = 'shared' | 'profession' | 'general_english';
 
 export interface AudienceRow {
   id?: string;
@@ -25,6 +26,8 @@ export interface MaterialFolderDto {
   name: string;
   description?: string | null;
   subtestCode?: string | null;
+  scopeKind?: MaterialScopeKind | null;
+  professionId?: string | null;
   audienceMode: MaterialAudienceMode;
   sortOrder: number;
   status: MaterialStatus;
@@ -91,6 +94,17 @@ export interface LearnerMaterialsTreeDto {
   folders: LearnerMaterialFolderDto[];
 }
 
+export interface MaterialCourseMapItem { canonicalFileId: string; folderId: string; title: string; kind: string; status: MaterialStatus }
+export interface MaterialCourseMapFolder { canonicalFolderId: string; name: string; status: MaterialStatus; parentFolderId?: string | null }
+export interface MaterialCourseMapSection {
+  subtestCode: string; sharing: 'shared' | 'profession'; folderCount: number; fileCount: number;
+  folders: MaterialCourseMapFolder[]; files: MaterialCourseMapItem[];
+}
+export interface MaterialCourseMap {
+  professions: { id: string; label: string; sections: MaterialCourseMapSection[] }[];
+  generalEnglish: { id: string; label: string; folderCount: number; fileCount: number; folders: MaterialCourseMapFolder[]; files: MaterialCourseMapItem[] };
+}
+
 // ── Fetch helper ────────────────────────────────────────────────────────────
 //
 // Delegates to the shared API client (lib/api.ts) so every call inherits its
@@ -119,11 +133,17 @@ export function adminListMaterialFolders(): Promise<MaterialFolderDto[]> {
   return request<MaterialFolderDto[]>('/v1/admin/materials/folders');
 }
 
+export function adminGetMaterialCourseMap(): Promise<MaterialCourseMap> {
+  return request<MaterialCourseMap>('/v1/admin/materials/course-map');
+}
+
 export function adminCreateMaterialFolder(body: {
   parentFolderId?: string | null;
   name: string;
   description?: string | null;
   subtestCode?: string | null;
+  scopeKind?: MaterialScopeKind | null;
+  professionId?: string | null;
   audienceMode?: MaterialAudienceMode;
   sortOrder?: number;
 }): Promise<MaterialFolderDto> {
@@ -139,6 +159,8 @@ export function adminUpdateMaterialFolder(
     name?: string;
     description?: string | null;
     subtestCode?: string | null;
+    scopeKind?: MaterialScopeKind | null;
+    professionId?: string | null;
     audienceMode?: MaterialAudienceMode;
     sortOrder?: number;
     status?: MaterialStatus;

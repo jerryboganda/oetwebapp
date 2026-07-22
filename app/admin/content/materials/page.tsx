@@ -44,9 +44,11 @@ import {
   type MaterialFileDto,
   type MaterialAudienceMode,
   type MaterialStatus,
+  type MaterialScopeKind,
   type AudienceRow,
 } from '@/lib/materials-api';
 import { uploadFileChunked, type PaperAssetRole } from '@/lib/content-upload-api';
+import { CourseMaterialsMap } from '@/components/domain/materials/course-materials-map';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,6 +81,8 @@ const defaultFolderForm = {
   name: '',
   description: '',
   subtestCode: '',
+  scopeKind: '' as '' | MaterialScopeKind,
+  professionId: '',
   audienceMode: 'Inherit' as MaterialAudienceMode,
   audiences: [] as AudienceRow[],
 };
@@ -212,6 +216,7 @@ function folderVisibilityHint(
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AdminMaterialsPage() {
+  const [viewMode, setViewMode] = useState<'course' | 'tree'>('course');
   const [tree, setTree] = useState<MaterialFolderDto[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<MaterialFolderDto | null>(null);
   const [files, setFiles] = useState<MaterialFileDto[]>([]);
@@ -322,6 +327,8 @@ export default function AdminMaterialsPage() {
       name: folder.name,
       description: folder.description ?? '',
       subtestCode: folder.subtestCode ?? '',
+      scopeKind: folder.scopeKind ?? '',
+      professionId: folder.professionId ?? '',
       audienceMode: folder.audienceMode,
       audiences: folder.audiences?.map((a) => ({ targetType: a.targetType as AudienceRow['targetType'], targetId: a.targetId })) ?? [],
     });
@@ -340,6 +347,8 @@ export default function AdminMaterialsPage() {
           name: folderForm.name.trim(),
           description: folderForm.description || null,
           subtestCode: folderForm.subtestCode || null,
+          scopeKind: folderForm.scopeKind || null,
+          professionId: folderForm.scopeKind === 'profession' ? folderForm.professionId : null,
           audienceMode: folderForm.audienceMode,
         });
         setToast({ variant: 'success', message: 'Folder updated.' });
@@ -349,6 +358,8 @@ export default function AdminMaterialsPage() {
           name: folderForm.name.trim(),
           description: folderForm.description || null,
           subtestCode: folderForm.subtestCode || null,
+          scopeKind: folderForm.scopeKind || null,
+          professionId: folderForm.scopeKind === 'profession' ? folderForm.professionId : null,
           audienceMode: folderForm.audienceMode,
         });
         setToast({ variant: 'success', message: 'Folder created.' });
@@ -608,18 +619,16 @@ export default function AdminMaterialsPage() {
   }
 
 
+  if (viewMode === 'course') return <CourseMaterialsMap onAdvanced={() => setViewMode('tree')} />;
+
   return (
     <AdminCatalogLayout
-      title="Materials Library"
+      title="Advanced Material Folder Tree"
       description="Upload and organise downloadable study materials for candidates. Assign folders to specific plans or cohorts to control access."
       breadcrumbs={BREADCRUMBS}
       eyebrow="CMS"
       hideViewModeToggle
-      actions={
-        <Button onClick={() => openCreateFolder(null)}>
-          <FolderPlus className="h-4 w-4 mr-1" /> New Root Folder
-        </Button>
-      }
+      actions={<div className="flex gap-2"><Button variant="outline" onClick={() => setViewMode('course')}>Course Materials</Button><Button onClick={() => openCreateFolder(null)}><FolderPlus className="h-4 w-4 mr-1" /> New Root Folder</Button></div>}
     >
       <div className="col-span-full grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Folder tree */}
@@ -785,6 +794,31 @@ export default function AdminMaterialsPage() {
             onChange={(e) => setFolderForm((f) => ({ ...f, subtestCode: e.target.value }))}
             options={SUBTEST_OPTIONS}
           />
+          <Select
+            label="Course scope"
+            value={folderForm.scopeKind}
+            onChange={(e) => setFolderForm((f) => ({ ...f, scopeKind: e.target.value as '' | MaterialScopeKind, professionId: e.target.value === 'profession' ? f.professionId : '' }))}
+            options={[
+              { value: '', label: 'Inherit / legacy' },
+              { value: 'shared', label: 'Shared across professions' },
+              { value: 'profession', label: 'Profession-specific' },
+              { value: 'general_english', label: 'General English' },
+            ]}
+          />
+          {folderForm.scopeKind === 'profession' ? <Select
+            label="Profession"
+            value={folderForm.professionId}
+            onChange={(e) => setFolderForm((f) => ({ ...f, professionId: e.target.value }))}
+            options={[
+              { value: '', label: 'Select a profession' },
+              { value: 'medicine', label: 'Medicine' },
+              { value: 'nursing', label: 'Nursing' },
+              { value: 'pharmacy', label: 'Pharmacy' },
+              { value: 'physiotherapy', label: 'Physiotherapy' },
+              { value: 'dentistry', label: 'Dentistry' },
+              { value: 'radiography', label: 'Radiography' },
+            ]}
+          /> : null}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setFolderModalOpen(false)}>Cancel</Button>
             <Button onClick={() => void saveFolder()} disabled={savingFolder}>

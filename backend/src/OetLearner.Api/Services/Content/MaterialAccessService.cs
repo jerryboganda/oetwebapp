@@ -450,6 +450,12 @@ public sealed class MaterialAccessService(
         var guard = 0;
         while (current is not null && guard++ < 64)
         {
+            if (current.ScopeKind == MaterialScopeKinds.Profession)
+                return !string.IsNullOrWhiteSpace(current.ProfessionId)
+                    && learnerDisciplines.Contains(current.ProfessionId);
+            if (current.ScopeKind is MaterialScopeKinds.Shared or MaterialScopeKinds.GeneralEnglish)
+                return true;
+
             var name = current.Name?.Trim() ?? string.Empty;
             if (disciplineUniverse.Contains(name) && !learnerDisciplines.Contains(name))
                 return false;
@@ -498,6 +504,8 @@ public sealed class MaterialAccessService(
         var guard = 0;
         while (current is not null && guard++ < 64)
         {
+            if (current.ScopeKind == MaterialScopeKinds.GeneralEnglish) return true;
+            if (current.ScopeKind is MaterialScopeKinds.Shared or MaterialScopeKinds.Profession) return false;
             if (BasicEnglishFolderNames.Contains(current.Name?.Trim() ?? string.Empty)) return true;
             if (current.ParentFolderId is null) break;
             allFolders.TryGetValue(current.ParentFolderId, out current);

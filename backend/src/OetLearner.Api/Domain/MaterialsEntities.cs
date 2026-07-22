@@ -44,6 +44,14 @@ public class MaterialFolder
     [MaxLength(32)]
     public string? SubtestCode { get; set; }
 
+    /// <summary>Structured course projection scope: shared | profession | general_english.</summary>
+    [MaxLength(32)]
+    public string? ScopeKind { get; set; }
+
+    /// <summary>Canonical profession id when ScopeKind is profession; otherwise null.</summary>
+    [MaxLength(64)]
+    public string? ProfessionId { get; set; }
+
     public MaterialAudienceMode AudienceMode { get; set; } = MaterialAudienceMode.Inherit;
 
     public int SortOrder { get; set; }

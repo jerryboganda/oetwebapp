@@ -3,19 +3,18 @@
 // Re-tag the live Video Library so it matches the "Course Videos" content chart
 // (owner, 2026-07-18). Sets each video's `language` (en/ar) and `targetProfessionIds`
 // so the app resolves exactly the availability matrix in the chart — WITHOUT any
-// new content (English is one shared set; Arabic Medicine aliases Physiotherapy,
-// Dentistry & Radiography via the profession list).
+// new content (English is one canonical set; Arabic Medicine Writing/Speaking
+// aliases Physiotherapy only; Dentistry/Radiography are limited to Listening/Reading).
 //
 // The rules (derived deterministically from scripts/videos/state/manifest.json):
 //
 //   English (any module)                 → language en, professions []  (all 6)
 //   Arabic Listening / Reading (shared)  → language ar, professions []  (all 6)
-//   Arabic Speaking/Writing — Medicine   → language ar, [medicine, physiotherapy, dentistry, radiography]
+//   Arabic Speaking/Writing — Medicine   → language ar, [medicine, physiotherapy]
 //   Arabic Speaking/Writing — Nursing    → language ar, [nursing]
 //   Arabic Speaking/Writing — Pharmacy   → language ar, [pharmacy]
 //
-// Dentistry & Radiography get the FULL Medicine set (owner decision 2026-07-18),
-// which is why they share Medicine's Arabic professions list above.
+// Dentistry & Radiography receive Listening/Reading only.
 //
 // SAFETY:
 //   * DRY-RUN by default — prints the full plan + summary and touches no network.
@@ -50,7 +49,8 @@ const APPLY = process.argv.includes('--apply');
 const LIMIT = numArg('--limit');
 const DELAY_MS = numArg('--delay-ms') ?? 2200;
 
-const MEDICINE_SET = ['medicine', 'physiotherapy', 'dentistry', 'radiography'];
+const RULE_VERSION = 'profession-first-flowchart-v2';
+const MEDICINE_SET = ['medicine', 'physiotherapy'];
 
 function numArg(flag) {
   const i = process.argv.indexOf(flag);
@@ -127,14 +127,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function loadDoneSet() {
   try {
     const s = JSON.parse(await fsp.readFile(RETAG_STATE_PATH, 'utf8'));
-    return new Set(s.done || []);
+    return s.ruleVersion === RULE_VERSION ? new Set(s.done || []) : new Set();
   } catch {
     return new Set();
   }
 }
 
 async function saveDone(done) {
-  await fsp.writeFile(RETAG_STATE_PATH, JSON.stringify({ done: [...done] }, null, 2));
+  await fsp.writeFile(RETAG_STATE_PATH, JSON.stringify({ ruleVersion: RULE_VERSION, done: [...done] }, null, 2));
 }
 
 async function main() {
@@ -165,6 +165,7 @@ async function main() {
 
   console.log(`API base:      ${API_BASE}`);
   console.log(`Mode:          ${APPLY ? 'APPLY (writes to production)' : 'DRY-RUN (no network writes)'}`);
+  console.log(`Rule version:  ${RULE_VERSION}`);
   console.log(`Manifest:      ${videos.length} videos`);
   console.log(`Mapped:        ${plan.length}   Unmapped: ${unmapped.length}`);
   console.log(`\nPlanned tag distribution:`);

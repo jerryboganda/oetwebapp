@@ -87,6 +87,76 @@ public static class MaterialsAdminEndpoints
             return Results.Ok(BuildAdminTree(folders, files, null));
         });
 
+        // Profession-first read model. Canonical folder/file ids may intentionally appear in
+        // several profession nodes; the underlying records and media are never duplicated.
+        admin.MapGet("/course-map", async (LearnerDbContext db, CancellationToken ct) =>
+        {
+            var folders = await db.MaterialFolders.AsNoTracking().OrderBy(f => f.SortOrder).ToListAsync(ct);
+            var files = await db.MaterialFiles.AsNoTracking().OrderBy(f => f.SortOrder).ToListAsync(ct);
+            var byId = folders.ToDictionary(f => f.Id, StringComparer.Ordinal);
+
+            object ProjectSection(string professionId, string subtest)
+            {
+                var scopedFolders = folders.Where(folder =>
+                {
+                    var scope = ResolveCourseScope(folder, byId);
+                    return string.Equals(ResolveCourseSubtest(folder, byId), subtest, StringComparison.OrdinalIgnoreCase)
+                        && (scope.Kind == MaterialScopeKinds.Shared
+                            || (scope.Kind == MaterialScopeKinds.Profession
+                                && string.Equals(scope.ProfessionId, professionId, StringComparison.OrdinalIgnoreCase)));
+                }).ToList();
+                var ids = scopedFolders.Select(f => f.Id).ToHashSet(StringComparer.Ordinal);
+                var scopedFiles = files.Where(f => f.FolderId is not null && ids.Contains(f.FolderId)).ToList();
+                return new
+                {
+                    subtestCode = subtest,
+                    sharing = subtest is "listening" or "reading" ? "shared" : "profession",
+                    folderCount = scopedFolders.Count,
+                    fileCount = scopedFiles.Count,
+                    folders = scopedFolders.Select(f => new
+                    {
+                        canonicalFolderId = f.Id,
+                        f.Name,
+                        status = f.Status.ToString(),
+                        f.ParentFolderId,
+                    }),
+                    files = scopedFiles.Select(f => new
+                    {
+                        canonicalFileId = f.Id,
+                        f.FolderId,
+                        f.Title,
+                        f.Kind,
+                        status = f.Status.ToString(),
+                    }),
+                };
+            }
+
+            var professionNodes = CourseContentMatrix.Professions.Select(p => new
+            {
+                p.Id,
+                p.Label,
+                sections = CourseContentMatrix.Subtests.Select(s => ProjectSection(p.Id, s)),
+            });
+
+            var generalFolders = folders.Where(f => ResolveCourseScope(f, byId).Kind == MaterialScopeKinds.GeneralEnglish).ToList();
+            var generalIds = generalFolders.Select(f => f.Id).ToHashSet(StringComparer.Ordinal);
+            var generalFiles = files.Where(f => f.FolderId is not null && generalIds.Contains(f.FolderId)).ToList();
+
+            return Results.Ok(new
+            {
+                professions = professionNodes,
+                generalEnglish = new
+                {
+                    id = "general_english",
+                    label = "General English",
+                    folderCount = generalFolders.Count,
+                    fileCount = generalFiles.Count,
+                    folders = generalFolders.Select(f => new { canonicalFolderId = f.Id, f.Name, status = f.Status.ToString() }),
+                    files = generalFiles.Select(f => new { canonicalFileId = f.Id, f.FolderId, f.Title, f.Kind, status = f.Status.ToString() }),
+                },
+            });
+        });
+
         admin.MapPost("/folders", async (
             HttpContext http,
             LearnerDbContext db,
@@ -116,6 +186,8 @@ public static class MaterialsAdminEndpoints
                 Name = dto.Name.Trim(),
                 Description = dto.Description?.Trim(),
                 SubtestCode = dto.SubtestCode?.Trim().ToLowerInvariant(),
+                ScopeKind = dto.ScopeKind?.Trim().ToLowerInvariant(),
+                ProfessionId = dto.ProfessionId?.Trim().ToLowerInvariant(),
                 AudienceMode = dto.AudienceMode ?? MaterialAudienceMode.Inherit,
                 SortOrder = dto.SortOrder ?? 0,
                 Status = ContentStatus.Draft,
@@ -123,6 +195,8 @@ public static class MaterialsAdminEndpoints
                 CreatedAt = now,
                 UpdatedAt = now,
             };
+            if (!TryNormalizeScope(folder, out var scopeError))
+                return Results.BadRequest(new { code = "invalid_material_scope", message = scopeError });
             db.MaterialFolders.Add(folder);
             AddAudit(db, http, "MaterialFolderCreated", "MaterialFolder", folder.Id, folder.Name);
             await db.SaveChangesAsync(ct);
@@ -148,6 +222,10 @@ public static class MaterialsAdminEndpoints
             }
             if (dto.Description != null) folder.Description = dto.Description.Trim();
             if (dto.SubtestCode != null) folder.SubtestCode = dto.SubtestCode.Trim().ToLowerInvariant();
+            if (dto.ScopeKind != null) folder.ScopeKind = dto.ScopeKind.Trim().ToLowerInvariant();
+            if (dto.ProfessionId != null) folder.ProfessionId = dto.ProfessionId.Trim().ToLowerInvariant();
+            if (!TryNormalizeScope(folder, out var scopeError))
+                return Results.BadRequest(new { code = "invalid_material_scope", message = scopeError });
             if (dto.AudienceMode.HasValue) folder.AudienceMode = dto.AudienceMode.Value;
             if (dto.SortOrder.HasValue) folder.SortOrder = dto.SortOrder.Value;
             if (dto.Status != null)
@@ -566,6 +644,8 @@ public static class MaterialsAdminEndpoints
                 f.Name,
                 f.Description,
                 f.SubtestCode,
+                f.ScopeKind,
+                f.ProfessionId,
                 audienceMode = f.AudienceMode.ToString(),
                 f.SortOrder,
                 status = f.Status.ToString(),
@@ -591,6 +671,8 @@ public static class MaterialsAdminEndpoints
         f.Name,
         f.Description,
         f.SubtestCode,
+        f.ScopeKind,
+        f.ProfessionId,
         audienceMode = f.AudienceMode.ToString(),
         f.SortOrder,
         status = f.Status.ToString(),
@@ -638,6 +720,71 @@ public static class MaterialsAdminEndpoints
             Details = details,
         });
     }
+
+    private static bool TryNormalizeScope(MaterialFolder folder, out string error)
+    {
+        if (folder.ScopeKind is null)
+        {
+            error = string.Empty; // legacy/nested folders inherit until migration backfill
+            return true;
+        }
+        if (!MaterialScopeKinds.IsValid(folder.ScopeKind))
+        {
+            error = "scopeKind must be shared, profession, or general_english.";
+            return false;
+        }
+        if (folder.ScopeKind == MaterialScopeKinds.Profession)
+        {
+            if (!CourseContentMatrix.IsProfession(folder.ProfessionId))
+            {
+                error = "professionId must be one of the six course professions.";
+                return false;
+            }
+        }
+        else
+        {
+            folder.ProfessionId = null;
+        }
+        error = string.Empty;
+        return true;
+    }
+
+    private static (string? Kind, string? ProfessionId) ResolveCourseScope(
+        MaterialFolder folder, Dictionary<string, MaterialFolder> allFolders)
+    {
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            if (MaterialScopeKinds.IsValid(current.ScopeKind)) return (current.ScopeKind, current.ProfessionId);
+            if (MaterialAccessService.BasicEnglishFolderNames.Contains(current.Name?.Trim() ?? string.Empty))
+                return (MaterialScopeKinds.GeneralEnglish, null);
+            var profession = CourseContentMatrix.Professions.FirstOrDefault(p =>
+                string.Equals(p.Id, current.Name?.Trim(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.Label, current.Name?.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (profession is not null) return (MaterialScopeKinds.Profession, profession.Id);
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+        var subtest = ResolveCourseSubtest(folder, allFolders);
+        return subtest is "listening" or "reading" ? (MaterialScopeKinds.Shared, null) : (null, null);
+    }
+
+    private static string? ResolveCourseSubtest(MaterialFolder folder, Dictionary<string, MaterialFolder> allFolders)
+    {
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            var explicitCode = current.SubtestCode?.Trim().ToLowerInvariant();
+            if (CourseContentMatrix.Subtests.Contains(explicitCode ?? string.Empty)) return explicitCode;
+            var byName = current.Name?.Trim().ToLowerInvariant();
+            if (CourseContentMatrix.Subtests.Contains(byName ?? string.Empty)) return byName;
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+        return null;
+    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -647,6 +794,8 @@ file sealed record CreateFolderDto(
     string Name,
     string? Description,
     string? SubtestCode,
+    string? ScopeKind,
+    string? ProfessionId,
     MaterialAudienceMode? AudienceMode,
     int? SortOrder);
 
@@ -654,6 +803,8 @@ file sealed record UpdateFolderDto(
     string? Name,
     string? Description,
     string? SubtestCode,
+    string? ScopeKind,
+    string? ProfessionId,
     MaterialAudienceMode? AudienceMode,
     int? SortOrder,
     // Bound as string (not ContentStatus) because ContentStatus has no

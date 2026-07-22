@@ -1,31 +1,29 @@
-# Agent State - Native App Update Hardening
+# Agent State - Profession-First Videos and Materials
 
-Last updated: 2026-07-22
+Last updated: 2026-07-23
 
 ## Goal
 
-Make desktop and mobile update discovery, download, and installation reliable and fail-safe while preserving the product name `OET with Dr. Hesham`.
+Make the admin Course Videos and Course Materials screens profession-first while preserving canonical media records and keeping raw Bunny/folder tools under Advanced views.
 
 ## Implemented
 
-- Added a stable, validated desktop updater feed backed by signed GitHub releases, with a GitHub fallback endpoint.
-- Deduplicated desktop checks/installs so automatic and forced-update flows cannot race.
-- Added automatic mobile checks on launch, resume, reconnect, and a four-hour interval.
-- Added trusted native-release discovery and a signed Android APK fallback when Google Play in-app update is unavailable.
-- Wired the Capacitor app-update plugin into Android and iOS native projects.
-- Made missing update targets visible errors instead of silent no-ops.
-- Updated desktop and Android release workflows to publish and verify their updater artifacts.
+- Added the six-profession course matrix and server-side video write/publish validation.
+- Added profession-first video and material course-map endpoints and primary admin views.
+- Added structured material scope fields plus guarded production backfill and video target correction migration.
+- Kept canonical IDs in every projection; no media, progress, assignment, entitlement, or download row is copied or deleted.
+- Added matrix-aware video draft preselection and access editing.
+- Kept raw Bunny collections and raw material folders as Advanced consoles.
+- Versioned the idempotent production metadata alignment script.
 
 ## Validation
 
-- Focused updater tests: 14 passed.
 - `pnpm exec tsc --noEmit`: passed.
+- Focused Vitest matrix test: 2 passed.
+- Metadata dry-run: 117 mapped, 0 unmapped; 26 English shared, 16 Arabic L/R shared, 48 Medicine+Physiotherapy, 16 Nursing, 11 Pharmacy.
 - `git diff --check`: passed.
-
-## External Requirement
-
-iOS App Store distribution still requires Apple signing/App Store Connect credentials and a live listing; those repository secrets are not configured. The iOS app now contains the update plugin and automatic detection path, but an installable iOS release cannot be truthfully published until those credentials exist.
+- Local .NET compile was stopped at owner request because it exceeded the quick-check window.
 
 ## Next Step
 
-Desktop `0.6.6` and Android `1.3.4` are published. Their production discovery endpoints return the new versions, signatures/digests, and downloadable artifacts. No code-side release work remains; configure Apple signing/App Store Connect credentials before publishing iOS.
+Commit and push the explicit implementation files to `main`; owner will verify the production admin pages and report any runtime issue.

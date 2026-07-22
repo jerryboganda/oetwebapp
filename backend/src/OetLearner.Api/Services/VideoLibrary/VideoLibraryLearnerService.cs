@@ -297,7 +297,7 @@ public sealed class VideoLibraryLearnerService(
         if (video is null) return null;
 
         var profession = await ResolveProfessionAsync(userId, ct);
-        if (!IsProfessionVisible(video.ProfessionIdsJson, profession)) return null;
+        if (!IsCourseProfessionVisible(video, profession)) return null;
 
         // Per-user video allocation (allow-list). No rows = unchanged (fail-open);
         // any rows restrict this learner to exactly those videos.
@@ -321,7 +321,7 @@ public sealed class VideoLibraryLearnerService(
         var allowed = await LoadAllowedVideoIdsAsync(userId, ct);
         // ProfessionIdsJson is a JSON column — filter client-side (never LINQ into JSON).
         return published
-            .Where(v => IsProfessionVisible(v.ProfessionIdsJson, profession))
+            .Where(v => IsCourseProfessionVisible(v, profession))
             .Where(v => allowed is null || allowed.Contains(v.Id))
             .ToList();
     }
@@ -381,6 +381,13 @@ public sealed class VideoLibraryLearnerService(
         {
             return false; // targeting we cannot evaluate is a lock, not a pass
         }
+    }
+
+    private static bool IsCourseProfessionVisible(LibraryVideo video, string? normalizedProfession)
+    {
+        if ((normalizedProfession is "dentistry" or "radiography")
+            && (video.SubtestCode is "writing" or "speaking")) return false;
+        return IsProfessionVisible(video.ProfessionIdsJson, normalizedProfession);
     }
 
     private async Task<Dictionary<string, LearnerVideoLibraryProgress>> LoadProgressAsync(
@@ -469,11 +476,12 @@ public sealed class VideoLibraryLearnerService(
             .Where(v => siblingIds.Contains(v.Id)
                 && v.Status == ContentStatus.Published
                 && (v.PublishAt == null || v.PublishAt <= now))
-            .Select(v => new { v.Id, v.ProfessionIdsJson })
+            .Select(v => new { v.Id, v.ProfessionIdsJson, v.SubtestCode })
             .ToListAsync(ct);
         var profession = await ResolveProfessionAsync(userId, ct);
         var visibleIds = visibleSiblings
-            .Where(v => IsProfessionVisible(v.ProfessionIdsJson, profession))
+            .Where(v => !((profession is "dentistry" or "radiography") && (v.SubtestCode is "writing" or "speaking"))
+                && IsProfessionVisible(v.ProfessionIdsJson, profession))
             .Select(v => v.Id)
             .ToHashSet(StringComparer.Ordinal);
 

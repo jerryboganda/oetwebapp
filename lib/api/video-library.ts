@@ -151,6 +151,15 @@ export interface AdminVideoPatch {
   bunnyCollectionId?: string | null;
 }
 
+export interface VideoCourseMapItem {
+  canonicalVideoId: string; title: string; subtestCode: string; language: 'en' | 'ar';
+  sourceLabel: string; status: VideoLifecycleStatus; encodeStatus: VideoEncodeStatus; bunnyVideoId: string | null;
+}
+export interface VideoCourseMapSection { subtestCode: string; available: boolean; count: number; items: VideoCourseMapItem[] }
+export interface VideoCourseMap {
+  professions: { id: string; label: string; languages: { code: 'en' | 'ar'; label: string; sections: VideoCourseMapSection[] }[] }[];
+}
+
 /** Presigned Bunny TUS authorization from the backend. */
 export interface VideoUploadAuthorization {
   bunnyVideoId: string;
@@ -308,6 +317,10 @@ export async function adminListVideos(
     `${BASE}/videos${suffix ? `?${suffix}` : ''}`,
     'Failed to list videos:',
   );
+}
+
+export function adminGetVideoCourseMap(): Promise<VideoCourseMap> {
+  return apiClient.get<VideoCourseMap>(`${BASE}/course-map`);
 }
 
 export function adminCreateVideo(input: { title: string }): Promise<AdminVideoDetail> {

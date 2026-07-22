@@ -160,6 +160,62 @@ public static class VideoLibraryAdminEndpoints
         })
         .WithAdminRead("AdminContentRead");
 
+        // Profession-first read model over canonical rows. A canonical id can appear in several
+        // nodes by design; no Bunny video or LibraryVideo record is duplicated.
+        admin.MapGet("/course-map", async (LearnerDbContext db, CancellationToken ct) =>
+        {
+            var videos = await db.LibraryVideos.AsNoTracking()
+                .Where(v => v.Status != ContentStatus.Archived)
+                .OrderBy(v => v.SortOrder).ThenBy(v => v.Title)
+                .ToListAsync(ct);
+            var parsed = videos.Select(v => new
+            {
+                Video = v,
+                Targets = VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson),
+            }).ToList();
+
+            return Results.Ok(new
+            {
+                professions = CourseContentMatrix.Professions.Select(profession => new
+                {
+                    profession.Id,
+                    profession.Label,
+                    languages = new[] { "en", "ar" }.Select(language => new
+                    {
+                        code = language,
+                        label = language == "en" ? "English" : "Arabic",
+                        sections = CourseContentMatrix.Subtests.Select(subtest =>
+                        {
+                            var items = parsed.Where(row =>
+                                string.Equals(row.Video.Language, language, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(row.Video.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase)
+                                && CourseContentMatrix.VideoAppearsFor(profession.Id, language, subtest, row.Targets))
+                                .Select(row => new
+                                {
+                                    canonicalVideoId = row.Video.Id,
+                                    row.Video.Title,
+                                    subtestCode = subtest,
+                                    language,
+                                    sourceLabel = CourseContentMatrix.VideoSourceLabel(language, subtest, row.Targets),
+                                    status = row.Video.Status.ToString(),
+                                    encodeStatus = row.Video.EncodeStatus.ToString(),
+                                    bunnyVideoId = row.Video.BunnyVideoId,
+                                }).ToList();
+                            return new
+                            {
+                                subtestCode = subtest,
+                                available = subtest is "listening" or "reading"
+                                    || profession.Id is "medicine" or "physiotherapy" or "nursing" or "pharmacy",
+                                count = items.Count,
+                                items,
+                            };
+                        }),
+                    }),
+                }),
+            });
+        })
+        .WithAdminRead("AdminContentRead");
+
         admin.MapPost("/videos", async (
             HttpContext http,
             AdminVideoCreateRequest request,

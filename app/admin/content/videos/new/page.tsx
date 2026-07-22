@@ -13,7 +13,8 @@ import { ArrowLeft, ArrowRight, Clapperboard, Loader2 } from 'lucide-react';
 import { AdminRouteHero, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
-import { adminCreateVideo } from '@/lib/api/video-library';
+import { adminCreateVideo, adminPatchVideo } from '@/lib/api/video-library';
+import { COURSE_PROFESSIONS, COURSE_SUBTESTS, expectedVideoTargets, type CourseProfessionId, type CourseSubtest } from '@/lib/course-content-matrix';
 import { buildVideoStepHref, VIDEO_DRAFT_SEED_TITLE } from '@/components/domain/video-library/video-wizard-config';
 
 export default function NewVideoPage() {
@@ -26,6 +27,19 @@ export default function NewVideoPage() {
     setError(null);
     try {
       const created = await adminCreateVideo({ title: VIDEO_DRAFT_SEED_TITLE });
+      const query = new URLSearchParams(window.location.search);
+      const profession = query.get('profession') as CourseProfessionId | null;
+      const language = query.get('language');
+      const subtest = query.get('subtest') as CourseSubtest | null;
+      if (profession && language && subtest
+        && COURSE_PROFESSIONS.some((p) => p.id === profession)
+        && (language === 'en' || language === 'ar')
+        && COURSE_SUBTESTS.includes(subtest)) {
+        const targets = expectedVideoTargets(language, subtest, profession);
+        if (targets) {
+          await adminPatchVideo(created.videoId, { language, subtestCode: subtest, targetProfessionIds: targets });
+        }
+      }
       router.replace(buildVideoStepHref(created.videoId, 'details'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create a draft video.');

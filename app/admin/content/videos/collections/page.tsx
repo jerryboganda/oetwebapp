@@ -54,6 +54,7 @@ import {
   PATH_SEP,
   splitCollectionPath,
 } from '@/components/domain/video-library/CollectionTree';
+import { CourseVideosMap } from '@/components/domain/video-library/course-videos-map';
 import {
   adminBunnyDeleteCollectionVideo,
   adminCreateCollection,
@@ -112,6 +113,7 @@ export default function AdminVideoCollectionsPage() {
   const { user } = useCurrentUser();
   const canWrite = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const canSystemAdmin = hasPermission(user?.adminPermissions, AdminPermission.SystemAdmin);
+  const [viewMode, setViewMode] = useState<'course' | 'storage'>('course');
 
   const [notConfigured, setNotConfigured] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
@@ -452,12 +454,15 @@ export default function AdminVideoCollectionsPage() {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((c) => ({ value: c.collectionId, label: c.name }));
 
+  if (viewMode === 'course') return <CourseVideosMap onAdvanced={() => setViewMode('storage')} />;
+
   return (
     <>
       <AdminOperationsLayout
         eyebrow="Content"
-        title="Collections"
+        title="Advanced Video Storage"
         description="Browse and manage the live Bunny Stream library: collections, the videos inside them, and import into the learner catalog — without leaving the app."
+        actions={<Button variant="outline" onClick={() => setViewMode('course')}>Course Videos</Button>}
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Content', href: '/admin/content' },
