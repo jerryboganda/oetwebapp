@@ -193,6 +193,10 @@ export interface AllocatableVideo {
   language: string | null;
   /** Empty = visible to all professions. */
   professionIds: string[];
+  /** Curated shelf/category name(s) this video belongs to (e.g. "Writing / Medicine / Arabic /
+   *  December Batch / Sessions"). Many videos share no distinguishing words in their own title,
+   *  so this is often the only thing a picker can search or bulk-select by. */
+  categoryNames: string[];
 }
 
 export async function fetchAllocatableVideos(): Promise<AllocatableVideo[]> {

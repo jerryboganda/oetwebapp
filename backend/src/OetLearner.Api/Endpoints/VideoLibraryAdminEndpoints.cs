@@ -125,9 +125,10 @@ public static class VideoLibraryAdminEndpoints
 
         // ── Allocation picker source ────────────────────────────────────────
         // Lightweight list for the per-user "Videos scope" allocator (admin Add-User /
-        // edit-user panel). Returns every non-archived video with just the axes the
-        // grouped tree needs — section (SubtestCode), language, profession — so the
-        // client can group by Section → Language without paging or heavy summary joins.
+        // edit-user panel) and the per-plan video include/exclude override picker. Returns every
+        // non-archived video with the axes the grouped tree needs — section (SubtestCode),
+        // language, profession, category — so the client can group/search by Section → Language
+        // or by curated shelf name without paging or heavy summary joins.
         admin.MapGet("/videos/allocatable", async (
             LearnerDbContext db,
             CancellationToken ct) =>
@@ -139,12 +140,23 @@ public static class VideoLibraryAdminEndpoints
                 .Select(v => new { v.Id, v.Title, v.SubtestCode, v.Language, v.ProfessionIdsJson })
                 .ToListAsync(ct);
 
+            var videoIds = videos.Select(v => v.Id).ToList();
+            var categoryNames = await (
+                from item in db.VideoCategoryItems.AsNoTracking()
+                join category in db.VideoCategories.AsNoTracking() on item.CategoryId equals category.Id
+                where videoIds.Contains(item.VideoId)
+                select new { item.VideoId, category.Title }).ToListAsync(ct);
+            var categoryNamesByVideo = categoryNames
+                .GroupBy(n => n.VideoId, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(n => n.Title).Distinct().ToList(), StringComparer.Ordinal);
+
             return Results.Ok(videos.Select(v => new AdminAllocatableVideoDto(
                 Id: v.Id,
                 Title: v.Title,
                 SubtestCode: v.SubtestCode,
                 Language: v.Language,
-                ProfessionIds: VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson))));
+                ProfessionIds: VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson),
+                CategoryNames: categoryNamesByVideo.TryGetValue(v.Id, out var names) ? names : [])));
         })
         .WithAdminRead("AdminContentRead");
 

@@ -22,14 +22,18 @@ public sealed record AdminVideoSummaryDto(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? PublishAt);
 
-/// <summary>Lightweight video row for the per-user allocation picker: just the
-/// axes the grouped tree needs (section = SubtestCode, language, profession).</summary>
+/// <summary>Lightweight video row for the per-user allocation / per-plan override pickers: the
+/// axes the grouped tree needs (section = SubtestCode, language, profession) plus the curated
+/// shelf/category name(s) — many videos share no distinguishing words in their own title (e.g.
+/// "Writing Session 3"), so the category ("... New Medicine Crash Course ...", "... December
+/// Batch ...") is often the only thing an admin can search or select by.</summary>
 public sealed record AdminAllocatableVideoDto(
     string Id,
     string Title,
     string? SubtestCode,
     string? Language,
-    IReadOnlyList<string> ProfessionIds);
+    IReadOnlyList<string> ProfessionIds,
+    IReadOnlyList<string> CategoryNames);
 
 public sealed record AdminVideoCaptionDto(Guid Id, string LanguageCode, string Label, bool SyncedToBunny);
 public sealed record AdminVideoAttachmentDto(Guid Id, string Title, string MediaAssetId, int SortOrder);

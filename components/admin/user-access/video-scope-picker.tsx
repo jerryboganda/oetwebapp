@@ -39,8 +39,15 @@ const LANGUAGE_ORDER = ['en', 'ar', ''] as const;
 
 function buildGroups(videos: AllocatableVideo[], query: string): SectionGroup[] {
   const needle = query.trim().toLowerCase();
+  // Many videos share no distinguishing words in their own title (e.g. "Writing Session 3") — the
+  // curated shelf/category name (e.g. "... New Medicine Crash Course ...") is often the only thing
+  // that tells a batch of videos apart, so search matches either.
   const filtered = needle
-    ? videos.filter((v) => v.title.toLowerCase().includes(needle))
+    ? videos.filter(
+        (v) =>
+          v.title.toLowerCase().includes(needle) ||
+          v.categoryNames.some((name) => name.toLowerCase().includes(needle)),
+      )
     : videos;
 
   const bySection = new Map<SectionKey, AllocatableVideo[]>();
@@ -170,7 +177,7 @@ export function VideoScopePicker({
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search videos by title…"
+          placeholder="Search by video title or shelf/category (e.g. “Crash”, “December”)…"
           disabled={disabled}
           className="w-full rounded-xl border border-border bg-background-light py-2 pl-9 pr-3 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
@@ -265,16 +272,23 @@ export function VideoScopePicker({
                             {lang.videos.map((video) => (
                               <label
                                 key={video.id}
-                                className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-admin-bg-subtle"
+                                className="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-admin-bg-subtle"
                               >
                                 <input
                                   type="checkbox"
                                   checked={selectedSet.has(video.id)}
                                   onChange={() => toggleOne(video.id)}
                                   disabled={disabled}
-                                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
                                 />
-                                <span className="truncate text-navy">{video.title}</span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-navy">{video.title}</span>
+                                  {video.categoryNames.length > 0 ? (
+                                    <span className="block truncate text-xs text-muted">
+                                      {video.categoryNames.join(' · ')}
+                                    </span>
+                                  ) : null}
+                                </span>
                               </label>
                             ))}
                           </div>
