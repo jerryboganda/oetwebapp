@@ -19,6 +19,17 @@ interface NotificationPreferencesPanelProps {
   showCard?: boolean;
 }
 
+type ChannelFilter = 'all' | 'in_app' | 'email' | 'push' | 'quiet' | 'web_push';
+
+const CHANNEL_TABS: { key: ChannelFilter; label: string; icon: typeof Bell }[] = [
+  { key: 'all', label: 'All', icon: Bell },
+  { key: 'in_app', label: 'In-app', icon: Volume2 },
+  { key: 'email', label: 'Email', icon: Mail },
+  { key: 'push', label: 'Push', icon: Smartphone },
+  { key: 'quiet', label: 'Quiet hours', icon: MoonStar },
+  { key: 'web_push', label: 'Web push', icon: Wifi },
+];
+
 function formatEventLabel(eventKey: string): string {
   return eventKey
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -99,6 +110,17 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
   const [draft, setDraft] = useState<NotificationPreferencePayload | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ChannelFilter>('all');
+
+  const isAll = filter === 'all';
+  const showInApp = isAll || filter === 'in_app';
+  const showEmail = isAll || filter === 'email';
+  const showPush = isAll || filter === 'push';
+  const showQuiet = isAll || filter === 'quiet';
+  const showChannelsSection = filter !== 'web_push';
+  const showQuietInputs = isAll || filter === 'quiet';
+  const showBrowserPush = isAll || filter === 'push' || filter === 'web_push';
+  const showEventMatrix = isAll || filter === 'in_app' || filter === 'email' || filter === 'push';
 
   useEffect(() => {
     setDraft(cloneNotificationPreferences(preferences));
@@ -156,36 +178,76 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
       {localError ? <InlineAlert variant="error">{localError}</InlineAlert> : null}
       {saveMessage ? <InlineAlert variant="success">{saveMessage}</InlineAlert> : null}
 
-      <section className="space-y-2">
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Delivery channels</h3>
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          <PreferenceToggle
-            checked={draft.globalInAppEnabled}
-            label="In-app notifications"
-            hint="Shared inbox and realtime badge."
-            onToggle={() => updateDraft((current) => ({ ...current, globalInAppEnabled: !current.globalInAppEnabled }))}
-          />
-          <PreferenceToggle
-            checked={draft.globalEmailEnabled}
-            label="Email delivery"
-            hint="Transactional notification email."
-            onToggle={() => updateDraft((current) => ({ ...current, globalEmailEnabled: !current.globalEmailEnabled }))}
-          />
-          <PreferenceToggle
-            checked={draft.globalPushEnabled}
-            label="Push delivery policy"
-            hint="Fan out browser push for supported events."
-            onToggle={() => updateDraft((current) => ({ ...current, globalPushEnabled: !current.globalPushEnabled }))}
-          />
-          <PreferenceToggle
-            checked={draft.quietHoursEnabled}
-            label="Quiet hours"
-            hint="Reminder push respects local quiet hours."
-            onToggle={() => updateDraft((current) => ({ ...current, quietHoursEnabled: !current.quietHoursEnabled }))}
-          />
-        </div>
-      </section>
+      <div
+        role="tablist"
+        aria-label="Filter notification controls by channel"
+        className="-mx-1 flex flex-nowrap gap-1.5 overflow-x-auto px-1 pb-1"
+      >
+        {CHANNEL_TABS.map((tab) => {
+          const TabIcon = tab.icon;
+          const active = filter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setFilter(tab.key)}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors',
+                active
+                  ? 'bg-primary text-white shadow-sm shadow-primary/20 dark:bg-violet-700'
+                  : 'bg-background-light text-muted hover:text-navy',
+              )}
+            >
+              <TabIcon className="h-3.5 w-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
+      {showChannelsSection ? (
+        <section className="space-y-2">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Delivery channels</h3>
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            {showInApp ? (
+              <PreferenceToggle
+                checked={draft.globalInAppEnabled}
+                label="In-app notifications"
+                hint="Shared inbox and realtime badge."
+                onToggle={() => updateDraft((current) => ({ ...current, globalInAppEnabled: !current.globalInAppEnabled }))}
+              />
+            ) : null}
+            {showEmail ? (
+              <PreferenceToggle
+                checked={draft.globalEmailEnabled}
+                label="Email delivery"
+                hint="Transactional notification email."
+                onToggle={() => updateDraft((current) => ({ ...current, globalEmailEnabled: !current.globalEmailEnabled }))}
+              />
+            ) : null}
+            {showPush ? (
+              <PreferenceToggle
+                checked={draft.globalPushEnabled}
+                label="Push delivery policy"
+                hint="Fan out browser push for supported events."
+                onToggle={() => updateDraft((current) => ({ ...current, globalPushEnabled: !current.globalPushEnabled }))}
+              />
+            ) : null}
+            {showQuiet ? (
+              <PreferenceToggle
+                checked={draft.quietHoursEnabled}
+                label="Quiet hours"
+                hint="Reminder push respects local quiet hours."
+                onToggle={() => updateDraft((current) => ({ ...current, quietHoursEnabled: !current.quietHoursEnabled }))}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {showQuietInputs ? (
       <section className="space-y-2">
         <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Timezone &amp; quiet hours</h3>
         <div className="grid gap-2.5 sm:grid-cols-3">
@@ -211,7 +273,9 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
           />
         </div>
       </section>
+      ) : null}
 
+      {showBrowserPush ? (
       <div className="rounded-xl border border-border bg-surface p-3.5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
@@ -248,7 +312,9 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
           </p>
         ) : null}
       </div>
+      ) : null}
 
+      {showEventMatrix ? (
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -269,6 +335,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
                 <div className="min-w-0 space-y-1.5">
                   <p className="text-[13px] font-semibold text-navy">{formatEventLabel(eventKey)}</p>
                   <div className="flex flex-wrap gap-1.5">
+                    {showInApp ? (
                     <PreferenceToggle
                       checked={Boolean(eventPreference.inAppEnabled)}
                       label="In-app"
@@ -285,6 +352,8 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
                         }))
                       }
                     />
+                    ) : null}
+                    {showEmail ? (
                     <PreferenceToggle
                       checked={Boolean(eventPreference.emailEnabled)}
                       label="Email"
@@ -301,6 +370,8 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
                         }))
                       }
                     />
+                    ) : null}
+                    {showPush ? (
                     <PreferenceToggle
                       checked={Boolean(eventPreference.pushEnabled)}
                       label="Push"
@@ -317,9 +388,11 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
                         }))
                       }
                     />
+                    ) : null}
                   </div>
                 </div>
 
+                {showEmail ? (
                 <div className="shrink-0 lg:w-44">
                   <Select
                     label="Email mode"
@@ -343,6 +416,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
                     ]}
                   />
                 </div>
+                ) : null}
               </div>
             </div>
           ))}
@@ -354,6 +428,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
           </p>
         ) : null}
       </section>
+      ) : null}
 
       <div className="flex justify-end border-t border-border pt-3.5">
         <Button type="button" onClick={handleSave} loading={isUpdatingPreferences} className="gap-2">
@@ -372,42 +447,12 @@ export function NotificationPreferencesPanel({
   description = 'Manage delivery channels, quiet hours, and browser push from one shared account-level panel.',
   showCard = true,
 }: NotificationPreferencesPanelProps) {
-  const legend = (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <Badge variant="info" className="gap-1">
-        <Bell className="h-3 w-3" />
-        Shared account
-      </Badge>
-      <Badge variant="muted" className="gap-1">
-        <Mail className="h-3 w-3" />
-        Email
-      </Badge>
-      <Badge variant="muted" className="gap-1">
-        <Volume2 className="h-3 w-3" />
-        In-app
-      </Badge>
-      <Badge variant="muted" className="gap-1">
-        <Smartphone className="h-3 w-3" />
-        Push
-      </Badge>
-      <Badge variant="muted" className="gap-1">
-        <MoonStar className="h-3 w-3" />
-        Quiet hours
-      </Badge>
-      <Badge variant="muted" className="gap-1">
-        <Wifi className="h-3 w-3" />
-        Web push
-      </Badge>
-    </div>
-  );
-
   if (!showCard) {
     return (
       <div className={cn('space-y-3.5', className)}>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <h2 className="text-lg font-semibold text-navy">{title}</h2>
           <p className="text-sm text-muted">{description}</p>
-          {legend}
         </div>
         <NotificationPreferencesInner compact={compact} />
       </div>
@@ -416,10 +461,9 @@ export function NotificationPreferencesPanel({
 
   return (
     <Card className={className}>
-      <CardHeader className="mb-4 space-y-2">
+      <CardHeader className="mb-4 space-y-1">
         <CardTitle>{title}</CardTitle>
         <p className="text-sm text-muted">{description}</p>
-        {legend}
       </CardHeader>
       <CardContent>
         <NotificationPreferencesInner compact={compact} />
