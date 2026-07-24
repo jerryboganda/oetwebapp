@@ -5,6 +5,7 @@
   "remote": {
     "urls": ["https://app.oetwithdrhesham.co.uk"]
   },
+  "platforms": ["windows", "macOS", "linux"],
   "windows": ["main"],
   "permissions": ["core:default", "allow-runtime-info", "allow-sign-video-challenge", "allow-updater-check", "allow-updater-install", "allow-app-relaunch", "allow-hard-reload", "allow-set-capture-protection"]
 }

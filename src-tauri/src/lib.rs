@@ -115,6 +115,68 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// macOS-only native application menu. Restores the standard menu bar so that
+/// the WebView gets working Edit shortcuts (Cmd+C/V/X/A/Z) — without an Edit
+/// submenu, WKWebView-based apps silently lose clipboard keyboard shortcuts —
+/// plus About, Services, Hide/Quit, a Cmd+R Reload, Fullscreen and Window
+/// controls. Windows/Linux are intentionally left with no app menu so the
+/// chromeless thin-client UX is unchanged (the tray menu still applies there).
+#[cfg(target_os = "macos")]
+fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
+    use tauri::menu::SubmenuBuilder;
+
+    let app_menu = SubmenuBuilder::new(app, "OET with Dr. Hesham")
+        .about(None)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let reload = MenuItemBuilder::with_id("menu-reload", "Reload")
+        .accelerator("CmdOrCtrl+R")
+        .build(app)?;
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&reload)
+        .separator()
+        .fullscreen()
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .separator()
+        .close_window()
+        .build()?;
+
+    let menu = MenuBuilder::new(app)
+        .items(&[&app_menu, &edit_menu, &view_menu, &window_menu])
+        .build()?;
+    app.set_menu(menu)?;
+
+    app.on_menu_event(|app, event| {
+        if event.id().as_ref() == "menu-reload" {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.eval("location.reload()");
+            }
+        }
+    });
+    Ok(())
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         // single-instance must be the first plugin registered.
@@ -292,6 +354,11 @@ pub fn run() {
             }
 
             setup_tray(&handle)?;
+
+            // macOS: install the native app menu (Edit shortcuts, About, Reload).
+            // Windows/Linux keep the chromeless UX (no app menu).
+            #[cfg(target_os = "macos")]
+            setup_app_menu(&handle)?;
 
             // Auto-update check (production updater config lives in
             // tauri.conf.json; OET_UPDATER_URL overrides for testing).
