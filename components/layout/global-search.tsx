@@ -171,7 +171,7 @@ export function GlobalSearch({ className }: { className?: string }) {
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'group flex h-9 w-full items-center gap-2.5 rounded-full border border-border bg-surface px-3.5 text-left text-[13px] text-muted shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          'group flex h-11 w-full items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 text-left text-[13.5px] text-muted shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           className,
         )}
         aria-label="Search anything"

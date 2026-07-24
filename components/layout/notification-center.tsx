@@ -584,7 +584,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
 /*  Notification Center (export)                                  */
 /* ────────────────────────────────────────────────────────────── */
 
-export function NotificationCenter() {
+export function NotificationCenter({ triggerClassName }: { triggerClassName?: string } = {}) {
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -594,7 +594,7 @@ export function NotificationCenter() {
       <div className="hidden md:block">
         <Popover.Root open={desktopOpen} onOpenChange={setDesktopOpen}>
           <Popover.Trigger asChild>
-             <NotificationBellButton open={desktopOpen} />
+             <NotificationBellButton open={desktopOpen} className={triggerClassName} />
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content
@@ -612,7 +612,7 @@ export function NotificationCenter() {
           button), so the Drawer chrome intentionally omits its `title` to avoid
           a duplicate "Notifications" bar. */}
       <div className="md:hidden">
-        <NotificationBellButton onClick={() => setMobileOpen(true)} open={mobileOpen} />
+        <NotificationBellButton onClick={() => setMobileOpen(true)} open={mobileOpen} className={triggerClassName} />
         <Drawer
           open={mobileOpen}
           onClose={() => setMobileOpen(false)}

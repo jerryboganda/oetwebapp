@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, type ReactNode, useContext, useEffect } from 'react';
+import { Suspense, type ReactNode, useContext, useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
@@ -74,6 +74,7 @@ export function AppShell({
   const presenceMode = getMotionPresenceMode(reducedMotion);
   const isAdminWorkspace = workspaceRole === 'admin' || requiredRole === 'admin';
   const isLearnerWorkspace = (workspaceRole ?? requiredRole) === 'learner' && !isAdminWorkspace;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const shellBackdrop = isAdminWorkspace ? null : (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -133,10 +134,13 @@ export function AppShell({
         sectionedItems={mobileMenuSections}
         userSummary={userSummary}
         workspaceRole={workspaceRole}
+        onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
+        sidebarCollapsed={sidebarCollapsed}
       />
       <div className="relative z-10 flex min-h-0 flex-1">
         <Sidebar
           hideBrand
+          className={cn(sidebarCollapsed && 'lg:hidden')}
           items={navItems}
           groups={navGroups}
           userSummary={userSummary}

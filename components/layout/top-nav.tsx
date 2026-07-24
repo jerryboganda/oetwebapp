@@ -38,7 +38,15 @@ interface TopNavProps {
    *  full viewport width (learner workspace) rather than sitting beside the
    *  sidebar, which owns the logo in the other workspaces. */
   showBrand?: boolean;
+  /** Desktop sidebar collapse. Supplying this reveals the menu button at lg+,
+   *  where it would otherwise be a mobile-only control. */
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
 }
+
+/** Bordered circular icon button used by the bell and theme toggle. */
+const ICON_BUTTON_CLASS =
+  'h-10 w-10 !rounded-full border border-border bg-surface p-0 text-muted shadow-sm hover:border-border-hover hover:bg-surface hover:text-navy';
 
 const ROLE_LABEL: Record<string, string> = {
   learner: 'Learner',
@@ -88,16 +96,16 @@ function ProfileMenu({
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1 pr-2 shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:pr-2.5"
+        className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-1.5 shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:pr-3"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-bold text-primary ring-1 ring-primary/10">
           {initials}
         </span>
-        <span className="hidden min-w-0 text-left leading-none xl:block">
-          <span className="block max-w-[9rem] truncate text-[12.5px] font-bold text-navy">{displayName}</span>
-          <span className="mt-0.5 block text-[10.5px] text-muted">{roleLabel}</span>
+        <span className="hidden min-w-0 text-left leading-tight xl:block">
+          <span className="block max-w-[9rem] truncate text-[13px] font-bold text-navy">{displayName}</span>
+          <span className="block text-[11px] text-muted">{roleLabel}</span>
         </span>
-        <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-muted lg:block" aria-hidden="true" />
+        <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted lg:block" aria-hidden="true" />
       </button>
 
       {open ? (
@@ -175,6 +183,8 @@ export function TopNav({
   userSummary,
   workspaceRole,
   showBrand = false,
+  onToggleSidebar,
+  sidebarCollapsed = false,
 }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname() ?? '/';
@@ -268,10 +278,7 @@ export function TopNav({
       >
         <div className={cn('flex items-center gap-2.5', showBrand && 'shrink-0')}>
           <button
-            className={cn(
-              'touch-target pressable -ml-1 rounded-xl p-1.5 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
-              showBrand ? 'lg:hidden' : 'lg:hidden',
-            )}
+            className="touch-target pressable -ml-1 rounded-xl p-1.5 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary lg:hidden"
             onClick={() => {
               void triggerImpactHaptic('LIGHT');
               setMobileMenuOpen((current) => !current);
@@ -283,21 +290,37 @@ export function TopNav({
             {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
           </button>
 
+          {onToggleSidebar ? (
+            <button
+              type="button"
+              className="pressable -ml-1 hidden rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy lg:inline-flex"
+              onClick={() => {
+                void triggerImpactHaptic('LIGHT');
+                onToggleSidebar();
+              }}
+              aria-label={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
+              aria-expanded={!sidebarCollapsed}
+            >
+              <Menu className="h-6 w-6" aria-hidden="true" />
+            </button>
+          ) : null}
+
           {showBrand ? (
             <Link
               href="/"
-              className="pressable flex items-center text-navy transition-opacity hover:opacity-90"
+              className="pressable flex items-baseline gap-2 transition-opacity hover:opacity-90"
               aria-label="OET with Dr Ahmed Hesham home"
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
             >
-              <Image
-                src="/brand/oet-with-dr-hesham-logo.png"
-                alt="OET with Dr Ahmed Hesham"
-                width={400}
-                height={200}
-                priority
-                className="h-12 w-auto object-contain sm:h-14 lg:h-20"
-              />
+              <span className="text-[1.75rem] font-extrabold leading-none tracking-tight text-[#4c1d95] dark:text-violet-300 lg:text-[2.25rem]">
+                OET
+              </span>
+              <span className="leading-tight">
+                <span className="block text-[10.5px] font-medium text-muted lg:text-[11.5px]">with</span>
+                <span className="block whitespace-nowrap text-[13px] font-bold text-navy lg:text-[15px]">
+                  Dr Ahmed Hesham
+                </span>
+              </span>
             </Link>
           ) : null}
 
@@ -327,22 +350,30 @@ export function TopNav({
         >
           {actions}
           {showStreakBadges && <LearnerStreakBadges className="hidden sm:flex" />}
-          <TourLauncher workspaceRole={workspaceRole} />
-          <ThemeToggle />
-          <NotificationCenter />
           {showBrand ? (
-            <ProfileMenu
-              displayName={displayName}
-              initials={initials}
-              email={userSummary?.email ?? ''}
-              roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
-              settingsHref={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
-              onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
-            />
+            <>
+              {/* Bell then theme, matching the reference header order. The tour
+                  launcher moves into the account menu to keep the bar clean. */}
+              <NotificationCenter triggerClassName={ICON_BUTTON_CLASS} />
+              <ThemeToggle className={ICON_BUTTON_CLASS} />
+              <ProfileMenu
+                displayName={displayName}
+                initials={initials}
+                email={userSummary?.email ?? ''}
+                roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
+                settingsHref={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
+                onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
+              />
+            </>
           ) : (
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
-              {initials}
-            </div>
+            <>
+              <TourLauncher workspaceRole={workspaceRole} />
+              <ThemeToggle />
+              <NotificationCenter />
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
+                {initials}
+              </div>
+            </>
           )}
         </motion.div>
       </motion.header>
