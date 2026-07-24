@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { LockKeyhole, MonitorDown, Smartphone } from 'lucide-react';
-import { ANDROID_STORE_URL, GET_APP_PATH, GITHUB_RELEASES_URL } from '@/lib/app-downloads';
+import { ANDROID_STORE_URL, GET_APP_PATH } from '@/lib/app-downloads';
 
 /**
  * Shown in place of the player on WEB (browser) visits — videos play only
@@ -43,15 +43,13 @@ export function PlayerLockScreen({
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <a
-            href={GITHUB_RELEASES_URL}
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            href={GET_APP_PATH}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
           >
             <MonitorDown className="h-4 w-4" aria-hidden="true" />
             Desktop app (Windows / Mac)
-          </a>
+          </Link>
           <a
             href={ANDROID_STORE_URL}
             target="_blank"
