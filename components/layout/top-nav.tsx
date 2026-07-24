@@ -16,6 +16,7 @@ import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
 import { LearnerStreakBadges } from './learner-streak-badges';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
@@ -63,7 +64,7 @@ const ROLE_LABEL: Record<string, string> = {
 /** Avatar + name + role with a small account menu. */
 function ProfileMenu({
   displayName,
-  initials,
+  avatarUrl,
   email,
   roleLabel,
   settingsHref,
@@ -71,7 +72,7 @@ function ProfileMenu({
   workspaceRole,
 }: {
   displayName: string;
-  initials: string;
+  avatarUrl?: string | null;
   email: string;
   roleLabel: string;
   settingsHref: string;
@@ -115,9 +116,7 @@ function ProfileMenu({
           HEADER_CHIP_HOVER,
         )}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-bold text-primary ring-1 ring-primary/10">
-          {initials}
-        </span>
+        <UserAvatar avatarUrl={avatarUrl} displayName={displayName} className="h-9 w-9" />
         <span className="hidden min-w-0 text-left leading-tight xl:block">
           <span className="block max-w-[9rem] truncate text-[13px] font-bold text-navy">{displayName}</span>
           <span className="block text-[11px] text-muted">{roleLabel}</span>
@@ -393,7 +392,7 @@ export function TopNav({
               <ThemeToggle className={ICON_BUTTON_CLASS} />
               <ProfileMenu
                 displayName={displayName}
-                initials={initials}
+                avatarUrl={authContext?.user?.avatarUrl}
                 email={userSummary?.email ?? ''}
                 roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
                 settingsHref={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}

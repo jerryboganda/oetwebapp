@@ -11,6 +11,7 @@ import {
 import { env } from './env';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
 import { getClientIdentitySnapshot } from './client-version';
+import type { CurrentUser } from './types/auth';
 import type {
   ExamFamilyCode,
   UserProfile,
@@ -1636,6 +1637,14 @@ export async function updateSettingsSection(section: 'profile' | 'goals' | 'noti
   return apiRequest<UpdateSettingsSectionResponse>(`/v1/settings/${section}`, {
     method: 'PATCH',
     body: JSON.stringify({ values }),
+  });
+}
+
+/** Sets or clears (null) the learner's avatar. `avatarUrl` must already be a `/v1/media/{id}/content` path from `uploadMedia`. */
+export async function updateMyAvatar(avatarUrl: string | null): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>('/v1/me/avatar', {
+    method: 'PUT',
+    body: JSON.stringify({ avatarUrl }),
   });
 }
 
@@ -14216,7 +14225,7 @@ export interface CheckoutSessionStatus {
   fulfilledAt?: string | null;
   /**
    * How the purchased package is handed over — `automatic_web` | `manual_web` |
-   * `telegram` | `manual_material`. `status: 'fulfilled'` only means the PAYMENT
+   * `whatsapp` | `manual_material`. `status: 'fulfilled'` only means the PAYMENT
    * cleared; for anything other than `automatic_web` access is NOT live, because the
    * subscription stays Pending until an admin marks it fulfilled (spec 2026-07-15
    * §2/§6.6). The success page must branch on this before claiming access was added.

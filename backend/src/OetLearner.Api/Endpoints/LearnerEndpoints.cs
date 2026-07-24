@@ -33,6 +33,7 @@ public static class LearnerEndpoints
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
 
         v1.MapGet("/me", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMeAsync(http.UserId(), ct)));
+        v1.MapPut("/me/avatar", async (HttpContext http, UpdateAvatarRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateAvatarAsync(http.UserId(), request, ct)));
         v1.MapGet("/me/bootstrap", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBootstrapAsync(http.UserId(), ct)));
         v1.MapGet("/freeze", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetFreezeStatusAsync(http.UserId(), ct)));
         v1.MapPost("/freeze/request", async (HttpContext http, FreezeRequestRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.RequestFreezeAsync(http.UserId(), request, ct)));

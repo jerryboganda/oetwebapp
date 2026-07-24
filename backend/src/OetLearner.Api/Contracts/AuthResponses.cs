@@ -13,7 +13,8 @@ public sealed record CurrentUserResponse(
     DateTimeOffset? AuthenticatorEnabledAt,
     string[]? AdminPermissions = null,
     string? ActiveProfessionId = null,
-    string? ActiveProfessionLabel = null);
+    string? ActiveProfessionLabel = null,
+    string? AvatarUrl = null);
 
 public sealed record AuthSessionResponse(
     string AccessToken,

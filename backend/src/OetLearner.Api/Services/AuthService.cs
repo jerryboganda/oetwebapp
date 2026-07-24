@@ -1051,7 +1051,8 @@ public sealed class AuthService(
                 learner.DisplayName,
                 cancellationToken,
                 activeProfessionId: learner.ActiveProfessionId,
-                activeProfessionLabel: professionLabel);
+                activeProfessionLabel: professionLabel,
+                avatarUrl: learner.AvatarUrl);
         }
 
         if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
@@ -1345,7 +1346,8 @@ public sealed class AuthService(
         CancellationToken cancellationToken,
         string[]? adminPermissions = null,
         string? activeProfessionId = null,
-        string? activeProfessionLabel = null)
+        string? activeProfessionLabel = null,
+        string? avatarUrl = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1381,7 +1383,8 @@ public sealed class AuthService(
             AdminPermissions: adminPermissions,
             ActiveProfessionId: activeProfessionId,
             ActiveProfessionLabel: activeProfessionLabel,
-            SubscriptionTier: subscriptionTier);
+            SubscriptionTier: subscriptionTier,
+            AvatarUrl: avatarUrl);
     }
 
     private async Task<bool> HasActiveLearnerSubscriptionAsync(string userId, CancellationToken cancellationToken)
@@ -1422,7 +1425,8 @@ public sealed class AuthService(
             subject.AuthenticatorEnabledAt,
             subject.AdminPermissions,
             subject.ActiveProfessionId,
-            subject.ActiveProfessionLabel);
+            subject.ActiveProfessionLabel,
+            subject.AvatarUrl);
 
     private static bool TryBuildCurrentUserFromClaims(
         ClaimsPrincipal principal,
@@ -1453,6 +1457,9 @@ public sealed class AuthService(
             ? null
             : adminPermsClaim.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+        // AvatarUrl intentionally left null here: this path rebuilds the current-user
+        // response from JWT claims only, and the avatar URL is not stamped into the
+        // token (keeps it small). The frontend falls back to initials in that case.
         currentUser = new CurrentUserResponse(
             userId,
             email,

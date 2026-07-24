@@ -23,6 +23,13 @@ public record PatchGoalsRequest(
 public record PatchSectionRequest(Dictionary<string, object?> Values);
 
 /// <summary>
+/// Sets or clears the current learner's avatar. <paramref name="AvatarUrl"/> must be a
+/// relative path under our own media route (see LearnerService.UpdateAvatarAsync); null
+/// or empty clears the avatar.
+/// </summary>
+public record UpdateAvatarRequest(string? AvatarUrl);
+
+/// <summary>
 /// Marks a guided product tour or contextual tip for the current user.
 /// <paramref name="Status"/> is one of: completed | skipped | dismissed.
 /// For "dismissed", <paramref name="TourId"/> is treated as a contextual-tip id.

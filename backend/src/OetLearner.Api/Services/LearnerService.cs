@@ -160,6 +160,47 @@ public partial class LearnerService(
         return BuildMeDto(profile.User, profile.Goal, freeze);
     }
 
+    public async Task<object> UpdateAvatarAsync(string userId, UpdateAvatarRequest request, CancellationToken cancellationToken)
+    {
+        var avatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
+
+        if (avatarUrl is not null)
+        {
+            if (avatarUrl.Length > 512)
+            {
+                throw ApiException.Validation(
+                    "avatar_url_too_long",
+                    "Avatar URL must be 512 characters or fewer.",
+                    [new ApiFieldError("avatarUrl", "too_long", "Avatar URL must be 512 characters or fewer.")]);
+            }
+
+            // Only our own media route is accepted — this field is later rendered directly,
+            // so anything that could resolve to an absolute/external location (protocol-relative,
+            // http(s), data:, javascript:, etc.) is rejected to prevent an open redirect or
+            // third-party content injection.
+            // The prefix check alone still admits traversal (".../v1/media/../../x"),
+            // which would resolve away from the media route once the browser
+            // normalises it. Same-origin and self-scoped, so not exploitable across
+            // users, but there is no legitimate avatar path containing "..".
+            if (!avatarUrl.StartsWith("/v1/media/", StringComparison.Ordinal)
+                || avatarUrl.Contains("..", StringComparison.Ordinal))
+            {
+                throw ApiException.Validation(
+                    "avatar_url_invalid",
+                    "Avatar URL must be a relative /v1/media/ path.",
+                    [new ApiFieldError("avatarUrl", "invalid", "Avatar URL must be a relative /v1/media/ path.")]);
+            }
+        }
+
+        var user = await db.Users.SingleAsync(x => x.Id == userId, cancellationToken);
+        user.AvatarUrl = avatarUrl;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
+        var freeze = await GetFreezeStatusForLoadedUserAsync(profile.User, cancellationToken);
+        return BuildMeDto(profile.User, profile.Goal, freeze);
+    }
+
     public async Task<object> GetBootstrapAsync(string userId, CancellationToken cancellationToken)
     {
         var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
@@ -210,6 +251,7 @@ public partial class LearnerService(
         lastActiveAt = user.LastActiveAt,
         currentPlanId = user.CurrentPlanId,
         activeProfessionId = user.ActiveProfessionId,
+        avatarUrl = user.AvatarUrl,
         freeze,
         goals = new
         {
@@ -8864,7 +8906,7 @@ public partial class LearnerService(
         var total = Math.Max(0m, Math.Round(subtotal - discount, 2, MidpointRounding.AwayFromZero));
         var planVersion = snapshotPlan is null ? null : await ResolvePlanVersionRefAsync(snapshotPlan, cancellationToken);
 
-        // How the plan being bought is handed over, so checkout can tell a Telegram/manual
+        // How the plan being bought is handed over, so checkout can tell a WhatsApp/manual
         // buyer their order sits Pending Manual Fulfilment rather than implying access is
         // live the moment they pay (spec 2026-07-15 §2/§6.6). Read from the version locked
         // to this quote so a mid-flight admin edit cannot change an in-flight order. An
@@ -10996,7 +11038,7 @@ public partial class LearnerService(
                 var deliveryMethod = await ResolvePlanDeliveryMethodAsync(quote.PlanVersionId, quote.PlanCode, ct);
                 if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod))
                 {
-                    // Telegram / manual-web / manual-material: the learner has paid, but an
+                    // WhatsApp / manual-web / manual-material: the learner has paid, but an
                     // admin still has to hand the package over. Park it at pending_manual and
                     // leave Status alone — a scaffold subscription stays Pending (which the
                     // entitlement resolver treats as FREE, so this grants nothing), and an
@@ -11095,7 +11137,7 @@ public partial class LearnerService(
         // is a strict no-op for a returning learner's existing Active/Cancelled/Frozen
         // subscription. Pending now has TWO producers — the checkout scaffold, and a
         // manual-delivery plan purchase parked above — so the pending_manual conjunct is
-        // load-bearing: without it this would activate a Telegram/manual order that an
+        // load-bearing: without it this would activate a WhatsApp/manual order that an
         // admin has not yet fulfilled.
         if (subscription.Status == SubscriptionStatus.Pending
             && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingManual, StringComparison.OrdinalIgnoreCase))

@@ -25,7 +25,8 @@ public sealed record AuthenticatedSessionSubject(
     string[]? AdminPermissions = null,
     string? ActiveProfessionId = null,
     string? ActiveProfessionLabel = null,
-    string? SubscriptionTier = null);
+    string? SubscriptionTier = null,
+    string? AvatarUrl = null);
 
 public sealed record IssuedAuthSession(
     string AccessToken,

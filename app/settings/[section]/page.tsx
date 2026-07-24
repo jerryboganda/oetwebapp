@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,9 +47,10 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
-import { ApiError, fetchSettingsSection, updateSettingsSection } from '@/lib/api';
+import { ApiError, fetchSettingsSection, updateMyAvatar, updateSettingsSection, uploadMedia } from '@/lib/api';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import { deleteAccount } from '@/lib/auth-client';
 import { fetchSupportWhatsApp, normalizeWhatsAppNumber, PLATFORM_WHATSAPP } from '@/lib/billing/whatsapp';
@@ -954,6 +955,109 @@ function SettingsSectionForm({
  * the real controls: the My-Recordings page (review + delete individual
  * recordings) and account deletion (full erasure).
  */
+const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
+const AVATAR_ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+
+/** Profile photo upload/remove control. Uploads to /v1/media/upload, then points
+ * the account at it via PUT /v1/me/avatar; refreshSession() pulls the new
+ * avatarUrl into AuthContext so the header updates immediately. */
+function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
+  const { user, refreshSession } = useAuth();
+  const palette = accentStyles[accent];
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = '';
+    if (!file) return;
+    if (!AVATAR_ALLOWED_TYPES.includes(file.type)) {
+      setError('Please choose a JPG, PNG, GIF, or WEBP image.');
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      setError('Photo must be smaller than 10 MB.');
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      const uploaded = await uploadMedia(file);
+      await updateMyAvatar(uploaded.url);
+      await refreshSession();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload photo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      await updateMyAvatar(null);
+      await refreshSession();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove photo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-[2.5rem] border border-border bg-surface shadow-sm relative overflow-hidden">
+      <div className="relative z-10 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-6">
+        <div className="flex min-w-0 flex-1 items-center gap-5">
+          <UserAvatar avatarUrl={user?.avatarUrl} displayName={user?.displayName} className="h-16 w-16 text-base" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <span className="text-xl font-black text-navy tracking-tight">Profile photo</span>
+              <Badge className={cn('rounded-full px-3 py-1 font-bold text-[10px] uppercase tracking-widest', palette.badge)}>
+                Personal Info
+              </Badge>
+            </div>
+            <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">
+              Shown across your account. JPG, PNG, GIF, or WEBP up to 10 MB. Optional — a picture isn&apos;t required.
+            </p>
+            {error ? <p className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <label
+            className={cn(
+              'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-primary-dark',
+              busy && 'pointer-events-none opacity-60',
+            )}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {user?.avatarUrl ? 'Change photo' : 'Upload photo'}
+            <input
+              type="file"
+              accept={AVATAR_ALLOWED_TYPES.join(',')}
+              className="sr-only"
+              disabled={busy}
+              onChange={(event) => { void handleFileSelected(event); }}
+            />
+          </label>
+          {user?.avatarUrl ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="gap-2 rounded-full font-bold text-danger hover:bg-danger/10"
+              disabled={busy}
+              onClick={() => { void handleRemove(); }}
+            >
+              <Trash2 className="h-4 w-4" />
+              Remove
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PrivacyControlsCard() {
   return (
     <div className="rounded-[2rem] border border-border bg-surface p-6 sm:p-8 shadow-sm relative overflow-hidden">
@@ -1307,6 +1411,8 @@ export default function LearnerSettingsSectionPage() {
                 configuredFieldCount={configuredFieldCount}
                 totalFieldCount={config.fields.length}
               />
+
+              {section === 'profile' ? <AvatarUploadCard accent={config.accent} /> : null}
 
               <SettingsSectionForm
                 accent={config.accent}

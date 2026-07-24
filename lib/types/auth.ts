@@ -15,6 +15,8 @@ export interface CurrentUser {
   adminPermissions?: string[] | null;
   activeProfessionId?: string | null;
   activeProfessionLabel?: string | null;
+  /** Relative path of the form `/v1/media/{id}/content`; bearer-authenticated, never load directly in an <img>. */
+  avatarUrl?: string | null;
 }
 
 export interface AuthSession {

@@ -34,6 +34,9 @@ public class LearnerUser
     [MaxLength(32)]
     public string? ActiveProfessionId { get; set; }
 
+    [MaxLength(512)]
+    public string? AvatarUrl { get; set; }
+
     public int OnboardingCurrentStep { get; set; } = 1;
     public int OnboardingStepCount { get; set; } = 4;
     public bool OnboardingCompleted { get; set; }
