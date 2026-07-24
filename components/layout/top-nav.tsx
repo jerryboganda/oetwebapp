@@ -260,7 +260,7 @@ export function TopNav({
       <motion.header
         className={cn(
           'sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-3 safe-area-inset-top lg:px-5',
-          showBrand ? 'h-16 lg:h-20' : 'glass-panel h-11 justify-between border-border/60 lg:h-12 lg:px-6',
+          showBrand ? 'h-16 lg:h-24' : 'glass-panel h-11 justify-between border-border/60 lg:h-12 lg:px-6',
           className,
         )}
         layout={!reducedMotion}
@@ -294,9 +294,9 @@ export function TopNav({
                 src="/brand/oet-with-dr-hesham-logo.png"
                 alt="OET with Dr Ahmed Hesham"
                 width={400}
-                height={140}
+                height={200}
                 priority
-                className="h-10 w-auto object-contain sm:h-11 lg:h-14"
+                className="h-12 w-auto object-contain sm:h-14 lg:h-20"
               />
             </Link>
           ) : null}
