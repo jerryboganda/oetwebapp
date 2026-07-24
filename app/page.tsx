@@ -469,7 +469,7 @@ export default function Dashboard() {
                   action={(
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} />
-                      <Button variant="outline" size="sm" className="ml-auto bg-surface shadow-sm" onClick={() => router.push('/study-plan')}>
+                      <Button variant="primary" size="sm" className="ml-auto" onClick={() => router.push('/study-plan')}>
                         View Full Plan <ArrowRight className="ml-1 h-4 w-4" />
                       </Button>
                     </div>
