@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
+    [DbContext(typeof(LearnerDbContext))]
     [Migration("20260805090000_AddSpeakingExamMockAttemptLink")]
     public partial class AddSpeakingExamMockAttemptLink : Migration
     {

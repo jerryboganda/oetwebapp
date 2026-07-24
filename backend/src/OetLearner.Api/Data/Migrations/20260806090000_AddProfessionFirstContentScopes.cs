@@ -1,9 +1,13 @@
+using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
+    [DbContext(typeof(LearnerDbContext))]
     [Migration("20260806090000_AddProfessionFirstContentScopes")]
     public partial class AddProfessionFirstContentScopes : Migration
     {
