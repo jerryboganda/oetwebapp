@@ -76,7 +76,10 @@ export function useEnabledModules(active = true): EnabledModulesGate {
   const isModuleEnabled = (moduleKey?: string | null): boolean => {
     if (!moduleKey) return true;
     if (!active || !loaded) return true;
-    if (lowered.length === 0) return true;
+    if (lowered.length === 0) {
+      return moduleKey.toLowerCase() !== MODULE_KEYS.mocks.toLowerCase()
+        && moduleKey.toLowerCase() !== MODULE_KEYS.recalls.toLowerCase();
+    }
     return lowered.includes(moduleKey.toLowerCase());
   };
 

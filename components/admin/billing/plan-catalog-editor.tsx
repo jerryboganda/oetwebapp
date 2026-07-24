@@ -92,13 +92,27 @@ const MODULE_TOGGLES = [
   { key: 'Recalls', label: 'Recalls' },
   { key: 'MaterialsLibrary', label: 'Materials' },
   { key: 'VideoLibrary', label: 'Videos' },
-  { key: 'Mocks', label: 'Mocks' },
 ] as const;
+const RECALLS_PLAN_CODES = new Set([
+  'full-condensed-medicine',
+  'full-condensed-medicine-tbook',
+  'full-nursing',
+  'full-nursing-assessment',
+  'full-nursing-premium',
+  'full-pharmacy',
+  'full-physiotherapy',
+  'full-allied-health',
+  'crash-course',
+  'crash-3letters',
+  'crash-5letters',
+]);
 const MODULE_STATUS_OPTIONS = [
   { value: 'enabled', label: 'Enabled' },
   { value: 'disabled', label: 'Disabled' },
 ];
-const DEFAULT_NEW_PLAN_MODULES = MODULE_TOGGLES.map((m) => m.key);
+// New plans start fail-closed. Modules are enabled deliberately from the approved
+// product matrix; mock access is never granted by a plan and is sold separately.
+const DEFAULT_NEW_PLAN_MODULES: string[] = [];
 
 function planHasModule(modules: string[], key: string): boolean {
   return modules.some((m) => m.toLowerCase() === key.toLowerCase());
@@ -367,6 +381,9 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
   // (subtests, TutorBook, etc.), so saving never drops modules the dropdowns don't manage.
   const setModuleEnabled = useCallback((key: string, enabled: boolean) => {
     setForm((prev) => {
+      if (key === 'Recalls' && !RECALLS_PLAN_CODES.has(prev.code.toLowerCase())) {
+        return { ...prev, modules: prev.modules.filter((m) => m.toLowerCase() !== 'recalls') };
+      }
       const without = prev.modules.filter((m) => m.toLowerCase() !== key.toLowerCase());
       return { ...prev, modules: enabled ? [...without, key] : without };
     });
@@ -436,7 +453,13 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       deliveryInstructions: form.deliveryInstructions.trim(),
       contentOverridesJson: buildContentOverridesJson(form.videoOverrides, form.materialOverridesJson),
       includedSubtestsJson: JSON.stringify(form.subtests),
-      dashboardModulesJson: JSON.stringify(form.modules),
+      dashboardModulesJson: JSON.stringify(
+        form.modules.filter((module) => {
+          if (module.toLowerCase() === 'mocks') return false;
+          if (module.toLowerCase() === 'recalls') return RECALLS_PLAN_CODES.has(form.code.toLowerCase());
+          return true;
+        }),
+      ),
       entitlementsJson: JSON.stringify(entitlements),
     };
 
@@ -666,12 +689,27 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
                 <Select
                   key={module.key}
                   label={module.label}
-                  value={planHasModule(form.modules, module.key) ? 'enabled' : 'disabled'}
+                  value={
+                    module.key === 'Recalls' && !RECALLS_PLAN_CODES.has(form.code.toLowerCase())
+                      ? 'disabled'
+                      : planHasModule(form.modules, module.key) ? 'enabled' : 'disabled'
+                  }
                   onChange={(e) => setModuleEnabled(module.key, e.target.value === 'enabled')}
                   options={MODULE_STATUS_OPTIONS}
+                  disabled={!canWrite || (module.key === 'Recalls' && !RECALLS_PLAN_CODES.has(form.code.toLowerCase()))}
                 />
               ))}
+              <Select
+                label="Mocks"
+                value="disabled"
+                options={MODULE_STATUS_OPTIONS}
+                disabled
+              />
             </div>
+            <p className="mt-3 text-xs text-muted">
+              Mock access is always sold separately through the 1, 3, or 5 Full Mocks packages.
+              Recalls can only be enabled for products that include the Recalls module in the approved pricing list.
+            </p>
           </div>
 
           <div className="rounded-2xl border border-border bg-background-light/50 p-4">

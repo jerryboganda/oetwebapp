@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Billing;
 
@@ -183,7 +184,9 @@ public sealed class Oet2026CatalogSeeder(
         plan.TutorBookDiscountEnabled = dto.TutorBookDiscount;
         plan.Profession = dto.Profession ?? "all";
         plan.ProductCategory = dto.ProductCategory ?? string.Empty;
-        plan.DashboardModulesJson = JsonSerializer.Serialize(dto.DashboardModules ?? new List<string>());
+        plan.DashboardModulesJson = PlanModulePolicy.NormalizeDashboardModulesJson(
+            dto.Code,
+            JsonSerializer.Serialize(dto.DashboardModules ?? new List<string>()));
         if (dto.IncludedSubtests is not null)
         {
             plan.IncludedSubtestsJson = JsonSerializer.Serialize(dto.IncludedSubtests);

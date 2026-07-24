@@ -51,6 +51,21 @@ public sealed class Oet2026CatalogManifestTests
         "tutor_book_discount"
     ];
 
+    private static readonly string[] RecallPlanCodes =
+    [
+        "full-condensed-medicine",
+        "full-condensed-medicine-tbook",
+        "full-nursing",
+        "full-nursing-assessment",
+        "full-nursing-premium",
+        "full-pharmacy",
+        "full-physiotherapy",
+        "full-allied-health",
+        "crash-course",
+        "crash-3letters",
+        "crash-5letters"
+    ];
+
     [Fact]
     public async Task PortfolioPlanCodes_MatchSpecExactlyOnce()
     {
@@ -121,6 +136,34 @@ public sealed class Oet2026CatalogManifestTests
         Assert.False(tutorBook.GetProperty("bundled").GetProperty("tutorBook").GetBoolean());
         Assert.False(tutorBook.GetProperty("recallUpdatesEnabled").GetBoolean());
         Assert.Contains("WhatsApp", tutorBook.GetProperty("deliveryInstructions").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CoursePlans_NeverGrantMocks_AndRecallsMatchPricingList()
+    {
+        var manifest = await LoadManifestAsync();
+        var plans = manifest.RootElement.GetProperty("plans").EnumerateArray().ToArray();
+
+        Assert.All(plans, plan =>
+        {
+            var modules = plan.GetProperty("dashboardModules")
+                .EnumerateArray()
+                .Select(module => module.GetString())
+                .ToArray();
+            Assert.DoesNotContain("Mocks", modules, StringComparer.OrdinalIgnoreCase);
+        });
+
+        var actualRecallCodes = plans
+            .Where(plan => plan.GetProperty("dashboardModules")
+                .EnumerateArray()
+                .Any(module => string.Equals(module.GetString(), "Recalls", StringComparison.OrdinalIgnoreCase)))
+            .Select(plan => plan.GetProperty("code").GetString())
+            .OrderBy(code => code, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            RecallPlanCodes.OrderBy(code => code, StringComparer.Ordinal),
+            actualRecallCodes);
     }
 
     private static async Task<JsonDocument> LoadManifestAsync()

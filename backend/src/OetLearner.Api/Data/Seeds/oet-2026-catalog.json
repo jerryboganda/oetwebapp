@@ -35,7 +35,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 100,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "WritingAssessments", "SpeakingSession", "AiPractice", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "WritingAssessments", "SpeakingSession", "AiPractice", "Recalls", "Addons"],
       "comparisonFeatures": [
         "160+ Listening exams (including exams beyond Jahshan/Benchmark)",
         "100+ Reading exams with answer keys and rationales",
@@ -64,7 +64,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 110,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "TutorBook", "AudioScripts", "Updates", "WritingAssessments", "SpeakingSession", "AiPractice", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "TutorBook", "AudioScripts", "Updates", "WritingAssessments", "SpeakingSession", "AiPractice", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Everything in Full Condensed Recorded Course (£100)",
         "The Tutor Book — First Edition 2026 (watermarked PDF, personalised)",
@@ -90,7 +90,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 120,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Full Nursing OET course (Listening, Reading, Writing, Speaking)",
         "Recall-based Nursing Writing letters and model answers",
@@ -117,7 +117,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 130,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "WritingAssessments", "AiPractice", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "WritingAssessments", "AiPractice", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Everything in Full Nursing OET Course (£60)",
         "5 Writing letter assessments (48–72h turnaround, Friday off)",
@@ -143,7 +143,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 140,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "BasicEnglish", "MaterialsLibrary", "WritingAssessments", "AiPractice", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "BasicEnglish", "MaterialsLibrary", "VideoLibrary", "WritingAssessments", "AiPractice", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Everything in Nursing Course + Assessment Package (£70)",
         "Basic English Course Preparation for OET (11+ hours)",
@@ -169,7 +169,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 150,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Full Pharmacy OET course (Listening, Reading, Writing, Speaking)",
         "Pharmacy-specific Writing examples and model answers",
@@ -196,7 +196,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 160,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Full Physiotherapy OET course (Listening, Reading, Writing, Speaking)",
         "Recall-based Physiotherapy Writing letters and model answers",
@@ -223,7 +223,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 170,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Full Allied Health OET course (Listening, Reading, Writing, Speaking)",
         "Recall-based allied-health Writing letters and model answers",
@@ -250,7 +250,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": false,
       "displayOrder": 200,
-      "dashboardModules": ["BasicEnglish", "Vocabulary", "Grammar", "ListeningFoundations", "StudyPlan", "Booklet", "Recalls", "MaterialsLibrary", "VideoLibrary", "Mocks"],
+      "dashboardModules": ["BasicEnglish", "Vocabulary", "Grammar", "ListeningFoundations", "StudyPlan", "Booklet", "MaterialsLibrary", "VideoLibrary"],
       "comparisonFeatures": [
         "Fully recorded preparatory English course",
         "Essential grammar from zero, framed around OET production",
@@ -279,7 +279,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 300,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Condensed recorded course across the four sub-tests",
         "High-yield strategies and practical techniques",
@@ -305,7 +305,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 310,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "WritingAssessments", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "WritingAssessments", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Everything in Full Crash Course (£60)",
         "Assessment of 3 Writing letters",
@@ -331,7 +331,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 320,
-      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "WritingAssessments", "Recalls", "Addons"],
+      "dashboardModules": ["Listening", "Reading", "Writing", "Speaking", "MaterialsLibrary", "VideoLibrary", "WritingAssessments", "Recalls", "Addons"],
       "comparisonFeatures": [
         "Everything in Full Crash Course (£60)",
         "Assessment of 5 Writing letters",
@@ -357,7 +357,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 400,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Full recorded Writing explanation (A–Z)",
         "Task, purpose, audience, case-note relevance",
@@ -385,7 +385,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 410,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Everything in Writing Crash Course (£35)",
         "2 Writing letter assessments"
@@ -409,7 +409,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 420,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Everything in Writing Crash Course (£35)",
         "3 Writing letter assessments"
@@ -433,7 +433,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 430,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Everything in Writing Crash Course (£35)",
         "5 Writing letter assessments"
@@ -457,7 +457,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 440,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Everything in Writing Crash Course (£35)",
         "7 Writing letter assessments"
@@ -481,7 +481,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 450,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "WritingAssessments", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Everything in Writing Crash Course (£35)",
         "10 Writing letter assessments"
@@ -505,7 +505,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 500,
-      "dashboardModules": ["Speaking", "SpeakingCards", "UsefulPhrases", "RolePlayPractice", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Speaking", "SpeakingCards", "UsefulPhrases", "RolePlayPractice", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Complete Speaking subtest and role-play structure explanation",
         "All major card types covered in detail",
@@ -583,7 +583,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 600,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "Speaking", "SpeakingCards", "UsefulPhrases", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "Speaking", "SpeakingCards", "UsefulPhrases", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Full recorded Writing course (latest criteria)",
         "Full recorded Speaking course (A–Z)"
@@ -607,7 +607,7 @@
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
       "displayOrder": 610,
-      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "Speaking", "SpeakingCards", "UsefulPhrases", "WritingAssessments", "SpeakingSession", "MaterialsLibrary", "Addons"],
+      "dashboardModules": ["Writing", "ModelLetters", "WritingRules", "Speaking", "SpeakingCards", "UsefulPhrases", "WritingAssessments", "SpeakingSession", "MaterialsLibrary", "VideoLibrary", "Addons"],
       "comparisonFeatures": [
         "Full recorded Writing sessions (latest criteria)",
         "Full recorded Speaking course (A–Z)",

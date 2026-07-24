@@ -401,7 +401,12 @@ public partial class AdminService(
         if (fields.TutorBookDiscountEnabled.HasValue) plan.TutorBookDiscountEnabled = fields.TutorBookDiscountEnabled.Value;
         if (!string.IsNullOrWhiteSpace(fields.Profession)) plan.Profession = fields.Profession.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(fields.ProductCategory)) plan.ProductCategory = fields.ProductCategory.Trim().ToLowerInvariant();
-        if (!string.IsNullOrWhiteSpace(fields.DashboardModulesJson)) plan.DashboardModulesJson = fields.DashboardModulesJson;
+        if (fields.DashboardModulesJson is not null)
+        {
+            plan.DashboardModulesJson = PlanModulePolicy.NormalizeDashboardModulesJson(
+                plan.Code,
+                fields.DashboardModulesJson);
+        }
         if (fields.BundledWritingAssessments.HasValue) plan.BundledWritingAssessments = Math.Max(0, fields.BundledWritingAssessments.Value);
         if (fields.BundledSpeakingSessions.HasValue) plan.BundledSpeakingSessions = Math.Max(0, fields.BundledSpeakingSessions.Value);
         if (fields.BundledAiCredits.HasValue) plan.BundledAiCredits = Math.Max(0, fields.BundledAiCredits.Value);

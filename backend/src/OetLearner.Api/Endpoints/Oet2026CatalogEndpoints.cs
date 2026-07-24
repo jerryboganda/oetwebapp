@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
@@ -75,16 +76,28 @@ public static class Oet2026CatalogEndpoints
     private static async Task<Ok<EntitlementSnapshotResponse>> MyEntitlementSnapshot(
         HttpContext http,
         IEffectiveEntitlementResolver resolver,
+        IMockEntitlementService mockEntitlements,
         CancellationToken ct)
     {
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         var snapshot = await resolver.ResolveAsync(userId, ct);
+        var enabledModules = snapshot.EnabledModules
+            .Where(module => !string.Equals(module, ModuleKeys.Mocks, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var mockSummary = await mockEntitlements.SummariseAsync(userId, ct);
+            if (mockSummary.Items.Any(item => item.Remaining > 0))
+            {
+                enabledModules.Add(ModuleKeys.Mocks);
+            }
+        }
         return TypedResults.Ok(new EntitlementSnapshotResponse(
             snapshot.HasEligibleSubscription,
             snapshot.Tier,
             snapshot.PlanCode,
             snapshot.ProductCategory,
-            snapshot.EnabledModules,
+            enabledModules,
             snapshot.WritingAddonsEnabled,
             snapshot.SpeakingAddonsEnabled,
             snapshot.SpeakingPracticeAccessEnabled,

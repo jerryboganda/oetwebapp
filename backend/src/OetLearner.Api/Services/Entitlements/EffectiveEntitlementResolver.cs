@@ -132,7 +132,13 @@ public sealed record EffectiveEntitlementSnapshot(
             }
         }
 
-        if (EnabledModules is null || EnabledModules.Count == 0) return true;
+        if (EnabledModules is null || EnabledModules.Count == 0)
+        {
+            // Mocks are separate-purchase only and Recalls are pricing-list opt-in.
+            // Neither may inherit the legacy fail-open behavior used for Materials/Videos.
+            return !string.Equals(moduleKey, ModuleKeys.Mocks, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(moduleKey, ModuleKeys.Recalls, StringComparison.OrdinalIgnoreCase);
+        }
         foreach (var enabled in EnabledModules)
         {
             if (string.Equals(enabled, moduleKey, StringComparison.OrdinalIgnoreCase)) return true;

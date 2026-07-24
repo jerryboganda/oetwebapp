@@ -21,7 +21,10 @@ public static class ModuleKeys
     /// <summary>Video Library module.</summary>
     public const string VideoLibrary = "VideoLibrary";
 
-    /// <summary>Mock exams module (subscription-granted unlimited mocks).</summary>
+    /// <summary>
+    /// Mock exams navigation key. Course plans may not grant this module; it is projected
+    /// only when separately purchased mock credits remain.
+    /// </summary>
     public const string Mocks = "Mocks";
 
     /// <summary>
