@@ -184,6 +184,15 @@ public sealed class Oet2026CatalogSeeder(
         plan.Profession = dto.Profession ?? "all";
         plan.ProductCategory = dto.ProductCategory ?? string.Empty;
         plan.DashboardModulesJson = JsonSerializer.Serialize(dto.DashboardModules ?? new List<string>());
+        if (dto.IncludedSubtests is not null)
+        {
+            plan.IncludedSubtestsJson = JsonSerializer.Serialize(dto.IncludedSubtests);
+        }
+        if (!string.IsNullOrWhiteSpace(dto.DeliveryMethod))
+        {
+            plan.DeliveryMethod = dto.DeliveryMethod;
+            plan.DeliveryInstructions = dto.DeliveryInstructions;
+        }
         plan.BundledWritingAssessments = dto.Bundled?.WritingAssessments ?? 0;
         plan.BundledSpeakingSessions = dto.Bundled?.SpeakingSessions ?? 0;
         plan.BundledAiCredits = dto.Bundled?.AiCredits ?? 0;
@@ -517,6 +526,9 @@ public sealed class Oet2026CatalogSeeder(
         public bool RecallUpdatesEnabled { get; set; }
         public int DisplayOrder { get; set; }
         public List<string>? DashboardModules { get; set; }
+        public List<string>? IncludedSubtests { get; set; }
+        public string? DeliveryMethod { get; set; }
+        public string? DeliveryInstructions { get; set; }
         public List<string>? ComparisonFeatures { get; set; }
     }
 

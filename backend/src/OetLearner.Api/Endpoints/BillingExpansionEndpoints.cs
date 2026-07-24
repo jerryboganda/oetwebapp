@@ -280,12 +280,26 @@ public static class BillingExpansionEndpoints
             .Select(u => new { u.Id, u.DisplayName, u.Email })
             .ToListAsync(ct);
         var userById = users.ToDictionary(u => u.Id, StringComparer.Ordinal);
+        var versionIds = subscriptions
+            .Select(s => s.PlanVersionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var versions = versionIds.Count == 0
+            ? new Dictionary<string, BillingPlanVersion>(StringComparer.Ordinal)
+            : await db.BillingPlanVersions
+                .Where(v => versionIds.Contains(v.Id))
+                .ToDictionaryAsync(v => v.Id, StringComparer.Ordinal, ct);
 
         var items = subscriptions.Select(s =>
         {
             plans.TryGetValue(s.PlanId, out var plan);
             proofBySubscription.TryGetValue(s.Id, out var proof);
             userById.TryGetValue(s.UserId, out var user);
+            versions.TryGetValue(s.PlanVersionId ?? string.Empty, out var version);
+            var externalOnly = version is not null
+                ? ManualDeliveryPolicy.IsExternalOnly(version)
+                : string.IsNullOrWhiteSpace(s.PlanVersionId) && ManualDeliveryPolicy.IsExternalOnly(plan);
             return new PendingFulfilmentDto(
                 s.Id,
                 s.UserId,
@@ -300,7 +314,9 @@ public static class BillingExpansionEndpoints
                 s.FulfilmentStatus,
                 s.StartedAt,
                 s.ChangedAt,
-                proof is null ? null : ManualPaymentDto.FromEntity(proof, s.FulfilmentStatus));
+                proof is null ? null : ManualPaymentDto.FromEntity(proof, s.FulfilmentStatus),
+                false,
+                externalOnly);
         }).ToList();
 
         return TypedResults.Ok(items);
@@ -327,14 +343,31 @@ public static class BillingExpansionEndpoints
             return TypedResults.BadRequest("Only an order awaiting manual fulfilment can be marked fulfilled.");
         }
 
-        var now = DateTimeOffset.UtcNow;
-        try
+        var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
+        BillingPlanVersion? purchasedVersion = null;
+        if (!string.IsNullOrWhiteSpace(subscription.PlanVersionId))
         {
-            SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "manual_fulfilment_completed");
+            purchasedVersion = await db.BillingPlanVersions
+                .FirstOrDefaultAsync(v => v.Id == subscription.PlanVersionId, ct);
+            if (purchasedVersion is null)
+            {
+                return TypedResults.BadRequest("The purchased plan version is missing. Delivery was not marked and no access was released.");
+            }
         }
-        catch (ApiException ex)
+        var externalOnly = purchasedVersion is not null
+            ? ManualDeliveryPolicy.IsExternalOnly(purchasedVersion)
+            : ManualDeliveryPolicy.IsExternalOnly(plan);
+        var now = DateTimeOffset.UtcNow;
+        if (!externalOnly)
         {
-            return TypedResults.BadRequest(ex.Message);
+            try
+            {
+                SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "manual_fulfilment_completed");
+            }
+            catch (ApiException ex)
+            {
+                return TypedResults.BadRequest(ex.Message);
+            }
         }
         subscription.FulfilmentStatus = FulfilmentStatuses.Fulfilled;
         subscription.ChangedAt = now;
@@ -348,12 +381,13 @@ public static class BillingExpansionEndpoints
             Action = "subscription.mark_fulfilled",
             ResourceType = "Subscription",
             ResourceId = subscription.Id,
-            Details = $"Marked {subscription.PlanId} fulfilled for {subscription.UserId}; access released."
+            Details = (externalOnly
+                ? $"Marked {subscription.PlanId} externally delivered for {subscription.UserId}; no platform access released."
+                : $"Marked {subscription.PlanId} fulfilled for {subscription.UserId}; access released.")
                       + (string.IsNullOrWhiteSpace(request.Notes) ? string.Empty : $" Notes: {request.Notes}"),
         });
         await db.SaveChangesAsync(ct);
 
-        var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
         var user = await db.Users
             .Where(u => u.Id == subscription.UserId)
             .Select(u => new { u.DisplayName, u.Email })
@@ -372,7 +406,9 @@ public static class BillingExpansionEndpoints
             subscription.FulfilmentStatus,
             subscription.StartedAt,
             subscription.ChangedAt,
-            null));
+            null,
+            !externalOnly,
+            externalOnly));
     }
 
     /// <summary>
@@ -635,7 +671,9 @@ public sealed record PendingFulfilmentDto(
     string FulfilmentStatus,
     DateTimeOffset StartedAt,
     DateTimeOffset ChangedAt,
-    ManualPaymentDto? Proof);
+    ManualPaymentDto? Proof,
+    bool WebAccessReleased = false,
+    bool ExternalOnly = false);
 
 public sealed record ApproveRejectRequest(string? Notes);
 

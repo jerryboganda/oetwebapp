@@ -63,7 +63,8 @@ public sealed record CheckoutSessionStatusDto(
     IReadOnlyList<CheckoutSessionStatusItemDto> Items,
     string? FailureReason,
     string? DeliveryMethod,
-    string? FulfilmentStatus
+    string? FulfilmentStatus,
+    bool? ExternalOnly
 );
 
 public sealed record CheckoutSessionStatusItemDto(

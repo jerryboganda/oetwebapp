@@ -106,6 +106,23 @@ public sealed class Oet2026CatalogManifestTests
         Assert.Empty(visibleZeroPricePlans);
     }
 
+    [Fact]
+    public async Task StandaloneTutorBook_IsExternalOnlyManualWhatsAppDelivery()
+    {
+        var manifest = await LoadManifestAsync();
+        var tutorBook = manifest.RootElement
+            .GetProperty("plans")
+            .EnumerateArray()
+            .Single(plan => plan.GetProperty("code").GetString() == "tutor-book");
+
+        Assert.Equal("manual_material", tutorBook.GetProperty("deliveryMethod").GetString());
+        Assert.Equal(["none"], tutorBook.GetProperty("includedSubtests").EnumerateArray().Select(x => x.GetString()));
+        Assert.Empty(tutorBook.GetProperty("dashboardModules").EnumerateArray());
+        Assert.False(tutorBook.GetProperty("bundled").GetProperty("tutorBook").GetBoolean());
+        Assert.False(tutorBook.GetProperty("recallUpdatesEnabled").GetBoolean());
+        Assert.Contains("WhatsApp", tutorBook.GetProperty("deliveryInstructions").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<JsonDocument> LoadManifestAsync()
     {
         var repoRoot = FindRepoRoot();

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services.Entitlements;
 
@@ -149,6 +150,7 @@ public sealed record EffectiveEntitlementSnapshot(
 
 public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
 {
+    public const string NoPlatformAccessSubtest = "none";
     private readonly LearnerDbContext db;
     private readonly ILogger<EffectiveEntitlementResolver>? logger;
     private readonly Dictionary<string, EffectiveEntitlementSnapshot> memoizedSnapshots =
@@ -283,6 +285,11 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                     {
                         failLowReason = "entitlements.malformed";
                         trace.Add("entitlements.malformed");
+                    }
+                    else if (ManualDeliveryPolicy.IsExternalOnly(plan))
+                    {
+                        failLowReason = "plan.external_only";
+                        trace.Add("plan.external_only");
                     }
                     // Snapshot integrity: if a PlanVersionId is recorded on
                     // the subscription it MUST resolve to an existing version
@@ -636,6 +643,10 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             && exp <= now;
         if (expired) return null;
 
+        // A paid off-platform/manual product remains a purchase record, never a learner-platform
+        // entitlement. Fail closed even for historical rows that were previously marked Active.
+        if (ManualDeliveryPolicy.IsExternalOnly(plan)) return null;
+
         return new EffectivePackage(sub, plan, ParseDashboardModules(plan.DashboardModulesJson));
     }
 
@@ -665,7 +676,9 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
 
     /// <summary>
     /// Unions the subtest axis across a learner's plans. A plan whose IncludedSubtestsJson is
-    /// empty, "[]" or unparseable imposes no restriction ("all subtests") and therefore dominates
+    /// empty, "[]" or unparseable imposes no restriction ("all subtests") and therefore dominates.
+    /// The explicit sentinel <c>"none"</c> represents a product with no platform subtest access;
+    /// unlike an empty array, it is restrictive and contributes no subtest codes to the union.
     /// the union — the column is NOT NULL default "[]" and only ever written through the admin's
     /// validated string-array path, so unparseable can only mean legacy data, which must not
     /// silently lock a paying learner out of every subtest.
@@ -674,14 +687,22 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         IReadOnlyList<BillingPlan> plans)
     {
         var subtests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hasRestrictedPlan = false;
         foreach (var plan in plans)
         {
             var included = ParseStringArray(plan.IncludedSubtestsJson);
             if (included.Count == 0) return (true, subtests);
-            foreach (var code in included) subtests.Add(code.ToLowerInvariant());
+            hasRestrictedPlan = true;
+            foreach (var code in included)
+            {
+                if (!string.Equals(code, NoPlatformAccessSubtest, StringComparison.OrdinalIgnoreCase))
+                {
+                    subtests.Add(code.ToLowerInvariant());
+                }
+            }
         }
 
-        return subtests.Count == 0 ? (true, subtests) : (false, subtests);
+        return hasRestrictedPlan ? (false, subtests) : (true, subtests);
     }
 
     /// <summary>
@@ -735,7 +756,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         }
     }
 
-    private static IReadOnlyList<string> ParseStringArray(string? json)
+    internal static IReadOnlyList<string> ParseStringArray(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
         try

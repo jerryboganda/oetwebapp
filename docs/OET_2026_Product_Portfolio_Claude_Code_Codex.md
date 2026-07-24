@@ -961,17 +961,19 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 | `product_id` | tutor-book |
 | `category_slug / category` | BOOK |
 | `price_gbp` | £45 (was £60) |
-| `access_duration` | Permanent entitlement with content updates |
+| `access_duration` | Manual off-platform delivery; no learner-platform entitlement |
 | `profession` | All disciplines |
 | `duration` | — |
-| `format` | Watermarked PDF + private Telegram channel |
+| `format` | Personalised PDF delivered manually through WhatsApp |
 | `writing_addons` | FALSE |
 | `speaking_addons` | FALSE |
 | `tutor_book_discount` | FALSE |
-| `dashboard_modules` | Tutor Book Reader, Audio Scripts, Updates |
-| `entitlements` | tutor_book=true |
-| `bundle_components` | book + channel |
-| `recall_updates` | Yes |
+| `dashboard_modules` | None |
+| `included_subtests` | None (`["none"]`, never an empty array) |
+| `entitlements` | None |
+| `bundle_components` | Tutor Book delivered externally |
+| `delivery_method` | `manual_material` |
+| `recall_updates` | Delivered manually through WhatsApp only |
 | `extension_allowed` | No |
 
 **What is included**
@@ -980,12 +982,14 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 - Reading: recall-based topics, vocab trends, Parts A/B/C strategies
 - Writing: 8 full recall-based letters with model answers and structure guidance
 - Speaking: 16 recall-based cards based on recent scenarios
-- Private Telegram channel access for continuous updates
+- Manual WhatsApp delivery and support
 
 **Developer implementation notes**
 
 - PDF is watermarked per buyer with buyer name + email.
 - Output filename pattern: [email - THE TUTOR BOOK - First Edition 2026.pdf].
+- Marking the order delivered records the external hand-over without activating a web subscription.
+- Do not use an empty included-subtests array: empty means all four subtests for legacy compatibility.
 
 ### The Tutor Book — Add-on Price (Enrolled Students)
 

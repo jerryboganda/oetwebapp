@@ -33,9 +33,14 @@ const MANUAL_DELIVERY_METHODS = new Set(['manual_web', 'telegram', 'manual_mater
  *   point at billing. Claiming entitlements were added would be a fabrication; claiming a
  *   manual hand-over would alarm ordinary card buyers over something equally unknown.
  */
-type AccessOutcome = 'manual' | 'granted' | 'unknown';
+type AccessOutcome = 'manual' | 'external-delivered' | 'granted' | 'unknown';
 
 function accessOutcome(session: CheckoutSessionStatus): AccessOutcome {
+  // A manually delivered material never grants platform entitlements, even after the
+  // external hand-over is recorded as fulfilled.
+  if (session.externalOnly === true) {
+    return session.fulfilmentStatus === 'fulfilled' ? 'external-delivered' : 'manual';
+  }
   // An explicit subscription state is definitive when present.
   if (session.fulfilmentStatus === 'fulfilled' || session.fulfilmentStatus === 'auto') return 'granted';
   if (session.fulfilmentStatus === 'pending_manual') return 'manual';
@@ -62,14 +67,16 @@ type ViewState =
   | { phase: 'fulfilled'; session: CheckoutSessionStatus }
   | { phase: 'paid'; session: CheckoutSessionStatus }
   | { phase: 'pending-manual'; session: CheckoutSessionStatus }
+  | { phase: 'external-delivered'; session: CheckoutSessionStatus }
   | { phase: 'failed'; session: CheckoutSessionStatus | null; reason: string }
   | { phase: 'timeout'; session: CheckoutSessionStatus | null };
 
 /** Maps the access outcome onto the view that states exactly that much and no more. */
-const PHASE_FOR_OUTCOME: Record<AccessOutcome, 'fulfilled' | 'paid' | 'pending-manual'> = {
+const PHASE_FOR_OUTCOME: Record<AccessOutcome, 'fulfilled' | 'paid' | 'pending-manual' | 'external-delivered'> = {
   granted: 'fulfilled',
   unknown: 'paid',
   manual: 'pending-manual',
+  'external-delivered': 'external-delivered',
 };
 
 export function CheckoutSuccessPoller({
@@ -219,6 +226,28 @@ export function CheckoutSuccessPoller({
               <Link href="/dashboard">Back to dashboard</Link>
             </Button>
           </div>
+        </div>
+      );
+
+    case 'external-delivered':
+      return (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-success/30 bg-success/10 p-6">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success" aria-hidden="true" />
+              <div>
+                <h2 className="text-lg font-semibold text-success">Tutor Book delivered</h2>
+                <p className="mt-1 text-sm text-navy">
+                  Your manual delivery has been recorded. The Tutor Book is supplied through WhatsApp
+                  and this purchase does not unlock course or subtest access in the platform.
+                </p>
+              </div>
+            </div>
+          </div>
+          <CheckoutSessionSummary session={state.session} />
+          <Button asChild variant="outline">
+            <Link href="/account/billing">View billing</Link>
+          </Button>
         </div>
       );
 

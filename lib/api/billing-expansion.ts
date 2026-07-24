@@ -162,14 +162,16 @@ export interface PendingFulfilmentDto {
   startedAt: string;
   changedAt: string;
   proof: ManualPaymentDto | null;
+  webAccessReleased: boolean;
+  externalOnly: boolean;
 }
 
 export function listPendingFulfilment(): Promise<PendingFulfilmentDto[]> {
   return apiClient.get<PendingFulfilmentDto[]>('/v1/admin/billing/fulfilment/');
 }
 
-/** Hand the package over: FulfilmentStatus → `fulfilled` and the subscription → Active,
- * which is what actually releases access. */
+/** Hand the package over. External-only material is recorded as delivered without activating
+ * the subscription; other manual methods release the configured platform access. */
 export function markSubscriptionFulfilled(subscriptionId: string, notes?: string): Promise<PendingFulfilmentDto> {
   return apiClient.post<PendingFulfilmentDto>(
     `/v1/admin/billing/fulfilment/subscriptions/${encodeURIComponent(subscriptionId)}/mark-fulfilled`,

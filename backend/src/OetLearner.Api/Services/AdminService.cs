@@ -1046,6 +1046,26 @@ public partial class AdminService(
                 "invalid",
                 "Delivery method must be automatic_web, manual_web, telegram, or manual_material.");
         }
+        var parsedSubtests = includedSubtests.Values;
+        var hasNoPlatformAccess = parsedSubtests.Any(code =>
+            string.Equals(code, EffectiveEntitlementResolver.NoPlatformAccessSubtest, StringComparison.OrdinalIgnoreCase));
+        if (hasNoPlatformAccess && parsedSubtests.Count != 1)
+        {
+            AddCatalogError(
+                errors,
+                "includedSubtestsJson",
+                "invalid",
+                "The no-platform-access value cannot be combined with Listening, Reading, Writing, or Speaking.");
+        }
+        if (hasNoPlatformAccess
+            && !string.Equals(deliveryMethod, DeliveryMethods.ManualMaterial, StringComparison.OrdinalIgnoreCase))
+        {
+            AddCatalogError(
+                errors,
+                "deliveryMethod",
+                "invalid",
+                "No platform access requires the manual_material delivery method.");
+        }
 
         // Content overrides are read back by the entitlement resolver at request time —
         // a malformed blob must never reach the column.
@@ -1080,6 +1100,25 @@ public partial class AdminService(
 
         ThrowIfCatalogInvalid(errors, "billing_plan_invalid", "Billing plan catalog data is invalid.");
 
+        var normalizedOet2026 = hasNoPlatformAccess
+            ? request.Oet2026 with
+            {
+                WritingAddonsEnabled = false,
+                SpeakingAddonsEnabled = false,
+                SpeakingPracticeAccessEnabled = false,
+                TutorBookDiscountEnabled = false,
+                DashboardModulesJson = "[]",
+                BundledWritingAssessments = 0,
+                BundledSpeakingSessions = 0,
+                BundledAiCredits = 0,
+                BundledTutorBook = false,
+                BundledBasicEnglish = false,
+                ExtensionAllowed = false,
+                RecallUpdatesEnabled = false,
+                ContentOverridesJson = "{}",
+            }
+            : request.Oet2026;
+
         return new ValidatedBillingPlanCatalog(
             code,
             name,
@@ -1088,16 +1127,16 @@ public partial class AdminService(
             currency,
             interval,
             request.DurationMonths,
-            request.IncludedCredits,
+            hasNoPlatformAccess ? 0 : request.IncludedCredits,
             request.DisplayOrder,
             request.IsVisible,
             request.IsRenewable,
-            request.TrialDays,
+            hasNoPlatformAccess ? 0 : request.TrialDays,
             diagnosticMockEntitlement,
             status,
             includedSubtests.Json,
-            entitlementsJson,
-            request.Oet2026);
+            hasNoPlatformAccess ? "{}" : entitlementsJson,
+            normalizedOet2026);
     }
 
     private async Task<ValidatedBillingAddOnCatalog> ValidateBillingAddOnCatalogAsync(

@@ -300,7 +300,8 @@ public sealed class CheckoutService : ICheckoutService
             items,
             FailureReasonFor(session.Status),
             deliveryMethod,
-            fulfilmentStatus);
+            fulfilmentStatus,
+            null);
     }
 
     /// <summary>

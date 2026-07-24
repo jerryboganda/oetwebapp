@@ -628,19 +628,22 @@
       "writingAddons": false,
       "speakingAddons": false,
       "tutorBookDiscount": false,
-      "bundled": { "writingAssessments": 0, "speakingSessions": 0, "aiCredits": 0, "tutorBook": true, "basicEnglish": false },
+      "bundled": { "writingAssessments": 0, "speakingSessions": 0, "aiCredits": 0, "tutorBook": false, "basicEnglish": false },
       "isDraft": false,
       "isVisible": true,
       "extensionAllowed": false,
-      "recallUpdatesEnabled": true,
+      "recallUpdatesEnabled": false,
       "displayOrder": 700,
-      "dashboardModules": ["TutorBook", "AudioScripts", "Updates", "Recalls"],
+      "dashboardModules": [],
+      "includedSubtests": ["none"],
+      "deliveryMethod": "manual_material",
+      "deliveryInstructions": "Contact support on WhatsApp after purchase. The personalised Tutor Book will be delivered manually; this purchase grants no platform course or subtest access.",
       "comparisonFeatures": [
         "Listening: new recalls, full audio scripts, answers, clear justifications",
         "Reading: recall-based topics, vocab trends, strategies for Parts A, B, C",
         "Writing: 8 full recall-based letters with model answers and structure guidance",
         "Speaking: 16 recall-based cards based on recent scenarios",
-        "Private Telegram channel access for continuous updates"
+        "Manual WhatsApp delivery and support for book access"
       ]
     }
   ],

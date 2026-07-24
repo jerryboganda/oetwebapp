@@ -14228,6 +14228,8 @@ export interface CheckoutSessionStatus {
    * load-bearing signal and this as best-effort enrichment.
    */
   fulfilmentStatus?: string | null;
+  /** Server-confirmed external-only delivery. Undefined/null means unknown, never false. */
+  externalOnly?: boolean | null;
 }
 
 export async function fetchCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {

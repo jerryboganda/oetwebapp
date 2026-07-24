@@ -56,6 +56,7 @@ interface AdminPlanRow {
 }
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
+const NO_PLATFORM_ACCESS = 'none';
 
 // Mirrors backend DeliveryMethods (Domain/Enums.cs). Anything but automatic_web parks the
 // buyer's subscription at Pending + FulfilmentStatus=pending_manual until an admin marks it
@@ -341,8 +342,25 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       ...prev,
       subtests: prev.subtests.includes(subtest)
         ? prev.subtests.filter((s) => s !== subtest)
-        : [...prev.subtests, subtest],
+        : [...prev.subtests.filter((s) => s !== NO_PLATFORM_ACCESS), subtest],
     }));
+  }, []);
+
+  const toggleNoPlatformAccess = useCallback(() => {
+    setForm((prev) => {
+      const enabled = prev.subtests.includes(NO_PLATFORM_ACCESS);
+      return {
+        ...prev,
+        subtests: enabled ? [] : [NO_PLATFORM_ACCESS],
+        modules: enabled ? prev.modules : [],
+        deliveryMethod: enabled ? prev.deliveryMethod : 'manual_material',
+        includedCredits: enabled ? prev.includedCredits : '0',
+        trialDays: enabled ? prev.trialDays : '0',
+        entitlements: enabled ? prev.entitlements : {},
+        videoOverrides: enabled ? prev.videoOverrides : EMPTY_PLAN_VIDEO_OVERRIDES,
+        materialOverridesJson: enabled ? prev.materialOverridesJson : MATERIAL_OVERRIDES_PLACEHOLDER,
+      };
+    });
   }, []);
 
   // Add/remove a single canonical module key while preserving every OTHER key already on the plan
@@ -378,6 +396,10 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
     }
 
     const telegramInviteUrl = form.telegramInviteUrl.trim();
+    if (form.subtests.includes(NO_PLATFORM_ACCESS) && form.deliveryMethod !== 'manual_material') {
+      setFeedback({ tone: 'error', message: 'No platform access requires Manual Material Delivery.' });
+      return;
+    }
     if (form.deliveryMethod === 'telegram' && !telegramInviteUrl) {
       setFeedback({ tone: 'error', message: 'Telegram Access needs an invite link — the learner has no other way in.' });
       return;
@@ -388,7 +410,10 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
     }
 
     // Preserve unknown entitlement keys; just toggle the invoice-downloads flag.
-    const entitlements = { ...form.entitlements, invoiceDownloadsAvailable: form.invoiceDownloads };
+    const entitlements = {
+      ...(form.subtests.includes(NO_PLATFORM_ACCESS) ? {} : form.entitlements),
+      invoiceDownloadsAvailable: form.invoiceDownloads,
+    };
 
     const payload = {
       name,
@@ -564,13 +589,32 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
               registered profession. Leave every box unticked for <strong>all four subtests</strong> — that is how a
               generic “Speaking Crash Course” auto-maps to whichever profession the buyer registered under.
             </p>
+            <div className="mb-4 rounded-xl border border-warning/40 bg-warning/5 p-3">
+              <Checkbox
+                label="No platform or subtest access (external/manual product only)"
+                checked={form.subtests.includes(NO_PLATFORM_ACCESS)}
+                onChange={toggleNoPlatformAccess}
+              />
+              <p className="mt-1 text-xs text-muted">
+                Use this for a product delivered entirely outside the platform, such as a Tutor Book sent manually by WhatsApp.
+                It also clears every student content module and content override.
+              </p>
+            </div>
             <div className="grid gap-3 sm:grid-cols-4">
               {SUBTESTS.map((subtest) => (
-                <Checkbox key={subtest} label={subtest[0].toUpperCase() + subtest.slice(1)} checked={form.subtests.includes(subtest)} onChange={() => toggleSubtest(subtest)} />
+                <Checkbox
+                  key={subtest}
+                  label={subtest[0].toUpperCase() + subtest.slice(1)}
+                  checked={form.subtests.includes(subtest)}
+                  onChange={() => toggleSubtest(subtest)}
+                  disabled={form.subtests.includes(NO_PLATFORM_ACCESS)}
+                />
               ))}
             </div>
             <p className="mt-3 text-xs font-medium text-navy">
-              {form.subtests.length === 0
+              {form.subtests.includes(NO_PLATFORM_ACCESS)
+                ? 'No platform content or subtest access will be granted.'
+                : form.subtests.length === 0
                 ? 'Nothing ticked → all subtests included (Listening, Reading, Writing, Speaking).'
                 : `Only ${form.subtests.map((s) => s[0].toUpperCase() + s.slice(1)).join(', ')} included.`}
             </p>

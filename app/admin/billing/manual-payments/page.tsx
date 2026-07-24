@@ -231,8 +231,14 @@ export default function AdminPaymentProofsPage() {
           await loadProofs();
           break;
         case 'fulfil':
-          await markSubscriptionFulfilled(decision.row.subscriptionId, notes || undefined);
-          toast.success('Marked fulfilled — access released.');
+          {
+            const result = await markSubscriptionFulfilled(decision.row.subscriptionId, notes || undefined);
+            toast.success(
+              result.webAccessReleased
+                ? 'Marked fulfilled — configured platform access released.'
+                : 'Marked delivered — no platform access released.',
+            );
+          }
           await loadFulfilment();
           break;
       }
@@ -632,13 +638,18 @@ export default function AdminPaymentProofsPage() {
           variant: 'primary' as const,
         };
       case 'fulfil':
-        return {
-          title: 'Mark fulfilled',
-          description: 'This releases access and reveals the delivery details to the learner. Hand the package over first, then mark it here.',
-          placeholder: 'Optional notes (e.g. invite sent 12:04)',
-          confirm: 'Mark fulfilled',
-          variant: 'primary' as const,
-        };
+        {
+          const externalOnly = decision.row.externalOnly;
+          return {
+            title: externalOnly ? 'Mark externally delivered' : 'Mark fulfilled',
+            description: externalOnly
+              ? 'Confirm that the material was sent outside the platform. This records delivery; products configured with no platform access remain locked.'
+              : 'This releases configured platform access and reveals the delivery details to the learner. Hand the package over first, then mark it here.',
+            placeholder: externalOnly ? 'Optional notes (e.g. sent by WhatsApp at 12:04)' : 'Optional notes (e.g. invite sent 12:04)',
+            confirm: externalOnly ? 'Mark delivered' : 'Mark fulfilled',
+            variant: 'primary' as const,
+          };
+        }
       default:
         return null;
     }
