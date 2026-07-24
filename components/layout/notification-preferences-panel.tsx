@@ -46,19 +46,19 @@ function PreferenceToggle({
       type="button"
       onClick={onToggle}
       className={cn(
-        'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors',
+        'flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors',
         checked
           ? 'border-primary/25 bg-primary/5 text-navy'
-          : 'border-border bg-surface text-navy hover:border-border',
+          : 'border-border bg-surface text-navy hover:border-border-hover',
       )}
     >
-      <div className="space-y-1">
-        <p className="text-sm font-semibold">{label}</p>
-        {hint ? <p className="text-xs text-muted">{hint}</p> : null}
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-[13px] font-semibold leading-tight">{label}</p>
+        {hint ? <p className="text-[11px] leading-snug text-muted">{hint}</p> : null}
       </div>
       <span
         className={cn(
-          'inline-flex min-w-14 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]',
+          'inline-flex min-w-10 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]',
           checked ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted',
         )}
       >
@@ -151,62 +151,68 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       {preferencesError ? <InlineAlert variant="error">{preferencesError}</InlineAlert> : null}
       {localError ? <InlineAlert variant="error">{localError}</InlineAlert> : null}
       {saveMessage ? <InlineAlert variant="success">{saveMessage}</InlineAlert> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <PreferenceToggle
-          checked={draft.globalInAppEnabled}
-          label="In-app notifications"
-          hint="Controls the shared inbox and realtime badge."
-          onToggle={() => updateDraft((current) => ({ ...current, globalInAppEnabled: !current.globalInAppEnabled }))}
-        />
-        <PreferenceToggle
-          checked={draft.globalEmailEnabled}
-          label="Email delivery"
-          hint="Keeps transactional notification email active for this account."
-          onToggle={() => updateDraft((current) => ({ ...current, globalEmailEnabled: !current.globalEmailEnabled }))}
-        />
-        <PreferenceToggle
-          checked={draft.globalPushEnabled}
-          label="Push delivery policy"
-          hint="Lets the notification service fan out browser push for supported events."
-          onToggle={() => updateDraft((current) => ({ ...current, globalPushEnabled: !current.globalPushEnabled }))}
-        />
-        <PreferenceToggle
-          checked={draft.quietHoursEnabled}
-          label="Quiet hours"
-          hint="Reminder-style push respects these local quiet hours."
-          onToggle={() => updateDraft((current) => ({ ...current, quietHoursEnabled: !current.quietHoursEnabled }))}
-        />
-      </div>
+      <section className="space-y-2">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Delivery channels</h3>
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <PreferenceToggle
+            checked={draft.globalInAppEnabled}
+            label="In-app notifications"
+            hint="Shared inbox and realtime badge."
+            onToggle={() => updateDraft((current) => ({ ...current, globalInAppEnabled: !current.globalInAppEnabled }))}
+          />
+          <PreferenceToggle
+            checked={draft.globalEmailEnabled}
+            label="Email delivery"
+            hint="Transactional notification email."
+            onToggle={() => updateDraft((current) => ({ ...current, globalEmailEnabled: !current.globalEmailEnabled }))}
+          />
+          <PreferenceToggle
+            checked={draft.globalPushEnabled}
+            label="Push delivery policy"
+            hint="Fan out browser push for supported events."
+            onToggle={() => updateDraft((current) => ({ ...current, globalPushEnabled: !current.globalPushEnabled }))}
+          />
+          <PreferenceToggle
+            checked={draft.quietHoursEnabled}
+            label="Quiet hours"
+            hint="Reminder push respects local quiet hours."
+            onToggle={() => updateDraft((current) => ({ ...current, quietHoursEnabled: !current.quietHoursEnabled }))}
+          />
+        </div>
+      </section>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Input
-          label="Timezone"
-          value={draft.timezone}
-          onChange={(event) => updateDraft((current) => ({ ...current, timezone: event.target.value }))}
-          placeholder="Asia/Karachi"
-        />
-        <Input
-          label="Quiet hours start"
-          type="time"
-          value={draft.quietHoursStartLocalTime ?? ''}
-          onChange={(event) => updateDraft((current) => ({ ...current, quietHoursStartLocalTime: event.target.value || null }))}
-          disabled={!draft.quietHoursEnabled}
-        />
-        <Input
-          label="Quiet hours end"
-          type="time"
-          value={draft.quietHoursEndLocalTime ?? ''}
-          onChange={(event) => updateDraft((current) => ({ ...current, quietHoursEndLocalTime: event.target.value || null }))}
-          disabled={!draft.quietHoursEnabled}
-        />
-      </div>
+      <section className="space-y-2">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Timezone &amp; quiet hours</h3>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          <Input
+            label="Timezone"
+            value={draft.timezone}
+            onChange={(event) => updateDraft((current) => ({ ...current, timezone: event.target.value }))}
+            placeholder="Asia/Karachi"
+          />
+          <Input
+            label="Quiet hours start"
+            type="time"
+            value={draft.quietHoursStartLocalTime ?? ''}
+            onChange={(event) => updateDraft((current) => ({ ...current, quietHoursStartLocalTime: event.target.value || null }))}
+            disabled={!draft.quietHoursEnabled}
+          />
+          <Input
+            label="Quiet hours end"
+            type="time"
+            value={draft.quietHoursEndLocalTime ?? ''}
+            onChange={(event) => updateDraft((current) => ({ ...current, quietHoursEndLocalTime: event.target.value || null }))}
+            disabled={!draft.quietHoursEnabled}
+          />
+        </div>
+      </section>
 
-      <div className="rounded-2xl border border-border bg-surface p-4">
+      <div className="rounded-xl border border-border bg-surface p-3.5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -243,26 +249,26 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
         ) : null}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-navy">Per-event delivery overrides</h3>
-            <p className="text-xs text-muted">
-              Overrides are stored per authenticated account and work across learner, expert, and admin shells.
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Per-event delivery overrides</h3>
+            <p className="text-[11px] leading-snug text-muted">
+              Stored per account; applies across learner, expert, and admin shells.
             </p>
           </div>
           {!compact && draft.legacyLearnerSettings && Object.keys(draft.legacyLearnerSettings).length > 0 ? (
-            <Badge variant="info">Legacy learner settings mirrored</Badge>
+            <Badge variant="info">Legacy mirrored</Badge>
           ) : null}
         </div>
 
-        <div className={cn('space-y-3 rounded-2xl border border-border bg-background-light/60 p-3', compact && 'max-h-80 overflow-y-auto')}>
+        <div className={cn('space-y-2 rounded-xl border border-border bg-background-light/60 p-2.5', compact && 'max-h-80 overflow-y-auto')}>
           {visibleEventEntries.map(([eventKey, eventPreference]) => (
-            <div key={eventKey} className="rounded-2xl border border-border bg-surface p-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-navy">{formatEventLabel(eventKey)}</p>
-                  <div className="flex flex-wrap gap-2">
+            <div key={eventKey} className="rounded-lg border border-border bg-surface p-2.5">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-[13px] font-semibold text-navy">{formatEventLabel(eventKey)}</p>
+                  <div className="flex flex-wrap gap-1.5">
                     <PreferenceToggle
                       checked={Boolean(eventPreference.inAppEnabled)}
                       label="In-app"
@@ -314,7 +320,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
                   </div>
                 </div>
 
-                <div className="min-w-48">
+                <div className="shrink-0 lg:w-44">
                   <Select
                     label="Email mode"
                     value={ensureEmailMode(eventPreference.emailMode)}
@@ -347,9 +353,9 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
             Showing the first {visibleEventEntries.length} event overrides here. Open Settings -&gt; Notifications for the full shared matrix.
           </p>
         ) : null}
-      </div>
+      </section>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end border-t border-border pt-3.5">
         <Button type="button" onClick={handleSave} loading={isUpdatingPreferences} className="gap-2">
           <Save className="h-4 w-4" />
           Save Preferences
@@ -366,52 +372,58 @@ export function NotificationPreferencesPanel({
   description = 'Manage delivery channels, quiet hours, and browser push from one shared account-level panel.',
   showCard = true,
 }: NotificationPreferencesPanelProps) {
-  const content = (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="info" className="gap-1">
-            <Bell className="h-3.5 w-3.5" />
-            Shared Account Preferences
-          </Badge>
-          <Badge variant="muted" className="gap-1">
-            <Mail className="h-3.5 w-3.5" />
-            Email
-          </Badge>
-          <Badge variant="muted" className="gap-1">
-            <Volume2 className="h-3.5 w-3.5" />
-            In-app
-          </Badge>
-          <Badge variant="muted" className="gap-1">
-            <Smartphone className="h-3.5 w-3.5" />
-            Push
-          </Badge>
-          <Badge variant="muted" className="gap-1">
-            <MoonStar className="h-3.5 w-3.5" />
-            Quiet Hours
-          </Badge>
-          <Badge variant="muted" className="gap-1">
-            <Wifi className="h-3.5 w-3.5" />
-            Web Push
-          </Badge>
-        </div>
-        <h2 className="text-lg font-semibold text-navy">{title}</h2>
-        <p className="text-sm text-muted">{description}</p>
-      </div>
-      <NotificationPreferencesInner compact={compact} />
+  const legend = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge variant="info" className="gap-1">
+        <Bell className="h-3 w-3" />
+        Shared account
+      </Badge>
+      <Badge variant="muted" className="gap-1">
+        <Mail className="h-3 w-3" />
+        Email
+      </Badge>
+      <Badge variant="muted" className="gap-1">
+        <Volume2 className="h-3 w-3" />
+        In-app
+      </Badge>
+      <Badge variant="muted" className="gap-1">
+        <Smartphone className="h-3 w-3" />
+        Push
+      </Badge>
+      <Badge variant="muted" className="gap-1">
+        <MoonStar className="h-3 w-3" />
+        Quiet hours
+      </Badge>
+      <Badge variant="muted" className="gap-1">
+        <Wifi className="h-3 w-3" />
+        Web push
+      </Badge>
     </div>
   );
 
   if (!showCard) {
-    return <div className={className}>{content}</div>;
+    return (
+      <div className={cn('space-y-3.5', className)}>
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-navy">{title}</h2>
+          <p className="text-sm text-muted">{description}</p>
+          {legend}
+        </div>
+        <NotificationPreferencesInner compact={compact} />
+      </div>
+    );
   }
 
   return (
     <Card className={className}>
-      <CardHeader>
+      <CardHeader className="mb-4 space-y-2">
         <CardTitle>{title}</CardTitle>
+        <p className="text-sm text-muted">{description}</p>
+        {legend}
       </CardHeader>
-      <CardContent>{content}</CardContent>
+      <CardContent>
+        <NotificationPreferencesInner compact={compact} />
+      </CardContent>
     </Card>
   );
 }
