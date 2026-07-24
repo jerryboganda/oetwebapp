@@ -6,6 +6,7 @@ import { CornerDownLeft, FileText, Loader2, Search, X } from 'lucide-react';
 import { searchContent } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { learnerMainNavItems, type NavItem } from './sidebar';
+import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 
 interface ContentSearchItem {
   id: string;
@@ -171,7 +172,9 @@ export function GlobalSearch({ className }: { className?: string }) {
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'group flex h-11 w-full items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 text-left text-[13.5px] text-muted shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          'group flex h-11 w-full items-center gap-2.5 rounded-xl px-3.5 text-left text-[13.5px] text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          HEADER_CHIP,
+          HEADER_CHIP_HOVER,
           className,
         )}
         aria-label="Search anything"

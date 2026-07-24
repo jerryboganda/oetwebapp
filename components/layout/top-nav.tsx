@@ -11,6 +11,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { GlobalSearch } from './global-search';
+import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
@@ -45,8 +46,11 @@ interface TopNavProps {
 }
 
 /** Bordered circular icon button used by the bell and theme toggle. */
-const ICON_BUTTON_CLASS =
-  'h-10 w-10 !rounded-full border border-border bg-surface p-0 text-muted shadow-sm hover:border-border-hover hover:bg-surface hover:text-navy';
+const ICON_BUTTON_CLASS = cn(
+  'h-11 w-11 !rounded-full p-0 text-muted hover:bg-surface hover:text-navy',
+  HEADER_CHIP,
+  HEADER_CHIP_HOVER,
+);
 
 const ROLE_LABEL: Record<string, string> = {
   learner: 'Learner',
@@ -96,7 +100,11 @@ function ProfileMenu({
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-1.5 shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:pr-3"
+        className={cn(
+          'flex items-center gap-2.5 rounded-xl p-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:pr-3',
+          HEADER_CHIP,
+          HEADER_CHIP_HOVER,
+        )}
       >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-bold text-primary ring-1 ring-primary/10">
           {initials}
@@ -308,19 +316,18 @@ export function TopNav({
           {showBrand ? (
             <Link
               href="/"
-              className="pressable flex items-baseline gap-2 transition-opacity hover:opacity-90"
+              className="pressable flex items-center transition-opacity hover:opacity-90"
               aria-label="OET with Dr Ahmed Hesham home"
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
             >
-              <span className="text-[1.75rem] font-extrabold leading-none tracking-tight text-[#4c1d95] dark:text-violet-300 lg:text-[2.25rem]">
-                OET
-              </span>
-              <span className="leading-tight">
-                <span className="block text-[10.5px] font-medium text-muted lg:text-[11.5px]">with</span>
-                <span className="block whitespace-nowrap text-[13px] font-bold text-navy lg:text-[15px]">
-                  Dr Ahmed Hesham
-                </span>
-              </span>
+              <Image
+                src="/brand/oet-with-dr-hesham-logo.png"
+                alt="OET with Dr Ahmed Hesham"
+                width={400}
+                height={200}
+                priority
+                className="h-12 w-auto object-contain sm:h-14 lg:h-20"
+              />
             </Link>
           ) : null}
 
@@ -339,8 +346,8 @@ export function TopNav({
         </div>
 
         {showBrand ? (
-          <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex">
-            <GlobalSearch className="max-w-sm" />
+          <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex lg:px-8">
+            <GlobalSearch className="max-w-2xl" />
           </div>
         ) : null}
 

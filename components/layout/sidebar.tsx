@@ -152,6 +152,58 @@ function getActiveItemHref(pathname: string | null, items: NavItem[]): string | 
   })[0].href;
 }
 
+/**
+ * Vertical icon-over-label rail used by the learner workspace. The label sits
+ * under the glyph and the active item carries a right-edge marker, matching the
+ * reference navigation.
+ */
+function NavRail({
+  items,
+  pathname,
+  reducedMotion,
+}: {
+  items: NavItem[];
+  pathname: string | null;
+  reducedMotion: boolean;
+}) {
+  const activeHref = getActiveItemHref(pathname, items);
+
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {items.map((item, index) => {
+        const active = item.href === activeHref;
+        return (
+          <li key={`rail:${index}:${item.href}`}>
+            <Link
+              href={item.href}
+              onClick={() => { void triggerImpactHaptic('LIGHT'); }}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'group relative flex flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 text-center',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1',
+                active
+                  ? 'bg-primary/[0.08] text-primary dark:text-violet-300'
+                  : 'text-muted hover:bg-background-light hover:text-navy',
+              )}
+            >
+              {active ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-y-1.5 -right-px w-[3px] rounded-full bg-primary"
+                />
+              ) : null}
+              <span className="flex items-center justify-center [&_svg]:h-[22px] [&_svg]:w-[22px]">
+                {item.icon}
+              </span>
+              <span className="w-full px-0.5 text-[11px] font-medium leading-tight">{item.label}</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function NavSection({
   label,
   items,
@@ -277,7 +329,7 @@ export function Sidebar({
     <motion.aside
       className={cn(
         'hidden shrink-0 flex-col overflow-hidden border-r border-border bg-surface lg:flex',
-        hideBrand ? 'h-full w-64' : 'glass-panel sticky top-0 h-screen w-72 border-border/60 bg-surface/90',
+        hideBrand ? 'h-full w-[104px] border-black/[0.06] dark:border-white/[0.08]' : 'glass-panel sticky top-0 h-screen w-72 border-border/60 bg-surface/90',
         className,
       )}
       layout={!reducedMotion}
@@ -306,6 +358,27 @@ export function Sidebar({
         </div>
       )}
 
+      {hideBrand ? (
+        <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Main navigation" data-tour="workspace-nav">
+          <NavRail
+            items={[
+              ...visibleMainItems,
+              {
+                href: activeWorkspaceRole === 'expert' ? '/expert/settings' : '/settings',
+                label: 'Settings',
+                icon: <Settings className="h-5 w-5" />,
+              },
+              {
+                href: '/support',
+                label: 'Help & Support',
+                icon: <HelpCircle className="h-5 w-5" />,
+              },
+            ]}
+            pathname={pathname}
+            reducedMotion={reducedMotion}
+          />
+        </nav>
+      ) : (
       <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Main navigation" data-tour="workspace-nav">
         {groups && groups.length > 0 ? (
           groups.map((group) => (
@@ -330,7 +403,9 @@ export function Sidebar({
           <NavSection label="Learn" items={visibleLearnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
         ) : null}
       </nav>
+      )}
 
+      {hideBrand ? null : (
       <div className="mt-auto border-t border-border/60 bg-white/35 p-4 dark:bg-white/5">
         <ul className="mb-4 flex flex-col gap-1.5">
           <li>
@@ -373,6 +448,7 @@ export function Sidebar({
           <LogOut className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
         </button>
       </div>
+      )}
     </motion.aside>
   );
 }

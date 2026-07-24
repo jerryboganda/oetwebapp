@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Flame, Zap } from 'lucide-react';
 import { fetchStreak, fetchXP } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 
 interface LearnerStreakBadgesProps {
   className?: string;
@@ -62,7 +63,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
         <Link
           href="/achievements"
           aria-label={`Current streak: ${streak} days`}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-1.5 shadow-sm transition-colors hover:border-border-hover lg:pr-3.5"
+          className={cn('flex items-center gap-2.5 rounded-xl p-1.5 lg:pr-3.5', HEADER_CHIP, HEADER_CHIP_HOVER)}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-950/60 dark:text-orange-400">
             <Flame className="h-4 w-4" aria-hidden="true" />
@@ -78,7 +79,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
         <Link
           href="/achievements"
           aria-label={`Level ${xp.level}, ${tier}, ${progress}% to next level`}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-1.5 shadow-sm transition-colors hover:border-border-hover lg:pr-3.5"
+          className={cn('flex items-center gap-2.5 rounded-xl p-1.5 lg:pr-3.5', HEADER_CHIP, HEADER_CHIP_HOVER)}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Zap className="h-4 w-4" aria-hidden="true" />
