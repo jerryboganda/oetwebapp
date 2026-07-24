@@ -159,7 +159,7 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 | `tutor_book_discount` | FALSE |
 | `dashboard_modules` | Listening, Reading, Writing, Speaking, Materials Library, Tutor Book, Writing Assessments, Speaking Session, AI Practice, Recalls, Add-ons |
 | `entitlements` | writing_assessments=5 | speaking_sessions=1 | ai_credits=5 | tutor_book=true |
-| `bundle_components` | full course + Tutor Book PDF + Telegram channel |
+| `bundle_components` | full course + Tutor Book PDF + WhatsApp access |
 | `recall_updates` | Yes |
 | `extension_allowed` | Yes — small extension fee |
 
@@ -167,7 +167,7 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 
 - Everything in Full Condensed Recorded Course (£100)
 - The Tutor Book — First Edition 2026, watermarked and personalised
-- Private Telegram channel access for book updates
+- WhatsApp access for book support and updates: [+44 7961 725989](https://wa.me/447961725989)
 - Continuous book + recall updates
 
 **Developer implementation notes**
@@ -1014,7 +1014,7 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 **What is included**
 
 - The Tutor Book — First Edition 2026 (watermarked PDF)
-- Private Telegram channel access
+- WhatsApp access: [+44 7961 725989](https://wa.me/447961725989)
 
 **Developer implementation notes**
 

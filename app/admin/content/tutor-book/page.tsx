@@ -156,7 +156,7 @@ export default function AdminTutorBookPage() {
   return (
     <AdminSettingsLayout
       title="The Tutor Book"
-      description="Manage recall updates + audio scripts surfaced inside the /learner/tutor-book reader. Telegram invite URL is configured via TutorBook:TelegramInviteUrl in appsettings."
+      description="Manage recall updates and audio scripts surfaced inside the Tutor Book reader. Candidate access uses the runtime Support WhatsApp number."
       eyebrow="Content"
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },

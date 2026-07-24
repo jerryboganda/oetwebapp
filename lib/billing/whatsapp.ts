@@ -56,6 +56,10 @@ export function normalizeWhatsAppNumber(value: string | null | undefined): strin
   return digits.length > 0 ? digits : null;
 }
 
+export function displayWhatsAppNumber(value: string | null | undefined): string {
+  return `+${normalizeWhatsAppNumber(value) ?? PLATFORM_WHATSAPP}`;
+}
+
 let supportSettingsPromise: Promise<SupportWhatsAppSettings> | null = null;
 
 /**

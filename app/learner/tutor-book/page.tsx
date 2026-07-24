@@ -5,7 +5,7 @@ import { BookOpen, Download, ExternalLink, Headphones, Megaphone } from 'lucide-
 import {
   fetchTutorBookAudioScripts,
   fetchTutorBookUpdates,
-  fetchTutorBookTelegram,
+  fetchTutorBookWhatsApp,
   tutorBookDownloadUrl,
   type TutorBookAudioScript,
   type TutorBookUpdate,
@@ -19,7 +19,7 @@ export default function TutorBookPage() {
   const [tab, setTab] = useState<Tab>('reader');
   const [audio, setAudio] = useState<TutorBookAudioScript[]>([]);
   const [updates, setUpdates] = useState<TutorBookUpdate[]>([]);
-  const [telegramUrl, setTelegramUrl] = useState<string | null>(null);
+  const [whatsAppAccess, setWhatsAppAccess] = useState<{ number: string; url: string } | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -27,14 +27,14 @@ export default function TutorBookPage() {
     if (!user) return;
     void (async () => {
       try {
-        const [audioRes, updatesRes, telegramRes] = await Promise.all([
+        const [audioRes, updatesRes, whatsAppRes] = await Promise.all([
           fetchTutorBookAudioScripts().catch(() => []),
           fetchTutorBookUpdates().catch(() => []),
-          fetchTutorBookTelegram().catch(() => ({ inviteUrl: null })),
+          fetchTutorBookWhatsApp().catch(() => null),
         ]);
         setAudio(audioRes);
         setUpdates(updatesRes);
-        setTelegramUrl(telegramRes.inviteUrl);
+        setWhatsAppAccess(whatsAppRes);
         setForbidden(false);
       } catch (err) {
         if (err instanceof Error && err.message.toLowerCase().includes('forbid')) {
@@ -109,7 +109,7 @@ export default function TutorBookPage() {
         {loading ? (
           <div className="h-96 animate-pulse rounded-xl bg-surface" />
         ) : tab === 'reader' ? (
-          <ReaderTab buyerEmail={user.email ?? ''} buyerName={(user as { name?: string }).name ?? ''} telegramUrl={telegramUrl} />
+          <ReaderTab buyerEmail={user.email ?? ''} buyerName={(user as { name?: string }).name ?? ''} whatsAppAccess={whatsAppAccess} />
         ) : tab === 'audio' ? (
           <AudioTab audio={audio} />
         ) : (
@@ -134,7 +134,15 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
   );
 }
 
-function ReaderTab({ buyerEmail, buyerName, telegramUrl }: { buyerEmail: string; buyerName: string; telegramUrl: string | null }) {
+function ReaderTab({
+  buyerEmail,
+  buyerName,
+  whatsAppAccess,
+}: {
+  buyerEmail: string;
+  buyerName: string;
+  whatsAppAccess: { number: string; url: string } | null;
+}) {
   return (
     <div className="space-y-6">
       <div className="relative rounded-2xl border border-border bg-surface shadow-sm">
@@ -159,14 +167,15 @@ function ReaderTab({ buyerEmail, buyerName, telegramUrl }: { buyerEmail: string;
         </div>
       </div>
 
-      {telegramUrl && (
+      {whatsAppAccess && (
         <a
-          href={telegramUrl}
+          href={whatsAppAccess.url}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-navy hover:bg-background-light"
         >
-          <ExternalLink className="h-4 w-4" /> Join the private Telegram channel
+          <ExternalLink className="h-4 w-4" />
+          Access and updates through WhatsApp: +{whatsAppAccess.number}
         </a>
       )}
     </div>

@@ -6,6 +6,7 @@ import { MessageCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   buildManualPaymentWhatsAppLink,
+  displayWhatsAppNumber,
   fetchSupportWhatsApp,
   type SupportWhatsAppSettings,
 } from '@/lib/billing/whatsapp';
@@ -41,7 +42,7 @@ export function SendProofOnWhatsAppButton({
   reference,
   name,
   email,
-  label = 'Send proof on WhatsApp',
+  label,
   className,
   variant = 'solid',
 }: SendProofOnWhatsAppButtonProps) {
@@ -70,6 +71,8 @@ export function SendProofOnWhatsAppButton({
     },
     { number: settings?.whatsAppNumber, template: settings?.whatsAppProofTemplate },
   );
+  const resolvedLabel = label
+    ?? `WhatsApp ${displayWhatsAppNumber(settings?.whatsAppNumber)}`;
 
   return (
     <a
@@ -84,7 +87,7 @@ export function SendProofOnWhatsAppButton({
         className,
       )}
     >
-      <MessageCircle className="h-4 w-4" /> {label}
+      <MessageCircle className="h-4 w-4" /> {resolvedLabel}
     </a>
   );
 }

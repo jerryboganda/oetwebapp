@@ -245,7 +245,7 @@ public static class BillingExpansionEndpoints
 
     // ── Manual fulfilment queue ────────────────────────────────────
 
-    /// <summary>Orders that are paid but await an admin hand-over (Telegram invite,
+    /// <summary>Orders that are paid but await an admin hand-over (WhatsApp access,
     /// manual web release, physical material). These subscriptions stay Pending, so the
     /// entitlement resolver grants nothing until <see cref="MarkSubscriptionFulfilled"/>.
     /// </summary>
@@ -656,7 +656,7 @@ public sealed record ManualPaymentListResponse(
     IReadOnlyList<ManualPaymentDto> Items);
 
 /// <summary>A paid order awaiting an admin hand-over, with everything the admin needs to
-/// complete it (the Telegram invite / delivery instructions) and the proof behind it.</summary>
+/// complete it (the WhatsApp access link / delivery instructions) and the proof behind it.</summary>
 public sealed record PendingFulfilmentDto(
     string SubscriptionId,
     string UserId,

@@ -65,7 +65,7 @@ public sealed class TutorBookWatermarkService(IConfiguration configuration, IHos
                     col.Item().Text("• Reading: recall-based topics, vocab trends, strategies for Parts A, B, C");
                     col.Item().Text("• Writing: 8 full recall-based letters with model answers and structure guidance");
                     col.Item().Text("• Speaking: 16 recall-based cards based on recent scenarios");
-                    col.Item().Text("• Private Telegram channel access for continuous updates");
+                    col.Item().Text("• WhatsApp access for support and continuous updates: +44 7961 725989");
 
                     col.Item().PaddingTop(40).Background("#EAE9E6").Padding(15).Column(notice =>
                     {

@@ -64,10 +64,11 @@ const NO_PLATFORM_ACCESS = 'none';
 const DELIVERY_METHOD_OPTIONS = [
   { value: 'automatic_web', label: 'Automatic Web Access' },
   { value: 'manual_web', label: 'Manual Web Access' },
-  { value: 'telegram', label: 'Telegram Access' },
+  { value: 'whatsapp', label: 'WhatsApp Access' },
   { value: 'manual_material', label: 'Manual Material Delivery' },
 ];
-const MANUAL_DELIVERY_METHODS = ['manual_web', 'telegram', 'manual_material'];
+const MANUAL_DELIVERY_METHODS = ['manual_web', 'whatsapp', 'telegram', 'manual_material'];
+const DEFAULT_WHATSAPP_ACCESS_URL = 'https://wa.me/447961725989';
 const DEFAULT_ACCESS_DURATION_DAYS = 180;
 const MATERIAL_OVERRIDES_PLACEHOLDER = '{\n  "include": [],\n  "exclude": []\n}';
 
@@ -192,7 +193,9 @@ function toForm(row: AdminPlanRow): FormState {
     modules: Array.isArray(row.dashboardModules) ? row.dashboardModules : [],
     profession: (row.profession && row.profession.trim()) || 'all',
     accessDurationDays: String(row.accessDurationDays ?? DEFAULT_ACCESS_DURATION_DAYS),
-    deliveryMethod: (row.deliveryMethod && row.deliveryMethod.trim()) || 'automatic_web',
+    deliveryMethod: row.deliveryMethod?.trim() === 'telegram'
+      ? 'whatsapp'
+      : (row.deliveryMethod && row.deliveryMethod.trim()) || 'automatic_web',
     telegramInviteUrl: row.telegramInviteUrl ?? '',
     deliveryInstructions: row.deliveryInstructions ?? '',
     videoOverrides,
@@ -412,17 +415,20 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       return;
     }
 
-    const telegramInviteUrl = form.telegramInviteUrl.trim();
+    const telegramInviteUrl = form.telegramInviteUrl.trim()
+      || ((form.deliveryMethod === 'whatsapp' || form.deliveryMethod === 'telegram')
+        ? DEFAULT_WHATSAPP_ACCESS_URL
+        : '');
     if (form.subtests.includes(NO_PLATFORM_ACCESS) && form.deliveryMethod !== 'manual_material') {
       setFeedback({ tone: 'error', message: 'No platform access requires Manual Material Delivery.' });
       return;
     }
-    if (form.deliveryMethod === 'telegram' && !telegramInviteUrl) {
-      setFeedback({ tone: 'error', message: 'Telegram Access needs an invite link — the learner has no other way in.' });
+    if ((form.deliveryMethod === 'whatsapp' || form.deliveryMethod === 'telegram') && !telegramInviteUrl) {
+      setFeedback({ tone: 'error', message: 'WhatsApp Access needs a wa.me link so the candidate can contact the team.' });
       return;
     }
     if (telegramInviteUrl && !/^https:\/\//i.test(telegramInviteUrl)) {
-      setFeedback({ tone: 'error', message: 'Telegram invite link must start with https://.' });
+      setFeedback({ tone: 'error', message: 'WhatsApp access link must start with https://.' });
       return;
     }
 
@@ -660,12 +666,12 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
             </div>
             {isManualDelivery ? (
               <div className="mt-4 space-y-4">
-                {form.deliveryMethod === 'telegram' ? (
+                {form.deliveryMethod === 'whatsapp' || form.deliveryMethod === 'telegram' ? (
                   <Input
-                    label="Telegram invite link"
-                    value={form.telegramInviteUrl}
+                    label="WhatsApp number and access link"
+                    value={form.telegramInviteUrl || DEFAULT_WHATSAPP_ACCESS_URL}
                     onChange={(e) => setField('telegramInviteUrl', e.target.value)}
-                    placeholder="https://t.me/+…"
+                    placeholder="https://wa.me/447961725989"
                     hint="Revealed on the learner’s order page only after an admin marks the order fulfilled."
                   />
                 ) : null}

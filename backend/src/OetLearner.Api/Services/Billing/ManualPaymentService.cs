@@ -273,7 +273,7 @@ public sealed class ManualPaymentService : IManualPaymentService
         {
             SubscriptionBundleInitializer.ApplyPlanEntitlements(subscription, plan, now);
         }
-        // Delivery method decides whether payment alone unlocks access. Telegram /
+        // Delivery method decides whether payment alone unlocks access. WhatsApp /
         // manual packages are paid but not delivered: the entitlement resolver grants
         // nothing on Pending, so access stays shut until an admin marks the order
         // fulfilled. The Active guard means re-approving an order never revokes access

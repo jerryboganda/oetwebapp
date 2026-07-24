@@ -147,7 +147,14 @@ export default function PackageDetailPage() {
                     <li>· {plan.bundledSpeakingSessions} private speaking session{plan.bundledSpeakingSessions === 1 ? '' : 's'}</li>
                   )}
                   {plan.bundledAiCredits > 0 && <li>· {plan.bundledAiCredits} AI practice credits</li>}
-                  {plan.bundledTutorBook && <li>· The Tutor Book, First Edition 2026 + private Telegram channel</li>}
+                  {plan.bundledTutorBook && (
+                    <li>
+                      · The Tutor Book, First Edition 2026 + WhatsApp access:{' '}
+                      <a className="font-semibold underline" href="https://wa.me/447961725989">
+                        +44 7961 725989
+                      </a>
+                    </li>
+                  )}
                   {plan.bundledBasicEnglish && <li>· Basic English foundation course (11+ hours)</li>}
                 </ul>
               </div>

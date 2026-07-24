@@ -400,12 +400,12 @@ public class BillingPlan
     // existing IncludedSubtestsJson column above ("[]" ⇒ all subtests). The profession
     // axis comes from the buyer's registered profession, not from the plan.
 
-    /// <summary><see cref="DeliveryMethods"/> — automatic_web | manual_web | telegram | manual_material.
+    /// <summary><see cref="DeliveryMethods"/> — automatic_web | manual_web | whatsapp | manual_material.
     /// Anything but automatic_web parks the Subscription at Pending until an admin marks it fulfilled.</summary>
     [MaxLength(32)]
     public string DeliveryMethod { get; set; } = DeliveryMethods.AutomaticWeb;
 
-    /// <summary>Telegram channel invite revealed to the learner only once the order is fulfilled.</summary>
+    /// <summary>Legacy storage column now used for the candidate WhatsApp access URL.</summary>
     [MaxLength(512)]
     public string? TelegramInviteUrl { get; set; }
 

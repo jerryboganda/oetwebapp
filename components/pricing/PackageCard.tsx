@@ -72,7 +72,7 @@ export function PackageCard({ plan, detailsHref }: PackageCardProps) {
           {plan.bundledTutorBook ? (
             <li className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 flex-none text-success" aria-hidden="true" />
-              The Tutor Book - First Edition 2026 (PDF + Telegram)
+              The Tutor Book - First Edition 2026 (PDF + WhatsApp access: +44 7961 725989)
             </li>
           ) : null}
           {plan.bundledBasicEnglish ? (

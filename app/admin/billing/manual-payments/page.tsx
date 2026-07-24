@@ -91,7 +91,8 @@ const STATUS_DISPLAY: Record<string, { label: string; variant: BadgeProps['varia
 const DELIVERY_LABELS: Record<string, string> = {
   automatic_web: 'Automatic (web)',
   manual_web: 'Manual release (web)',
-  telegram: 'Telegram invite',
+  whatsapp: 'WhatsApp access',
+  telegram: 'WhatsApp access',
   manual_material: 'Manual material',
 };
 
@@ -663,7 +664,7 @@ export default function AdminPaymentProofsPage() {
   return (
     <AdminTableLayout
       title="Payment proofs"
-      description="Every order carries a proof of payment — a learner upload for offline methods, or a system receipt for card gateways. Manual and Telegram orders wait here for hand-over."
+      description="Every order carries a proof of payment — a learner upload for offline methods, or a system receipt for card gateways. Manual and WhatsApp orders wait here for hand-over."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Billing', href: '/admin/billing' },

@@ -29,7 +29,7 @@ export default function CheckoutSuccessPage() {
 
 /** Delivery methods where payment does NOT release access — an admin hands the
  *  package over and only then does the subscription go Active (spec §2/§5). */
-const MANUAL_DELIVERY = new Set(['manual_web', 'telegram', 'manual_material']);
+const MANUAL_DELIVERY = new Set(['manual_web', 'whatsapp', 'telegram', 'manual_material']);
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
@@ -87,8 +87,8 @@ function CheckoutSuccessContent() {
  */
 function PendingManualFulfilment({ delivery, course }: { delivery: string; course: string }) {
   const handover =
-    delivery === 'telegram'
-      ? 'Once our team verifies your payment we will send you the Telegram invite link — it appears on your billing page and is emailed to you.'
+    delivery === 'whatsapp' || delivery === 'telegram'
+      ? 'Once our team verifies your payment, contact us on WhatsApp at +44 7961 725989. The clickable WhatsApp link appears with your order details.'
       : delivery === 'manual_material'
         ? 'Once our team verifies your payment we will arrange delivery of your materials and confirm the details with you.'
         : 'Once our team verifies your payment we will switch your access on and confirm it with you.';

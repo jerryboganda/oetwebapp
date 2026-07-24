@@ -16,7 +16,7 @@ import { CheckoutSessionSummary } from './CheckoutSessionSummary';
  */
 
 /** Delivery methods that park the subscription at Pending until an admin hands it over. */
-const MANUAL_DELIVERY_METHODS = new Set(['manual_web', 'telegram', 'manual_material']);
+const MANUAL_DELIVERY_METHODS = new Set(['manual_web', 'whatsapp', 'telegram', 'manual_material']);
 
 /**
  * What we can honestly tell the buyer once `status: 'fulfilled'` lands.

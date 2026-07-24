@@ -329,7 +329,7 @@ export function deriveDefaultBullets(plan: PublicCatalogPlanRow): string[] {
     );
   }
   if (plan.bundledTutorBook) {
-    bullets.push('The Tutor Book, First Edition 2026 (PDF + Telegram)');
+    bullets.push('The Tutor Book, First Edition 2026 (PDF + WhatsApp access: +44 7961 725989)');
   }
   if (plan.bundledBasicEnglish) {
     bullets.push('Basic English foundation course');

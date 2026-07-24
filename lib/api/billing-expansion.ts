@@ -141,7 +141,7 @@ export function getManualPaymentProofBlob(id: string): Promise<Blob> {
 
 // ── Manual fulfilment queue ──────────────────────────────────────
 
-export type DeliveryMethod = 'automatic_web' | 'manual_web' | 'telegram' | 'manual_material';
+export type DeliveryMethod = 'automatic_web' | 'manual_web' | 'whatsapp' | 'manual_material';
 
 export type FulfilmentStatus = 'auto' | 'pending_manual' | 'fulfilled';
 

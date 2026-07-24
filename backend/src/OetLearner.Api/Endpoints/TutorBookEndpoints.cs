@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.TutorBook;
 
 namespace OetLearner.Api.Endpoints;
@@ -27,7 +28,7 @@ public static class TutorBookEndpoints
         v1.MapGet("/download", DownloadWatermarked);
         v1.MapGet("/audio-scripts", ListLearnerAudioScripts);
         v1.MapGet("/updates", ListLearnerUpdates);
-        v1.MapGet("/telegram", GetTelegramLink);
+        v1.MapGet("/whatsapp", GetWhatsAppAccess);
 
         var admin = app.MapGroup("/v1/admin/tutor-book").RequireAuthorization("AdminBillingCatalogWrite");
         admin.MapGet("/updates", AdminListUpdates);
@@ -42,7 +43,7 @@ public static class TutorBookEndpoints
 
     private sealed record AudioScriptDto(string Id, string Chapter, string Title, string AudioUrl, string? TranscriptUrl, int DisplayOrder, bool IsPublished);
     private sealed record TutorBookUpdateDto(string Id, string Title, string BodyMarkdown, DateTimeOffset PublishedAt, string Audience, bool IsPublished);
-    private sealed record TelegramResponse(string? InviteUrl);
+    private sealed record WhatsAppAccessResponse(string Number, string Url);
 
     private sealed record AudioScriptUpsertRequest(string? Id, string Chapter, string Title, string AudioUrl, string? TranscriptUrl, int DisplayOrder, bool IsPublished = true);
     private sealed record TutorBookUpdateUpsertRequest(string? Id, string Title, string BodyMarkdown, string Audience = "all", bool IsPublished = true, DateTimeOffset? PublishedAt = null);
@@ -75,7 +76,7 @@ public static class TutorBookEndpoints
         return TypedResults.File(bytes, "application/pdf", filename);
     }
 
-    // ── Learner: audio scripts + updates + telegram ──────────────────────
+    // ── Learner: audio scripts + updates + WhatsApp access ───────────────
 
     private static async Task<Results<Ok<List<AudioScriptDto>>, ForbidHttpResult>> ListLearnerAudioScripts(
         HttpContext http,
@@ -121,10 +122,10 @@ public static class TutorBookEndpoints
         return TypedResults.Ok(rows);
     }
 
-    private static async Task<Results<Ok<TelegramResponse>, ForbidHttpResult>> GetTelegramLink(
+    private static async Task<Results<Ok<WhatsAppAccessResponse>, ForbidHttpResult>> GetWhatsAppAccess(
         HttpContext http,
         LearnerDbContext db,
-        IConfiguration config,
+        IRuntimeSettingsProvider settings,
         CancellationToken ct)
     {
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -132,8 +133,15 @@ public static class TutorBookEndpoints
         var unlocked = await UserHasTutorBookAsync(db, userId, ct);
         if (!unlocked) return TypedResults.Forbid();
 
-        var url = config["TutorBook:TelegramInviteUrl"];
-        return TypedResults.Ok(new TelegramResponse(url));
+        const string fallbackNumber = "447961725989";
+        var configured = (await settings.GetAsync(ct)).Support.WhatsAppNumber;
+        var number = string.Concat((configured ?? fallbackNumber).Where(char.IsDigit));
+        if (number.Length == 0) number = fallbackNumber;
+        var message = Uri.EscapeDataString(
+            "Hello OET with Dr. Hesham, I need help with access to my Tutor Book and candidate updates.");
+        return TypedResults.Ok(new WhatsAppAccessResponse(
+            number,
+            $"https://wa.me/{number}?text={message}"));
     }
 
     // ── Admin: updates CRUD ──────────────────────────────────────────────

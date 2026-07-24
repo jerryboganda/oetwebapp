@@ -335,7 +335,10 @@ public static class DeliveryMethods
     /// <summary>Web access, but an admin must release it by hand.</summary>
     public const string ManualWeb = "manual_web";
 
-    /// <summary>Delivered as a Telegram channel invite (<see cref="BillingPlan.TelegramInviteUrl"/>).</summary>
+    /// <summary>Delivered through the candidate support WhatsApp channel.</summary>
+    public const string WhatsApp = "whatsapp";
+
+    /// <summary>Legacy persisted value; treated as WhatsApp and migrated forward.</summary>
     public const string Telegram = "telegram";
 
     /// <summary>Physical/off-platform material handed over outside the app.</summary>
@@ -343,7 +346,7 @@ public static class DeliveryMethods
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        AutomaticWeb, ManualWeb, Telegram, ManualMaterial,
+        AutomaticWeb, ManualWeb, WhatsApp, Telegram, ManualMaterial,
     };
 
     public static bool IsValid(string? value) => value is not null && All.Contains(value);
@@ -356,7 +359,8 @@ public static class DeliveryMethods
     {
         AutomaticWeb => "Automatic (web app)",
         ManualWeb => "Manual (web app)",
-        Telegram => "Telegram channel",
+        WhatsApp => "WhatsApp access",
+        Telegram => "WhatsApp access",
         ManualMaterial => "Manual material",
         _ => value,
     };

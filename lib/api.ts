@@ -5993,8 +5993,9 @@ export interface TutorBookUpdate {
   audience: string;
 }
 
-export interface TutorBookTelegramResponse {
-  inviteUrl: string | null;
+export interface TutorBookWhatsAppResponse {
+  number: string;
+  url: string;
 }
 
 export async function fetchTutorBookAudioScripts(): Promise<TutorBookAudioScript[]> {
@@ -6005,8 +6006,8 @@ export async function fetchTutorBookUpdates(): Promise<TutorBookUpdate[]> {
   return apiRequest('/v1/tutor-book/updates');
 }
 
-export async function fetchTutorBookTelegram(): Promise<TutorBookTelegramResponse> {
-  return apiRequest('/v1/tutor-book/telegram');
+export async function fetchTutorBookWhatsApp(): Promise<TutorBookWhatsAppResponse> {
+  return apiRequest('/v1/tutor-book/whatsapp');
 }
 
 /** Returns the URL for the watermarked PDF download (same-origin /api/backend proxy). */

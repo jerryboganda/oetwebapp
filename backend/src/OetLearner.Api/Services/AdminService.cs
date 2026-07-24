@@ -330,7 +330,7 @@ public partial class AdminService(
         string? ComparisonFeaturesJson,
         // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
         // Unlike the fields above, the three nullable strings use "" ⇒ clear to NULL
-        // semantics so an admin can remove a Telegram invite once set.
+        // semantics so an admin can remove a WhatsApp access link once set.
         string? DeliveryMethod = null,
         string? TelegramInviteUrl = null,
         string? DeliveryInstructions = null,
@@ -426,7 +426,7 @@ public partial class AdminService(
 
         // The three below deliberately skip the IsNullOrWhiteSpace guard used above:
         // null ⇒ field omitted (leave as-is), "" ⇒ admin cleared it (write NULL).
-        // Guarding on whitespace would make a Telegram invite impossible to remove.
+        // Guarding on whitespace would make a WhatsApp access link impossible to remove.
         if (fields.TelegramInviteUrl is not null)
         {
             var value = fields.TelegramInviteUrl.Trim();
@@ -1049,7 +1049,7 @@ public partial class AdminService(
                 errors,
                 "deliveryMethod",
                 "invalid",
-                "Delivery method must be automatic_web, manual_web, telegram, or manual_material.");
+                "Delivery method must be automatic_web, manual_web, whatsapp, or manual_material.");
         }
         var parsedSubtests = includedSubtests.Values;
         var hasNoPlatformAccess = parsedSubtests.Any(code =>
@@ -1540,7 +1540,7 @@ public partial class AdminService(
         recallUpdatesEnabled = plan.RecallUpdatesEnabled,
         // Delivery + content scoping — the plan editor hydrates its form from these.
         // Omitting them would make every save post deliveryMethod='automatic_web'
-        // (the form's default for an absent value) and silently unlock a Telegram plan.
+        // (the form's default for an absent value) and silently unlock a WhatsApp-delivered plan.
         deliveryMethod = plan.DeliveryMethod,
         telegramInviteUrl = plan.TelegramInviteUrl,
         deliveryInstructions = plan.DeliveryInstructions,
@@ -1661,7 +1661,7 @@ public partial class AdminService(
         RecallUpdatesEnabled = plan.RecallUpdatesEnabled,
         // Delivery + content scoping — frozen onto the snapshot. LearnerService
         // resolves delivery off the VERSION, so omitting these here would silently
-        // fall back to automatic_web and grant instant access to a Telegram plan.
+        // fall back to automatic_web and grant instant access to a WhatsApp-delivered plan.
         DeliveryMethod = plan.DeliveryMethod,
         TelegramInviteUrl = plan.TelegramInviteUrl,
         DeliveryInstructions = plan.DeliveryInstructions,

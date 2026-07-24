@@ -364,7 +364,7 @@ public record AdminBillingPlanCreateRequest(
     // "What's included" bullet list — persisted on the linked ContentPackage.
     string? ComparisonFeaturesJson = null,
     // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
-    // Empty string clears TelegramInviteUrl / DeliveryInstructions / ContentOverridesJson;
+    // Empty string clears the legacy access-URL field / DeliveryInstructions / ContentOverridesJson;
     // null leaves the stored value untouched.
     string? DeliveryMethod = null,
     string? TelegramInviteUrl = null,
@@ -407,7 +407,7 @@ public record AdminBillingPlanUpdateRequest(
     bool? RecallUpdatesEnabled = null,
     string? ComparisonFeaturesJson = null,
     // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
-    // Empty string clears TelegramInviteUrl / DeliveryInstructions / ContentOverridesJson;
+    // Empty string clears the legacy access-URL field / DeliveryInstructions / ContentOverridesJson;
     // null leaves the stored value untouched.
     string? DeliveryMethod = null,
     string? TelegramInviteUrl = null,
