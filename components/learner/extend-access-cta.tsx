@@ -49,12 +49,18 @@ export function ExtendAccessCta({ hasEligibleSubscription = false, expiresAt }: 
 
   return (
     <>
-      <section className="rounded-2xl border border-[#D4A44F]/40 bg-[#D4A44F]/5 p-5 shadow-sm dark:border-[#D4A44F]/30">
-        <header className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-[#996F1F]" aria-hidden="true" />
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#996F1F]">Extend your access</h3>
+      <section className="rounded-2xl border border-gold/40 bg-gold/[0.06] p-5 shadow-sm dark:border-gold/30 dark:bg-gold/[0.08]">
+        <header className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold-fg ring-1 ring-inset ring-gold/30">
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-gold-fg">Extend your access</h3>
         </header>
-        <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+        <p
+          className={`mt-2 flex items-center gap-1.5 text-sm font-semibold ${
+            expired || expiryInfo.daysRemaining <= 3 ? 'text-danger' : 'text-navy'
+          }`}
+        >
           <Clock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
           {expired ? (
             <span>Your course access expired on {expiryLabel}.</span>
@@ -73,7 +79,7 @@ export function ExtendAccessCta({ hasEligibleSubscription = false, expiresAt }: 
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0E2841] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#156082]"
+          className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg bg-oet-navy px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-oet-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1"
         >
           <CalendarClock className="h-4 w-4" aria-hidden="true" /> Extend access (+90 days)
         </button>

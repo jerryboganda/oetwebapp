@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'motion/react';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionList } from '@/components/ui/motion-primitives';
 import {
   ArrowRight,
   BookOpen,
@@ -73,6 +73,14 @@ const SUBTEST_COLORS: Record<SubTest, string> = {
   Speaking: 'text-purple-600 bg-purple-50',
   Reading: 'text-blue-600 bg-blue-50',
   Listening: 'text-indigo-600 bg-indigo-50',
+};
+
+// Left-edge accent used to make each task instantly scannable by skill.
+const SUBTEST_SPINE: Record<SubTest, string> = {
+  Writing: 'bg-rose-400',
+  Speaking: 'bg-purple-400',
+  Reading: 'bg-blue-400',
+  Listening: 'bg-indigo-400',
 };
 
 function hasLiveReadinessEvidence(readiness: ReturnType<typeof useDashboardHome>['data']['readiness']) {
@@ -168,7 +176,7 @@ function DashboardSubscriptionStrip({
           {isLoading ? 'Loading subscription…' : hasError ? 'Subscription details unavailable' : planName}
         </span>
         {!isLoading && !hasError ? (
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
             {statusLabel}
           </span>
         ) : null}
@@ -179,7 +187,7 @@ function DashboardSubscriptionStrip({
           {facts.map(({ icon: Icon, label }) => (
             <span
               key={label}
-              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-[11px] font-semibold text-navy ring-1 ring-border/70"
+              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-[11px] font-semibold text-navy ring-1 ring-border/70 transition-colors hoverable:bg-lavender/50 hoverable:ring-primary/25"
             >
               <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
               <span className="truncate">{label}</span>
@@ -481,6 +489,7 @@ export default function Dashboard() {
                   {todayTasks.length > 0 ? todayTasks.map((task) => {
                     const Icon = SUBTEST_ICONS[task.subTest];
                     const colorClass = SUBTEST_COLORS[task.subTest];
+                    const spineClass = SUBTEST_SPINE[task.subTest];
                     const isComplete = task.status === 'completed';
 
                     return (
@@ -488,12 +497,16 @@ export default function Dashboard() {
                         key={task.id}
                         whileHover={prefersReducedMotion || isComplete ? {} : { scale: 1.01 }}
                         whileTap={prefersReducedMotion || isComplete ? {} : { scale: 0.98 }}
-                        className={`group flex flex-col items-start justify-between rounded-2xl border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
+                        className={`group relative flex flex-col items-start justify-between overflow-hidden rounded-2xl border bg-surface p-4 pl-5 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
                           isComplete
                             ? 'border-border opacity-60'
-                            : 'border-border/60 hover:border-border hover:shadow-md'
+                            : 'border-border/60 hover:border-border-hover hover:shadow-clinical'
                         }`}
                       >
+                        <span
+                          aria-hidden="true"
+                          className={`absolute inset-y-0 left-0 w-1.5 transition-colors ${isComplete ? 'bg-success/50' : spineClass}`}
+                        />
                         <div className="mb-3 flex items-center gap-4 sm:mb-0">
                           <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${isComplete ? 'bg-success/10 text-success' : colorClass}`}>
                             {isComplete ? <CheckCircle2 className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
@@ -538,12 +551,15 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {upcomingTasks.map((task) => {
                       const Icon = SUBTEST_ICONS[task.subTest];
+                      const colorClass = SUBTEST_COLORS[task.subTest];
                       return (
                         <CardLink key={task.id} href={routeForTask(task)}>
                           <CardContent className="flex items-start gap-3 p-0">
-                            <Icon className="mt-0.5 h-5 w-5 shrink-0 text-muted" />
-                            <div>
-                              <h4 className="text-sm font-bold text-navy">{task.title}</h4>
+                            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${colorClass}`}>
+                              <Icon className="h-4.5 w-4.5" />
+                            </span>
+                            <div className="min-w-0">
+                              <h4 className="truncate text-sm font-bold text-navy">{task.title}</h4>
                               <p className="mt-0.5 text-xs text-muted">{task.dueDate} · {task.duration}</p>
                             </div>
                           </CardContent>
@@ -563,7 +579,7 @@ export default function Dashboard() {
               />
             </div>
 
-            <div className="space-y-5 lg:col-span-4">
+            <MotionList className="space-y-5 lg:col-span-4">
               {liveReadiness ? (
                 <Card data-tour="learner-dashboard-readiness">
                   <CardHeader>
@@ -577,13 +593,20 @@ export default function Dashboard() {
                       value={readinessAverage}
                       size={120}
                     />
-                    <p className="flex items-center gap-1 text-sm font-semibold text-emerald-700">
-                      <TrendingUp className="h-4 w-4" />
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+                      <TrendingUp className="h-4 w-4 shrink-0" />
                       {readinessRecentTrend}
                     </p>
-                    <p className="text-xs text-muted">
-                      {liveReadiness.weeksRemaining} weeks to exam · {liveReadiness.overallRisk} risk
-                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2.5 py-1 text-[11px] font-semibold text-navy ring-1 ring-border/70">
+                        <Timer className="h-3 w-3 text-primary" aria-hidden="true" />
+                        {liveReadiness.weeksRemaining} weeks to exam
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2.5 py-1 text-[11px] font-semibold capitalize text-navy ring-1 ring-border/70">
+                        <Flag className="h-3 w-3 text-primary" aria-hidden="true" />
+                        {liveReadiness.overallRisk} risk
+                      </span>
+                    </div>
                     <Link
                       href="/readiness"
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
@@ -602,9 +625,18 @@ export default function Dashboard() {
                   <CardContent className="space-y-4">
                     {liveReadiness.subTests.map((subTest) => (
                       <div key={subTest.id}>
-                        <div className="mb-1 flex justify-between text-sm">
-                          <span className="font-semibold text-navy">{subTest.name}</span>
-                          <span className="text-muted">{subTest.readiness}%</span>
+                        <div className="mb-1 flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-2 font-semibold text-navy">
+                            <span
+                              aria-hidden="true"
+                              className={`h-2 w-2 shrink-0 rounded-full ${SUBTEST_SPINE[subTest.name as SubTest] ?? 'bg-muted'}`}
+                            />
+                            {subTest.name}
+                          </span>
+                          <span className="tabular-nums text-muted">
+                            {subTest.readiness}%
+                            <span className="text-muted/60"> · target {subTest.target}%</span>
+                          </span>
                         </div>
                         <ProgressBar
                           value={subTest.readiness}
@@ -683,32 +715,36 @@ export default function Dashboard() {
                     </div>
 
                     <div>
-                      <p className="mb-2 text-xs font-medium text-muted">This Week</p>
-                      <div className="flex justify-between gap-1">
-                        {engagement.weeklyActivity.map((day) => (
-                          <div key={day.day} className="flex flex-col items-center gap-1">
+                      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">This Week</p>
+                      <div className="grid grid-cols-7 gap-1.5">
+                        {engagement.weeklyActivity.map((day, index, all) => {
+                          const isToday = index === all.length - 1;
+                          return (
                             <div
-                              className={`h-7 w-7 rounded-md transition-colors ${
+                              key={day.day}
+                              title={day.day}
+                              className={`flex h-9 items-center justify-center rounded-lg text-[11px] font-bold uppercase transition-colors duration-200 ${
                                 day.active
-                                  ? 'bg-amber-600 shadow-sm shadow-amber-200'
-                                  : 'bg-background-light border border-border'
+                                  ? 'bg-amber-600 text-white shadow-sm shadow-amber-200/70'
+                                  : `bg-background-light text-muted/70 ${isToday ? 'ring-2 ring-inset ring-amber-400/60' : 'border border-border'}`
                               }`}
-                            />
-                            <span className="text-[11px] text-muted">{day.day}</span>
-                          </div>
-                        ))}
+                            >
+                              {day.day.slice(0, 1)}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-2xl border border-border bg-background-light p-2.5 text-center">
+                      <div className="rounded-xl border border-border bg-background-light p-2.5 text-center transition-colors hoverable:border-border-hover">
                         <div className="flex items-center justify-center gap-1 text-sm font-bold text-navy">
-                          <Timer className="h-3.5 w-3.5" />
+                          <Timer className="h-3.5 w-3.5 text-amber-700" />
                           {Math.round(engagement.totalPracticeMinutes / 60)}h
                         </div>
                         <div className="text-[11px] text-muted">Total Practice</div>
                       </div>
-                      <div className="rounded-2xl border border-border bg-background-light p-2.5 text-center">
+                      <div className="rounded-xl border border-border bg-background-light p-2.5 text-center transition-colors hoverable:border-border-hover">
                         <div className="text-sm font-bold text-navy">{engagement.totalPracticeSessions}</div>
                         <div className="text-[11px] text-muted">Sessions</div>
                       </div>
@@ -716,7 +752,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
               ) : null}
-            </div>
+            </MotionList>
           </div>
         </div>
       </AsyncStateWrapper>

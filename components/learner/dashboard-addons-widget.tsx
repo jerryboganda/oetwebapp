@@ -7,6 +7,13 @@ import type { PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { Card } from '@/components/ui/card';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
 
+/** Human-readable labels for the raw eligibility flags stored on catalog rows. */
+const ELIGIBILITY_LABELS: Record<string, string> = {
+  writing_addons: 'Writing',
+  speaking_addons: 'Speaking',
+  tutor_book_discount: 'Tutor Book',
+};
+
 interface DashboardAddonsWidgetProps {
   /** Three eligibility flags from the buyer's active enrolment. */
   writingAddonsEnabled?: boolean;
@@ -91,7 +98,7 @@ export function DashboardAddonsWidget({
             return (
               <article
                 key={addon.code}
-                className="group flex h-full flex-col rounded-xl border border-gold/25 bg-surface p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gold/50 hover:shadow-md focus-within:border-gold/50"
+                className="group flex h-full flex-col rounded-xl border border-gold/25 bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-spring)] hover:border-gold/50 hover:shadow-clinical hoverable:-translate-y-0.5 focus-within:border-gold/50"
               >
                 <div className="flex items-start justify-between gap-3">
                   <h4 className="text-sm font-bold leading-snug text-navy">{addon.name}</h4>
@@ -110,7 +117,7 @@ export function DashboardAddonsWidget({
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <span className="inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold-fg">
                     <Tag className="h-2.5 w-2.5" aria-hidden="true" />
-                    {addon.eligibilityFlag.replace(/_/g, ' ')}
+                    {ELIGIBILITY_LABELS[addon.eligibilityFlag] ?? addon.eligibilityFlag.replace(/_/g, ' ')}
                   </span>
                   {hasDiscount && savings > 0 && (
                     <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-success">

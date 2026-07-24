@@ -209,7 +209,7 @@ export function LearnerPageHero({
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-surface px-3 py-3 shadow-sm sm:px-6 sm:py-6">
+    <section className="rounded-2xl border border-border bg-gradient-to-b from-background-light/60 to-surface px-3 py-3 shadow-clinical sm:px-6 sm:py-6">
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2.5 sm:gap-4">

@@ -32,25 +32,28 @@ export function AiUsageWidget() {
   const pct = Math.min(100, Math.round((snap.tokensUsedThisMonth / snap.monthlyTokenCap) * 100));
   const remaining = Math.max(0, snap.monthlyTokenCap - snap.tokensUsedThisMonth);
   const barClass =
-    pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-amber-500' : 'bg-emerald-500';
+    pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success';
 
   return (
     <Link
       href="/settings/ai"
-      className="block rounded-2xl border border-border bg-surface p-4 hover:border-primary transition-colors"
+      className="block rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-border-hover hoverable:shadow-clinical"
     >
-      <div className="flex items-center gap-2 text-sm font-medium text-navy mb-2">
-        <Cpu className="w-4 h-4" /> AI credits · {snap.planName}
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-navy">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Cpu className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 truncate">AI credits · {snap.planName}</span>
       </div>
-      <div className="w-full h-1.5 bg-background-light rounded-full overflow-hidden mb-2">
+      <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-background-light">
         <div className={`h-full transition-[width,background-color] duration-300 ${barClass}`} style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between text-xs text-muted">
-        <span>{remaining.toLocaleString()} tokens left</span>
-        <span>{pct}% used</span>
+        <span className="tabular-nums font-semibold text-navy">{remaining.toLocaleString()} tokens left</span>
+        <span className="tabular-nums">{pct}% used</span>
       </div>
       {snap.killSwitchActive && (
-        <div className="mt-2 text-xs text-red-600">Platform AI is temporarily paused by an administrator.</div>
+        <div className="mt-2 text-xs font-semibold text-danger">Platform AI is temporarily paused by an administrator.</div>
       )}
     </Link>
   );
