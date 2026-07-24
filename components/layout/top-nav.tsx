@@ -21,6 +21,8 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { TourLauncher } from '@/components/onboarding/tour-launcher';
+import { HelpCenterDrawer } from '@/components/onboarding/help-center-drawer';
+import { trackHelpCenterOpened } from '@/lib/onboarding/tour-events';
 
 export interface MobileMenuSection {
   label: string;
@@ -66,6 +68,7 @@ function ProfileMenu({
   roleLabel,
   settingsHref,
   onSignOut,
+  workspaceRole,
 }: {
   displayName: string;
   initials: string;
@@ -73,8 +76,10 @@ function ProfileMenu({
   roleLabel: string;
   settingsHref: string;
   onSignOut?: () => void;
+  workspaceRole?: UserRole;
 }) {
   const [open, setOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -97,6 +102,10 @@ function ProfileMenu({
     <div className="relative" ref={containerRef}>
       <button
         type="button"
+        // The dashboard tour anchors on this attribute to show learners where
+        // to replay tours; help lives in this menu now, so the anchor moves
+        // here with it.
+        data-tour="learner-help-launcher"
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -134,6 +143,23 @@ function ProfileMenu({
             <Settings className="h-4 w-4 text-muted" aria-hidden="true" />
             Settings
           </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              setHelpOpen(true);
+              trackHelpCenterOpened({
+                role: workspaceRole,
+                route: typeof window !== 'undefined' ? window.location.pathname : undefined,
+              });
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-navy transition-colors hover:bg-background-light"
+            aria-haspopup="dialog"
+          >
+            <HelpCircle className="h-4 w-4 text-muted" aria-hidden="true" />
+            Help &amp; guided tours
+          </button>
           {onSignOut ? (
             <button
               type="button"
@@ -150,6 +176,8 @@ function ProfileMenu({
           ) : null}
         </div>
       ) : null}
+
+      <HelpCenterDrawer open={helpOpen} onClose={() => setHelpOpen(false)} workspaceRole={workspaceRole} />
     </div>
   );
 }
@@ -370,6 +398,7 @@ export function TopNav({
                 roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
                 settingsHref={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
                 onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
+                workspaceRole={workspaceRole}
               />
             </>
           ) : (
