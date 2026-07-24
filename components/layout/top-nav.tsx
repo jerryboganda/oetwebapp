@@ -6,9 +6,11 @@ import { buildSupportMailto } from '@/lib/auth/support';
 import { AuthContext } from '@/contexts/auth-context';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import type { UserRole } from '@/lib/types/auth';
-import { HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
+import { ChevronDown, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
-import { type ReactNode, useContext, useMemo, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { GlobalSearch } from './global-search';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
@@ -32,6 +34,108 @@ interface TopNavProps {
   sectionedItems?: MobileMenuSection[];
   userSummary?: ShellUserSummary;
   workspaceRole?: UserRole;
+  /** Renders the brand lockup + global search. Set when the header spans the
+   *  full viewport width (learner workspace) rather than sitting beside the
+   *  sidebar, which owns the logo in the other workspaces. */
+  showBrand?: boolean;
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  learner: 'Learner',
+  expert: 'Tutor',
+  admin: 'Admin',
+};
+
+/** Avatar + name + role with a small account menu. */
+function ProfileMenu({
+  displayName,
+  initials,
+  email,
+  roleLabel,
+  settingsHref,
+  onSignOut,
+}: {
+  displayName: string;
+  initials: string;
+  email: string;
+  roleLabel: string;
+  settingsHref: string;
+  onSignOut?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1 pr-2 shadow-sm transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:pr-2.5"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10">
+          {initials}
+        </span>
+        <span className="hidden min-w-0 text-left leading-none xl:block">
+          <span className="block max-w-[9rem] truncate text-[12.5px] font-bold text-navy">{displayName}</span>
+          <span className="mt-0.5 block text-[10.5px] text-muted">{roleLabel}</span>
+        </span>
+        <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-muted lg:block" aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-xl"
+        >
+          <div className="border-b border-border px-2.5 pb-2 pt-1.5">
+            <p className="truncate text-[13px] font-bold text-navy">{displayName}</p>
+            {email ? <p className="truncate text-[11.5px] text-muted">{email}</p> : null}
+          </div>
+          <Link
+            href={settingsHref}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="mt-1 flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-navy transition-colors hover:bg-background-light"
+          >
+            <Settings className="h-4 w-4 text-muted" aria-hidden="true" />
+            Settings
+          </Link>
+          {onSignOut ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onSignOut();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-danger transition-colors hover:bg-danger/10"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              Sign out
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function matchesPathPrefix(pathname: string, prefix: string): boolean {
@@ -70,6 +174,7 @@ export function TopNav({
   sectionedItems,
   userSummary,
   workspaceRole,
+  showBrand = false,
 }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname() ?? '/';
@@ -154,15 +259,19 @@ export function TopNav({
     <>
       <motion.header
         className={cn(
-          'glass-panel sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b border-border/60 px-3 safe-area-inset-top lg:h-12 lg:px-6',
+          'sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-3 safe-area-inset-top lg:px-5',
+          showBrand ? 'h-14 lg:h-16' : 'glass-panel h-11 justify-between border-border/60 lg:h-12 lg:px-6',
           className,
         )}
         layout={!reducedMotion}
         transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32, mass: 0.9 }}
       >
-        <div className="flex items-center gap-3">
+        <div className={cn('flex items-center gap-2.5', showBrand && 'shrink-0')}>
           <button
-            className="touch-target pressable -ml-1 rounded-xl p-1.5 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary lg:hidden"
+            className={cn(
+              'touch-target pressable -ml-1 rounded-xl p-1.5 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
+              showBrand ? 'lg:hidden' : 'lg:hidden',
+            )}
             onClick={() => {
               void triggerImpactHaptic('LIGHT');
               setMobileMenuOpen((current) => !current);
@@ -174,8 +283,26 @@ export function TopNav({
             {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
           </button>
 
+          {showBrand ? (
+            <Link
+              href="/"
+              className="pressable flex items-center text-navy transition-opacity hover:opacity-90"
+              aria-label="OET with Dr Ahmed Hesham home"
+              onClick={() => { void triggerImpactHaptic('LIGHT'); }}
+            >
+              <Image
+                src="/brand/oet-with-dr-hesham-logo.png"
+                alt="OET with Dr Ahmed Hesham"
+                width={400}
+                height={140}
+                priority
+                className="h-8 w-auto object-contain lg:h-10"
+              />
+            </Link>
+          ) : null}
+
           <AnimatePresence mode="wait" initial={false}>
-            {pageTitle && (
+            {pageTitle && !showBrand && (
               <motion.div
                 key={pageTitle}
                 className="hidden items-center gap-2 sm:flex"
@@ -188,15 +315,35 @@ export function TopNav({
           </AnimatePresence>
         </div>
 
-        <motion.div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2" layout={!reducedMotion}>
+        {showBrand ? (
+          <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex">
+            <GlobalSearch className="max-w-sm" />
+          </div>
+        ) : null}
+
+        <motion.div
+          className={cn('flex items-center justify-end gap-1.5 sm:gap-2', showBrand ? 'shrink-0' : 'flex-wrap gap-1')}
+          layout={!reducedMotion}
+        >
           {actions}
-          {showStreakBadges && <LearnerStreakBadges />}
+          {showStreakBadges && <LearnerStreakBadges className="hidden sm:flex" />}
           <TourLauncher workspaceRole={workspaceRole} />
           <ThemeToggle />
           <NotificationCenter />
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
-            {initials}
-          </div>
+          {showBrand ? (
+            <ProfileMenu
+              displayName={displayName}
+              initials={initials}
+              email={userSummary?.email ?? ''}
+              roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
+              settingsHref={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
+              onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
+            />
+          ) : (
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
+              {initials}
+            </div>
+          )}
         </motion.div>
       </motion.header>
 

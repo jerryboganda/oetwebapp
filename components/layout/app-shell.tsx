@@ -73,6 +73,7 @@ export function AppShell({
   const routeMotionProps = getSurfaceMotion('route', reducedMotion);
   const presenceMode = getMotionPresenceMode(reducedMotion);
   const isAdminWorkspace = workspaceRole === 'admin' || requiredRole === 'admin';
+  const isLearnerWorkspace = (workspaceRole ?? requiredRole) === 'learner' && !isAdminWorkspace;
 
   const shellBackdrop = isAdminWorkspace ? null : (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -112,6 +113,52 @@ export function AppShell({
           {children}
         </motion.main>
       </AnimatePresence>
+    </div>
+  ) : isLearnerWorkspace ? (
+    // Learner workspace: one full-width header across the top, sidebar beneath
+    // it. Admin/expert keep the original sidebar-beside-header arrangement.
+    <div className="relative isolate flex h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy">
+      {shellBackdrop}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-2xl focus:bg-primary focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+      <TopNav
+        showBrand
+        pageTitle={pageTitle}
+        actions={navActions}
+        items={mobileNavItems ?? navItems}
+        sectionedItems={mobileMenuSections}
+        userSummary={userSummary}
+        workspaceRole={workspaceRole}
+      />
+      <div className="relative z-10 flex min-h-0 flex-1">
+        <Sidebar
+          hideBrand
+          items={navItems}
+          groups={navGroups}
+          userSummary={userSummary}
+          workspaceRole={workspaceRole}
+        />
+        <div className="flex min-w-0 flex-1 min-h-0 flex-col">
+          <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
+            <motion.main
+              id="main-content"
+              tabIndex={-1}
+              key={pathname}
+              layout="position"
+              className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
+              {...routeMotionProps}
+            >
+              <ScrollReset />
+              {children}
+            </motion.main>
+          </AnimatePresence>
+        </div>
+      </div>
+      <BottomNav items={mobileNavItems} />
     </div>
   ) : (
     <div className="relative isolate flex h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy lg:flex-row">

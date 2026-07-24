@@ -10,13 +10,28 @@ interface LearnerStreakBadgesProps {
   className?: string;
 }
 
+interface XpSummary {
+  level: number;
+  totalXP: number;
+  currentLevelXP: number;
+  nextLevelXP: number;
+}
+
+/** Derived client-side — the XP endpoint returns a numeric level only. */
+function tierForLevel(level: number): string {
+  if (level >= 15) return 'Expert';
+  if (level >= 10) return 'Advanced';
+  if (level >= 5) return 'Intermediate';
+  return 'Beginner';
+}
+
 /**
- * Compact streak + level badges shown in the learner top-nav.
- * Hidden until both values resolve to avoid layout flicker.
+ * Streak + level cards in the learner top bar. Both link to /achievements.
+ * Hidden until at least one value resolves so the header does not jump.
  */
 export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
   const [streak, setStreak] = useState<number | null>(null);
-  const [level, setLevel] = useState<number | null>(null);
+  const [xp, setXp] = useState<XpSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +41,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
         setStreak((streakR.value as { currentStreak: number }).currentStreak);
       }
       if (xpR.status === 'fulfilled') {
-        setLevel((xpR.value as { level: number }).level);
+        setXp(xpR.value as XpSummary);
       }
     });
     return () => {
@@ -34,32 +49,54 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
     };
   }, []);
 
-  if (streak === null && level === null) {
-    return null;
-  }
+  if (streak === null && xp === null) return null;
+
+  const span = xp ? Math.max(1, xp.nextLevelXP - xp.currentLevelXP) : 1;
+  const gained = xp ? Math.max(0, xp.totalXP - xp.currentLevelXP) : 0;
+  const progress = xp ? Math.min(100, Math.round((gained / span) * 100)) : 0;
+  const tier = xp ? tierForLevel(xp.level) : '';
 
   return (
-    <div className={cn('flex items-center gap-1', className)}>
-      {streak !== null && (
+    <div className={cn('flex items-center gap-2', className)}>
+      {streak !== null ? (
         <Link
           href="/achievements"
           aria-label={`Current streak: ${streak} days`}
-          className="flex items-center gap-1 rounded-full bg-amber-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-amber-800 dark:bg-amber-700 dark:text-white dark:hover:bg-amber-600 lg:px-2.5 lg:py-1.5 lg:text-xs"
+          className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1 pr-3 shadow-sm transition-colors hover:border-border-hover"
         >
-          <Flame className="h-3 w-3 lg:h-3.5 lg:w-3.5" aria-hidden="true" />
-          {streak}d
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-950/60 dark:text-orange-400">
+            <Flame className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+          <span className="leading-none">
+            <span className="block text-[13px] font-bold text-navy">{streak}</span>
+            <span className="mt-0.5 hidden text-[10.5px] text-muted xl:block">day streak</span>
+          </span>
         </Link>
-      )}
-      {level !== null && (
+      ) : null}
+
+      {xp ? (
         <Link
           href="/achievements"
-          aria-label={`Level ${level}`}
-          className="flex items-center gap-1 rounded-full bg-navy px-2 py-1 text-[11px] font-bold text-surface shadow-sm ring-1 ring-border transition-colors hover:bg-navy/90 lg:px-2.5 lg:py-1.5 lg:text-xs"
+          aria-label={`Level ${xp.level}, ${tier}, ${progress}% to next level`}
+          className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1 pr-3 shadow-sm transition-colors hover:border-border-hover"
         >
-          <Zap className="h-3 w-3 lg:h-3.5 lg:w-3.5" aria-hidden="true" />
-          Lv.{level}
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+          <span className="leading-none">
+            <span className="flex items-center gap-2">
+              <span className="text-[13px] font-bold text-navy">Level {xp.level}</span>
+              <span className="hidden text-[10.5px] text-muted xl:inline">{tier}</span>
+            </span>
+            <span className="mt-1 hidden h-1 w-24 overflow-hidden rounded-full bg-background-light xl:block">
+              <span
+                className="block h-full rounded-full bg-primary transition-[width] duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </span>
+          </span>
         </Link>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -213,12 +213,16 @@ export function Sidebar({
   groups,
   userSummary,
   workspaceRole,
+  hideBrand = false,
 }: {
   className?: string;
   items?: NavItem[];
   groups?: NavGroup[];
   userSummary?: ShellUserSummary;
   workspaceRole?: UserRole;
+  /** The learner shell renders a full-width header that already carries the
+   *  brand lockup, so the sidebar drops its own logo block and fills the row. */
+  hideBrand?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -271,28 +275,36 @@ export function Sidebar({
 
   return (
     <motion.aside
-      className={cn('glass-panel hidden h-screen shrink-0 flex-col sticky top-0 w-72 overflow-hidden border-r border-border/60 bg-surface/90 lg:flex', className)}
+      className={cn(
+        'hidden shrink-0 flex-col overflow-hidden border-r border-border bg-surface lg:flex',
+        hideBrand ? 'h-full w-64' : 'glass-panel sticky top-0 h-screen w-72 border-border/60 bg-surface/90',
+        className,
+      )}
       layout={!reducedMotion}
       {...sidebarMotion}
     >
-      <div className="border-b border-border/60 px-2 py-2">
-        <Link
-          href="/"
-          className="pressable flex items-center justify-center text-navy transition-opacity hover:opacity-90"
-          aria-label="OET with Dr Ahmed Hesham home"
-          onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-        >
-          <Image
-            src="/brand/oet-with-dr-hesham-logo.png"
-            alt="OET with Dr Ahmed Hesham"
-            width={400}
-            height={140}
-            priority
-            className="h-auto w-full max-w-[240px] object-contain"
-          />
-          <span className="sr-only">{workspaceLabel}</span>
-        </Link>
-      </div>
+      {hideBrand ? (
+        <span className="sr-only">{workspaceLabel}</span>
+      ) : (
+        <div className="border-b border-border/60 px-2 py-2">
+          <Link
+            href="/"
+            className="pressable flex items-center justify-center text-navy transition-opacity hover:opacity-90"
+            aria-label="OET with Dr Ahmed Hesham home"
+            onClick={() => { void triggerImpactHaptic('LIGHT'); }}
+          >
+            <Image
+              src="/brand/oet-with-dr-hesham-logo.png"
+              alt="OET with Dr Ahmed Hesham"
+              width={400}
+              height={140}
+              priority
+              className="h-auto w-full max-w-[240px] object-contain"
+            />
+            <span className="sr-only">{workspaceLabel}</span>
+          </Link>
+        </div>
+      )}
 
       <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Main navigation" data-tour="workspace-nav">
         {groups && groups.length > 0 ? (
