@@ -149,6 +149,12 @@ export function SignInForm({ nextHref, initialEmail, externalError, reason }: Si
         return;
       }
 
+      if (result.status === 'device_verification_required') {
+        const nextQuery = nextHref ? `?next=${encodeURIComponent(nextHref)}` : '';
+        router.replace(`/device/verify${nextQuery}`);
+        return;
+      }
+
       router.replace(resolveAuthenticatedDestination(result.session.currentUser, nextHref));
     } catch (authError) {
       if (readErrorCode(authError) === 'email_verification_required') {

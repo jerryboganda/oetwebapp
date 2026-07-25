@@ -2,9 +2,11 @@
 
 import {
   beginAuthenticatorSetup as beginAuthenticatorSetupRequest,
+  completeDeviceVerification as completeDeviceVerificationRequest,
   completeMfaChallenge as completeMfaChallengeRequest,
   completeRecoveryChallenge as completeRecoveryChallengeRequest,
   confirmAuthenticatorSetup as confirmAuthenticatorSetupRequest,
+  getPendingDeviceChallenge,
   getPendingMfaChallenge,
   registerLearner as registerLearnerRequest,
   restoreSession,
@@ -17,7 +19,9 @@ import type {
   AuthSession,
   AuthenticatorSetup,
   CurrentUser,
+  MfaCompletionResult,
   OtpChallenge,
+  PendingDeviceChallenge,
   PendingMfaChallenge,
   RegisterLearnerInput,
   SignInResult,
@@ -34,6 +38,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   pendingMfaChallenge: PendingMfaChallenge | null;
+  pendingDeviceChallenge: PendingDeviceChallenge | null;
 }
 
 export interface AuthContextValue extends AuthState {
@@ -47,8 +52,11 @@ export interface AuthContextValue extends AuthState {
   verifyEmailOtp: (code: string) => Promise<CurrentUser>;
   beginAuthenticatorSetup: () => Promise<AuthenticatorSetup>;
   confirmAuthenticatorSetup: (code: string) => Promise<CurrentUser>;
-  completeMfaChallenge: (code: string) => Promise<AuthSession>;
-  completeRecoveryChallenge: (recoveryCode: string) => Promise<AuthSession>;
+  completeMfaChallenge: (code: string) => Promise<MfaCompletionResult>;
+  completeRecoveryChallenge: (recoveryCode: string) => Promise<MfaCompletionResult>;
+  /** Security spec §3.2: completes the device-binding email-OTP challenge
+   * (`pendingDeviceChallenge`) and restores the session it was blocking. */
+  completeDeviceVerification: (code: string) => Promise<AuthSession>;
   clearError: () => void;
 }
 
@@ -69,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
     error: null,
     pendingMfaChallenge: null,
+    pendingDeviceChallenge: null,
   });
 
   useEffect(() => {
@@ -87,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           error: null,
           pendingMfaChallenge: getPendingMfaChallenge(),
+          pendingDeviceChallenge: getPendingDeviceChallenge(),
         });
       } catch (error) {
         if (cancelled) {
@@ -99,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           error: toMessage(error),
           pendingMfaChallenge: getPendingMfaChallenge(),
+          pendingDeviceChallenge: getPendingDeviceChallenge(),
         });
       }
     };
@@ -132,6 +143,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             loading: false,
             error: null,
             pendingMfaChallenge: null,
+            pendingDeviceChallenge: null,
+          });
+        } else if (result.status === 'mfa_required') {
+          setState({
+            session: null,
+            user: null,
+            loading: false,
+            error: null,
+            pendingMfaChallenge: result.challenge,
+            pendingDeviceChallenge: null,
           });
         } else {
           setState({
@@ -139,7 +160,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             user: null,
             loading: false,
             error: null,
-            pendingMfaChallenge: result.challenge,
+            pendingMfaChallenge: null,
+            pendingDeviceChallenge: result.challenge,
           });
         }
 
@@ -164,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           error: null,
           pendingMfaChallenge: null,
+          pendingDeviceChallenge: null,
         });
         return session;
       } catch (error) {
@@ -192,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           error: null,
           pendingMfaChallenge: null,
+          pendingDeviceChallenge: null,
         });
       }
     },
@@ -206,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           error: null,
           pendingMfaChallenge: getPendingMfaChallenge(),
+          pendingDeviceChallenge: getPendingDeviceChallenge(),
         });
         return session;
       } catch (error) {
@@ -215,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           error: toMessage(error),
           pendingMfaChallenge: getPendingMfaChallenge(),
+          pendingDeviceChallenge: getPendingDeviceChallenge(),
         });
         throw error;
       }
@@ -256,24 +282,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return currentUser;
     },
     async completeMfaChallenge(code) {
-      const session = await completeMfaChallengeRequest(code);
+      const result = await completeMfaChallengeRequest(code);
+      if (result.status === 'device_verification_required') {
+        setState((current) => ({
+          ...current,
+          loading: false,
+          error: null,
+          pendingMfaChallenge: null,
+          pendingDeviceChallenge: result.challenge,
+        }));
+        return result;
+      }
+
       setState({
-        session,
-        user: session.currentUser,
+        session: result.session,
+        user: result.session.currentUser,
         loading: false,
         error: null,
         pendingMfaChallenge: null,
+        pendingDeviceChallenge: null,
       });
-      return session;
+      return result;
     },
     async completeRecoveryChallenge(recoveryCode) {
-      const session = await completeRecoveryChallengeRequest(recoveryCode);
+      const result = await completeRecoveryChallengeRequest(recoveryCode);
+      if (result.status === 'device_verification_required') {
+        setState((current) => ({
+          ...current,
+          loading: false,
+          error: null,
+          pendingMfaChallenge: null,
+          pendingDeviceChallenge: result.challenge,
+        }));
+        return result;
+      }
+
+      setState({
+        session: result.session,
+        user: result.session.currentUser,
+        loading: false,
+        error: null,
+        pendingMfaChallenge: null,
+        pendingDeviceChallenge: null,
+      });
+      return result;
+    },
+    async completeDeviceVerification(code) {
+      const session = await completeDeviceVerificationRequest(code);
       setState({
         session,
         user: session.currentUser,
         loading: false,
         error: null,
         pendingMfaChallenge: null,
+        pendingDeviceChallenge: null,
       });
       return session;
     },

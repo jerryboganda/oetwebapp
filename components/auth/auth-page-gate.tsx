@@ -13,7 +13,7 @@ interface AuthPageGateProps {
 
 export function AuthPageGate({ children, nextHref, mfaNextHref }: AuthPageGateProps) {
   const router = useRouter();
-  const { loading, isAuthenticated, user, pendingMfaChallenge } = useAuth();
+  const { loading, isAuthenticated, user, pendingMfaChallenge, pendingDeviceChallenge } = useAuth();
 
   useEffect(() => {
     if (loading) {
@@ -27,10 +27,17 @@ export function AuthPageGate({ children, nextHref, mfaNextHref }: AuthPageGatePr
       return;
     }
 
+    if (pendingDeviceChallenge) {
+      const nextValue = mfaNextHref ?? nextHref;
+      const nextQuery = nextValue ? `?next=${encodeURIComponent(nextValue)}` : '';
+      router.replace(`/device/verify${nextQuery}`);
+      return;
+    }
+
     if (isAuthenticated && user) {
       router.replace(resolveAuthenticatedDestination(user, nextHref));
     }
-  }, [isAuthenticated, loading, mfaNextHref, nextHref, pendingMfaChallenge, router, user]);
+  }, [isAuthenticated, loading, mfaNextHref, nextHref, pendingMfaChallenge, pendingDeviceChallenge, router, user]);
 
   return <>{children}</>;
 }

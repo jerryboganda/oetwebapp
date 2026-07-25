@@ -1,9 +1,12 @@
 import {
+  clearPendingDeviceChallenge,
   clearPendingMfaChallenge,
   clearStoredSession,
   hydrateAuthStorage,
+  loadPendingDeviceChallenge,
   loadPendingMfaChallenge,
   loadStoredSessionRecord,
+  savePendingDeviceChallenge,
   savePendingMfaChallenge,
   saveStoredSession,
   updateStoredUser,
@@ -16,7 +19,9 @@ import type {
   CurrentUser,
   ExternalAuthExchangeResult,
   ExternalAuthProvider,
+  MfaCompletionResult,
   OtpChallenge,
+  PendingDeviceChallenge,
   PendingMfaChallenge,
   RegisterLearnerInput,
   SignupCatalog,
@@ -353,11 +358,27 @@ export async function restoreSession(): Promise<AuthSession | null> {
   return null;
 }
 
+/** Security spec §3.2: `DeviceVerificationRequiredException` (backend) uses the
+ * identical 403 JSON shape as the MFA challenge (`email` + `challengeToken`),
+ * so every call site that can hit it builds the pending challenge the same way. */
+function buildPendingDeviceChallenge(
+  error: AuthClientError,
+  fallbackEmail: string,
+  rememberMe: boolean,
+): PendingDeviceChallenge {
+  return {
+    email: error.details?.email ?? fallbackEmail,
+    challengeToken: error.details?.challengeToken ?? '',
+    rememberMe,
+  };
+}
+
 export async function signIn(input: { email: string; password: string; rememberMe: boolean }): Promise<SignInResult> {
   try {
     const session = await postJson<AuthSession>('/v1/auth/sign-in', input);
     saveStoredSession(session, input.rememberMe ? 'local' : 'session');
     clearPendingMfaChallenge();
+    clearPendingDeviceChallenge();
     return { status: 'authenticated', session };
   } catch (error) {
     if (error instanceof AuthClientError && error.status === 400 && error.code === 'auth_request_failed') {
@@ -372,6 +393,12 @@ export async function signIn(input: { email: string; password: string; rememberM
       } satisfies PendingMfaChallenge;
       savePendingMfaChallenge(challenge);
       return { status: 'mfa_required', challenge };
+    }
+
+    if (error instanceof AuthClientError && error.code === 'device_verification_required') {
+      const challenge = buildPendingDeviceChallenge(error, input.email, input.rememberMe);
+      savePendingDeviceChallenge(challenge);
+      return { status: 'device_verification_required', challenge };
     }
 
     throw error;
@@ -558,38 +585,102 @@ export function getPendingMfaChallenge(): PendingMfaChallenge | null {
   return loadPendingMfaChallenge();
 }
 
-export async function completeMfaChallenge(code: string): Promise<AuthSession> {
-  const challenge = loadPendingMfaChallenge();
-  if (!challenge) {
-    throw new AuthClientError(400, 'missing_mfa_challenge', 'No MFA challenge is available.');
-  }
-
-  const session = await postJson<AuthSession>('/v1/auth/mfa/challenge', {
-    email: challenge.email,
-    code,
-    challengeToken: challenge.challengeToken,
-    recoveryCode: null,
-  });
-
-  saveStoredSession(session, challenge.rememberMe ? 'local' : 'session');
-  clearPendingMfaChallenge();
-  return session;
+export function getPendingDeviceChallenge(): PendingDeviceChallenge | null {
+  return loadPendingDeviceChallenge();
 }
 
-export async function completeRecoveryChallenge(recoveryCode: string): Promise<AuthSession> {
+/** Completing the MFA step can itself land on a NEW device the account
+ * hasn't trusted yet — `CreateSessionCoreAsync` (backend) runs the device
+ * check only after MFA passes, so this endpoint can also 403
+ * `device_verification_required`. Returning `SignInResult` (not a bare
+ * `AuthSession`) lets callers route to the device-verify step instead of
+ * hitting a dead end. */
+export async function completeMfaChallenge(code: string): Promise<MfaCompletionResult> {
   const challenge = loadPendingMfaChallenge();
   if (!challenge) {
     throw new AuthClientError(400, 'missing_mfa_challenge', 'No MFA challenge is available.');
   }
 
-  const session = await postJson<AuthSession>('/v1/auth/mfa/recovery', {
-    email: challenge.email,
-    code: '',
+  try {
+    const session = await postJson<AuthSession>('/v1/auth/mfa/challenge', {
+      email: challenge.email,
+      code,
+      challengeToken: challenge.challengeToken,
+      recoveryCode: null,
+    });
+
+    saveStoredSession(session, challenge.rememberMe ? 'local' : 'session');
+    clearPendingMfaChallenge();
+    return { status: 'authenticated', session };
+  } catch (error) {
+    if (error instanceof AuthClientError && error.code === 'device_verification_required') {
+      const deviceChallenge = buildPendingDeviceChallenge(error, challenge.email, challenge.rememberMe);
+      clearPendingMfaChallenge();
+      savePendingDeviceChallenge(deviceChallenge);
+      return { status: 'device_verification_required', challenge: deviceChallenge };
+    }
+
+    throw error;
+  }
+}
+
+export async function completeRecoveryChallenge(recoveryCode: string): Promise<MfaCompletionResult> {
+  const challenge = loadPendingMfaChallenge();
+  if (!challenge) {
+    throw new AuthClientError(400, 'missing_mfa_challenge', 'No MFA challenge is available.');
+  }
+
+  try {
+    const session = await postJson<AuthSession>('/v1/auth/mfa/recovery', {
+      email: challenge.email,
+      code: '',
+      challengeToken: challenge.challengeToken,
+      recoveryCode,
+    });
+
+    saveStoredSession(session, challenge.rememberMe ? 'local' : 'session');
+    clearPendingMfaChallenge();
+    return { status: 'authenticated', session };
+  } catch (error) {
+    if (error instanceof AuthClientError && error.code === 'device_verification_required') {
+      const deviceChallenge = buildPendingDeviceChallenge(error, challenge.email, challenge.rememberMe);
+      clearPendingMfaChallenge();
+      savePendingDeviceChallenge(deviceChallenge);
+      return { status: 'device_verification_required', challenge: deviceChallenge };
+    }
+
+    throw error;
+  }
+}
+
+/** Security spec §3.2: re-send the device-approval email code for the
+ * pending challenge (mirrors `sendEmailVerificationOtp`). No auth state
+ * changes here, so this is a plain client call rather than a context method —
+ * same reasoning as the email-verification send during registration. */
+export async function sendDeviceVerificationOtp(): Promise<OtpChallenge> {
+  const challenge = loadPendingDeviceChallenge();
+  if (!challenge) {
+    throw new AuthClientError(400, 'missing_device_challenge', 'No device verification challenge is available.');
+  }
+
+  return postJson<OtpChallenge>('/v1/auth/device/send-otp', {
     challengeToken: challenge.challengeToken,
-    recoveryCode,
+  });
+}
+
+export async function completeDeviceVerification(code: string): Promise<AuthSession> {
+  const challenge = loadPendingDeviceChallenge();
+  if (!challenge) {
+    throw new AuthClientError(400, 'missing_device_challenge', 'No device verification challenge is available.');
+  }
+
+  const session = await postJson<AuthSession>('/v1/auth/device/verify', {
+    challengeToken: challenge.challengeToken,
+    code,
   });
 
   saveStoredSession(session, challenge.rememberMe ? 'local' : 'session');
+  clearPendingDeviceChallenge();
   clearPendingMfaChallenge();
   return session;
 }

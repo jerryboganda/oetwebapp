@@ -175,6 +175,7 @@ const PUBLIC_PATHS = new Set([
   '/mfa/challenge',
   '/mfa/setup',
   '/mfa/recovery',
+  '/device/verify',
   '/auth/callback',
   '/get-app',
   '/.well-known/apple-app-site-association',

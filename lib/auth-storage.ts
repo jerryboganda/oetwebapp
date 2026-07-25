@@ -1,4 +1,4 @@
-import type { AuthSession, CurrentUser, PendingMfaChallenge } from './types/auth';
+import type { AuthSession, CurrentUser, PendingDeviceChallenge, PendingMfaChallenge } from './types/auth';
 import {
   hydrateWebStorageKeys,
   isNativeMobilePlatform,
@@ -12,6 +12,7 @@ export type AuthPersistence = 'local' | 'session';
 const LOCAL_SESSION_KEY = 'oet.auth.session.local';
 const SESSION_SESSION_KEY = 'oet.auth.session.session';
 const MFA_CHALLENGE_KEY = 'oet.auth.challenge.mfa';
+const DEVICE_CHALLENGE_KEY = 'oet.auth.challenge.device';
 
 export const AUTH_INDICATOR_COOKIE = 'oet_auth';
 
@@ -193,8 +194,20 @@ export function clearPendingMfaChallenge(): void {
   removeWebStorageKey(MFA_CHALLENGE_KEY);
 }
 
+export function savePendingDeviceChallenge(challenge: PendingDeviceChallenge): void {
+  persistWebStorageKey(DEVICE_CHALLENGE_KEY, JSON.stringify(challenge), 'session');
+}
+
+export function loadPendingDeviceChallenge(): PendingDeviceChallenge | null {
+  return parseJson<PendingDeviceChallenge>(getStorage('session')?.getItem(DEVICE_CHALLENGE_KEY) ?? getStorage('local')?.getItem(DEVICE_CHALLENGE_KEY) ?? null);
+}
+
+export function clearPendingDeviceChallenge(): void {
+  removeWebStorageKey(DEVICE_CHALLENGE_KEY);
+}
+
 export async function hydrateAuthStorage(): Promise<void> {
-  await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY]);
+  await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY, DEVICE_CHALLENGE_KEY]);
 
   const record = loadStoredSessionRecord();
   if (!record || !isNativeMobilePlatform()) {

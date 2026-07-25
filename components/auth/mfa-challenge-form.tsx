@@ -37,8 +37,14 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
     setError(null);
 
     try {
-      const session = await completeMfaChallenge(normalizedCode);
-      router.replace(resolvePostAuthDestination(session.currentUser, nextHref));
+      const result = await completeMfaChallenge(normalizedCode);
+
+      if (result.status === 'device_verification_required') {
+        router.replace(`/device/verify${nextHref ? `?next=${encodeURIComponent(nextHref)}` : ''}`);
+        return;
+      }
+
+      router.replace(resolvePostAuthDestination(result.session.currentUser, nextHref));
     } catch (submitError) {
       setError(readErrorMessage(submitError, 'Unable to verify the MFA challenge.'));
     } finally {
@@ -52,8 +58,14 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
     setError(null);
 
     try {
-      const session = await completeRecoveryChallenge(recoveryCode.trim());
-      router.replace(resolvePostAuthDestination(session.currentUser, nextHref));
+      const result = await completeRecoveryChallenge(recoveryCode.trim());
+
+      if (result.status === 'device_verification_required') {
+        router.replace(`/device/verify${nextHref ? `?next=${encodeURIComponent(nextHref)}` : ''}`);
+        return;
+      }
+
+      router.replace(resolvePostAuthDestination(result.session.currentUser, nextHref));
     } catch (submitError) {
       setError(readErrorMessage(submitError, 'Unable to verify the MFA challenge.'));
     } finally {

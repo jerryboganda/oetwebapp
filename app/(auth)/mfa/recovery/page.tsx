@@ -47,8 +47,15 @@ export default function MfaRecoveryPage() {
     setError(null);
 
     try {
-      const session = await completeRecoveryChallenge(trimmed);
-      router.replace(resolvePostAuthDestination(session.currentUser, nextHref));
+      const result = await completeRecoveryChallenge(trimmed);
+
+      if (result.status === 'device_verification_required') {
+        const nextQuery = nextHref ? `?next=${encodeURIComponent(nextHref)}` : '';
+        router.replace(`/device/verify${nextQuery}`);
+        return;
+      }
+
+      router.replace(resolvePostAuthDestination(result.session.currentUser, nextHref));
     } catch (submitError) {
       if (submitError && typeof submitError === 'object' && 'message' in submitError && typeof submitError.message === 'string') {
         setError(submitError.message);

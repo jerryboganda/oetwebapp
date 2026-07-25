@@ -19,7 +19,7 @@ const EXAM_DATE_EXEMPT_PATHS = ['/goals', '/onboarding', '/onboarding-tour'];
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { loading, isAuthenticated, role, pendingMfaChallenge } = useAuth();
+  const { loading, isAuthenticated, role, pendingMfaChallenge, pendingDeviceChallenge } = useAuth();
   const nextPath = pathname ?? '/';
   const isAuthRoute =
     nextPath === '/sign-in' ||
@@ -35,6 +35,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     nextPath === '/mfa/challenge' ||
     nextPath === '/mfa/recovery' ||
     nextPath === '/mfa/setup' ||
+    nextPath === '/device/verify' ||
     nextPath.startsWith('/auth/callback/');
 
   const examDateGateEnabled =
@@ -58,6 +59,11 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
       return;
     }
 
+    if (pendingDeviceChallenge) {
+      router.replace(`/device/verify?next=${encodeURIComponent(nextPath)}`);
+      return;
+    }
+
     if (!isAuthenticated) {
       router.replace(`/sign-in?next=${encodeURIComponent(nextPath)}`);
       return;
@@ -71,7 +77,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     if (examDateGateEnabled && examDateRequired) {
       router.replace('/goals?required=examDate');
     }
-  }, [isAuthenticated, isAuthRoute, loading, nextPath, pendingMfaChallenge, requiredRole, role, router, examDateGateEnabled, examDateRequired]);
+  }, [isAuthenticated, isAuthRoute, loading, nextPath, pendingMfaChallenge, pendingDeviceChallenge, requiredRole, role, router, examDateGateEnabled, examDateRequired]);
 
   if (isAuthRoute) {
     return <>{children}</>;
@@ -79,7 +85,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
   const blockedOnExamDate = examDateGateEnabled && examDateRequired === true;
 
-  if (loading || pendingMfaChallenge || !isAuthenticated || (requiredRole && !roleSatisfiesRequired(role, requiredRole)) || blockedOnExamDate) {
+  if (loading || pendingMfaChallenge || pendingDeviceChallenge || !isAuthenticated || (requiredRole && !roleSatisfiesRequired(role, requiredRole)) || blockedOnExamDate) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background-light px-6">
         <div className="flex flex-col items-center gap-4 text-center text-muted">

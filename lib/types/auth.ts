@@ -49,6 +49,14 @@ export interface PendingMfaChallenge {
   rememberMe: boolean;
 }
 
+/** Security spec §3.2: mirrors `PendingMfaChallenge` for the device-binding
+ * email-OTP challenge (`device_verification_required`). */
+export interface PendingDeviceChallenge {
+  email: string;
+  challengeToken: string;
+  rememberMe: boolean;
+}
+
 export interface SignupExamType {
   id: string;
   label: string;
@@ -110,4 +118,14 @@ export type ExternalAuthExchangeResult =
 
 export type SignInResult =
   | { status: 'authenticated'; session: AuthSession }
-  | { status: 'mfa_required'; challenge: PendingMfaChallenge };
+  | { status: 'mfa_required'; challenge: PendingMfaChallenge }
+  | { status: 'device_verification_required'; challenge: PendingDeviceChallenge };
+
+/** Narrower than `SignInResult`: completing an MFA challenge/recovery code
+ * can never re-request MFA, only succeed outright or (security spec §3.2)
+ * bounce into device verification if the account also has a pending device
+ * change. Keeping this distinct from `SignInResult` lets callers narrow
+ * without an unreachable `mfa_required` branch. */
+export type MfaCompletionResult =
+  | { status: 'authenticated'; session: AuthSession }
+  | { status: 'device_verification_required'; challenge: PendingDeviceChallenge };

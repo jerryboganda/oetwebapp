@@ -67,6 +67,7 @@ describe('useDashboardHome', () => {
       loading: false,
       error: null,
       pendingMfaChallenge: null,
+      pendingDeviceChallenge: null,
       role: 'learner',
       isAuthenticated: true,
       signIn: vi.fn(),
@@ -79,6 +80,7 @@ describe('useDashboardHome', () => {
       confirmAuthenticatorSetup: vi.fn(),
       completeMfaChallenge: vi.fn(),
       completeRecoveryChallenge: vi.fn(),
+      completeDeviceVerification: vi.fn(),
       clearError: vi.fn(),
       ...overrides,
     };

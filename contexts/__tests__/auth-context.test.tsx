@@ -10,12 +10,14 @@ const authClientMock = vi.hoisted(() => ({
   registerLearner: vi.fn(),
   signOut: vi.fn(),
   getPendingMfaChallenge: vi.fn(() => null),
+  getPendingDeviceChallenge: vi.fn(() => null),
   sendEmailVerificationOtp: vi.fn(),
   verifyEmailOtp: vi.fn(),
   beginAuthenticatorSetup: vi.fn(),
   confirmAuthenticatorSetup: vi.fn(),
   completeMfaChallenge: vi.fn(),
   completeRecoveryChallenge: vi.fn(),
+  completeDeviceVerification: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-client', () => authClientMock);
@@ -61,6 +63,7 @@ describe('AuthProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authClientMock.getPendingMfaChallenge.mockReturnValue(null);
+    authClientMock.getPendingDeviceChallenge.mockReturnValue(null);
   });
 
   it('hydrates the current user from the stored backend auth session', async () => {
