@@ -120,6 +120,8 @@ export interface SecuritySettings {
 /** Course Platform Security Requirements §2.4 — video capture-protection response. */
 export interface VideoProtectionSettings {
   revokeOnCaptureDetected: boolean | null;
+  blockRootedDevices: boolean | null;
+  blockEmulators: boolean | null;
 }
 
 export interface ZoomSettings {
@@ -625,6 +627,8 @@ const SECURITY_FIELDS: FieldDef<SecuritySettings>[] = [
 
 const VIDEO_PROTECTION_FIELDS: FieldDef<VideoProtectionSettings>[] = [
   { key: 'revokeOnCaptureDetected', label: 'Revoke playback on capture detected', type: 'checkbox', hint: 'Security spec §2.4. Immediately kill a playback session when the client reports screen capture/recording.' },
+  { key: 'blockRootedDevices', label: 'Block rooted/jailbroken devices', type: 'checkbox', hint: 'Security spec §3 (mobile hardening). Reject a new playback session when the client reports root/jailbreak integrity signals. A client that sends no integrity signal (old shell, desktop) always fails open.' },
+  { key: 'blockEmulators', label: 'Block emulators', type: 'checkbox', hint: 'Same as above, for emulator signals.' },
 ];
 
 const ZOOM_FIELDS: FieldDef<ZoomSettings>[] = [
@@ -1337,6 +1341,8 @@ function emptyResponse(): RuntimeSettingsResponse {
     },
     videoProtection: {
       revokeOnCaptureDetected: null,
+      blockRootedDevices: null,
+      blockEmulators: null,
     },
     updatedBy: null,
     updatedByUserId: null,

@@ -262,5 +262,9 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceChangeM
 
 -- Security spec §4.2 inactive-session expiry -- sync with migration 20260817090000_AddSecurityInactiveSessionTimeout
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityInactiveSessionTimeoutDays"" integer;
+
+-- Security spec §3 mobile integrity blocking -- sync with migration 20260818090000_AddVideoProtectionIntegrityBlocking
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionBlockRootedDevices"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionBlockEmulators"" boolean;
 ";
 }

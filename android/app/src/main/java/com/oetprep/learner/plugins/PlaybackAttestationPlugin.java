@@ -1,18 +1,25 @@
 package com.oetprep.learner.plugins;
 
+import android.os.Build;
+import android.os.Debug;
 import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.oetprep.learner.BuildConfig;
 
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -28,7 +35,11 @@ import javax.crypto.spec.SecretKeySpec;
  * fall back to a public dev constant; release builds without it refuse to sign.
  *
  * {@code setSecureScreen} toggles FLAG_SECURE on the activity window so video playback
- * cannot be screenshotted / screen-recorded / mirrored while enabled.
+ * cannot be screenshotted / screen-recorded / mirrored while enabled — unlike iOS, Android
+ * actually BLOCKS the capture at the OS level, so no screenshot-detection listener is needed
+ * here (contrast {@code PlaybackAttestationPlugin.swift}, which can only detect, not block).
+ *
+ * {@code getIntegrity} reports best-effort root/emulator/debugger heuristics (spec §3).
  */
 @CapacitorPlugin(name = "PlaybackAttestation")
 public class PlaybackAttestationPlugin extends Plugin {
@@ -112,6 +123,85 @@ public class PlaybackAttestationPlugin extends Plugin {
             result.put("ok", true);
             call.resolve(result);
         });
+    }
+
+    private static final String[] ROOT_INDICATOR_PATHS = {
+        "/system/app/Superuser.apk",
+        "/sbin/su",
+        "/system/bin/su",
+        "/system/xbin/su",
+        "/data/local/xbin/su",
+        "/data/local/bin/su",
+        "/system/sd/xbin/su",
+        "/system/bin/failsafe/su",
+        "/data/local/su",
+        "/su/bin/su",
+        "/system/xbin/busybox"
+    };
+
+    private static final String[] EMULATOR_FINGERPRINT_PREFIXES = {
+        "generic", "unknown", "google_sdk", "sdk", "sdk_gphone"
+    };
+
+    /**
+     * Security spec §3 (mobile hardening) — best-effort root/emulator
+     * heuristics. Every check is independently defeatable (Magisk hides most
+     * of these); the backend treats this as one signal among several, never
+     * a sole gate.
+     */
+    @com.getcapacitor.PluginMethod
+    public void getIntegrity(PluginCall call) {
+        List<String> signals = new ArrayList<>();
+
+        for (String path : ROOT_INDICATOR_PATHS) {
+            if (new File(path).exists()) {
+                signals.add("root_path");
+                break;
+            }
+        }
+
+        String tags = Build.TAGS;
+        if (tags != null && tags.contains("test-keys")) {
+            signals.add("test_keys_build");
+        }
+
+        String fingerprint = Build.FINGERPRINT == null ? "" : Build.FINGERPRINT.toLowerCase(Locale.ROOT);
+        String hardware = Build.HARDWARE == null ? "" : Build.HARDWARE.toLowerCase(Locale.ROOT);
+        String model = Build.MODEL == null ? "" : Build.MODEL.toLowerCase(Locale.ROOT);
+        String product = Build.PRODUCT == null ? "" : Build.PRODUCT.toLowerCase(Locale.ROOT);
+        String manufacturer = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase(Locale.ROOT);
+
+        boolean looksLikeEmulator = false;
+        for (String prefix : EMULATOR_FINGERPRINT_PREFIXES) {
+            if (fingerprint.startsWith(prefix) || product.startsWith(prefix)) {
+                looksLikeEmulator = true;
+                break;
+            }
+        }
+        looksLikeEmulator = looksLikeEmulator
+            || hardware.contains("goldfish")
+            || hardware.contains("ranchu")
+            || model.contains("google_sdk")
+            || model.contains("emulator")
+            || model.contains("android sdk built for x86")
+            || manufacturer.contains("genymotion");
+        if (looksLikeEmulator) {
+            signals.add("emulator_fingerprint");
+        }
+
+        if (Debug.isDebuggerConnected()) {
+            signals.add("debugger_connected");
+        }
+
+        JSArray signalsArray = new JSArray();
+        for (String signal : signals) {
+            signalsArray.put(signal);
+        }
+
+        JSObject result = new JSObject();
+        result.put("signals", signalsArray);
+        result.put("isSuspicious", !signals.isEmpty());
+        call.resolve(result);
     }
 
     /**

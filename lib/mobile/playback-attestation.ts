@@ -1,6 +1,6 @@
 'use client';
 
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 
 /**
  * Native HMAC attestation for app-only video playback (Capacitor shells >= 1.2.0).
@@ -30,9 +30,32 @@ export interface PlaybackAttestationSecureScreenResult {
   ok: boolean;
 }
 
+export interface PlaybackAttestationIntegrityResult {
+  /** Best-effort root/jailbreak/emulator/debugger signals — never exhaustive,
+   * every check is independently defeatable. Empty on desktop/web (native-only). */
+  signals: string[];
+  isSuspicious: boolean;
+}
+
 export interface PlaybackAttestationPlugin {
   sign(options: { nonce: string; videoId: string; userId: string }): Promise<PlaybackAttestationSignResult>;
   setSecureScreen(options: { enabled: boolean }): Promise<PlaybackAttestationSecureScreenResult>;
+  /** Native-only (Android + iOS). Rejects on desktop/web shells that don't implement it. */
+  getIntegrity(): Promise<PlaybackAttestationIntegrityResult>;
+  /** iOS only: fires whenever `UIApplication.userDidTakeScreenshotNotification`
+   * is posted. Detection-after-the-fact only — iOS cannot block a still
+   * screenshot of an arbitrary WKWebView. Android blocks screenshots outright
+   * via FLAG_SECURE (see setSecureScreen) so never fires this event. */
+  addListener(
+    eventName: 'screenshotTaken',
+    listenerFunc: () => void,
+  ): Promise<PluginListenerHandle>;
+  /** iOS only: fires whenever `UIScreen.isCaptured` changes (recording/mirroring
+   * start or stop). Mirrors the native blackout that `setSecureScreen` applies. */
+  addListener(
+    eventName: 'captureStateChanged',
+    listenerFunc: (data: { isCaptured: boolean }) => void,
+  ): Promise<PluginListenerHandle>;
 }
 
 export const PlaybackAttestation = registerPlugin<PlaybackAttestationPlugin>('PlaybackAttestation');
@@ -84,5 +107,64 @@ export async function setSecureScreen(enabled: boolean): Promise<boolean> {
     return result?.ok === true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Security spec §3 (mobile hardening) — best-effort root/jailbreak/emulator
+ * signals for the playback session's `integrity` field. No-throw: returns
+ * null on web/old shells or if the native call fails, so the caller sends no
+ * integrity string rather than a fabricated one (the backend treats a null
+ * integrity from a client that never sends one as fail-open + logged).
+ */
+export async function getDeviceIntegrity(): Promise<PlaybackAttestationIntegrityResult | null> {
+  if (!isPlaybackAttestationAvailable()) {
+    return null;
+  }
+
+  try {
+    return await PlaybackAttestation.getIntegrity();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * iOS only: registers for `screenshotTaken`. Returns a no-op unsubscribe
+ * function on web/Android/old shells so callers don't need to feature-detect
+ * before calling it.
+ */
+export async function addScreenshotListener(onScreenshot: () => void): Promise<() => void> {
+  if (!isPlaybackAttestationAvailable()) {
+    return () => {};
+  }
+
+  try {
+    const handle = await PlaybackAttestation.addListener('screenshotTaken', onScreenshot);
+    return () => void handle.remove();
+  } catch {
+    return () => {};
+  }
+}
+
+/**
+ * iOS only: registers for `captureStateChanged` (screen recording/mirroring
+ * start or stop). Returns a no-op unsubscribe function on web/Android/old
+ * shells so callers don't need to feature-detect before calling it.
+ */
+export async function addCaptureStateListener(
+  onCaptureStateChanged: (isCaptured: boolean) => void,
+): Promise<() => void> {
+  if (!isPlaybackAttestationAvailable()) {
+    return () => {};
+  }
+
+  try {
+    const handle = await PlaybackAttestation.addListener('captureStateChanged', (data) => {
+      onCaptureStateChanged(data.isCaptured);
+    });
+    return () => void handle.remove();
+  } catch {
+    return () => {};
   }
 }

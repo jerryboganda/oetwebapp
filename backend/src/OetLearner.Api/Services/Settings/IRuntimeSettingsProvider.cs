@@ -704,7 +704,17 @@ public sealed record AuthTokenSettings(
 /// valid session id immediately revokes that playback session. Default: true
 /// (owner directive — block on detection rather than log-only).
 /// </summary>
-public sealed record VideoProtectionSettings(bool RevokeOnCaptureDetected);
+public sealed record VideoProtectionSettings(
+    bool RevokeOnCaptureDetected,
+    /// <summary>Security spec §3 (mobile hardening). Reject a NEW playback
+    /// session with 403 device_integrity when the client-reported integrity
+    /// signals indicate a rooted/jailbroken device. Default true (owner
+    /// directive — block immediately). A client that sends no integrity
+    /// field at all (old shell, desktop) always fails open.</summary>
+    bool BlockRootedDevices = true,
+    /// <summary>Same as <see cref="BlockRootedDevices"/> but for emulator
+    /// signals. Default true (owner directive).</summary>
+    bool BlockEmulators = true);
 
 /// <summary>
 /// Account-security policy toggles (Course Platform Security Requirements

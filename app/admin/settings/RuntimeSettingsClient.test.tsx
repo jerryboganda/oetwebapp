@@ -402,6 +402,8 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
     },
     videoProtection: {
       revokeOnCaptureDetected: true,
+      blockRootedDevices: true,
+      blockEmulators: true,
     },
     updatedBy: 'admin@example.com',
     updatedByUserId: 'u-1',

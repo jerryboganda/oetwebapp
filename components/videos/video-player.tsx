@@ -29,6 +29,7 @@ import {
 import { postVideoEvent, postVideoProgress, renewPlaybackSession } from '@/lib/api/videos';
 import { reportProtectionEvent } from '@/lib/api/video-protection';
 import { setVideoScreenProtection } from '@/lib/video/screen-protection';
+import { addCaptureStateListener, addScreenshotListener } from '@/lib/mobile/playback-attestation';
 import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/types/videos';
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
 import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
@@ -61,6 +62,8 @@ function gateMessage(code: PlaybackGateErrorCode): string {
       return 'Video streaming is not available right now. Please try again later.';
     case 'SECURITY_VIOLATION':
       return 'Playback was stopped because the security watermark was tampered with.';
+    case 'DEVICE_BLOCKED':
+      return 'Video playback is unavailable on this device.';
     case 'ATTESTATION_REJECTED':
     case 'ATTESTATION_UNAVAILABLE':
     case 'WEB_NOT_ALLOWED':
@@ -124,6 +127,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [hasCaptionTracks, setHasCaptionTracks] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [watermarkKey, setWatermarkKey] = useState(0);
+  const [captureWarning, setCaptureWarning] = useState<'screenshot' | 'recording' | null>(null);
 
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {
@@ -374,6 +378,48 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     };
   }, [activeSessionId, videoId]);
 
+  // iOS screenshot/screen-recording detection (Course Platform Security
+  // Requirements §3, mobile hardening). Report-only, same as focus/visibility
+  // above — iOS cannot BLOCK a still screenshot of an arbitrary WKWebView
+  // (documented platform limitation; the native blackout in setSecureScreen
+  // already handles active recording/mirroring). No-op on Android/desktop/web
+  // (addScreenshotListener/addCaptureStateListener resolve a no-op unsubscribe
+  // there) — Android blocks screenshots outright via FLAG_SECURE instead.
+  useEffect(() => {
+    if (!activeSessionId) return;
+    let cancelled = false;
+    let warningTimer: number | null = null;
+    let removeScreenshotListener = () => {};
+    let removeCaptureListener = () => {};
+
+    void addScreenshotListener(() => {
+      reportProtectionEvent({ kind: 'screenshot_detected', videoId, sessionId: activeSessionId });
+      setCaptureWarning('screenshot');
+      if (warningTimer !== null) window.clearTimeout(warningTimer);
+      warningTimer = window.setTimeout(() => setCaptureWarning(null), 3000);
+    }).then((remove) => {
+      if (cancelled) remove();
+      else removeScreenshotListener = remove;
+    });
+
+    void addCaptureStateListener((isCaptured) => {
+      if (isCaptured) {
+        reportProtectionEvent({ kind: 'capture_detected', videoId, sessionId: activeSessionId });
+      }
+      setCaptureWarning(isCaptured ? 'recording' : null);
+    }).then((remove) => {
+      if (cancelled) remove();
+      else removeCaptureListener = remove;
+    });
+
+    return () => {
+      cancelled = true;
+      if (warningTimer !== null) window.clearTimeout(warningTimer);
+      removeScreenshotListener();
+      removeCaptureListener();
+    };
+  }, [activeSessionId, videoId]);
+
   // Low-bandwidth mode: once quality levels are known, pin the lowest instead of
   // letting adaptive bitrate climb — video is the heaviest media on slow links.
   // Only acts while quality is still on Auto (-1), so a manual pick is respected.
@@ -586,6 +632,16 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           fallbackText={phase.session.watermarkText}
           onTamper={handleWatermarkTamper}
         />
+      )}
+
+      {captureWarning && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center p-3">
+          <div className="rounded-full bg-red-600/90 px-4 py-1.5 text-xs font-semibold text-white shadow-lg">
+            {captureWarning === 'screenshot'
+              ? 'Screenshot detected — this activity is logged.'
+              : 'Screen recording detected — this activity is logged.'}
+          </div>
+        </div>
       )}
 
       {/* Controls */}

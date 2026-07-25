@@ -22,6 +22,7 @@ import {
 import type { PlaybackSession } from '@/lib/types/videos';
 import { getAppRuntimeKind, type AppRuntimeKind } from '@/lib/runtime-signals';
 import {
+  getDeviceIntegrity,
   isPlaybackAttestationAvailable,
   signVideoChallenge as signViaCapacitor,
 } from '@/lib/mobile/playback-attestation';
@@ -38,7 +39,8 @@ export type PlaybackGateErrorCode =
   | 'SESSION_LIMIT'
   | 'NOT_CONFIGURED'
   | 'NETWORK'
-  | 'SECURITY_VIOLATION';
+  | 'SECURITY_VIOLATION'
+  | 'DEVICE_BLOCKED';
 
 export class PlaybackGateError extends Error {
   readonly code: PlaybackGateErrorCode;
@@ -139,6 +141,8 @@ function mapApiFailure(error: unknown): PlaybackGateError {
         return new PlaybackGateError('SESSION_LIMIT', error.userMessage);
       case 'bunny_not_configured':
         return new PlaybackGateError('NOT_CONFIGURED', error.userMessage);
+      case 'device_integrity':
+        return new PlaybackGateError('DEVICE_BLOCKED', error.userMessage);
       default:
         if (error.status === 402) return new PlaybackGateError('CONTENT_LOCKED', error.userMessage);
         if (error.status === 403) return new PlaybackGateError('ATTESTATION_REJECTED', error.userMessage);
@@ -169,11 +173,16 @@ async function attemptSession(
     );
   }
 
+  // Best-effort, native-only (getDeviceIntegrity is no-throw and resolves
+  // null on desktop/web/old shells) — never blocks issuing the session.
+  const integrity = attestor.runtimeKind === 'capacitor-native' ? await getDeviceIntegrity() : null;
+
   return createPlaybackSession(videoId, {
     nonce: challenge.nonce,
     platform: signed.platform,
     keyId: signed.keyId,
     signature: signed.signature,
+    ...(integrity ? { integrity } : {}),
   });
 }
 

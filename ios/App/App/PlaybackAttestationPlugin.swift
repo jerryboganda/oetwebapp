@@ -16,12 +16,31 @@ public class PlaybackAttestationPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "PlaybackAttestation"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "sign", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setSecureScreen", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "setSecureScreen", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getIntegrity", returnType: CAPPluginReturnPromise)
     ]
 
     private static let platform = "capacitor-ios"
     private static let keyId = "v1"
     private static let maxInputLength = 512
+
+    // Security spec §3 (mobile hardening): fires for the lifetime of the app,
+    // not just during video playback — a screenshot is worth reporting
+    // wherever it happens. Detection-after-the-fact only: iOS has no API to
+    // BLOCK a still screenshot of an arbitrary WKWebView (documented platform
+    // limitation; FairPlay DRM is the only real block, out of scope for v1).
+    override public func load() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScreenshotTaken),
+            name: UIApplication.userDidTakeScreenshotNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleScreenshotTaken() {
+        notifyListeners("screenshotTaken", data: [:])
+    }
 
     @objc func sign(_ call: CAPPluginCall) {
         guard let nonce = requireChallengeParam(call, "nonce"),
@@ -98,8 +117,14 @@ public class PlaybackAttestationPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func applyBlackoutForCaptureState() {
+        let isCaptured = UIScreen.main.isCaptured
+        // Report the raw signal to JS regardless of whether a container view
+        // is available yet — the caller logs it as a protection event even
+        // when the native blackout itself can't be applied.
+        notifyListeners("captureStateChanged", data: ["isCaptured": isCaptured])
+
         guard let container = self.bridge?.viewController?.view else { return }
-        if UIScreen.main.isCaptured {
+        if isCaptured {
             if blackoutView == nil {
                 let view = UIView(frame: container.bounds)
                 view.backgroundColor = .black
@@ -113,6 +138,59 @@ public class PlaybackAttestationPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         } else {
             blackoutView?.removeFromSuperview()
+        }
+    }
+
+    /// Security spec §3 (mobile hardening) — best-effort jailbreak heuristics.
+    /// Every check is independently defeatable (this is a compensating
+    /// control, not a security boundary); the backend treats this as one
+    /// signal among several, never a sole gate. No fork() test (App Store
+    /// guideline risk); no private API usage.
+    @objc func getIntegrity(_ call: CAPPluginCall) {
+        // canOpenURL is a UIKit API best called on the main thread (it
+        // round-trips to SpringBoard); dispatch the whole check there rather
+        // than splitting main-thread and background-safe work across two paths.
+        DispatchQueue.main.async {
+            var signals: [String] = []
+
+            let suspiciousPaths = [
+                "/Applications/Cydia.app",
+                "/Applications/Sileo.app",
+                "/Library/MobileSubstrate/MobileSubstrate.dylib",
+                "/private/var/lib/apt",
+                "/private/var/lib/cydia",
+                "/private/var/stash",
+                "/usr/sbin/sshd",
+                "/usr/bin/ssh",
+                "/bin/bash",
+                "/etc/apt"
+            ]
+            if suspiciousPaths.contains(where: { FileManager.default.fileExists(atPath: $0) }) {
+                signals.append("jailbreak_path")
+            }
+
+            if let cydiaUrl = URL(string: "cydia://package/com.example.package"),
+               UIApplication.shared.canOpenURL(cydiaUrl) {
+                signals.append("cydia_url_scheme")
+            }
+
+            let sandboxEscapePath = "/private/jailbreak-check-\(UUID().uuidString).txt"
+            do {
+                try "jailbreak check".write(toFile: sandboxEscapePath, atomically: true, encoding: .utf8)
+                try FileManager.default.removeItem(atPath: sandboxEscapePath)
+                signals.append("sandbox_write_outside_container")
+            } catch {
+                // Expected on a non-jailbroken device — the sandbox blocks the write.
+            }
+
+            if ProcessInfo.processInfo.environment["DYLD_INSERT_LIBRARIES"] != nil {
+                signals.append("dyld_insert_libraries")
+            }
+
+            call.resolve([
+                "signals": signals,
+                "isSuspicious": !signals.isEmpty
+            ])
         }
     }
 

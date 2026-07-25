@@ -463,7 +463,10 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             PdfExtraction: pdfExtraction,
             Pronunciation: pronunciation,
             AuthTokens: authTokens,
-            VideoProtection: new VideoProtectionSettings(RevokeOnCaptureDetected: r.VideoProtectionRevokeOnCaptureDetected ?? true),
+            VideoProtection: new VideoProtectionSettings(
+                RevokeOnCaptureDetected: r.VideoProtectionRevokeOnCaptureDetected ?? true,
+                BlockRootedDevices: r.VideoProtectionBlockRootedDevices ?? true,
+                BlockEmulators: r.VideoProtectionBlockEmulators ?? true),
             Security: new SecuritySettings(
                 SingleActiveSessionEnabled: r.SecuritySingleActiveSessionEnabled ?? true,
                 RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.LogOnly : r.SecurityRiskMode,

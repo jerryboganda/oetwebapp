@@ -12,14 +12,15 @@ and partially built. Each row says which.
 
 | Requirement area | Status | Notes |
 |---|---|---|
-| Screenshot protection | **Implemented** (Win/macOS/Android) / **Partial** (iOS) | Windows/macOS/Android block the capture at the OS level. iOS cannot block a still screenshot of an arbitrary WKWebView — see §3.3. Detection-after-the-fact is designed (Phase 8), not yet shipped. |
+| Screenshot protection | **Implemented** (Win/macOS/Android) / **Partial** (iOS) | Windows/macOS/Android block the capture at the OS level. iOS cannot block a still screenshot of an arbitrary WKWebView — see §3.3. Detection-after-the-fact (`userDidTakeScreenshotNotification`) is shipped as of Phase 8; still logs-only, never a block. |
 | Screen-recording protection | **Implemented** (Win/macOS/Android/iOS) | All four platforms blank the app during active recording/mirroring. See §3. |
 | Dynamic watermark | **Implemented** | Shipped and live — full name, masked email, live clock, session reference; moves on a randomized interval; tiled low-opacity forensic layer; integrity watchdog. See §2. |
 | DRM and encrypted streaming | **Not implemented** (documented upgrade path) | Native-only playback + token-signed HLS + OS capture blocking is the current model. No DRM/EME. See §4. |
 | One active session only | **Implemented** | Shipped and live — signing in anywhere revokes every other session within seconds via a SignalR push, with a family-liveness check as the hard backstop. See §5. |
-| Device binding and reset | **Designed, not yet shipped** | See §6 — next planned increment. |
+| Device binding and reset | **Backend + frontend shipped, ships DARK** | Full flow built (§6): email-OTP challenge on a new device, sign-in UI, admin reset. `SecurityTrustedDeviceRequired` stays off until a genuine end-to-end OTP round-trip has been observed against a non-stale backend. |
 | IP and risk monitoring | **Implemented (log-only)** | Shipped and live in log-only mode — country-change and impossible-travel detection, device-churn detection. Enforcement mode (blocking) is built and ready but held off pending a review week. See §7. |
-| Audit logs and admin controls | **Implemented (backend); admin UI partial** | `SecurityEvents` telemetry + a read-only admin API are live. A full admin console (per-account session/device management, computed alerts) is designed but not yet built. See §8. |
+| Audit logs and admin controls | **Implemented** | `SecurityEvents` telemetry, a full `/admin/security` console (events feed, filters, computed alerts), and per-account session/device management (targeted revoke, device reset, block playback) are all live. See §8. |
+| Root/jailbreak/emulator detection | **Implemented (heuristics)** | Android + iOS native plugins report best-effort signals on every playback-session request; `VideoProtectionBlockRootedDevices`/`BlockEmulators` (default: on) reject a new session with 403 `device_integrity` when present. See §10. |
 
 ---
 
@@ -55,10 +56,14 @@ that is a deliberate non-goal for now.
 The compensating controls actually shipped: (1) the watermark is visible and
 identifying at the exact moment a screenshot is taken, so a leaked still
 still traces back to the account; (2) iOS screenshot **detection** — via
-`UIApplication.userDidTakeScreenshotNotification` — is designed (Phase 8) to
-report the event to the server and, at the owner's option, revoke the
-session; this catches it after the fact rather than preventing it, which is
-the honest limit of what iOS allows for non-DRM content.
+`UIApplication.userDidTakeScreenshotNotification` (Phase 8, shipped) —
+reports a `screenshot_detected` protection event to the server and shows the
+learner a brief on-screen notice that the activity is logged; this catches
+it after the fact rather than preventing it, which is the honest limit of
+what iOS allows for non-DRM content. It does not currently revoke the
+session by itself (unlike `capture_detected`, which can under
+`VideoProtectionRevokeOnCaptureDetected`) — a single still screenshot is a
+weaker signal than an active recording.
 
 ## 4. DRM and encrypted streaming
 
@@ -109,22 +114,31 @@ life — this is the same conclusion, restated with the reasoning.)
   reuse-detection (presenting an already-rotated token burns the whole
   family) — that mechanism is unchanged and still the second line of
   defense.
-- **What is deferred:** device *binding* (spec §3.2 — requiring email
-  verification of a genuinely new device, with a cooldown on frequent
-  changes) is designed but not yet built; single active session does not by
+- **Relationship to device binding:** single active session does not by
   itself require a device to be "known," only that there is exactly one live
-  session at a time.
+  session at a time. Device *binding* (spec §3.2) is a separate, additional
+  gate — see §6 — built and ready but not yet enforced.
 
-## 6. Device binding (spec §3.2) — designed, not yet shipped
+## 6. Device binding (spec §3.2) — shipped, ships DARK
 
-Planned design: a `TrustedDevice` row per account; a client-generated device
-id sent as a header on every auth request; first sign-in from a device
-auto-trusts silently; a sign-in from a *different* device triggers an email
-one-time-code challenge (reusing the existing OTP infrastructure); approving
-it revokes the previous device's sessions (via the same
+A `TrustedDevice` row per account; a client-generated device id
+(`lib/device-id.ts`) sent as the `X-OET-Device-Id` header on every auth
+request; first sign-in from a device auto-trusts silently; a sign-in from a
+*different* device triggers an email one-time-code challenge (reusing the
+existing OTP infrastructure) — the learner completes it at
+`app/(auth)/device/verify`, mirroring the MFA-challenge flow exactly.
+Approving a new device revokes the previous device's sessions (via the same
 `SessionRevocationService` from §5) and logs the change; a cooldown blocks
-more than a handful of device changes in a rolling week. This is the next
-planned increment — see the admin runbook for the toggle that will gate it.
+more than a handful of device changes in a rolling week. An admin can also
+reset an account's trusted device from `/admin/security` or the user detail
+page, which revokes its sessions the same way.
+
+**Ships DARK on purpose:** `SecurityTrustedDeviceRequired` defaults off. Both
+halves of the flow are code-complete, but a genuine end-to-end OTP
+round-trip (email actually arriving, challenge actually completing into a
+session) has not yet been observed against a non-stale backend in this
+environment. Flip the toggle in Admin → Runtime Settings → Security only
+after that verification.
 
 ## 7. IP / location risk signals (spec §3.3) — shipped, log-only
 
@@ -148,48 +162,75 @@ IP-intelligence feed (ipinfo/MaxMind), and static IP-range lists are not
 trustworthy enough to act on; this is a clean, documented later integration
 point (`IIpIntelligenceService` interface exists with a no-op default).
 
-## 8. Audit logging & admin controls (spec §4.4)
+## 8. Audit logging & admin controls (spec §4.4) — shipped
 
-**Shipped:** a new partitioned `SecurityEvents` table records sign-in
-success/failure, sign-out, MFA failure, refresh-token reuse, session
-created/revoked, playback session start, and risk signals — each with
-account, IP, country, user agent, platform, and session-family id where
-applicable. A read-only admin API (`GET /v1/admin/security/events`, `GET
-/v1/admin/security/video-protection-events`) exists behind a new
-`security:read` / `security:write` admin permission pair. The pre-existing
-`AuditEvent` trail (admin actions) is unchanged and still the system of
-record for admin-initiated changes.
+A partitioned `SecurityEvents` table records sign-in success/failure,
+sign-out, MFA failure, refresh-token reuse, session created/revoked,
+playback session start, risk signals, and admin-initiated security actions —
+each with account, IP, country, user agent, platform, and session-family id
+where applicable. Behind a `security:read` / `security:write` admin
+permission pair:
 
-**Not yet shipped:** a dedicated admin UI page for browsing this feed,
-per-account session/device management (targeted revoke, device reset, block
-playback) beyond the existing blunt "revoke all sessions" action, and
-computed alerts (repeated device switching, simultaneous-use clusters,
-abnormal geography) surfaced on the admin dashboard. This is the next
-planned increment after device binding.
+- `GET /v1/admin/security/events`, `GET /v1/admin/security/video-protection-events`
+  — the raw feed, with a dedicated `/admin/security` console (filters by
+  kind/severity/account, event-detail drawer) plus computed alerts
+  (impossible travel, refresh-token reuse, device-change cooldown hits,
+  capture/tamper events) surfaced there and folded into `/admin/alerts`.
+- `GET/POST /v1/admin/users/{userId}/security/sessions` (list + targeted
+  revoke by family id), `GET/POST /v1/admin/users/{userId}/security/devices/reset`,
+  `POST /v1/admin/users/{userId}/security/block-playback` — all routed
+  through `ISessionRevocationService`/`ITrustedDeviceService` so the same
+  playback-kill/push/audit guarantees apply as any other revoke. Surfaced on
+  the admin user detail page's "Sessions & Devices" section.
+
+The pre-existing `AuditEvent` trail (admin actions) is unchanged and still
+the system of record for admin-initiated changes; every mutation above is
+dual-logged (a `SecurityEvent` from the account's perspective, an
+`AuditEvent` from the admin's).
 
 ## 9. Capture-protection telemetry (spec §2, cross-cutting)
 
 A `VideoProtectionEvents` pipeline (`POST
 /v1/video-library/protection-events`) ingests: OS capture-protection
 engaged/unavailable, watermark tampering, focus/visibility loss (risk
-signals only, never a gate), and reserved slots for iOS screenshot/capture
-detection and device-integrity signals (rooted/jailbroken/emulator —
-Phase 8). High-severity kinds also write to the admin audit trail, and a
-capture/screenshot-detected event can — subject to
-`VideoProtectionRevokeOnCaptureDetected` (default: on) — immediately revoke
-that playback session.
+signals only, never a gate), iOS screenshot/capture detection (Phase 8,
+shipped), and device-integrity signals (rooted/jailbroken/emulator — Phase 8,
+shipped, persisted server-side directly from the playback-session request
+rather than the client batch endpoint). High-severity kinds also write to
+the admin audit trail, and a capture/screenshot-detected event can — subject
+to `VideoProtectionRevokeOnCaptureDetected` (default: on) — immediately
+revoke that playback session.
 
-## 10. Root / jailbreak / emulator / debugger detection
+## 10. Root / jailbreak / emulator / debugger detection — shipped
 
-**Not yet shipped.** Planned as Android/iOS native-plugin heuristics
-(test-keys build tag, `su` binary probing, emulator fingerprint matching,
-`Debug.isDebuggerConnected()` on Android; jailbreak file-path probing,
-sandbox write tests, `DYLD_INSERT_LIBRARIES` inspection on iOS) reported
-alongside the existing HMAC attestation payload. These are heuristics, not
-hardware attestation (Play Integrity / App Attest) — evadable by
-sufficiently determined tooling, which is why the spec's "where reasonably
-detectable" qualifier is the right bar for a first version. Requires a
-native mobile release to ship (not deployable via the web/API path alone).
+Android/iOS native-plugin heuristics (test-keys build tag, `su` binary
+probing, emulator fingerprint matching, `Debug.isDebuggerConnected()` on
+Android; jailbreak file-path probing, a Cydia URL-scheme probe, a
+sandbox-escape write test, `DYLD_INSERT_LIBRARIES` inspection on iOS —
+deliberately no `fork()` test, to stay inside App Store review guidelines,
+and no private-API usage) are reported on every playback-session request
+(`lib/mobile/playback-attestation.ts getDeviceIntegrity()`), independent of
+the HMAC attestation payload. `VideoProtectionBlockRootedDevices` /
+`VideoProtectionBlockEmulators` (both default: on, owner directive) reject
+the session outright with 403 `device_integrity` when the corresponding
+signal category is present; every signal is persisted as an
+`integrity_signal` event regardless of the block decision. A client that
+sends no integrity field at all (desktop, web, or an old mobile shell that
+predates this) always fails open — nothing here can regress an existing
+build. These are heuristics, not hardware attestation (Play Integrity / App
+Attest) — evadable by sufficiently determined tooling (Magisk hides most of
+the Android checks), which is why the spec's "where reasonably detectable"
+qualifier is the right bar for a first version.
+
+**Not yet shipped: the actual mobile release.** All of the above is
+merged code, not yet in learners' hands — it ships to real devices only
+once a signed Android+iOS build is cut via `mobile-release.yml` and clears
+app-store review (Google Play review is typically hours; Apple App Store
+review can take days and is outside engineering's control). Desktop
+(Tauri) integrity heuristics are explicitly **out of scope for v1** — the
+capture blackout (§2) already blanks the screen regardless of device
+integrity, so the marginal security value is lower there; documented as a
+residual gap, not silently skipped.
 
 ## 11. MP4-fallback closure (owner action, not yet executed)
 

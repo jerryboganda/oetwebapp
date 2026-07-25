@@ -1,4 +1,8 @@
 using System.Security.Claims;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.VideoLibrary;
 
 namespace OetLearner.Api.Endpoints;
@@ -147,6 +151,8 @@ public static class VideoLibraryEndpoints
             IVideoAttestationService attestation,
             IVideoEntitlementService entitlements,
             IVideoPlaybackSessionService sessions,
+            LearnerDbContext db,
+            IRuntimeSettingsProvider settingsProvider,
             CancellationToken ct) =>
         {
             var userId = http.LearnerId();
@@ -161,6 +167,16 @@ public static class VideoLibraryEndpoints
             // (a)–(c) nonce consume + key lookup + HMAC compare (403s + audit inside).
             await attestation.VerifyAsync(
                 userId, videoId, request.Nonce, request.Platform, request.KeyId, request.Signature, ip, ct);
+
+            // Security spec §3 (mobile hardening): a device-integrity block, if
+            // any, happens before the entitlement check so a suspicious device
+            // never learns anything about the account's entitlement state.
+            var integrityBlock = await CheckDeviceIntegrityAsync(
+                db, settingsProvider, userId, videoId, request.Platform, request.Integrity, ct);
+            if (integrityBlock is not null)
+            {
+                return integrityBlock;
+            }
 
             // (d) entitlement — 402 content_locked / 403 frozen|expired.
             await entitlements.RequireAccessAsync(userId, video, ct);
@@ -229,6 +245,67 @@ public static class VideoLibraryEndpoints
             new { code = "bunny_not_configured", message = "Video streaming is not configured yet." },
             statusCode: StatusCodes.Status503ServiceUnavailable);
 
+    private static readonly IReadOnlySet<string> EmulatorSignalMarkers = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "emulator_fingerprint",
+    };
+
+    /// <summary>Security spec §3 (mobile hardening): persists an
+    /// <c>integrity_signal</c> protection event whenever the client reports
+    /// any signal, then — only if the corresponding runtime-settings toggle
+    /// is on — returns a 403 <c>device_integrity</c> result. Returns null
+    /// (proceed normally) when there's nothing to report or nothing to block.
+    /// A client that sends no <see cref="PlaybackSessionRequest.Integrity"/>
+    /// at all (desktop, web, or an old mobile shell) always fails open.</summary>
+    private static async Task<IResult?> CheckDeviceIntegrityAsync(
+        LearnerDbContext db,
+        IRuntimeSettingsProvider settingsProvider,
+        string userId,
+        string videoId,
+        string? platform,
+        PlaybackIntegritySignalRequest? integrity,
+        CancellationToken ct)
+    {
+        var signals = integrity?.Signals?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray() ?? [];
+        if (signals.Length == 0)
+        {
+            return null;
+        }
+
+        db.VideoProtectionEvents.Add(new VideoProtectionEvent
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            VideoId = videoId,
+            SessionId = null,
+            Kind = VideoProtectionKinds.IntegritySignal,
+            Severity = VideoProtectionKinds.DefaultSeverity(VideoProtectionKinds.IntegritySignal),
+            Platform = platform,
+            IpAddress = null,
+            OccurredAt = DateTimeOffset.UtcNow,
+            MetadataJson = JsonSupport.Serialize(new { signals }),
+        });
+        await db.SaveChangesAsync(ct);
+
+        var isEmulator = signals.Any(EmulatorSignalMarkers.Contains);
+        var isRooted = signals.Any(s => !EmulatorSignalMarkers.Contains(s));
+
+        var settings = (await settingsProvider.GetAsync(ct)).VideoProtection;
+        var blocked = (isEmulator && settings.BlockEmulators) || (isRooted && settings.BlockRootedDevices);
+        if (!blocked)
+        {
+            return null;
+        }
+
+        return Results.Json(
+            new
+            {
+                code = "device_integrity",
+                message = "Video playback is unavailable on this device.",
+            },
+            statusCode: StatusCodes.Status403Forbidden);
+    }
+
     private static string LearnerId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
@@ -246,4 +323,13 @@ public sealed record PlaybackSessionRequest(
     string? Nonce,
     string? Platform,
     string? KeyId,
-    string? Signature);
+    string? Signature,
+    /// <summary>Security spec §3 (mobile hardening) — best-effort native
+    /// integrity signals (lib/mobile/playback-attestation.ts getIntegrity()).
+    /// Null on desktop/web or old mobile shells that predate this — always
+    /// fails open, never blocked.</summary>
+    PlaybackIntegritySignalRequest? Integrity = null);
+
+public sealed record PlaybackIntegritySignalRequest(
+    IReadOnlyList<string>? Signals,
+    bool? IsSuspicious);

@@ -479,6 +479,15 @@ public class RuntimeSettingsRow
     /// session. Null defaults to true (block-on-detection).</summary>
     public bool? VideoProtectionRevokeOnCaptureDetected { get; set; }
 
+    /// <summary>Security spec §3 (mobile hardening): reject a new playback
+    /// session when the client reports rooted/jailbroken integrity signals.
+    /// Null defaults to true (owner directive — block immediately).</summary>
+    public bool? VideoProtectionBlockRootedDevices { get; set; }
+
+    /// <summary>Same as <see cref="VideoProtectionBlockRootedDevices"/> but
+    /// for emulator signals. Null defaults to true.</summary>
+    public bool? VideoProtectionBlockEmulators { get; set; }
+
     /// <summary>Security spec §3.1: single active session enforcement.
     /// Null defaults to true (owner directive — enforce immediately).</summary>
     public bool? SecuritySingleActiveSessionEnabled { get; set; }

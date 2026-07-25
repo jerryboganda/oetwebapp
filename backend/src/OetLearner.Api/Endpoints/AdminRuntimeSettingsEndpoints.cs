@@ -393,6 +393,8 @@ public static class AdminRuntimeSettingsEndpoints
             videoProtection = new
             {
                 revokeOnCaptureDetected = settings.VideoProtection.RevokeOnCaptureDetected,
+                blockRootedDevices = settings.VideoProtection.BlockRootedDevices,
+                blockEmulators = settings.VideoProtection.BlockEmulators,
             },
             security = new
             {
@@ -1175,6 +1177,8 @@ public static class AdminRuntimeSettingsEndpoints
     {
         if (d is null) return;
         if (TrySetNullableBool(d.RevokeOnCaptureDetected, v => row.VideoProtectionRevokeOnCaptureDetected = v, "videoProtection.revokeOnCaptureDetected", changed)) { }
+        if (TrySetNullableBool(d.BlockRootedDevices, v => row.VideoProtectionBlockRootedDevices = v, "videoProtection.blockRootedDevices", changed)) { }
+        if (TrySetNullableBool(d.BlockEmulators, v => row.VideoProtectionBlockEmulators = v, "videoProtection.blockEmulators", changed)) { }
     }
 
     private static readonly HashSet<string> ValidRiskModes = new(StringComparer.Ordinal)
@@ -2361,6 +2365,8 @@ public sealed class RuntimeSettingsBunnyStreamUpdate
 public sealed class RuntimeSettingsVideoProtectionUpdate
 {
     public JsonElement? RevokeOnCaptureDetected { get; set; }
+    public JsonElement? BlockRootedDevices { get; set; }
+    public JsonElement? BlockEmulators { get; set; }
 }
 
 /// <summary>Account-security policy (Course Platform Security Requirements §3).</summary>

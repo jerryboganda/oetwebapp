@@ -40,6 +40,14 @@ export interface PlaybackAttestationInput {
   platform: string;
   keyId: string;
   signature: string;
+  /** Security spec §3 (mobile hardening) — best-effort native integrity
+   * signals (lib/mobile/playback-attestation.ts getDeviceIntegrity()).
+   * Omit on desktop/web/old mobile shells — the backend always fails open
+   * when this is absent. */
+  integrity?: {
+    signals: string[];
+    isSuspicious: boolean;
+  };
 }
 
 export async function createPlaybackSession(
