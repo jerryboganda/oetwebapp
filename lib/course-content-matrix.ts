@@ -16,9 +16,10 @@ export function expectedVideoTargets(
   subtest: CourseSubtest,
   profession: CourseProfessionId,
 ): string[] | null {
-  if ((profession === 'dentistry' || profession === 'radiography') && (subtest === 'writing' || subtest === 'speaking')) return null;
   if (language === 'en' || subtest === 'listening' || subtest === 'reading') return [];
-  if (profession === 'medicine' || profession === 'physiotherapy') return ['medicine', 'physiotherapy'];
+  if (profession === 'medicine' || profession === 'physiotherapy' || profession === 'dentistry' || profession === 'radiography') {
+    return ['medicine', 'physiotherapy', 'dentistry', 'radiography'];
+  }
   if (profession === 'nursing') return ['nursing'];
   if (profession === 'pharmacy') return ['pharmacy'];
   return null;

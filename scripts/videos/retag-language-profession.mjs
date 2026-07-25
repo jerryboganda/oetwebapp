@@ -4,17 +4,15 @@
 // (owner, 2026-07-18). Sets each video's `language` (en/ar) and `targetProfessionIds`
 // so the app resolves exactly the availability matrix in the chart — WITHOUT any
 // new content (English is one canonical set; Arabic Medicine Writing/Speaking
-// aliases Physiotherapy only; Dentistry/Radiography are limited to Listening/Reading).
+// aliases Physiotherapy, Dentistry, and Radiography).
 //
 // The rules (derived deterministically from scripts/videos/state/manifest.json):
 //
 //   English (any module)                 → language en, professions []  (all 6)
 //   Arabic Listening / Reading (shared)  → language ar, professions []  (all 6)
-//   Arabic Speaking/Writing — Medicine   → language ar, [medicine, physiotherapy]
+//   Arabic Speaking/Writing — Medicine   → language ar, [medicine, physiotherapy, dentistry, radiography]
 //   Arabic Speaking/Writing — Nursing    → language ar, [nursing]
 //   Arabic Speaking/Writing — Pharmacy   → language ar, [pharmacy]
-//
-// Dentistry & Radiography receive Listening/Reading only.
 //
 // SAFETY:
 //   * DRY-RUN by default — prints the full plan + summary and touches no network.
@@ -49,8 +47,8 @@ const APPLY = process.argv.includes('--apply');
 const LIMIT = numArg('--limit');
 const DELAY_MS = numArg('--delay-ms') ?? 2200;
 
-const RULE_VERSION = 'profession-first-flowchart-v2';
-const MEDICINE_SET = ['medicine', 'physiotherapy'];
+const RULE_VERSION = 'profession-first-flowchart-v3';
+const MEDICINE_SET = ['medicine', 'physiotherapy', 'dentistry', 'radiography'];
 
 function numArg(flag) {
   const i = process.argv.indexOf(flag);

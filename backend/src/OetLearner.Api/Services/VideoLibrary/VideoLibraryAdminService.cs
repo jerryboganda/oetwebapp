@@ -52,6 +52,7 @@ public sealed record AdminVideoDetailDto(
     IReadOnlyList<string> TargetProfessionIds,
     string? BunnyVideoId,
     string? BunnyCollectionId,
+    string? CourseFolder,
     string EncodeStatus,
     int EncodeProgress,
     string? EncodeError,
@@ -193,6 +194,18 @@ public sealed class VideoLibraryAdminService(
         if (patch.SortOrder is not null) video.SortOrder = patch.SortOrder.Value;
         if (patch.BunnyCollectionId is not null)
             video.BunnyCollectionId = string.IsNullOrWhiteSpace(patch.BunnyCollectionId) ? null : patch.BunnyCollectionId.Trim();
+        if (patch.CourseFolder is not null)
+        {
+            var folder = patch.CourseFolder.Trim().ToLowerInvariant();
+            if (folder.Length == 0)
+                video.CourseFolder = null;
+            else if (folder is not ("sessions" or "workshops"))
+                throw ApiException.Validation("invalid_course_folder", "Course folder must be Sessions or Workshops.");
+            else if (video.SubtestCode is not ("writing" or "speaking"))
+                throw ApiException.Validation("invalid_course_folder_subtest", "Sessions and Workshops folders apply only to Writing and Speaking.");
+            else
+                video.CourseFolder = folder;
+        }
         if (patch.PublishAt is { } publishAtEl)
         {
             video.PublishAt = publishAtEl.ValueKind switch
@@ -534,6 +547,7 @@ public sealed class VideoLibraryAdminService(
             TargetProfessionIds: ParseProfessionIds(video.ProfessionIdsJson),
             BunnyVideoId: video.BunnyVideoId,
             BunnyCollectionId: video.BunnyCollectionId,
+            CourseFolder: CourseContentMatrix.ResolveCourseFolder(video.SubtestCode, video.CourseFolder, video.Title),
             EncodeStatus: EncodeStatusLabel(video.EncodeStatus),
             EncodeProgress: video.EncodeProgress,
             EncodeError: video.EncodeError,
@@ -675,4 +689,6 @@ public sealed class AdminVideoPatchRequest
     public JsonElement? PublishAt { get; set; }
     /// <summary>Bunny collection membership mirror. Omitted = unchanged; "" = clear; guid = set.</summary>
     public string? BunnyCollectionId { get; set; }
+    /// <summary>Writing/Speaking operational folder: "sessions" | "workshops".</summary>
+    public string? CourseFolder { get; set; }
 }

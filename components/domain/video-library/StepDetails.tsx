@@ -42,6 +42,7 @@ export function StepDetails() {
   const [subtestCode, setSubtestCode] = useState(video.subtestCode ?? 'general');
   const [categoryIds, setCategoryIds] = useState<string[]>(video.categoryIds ?? []);
   const [bunnyCollectionId, setBunnyCollectionId] = useState(video.bunnyCollectionId ?? '');
+  const [courseFolder, setCourseFolder] = useState<'' | 'sessions' | 'workshops'>(video.courseFolder ?? '');
 
   const [categories, setCategories] = useState<AdminVideoCategory[]>([]);
   const [collections, setCollections] = useState<AdminCollection[]>([]);
@@ -78,6 +79,7 @@ export function StepDetails() {
       categoryIds,
       subtestCode: subtestCode || null,
       bunnyCollectionId: bunnyCollectionId || '',
+      courseFolder: courseFolder || '',
     });
     // Keep Bunny in sync when the video already exists there and the collection
     // changed. Not-yet-uploaded drafts just persist the field; the upload uses it.
@@ -96,6 +98,7 @@ export function StepDetails() {
     categoryIds,
     subtestCode,
     bunnyCollectionId,
+    courseFolder,
     wizard,
   ]);
 
@@ -181,6 +184,19 @@ export function StepDetails() {
           required
         />
       </div>
+
+      {subtestCode === 'writing' || subtestCode === 'speaking' ? (
+        <Select
+          label="Course folder"
+          value={courseFolder}
+          onChange={(e) => setCourseFolder(e.target.value as '' | 'sessions' | 'workshops')}
+          options={[
+            { value: 'sessions', label: 'Sessions' },
+            { value: 'workshops', label: 'Workshops' },
+          ]}
+          required
+        />
+      ) : null}
 
       {collections.length > 0 ? (
         <Select

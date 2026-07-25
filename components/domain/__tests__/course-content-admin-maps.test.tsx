@@ -36,7 +36,7 @@ function videoMap(): VideoCourseMap {
         label: language === 'en' ? 'English' : 'Arabic',
         sections: COURSE_SUBTESTS.map((subtest) => ({
           subtestCode: subtest,
-          available: subtest === 'listening' || subtest === 'reading' || !['dentistry', 'radiography'].includes(profession.id),
+          available: true,
           count: language === 'en' && subtest === 'listening' ? 1 : 0,
           items: language === 'en' && subtest === 'listening' ? [{
             canonicalVideoId: 'video-shared-1',
@@ -47,6 +47,7 @@ function videoMap(): VideoCourseMap {
             status: 'Published',
             encodeStatus: 'ready',
             bunnyVideoId: 'bunny-1',
+            courseFolder: null,
           }] : [],
         })),
       })),
@@ -96,12 +97,14 @@ describe('profession-first admin course maps', () => {
     expect(screen.getAllByRole('link', { name: 'New' })[0]).toHaveAttribute(
       'href', '/admin/content/videos/new?profession=medicine&language=en&subtest=listening',
     );
-    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/admin/content/videos/video-shared-1/details');
+    expect(screen.getByRole('link', { name: 'Edit / Move' })).toHaveAttribute('href', '/admin/content/videos/video-shared-1/details');
+    expect(screen.getAllByText('Sessions').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Workshops').length).toBeGreaterThan(0);
     await user.click(within(root).getByRole('button', { name: 'Open Nursing' }));
     expect(screen.getAllByRole('link', { name: 'New' })[0]).toHaveAttribute(
       'href', '/admin/content/videos/new?profession=nursing&language=en&subtest=listening',
     );
-    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/admin/content/videos/video-shared-1/details');
+    expect(screen.getByRole('link', { name: 'Edit / Move' })).toHaveAttribute('href', '/admin/content/videos/video-shared-1/details');
   });
 
   it('renders professions plus General English at the Materials root and edits the same shared canonical file from every projection', async () => {

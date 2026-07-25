@@ -107,6 +107,10 @@ public class LibraryVideo
     [MaxLength(8)]
     public string? Language { get; set; }
 
+    /// <summary>Operational profession-map folder for Writing/Speaking: "sessions" | "workshops".</summary>
+    [MaxLength(32)]
+    public string? CourseFolder { get; set; }
+
     public bool IsFeatured { get; set; }
     public int SortOrder { get; set; }
     public long ViewCount { get; set; }

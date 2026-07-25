@@ -14,10 +14,10 @@ describe('profession-first course content matrix', () => {
       for (const language of ['en', 'ar'] as const) {
         for (const subtest of COURSE_SUBTESTS) {
           const targets = expectedVideoTargets(language, subtest, profession.id);
-          if ((profession.id === 'dentistry' || profession.id === 'radiography') && (subtest === 'writing' || subtest === 'speaking')) {
-            expect(targets).toBeNull();
-          } else if (language === 'en' || subtest === 'listening' || subtest === 'reading') {
+          if (language === 'en' || subtest === 'listening' || subtest === 'reading') {
             expect(targets).toEqual([]);
+          } else if (['medicine', 'physiotherapy', 'dentistry', 'radiography'].includes(profession.id)) {
+            expect(targets).toEqual(['medicine', 'physiotherapy', 'dentistry', 'radiography']);
           } else {
             expect(targets).not.toBeNull();
           }

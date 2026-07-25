@@ -109,6 +109,7 @@ export interface AdminVideoDetail {
   language: VideoLanguage | null;
   bunnyVideoId: string | null;
   bunnyCollectionId: string | null;
+  courseFolder: 'sessions' | 'workshops' | null;
   encodeStatus: VideoEncodeStatus;
   encodeProgress: number | null;
   encodeError: string | null;
@@ -149,11 +150,14 @@ export interface AdminVideoPatch {
   subtestCode?: string | null;
   /** Bunny collection membership mirror. Omitted = unchanged; '' = clear; guid = set. */
   bunnyCollectionId?: string | null;
+  /** Writing/Speaking operational folder. */
+  courseFolder?: 'sessions' | 'workshops' | '' | null;
 }
 
 export interface VideoCourseMapItem {
   canonicalVideoId: string; title: string; subtestCode: string; language: 'en' | 'ar';
   sourceLabel: string; status: VideoLifecycleStatus; encodeStatus: VideoEncodeStatus; bunnyVideoId: string | null;
+  courseFolder: 'sessions' | 'workshops' | null;
 }
 export interface VideoCourseMapSection { subtestCode: string; available: boolean; count: number; items: VideoCourseMapItem[] }
 export interface VideoCourseMap {

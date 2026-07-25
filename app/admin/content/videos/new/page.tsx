@@ -31,13 +31,19 @@ export default function NewVideoPage() {
       const profession = query.get('profession') as CourseProfessionId | null;
       const language = query.get('language');
       const subtest = query.get('subtest') as CourseSubtest | null;
+      const courseFolder = query.get('folder');
       if (profession && language && subtest
         && COURSE_PROFESSIONS.some((p) => p.id === profession)
         && (language === 'en' || language === 'ar')
         && COURSE_SUBTESTS.includes(subtest)) {
         const targets = expectedVideoTargets(language, subtest, profession);
         if (targets) {
-          await adminPatchVideo(created.videoId, { language, subtestCode: subtest, targetProfessionIds: targets });
+          await adminPatchVideo(created.videoId, {
+            language,
+            subtestCode: subtest,
+            targetProfessionIds: targets,
+            courseFolder: courseFolder === 'sessions' || courseFolder === 'workshops' ? courseFolder : undefined,
+          });
         }
       }
       router.replace(buildVideoStepHref(created.videoId, 'details'));

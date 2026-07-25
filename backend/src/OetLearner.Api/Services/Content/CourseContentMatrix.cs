@@ -35,18 +35,17 @@ public static class CourseContentMatrix
         subtest = subtest.Trim().ToLowerInvariant();
         sourceProfession = sourceProfession.Trim().ToLowerInvariant();
 
-        if ((sourceProfession is "dentistry" or "radiography") && (subtest is "writing" or "speaking"))
-            throw new ArgumentException("Dentistry and Radiography do not have Writing or Speaking videos.");
         if (language == "en" || subtest is "listening" or "reading") return [];
         if (language != "ar" || subtest is not ("writing" or "speaking"))
             throw new ArgumentException("Unsupported course-video language or subtest.");
 
         return sourceProfession switch
         {
-            "medicine" or "physiotherapy" => ["medicine", "physiotherapy"],
+            "medicine" or "physiotherapy" or "dentistry" or "radiography" =>
+                ["medicine", "physiotherapy", "dentistry", "radiography"],
             "nursing" => ["nursing"],
             "pharmacy" => ["pharmacy"],
-            _ => throw new ArgumentException("Dentistry and Radiography do not have Writing or Speaking videos."),
+            _ => throw new ArgumentException("Unsupported profession for Arabic Writing/Speaking."),
         };
     }
 
@@ -78,12 +77,12 @@ public static class CourseContentMatrix
         var allowed = new[]
         {
             Array.Empty<string>(), // not valid; retained only to keep comparisons explicit below
-            new[] { "medicine", "physiotherapy" },
+            new[] { "medicine", "physiotherapy", "dentistry", "radiography" },
             new[] { "nursing" },
             new[] { "pharmacy" },
         };
         var valid = allowed.Skip(1).Any(a => a.Order().SequenceEqual(normalized));
-        message = valid ? string.Empty : "Arabic Writing/Speaking must use Medicine + Physiotherapy, Nursing, or Pharmacy. Dentistry and Radiography are not available.";
+        message = valid ? string.Empty : "Arabic Writing/Speaking must use Medicine + Physiotherapy + Dentistry + Radiography, Nursing, or Pharmacy.";
         return valid;
     }
 
@@ -91,7 +90,6 @@ public static class CourseContentMatrix
     {
         professionId = professionId.Trim().ToLowerInvariant();
         var section = subtest?.Trim().ToLowerInvariant();
-        if ((professionId is "dentistry" or "radiography") && (section is "writing" or "speaking")) return false;
         if (!TryValidateVideo(language, subtest, targets, out _)) return false;
         return targets.Count == 0 || targets.Contains(professionId, StringComparer.OrdinalIgnoreCase);
     }
@@ -102,7 +100,15 @@ public static class CourseContentMatrix
         if (subtest?.Trim().ToLowerInvariant() is "listening" or "reading") return "Shared Arabic";
         if (targets.Contains("nursing", StringComparer.OrdinalIgnoreCase)) return "Nursing Arabic";
         if (targets.Contains("pharmacy", StringComparer.OrdinalIgnoreCase)) return "Pharmacy Arabic";
-        return "Medicine Arabic (shared with Physiotherapy)";
+        return "Medicine Arabic (shared with Physiotherapy, Dentistry and Radiography)";
+    }
+
+    public static string? ResolveCourseFolder(string? subtest, string? courseFolder, string? title)
+    {
+        if (subtest?.Trim().ToLowerInvariant() is not ("writing" or "speaking")) return null;
+        var normalized = courseFolder?.Trim().ToLowerInvariant();
+        if (normalized is "sessions" or "workshops") return normalized;
+        return title?.Contains("workshop", StringComparison.OrdinalIgnoreCase) == true ? "workshops" : "sessions";
     }
 
     public static (string? Kind, string? ProfessionId) ResolveMaterialScope(

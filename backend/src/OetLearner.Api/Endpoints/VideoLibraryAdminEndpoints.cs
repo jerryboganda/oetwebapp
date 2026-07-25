@@ -210,12 +210,13 @@ public static class VideoLibraryAdminEndpoints
                                     status = row.Video.Status.ToString(),
                                     encodeStatus = VideoLibraryAdminService.EncodeStatusLabel(row.Video.EncodeStatus),
                                     bunnyVideoId = row.Video.BunnyVideoId,
+                                    courseFolder = CourseContentMatrix.ResolveCourseFolder(
+                                        row.Video.SubtestCode, row.Video.CourseFolder, row.Video.Title),
                                 }).ToList();
                             return new
                             {
                                 subtestCode = subtest,
-                                available = subtest is "listening" or "reading"
-                                    || profession.Id is "medicine" or "physiotherapy" or "nursing" or "pharmacy",
+                                available = true,
                                 count = items.Count,
                                 items,
                             };
