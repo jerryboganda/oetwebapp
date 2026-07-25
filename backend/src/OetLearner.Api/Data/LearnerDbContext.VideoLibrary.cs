@@ -15,6 +15,7 @@ public partial class LearnerDbContext
     public DbSet<VideoPlaybackSession> VideoPlaybackSessions => Set<VideoPlaybackSession>();
     public DbSet<VideoAttestationChallenge> VideoAttestationChallenges => Set<VideoAttestationChallenge>();
     public DbSet<VideoPlaybackEvent> VideoPlaybackEvents => Set<VideoPlaybackEvent>();
+    public DbSet<VideoProtectionEvent> VideoProtectionEvents => Set<VideoProtectionEvent>();
 
     partial void OnModelCreatingVideoLibrary(ModelBuilder modelBuilder)
     {
@@ -73,10 +74,12 @@ public partial class LearnerDbContext
             modelBuilder.Entity<LibraryVideo>().Property(x => x.ProfessionIdsJson).HasColumnType("jsonb");
             modelBuilder.Entity<LibraryVideo>().Property(x => x.ChaptersJson).HasColumnType("jsonb");
             modelBuilder.Entity<VideoPlaybackEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+            modelBuilder.Entity<VideoProtectionEvent>().Property(x => x.MetadataJson).HasColumnType("jsonb");
         }
 
         modelBuilder.Entity<LibraryVideo>().Property(x => x.ProfessionIdsJson).HasDefaultValue("[]");
         modelBuilder.Entity<LibraryVideo>().Property(x => x.ChaptersJson).HasDefaultValue("[]");
         modelBuilder.Entity<VideoPlaybackEvent>().Property(x => x.PayloadJson).HasDefaultValue("{}");
+        modelBuilder.Entity<VideoProtectionEvent>().Property(x => x.MetadataJson).HasDefaultValue("{}");
     }
 }

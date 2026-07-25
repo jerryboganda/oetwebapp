@@ -107,6 +107,7 @@ public sealed record EffectiveSettings(
     PdfExtractionSettings PdfExtraction,
     PronunciationSettings Pronunciation,
     AuthTokenSettings AuthTokens,
+    VideoProtectionSettings VideoProtection,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt)
@@ -694,3 +695,12 @@ public sealed record AuthTokenSettings(
     TimeSpan RefreshTokenLifetime,
     TimeSpan OtpLifetime,
     string? AuthenticatorIssuer);
+
+/// <summary>
+/// Video capture-protection policy (Course Platform Security Requirements
+/// §2). <see cref="RevokeOnCaptureDetected"/>: when true, a
+/// <c>capture_detected</c>/<c>screenshot_detected</c> protection event with a
+/// valid session id immediately revokes that playback session. Default: true
+/// (owner directive — block on detection rather than log-only).
+/// </summary>
+public sealed record VideoProtectionSettings(bool RevokeOnCaptureDetected);

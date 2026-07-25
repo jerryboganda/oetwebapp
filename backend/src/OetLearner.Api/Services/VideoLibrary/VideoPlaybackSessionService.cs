@@ -28,15 +28,39 @@ public interface IVideoPlaybackSessionService
 
     /// <summary>Renew the signed URL of a still-valid session (403 session_expired otherwise).</summary>
     Task<PlaybackSessionResult> RenewAsync(string userId, string sessionId, CancellationToken ct);
+
+    /// <summary>Immediately revokes one session owned by <paramref name="userId"/>
+    /// (e.g. a capture-detected protection event, per RuntimeSettings
+    /// <c>VideoProtectionRevokeOnCaptureDetected</c>). No-op — and returns
+    /// false — if the session doesn't exist, isn't owned by this user, or is
+    /// already revoked. The player's next renew call 403s as usual.</summary>
+    Task<bool> RevokeSessionAsync(string userId, string sessionId, CancellationToken ct);
 }
 
 public sealed record PlaybackSessionCaption(string LanguageCode, string Label);
+
+/// <summary>
+/// Structured watermark payload (Course Platform Security Requirements §2.3):
+/// full name, masked email, a stable user/session reference, and the issuing
+/// platform. <see cref="IssuedAt"/> is the session-reference timestamp; the
+/// player renders a LIVE clock alongside it (a live clock is strictly
+/// stronger than a frozen issue time for the "current date and time"
+/// requirement).
+/// </summary>
+public sealed record PlaybackWatermark(
+    string FullName,
+    string MaskedEmail,
+    string UserRef,
+    string SessionRef,
+    string Platform,
+    DateTimeOffset IssuedAt);
 
 public sealed record PlaybackSessionResult(
     string SessionId,
     string PlaybackUrl,
     DateTimeOffset ExpiresAt,
     string WatermarkText,
+    PlaybackWatermark Watermark,
     IReadOnlyList<PlaybackSessionCaption> Captions);
 
 public sealed class VideoPlaybackSessionService(
@@ -74,7 +98,7 @@ public sealed class VideoPlaybackSessionService(
             .FirstOrDefaultAsync(ct);
         if (existing is not null)
         {
-            return await BuildResultAsync(existing.Id, video, existing.ExpiresAt, userId, ct);
+            return await BuildResultAsync(existing.Id, video, existing.ExpiresAt, userId, existing.Platform, ct);
         }
 
         // (e2) Concurrency cap: at most 3 active distinct-video sessions.
@@ -112,7 +136,7 @@ public sealed class VideoPlaybackSessionService(
 
         // (f) Sign FIRST — an unconfigured Bunny throws BunnyNotConfiguredException
         // (mapped to 503 bunny_not_configured) before any row is persisted.
-        var result = await BuildResultAsync(session.Id, video, expiresAt, userId, ct);
+        var result = await BuildResultAsync(session.Id, video, expiresAt, userId, platform, ct);
 
         db.VideoPlaybackSessions.Add(session);
         var tracked = await db.LibraryVideos.FirstOrDefaultAsync(v => v.Id == video.Id, ct);
@@ -186,7 +210,17 @@ public sealed class VideoPlaybackSessionService(
         }
 
         // New signed URL; expiry stays capped at the session's ExpiresAt.
-        return await BuildResultAsync(session.Id, video, session.ExpiresAt, userId, ct);
+        return await BuildResultAsync(session.Id, video, session.ExpiresAt, userId, session.Platform, ct);
+    }
+
+    public async Task<bool> RevokeSessionAsync(string userId, string sessionId, CancellationToken ct)
+    {
+        var tracked = await db.VideoPlaybackSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
+        if (tracked is null || tracked.RevokedAt is not null) return false;
+        tracked.RevokedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     private async Task RevokeAsync(string sessionId, DateTimeOffset now, CancellationToken ct)
@@ -198,7 +232,7 @@ public sealed class VideoPlaybackSessionService(
     }
 
     private async Task<PlaybackSessionResult> BuildResultAsync(
-        string sessionId, LibraryVideo video, DateTimeOffset expiresAt, string userId, CancellationToken ct)
+        string sessionId, LibraryVideo video, DateTimeOffset expiresAt, string userId, string platform, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(video.BunnyVideoId))
         {
@@ -210,9 +244,9 @@ public sealed class VideoPlaybackSessionService(
         var playbackUrl = await bunny.SignPlaybackUrlAsync(
             video.BunnyVideoId, expiresAt.ToUnixTimeSeconds(), ct);
 
-        var email = await db.Users.AsNoTracking()
+        var learner = await db.Users.AsNoTracking()
             .Where(u => u.Id == userId)
-            .Select(u => u.Email)
+            .Select(u => new { u.DisplayName, u.Email })
             .FirstOrDefaultAsync(ct);
 
         var captions = await db.VideoCaptionTracks.AsNoTracking()
@@ -222,8 +256,50 @@ public sealed class VideoPlaybackSessionService(
             .Select(c => new PlaybackSessionCaption(c.LanguageCode, c.Label))
             .ToListAsync(ct);
 
-        var watermark = $"{email ?? userId} · {sessionId[..Math.Min(8, sessionId.Length)]}";
-        return new PlaybackSessionResult(sessionId, playbackUrl, expiresAt, watermark, captions);
+        var sessionRef = sessionId[..Math.Min(8, sessionId.Length)];
+        var userRef = userId[..Math.Min(8, userId.Length)];
+        var displayName = learner?.DisplayName;
+        var learnerEmail = learner?.Email;
+        var fullName = !string.IsNullOrWhiteSpace(displayName)
+            ? displayName
+            : !string.IsNullOrWhiteSpace(learnerEmail)
+                ? learnerEmail.Split('@')[0]
+                : userRef;
+        var maskedEmail = MaskEmail(learnerEmail);
+        var issuedAt = DateTimeOffset.UtcNow;
+
+        // Legacy single-string watermark kept for one deploy cycle so a
+        // frontend that hasn't picked up the structured `watermark` field yet
+        // (deploy skew) still renders something identifying.
+        var watermarkText = $"{learner?.Email ?? userId} · {sessionRef}";
+        var watermark = new PlaybackWatermark(fullName, maskedEmail, userRef, sessionRef, platform, issuedAt);
+
+        return new PlaybackSessionResult(sessionId, playbackUrl, expiresAt, watermarkText, watermark, captions);
+    }
+
+    /// <summary>Masks an email for on-screen display (Course Platform Security
+    /// Requirements §2.3: "masked email or user ID"): keeps the first
+    /// character of the local part and of the domain name, masks the rest,
+    /// and preserves the TLD (e.g. "john.doe@gmail.com" → "j•••@g•••.com").</summary>
+    internal static string MaskEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return "unknown";
+        var at = email.IndexOf('@');
+        if (at <= 0 || at == email.Length - 1) return "unknown";
+
+        var local = email[..at];
+        var domain = email[(at + 1)..];
+        var maskedLocal = MaskSegment(local);
+
+        var dot = domain.IndexOf('.');
+        var maskedDomain = dot > 0
+            ? MaskSegment(domain[..dot]) + domain[dot..]
+            : MaskSegment(domain);
+
+        return $"{maskedLocal}@{maskedDomain}";
+
+        static string MaskSegment(string segment)
+            => segment.Length <= 1 ? segment + "•••" : segment[0] + "•••";
     }
 
     private static string? Truncate(string? value, int max)

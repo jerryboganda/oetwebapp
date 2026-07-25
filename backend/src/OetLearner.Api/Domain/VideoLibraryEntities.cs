@@ -362,3 +362,117 @@ public class VideoPlaybackEvent
 
     public string PayloadJson { get; set; } = "{}";
 }
+
+/// <summary>
+/// Capture-protection / tamper telemetry from the video player (Course
+/// Platform Security Requirements §2). Deliberately separate from
+/// <see cref="VideoPlaybackEvent"/> (analytics) — these are security signals
+/// that may trigger an audit write or a policy-gated session revoke; mixing
+/// them into the analytics event stream would pollute both. Modeled on
+/// <c>MockProctoringEvent</c> (kind whitelist + severity + capped batch ingest).
+/// </summary>
+[Index(nameof(UserId), nameof(OccurredAt))]
+[Index(nameof(SessionId))]
+[Index(nameof(Kind))]
+public class VideoProtectionEvent
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? VideoId { get; set; }
+
+    [MaxLength(64)]
+    public string? SessionId { get; set; }
+
+    /// <summary>One of <see cref="VideoProtectionKinds"/>.All.</summary>
+    [MaxLength(48)]
+    public string Kind { get; set; } = default!;
+
+    /// <summary>"info" | "warning" | "critical".</summary>
+    [MaxLength(16)]
+    public string Severity { get; set; } = "info";
+
+    [MaxLength(32)]
+    public string? Platform { get; set; }
+
+    [MaxLength(64)]
+    public string? IpAddress { get; set; }
+
+    public DateTimeOffset OccurredAt { get; set; }
+
+    public string MetadataJson { get; set; } = "{}";
+}
+
+/// <summary>
+/// Canonical <see cref="VideoProtectionEvent.Kind"/> whitelist. Frontend
+/// (lib/api/video-protection.ts) and backend MUST share this contract.
+/// </summary>
+public static class VideoProtectionKinds
+{
+    /// <summary>OS-level capture protection engaged successfully on mount
+    /// (Windows WDA_EXCLUDEFROMCAPTURE, macOS NSWindow.sharingType=None,
+    /// Android FLAG_SECURE).</summary>
+    public const string ProtectionEngaged = "protection_engaged";
+
+    /// <summary>The current shell/platform has no capture-protection API
+    /// (web, or a native shell build predating it) — expected on old shells,
+    /// not itself a tamper signal.</summary>
+    public const string ProtectionUnavailable = "protection_unavailable";
+
+    /// <summary>iOS: `UIScreen.isCaptured` went true (screen recording or
+    /// mirroring in progress).</summary>
+    public const string CaptureDetected = "capture_detected";
+
+    /// <summary>iOS: `UIApplication.userDidTakeScreenshotNotification` fired.
+    /// Detection-after-the-fact — iOS cannot block a still screenshot of an
+    /// arbitrary WKWebView (documented platform limitation).</summary>
+    public const string ScreenshotDetected = "screenshot_detected";
+
+    /// <summary>The watermark overlay's integrity watchdog found the node
+    /// hidden, detached, or CSS-tampered.</summary>
+    public const string WatermarkTampered = "watermark_tampered";
+
+    /// <summary>Heuristic devtools-open signal (desktop runtime only) — a
+    /// risk signal, never a sole gate.</summary>
+    public const string DevtoolsSuspected = "devtools_suspected";
+
+    /// <summary>Tab/window hidden while playing — risk signal only.</summary>
+    public const string VisibilityHidden = "visibility_hidden";
+
+    /// <summary>Window lost focus while playing — risk signal only.</summary>
+    public const string FocusLost = "focus_lost";
+
+    /// <summary>Root/jailbreak/emulator/debugger heuristic signal from the
+    /// native attestation plugin (see Phase 8 — device-integrity checks).</summary>
+    public const string IntegritySignal = "integrity_signal";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
+    {
+        ProtectionEngaged, ProtectionUnavailable, CaptureDetected, ScreenshotDetected,
+        WatermarkTampered, DevtoolsSuspected, VisibilityHidden, FocusLost, IntegritySignal,
+    };
+
+    public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "info", "warning", "critical",
+    };
+
+    /// <summary>Kinds that also warrant an AuditEvent write (high-severity
+    /// forensic signal, not just telemetry) — mirrors the precedent in
+    /// <c>VideoAttestationService.RecordFailureAsync</c>.</summary>
+    public static readonly IReadOnlySet<string> AuditWorthy = new HashSet<string>(StringComparer.Ordinal)
+    {
+        CaptureDetected, ScreenshotDetected, WatermarkTampered, IntegritySignal,
+    };
+
+    public static string DefaultSeverity(string kind) => kind switch
+    {
+        CaptureDetected or ScreenshotDetected or WatermarkTampered or IntegritySignal => "critical",
+        DevtoolsSuspected => "warning",
+        _ => "info",
+    };
+}

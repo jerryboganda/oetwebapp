@@ -92,11 +92,24 @@ export type PlaybackChallenge = {
   expiresAt: string;
 };
 
+export type PlaybackWatermark = {
+  fullName: string;
+  maskedEmail: string;
+  userRef: string;
+  sessionRef: string;
+  platform: string;
+  issuedAt: string;
+};
+
 export type PlaybackSession = {
   sessionId: string;
   playbackUrl: string;
   expiresAt: string;
+  /** @deprecated kept for one deploy cycle in case of frontend/backend skew; use `watermark`. */
   watermarkText: string;
+  /** Null only during the brief window where the backend hasn't deployed the
+   * structured watermark yet — callers should fall back to `watermarkText`. */
+  watermark: PlaybackWatermark | null;
   captions: VideoCaptionInfo[];
 };
 

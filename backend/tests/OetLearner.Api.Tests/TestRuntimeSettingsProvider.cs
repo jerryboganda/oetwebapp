@@ -66,6 +66,7 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             PdfExtraction: DefaultPdfExtraction(),
             Pronunciation: DefaultPronunciation(),
             AuthTokens: DefaultAuthTokens(),
+            VideoProtection: DefaultVideoProtection(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);
@@ -354,6 +355,7 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
     public static PdfExtractionSettings DefaultPdfExtraction() => MapPdfExtraction(new PdfExtractionOptions());
     public static PronunciationSettings DefaultPronunciation() => MapPronunciation(new PronunciationOptions());
     public static AuthTokenSettings DefaultAuthTokens() => MapAuthTokens(new AuthTokenOptions());
+    public static VideoProtectionSettings DefaultVideoProtection() => new(RevokeOnCaptureDetected: true);
 
     private static FxSettings MapFx(FxOptions o)
         => new(

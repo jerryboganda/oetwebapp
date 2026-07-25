@@ -173,6 +173,7 @@ public class BrevoResilienceTests
             PdfExtraction: TestRuntimeSettingsProvider.DefaultPdfExtraction(),
             Pronunciation: TestRuntimeSettingsProvider.DefaultPronunciation(),
             AuthTokens: TestRuntimeSettingsProvider.DefaultAuthTokens(),
+            VideoProtection: TestRuntimeSettingsProvider.DefaultVideoProtection(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);

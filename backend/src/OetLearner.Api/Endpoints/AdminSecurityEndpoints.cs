@@ -86,6 +86,72 @@ public static class AdminSecurityEndpoints
         })
         .WithAdminRead("AdminSecurityRead");
 
+        security.MapGet("/video-protection-events", async (
+            LearnerDbContext db,
+            CancellationToken ct,
+            string? userId,
+            string? videoId,
+            string? kind,
+            DateTimeOffset? from,
+            DateTimeOffset? to,
+            int? page,
+            int? pageSize) =>
+        {
+            var resolvedPage = page is > 0 ? page.Value : 1;
+            var resolvedPageSize = pageSize is > 0 and <= 200 ? pageSize.Value : 50;
+
+            var query = db.VideoProtectionEvents.AsNoTracking().AsQueryable();
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                query = query.Where(e => e.UserId == userId);
+            }
+            if (!string.IsNullOrWhiteSpace(videoId))
+            {
+                query = query.Where(e => e.VideoId == videoId);
+            }
+            if (!string.IsNullOrWhiteSpace(kind))
+            {
+                query = query.Where(e => e.Kind == kind);
+            }
+            if (from is not null)
+            {
+                query = query.Where(e => e.OccurredAt >= from.Value);
+            }
+            if (to is not null)
+            {
+                query = query.Where(e => e.OccurredAt <= to.Value);
+            }
+
+            var totalCount = await query.CountAsync(ct);
+            var items = await query
+                .OrderByDescending(e => e.OccurredAt)
+                .Skip((resolvedPage - 1) * resolvedPageSize)
+                .Take(resolvedPageSize)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.OccurredAt,
+                    e.UserId,
+                    e.VideoId,
+                    e.SessionId,
+                    e.Kind,
+                    e.Severity,
+                    e.Platform,
+                    e.IpAddress,
+                    e.MetadataJson,
+                })
+                .ToListAsync(ct);
+
+            return Results.Ok(new
+            {
+                items,
+                page = resolvedPage,
+                pageSize = resolvedPageSize,
+                totalCount,
+            });
+        })
+        .WithAdminRead("AdminSecurityRead");
+
         return app;
     }
 }

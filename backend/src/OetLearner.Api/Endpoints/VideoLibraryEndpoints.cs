@@ -212,6 +212,15 @@ public static class VideoLibraryEndpoints
         playbackUrl = result.PlaybackUrl,
         expiresAt = result.ExpiresAt,
         watermarkText = result.WatermarkText,
+        watermark = new
+        {
+            fullName = result.Watermark.FullName,
+            maskedEmail = result.Watermark.MaskedEmail,
+            userRef = result.Watermark.UserRef,
+            sessionRef = result.Watermark.SessionRef,
+            platform = result.Watermark.Platform,
+            issuedAt = result.Watermark.IssuedAt,
+        },
         captions = result.Captions.Select(c => new { languageCode = c.LanguageCode, label = c.Label }),
     };
 

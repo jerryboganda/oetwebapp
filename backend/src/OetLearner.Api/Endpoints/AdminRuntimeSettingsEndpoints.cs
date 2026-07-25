@@ -94,6 +94,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplySpeakingFeatures(row, request.SpeakingFeatures, changedKeys);
                     ApplyCheckoutCom(row, request.CheckoutCom, provider, changedKeys);
                     ApplyBunnyStream(row, request.BunnyStream, provider, changedKeys);
+                    ApplyVideoProtection(row, request.VideoProtection, changedKeys);
                     ApplyPaymob(row, request.Paymob, provider, changedKeys);
                     ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
                     ApplyEasyKash(row, request.EasyKash, provider, changedKeys);
@@ -387,6 +388,10 @@ public static class AdminRuntimeSettingsEndpoints
                 // and the platform:keyId identifiers are ever surfaced.
                 videoAttestationKeys = settings.VideoAttestation.IsConfigured ? SecretMask : string.Empty,
                 videoAttestationKeyIds = settings.VideoAttestation.Keys.Keys.Order(StringComparer.Ordinal).ToArray(),
+            },
+            videoProtection = new
+            {
+                revokeOnCaptureDetected = settings.VideoProtection.RevokeOnCaptureDetected,
             },
             paymob = new
             {
@@ -1154,6 +1159,12 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetSecret(d.AppSecret, p, v => row.SoketiAppSecretEncrypted = v, "soketi.appSecret", changed)) { }
         if (TrySetNullableBool(d.UseTls, v => row.SoketiUseTls = v, "soketi.useTls", changed)) { }
         if (TrySetNullableBool(d.Enabled, v => row.SoketiEnabled = v, "soketi.enabled", changed)) { }
+    }
+
+    private static void ApplyVideoProtection(RuntimeSettingsRow row, RuntimeSettingsVideoProtectionUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.RevokeOnCaptureDetected, v => row.VideoProtectionRevokeOnCaptureDetected = v, "videoProtection.revokeOnCaptureDetected", changed)) { }
     }
 
     private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
@@ -2129,6 +2140,7 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsSpeakingFeaturesUpdate? SpeakingFeatures { get; set; }
     public RuntimeSettingsCheckoutComUpdate? CheckoutCom { get; set; }
     public RuntimeSettingsBunnyStreamUpdate? BunnyStream { get; set; }
+    public RuntimeSettingsVideoProtectionUpdate? VideoProtection { get; set; }
     public RuntimeSettingsPaymobUpdate? Paymob { get; set; }
     public RuntimeSettingsPayTabsUpdate? PayTabs { get; set; }
     public RuntimeSettingsEasyKashUpdate? EasyKash { get; set; }
@@ -2306,6 +2318,12 @@ public sealed class RuntimeSettingsBunnyStreamUpdate
     public JsonElement? PlaybackTokenTtlSeconds { get; set; }
     /// <summary>JSON map {"tauri:v1":"&lt;hex&gt;", ...} for playback attestation.</summary>
     public string? VideoAttestationKeysJson { get; set; }
+}
+
+/// <summary>Video capture-protection policy (Course Platform Security Requirements §2).</summary>
+public sealed class RuntimeSettingsVideoProtectionUpdate
+{
+    public JsonElement? RevokeOnCaptureDetected { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

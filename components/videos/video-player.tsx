@@ -27,6 +27,7 @@ import {
   type PlaybackGateErrorCode,
 } from '@/lib/video/attestation';
 import { postVideoEvent, postVideoProgress, renewPlaybackSession } from '@/lib/api/videos';
+import { reportProtectionEvent } from '@/lib/api/video-protection';
 import { setVideoScreenProtection } from '@/lib/video/screen-protection';
 import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/types/videos';
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
@@ -58,6 +59,8 @@ function gateMessage(code: PlaybackGateErrorCode): string {
       return 'You have too many active video sessions. Close playback on another device and try again.';
     case 'NOT_CONFIGURED':
       return 'Video streaming is not available right now. Please try again later.';
+    case 'SECURITY_VIOLATION':
+      return 'Playback was stopped because the security watermark was tampered with.';
     case 'ATTESTATION_REJECTED':
     case 'ATTESTATION_UNAVAILABLE':
     case 'WEB_NOT_ALLOWED':
@@ -107,6 +110,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const lastReportedRef = useRef(initialProgress?.positionSeconds ?? 0);
   const resumedRef = useRef(false);
   const recoveringRef = useRef(false);
+  const watermarkTamperCountRef = useRef(0);
 
   const [phase, setPhase] = useState<PlayerPhase>({ kind: 'attesting' });
   const [isPlaying, setIsPlaying] = useState(false);
@@ -119,6 +123,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [captionsOn, setCaptionsOn] = useState(false);
   const [hasCaptionTracks, setHasCaptionTracks] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [watermarkKey, setWatermarkKey] = useState(0);
 
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {
@@ -144,6 +149,28 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     },
     [onProgressPersisted, videoId],
   );
+
+  // Watermark integrity watchdog callback (Course Platform Security
+  // Requirements §2.3). The overlay reports at most once per continuous
+  // tampered state; remount it (bumping the key) so a hidden/removed node
+  // reappears, and after repeated tampers in one session, stop playback
+  // outright rather than keep handing an unwatermarked frame to whatever
+  // is capturing it.
+  const handleWatermarkTamper = useCallback(() => {
+    watermarkTamperCountRef.current += 1;
+    const count = watermarkTamperCountRef.current;
+    reportProtectionEvent({
+      kind: 'watermark_tampered',
+      videoId,
+      sessionId: sessionRef.current?.sessionId,
+      metadata: { count },
+    });
+    setWatermarkKey((key) => key + 1);
+    if (count >= 3) {
+      videoRef.current?.pause();
+      setPhase({ kind: 'error', code: 'SECURITY_VIOLATION', message: gateMessage('SECURITY_VIOLATION') });
+    }
+  }, [videoId]);
 
   const teardownEngine = useCallback(() => {
     if (renewTimerRef.current !== null) {
@@ -302,6 +329,27 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+
+  // Focus/visibility loss while playing — Course Platform Security
+  // Requirements §2.2 "detect loss of focus... as risk signals without
+  // relying on these signals alone". Report-only: never pauses or gates
+  // playback by itself (a learner alt-tabbing to check notes is normal).
+  const activeSessionId = phase.kind === 'playing' ? phase.session.sessionId : null;
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        reportProtectionEvent({ kind: 'visibility_hidden', videoId, sessionId: activeSessionId });
+      }
+    };
+    const onBlur = () => reportProtectionEvent({ kind: 'focus_lost', videoId, sessionId: activeSessionId });
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [activeSessionId, videoId]);
 
   // Low-bandwidth mode: once quality levels are known, pin the lowest instead of
   // letting adaptive bitrate climb — video is the heaviest media on slow links.
@@ -508,7 +556,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         </div>
       )}
 
-      {phase.kind === 'playing' && <WatermarkOverlay text={phase.session.watermarkText} />}
+      {phase.kind === 'playing' && (
+        <WatermarkOverlay
+          key={watermarkKey}
+          watermark={phase.session.watermark}
+          fallbackText={phase.session.watermarkText}
+          onTamper={handleWatermarkTamper}
+        />
+      )}
 
       {/* Controls */}
       <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pb-2 pt-8 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">

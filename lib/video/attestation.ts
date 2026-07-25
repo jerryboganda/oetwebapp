@@ -37,7 +37,8 @@ export type PlaybackGateErrorCode =
   | 'SUBSCRIPTION_EXPIRED'
   | 'SESSION_LIMIT'
   | 'NOT_CONFIGURED'
-  | 'NETWORK';
+  | 'NETWORK'
+  | 'SECURITY_VIOLATION';
 
 export class PlaybackGateError extends Error {
   readonly code: PlaybackGateErrorCode;

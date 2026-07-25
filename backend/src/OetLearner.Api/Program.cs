@@ -985,6 +985,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IVideoAttestatio
     OetLearner.Api.Services.VideoLibrary.VideoAttestationService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.IVideoPlaybackSessionService,
     OetLearner.Api.Services.VideoLibrary.VideoPlaybackSessionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoProtectionEventService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryAdminService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.BunnyCollectionAdminService>();
@@ -2206,6 +2207,7 @@ app.MapAiPackageCreditEndpoints();
 app.MapStripeWebhookEndpoints();
 // Video Library — learner catalog + attested playback, admin CRUD, Bunny webhook.
 app.MapVideoLibraryEndpoints();
+app.MapVideoProtectionEndpoints();
 app.MapVideoLibraryAdminEndpoints();
 app.MapVideoLibraryWebhookEndpoints();
 // Wave B4 — finance/ops admin surface (revenue/MRR/churn/LTV/refunds + product

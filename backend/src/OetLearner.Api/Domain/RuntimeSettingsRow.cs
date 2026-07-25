@@ -474,6 +474,11 @@ public class RuntimeSettingsRow
     // HMAC over the attestation challenge with one of these secrets.
     public string? VideoAttestationKeysEncrypted { get; set; }
 
+    /// <summary>Security spec §2: when true, a capture/screenshot protection
+    /// event with a valid session id immediately revokes that playback
+    /// session. Null defaults to true (block-on-detection).</summary>
+    public bool? VideoProtectionRevokeOnCaptureDetected { get; set; }
+
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on
     // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back

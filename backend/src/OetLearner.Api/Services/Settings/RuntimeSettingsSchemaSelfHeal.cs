@@ -243,5 +243,8 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportWhatsAppProofT
 
 -- Security spec §4.4 retention -- sync with migration 20260812090000_AddSecurityEvents
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionSecurityEventsDays"" integer;
+
+-- Security spec §2 capture-protection policy -- sync with migration 20260813090000_AddVideoProtectionEvents
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionRevokeOnCaptureDetected"" boolean;
 ";
 }
