@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { sendEmailVerificationOtp, verifyEmailOtp } from '@/lib/auth-client';
+import { sendEmailVerificationOtp, verifyEmailOtp as verifyEmailOtpRequest } from '@/lib/auth-client';
 import { resolveAuthenticatedDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { OtpCodeInput } from '@/components/auth/otp-code-input';
@@ -39,7 +39,7 @@ function VerifyEmailFallback() {
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, verifyEmailOtp } = useAuth();
   const email = user?.email ?? searchParams?.get('email') ?? '';
   const nextHref = searchParams?.get('next') ?? null;
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,7 +103,13 @@ function VerifyEmailContent() {
     setErrorMessage(null);
 
     try {
-      const currentUser = await verifyEmailOtp(email, normalizedOtp);
+      // Authenticated case (e.g. the dashboard banner's "Verify now" link):
+      // go through AuthContext so its `user` state — and every component
+      // reading it, like EmailVerificationBanner — reflects the new
+      // isEmailVerified immediately, without needing a hard refresh.
+      const currentUser = user
+        ? await verifyEmailOtp(normalizedOtp)
+        : await verifyEmailOtpRequest(email, normalizedOtp);
 
       if (user) {
         router.replace(resolveAuthenticatedDestination(currentUser, nextHref));
