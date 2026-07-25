@@ -249,5 +249,9 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionRevoke
 
 -- Security spec §3.1 single-active-session -- sync with migration 20260814090000_AddSingleSessionEnforcement
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecuritySingleActiveSessionEnabled"" boolean;
+
+-- Security spec §3.3 sign-in risk signals -- sync with migration 20260815090000_AddSignInRiskSignals
+ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""CountryCode"" character varying(8);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityRiskMode"" character varying(16);
 ";
 }

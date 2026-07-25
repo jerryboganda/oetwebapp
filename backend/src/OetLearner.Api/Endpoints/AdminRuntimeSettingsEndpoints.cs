@@ -397,6 +397,7 @@ public static class AdminRuntimeSettingsEndpoints
             security = new
             {
                 singleActiveSessionEnabled = settings.Security.SingleActiveSessionEnabled,
+                riskMode = settings.Security.RiskMode,
             },
             paymob = new
             {
@@ -1172,10 +1173,26 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableBool(d.RevokeOnCaptureDetected, v => row.VideoProtectionRevokeOnCaptureDetected = v, "videoProtection.revokeOnCaptureDetected", changed)) { }
     }
 
+    private static readonly HashSet<string> ValidRiskModes = new(StringComparer.Ordinal)
+    {
+        SecurityRiskModes.Off,
+        SecurityRiskModes.LogOnly,
+        SecurityRiskModes.Enforce,
+    };
+
     private static void ApplySecurity(RuntimeSettingsRow row, RuntimeSettingsSecurityUpdate? d, List<string> changed)
     {
         if (d is null) return;
         if (TrySetNullableBool(d.SingleActiveSessionEnabled, v => row.SecuritySingleActiveSessionEnabled = v, "security.singleActiveSessionEnabled", changed)) { }
+        if (d.RiskMode is not null)
+        {
+            if (!ValidRiskModes.Contains(d.RiskMode))
+            {
+                throw new RuntimeSettingsValidationException("security.riskMode must be one of: off, log_only, enforce.");
+            }
+            row.SecurityRiskMode = d.RiskMode;
+            changed.Add("security.riskMode");
+        }
     }
 
     private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
@@ -2342,6 +2359,8 @@ public sealed class RuntimeSettingsVideoProtectionUpdate
 public sealed class RuntimeSettingsSecurityUpdate
 {
     public JsonElement? SingleActiveSessionEnabled { get; set; }
+    /// <summary>"off" | "log_only" | "enforce" — see SecurityRiskModes.</summary>
+    public string? RiskMode { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

@@ -206,6 +206,7 @@ builder.Services.AddHttpContextAccessor();
 // see SecurityEventLogger's class doc for why.
 builder.Services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
 builder.Services.AddScoped<ISessionRevocationService, SessionRevocationService>();
+builder.Services.AddScoped<ISignInRiskService, SignInRiskService>();
 builder.Services.AddScoped<AuthService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check

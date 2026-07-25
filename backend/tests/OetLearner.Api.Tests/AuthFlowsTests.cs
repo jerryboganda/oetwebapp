@@ -26,7 +26,9 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -1579,6 +1581,7 @@ public class AuthFlowsTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new NoopSecurityEventLogger(),
             new NoopSessionRevocationService(),
+            new NoopSignInRiskService(),
             new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base()),
             now);
 
@@ -1951,6 +1954,14 @@ public class AuthFlowsTests
 
         public Task<bool> RevokeFamilyAsync(string authAccountId, Guid familyId, string reason, CancellationToken ct)
             => Task.FromResult(false);
+    }
+
+    /// <summary>No-op test double — none of these tests exercise sign-in risk
+    /// scoring (it has its own dedicated tests).</summary>
+    private sealed class NoopSignInRiskService : ISignInRiskService
+    {
+        public Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, CancellationToken ct)
+            => Task.FromResult(new SignInRiskAssessment(SignInRiskLevel.None, []));
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider

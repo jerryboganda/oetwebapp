@@ -483,6 +483,11 @@ public class RuntimeSettingsRow
     /// Null defaults to true (owner directive — enforce immediately).</summary>
     public bool? SecuritySingleActiveSessionEnabled { get; set; }
 
+    /// <summary>Security spec §3.3 sign-in risk mode: "off" | "log_only" |
+    /// "enforce". Null defaults to "log_only".</summary>
+    [MaxLength(16)]
+    public string? SecurityRiskMode { get; set; }
+
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on
     // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back

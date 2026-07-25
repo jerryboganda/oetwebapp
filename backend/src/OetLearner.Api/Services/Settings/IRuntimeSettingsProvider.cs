@@ -718,4 +718,17 @@ public sealed record VideoProtectionSettings(bool RevokeOnCaptureDetected);
 public sealed record SecuritySettings(
     /// <summary>Signing in on one platform revokes every other active
     /// session immediately (spec §3.1). Default: true (owner directive).</summary>
-    bool SingleActiveSessionEnabled);
+    bool SingleActiveSessionEnabled,
+    /// <summary>Sign-in risk scoring mode (spec §3.3): "off" evaluates
+    /// nothing; "log_only" (default) logs risk.* SecurityEvents but never
+    /// blocks a sign-in; "enforce" additionally rejects High-risk sign-ins
+    /// with 403 sign_in_blocked_risk. Ship in log_only, review a week of
+    /// events, then flip to enforce once false-positive rate looks safe.</summary>
+    string RiskMode);
+
+public static class SecurityRiskModes
+{
+    public const string Off = "off";
+    public const string LogOnly = "log_only";
+    public const string Enforce = "enforce";
+}

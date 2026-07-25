@@ -35,6 +35,7 @@ public sealed class AuthService(
     IMemoryCache memoryCache,
     ISecurityEventLogger securityEventLogger,
     ISessionRevocationService sessionRevocationService,
+    ISignInRiskService signInRiskService,
     IRuntimeSettingsProvider runtimeSettingsProvider,
     TimeProvider timeProvider)
 {
@@ -1020,6 +1021,55 @@ public sealed class AuthService(
         // so the "sfam" claim is stamped into the very first access token,
         // not just the refresh-token row.
         var resolvedFamilyId = familyId ?? sessionId;
+
+        string? deviceInfo = null;
+        string? ipAddress = null;
+        string? countryCode = null;
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is not null)
+        {
+            deviceInfo = httpContext.Request.Headers.UserAgent.ToString();
+            if (deviceInfo?.Length > 512) deviceInfo = deviceInfo[..512];
+            ipAddress = httpContext.Connection.RemoteIpAddress?.ToString();
+            if (ipAddress?.Length > 64) ipAddress = ipAddress[..64];
+            countryCode = httpContext.Request.Headers["CF-IPCountry"].ToString();
+            if (string.IsNullOrWhiteSpace(countryCode) || countryCode.Length > 8) countryCode = null;
+        }
+
+        // Security spec §3.3: risk-score a genuinely fresh sign-in BEFORE
+        // touching any existing session — a blocked high-risk attempt must
+        // never cost the account its already-legitimate session(s). Never
+        // evaluated on a refresh rotation (the user isn't present for that).
+        if (familyId is null)
+        {
+            var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
+            if (!string.Equals(security.RiskMode, SecurityRiskModes.Off, StringComparison.Ordinal))
+            {
+                var risk = await signInRiskService.EvaluateAsync(account.Id, countryCode, cancellationToken);
+                if (risk.Level != SignInRiskLevel.None)
+                {
+                    var kind = risk.Reasons.Contains("impossible_travel")
+                        ? SecurityEventKinds.RiskImpossibleTravel
+                        : SecurityEventKinds.RiskCountryChanged;
+                    await securityEventLogger.TryLogAsync(
+                        account.Id, kind, details: new { reasons = risk.Reasons, countryCode },
+                        cancellationToken: cancellationToken);
+
+                    if (risk.Level == SignInRiskLevel.High
+                        && string.Equals(security.RiskMode, SecurityRiskModes.Enforce, StringComparison.Ordinal))
+                    {
+                        await securityEventLogger.TryLogAsync(
+                            account.Id, SecurityEventKinds.RiskSignInBlocked,
+                            details: new { reasons = risk.Reasons, countryCode },
+                            cancellationToken: cancellationToken);
+                        throw ApiException.Forbidden(
+                            "sign_in_blocked_risk",
+                            "This sign-in was blocked for unusual account activity. Contact support if this was you.");
+                    }
+                }
+            }
+        }
+
         var issuedSession = tokenService.IssueSession(subject, sessionId, resolvedFamilyId);
 
         // Security spec §3.1: signing in on any platform revokes every OTHER
@@ -1036,17 +1086,6 @@ public sealed class AuthService(
             }
         }
 
-        string? deviceInfo = null;
-        string? ipAddress = null;
-        var httpContext = httpContextAccessor.HttpContext;
-        if (httpContext is not null)
-        {
-            deviceInfo = httpContext.Request.Headers.UserAgent.ToString();
-            if (deviceInfo?.Length > 512) deviceInfo = deviceInfo[..512];
-            ipAddress = httpContext.Connection.RemoteIpAddress?.ToString();
-            if (ipAddress?.Length > 64) ipAddress = ipAddress[..64];
-        }
-
         db.RefreshTokenRecords.Add(new RefreshTokenRecord
         {
             Id = sessionId,
@@ -1060,7 +1099,8 @@ public sealed class AuthService(
             ExpiresAt = issuedSession.RefreshTokenExpiresAt,
             CreatedAt = timeProvider.GetUtcNow(),
             DeviceInfo = deviceInfo,
-            IpAddress = ipAddress
+            IpAddress = ipAddress,
+            CountryCode = countryCode
         });
 
         // Fresh sign-in (familyId is null on entry) vs. rotation (familyId ==

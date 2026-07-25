@@ -464,7 +464,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Pronunciation: pronunciation,
             AuthTokens: authTokens,
             VideoProtection: new VideoProtectionSettings(RevokeOnCaptureDetected: r.VideoProtectionRevokeOnCaptureDetected ?? true),
-            Security: new SecuritySettings(SingleActiveSessionEnabled: r.SecuritySingleActiveSessionEnabled ?? true),
+            Security: new SecuritySettings(
+                SingleActiveSessionEnabled: r.SecuritySingleActiveSessionEnabled ?? true,
+                RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.LogOnly : r.SecurityRiskMode),
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt)

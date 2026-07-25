@@ -90,6 +90,12 @@ public class RefreshTokenRecord
     [MaxLength(64)]
     public string? IpAddress { get; set; }
 
+    /// <summary>ISO 3166-1 alpha-2 country from CF-IPCountry at sign-in
+    /// (Security spec §3.3). Null for tokens minted before this column
+    /// existed or when the header is absent (e.g. local dev).</summary>
+    [MaxLength(8)]
+    public string? CountryCode { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
 }
 
