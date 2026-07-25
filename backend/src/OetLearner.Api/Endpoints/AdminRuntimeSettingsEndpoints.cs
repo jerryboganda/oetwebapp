@@ -398,6 +398,9 @@ public static class AdminRuntimeSettingsEndpoints
             {
                 singleActiveSessionEnabled = settings.Security.SingleActiveSessionEnabled,
                 riskMode = settings.Security.RiskMode,
+                trustedDeviceRequired = settings.Security.TrustedDeviceRequired,
+                deviceChangeWindowDays = settings.Security.DeviceChangeWindowDays,
+                deviceChangeMaxPerWindow = settings.Security.DeviceChangeMaxPerWindow,
             },
             paymob = new
             {
@@ -1193,6 +1196,9 @@ public static class AdminRuntimeSettingsEndpoints
             row.SecurityRiskMode = d.RiskMode;
             changed.Add("security.riskMode");
         }
+        if (TrySetNullableBool(d.TrustedDeviceRequired, v => row.SecurityTrustedDeviceRequired = v, "security.trustedDeviceRequired", changed)) { }
+        if (TrySetNullableInt(d.DeviceChangeWindowDays, v => row.SecurityDeviceChangeWindowDays = v, "security.deviceChangeWindowDays", changed, min: 1, max: 365)) { }
+        if (TrySetNullableInt(d.DeviceChangeMaxPerWindow, v => row.SecurityDeviceChangeMaxPerWindow = v, "security.deviceChangeMaxPerWindow", changed, min: 1, max: 100)) { }
     }
 
     private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
@@ -2361,6 +2367,11 @@ public sealed class RuntimeSettingsSecurityUpdate
     public JsonElement? SingleActiveSessionEnabled { get; set; }
     /// <summary>"off" | "log_only" | "enforce" — see SecurityRiskModes.</summary>
     public string? RiskMode { get; set; }
+    /// <summary>Do not enable until the frontend device-challenge UI ships —
+    /// see the migration doc comment on SecurityTrustedDeviceRequired.</summary>
+    public JsonElement? TrustedDeviceRequired { get; set; }
+    public JsonElement? DeviceChangeWindowDays { get; set; }
+    public JsonElement? DeviceChangeMaxPerWindow { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

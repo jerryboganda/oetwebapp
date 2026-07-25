@@ -96,6 +96,13 @@ public class RefreshTokenRecord
     [MaxLength(8)]
     public string? CountryCode { get; set; }
 
+    /// <summary>The client-supplied X-OET-Device-Id at the time this session
+    /// was created (Security spec §3.2). Null when the client sent no header
+    /// (old shell build) — refresh-time device-mismatch detection is skipped
+    /// whenever either side is null, so old clients degrade gracefully.</summary>
+    [MaxLength(128)]
+    public string? DeviceId { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
 }
 

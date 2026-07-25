@@ -109,6 +109,16 @@ public static class AuthEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("AuthBruteforce");
 
+        auth.MapPost("/device/send-otp", async (DeviceOtpSendRequest request, AuthService service, CancellationToken ct)
+                => Results.Ok(await service.SendDeviceVerificationOtpAsync(request.ChallengeToken, ct)))
+            .AllowAnonymous()
+            .RequireRateLimiting("AuthOtpSend");
+
+        auth.MapPost("/device/verify", async (DeviceOtpVerifyRequest request, AuthService service, CancellationToken ct)
+                => Results.Ok(await service.CompleteDeviceVerificationAsync(request.ChallengeToken, request.Code, ct)))
+            .AllowAnonymous()
+            .RequireRateLimiting("AuthBruteforce");
+
         auth.MapGet("/me", async (ClaimsPrincipal user, AuthService service, CancellationToken ct)
                 => Results.Ok(await service.GetCurrentUserAsync(user, ct)))
             .RequireAuthorization();

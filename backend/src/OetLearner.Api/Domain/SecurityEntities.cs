@@ -131,3 +131,45 @@ public static class SecurityEventKinds
         _ => "info",
     };
 }
+
+/// <summary>
+/// One trusted device per account (Course Platform Security Requirements
+/// §3.2). Outlives sessions — a session (RefreshTokenRecord) rotates every
+/// ~15 minutes, but the device it belongs to persists until the account
+/// holder (or an admin) trusts a different one. Only one row per account
+/// should have <see cref="RevokedAt"/> null at a time; enforced in
+/// application code (<c>TrustedDeviceService</c>) rather than a DB
+/// constraint, for portability with the SQLite test provider.
+/// </summary>
+[Index(nameof(ApplicationUserAccountId))]
+public class TrustedDevice
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string ApplicationUserAccountId { get; set; } = default!;
+
+    /// <summary>Client-generated opaque id (lib/device-id.ts), sent as the
+    /// X-OET-Device-Id header on every auth request.</summary>
+    [MaxLength(128)]
+    public string DeviceId { get; set; } = default!;
+
+    /// <summary>Human-readable label derived from the User-Agent at trust time
+    /// (e.g. "Chrome on Windows"), for the account holder's sessions page.</summary>
+    [MaxLength(256)]
+    public string? DeviceName { get; set; }
+
+    [MaxLength(32)]
+    public string? Platform { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset TrustedAt { get; set; }
+    public DateTimeOffset? LastSeenAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+
+    /// <summary>"bootstrap" (first device, auto-trusted) | "otp_verified"
+    /// (explicit email-OTP approval of a new device) | "admin_reset".</summary>
+    [MaxLength(32)]
+    public string TrustGrantedVia { get; set; } = "bootstrap";
+}

@@ -52,6 +52,11 @@ public record MfaChallengeRequest(
     string? ChallengeToken,
     string? RecoveryCode);
 
+/// <summary>Security spec §3.2: device-verification challenge requests.</summary>
+public record DeviceOtpSendRequest(string? ChallengeToken);
+
+public record DeviceOtpVerifyRequest(string? ChallengeToken, string? Code);
+
 public record ForgotPasswordRequest(string Email);
 
 public record ResetPasswordRequest(

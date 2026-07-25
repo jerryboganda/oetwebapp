@@ -207,6 +207,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
 builder.Services.AddScoped<ISessionRevocationService, SessionRevocationService>();
 builder.Services.AddScoped<ISignInRiskService, SignInRiskService>();
+builder.Services.AddScoped<ITrustedDeviceService, TrustedDeviceService>();
 builder.Services.AddScoped<AuthService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
@@ -1988,6 +1989,22 @@ app.UseExceptionHandler(handler =>
                 correlationId
             };
             await context.Response.WriteAsync(JsonSupport.Serialize(mfaPayload));
+            return;
+        }
+
+        if (exception is DeviceVerificationRequiredException deviceVerificationRequiredException)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            var devicePayload = new
+            {
+                code = "device_verification_required",
+                message = deviceVerificationRequiredException.Message,
+                email = deviceVerificationRequiredException.Email,
+                challengeToken = deviceVerificationRequiredException.ChallengeToken,
+                retryable = false,
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(devicePayload));
             return;
         }
 

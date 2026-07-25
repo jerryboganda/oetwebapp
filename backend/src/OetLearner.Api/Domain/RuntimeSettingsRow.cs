@@ -488,6 +488,20 @@ public class RuntimeSettingsRow
     [MaxLength(16)]
     public string? SecurityRiskMode { get; set; }
 
+    /// <summary>Security spec §3.2: require email-OTP verification of a new
+    /// device before it can complete sign-in. Null defaults to FALSE — the
+    /// frontend challenge UI for this has not shipped yet; see the migration
+    /// doc comment for why this is not default-on like the other P0 toggles.</summary>
+    public bool? SecurityTrustedDeviceRequired { get; set; }
+
+    /// <summary>Rolling window (days) for the device-change cooldown count.
+    /// Null defaults to 7.</summary>
+    public int? SecurityDeviceChangeWindowDays { get; set; }
+
+    /// <summary>Max device changes allowed within the window before further
+    /// changes are blocked. Null defaults to 3.</summary>
+    public int? SecurityDeviceChangeMaxPerWindow { get; set; }
+
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on
     // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back

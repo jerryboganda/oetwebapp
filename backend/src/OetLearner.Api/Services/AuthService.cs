@@ -36,6 +36,7 @@ public sealed class AuthService(
     ISecurityEventLogger securityEventLogger,
     ISessionRevocationService sessionRevocationService,
     ISignInRiskService signInRiskService,
+    ITrustedDeviceService trustedDeviceService,
     IRuntimeSettingsProvider runtimeSettingsProvider,
     TimeProvider timeProvider)
 {
@@ -53,6 +54,7 @@ public sealed class AuthService(
     private readonly TimeSpan _mfaChallengeLifetime = authTokenOptions.Value.OtpLifetime;
     private readonly IDataProtector _authenticatorSecretProtector = dataProtectionProvider.CreateProtector("AuthService.AuthenticatorSecret");
     private readonly IDataProtector _mfaChallengeProtector = dataProtectionProvider.CreateProtector("AuthService.MfaChallenge");
+    private readonly IDataProtector _deviceChallengeProtector = dataProtectionProvider.CreateProtector("AuthService.DeviceChallenge");
 
     // M2 (security): a PBKDF2-hashed sentinel password used to normalise
     // sign-in response timing when the email does not map to any account.
@@ -435,6 +437,35 @@ public sealed class AuthService(
             throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
         }
 
+        // Security spec §3.2: a copied refresh cookie presented from a
+        // different device than the one this session was issued to is a
+        // compromise signal — burn the whole family, same as reuse
+        // detection above. Only checked when BOTH sides have a device id
+        // (old clients sending no X-OET-Device-Id header, or sessions
+        // created before this column existed, skip silently).
+        var presentedDeviceId = httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString();
+        if (!string.IsNullOrWhiteSpace(presentedDeviceId)
+            && !string.IsNullOrWhiteSpace(refreshToken.DeviceId)
+            && !string.Equals(presentedDeviceId, refreshToken.DeviceId, StringComparison.Ordinal))
+        {
+            var mismatchedFamilyId = refreshToken.FamilyId;
+            var familyTokens = await db.RefreshTokenRecords
+                .Where(t => t.FamilyId == mismatchedFamilyId && t.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var token in familyTokens)
+            {
+                token.RevokedAt = now;
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            await securityEventLogger.TryLogAsync(
+                refreshToken.ApplicationUserAccountId,
+                SecurityEventKinds.AuthRefreshDeviceMismatch,
+                sessionFamilyId: mismatchedFamilyId,
+                deviceId: presentedDeviceId,
+                cancellationToken: cancellationToken);
+            throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
+        }
+
         refreshToken.LastUsedAt = now;
         refreshToken.RevokedAt = now;
 
@@ -636,6 +667,64 @@ public sealed class AuthService(
         recoveryCode.RedeemedAt = timeProvider.GetUtcNow();
         ResetMfaAttempts(account.Id);
         return await CompleteMfaSignInAsync(account, authenticatedLearner, cancellationToken);
+    }
+
+    /// <summary>Security spec §3.2: re-send the device-approval email code
+    /// for a pending device challenge (mirrors the MFA challenge transport —
+    /// see DeviceVerificationRequiredException / ReadDeviceChallengeTokenOrThrow).</summary>
+    public async Task<OtpChallengeResponse> SendDeviceVerificationOtpAsync(
+        string? challengeToken, CancellationToken cancellationToken = default)
+    {
+        var challenge = ReadDeviceChallengeTokenOrThrow(challengeToken);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.Id == challenge.AccountId, cancellationToken)
+            ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
+
+        return await emailOtpService.RequestDeviceTrustOtpAsync(account, cancellationToken);
+    }
+
+    /// <summary>Verifies the device-approval code, trusts the device
+    /// (auto-revoking whatever was previously trusted), and completes the
+    /// sign-in that was paused for this challenge.</summary>
+    public async Task<AuthSessionResponse> CompleteDeviceVerificationAsync(
+        string? challengeToken, string? code, CancellationToken cancellationToken = default)
+    {
+        var challenge = ReadDeviceChallengeTokenOrThrow(challengeToken);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.Id == challenge.AccountId, cancellationToken)
+            ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
+
+        await emailOtpService.VerifyDeviceTrustOtpAsync(account, code ?? string.Empty, cancellationToken);
+
+        var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+
+        string? deviceInfo = null;
+        string? platform = null;
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is not null)
+        {
+            deviceInfo = httpContext.Request.Headers.UserAgent.ToString();
+            if (deviceInfo.Length > 512) deviceInfo = deviceInfo[..512];
+            platform = httpContext.Request.Headers["X-OET-Client-Platform"].ToString();
+            if (string.IsNullOrWhiteSpace(platform)) platform = null;
+        }
+
+        // Trust (and revoke the prior device's sessions) BEFORE creating the
+        // new session, so CreateSessionCoreAsync's own device check below
+        // sees this device as already Trusted rather than looping back into
+        // OtpRequired.
+        await trustedDeviceService.TrustDeviceAsync(
+            account.Id, challenge.DeviceId, deviceInfo, platform, "otp_verified", cancellationToken);
+
+        var now = timeProvider.GetUtcNow();
+        account.LastLoginAt = now;
+        account.UpdatedAt = now;
+
+        var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
+        return session;
     }
 
     // H2 helpers (security): per-account sliding counter of invalid MFA
@@ -1025,6 +1114,7 @@ public sealed class AuthService(
         string? deviceInfo = null;
         string? ipAddress = null;
         string? countryCode = null;
+        string? deviceId = null;
         var httpContext = httpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
@@ -1034,7 +1124,11 @@ public sealed class AuthService(
             if (ipAddress?.Length > 64) ipAddress = ipAddress[..64];
             countryCode = httpContext.Request.Headers["CF-IPCountry"].ToString();
             if (string.IsNullOrWhiteSpace(countryCode) || countryCode.Length > 8) countryCode = null;
+            deviceId = httpContext.Request.Headers["X-OET-Device-Id"].ToString();
+            if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128) deviceId = null;
         }
+        var platform = httpContext?.Request.Headers["X-OET-Client-Platform"].ToString();
+        if (string.IsNullOrWhiteSpace(platform)) platform = null;
 
         // Security spec §3.3: risk-score a genuinely fresh sign-in BEFORE
         // touching any existing session — a blocked high-risk attempt must
@@ -1070,6 +1164,41 @@ public sealed class AuthService(
             }
         }
 
+        // Security spec §3.2: a genuinely fresh sign-in from a device other
+        // than the one currently trusted needs an email-OTP challenge before
+        // it can proceed — evaluated BEFORE IssueSession/revoke-others so an
+        // OtpRequired/CooldownBlocked outcome never touches the account's
+        // existing legitimate session. Skipped entirely for old clients that
+        // send no X-OET-Device-Id header (fail-open).
+        if (familyId is null)
+        {
+            var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
+            if (security.TrustedDeviceRequired)
+            {
+                var resolution = await trustedDeviceService.ResolveForSignInAsync(
+                    account.Id, deviceId, security.DeviceChangeWindowDays, security.DeviceChangeMaxPerWindow, cancellationToken);
+
+                switch (resolution.Resolution)
+                {
+                    case DeviceResolution.CooldownBlocked:
+                        throw ApiException.Forbidden(
+                            "device_change_cooldown",
+                            "Too many device changes recently. Try again later or contact support.");
+                    case DeviceResolution.OtpRequired:
+                        throw new DeviceVerificationRequiredException(
+                            account.Email, CreateDeviceChallengeToken(account.Id, deviceId!));
+                    case DeviceResolution.Bootstrap:
+                        await trustedDeviceService.TrustDeviceAsync(
+                            account.Id, deviceId!, deviceInfo, platform, "bootstrap", cancellationToken);
+                        break;
+                    case DeviceResolution.Trusted:
+                    case DeviceResolution.NoDeviceId:
+                    default:
+                        break;
+                }
+            }
+        }
+
         var issuedSession = tokenService.IssueSession(subject, sessionId, resolvedFamilyId);
 
         // Security spec §3.1: signing in on any platform revokes every OTHER
@@ -1100,7 +1229,8 @@ public sealed class AuthService(
             CreatedAt = timeProvider.GetUtcNow(),
             DeviceInfo = deviceInfo,
             IpAddress = ipAddress,
-            CountryCode = countryCode
+            CountryCode = countryCode,
+            DeviceId = deviceId
         });
 
         // Fresh sign-in (familyId is null on entry) vs. rotation (familyId ==
@@ -1362,6 +1492,49 @@ public sealed class AuthService(
         catch
         {
             throw ApiException.Validation("invalid_mfa_challenge", "The MFA challenge is invalid or expired.");
+        }
+    }
+
+    // Security spec §3.2: same DataProtection-token transport as the MFA
+    // challenge above, carrying the account id AND the specific device id
+    // being challenged (so verification knows exactly which device to trust
+    // without re-deriving it from a header that could differ by the time the
+    // OTP is submitted).
+    private string CreateDeviceChallengeToken(string accountId, string deviceId)
+    {
+        var challenge = new DeviceChallengeTicket(accountId, deviceId, timeProvider.GetUtcNow().Add(_mfaChallengeLifetime));
+        var serialized = JsonSerializer.Serialize(challenge);
+        var protectedPayload = _deviceChallengeProtector.Protect(serialized);
+        return WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(protectedPayload));
+    }
+
+    private DeviceChallengeTicket ReadDeviceChallengeTokenOrThrow(string? challengeToken)
+    {
+        if (string.IsNullOrWhiteSpace(challengeToken))
+        {
+            throw ApiException.Validation("device_challenge_token_required", "Device challenge token is required.");
+        }
+
+        try
+        {
+            var protectedPayload = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(challengeToken));
+            var serialized = _deviceChallengeProtector.Unprotect(protectedPayload);
+            var challenge = JsonSerializer.Deserialize<DeviceChallengeTicket>(serialized)
+                            ?? throw new InvalidOperationException("Challenge token payload was empty.");
+            if (challenge.ExpiresAt <= timeProvider.GetUtcNow())
+            {
+                throw ApiException.Validation("invalid_device_challenge", "The device challenge is invalid or expired.");
+            }
+
+            return challenge;
+        }
+        catch (ApiException)
+        {
+            throw;
+        }
+        catch
+        {
+            throw ApiException.Validation("invalid_device_challenge", "The device challenge is invalid or expired.");
         }
     }
 
@@ -1701,4 +1874,6 @@ public sealed class AuthService(
         => email.Split('@', 2)[0];
 
     private sealed record MfaChallengeTicket(string AccountId, DateTimeOffset ExpiresAt);
+
+    private sealed record DeviceChallengeTicket(string AccountId, string DeviceId, DateTimeOffset ExpiresAt);
 }

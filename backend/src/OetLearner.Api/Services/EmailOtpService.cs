@@ -18,6 +18,7 @@ public sealed class EmailOtpService(
 {
     public const string EmailVerificationPurpose = "verify_email";
     public const string PasswordResetPurpose = "reset_password";
+    public const string DeviceTrustPurpose = "trust_device";
     private const int RetryAfterSeconds = 60;
     // H2 (security): cap wrong-code guesses per challenge. 6-digit codes in a
     // 10-minute lifetime + only IP rate limiting left OTP/reset codes brute
@@ -290,6 +291,108 @@ public sealed class EmailOtpService(
         await db.SaveChangesAsync(cancellationToken);
 
         return account;
+    }
+
+    /// <summary>Security spec §3.2: challenge for approving sign-in from a new
+    /// device. Unlike the two purposes above, the account is already known
+    /// (resolved mid-sign-in via the device challenge token) — no separate
+    /// email-based lookup or account-enumeration guard is needed here.</summary>
+    public async Task<OtpChallengeResponse> RequestDeviceTrustOtpAsync(
+        ApplicationUserAccount account, CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNow();
+        var expiresAt = now.Add(_otpLifetime);
+        var challengeId = Guid.NewGuid();
+
+        var pendingChallenges = await db.EmailOtpChallenges
+            .Where(x => x.ApplicationUserAccountId == account.Id && x.Purpose == DeviceTrustPurpose && x.VerifiedAt == null)
+            .ToListAsync(cancellationToken);
+        if (pendingChallenges.Count > 0)
+        {
+            db.EmailOtpChallenges.RemoveRange(pendingChallenges);
+        }
+
+        var otpCode = GenerateSixDigitCode();
+        var challenge = new EmailOtpChallenge
+        {
+            Id = challengeId,
+            ApplicationUserAccountId = account.Id,
+            Purpose = DeviceTrustPurpose,
+            CodeHash = HashOtp(challengeId, otpCode, account.Id, DeviceTrustPurpose),
+            AttemptCount = 0,
+            CreatedAt = now,
+            ExpiresAt = expiresAt
+        };
+
+        const string subject = "Approve this new device";
+        var textBody = $"Hello {BuildDisplayName(account.Email)},\n\nA sign-in from a new device needs approval. Your code is {otpCode}.\nIt expires at {expiresAt:O}.\n\nIf this wasn't you, do not share this code and consider changing your password.";
+        await emailSender.SendAsync(new EmailMessage(
+            account.Email,
+            subject,
+            textBody,
+            HtmlBody: BuildHtmlBody(subject, account.Email, otpCode, expiresAt),
+            TemplateKey: EmailTemplateKeys.EmailVerificationOtp,
+            TemplateParameters: new Dictionary<string, object?>
+            {
+                ["email"] = account.Email,
+                ["displayName"] = BuildDisplayName(account.Email),
+                ["otpCode"] = otpCode,
+                ["expiresAt"] = expiresAt.ToString("O")
+            }), cancellationToken);
+
+        db.EmailOtpChallenges.Add(challenge);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new OtpChallengeResponse(
+            challengeId.ToString(),
+            DeviceTrustPurpose,
+            "email",
+            AuthEmailAddress.Mask(account.Email),
+            expiresAt,
+            RetryAfterSeconds);
+    }
+
+    public async Task VerifyDeviceTrustOtpAsync(
+        ApplicationUserAccount account, string code, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw ApiException.Validation("otp_code_required", "Verification code is required.");
+        }
+
+        var challenge = await db.EmailOtpChallenges
+            .Where(x => x.ApplicationUserAccountId == account.Id
+                && x.Purpose == DeviceTrustPurpose
+                && x.VerifiedAt == null)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (challenge is null)
+        {
+            throw ApiException.Validation("invalid_otp_code", "The verification code is invalid.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        if (challenge.ExpiresAt <= now)
+        {
+            throw ApiException.Validation("expired_otp_code", "The verification code has expired.");
+        }
+
+        if (challenge.AttemptCount >= MaxOtpAttempts)
+        {
+            throw ApiException.Validation("otp_attempts_exceeded", "Too many invalid attempts. Request a new code.");
+        }
+
+        var codeHash = HashOtp(challenge.Id, code.Trim(), account.Id, DeviceTrustPurpose);
+        if (!FixedTimeHexEquals(challenge.CodeHash, codeHash))
+        {
+            challenge.AttemptCount += 1;
+            await db.SaveChangesAsync(cancellationToken);
+            throw ApiException.Validation("invalid_otp_code", "The verification code is invalid.");
+        }
+
+        challenge.VerifiedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static string GenerateSixDigitCode()

@@ -235,6 +235,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     // security actions). See Domain/SecurityEntities.cs.
     public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
+    // Security spec §3.2: one trusted device per account.
+    public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
+
     // AI usage accounting. See docs/AI-USAGE-POLICY.md. Every AI call made
     // through AiGatewayService produces exactly one AiUsageRecord row.
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();

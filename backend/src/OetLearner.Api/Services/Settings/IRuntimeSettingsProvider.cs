@@ -724,7 +724,14 @@ public sealed record SecuritySettings(
     /// blocks a sign-in; "enforce" additionally rejects High-risk sign-ins
     /// with 403 sign_in_blocked_risk. Ship in log_only, review a week of
     /// events, then flip to enforce once false-positive rate looks safe.</summary>
-    string RiskMode);
+    string RiskMode,
+    /// <summary>Require email-OTP verification of a new device before it can
+    /// sign in (spec §3.2). Default FALSE — see RuntimeSettingsRow doc:
+    /// flipping this on requires the frontend device-challenge UI to exist
+    /// first, or new-device sign-ins have no way to complete the challenge.</summary>
+    bool TrustedDeviceRequired,
+    int DeviceChangeWindowDays,
+    int DeviceChangeMaxPerWindow);
 
 public static class SecurityRiskModes
 {

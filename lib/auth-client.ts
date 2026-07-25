@@ -9,6 +9,7 @@ import {
   updateStoredUser,
 } from './auth-storage';
 import { env } from './env';
+import { getDeviceId } from './device-id';
 import type {
   AuthenticatorSetup,
   AuthSession,
@@ -115,6 +116,12 @@ function buildHeaders(contentType?: string, accessToken?: string | null): Header
   const csrfToken = readCookie('oet_csrf');
   if (csrfToken) {
     headers.set('x-csrf-token', csrfToken);
+  }
+  // Security spec §3.2: device identity, sent ahead of enabling
+  // SecurityTrustedDeviceRequired server-side — see lib/device-id.ts.
+  const deviceId = getDeviceId();
+  if (deviceId) {
+    headers.set('X-OET-Device-Id', deviceId);
   }
   return withAuthHeader(headers, accessToken);
 }

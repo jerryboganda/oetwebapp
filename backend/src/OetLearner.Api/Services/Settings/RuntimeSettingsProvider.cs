@@ -466,7 +466,10 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             VideoProtection: new VideoProtectionSettings(RevokeOnCaptureDetected: r.VideoProtectionRevokeOnCaptureDetected ?? true),
             Security: new SecuritySettings(
                 SingleActiveSessionEnabled: r.SecuritySingleActiveSessionEnabled ?? true,
-                RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.LogOnly : r.SecurityRiskMode),
+                RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.LogOnly : r.SecurityRiskMode,
+                TrustedDeviceRequired: r.SecurityTrustedDeviceRequired ?? false,
+                DeviceChangeWindowDays: r.SecurityDeviceChangeWindowDays is > 0 ? r.SecurityDeviceChangeWindowDays.Value : 7,
+                DeviceChangeMaxPerWindow: r.SecurityDeviceChangeMaxPerWindow is > 0 ? r.SecurityDeviceChangeMaxPerWindow.Value : 3),
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt)

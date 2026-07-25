@@ -1582,6 +1582,7 @@ public class AuthFlowsTests
             new NoopSecurityEventLogger(),
             new NoopSessionRevocationService(),
             new NoopSignInRiskService(),
+            new NoopTrustedDeviceService(),
             new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base()),
             now);
 
@@ -1962,6 +1963,20 @@ public class AuthFlowsTests
     {
         public Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, CancellationToken ct)
             => Task.FromResult(new SignInRiskAssessment(SignInRiskLevel.None, []));
+    }
+
+    /// <summary>No-op test double — TrustedDeviceRequired defaults to false in
+    /// TestRuntimeSettingsProvider.Base(), so this is never invoked by these
+    /// tests; it exists purely to satisfy the constructor.</summary>
+    private sealed class NoopTrustedDeviceService : ITrustedDeviceService
+    {
+        public Task<DeviceResolutionResult> ResolveForSignInAsync(
+            string authAccountId, string? deviceId, int changeWindowDays, int changeMaxPerWindow, CancellationToken ct)
+            => Task.FromResult(new DeviceResolutionResult(DeviceResolution.NoDeviceId));
+
+        public Task TrustDeviceAsync(
+            string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+            => Task.CompletedTask;
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider

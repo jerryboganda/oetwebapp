@@ -253,5 +253,11 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecuritySingleActiveS
 -- Security spec §3.3 sign-in risk signals -- sync with migration 20260815090000_AddSignInRiskSignals
 ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""CountryCode"" character varying(8);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityRiskMode"" character varying(16);
+
+-- Security spec §3.2 trusted devices -- sync with migration 20260816090000_AddTrustedDevices
+ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""DeviceId"" character varying(128);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityTrustedDeviceRequired"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceChangeWindowDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceChangeMaxPerWindow"" integer;
 ";
 }
