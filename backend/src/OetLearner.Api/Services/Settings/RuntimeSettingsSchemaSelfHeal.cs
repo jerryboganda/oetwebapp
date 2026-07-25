@@ -259,5 +259,8 @@ ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""DeviceId"" charac
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityTrustedDeviceRequired"" boolean;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceChangeWindowDays"" integer;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceChangeMaxPerWindow"" integer;
+
+-- Security spec §4.2 inactive-session expiry -- sync with migration 20260817090000_AddSecurityInactiveSessionTimeout
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityInactiveSessionTimeoutDays"" integer;
 ";
 }

@@ -401,6 +401,7 @@ public static class AdminRuntimeSettingsEndpoints
                 trustedDeviceRequired = settings.Security.TrustedDeviceRequired,
                 deviceChangeWindowDays = settings.Security.DeviceChangeWindowDays,
                 deviceChangeMaxPerWindow = settings.Security.DeviceChangeMaxPerWindow,
+                inactiveSessionTimeoutDays = settings.Security.InactiveSessionTimeoutDays,
             },
             paymob = new
             {
@@ -1199,6 +1200,7 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableBool(d.TrustedDeviceRequired, v => row.SecurityTrustedDeviceRequired = v, "security.trustedDeviceRequired", changed)) { }
         if (TrySetNullableInt(d.DeviceChangeWindowDays, v => row.SecurityDeviceChangeWindowDays = v, "security.deviceChangeWindowDays", changed, min: 1, max: 365)) { }
         if (TrySetNullableInt(d.DeviceChangeMaxPerWindow, v => row.SecurityDeviceChangeMaxPerWindow = v, "security.deviceChangeMaxPerWindow", changed, min: 1, max: 100)) { }
+        if (TrySetNullableInt(d.InactiveSessionTimeoutDays, v => row.SecurityInactiveSessionTimeoutDays = v, "security.inactiveSessionTimeoutDays", changed, min: 1, max: 365)) { }
     }
 
     private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
@@ -2372,6 +2374,8 @@ public sealed class RuntimeSettingsSecurityUpdate
     public JsonElement? TrustedDeviceRequired { get; set; }
     public JsonElement? DeviceChangeWindowDays { get; set; }
     public JsonElement? DeviceChangeMaxPerWindow { get; set; }
+    /// <summary>Idle sessions past this many days are revoked by AuthDataRetentionWorker (spec §4.2).</summary>
+    public JsonElement? InactiveSessionTimeoutDays { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

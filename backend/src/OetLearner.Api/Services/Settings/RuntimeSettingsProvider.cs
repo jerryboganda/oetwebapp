@@ -469,7 +469,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
                 RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.LogOnly : r.SecurityRiskMode,
                 TrustedDeviceRequired: r.SecurityTrustedDeviceRequired ?? false,
                 DeviceChangeWindowDays: r.SecurityDeviceChangeWindowDays is > 0 ? r.SecurityDeviceChangeWindowDays.Value : 7,
-                DeviceChangeMaxPerWindow: r.SecurityDeviceChangeMaxPerWindow is > 0 ? r.SecurityDeviceChangeMaxPerWindow.Value : 3),
+                DeviceChangeMaxPerWindow: r.SecurityDeviceChangeMaxPerWindow is > 0 ? r.SecurityDeviceChangeMaxPerWindow.Value : 3,
+                InactiveSessionTimeoutDays: r.SecurityInactiveSessionTimeoutDays is > 0 ? r.SecurityInactiveSessionTimeoutDays.Value : 30),
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt)

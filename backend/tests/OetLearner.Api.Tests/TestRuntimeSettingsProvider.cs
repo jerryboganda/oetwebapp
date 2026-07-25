@@ -362,7 +362,8 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
         RiskMode: SecurityRiskModes.LogOnly,
         TrustedDeviceRequired: false,
         DeviceChangeWindowDays: 7,
-        DeviceChangeMaxPerWindow: 3);
+        DeviceChangeMaxPerWindow: 3,
+        InactiveSessionTimeoutDays: 30);
 
     private static FxSettings MapFx(FxOptions o)
         => new(

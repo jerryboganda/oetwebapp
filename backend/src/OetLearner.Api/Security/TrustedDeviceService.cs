@@ -38,6 +38,12 @@ public interface ITrustedDeviceService
     /// its sessions) — spec §3.2 "approving a new device revokes the old one".</summary>
     Task TrustDeviceAsync(
         string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct);
+
+    /// <summary>Admin-initiated: clears the account's current trusted device
+    /// (next sign-in bootstraps a new one silently) and, since a cleared
+    /// device is a security-boundary reset, revokes every live session too —
+    /// spec §4.4 admin device reset.</summary>
+    Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct);
 }
 
 public sealed class TrustedDeviceService(
@@ -131,5 +137,30 @@ public sealed class TrustedDeviceService(
                 authAccountId, SecurityEventKinds.DeviceRevoked,
                 deviceId: priorDevices[0].DeviceId, cancellationToken: ct);
         }
+    }
+
+    public async Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+        var current = await db.TrustedDevices
+            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
+            .ToListAsync(ct);
+        if (current.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var device in current)
+        {
+            device.RevokedAt = now;
+        }
+        await db.SaveChangesAsync(ct);
+
+        await securityEventLogger.TryLogAsync(
+            authAccountId, SecurityEventKinds.DeviceAdminReset, cancellationToken: ct);
+
+        // Same as an ordinary device change: clearing trust is meaningless as
+        // a security boundary if the old device's live session survives it.
+        await sessionRevocationService.RevokeAllFamiliesAsync(authAccountId, exceptFamilyId: null, reason: reason, ct);
     }
 }

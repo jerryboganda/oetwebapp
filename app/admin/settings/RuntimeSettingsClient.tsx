@@ -107,6 +107,21 @@ export interface UploadScannerSettings {
   failClosedOnError: boolean | null;
 }
 
+/** Course Platform Security Requirements §3.2/§3.3/§4.4 — account-security policy toggles. */
+export interface SecuritySettings {
+  singleActiveSessionEnabled: boolean | null;
+  riskMode: string;
+  trustedDeviceRequired: boolean | null;
+  deviceChangeWindowDays: number | null;
+  deviceChangeMaxPerWindow: number | null;
+  inactiveSessionTimeoutDays: number | null;
+}
+
+/** Course Platform Security Requirements §2.4 — video capture-protection response. */
+export interface VideoProtectionSettings {
+  revokeOnCaptureDetected: boolean | null;
+}
+
 export interface ZoomSettings {
   enabled: boolean | null;
   accountId: string;
@@ -460,6 +475,8 @@ export interface RuntimeSettingsResponse {
   authTokens: AuthTokensSettings;
   webPush: WebPushSettings;
   support: SupportSettings;
+  security: SecuritySettings;
+  videoProtection: VideoProtectionSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -472,7 +489,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush' | 'support';
+type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush' | 'support' | 'security' | 'videoProtection';
 
 // The object-valued payload keys (every UI section maps to one of these; the "paypal"
 // UI section writes into "billing"). Excludes the scalar audit fields so updateField can
@@ -585,6 +602,29 @@ const UPLOAD_SCANNER_FIELDS: FieldDef<UploadScannerSettings>[] = [
   { key: 'port', label: 'ClamAV Port', type: 'number', hint: 'Default clamd port is 3310.' },
   { key: 'timeoutSeconds', label: 'Scan Timeout (seconds)', type: 'number', hint: 'Fail fast for slow scanners; valid range is 1-120.' },
   { key: 'failClosedOnError', label: 'Fail closed on scanner errors', type: 'checkbox', hint: 'Reject uploads when ClamAV is unavailable or times out.' },
+];
+
+const SECURITY_FIELDS: FieldDef<SecuritySettings>[] = [
+  { key: 'singleActiveSessionEnabled', label: 'Enforce single active session', type: 'checkbox', hint: 'Security spec §3.1 (P0). Signing in anywhere revokes every other session for the account.' },
+  {
+    key: 'riskMode',
+    label: 'Sign-in Risk Mode',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off — no risk evaluation' },
+      { value: 'log_only', label: 'Log only — record risk signals, never block' },
+      { value: 'enforce', label: 'Enforce — step-up/block on risk signals' },
+    ],
+    hint: 'Security spec §3.3. Review a week of log_only data before switching to enforce.',
+  },
+  { key: 'trustedDeviceRequired', label: 'Require device verification', type: 'checkbox', hint: 'Security spec §3.2 (P1). A sign-in from an unrecognized device requires an email-OTP challenge. Do not enable until the device-verification sign-in UI (app/(auth)/device/verify) has been verified end-to-end.' },
+  { key: 'deviceChangeWindowDays', label: 'Device Change Window (days)', type: 'number', hint: 'Rolling window for the device-change cooldown, 1-365.' },
+  { key: 'deviceChangeMaxPerWindow', label: 'Max Device Changes per Window', type: 'number', hint: 'Device changes allowed within the window before further changes are blocked, 1-100.' },
+  { key: 'inactiveSessionTimeoutDays', label: 'Inactive Session Timeout (days)', type: 'number', hint: 'Security spec §4.2. Sessions idle this long are revoked by the auth data-retention sweep, 1-365.' },
+];
+
+const VIDEO_PROTECTION_FIELDS: FieldDef<VideoProtectionSettings>[] = [
+  { key: 'revokeOnCaptureDetected', label: 'Revoke playback on capture detected', type: 'checkbox', hint: 'Security spec §2.4. Immediately kill a playback session when the client reports screen capture/recording.' },
 ];
 
 const ZOOM_FIELDS: FieldDef<ZoomSettings>[] = [
@@ -927,6 +967,8 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'authTokens', title: 'Auth Tokens', description: 'Access/refresh/OTP token lifetimes and the authenticator issuer label. Signing keys, issuer, and audience stay env-only (trust anchors).' },
   { id: 'webPush', title: 'Web Push', description: 'Browser web-push master toggle. VAPID keys are configured in the Push section.' },
   { id: 'support', title: 'Support WhatsApp', description: 'The public WhatsApp number learners message to send payment proof, plus the pre-filled message. Shown next to every package and on every checkout/billing surface. Stored in plaintext — it is a public number, not a secret. Separate from the Messaging section, which holds the Meta Cloud API sender credentials for automated notifications.' },
+  { id: 'security', title: 'Security', description: 'Course Platform Security Requirements: single active session enforcement, sign-in risk mode, and device-verification policy. See Admin → Security for the events feed and per-account session/device management.' },
+  { id: 'videoProtection', title: 'Video Capture Protection', description: 'Response to detected screen capture/recording during video playback.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -1285,6 +1327,17 @@ function emptyResponse(): RuntimeSettingsResponse {
       whatsAppProofTemplate: '',
       isWhatsAppConfigured: false,
     },
+    security: {
+      singleActiveSessionEnabled: null,
+      riskMode: 'off',
+      trustedDeviceRequired: null,
+      deviceChangeWindowDays: null,
+      deviceChangeMaxPerWindow: null,
+      inactiveSessionTimeoutDays: null,
+    },
+    videoProtection: {
+      revokeOnCaptureDetected: null,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -1338,6 +1391,8 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     authTokens: { ...empty.authTokens, ...data.authTokens },
     webPush: { ...empty.webPush, ...data.webPush },
     support: { ...empty.support, ...data.support },
+    security: { ...empty.security, ...data.security },
+    videoProtection: { ...empty.videoProtection, ...data.videoProtection },
   });
 }
 
@@ -1796,6 +1851,8 @@ export function RuntimeSettingsClient() {
     authTokens: false,
     webPush: false,
     support: false,
+    security: false,
+    videoProtection: false,
   });
 
   const load = useCallback(async () => {
@@ -2957,6 +3014,51 @@ export function RuntimeSettingsClient() {
                     onChange={(next) =>
                       updateField(
                         'support',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'security' &&
+                SECURITY_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    options={field.options}
+                    value={draft.security[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'security',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'videoProtection' &&
+                VIDEO_PROTECTION_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.videoProtection[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'videoProtection',
                         field.key,
                         (field.type === 'number'
                           ? parseNullableNumberInput(String(next))

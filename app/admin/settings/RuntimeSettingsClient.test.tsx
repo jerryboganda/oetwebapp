@@ -392,6 +392,17 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       whatsAppProofTemplate: '',
       isWhatsAppConfigured: true,
     },
+    security: {
+      singleActiveSessionEnabled: true,
+      riskMode: 'log_only',
+      trustedDeviceRequired: false,
+      deviceChangeWindowDays: 7,
+      deviceChangeMaxPerWindow: 3,
+      inactiveSessionTimeoutDays: 30,
+    },
+    videoProtection: {
+      revokeOnCaptureDetected: true,
+    },
     updatedBy: 'admin@example.com',
     updatedByUserId: 'u-1',
     updatedAt: '2026-05-16T10:00:00Z',

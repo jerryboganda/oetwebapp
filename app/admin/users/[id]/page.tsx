@@ -15,9 +15,11 @@ import {
   Phone,
   RefreshCcw,
   Shield,
+  ShieldAlert,
   ShieldCheck,
   User as UserIcon,
   UserLock,
+  Video,
 } from 'lucide-react';
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent } from '@/components/admin/ui/card';
@@ -55,6 +57,15 @@ import {
   type UserAccess,
 } from '@/lib/user-access';
 import { getAdminUserDetailData } from '@/lib/admin';
+import {
+  blockAdminUserPlayback,
+  fetchAdminUserDevices,
+  fetchAdminUserSessions,
+  resetAdminUserDevice,
+  revokeAdminUserSession,
+  type AdminSecurityDevice,
+  type AdminSecuritySession,
+} from '@/lib/api/admin-security';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -199,6 +210,9 @@ export default function UserDetailPage() {
   const [access, setAccess] = useState<UserAccess | null>(null);
   const [originalAccess, setOriginalAccess] = useState<UserAccess | null>(null);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
+  const [securitySessions, setSecuritySessions] = useState<AdminSecuritySession[]>([]);
+  const [securityDevices, setSecurityDevices] = useState<AdminSecurityDevice[]>([]);
+  const [isLoadingSecurityDetail, setIsLoadingSecurityDetail] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -243,6 +257,34 @@ export default function UserDetailPage() {
         } else {
           setAccess(null);
           setOriginalAccess(null);
+        }
+
+        // Security spec §4.4: sessions/devices list only makes sense for an
+        // account with a linked auth account (mirrors the existing Security
+        // card's own `user.security` gate).
+        if (detail.security) {
+          setIsLoadingSecurityDetail(true);
+          try {
+            const [sessions, devices] = await Promise.all([
+              fetchAdminUserSessions(detail.id),
+              fetchAdminUserDevices(detail.id),
+            ]);
+            if (!cancelled) {
+              setSecuritySessions(sessions);
+              setSecurityDevices(devices);
+            }
+          } catch (securityError) {
+            console.error(securityError);
+            if (!cancelled) {
+              setSecuritySessions([]);
+              setSecurityDevices([]);
+            }
+          } finally {
+            if (!cancelled) setIsLoadingSecurityDetail(false);
+          }
+        } else {
+          setSecuritySessions([]);
+          setSecurityDevices([]);
         }
       } catch (error) {
         console.error(error);
@@ -439,6 +481,57 @@ export default function UserDetailPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: 'Unable to revoke sessions.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleRevokeSession(familyId: string) {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      await revokeAdminUserSession(user.id, familyId);
+      setToast({ variant: 'success', message: 'Session revoked.' });
+      const [sessions] = await Promise.all([fetchAdminUserSessions(user.id), reloadUser()]);
+      setSecuritySessions(sessions);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to revoke this session.') });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleResetDevice() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      await resetAdminUserDevice(user.id);
+      setToast({ variant: 'success', message: "Trusted device cleared — next sign-in bootstraps a new one." });
+      const devices = await fetchAdminUserDevices(user.id);
+      setSecurityDevices(devices);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to reset the trusted device.') });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleBlockPlayback() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      const result = await blockAdminUserPlayback(user.id);
+      setToast({
+        variant: 'success',
+        message: result.revoked > 0
+          ? `Blocked ${result.revoked} active playback session(s).`
+          : 'No active playback sessions to block.',
+      });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to block playback.') });
     } finally {
       setIsMutating(false);
     }
@@ -1059,6 +1152,89 @@ export default function UserDetailPage() {
                     <p className="text-sm text-muted">No authentication account is linked to this user.</p>
                   )}
                 </SettingsSection>
+
+                {user.security ? (
+                  <SettingsSection
+                    title="Sessions & Devices"
+                    description="Live sessions and the trusted device for this account (Course Platform Security Requirements §4.4)."
+                  >
+                    <div className="space-y-4">
+                      <div>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Active sessions</p>
+                          <Button variant="outline" onClick={handleBlockPlayback} loading={isMutating} className="gap-2">
+                            <Video className="h-3.5 w-3.5" />
+                            Block Playback
+                          </Button>
+                        </div>
+                        {isLoadingSecurityDetail ? (
+                          <p className="text-sm text-admin-text-muted">Loading sessions…</p>
+                        ) : securitySessions.length === 0 ? (
+                          <p className="text-sm text-admin-text-muted">No active sessions.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {securitySessions.map((session) => (
+                              <div
+                                key={session.familyId}
+                                className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-admin-bg-subtle p-3 text-sm"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-admin-fg-strong">{session.deviceInfo ?? 'Unknown device'}</p>
+                                  <p className="truncate text-xs text-muted">
+                                    {session.ipAddress ?? 'Unknown IP'}
+                                    {session.countryCode ? ` - ${session.countryCode}` : ''}
+                                    {' - last used '}
+                                    {formatDate(session.lastUsedAt, 'never')}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="destructive"
+                                  onClick={() => handleRevokeSession(session.familyId)}
+                                  loading={isMutating}
+                                  className="shrink-0 gap-1.5"
+                                >
+                                  <LogOut className="h-3.5 w-3.5" />
+                                  Revoke
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Trusted device</p>
+                          {securityDevices.some((device) => !device.revokedAt) ? (
+                            <Button variant="outline" onClick={handleResetDevice} loading={isMutating} className="gap-2">
+                              <ShieldAlert className="h-3.5 w-3.5" />
+                              Reset Device
+                            </Button>
+                          ) : null}
+                        </div>
+                        {isLoadingSecurityDetail ? (
+                          <p className="text-sm text-admin-text-muted">Loading devices…</p>
+                        ) : securityDevices.length === 0 ? (
+                          <p className="text-sm text-admin-text-muted">No trusted device recorded yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {securityDevices.map((device) => (
+                              <div key={device.id} className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-3 text-sm">
+                                <p className="font-medium text-admin-fg-strong">
+                                  {device.deviceName ?? device.platform ?? 'Unknown device'}
+                                  {device.revokedAt ? ' (revoked)' : ' (current)'}
+                                </p>
+                                <p className="text-xs text-muted">
+                                  Trusted {formatDate(device.trustedAt)} - last seen {formatDate(device.lastSeenAt, 'never')}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </SettingsSection>
+                ) : null}
 
                 {user.subscription ? (
                   <SettingsSection title="Subscription" description="Current billing relationship for this learner.">

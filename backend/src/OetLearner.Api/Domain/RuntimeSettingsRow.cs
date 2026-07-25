@@ -489,9 +489,10 @@ public class RuntimeSettingsRow
     public string? SecurityRiskMode { get; set; }
 
     /// <summary>Security spec §3.2: require email-OTP verification of a new
-    /// device before it can complete sign-in. Null defaults to FALSE — the
-    /// frontend challenge UI for this has not shipped yet; see the migration
-    /// doc comment for why this is not default-on like the other P0 toggles.</summary>
+    /// device before it can complete sign-in. Null defaults to FALSE. The
+    /// frontend challenge UI (app/(auth)/device/verify) has shipped, but this
+    /// stays off until a real end-to-end OTP round-trip has been observed
+    /// against a non-stale backend — flip only after that verification.</summary>
     public bool? SecurityTrustedDeviceRequired { get; set; }
 
     /// <summary>Rolling window (days) for the device-change cooldown count.
@@ -501,6 +502,11 @@ public class RuntimeSettingsRow
     /// <summary>Max device changes allowed within the window before further
     /// changes are blocked. Null defaults to 3.</summary>
     public int? SecurityDeviceChangeMaxPerWindow { get; set; }
+
+    /// <summary>Security spec §4.2: idle sessions (no refresh-token activity
+    /// for this many days) are revoked by AuthDataRetentionWorker. Null
+    /// defaults to 30.</summary>
+    public int? SecurityInactiveSessionTimeoutDays { get; set; }
 
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on

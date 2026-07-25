@@ -27,6 +27,10 @@ export const AdminPermission = {
   AuditLogs: 'audit_logs',
   SystemAdmin: 'system_admin',
   ManagePermissions: 'manage_permissions',
+  /** Security spec §4.4: read the security-events feed, sessions, devices, alerts. */
+  SecurityRead: 'security:read',
+  /** Security spec §4.4: revoke a session/device or block playback for an account. */
+  SecurityWrite: 'security:write',
 } as const;
 
 /**
@@ -48,6 +52,7 @@ export function hasPermission(
  */
 export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/alerts': [AdminPermission.SystemAdmin],
+  '/admin/security': [AdminPermission.SecurityRead],
   '/admin/content': [
     AdminPermission.ContentRead,
     AdminPermission.ContentWrite,
@@ -234,6 +239,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
   '/admin/review-ops': [AdminPermission.ReviewOps],
   '/admin/roles': [AdminPermission.ManagePermissions],
+  '/admin/security': [AdminPermission.SecurityRead],
   '/admin/rulebooks': [AdminPermission.ContentRead],
   '/admin/conformance': [AdminPermission.ContentRead],
   '/admin/score-guarantee-claims': [AdminPermission.BillingRead],

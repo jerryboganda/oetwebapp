@@ -55,6 +55,40 @@ public class AdminAlertService(LearnerDbContext db)
         else if (pendingPublish > 0)
             alerts.Add(new AdminAlertItemResponse("publish_backlog", "info", "Publish Backlog", $"{pendingPublish} items awaiting review/publish", "/admin/content/publish-requests", now));
 
+        // Security spec §4.4: impossible-travel sign-ins in the last 24h
+        var last24h = now.AddHours(-24);
+        var impossibleTravelCount = await db.SecurityEvents.AsNoTracking()
+            .Where(e => e.Kind == SecurityEventKinds.RiskImpossibleTravel && e.OccurredAt >= last24h)
+            .CountAsync(ct);
+        if (impossibleTravelCount > 0)
+            alerts.Add(new AdminAlertItemResponse("impossible_travel", "critical", "Impossible Travel", $"{impossibleTravelCount} sign-in(s) flagged for impossible travel in the last 24h", "/admin/security", now));
+
+        // Refresh-token family reuse — the strongest signal of a copied/stolen
+        // session (simultaneous use from two places)
+        var reuseCount = await db.SecurityEvents.AsNoTracking()
+            .Where(e => e.Kind == SecurityEventKinds.AuthRefreshReuseDetected && e.OccurredAt >= last24h)
+            .CountAsync(ct);
+        if (reuseCount > 0)
+            alerts.Add(new AdminAlertItemResponse("refresh_reuse_detected", "critical", "Refresh Token Reuse", $"{reuseCount} refresh-token reuse event(s) in the last 24h — possible session theft", "/admin/security", now));
+
+        // Device churn: change attempts blocked by the cooldown, last 7 days
+        var last7d = now.AddDays(-7);
+        var deviceCooldownBlocks = await db.SecurityEvents.AsNoTracking()
+            .Where(e => e.Kind == SecurityEventKinds.DeviceChangeBlockedCooldown && e.OccurredAt >= last7d)
+            .CountAsync(ct);
+        if (deviceCooldownBlocks > 0)
+            alerts.Add(new AdminAlertItemResponse("device_change_cooldown", "warning", "Device Change Cooldown Hits", $"{deviceCooldownBlocks} device-change attempt(s) blocked by cooldown in the last 7 days", "/admin/security", now));
+
+        // Capture/tamper signals from video playback in the last 24h
+        var captureEventsCount = await db.VideoProtectionEvents.AsNoTracking()
+            .Where(e => (e.Kind == VideoProtectionKinds.CaptureDetected
+                    || e.Kind == VideoProtectionKinds.ScreenshotDetected
+                    || e.Kind == VideoProtectionKinds.WatermarkTampered)
+                && e.OccurredAt >= last24h)
+            .CountAsync(ct);
+        if (captureEventsCount > 0)
+            alerts.Add(new AdminAlertItemResponse("capture_protection_triggered", "warning", "Capture Protection Triggered", $"{captureEventsCount} capture/tamper event(s) in the last 24h", "/admin/security", now));
+
         var criticalCount = alerts.Count(a => a.Severity == "critical");
         var warningCount = alerts.Count(a => a.Severity == "warning");
         var infoCount = alerts.Count(a => a.Severity == "info");

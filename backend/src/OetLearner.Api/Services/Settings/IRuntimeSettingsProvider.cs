@@ -731,7 +731,10 @@ public sealed record SecuritySettings(
     /// first, or new-device sign-ins have no way to complete the challenge.</summary>
     bool TrustedDeviceRequired,
     int DeviceChangeWindowDays,
-    int DeviceChangeMaxPerWindow);
+    int DeviceChangeMaxPerWindow,
+    /// <summary>Idle sessions (no activity for this many days) are revoked by
+    /// <c>AuthDataRetentionWorker</c> (spec §4.2). Default 30.</summary>
+    int InactiveSessionTimeoutDays = 30);
 
 public static class SecurityRiskModes
 {

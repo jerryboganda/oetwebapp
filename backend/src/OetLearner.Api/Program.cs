@@ -991,6 +991,7 @@ builder.Services.AddScoped<ExpertCompensationService>();
 builder.Services.AddScoped<AdminAlertService>();
 builder.Services.AddScoped<LearnerActionsService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<AdminSecurityService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.UserAccessAllocationService>();
 builder.Services.AddScoped<ILaunchReadinessService, LaunchReadinessService>();
 builder.Services.AddScoped<SponsorService>();

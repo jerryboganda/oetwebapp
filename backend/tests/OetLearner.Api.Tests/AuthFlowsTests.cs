@@ -1977,6 +1977,9 @@ public class AuthFlowsTests
         public Task TrustDeviceAsync(
             string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
             => Task.CompletedTask;
+
+        public Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
+            => Task.CompletedTask;
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider

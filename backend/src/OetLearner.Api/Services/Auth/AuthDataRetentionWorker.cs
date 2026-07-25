@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
+using OetLearner.Api.Security;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Auth;
 
@@ -15,9 +17,15 @@ namespace OetLearner.Api.Services.Auth;
 ///     <see cref="RevokedRefreshRetention"/> (kept briefly so reuse-detection
 ///     still works for the grace period, deleted after).
 ///
-/// Hard deletes only: active tokens and unexpired challenges are never
-/// touched. Batch size is capped so a very large backlog is cleared over
-/// several sweeps rather than locking the tables.
+/// Hard deletes only for the two sweeps above: active tokens and unexpired
+/// challenges are never touched. Batch size is capped so a very large
+/// backlog is cleared over several sweeps rather than locking the tables.
+///
+/// A third step (Course Platform Security Requirements §4.2) actively
+/// REVOKES — not deletes — still-valid sessions that have gone idle for
+/// longer than <c>Security.InactiveSessionTimeoutDays</c>, routed through
+/// <see cref="ISessionRevocationService"/> so the playback-kill/push/audit
+/// guarantees apply the same as any other revoke.
 /// </summary>
 public sealed class AuthDataRetentionWorker(
     IServiceScopeFactory scopeFactory,
@@ -81,6 +89,51 @@ public sealed class AuthDataRetentionWorker(
                 "Auth-data retention swept: {Otp} expired OTP challenges, {Refresh} revoked refresh tokens.",
                 otpDeleted,
                 refreshDeleted);
+        }
+
+        await RevokeIdleSessionsAsync(scope, db, now, ct);
+    }
+
+    /// <summary>Security spec §4.2: revoke (not delete) still-active sessions
+    /// idle past the configured timeout. Deduplicates by FamilyId before
+    /// calling <see cref="ISessionRevocationService.RevokeFamilyAsync"/> so a
+    /// multi-row family is only revoked once per sweep.</summary>
+    private static async Task RevokeIdleSessionsAsync(
+        AsyncServiceScope scope, LearnerDbContext db, DateTimeOffset now, CancellationToken ct)
+    {
+        var settingsProvider = scope.ServiceProvider.GetRequiredService<IRuntimeSettingsProvider>();
+        var timeoutDays = (await settingsProvider.GetAsync(ct)).Security.InactiveSessionTimeoutDays;
+        var idleCutoff = now - TimeSpan.FromDays(timeoutDays);
+
+        var idleFamilies = await db.RefreshTokenRecords
+            .Where(r => r.RevokedAt == null && r.ExpiresAt > now && (r.LastUsedAt ?? r.CreatedAt) < idleCutoff)
+            .Select(r => new { r.ApplicationUserAccountId, r.FamilyId })
+            .Distinct()
+            .Take(BatchSize)
+            .ToListAsync(ct);
+
+        if (idleFamilies.Count == 0)
+        {
+            return;
+        }
+
+        var revocationService = scope.ServiceProvider.GetRequiredService<ISessionRevocationService>();
+        var revokedCount = 0;
+        foreach (var family in idleFamilies)
+        {
+            if (await revocationService.RevokeFamilyAsync(family.ApplicationUserAccountId, family.FamilyId, "inactive_session_timeout", ct))
+            {
+                revokedCount++;
+            }
+        }
+
+        if (revokedCount > 0)
+        {
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<AuthDataRetentionWorker>>();
+            logger.LogInformation(
+                "Auth-data retention swept: {Revoked} idle session(s) revoked (timeout {TimeoutDays}d).",
+                revokedCount,
+                timeoutDays);
         }
     }
 }

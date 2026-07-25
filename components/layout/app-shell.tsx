@@ -3,6 +3,7 @@
 import { Suspense, type ReactNode, useContext, useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { EmailVerificationBanner } from '@/components/domain/email-verification-banner';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
 import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
@@ -157,6 +158,7 @@ export function AppShell({
               {...routeMotionProps}
             >
               <ScrollReset />
+              <EmailVerificationBanner />
               {children}
             </motion.main>
           </AnimatePresence>
@@ -202,6 +204,7 @@ export function AppShell({
             {...routeMotionProps}
           >
             <ScrollReset />
+            <EmailVerificationBanner />
             {children}
           </motion.main>
         </AnimatePresence>

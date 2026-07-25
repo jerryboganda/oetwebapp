@@ -190,6 +190,14 @@ public partial class AdminService(
     private static string ResolveUserStatus(string? storedStatus, bool isDeleted)
         => isDeleted ? DeletedUserStatus : NormalizeStoredUserStatus(storedStatus);
 
+    /// <summary>Resolves an admin `userId` (learner/expert/admin-account) to
+    /// the auth-account id security data is keyed on, for
+    /// <c>AdminSecurityService</c> — thin public wrapper around
+    /// <see cref="ResolveUserTargetAsync"/> so that service doesn't duplicate
+    /// the three-way learner/expert/admin resolution.</summary>
+    public async Task<string?> ResolveAuthAccountIdAsync(string userId, CancellationToken ct)
+        => (await ResolveUserTargetAsync(userId, ct)).AuthAccountId;
+
     private async Task<AdminUserTarget> ResolveUserTargetAsync(string userId, CancellationToken ct)
     {
         var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);

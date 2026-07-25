@@ -1,14 +1,16 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
 
 /// <summary>
-/// Admin read surface for <see cref="OetLearner.Api.Domain.SecurityEvent"/>
-/// (Course Platform Security Requirements §4.4). Session/device management
-/// mutations (targeted revoke, device reset, block playback) land here in a
-/// later phase once <c>ISessionRevocationService</c> exists; this phase is
-/// read-only.
+/// Admin surface for <see cref="OetLearner.Api.Domain.SecurityEvent"/> and
+/// per-account session/device management (Course Platform Security
+/// Requirements §4.4): events/video-protection-events read, plus targeted
+/// session revoke, trusted-device reset, and immediate playback block —
+/// all via <see cref="AdminSecurityService"/>.
 /// </summary>
 public static class AdminSecurityEndpoints
 {
@@ -152,6 +154,43 @@ public static class AdminSecurityEndpoints
         })
         .WithAdminRead("AdminSecurityRead");
 
+        var userSecurity = app.MapGroup("/v1/admin/users/{userId}/security")
+            .RequireAuthorization("AdminOnly")
+            .RequireRateLimiting("PerUser");
+
+        userSecurity.MapGet("/sessions", async (string userId, AdminSecurityService service, CancellationToken ct)
+                => Results.Ok(await service.GetSessionsAsync(userId, ct)))
+            .WithAdminRead("AdminSecurityRead");
+
+        userSecurity.MapGet("/devices", async (string userId, AdminSecurityService service, CancellationToken ct)
+                => Results.Ok(await service.GetDevicesAsync(userId, ct)))
+            .WithAdminRead("AdminSecurityRead");
+
+        userSecurity.MapPost("/sessions/{familyId:guid}/revoke", async (
+                string userId, Guid familyId, HttpContext http, AdminSecurityService service, CancellationToken ct)
+                => Results.Ok(new { revoked = await service.RevokeSessionAsync(http.AdminId(), http.AdminName(), userId, familyId, ct) }))
+            .WithAdminWrite("AdminSecurityWrite");
+
+        userSecurity.MapPost("/devices/reset", async (
+                string userId, HttpContext http, AdminSecurityService service, CancellationToken ct) =>
+        {
+            await service.ResetDeviceAsync(http.AdminId(), http.AdminName(), userId, ct);
+            return Results.Ok(new { reset = true });
+        })
+            .WithAdminWrite("AdminSecurityWrite");
+
+        userSecurity.MapPost("/block-playback", async (
+                string userId, HttpContext http, AdminSecurityService service, CancellationToken ct)
+                => Results.Ok(new { revoked = await service.BlockPlaybackAsync(http.AdminId(), http.AdminName(), userId, ct) }))
+            .WithAdminWrite("AdminSecurityWrite");
+
         return app;
     }
+
+    private static string AdminId(this HttpContext httpContext)
+        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated admin id is required.");
+
+    private static string AdminName(this HttpContext httpContext)
+        => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
 }
