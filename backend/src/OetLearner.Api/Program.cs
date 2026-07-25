@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
@@ -254,7 +253,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardLimit = 2;
     foreach (var cidr in knownNetworksConfig)
     {
-        if (IPNetwork.TryParse(cidr, out var network))
+        if (System.Net.IPNetwork.TryParse(cidr, out var network))
         {
             options.KnownIPNetworks.Add(network);
         }
