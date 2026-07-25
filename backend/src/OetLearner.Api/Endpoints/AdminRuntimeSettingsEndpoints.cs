@@ -1703,7 +1703,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "easykash" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
+        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "easykash" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush" or "security" or "videoprotection"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner"
             : normalized == "bunny-stream" ? "bunnystream" : null;
@@ -1823,6 +1823,8 @@ public static class AdminRuntimeSettingsEndpoints
                     ? Ok(sectionId, "Web push is enabled and VAPID keys are configured (Push section).", testedAt)
                     : Failed(sectionId, "Web push is enabled but VAPID keys are missing. Configure them in the Push section.", testedAt))
                 : Ok(sectionId, "Web push is disabled. Enable it (with VAPID keys) to allow browser notifications.", testedAt),
+            "security" => Ok(sectionId, $"Single active session {(settings.Security.SingleActiveSessionEnabled ? "enforced" : "off")}; risk mode '{settings.Security.RiskMode}'; device verification {(settings.Security.TrustedDeviceRequired ? "required" : "off")}; inactive session timeout {settings.Security.InactiveSessionTimeoutDays}d. No live sign-in was attempted.", testedAt),
+            "videoprotection" => Ok(sectionId, $"Revoke-on-capture {(settings.VideoProtection.RevokeOnCaptureDetected ? "on" : "off")}; block rooted devices {(settings.VideoProtection.BlockRootedDevices ? "on" : "off")}; block emulators {(settings.VideoProtection.BlockEmulators ? "on" : "off")}. No playback session was probed.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
