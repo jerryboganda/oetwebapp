@@ -4432,6 +4432,8 @@ export async function fetchBillingPaymentStatus(input: {
     failureReason: toNullableString(response.failureReason),
     fulfilledAt: toNullableString(response.fulfilledAt),
     expiresAt: toNullableString(response.expiresAt),
+    manualDeliveryRequired: response.manualDeliveryRequired === true,
+    whatsAppUrl: toNullableString(response.whatsAppUrl),
   };
 }
 

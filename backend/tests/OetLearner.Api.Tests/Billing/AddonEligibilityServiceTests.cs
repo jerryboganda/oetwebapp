@@ -32,6 +32,9 @@ public class AddonEligibilityServiceTests : IDisposable
             Plan("writing-crash", writing: true, speaking: false, tutorBook: true, price: 35, draft: false, visible: true),
             Plan("speaking-crash", writing: false, speaking: true, tutorBook: true, price: 30, draft: false, visible: true),
             Plan("mega-special", writing: true, speaking: true, tutorBook: true, price: 80, draft: false, visible: true),
+            // Deliberately carries the legacy flag so the explicit guidance-list
+            // allowlist is proven to be authoritative.
+            Plan("full-physiotherapy", writing: true, speaking: false, tutorBook: true, price: 100, draft: false, visible: true),
             Plan("full-condensed-medicine-tbook", writing: true, speaking: false, tutorBook: false, price: 135, draft: false, visible: true),
             // tutor-book is the canonical extensionAllowed:false plan.
             Plan("tutor-book", writing: false, speaking: false, tutorBook: false, price: 45, draft: false, visible: true, extensionAllowed: false)
@@ -190,6 +193,31 @@ public class AddonEligibilityServiceTests : IDisposable
         var result = await service.ResolveAsync("user-tb", "tutor-book-addon", default);
         Assert.False(result.Eligible);
         Assert.Equal("addon_already_owned", result.Reason);
+    }
+
+    [Fact]
+    public async Task GuidanceListedCourse_AllowsTutorBookAddon()
+    {
+        GiveUserEnrolment("user-tb-eligible", "writing-crash");
+        var service = new AddonEligibilityService(_db);
+
+        var result = await service.ResolveAsync("user-tb-eligible", "tutor-book-addon", default);
+
+        Assert.True(result.Eligible);
+        Assert.Single(result.EligibleParents);
+        Assert.Equal("writing-crash", result.EligibleParents[0].PlanCode);
+    }
+
+    [Fact]
+    public async Task CourseOutsideGuidanceList_BlocksTutorBookAddonEvenWithLegacyFlag()
+    {
+        GiveUserEnrolment("user-physio", "full-physiotherapy");
+        var service = new AddonEligibilityService(_db);
+
+        var result = await service.ResolveAsync("user-physio", "tutor-book-addon", default);
+
+        Assert.False(result.Eligible);
+        Assert.Equal("no_eligible_parent", result.Reason);
     }
 
     [Fact]

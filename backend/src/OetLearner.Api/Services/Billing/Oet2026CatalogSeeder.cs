@@ -358,7 +358,8 @@ public sealed class Oet2026CatalogSeeder(
         if (dto.ListeningTests.HasValue) grants["listening_tests"] = dto.ListeningTests.Value;
         if (dto.ReadingTests.HasValue) grants["reading_tests"] = dto.ReadingTests.Value;
         if (dto.PriorityQueue) grants["priority_queue"] = true;
-        if (dto.AddonKind == "tutor_book") grants["tutor_book"] = true;
+        // Tutor Book purchases are fulfilled outside the platform through WhatsApp.
+        // The paid order/item is retained, but no learner entitlement is granted.
         return JsonSerializer.Serialize(grants);
     }
 

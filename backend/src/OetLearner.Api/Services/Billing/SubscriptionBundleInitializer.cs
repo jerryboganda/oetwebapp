@@ -91,9 +91,9 @@ public static class SubscriptionBundleInitializer
 
     /// <summary>
     /// Apply ONLY the non-AI add-on entitlements to a Subscription: increment
-    /// writing assessments by <c>LettersGranted</c>, speaking sessions by
-    /// <c>SessionsGranted</c>, and unlock the Tutor Book for <c>tutor_book</c>
-    /// add-ons.
+    /// writing assessments by <c>LettersGranted</c> and speaking sessions by
+    /// <c>SessionsGranted</c>. Tutor Book products are manual WhatsApp delivery
+    /// and intentionally grant no platform entitlement.
     ///
     /// <para>Deliberately does NOT touch <c>AiCreditsRemaining</c>. AI-credit
     /// add-ons are granted separately via the AI-credit ledger
@@ -115,10 +115,6 @@ public static class SubscriptionBundleInitializer
         {
             subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + addon.SessionsGranted);
         }
-        if (string.Equals(addon.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
-        {
-            subscription.TutorBookUnlocked = true;
-        }
     }
 
     /// <summary>Immutable-snapshot flavour of
@@ -136,10 +132,6 @@ public static class SubscriptionBundleInitializer
         {
             subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + version.SessionsGranted);
         }
-        if (string.Equals(version.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
-        {
-            subscription.TutorBookUnlocked = true;
-        }
     }
 
     /// <summary>Apply an add-on grant to an existing Subscription. Increments
@@ -155,10 +147,6 @@ public static class SubscriptionBundleInitializer
         if (addon.SessionsGranted > 0)
         {
             subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + addon.SessionsGranted);
-        }
-        if (string.Equals(addon.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
-        {
-            subscription.TutorBookUnlocked = true;
         }
         if (addon.GrantCredits > 0)
         {
@@ -177,10 +165,6 @@ public static class SubscriptionBundleInitializer
         if (version.SessionsGranted > 0)
         {
             subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + version.SessionsGranted);
-        }
-        if (string.Equals(version.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
-        {
-            subscription.TutorBookUnlocked = true;
         }
         if (version.GrantCredits > 0)
         {

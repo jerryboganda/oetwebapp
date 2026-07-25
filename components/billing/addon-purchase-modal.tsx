@@ -32,6 +32,7 @@ export function AddonPurchaseModal({
   onClose,
   checkoutPath = '/checkout/review',
 }: AddonPurchaseModalProps) {
+  const isTutorBook = addOnCode === 'tutor-book-addon';
   const router = useRouter();
   const [status, setStatus] = useState<Status>('idle');
   const [quote, setQuote] = useState<AddonQuoteResponse | null>(null);
@@ -159,7 +160,7 @@ export function AddonPurchaseModal({
               ) : quote.eligibleParents.length === 1 ? (
                 <div className="rounded-lg border border-success/30 bg-success/10 p-4 text-sm">
                   <div className="flex items-center gap-2 font-medium text-success">
-                    <Check className="h-4 w-4" /> Will apply to:
+                    <Check className="h-4 w-4" /> {isTutorBook ? 'Eligible through:' : 'Will apply to:'}
                   </div>
                   <div className="mt-1 text-sm text-navy">
                     {quote.eligibleParents[0].planName}
@@ -167,6 +168,13 @@ export function AddonPurchaseModal({
                 </div>
               ) : (
                 <p className="text-sm text-muted">No parent selector available.</p>
+              )}
+
+              {isTutorBook && (
+                <div className="rounded-lg border border-[#D4A44F]/40 bg-[#D4A44F]/10 p-3 text-xs text-navy">
+                  Pay normally online, then contact us on WhatsApp to receive your personalised Tutor Book.
+                  This purchase does not unlock Tutor Book, Recalls, courses, or subtests on the platform.
+                </div>
               )}
 
               <button

@@ -62,6 +62,38 @@ describe('Billing payment return page', () => {
     expect(screen.getByRole('link', { name: /continue/i })).toHaveAttribute('href', '/dashboard?purchase=success');
   });
 
+  it('sends a completed manual Tutor Book order to WhatsApp without claiming access', async () => {
+    mockFetchBillingPaymentStatus.mockResolvedValue({
+      status: 'completed',
+      quoteId: 'quote-tutor-book',
+      checkoutSessionId: 'cs_tutor_book',
+      productType: 'addon_purchase',
+      targetPlanId: null,
+      addOnCodes: ['tutor-book-addon'],
+      items: [],
+      totalAmount: 32,
+      currency: 'GBP',
+      invoiceId: 'inv-tutor-book',
+      subscriptionId: 'sub-parent',
+      failureReason: null,
+      fulfilledAt: '2026-07-25T12:00:00Z',
+      expiresAt: null,
+      manualDeliveryRequired: true,
+      whatsAppUrl: 'https://wa.me/447961725989',
+    });
+
+    renderWithRouter(<BillingPaymentReturnPage />, {
+      searchParams: new URLSearchParams('status=success&quote=quote-tutor-book&session=cs_tutor_book'),
+    });
+
+    expect(await screen.findByText('Payment confirmed')).toBeInTheDocument();
+    expect(screen.getByText(/no Tutor Book access is activated automatically/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /contact us on WhatsApp/i })).toHaveAttribute(
+      'href',
+      'https://wa.me/447961725989',
+    );
+  });
+
   it('renders a cancellable retry state without polling when no reference is present', async () => {
     renderWithRouter(<BillingPaymentReturnPage />, {
       searchParams: new URLSearchParams('status=cancelled'),

@@ -100,14 +100,14 @@ public class SubscriptionBundleInitializerTests
     }
 
     [Fact]
-    public void ApplyAddOnGrant_TutorBook_FlipsUnlocked()
+    public void ApplyAddOnGrant_TutorBook_DoesNotUnlockPlatformAccess()
     {
         var addon = new BillingAddOn { Code = "tutor-book-addon", AddonKind = "tutor_book" };
         var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "writing-crash", TutorBookUnlocked = false };
 
         SubscriptionBundleInitializer.ApplyAddOnGrant(sub, addon);
 
-        Assert.True(sub.TutorBookUnlocked);
+        Assert.False(sub.TutorBookUnlocked);
     }
 
     [Fact]
@@ -277,25 +277,25 @@ public class SubscriptionBundleInitializerTests
     }
 
     [Fact]
-    public void ApplyAddOnEntitlements_FromAddOn_TutorBookKind_FlipsUnlocked_WithoutAiCredits()
+    public void ApplyAddOnEntitlements_FromAddOn_TutorBookKind_DoesNotUnlockPlatformAccess()
     {
         var addon = new BillingAddOn { Code = "tutor-book-addon", AddonKind = "tutor_book" };
         var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "writing-crash", TutorBookUnlocked = false, AiCreditsRemaining = 2 };
 
         SubscriptionBundleInitializer.ApplyAddOnEntitlements(sub, addon);
 
-        Assert.True(sub.TutorBookUnlocked);
+        Assert.False(sub.TutorBookUnlocked);
         Assert.Equal(2, sub.AiCreditsRemaining); // untouched
     }
 
     [Fact]
-    public void ApplyAddOnEntitlements_FromVersion_TutorBookKind_FlipsUnlocked()
+    public void ApplyAddOnEntitlements_FromVersion_TutorBookKind_DoesNotUnlockPlatformAccess()
     {
         var version = new BillingAddOnVersion { Code = "tutor-book-addon", AddonKind = "tutor_book" };
         var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "writing-crash", TutorBookUnlocked = false };
 
         SubscriptionBundleInitializer.ApplyAddOnEntitlements(sub, version);
 
-        Assert.True(sub.TutorBookUnlocked);
+        Assert.False(sub.TutorBookUnlocked);
     }
 }

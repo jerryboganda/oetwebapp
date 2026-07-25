@@ -160,6 +160,8 @@ export interface BillingPaymentStatus {
   failureReason: string | null;
   fulfilledAt: string | null;
   expiresAt: string | null;
+  manualDeliveryRequired: boolean;
+  whatsAppUrl: string | null;
 }
 
 export interface WalletTransactionDto {

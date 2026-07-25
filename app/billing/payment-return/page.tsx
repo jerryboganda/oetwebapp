@@ -166,9 +166,17 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain }: { phase: Pha
 
           <div className="mt-6 flex flex-wrap gap-3">
             {phase === 'completed' ? (
-              <Button asChild>
-                <Link href={destination}>Continue <ArrowRight className="h-4 w-4" /></Link>
-              </Button>
+              status?.manualDeliveryRequired && status.whatsAppUrl ? (
+                <Button asChild>
+                  <a href={status.whatsAppUrl} target="_blank" rel="noreferrer">
+                    Contact us on WhatsApp <ArrowRight className="h-4 w-4" />
+                  </a>
+                </Button>
+              ) : (
+                <Button asChild>
+                  <Link href={destination}>Continue <ArrowRight className="h-4 w-4" /></Link>
+                </Button>
+              )
             ) : null}
             {phase === 'polling' ? (
               <Button disabled>
@@ -203,6 +211,9 @@ function StatusIcon({ phase }: { phase: Phase }) {
 }
 
 function messageFor(phase: Phase, status?: BillingPaymentStatus | null) {
+  if (phase === 'completed' && status?.manualDeliveryRequired) {
+    return 'Your payment has been received. No Tutor Book access is activated automatically. Please contact us on WhatsApp so we can prepare and send your personalised package.';
+  }
   if (phase === 'completed') return 'Your payment has been received and your account has been updated.';
   if (phase === 'cancelled') return status?.failureReason ?? 'No charge was made. You can safely retry when ready.';
   if (phase === 'expired') return status?.failureReason ?? 'The checkout window expired before payment was completed.';

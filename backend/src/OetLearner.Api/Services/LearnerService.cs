@@ -3657,13 +3657,19 @@ public partial class LearnerService(
             resolvedSubscriptionId = quote.SubscriptionId;
         }
 
+        var purchasedAddOnCodes = JsonSupport.Deserialize<List<string>>(quote.AddOnCodesJson, []);
+        var manualDeliveryRequired = purchasedAddOnCodes.Contains("tutor-book-addon", StringComparer.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(quote.PlanCode)
+                && DeliveryMethods.RequiresManualFulfilment(
+                    await ResolvePlanDeliveryMethodAsync(quote.PlanVersionId, quote.PlanCode, cancellationToken)));
+
         return new BillingPaymentStatusResponse(
             status,
             quote.Id,
             quote.CheckoutSessionId,
             productType,
             quote.PlanCode,
-            JsonSupport.Deserialize<List<string>>(quote.AddOnCodesJson, []),
+            purchasedAddOnCodes,
             quoteResponse.Items,
             quote.TotalAmount,
             quote.Currency,
@@ -3671,7 +3677,9 @@ public partial class LearnerService(
             resolvedSubscriptionId,
             FailureReasonForBillingPaymentStatus(status),
             status == "completed" ? transaction?.UpdatedAt ?? invoice?.IssuedAt : null,
-            quote.ExpiresAt);
+            quote.ExpiresAt,
+            manualDeliveryRequired,
+            manualDeliveryRequired ? "https://wa.me/447961725989" : null);
     }
 
     public async Task<object> GetBillingExtrasAsync()
@@ -8026,29 +8034,8 @@ public partial class LearnerService(
                   || coupon.Id.ToLower() == normalized, cancellationToken);
       }
 
-      /// <summary>TutorBook packages ("tutor-book" plan, "tutor-book-addon" add-on) are
-      /// manual-grant-only per owner directive 2026-07-22: no self-checkout, admins grant
-      /// access per-user from the "Manage access" panel (<see cref="UserAccessAllocationService"/>).
-      /// Every purchase entry point resolves its target through
-      /// <see cref="FindPurchasableBillingPlanAsync"/>/<see cref="FindPurchasableBillingAddOnAsync"/>,
-      /// so gating here blocks quote building, plan changes, and cart add-ons in one place.</summary>
-      private static readonly HashSet<string> ManualGrantOnlyPlanCodes = new(StringComparer.OrdinalIgnoreCase) { "tutor-book" };
-      private static readonly HashSet<string> ManualGrantOnlyAddOnCodes = new(StringComparer.OrdinalIgnoreCase) { "tutor-book-addon" };
-
-      private static void EnsureNotManualGrantOnly(string code)
-      {
-          if (ManualGrantOnlyPlanCodes.Contains(code) || ManualGrantOnlyAddOnCodes.Contains(code))
-          {
-              throw ApiException.Validation(
-                  "manual_grant_only",
-                  "This package is granted manually by an admin — it cannot be purchased directly. Please contact support to enable it on your account.",
-                  [new ApiFieldError("priceId", "manual_grant_only", "Contact support to enable this package.")]);
-          }
-      }
-
       private async Task<BillingPlan?> FindPurchasableBillingPlanAsync(string planCode, CancellationToken cancellationToken)
       {
-          if (!string.IsNullOrWhiteSpace(planCode)) EnsureNotManualGrantOnly(planCode.Trim());
           var plan = await FindBillingPlanAsync(planCode, cancellationToken);
           return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible && !plan.IsDraft
               ? plan
@@ -8110,7 +8097,6 @@ public partial class LearnerService(
 
       private async Task<BillingAddOn?> FindPurchasableBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
       {
-          if (!string.IsNullOrWhiteSpace(addOnCode)) EnsureNotManualGrantOnly(addOnCode.Trim());
           var addOn = await FindBillingAddOnAsync(addOnCode, cancellationToken);
           return addOn is not null && addOn.Status == BillingAddOnStatus.Active
               ? addOn
@@ -8910,10 +8896,19 @@ public partial class LearnerService(
         // buyer their order sits Pending Manual Fulfilment rather than implying access is
         // live the moment they pay (spec 2026-07-15 §2/§6.6). Read from the version locked
         // to this quote so a mid-flight admin edit cannot change an in-flight order. An
-        // add-on/credit purchase buys no plan, so it is always automatic_web.
+        // The Tutor Book add-on is also manual material: payment records the order
+        // against its eligible parent course but never unlocks a platform module.
+        var hasManualTutorBookAddon = snapshotAddOns.Any(addOn =>
+            string.Equals(addOn.Code, "tutor-book-addon", StringComparison.OrdinalIgnoreCase));
         validation["deliveryMethod"] = snapshotPlan is null
-            ? DeliveryMethods.AutomaticWeb
+            ? hasManualTutorBookAddon ? DeliveryMethods.ManualMaterial : DeliveryMethods.AutomaticWeb
             : await ResolvePlanDeliveryMethodAsync(planVersion?.Id, snapshotPlan.Code, cancellationToken);
+        validation["manualDeliveryRequired"] = hasManualTutorBookAddon
+            || string.Equals(validation["deliveryMethod"]?.ToString(), DeliveryMethods.ManualMaterial, StringComparison.OrdinalIgnoreCase);
+        if ((bool)validation["manualDeliveryRequired"])
+        {
+            validation["whatsAppUrl"] = "https://wa.me/447961725989";
+        }
 
         var addOnVersions = new Dictionary<string, BillingCatalogVersionRef>(StringComparer.OrdinalIgnoreCase);
         foreach (var snapshotAddOn in snapshotAddOns)
@@ -11242,18 +11237,24 @@ public partial class LearnerService(
                 int resolvedExtensionDays = 0;
                 if (addOnVersion is not null)
                 {
-                    SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, addOnVersion);
                     resolvedAddonKind = addOnVersion.AddonKind;
                     resolvedExtensionDays = addOnVersion.ExtensionDays;
+                    if (!string.Equals(resolvedAddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
+                    {
+                        SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, addOnVersion);
+                    }
                 }
                 else
                 {
                     var liveAddOnForEntitlements = await FindBillingAddOnAsync(addOn.Code, ct);
                     if (liveAddOnForEntitlements is not null)
                     {
-                        SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, liveAddOnForEntitlements);
                         resolvedAddonKind = liveAddOnForEntitlements.AddonKind;
                         resolvedExtensionDays = liveAddOnForEntitlements.ExtensionDays;
+                        if (!string.Equals(resolvedAddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
+                        {
+                            SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, liveAddOnForEntitlements);
+                        }
                     }
                 }
 

@@ -185,7 +185,9 @@ public static class Oet2026CatalogEndpoints
         int DisplayOrder);
 
     private static async Task<Ok<PublicCatalogResponse>> PublicCatalogPricing(
+        HttpContext http,
         LearnerDbContext db,
+        IAddonEligibilityService addonEligibility,
         CancellationToken ct)
     {
         var plans = await db.BillingPlans.AsNoTracking()
@@ -202,6 +204,21 @@ public static class Oet2026CatalogEndpoints
                     || a.EligibilityFlag == "tutor_book_discount"))
             .OrderBy(a => a.DisplayOrder)
             .ToListAsync(ct);
+
+        // The discounted Tutor Book is not a public offer. It is returned only
+        // to an authenticated learner who currently owns an approved parent course.
+        var tutorBookAddon = addOns.FirstOrDefault(a =>
+            string.Equals(a.Code, "tutor-book-addon", StringComparison.OrdinalIgnoreCase));
+        if (tutorBookAddon is not null)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var eligible = !string.IsNullOrWhiteSpace(userId)
+                && (await addonEligibility.ResolveAsync(userId, tutorBookAddon.Code, ct)).Eligible;
+            if (!eligible)
+            {
+                addOns.Remove(tutorBookAddon);
+            }
+        }
 
         var planRows = plans.Select(p => new PublicPlanRow(
             p.Code,
@@ -348,7 +365,8 @@ public static class Oet2026CatalogEndpoints
     {
         "writing_addons" => plan.WritingAddonsEnabled,
         "speaking_addons" => plan.SpeakingAddonsEnabled,
-        "tutor_book_discount" => plan.TutorBookDiscountEnabled,
+        "tutor_book_discount" => plan.TutorBookDiscountEnabled
+            && AddonEligibilityService.IsTutorBookParentPlanCode(plan.Code),
         _ => false
     };
 

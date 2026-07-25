@@ -235,7 +235,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
     }
 
     [Fact]
-    public async Task AddOnPurchase_TutorBookAddOn_UnlocksTutorBook()
+    public async Task AddOnPurchase_TutorBookAddOn_RecordsPurchaseWithoutPlatformUnlock()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var ctx = new FulfillmentContext(suffix);
@@ -262,7 +262,10 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == ctx.UserId);
 
-            Assert.True(subscription.TutorBookUnlocked);
+            Assert.False(subscription.TutorBookUnlocked);
+            Assert.Contains(
+                await db.SubscriptionItems.Where(item => item.SubscriptionId == subscription.Id).ToListAsync(),
+                item => item.ItemCode == "tutor-book-addon");
         }
     }
 
@@ -447,7 +450,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
     public async Task CartMultiAddOn_GrantsEveryLineItem()
     {
         // Regression guard for the storefront cart: BuildBillingQuoteAsync now composes a
-        // multi-item quote (a letters pack AND a tutor-book unlock bought together), and
+        // multi-item quote (a letters pack AND a manual Tutor Book order), and
         // ApplyCheckoutCompletionAsync must fulfil EVERY line in the one checkout.
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var ctx = new FulfillmentContext(suffix);
@@ -465,7 +468,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             SeedLearnerWithSubscription(db, ctx, now, writingAssessmentsRemaining: 2);
             // Add-on A: 5-letter writing pack (ctx-based helper).
             SeedAddOn(db, ctx, lettersGranted: 5, sessionsGranted: 0, addonKind: "writing_assessments", grantCredits: 0, now: now);
-            // Add-on B: tutor-book unlock (inline, distinct identity).
+            // Add-on B: manual Tutor Book order (inline, distinct identity).
             db.BillingAddOns.Add(new BillingAddOn
             {
                 Id = addOnBId, Code = addOnBCode, Name = "Tutor Book", Price = 49m, Currency = "AUD",
@@ -516,9 +519,9 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == ctx.UserId);
 
-            // BOTH cart lines fulfilled in the single checkout: +5 letters AND tutor book.
+            // BOTH cart lines are recorded in the single checkout, but Tutor Book remains manual.
             Assert.Equal(7, subscription.WritingAssessmentsRemaining); // 2 + 5
-            Assert.True(subscription.TutorBookUnlocked);
+            Assert.False(subscription.TutorBookUnlocked);
         }
     }
 

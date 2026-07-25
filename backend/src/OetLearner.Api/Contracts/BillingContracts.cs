@@ -48,7 +48,9 @@ public record BillingPaymentStatusResponse(
     string? SubscriptionId,
     string? FailureReason,
     DateTimeOffset? FulfilledAt,
-    DateTimeOffset? ExpiresAt);
+    DateTimeOffset? ExpiresAt,
+    bool ManualDeliveryRequired,
+    string? WhatsAppUrl);
 
 public record NativeIapProductMappingUpsertRequest(
     string Platform,

@@ -11,8 +11,9 @@ namespace OetLearner.Api.Services.Billing;
 /// <list type="bullet">
 ///   <item>Writing letter assessment add-ons require a parent enrolment with <c>WritingAddonsEnabled=true</c>.</item>
 ///   <item>Speaking session add-ons require a parent with <c>SpeakingAddonsEnabled=true</c>.</item>
-///   <item>The £32 Tutor Book add-on requires a parent with <c>TutorBookDiscountEnabled=true</c> AND no
-///   pre-existing Tutor Book entitlement (block double-charge).</item>
+///   <item>The £32 Tutor Book add-on requires an active parent course on the
+///   guidance-list allowlist with <c>TutorBookDiscountEnabled=true</c>, and no
+///   prior Tutor Book purchase (block double-charge).</item>
 /// </list>
 ///
 /// <para>Returns the candidate parent enrolment(s) so the checkout UI can
@@ -43,6 +44,30 @@ public sealed record AddonEligibilityResult(
 
 public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibilityService
 {
+    private static readonly HashSet<string> TutorBookParentPlanCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "full-condensed-medicine",
+        "full-nursing",
+        "full-nursing-assessment",
+        "full-nursing-premium",
+        "full-pharmacy",
+        "crash-course",
+        "crash-3letters",
+        "crash-5letters",
+        "writing-crash",
+        "writing-crash-2",
+        "writing-crash-3",
+        "writing-crash-5",
+        "writing-crash-7",
+        "writing-crash-10",
+        "speaking-crash",
+        "double-special",
+        "mega-special",
+    };
+
+    public static bool IsTutorBookParentPlanCode(string? planCode) =>
+        !string.IsNullOrWhiteSpace(planCode) && TutorBookParentPlanCodes.Contains(planCode);
+
     public async Task<AddonEligibilityResult> ResolveAsync(string userId, string addOnCode, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId))
@@ -72,13 +97,26 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
         }
 
         // Tutor Book add-on has an additional "no double-charge" guard.
-        if (string.Equals(addOn.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
+        var isTutorBookAddon = string.Equals(addOn.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase);
+        if (isTutorBookAddon)
         {
-            var alreadyOwns = await db.Subscriptions.AsNoTracking()
+            var alreadyOwnsPlatformTutorBook = await db.Subscriptions.AsNoTracking()
                 .AnyAsync(s => s.UserId == userId
                     && s.TutorBookUnlocked
                     && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial), ct);
-            if (alreadyOwns)
+            var alreadyPurchasedTutorBook = await db.Subscriptions.AsNoTracking()
+                .Where(s => s.UserId == userId)
+                .AnyAsync(s =>
+                    (db.BillingPlans.Any(plan =>
+                            plan.Code == "tutor-book"
+                            && (plan.Code == s.PlanId || plan.Id == s.PlanId))
+                        && s.Status != SubscriptionStatus.Cancelled
+                        && s.Status != SubscriptionStatus.Expired)
+                    || db.SubscriptionItems.Any(item =>
+                        item.SubscriptionId == s.Id
+                        && item.ItemCode == "tutor-book-addon"
+                        && item.Status == SubscriptionItemStatus.Active), ct);
+            if (alreadyOwnsPlatformTutorBook || alreadyPurchasedTutorBook)
             {
                 return Fail(
                     addOn.Code, addOn.Name, addOn.AddonKind, addOn.EligibilityFlag,
@@ -119,7 +157,8 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
 
         var matches = candidateRows.Where(row => isAccessExtension
             ? row.ExtensionAllowed
-            : FlagMatches(row.WritingAddonsEnabled, row.SpeakingAddonsEnabled, row.TutorBookDiscountEnabled, flag)).ToList();
+            : (!isTutorBookAddon || IsTutorBookParentPlanCode(row.PlanCode))
+              && FlagMatches(row.WritingAddonsEnabled, row.SpeakingAddonsEnabled, row.TutorBookDiscountEnabled, flag)).ToList();
 
         if (matches.Count == 0)
         {
@@ -160,7 +199,8 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
         {
             "writing_addons" => query.Where(p => p.WritingAddonsEnabled),
             "speaking_addons" => query.Where(p => p.SpeakingAddonsEnabled),
-            "tutor_book_discount" => query.Where(p => p.TutorBookDiscountEnabled),
+            "tutor_book_discount" => query.Where(p => p.TutorBookDiscountEnabled
+                && TutorBookParentPlanCodes.Contains(p.Code)),
             _ => query.Where(p => false)
         };
 
