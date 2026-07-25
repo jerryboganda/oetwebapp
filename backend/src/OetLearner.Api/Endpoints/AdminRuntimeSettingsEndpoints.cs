@@ -95,6 +95,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyCheckoutCom(row, request.CheckoutCom, provider, changedKeys);
                     ApplyBunnyStream(row, request.BunnyStream, provider, changedKeys);
                     ApplyVideoProtection(row, request.VideoProtection, changedKeys);
+                    ApplySecurity(row, request.Security, changedKeys);
                     ApplyPaymob(row, request.Paymob, provider, changedKeys);
                     ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
                     ApplyEasyKash(row, request.EasyKash, provider, changedKeys);
@@ -392,6 +393,10 @@ public static class AdminRuntimeSettingsEndpoints
             videoProtection = new
             {
                 revokeOnCaptureDetected = settings.VideoProtection.RevokeOnCaptureDetected,
+            },
+            security = new
+            {
+                singleActiveSessionEnabled = settings.Security.SingleActiveSessionEnabled,
             },
             paymob = new
             {
@@ -1165,6 +1170,12 @@ public static class AdminRuntimeSettingsEndpoints
     {
         if (d is null) return;
         if (TrySetNullableBool(d.RevokeOnCaptureDetected, v => row.VideoProtectionRevokeOnCaptureDetected = v, "videoProtection.revokeOnCaptureDetected", changed)) { }
+    }
+
+    private static void ApplySecurity(RuntimeSettingsRow row, RuntimeSettingsSecurityUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.SingleActiveSessionEnabled, v => row.SecuritySingleActiveSessionEnabled = v, "security.singleActiveSessionEnabled", changed)) { }
     }
 
     private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
@@ -2141,6 +2152,7 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsCheckoutComUpdate? CheckoutCom { get; set; }
     public RuntimeSettingsBunnyStreamUpdate? BunnyStream { get; set; }
     public RuntimeSettingsVideoProtectionUpdate? VideoProtection { get; set; }
+    public RuntimeSettingsSecurityUpdate? Security { get; set; }
     public RuntimeSettingsPaymobUpdate? Paymob { get; set; }
     public RuntimeSettingsPayTabsUpdate? PayTabs { get; set; }
     public RuntimeSettingsEasyKashUpdate? EasyKash { get; set; }
@@ -2324,6 +2336,12 @@ public sealed class RuntimeSettingsBunnyStreamUpdate
 public sealed class RuntimeSettingsVideoProtectionUpdate
 {
     public JsonElement? RevokeOnCaptureDetected { get; set; }
+}
+
+/// <summary>Account-security policy (Course Platform Security Requirements §3).</summary>
+public sealed class RuntimeSettingsSecurityUpdate
+{
+    public JsonElement? SingleActiveSessionEnabled { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

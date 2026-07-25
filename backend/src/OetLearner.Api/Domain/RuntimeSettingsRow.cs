@@ -479,6 +479,10 @@ public class RuntimeSettingsRow
     /// session. Null defaults to true (block-on-detection).</summary>
     public bool? VideoProtectionRevokeOnCaptureDetected { get; set; }
 
+    /// <summary>Security spec §3.1: single active session enforcement.
+    /// Null defaults to true (owner directive — enforce immediately).</summary>
+    public bool? SecuritySingleActiveSessionEnabled { get; set; }
+
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on
     // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back

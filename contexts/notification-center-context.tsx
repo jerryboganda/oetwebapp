@@ -2,7 +2,7 @@
 
 import type { HubConnection } from '@microsoft/signalr';
 import { Toast } from '@/components/ui/alert';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
+import { ensureFreshAccessToken, forceSignOutAndRedirect } from '@/lib/auth-client';
 import { env } from '@/lib/env';
 import {
   createPushSubscription,
@@ -594,6 +594,15 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       setConnectionStatus('connecting');
       connection.on('notification', (envelope: NotificationRealtimeEnvelope) => {
         handleRealtimeEnvelope(envelope);
+      });
+      // Security spec §3.1: another sign-in (or an admin/self revoke) killed
+      // THIS session. Broadcast a DOM event first so anything mounted right
+      // now (e.g. the video player) can react immediately — pause, show a
+      // "signed in elsewhere" overlay — before the hard navigation below
+      // unmounts everything anyway.
+      connection.on('session_revoked', (payload?: { reason?: string }) => {
+        window.dispatchEvent(new CustomEvent('oet:session-revoked', { detail: payload }));
+        forceSignOutAndRedirect('signed_out_elsewhere');
       });
       connection.onreconnecting(() => {
         setConnectionStatus('reconnecting');

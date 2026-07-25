@@ -255,14 +255,27 @@ function isOnPublicAuthPath(pathname: string): boolean {
  * "Request failed: 400" error cards — which is what the dashboard was showing
  * after the SameSite cookie migration left stale Strict cookies in browsers.
  */
-function redirectToSignInAfterSessionLoss(): void {
+function redirectToSignInAfterSessionLoss(reason?: string): void {
   if (typeof window === 'undefined') return;
   const currentPath = window.location.pathname;
   if (isOnPublicAuthPath(currentPath)) return;
   const next = encodeURIComponent(currentPath + window.location.search);
+  const reasonParam = reason ? `&reason=${encodeURIComponent(reason)}` : '';
   // Hard navigation so the Next.js middleware sees the cleared auth cookie and
   // any in-flight React state is discarded.
-  window.location.replace(`/sign-in?next=${next}`);
+  window.location.replace(`/sign-in?next=${next}${reasonParam}`);
+}
+
+/**
+ * Security spec §3.1: called when a `session_revoked` push arrives over
+ * SignalR (see contexts/notification-center-context.tsx) — another sign-in
+ * elsewhere, an admin revoke, or a self-serve revoke of the CURRENT session.
+ * Clears local session state and hard-navigates to /sign-in with a reason
+ * code the form renders as a banner (`signed_out_elsewhere` | `session_revoked`).
+ */
+export function forceSignOutAndRedirect(reason: 'signed_out_elsewhere' | 'session_revoked'): void {
+  clearStoredSession();
+  redirectToSignInAfterSessionLoss(reason);
 }
 
 // Dedupe concurrent refresh attempts. Refresh tokens are single-use (rotated

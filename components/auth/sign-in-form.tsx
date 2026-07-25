@@ -26,6 +26,11 @@ interface SignInFormProps {
   nextHref?: string | null;
   initialEmail?: string | null;
   externalError?: string | null;
+  /** Set when the sign-in redirect was triggered by a lost session, not a
+   * user-initiated navigation — e.g. `signed_out_elsewhere` (security spec
+   * §3.1: another device signed in) or `session_revoked` (an admin or the
+   * account holder revoked this session). */
+  reason?: string | null;
 }
 
 function readErrorCode(error: unknown): string | null {
@@ -54,7 +59,18 @@ function resolveExternalErrorMessage(errorCode?: string | null): string | null {
   }
 }
 
-export function SignInForm({ nextHref, initialEmail, externalError }: SignInFormProps) {
+function resolveSignOutReasonMessage(reason?: string | null): string | null {
+  switch (reason) {
+    case 'signed_out_elsewhere':
+      return 'You were signed out because this account signed in on another device.';
+    case 'session_revoked':
+      return 'You were signed out because this session was revoked. Sign in again to continue.';
+    default:
+      return null;
+  }
+}
+
+export function SignInForm({ nextHref, initialEmail, externalError, reason }: SignInFormProps) {
   const router = useRouter();
   const { signIn } = useAuth();
   const { externalAuthProviders = [] } = useSignupCatalog();
@@ -64,7 +80,9 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
   const [email, setEmail] = useState(initialEmail ?? '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState<string | null>(resolveExternalErrorMessage(externalError));
+  const [error, setError] = useState<string | null>(
+    resolveExternalErrorMessage(externalError) ?? resolveSignOutReasonMessage(reason),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExpiredSubscriptionModalOpen, setIsExpiredSubscriptionModalOpen] = useState(false);
   const [desktopRuntimeInfo, setDesktopRuntimeInfo] = useState<Awaited<ReturnType<NonNullable<typeof window.desktopBridge>['runtime']['info']>> | null>(null);

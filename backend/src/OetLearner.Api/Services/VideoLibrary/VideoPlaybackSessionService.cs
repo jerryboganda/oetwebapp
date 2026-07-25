@@ -35,6 +35,13 @@ public interface IVideoPlaybackSessionService
     /// false — if the session doesn't exist, isn't owned by this user, or is
     /// already revoked. The player's next renew call 403s as usual.</summary>
     Task<bool> RevokeSessionAsync(string userId, string sessionId, CancellationToken ct);
+
+    /// <summary>Immediately revokes EVERY active playback session owned by
+    /// <paramref name="userId"/> (Security spec §3.1 "previous device loses
+    /// playback access even mid-video" — called when a sign-in elsewhere
+    /// revokes this account's other auth sessions, and by admin
+    /// block-playback). Returns the number of sessions revoked.</summary>
+    Task<int> RevokeAllForUserAsync(string userId, CancellationToken ct);
 }
 
 public sealed record PlaybackSessionCaption(string LanguageCode, string Label);
@@ -221,6 +228,14 @@ public sealed class VideoPlaybackSessionService(
         tracked.RevokedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<int> RevokeAllForUserAsync(string userId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return await db.VideoPlaybackSessions
+            .Where(s => s.UserId == userId && s.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.RevokedAt, now), ct);
     }
 
     private async Task RevokeAsync(string sessionId, DateTimeOffset now, CancellationToken ct)

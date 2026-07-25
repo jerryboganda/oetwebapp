@@ -15,6 +15,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Security;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -33,6 +34,8 @@ public sealed class AuthService(
     IHttpContextAccessor httpContextAccessor,
     IMemoryCache memoryCache,
     ISecurityEventLogger securityEventLogger,
+    ISessionRevocationService sessionRevocationService,
+    IRuntimeSettingsProvider runtimeSettingsProvider,
     TimeProvider timeProvider)
 {
     private const int AllowedAuthenticatorDriftWindows = 1;
@@ -1011,7 +1014,27 @@ public sealed class AuthService(
         Guid? familyId = null)
     {
         var sessionId = Guid.NewGuid();
-        var issuedSession = tokenService.IssueSession(subject, sessionId);
+        // Fresh sign-in (familyId is null on entry) starts its own family;
+        // rotation (RefreshAsync) passes the presented token's FamilyId so
+        // the chain survives across refreshes. Computed BEFORE IssueSession
+        // so the "sfam" claim is stamped into the very first access token,
+        // not just the refresh-token row.
+        var resolvedFamilyId = familyId ?? sessionId;
+        var issuedSession = tokenService.IssueSession(subject, sessionId, resolvedFamilyId);
+
+        // Security spec §3.1: signing in on any platform revokes every OTHER
+        // active session immediately. Only on a genuinely fresh sign-in
+        // (familyId is null) — a refresh rotation is the SAME session
+        // continuing, not a new one, and must never revoke itself.
+        if (familyId is null)
+        {
+            var securitySettings = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
+            if (securitySettings.SingleActiveSessionEnabled)
+            {
+                await sessionRevocationService.RevokeAllFamiliesAsync(
+                    account.Id, exceptFamilyId: resolvedFamilyId, reason: "new_sign_in", cancellationToken);
+            }
+        }
 
         string? deviceInfo = null;
         string? ipAddress = null;
@@ -1024,7 +1047,6 @@ public sealed class AuthService(
             if (ipAddress?.Length > 64) ipAddress = ipAddress[..64];
         }
 
-        var resolvedFamilyId = familyId ?? sessionId;
         db.RefreshTokenRecords.Add(new RefreshTokenRecord
         {
             Id = sessionId,

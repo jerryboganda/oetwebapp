@@ -108,6 +108,7 @@ public sealed record EffectiveSettings(
     PronunciationSettings Pronunciation,
     AuthTokenSettings AuthTokens,
     VideoProtectionSettings VideoProtection,
+    SecuritySettings Security,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt)
@@ -704,3 +705,17 @@ public sealed record AuthTokenSettings(
 /// (owner directive — block on detection rather than log-only).
 /// </summary>
 public sealed record VideoProtectionSettings(bool RevokeOnCaptureDetected);
+
+/// <summary>
+/// Account-security policy toggles (Course Platform Security Requirements
+/// §3). Grouped in one record so later phases (device binding, risk mode,
+/// email-verification gate) only add a field here rather than widening
+/// <see cref="EffectiveSettings"/>'s already-large positional parameter list
+/// again. Every toggle here is a safety valve: if a P0 default-on rollout
+/// ever produces a false-positive lockout, an admin can flip it off in
+/// Runtime Settings without a redeploy.
+/// </summary>
+public sealed record SecuritySettings(
+    /// <summary>Signing in on one platform revokes every other active
+    /// session immediately (spec §3.1). Default: true (owner directive).</summary>
+    bool SingleActiveSessionEnabled);

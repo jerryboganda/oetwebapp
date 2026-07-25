@@ -50,10 +50,16 @@ public sealed class AuthTokenService(
     public const string AdminPermissionsClaimType = "admin_permissions";
     public const string SessionIdClaimType = "sid";
 
+    /// <summary>Refresh-token family id (Security spec §3.1) — the session
+    /// IDENTITY that survives rotation, unlike <see cref="SessionIdClaimType"/>
+    /// which changes on every refresh. Single-active-session enforcement keys
+    /// on this claim, not "sid".</summary>
+    public const string SessionFamilyClaimType = "sfam";
+
     private readonly AuthTokenOptions _options = authTokenOptions.Value;
     private readonly IRuntimeSettingsProvider? _runtimeSettings = runtimeSettings;
 
-    public IssuedAuthSession IssueSession(AuthenticatedSessionSubject subject, Guid? sessionId = null)
+    public IssuedAuthSession IssueSession(AuthenticatedSessionSubject subject, Guid? sessionId = null, Guid? sessionFamilyId = null)
     {
         var now = timeProvider.GetUtcNow();
         // Token lifetimes are DB-overridable (Wave 4). Token issuance is a
@@ -105,6 +111,11 @@ public sealed class AuthTokenService(
         if (sessionId is not null)
         {
             claims.Add(new Claim(SessionIdClaimType, sessionId.Value.ToString()));
+        }
+
+        if (sessionFamilyId is not null)
+        {
+            claims.Add(new Claim(SessionFamilyClaimType, sessionFamilyId.Value.ToString()));
         }
 
         var accessTokenDescriptor = new SecurityTokenDescriptor

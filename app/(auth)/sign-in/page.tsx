@@ -10,6 +10,7 @@ export default function SignInPage() {
   const rawNext = searchParams?.get('next') ?? null;
   const initialEmail = searchParams?.get('email') ?? null;
   const externalError = searchParams?.get('externalError') ?? null;
+  const reason = searchParams?.get('reason') ?? null;
 
   // Public website pricing-page CTAs deep-link a specific package via ?package=<slug>.
   // Resolve it to a known package and, when valid, route the learner straight to it on
@@ -22,7 +23,7 @@ export default function SignInPage() {
 
   return (
     <AuthPageGate nextHref={nextHref}>
-      <SignInForm nextHref={nextHref} initialEmail={initialEmail} externalError={externalError} />
+      <SignInForm nextHref={nextHref} initialEmail={initialEmail} externalError={externalError} reason={reason} />
     </AuthPageGate>
   );
 }

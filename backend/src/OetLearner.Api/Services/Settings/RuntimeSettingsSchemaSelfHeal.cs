@@ -246,5 +246,8 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionSecurity
 
 -- Security spec §2 capture-protection policy -- sync with migration 20260813090000_AddVideoProtectionEvents
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionRevokeOnCaptureDetected"" boolean;
+
+-- Security spec §3.1 single-active-session -- sync with migration 20260814090000_AddSingleSessionEnforcement
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecuritySingleActiveSessionEnabled"" boolean;
 ";
 }

@@ -18,6 +18,20 @@ public sealed class NotificationHub(LearnerDbContext dbContext) : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, AccountGroup(authAccountId));
+
+        // Security spec §3.1: join the refresh-token-family group too, so a
+        // sign-in elsewhere can push an immediate `session_revoked` to THIS
+        // specific session (not just the account as a whole — other sessions
+        // on the same account must keep working). Old tokens minted before
+        // the "sfam" claim existed simply don't join a family group; they
+        // still fall back to the OnTokenValidated liveness check on their
+        // next API call.
+        var sessionFamilyId = Context.User?.FindFirstValue(AuthTokenService.SessionFamilyClaimType);
+        if (Guid.TryParse(sessionFamilyId, out var familyId))
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, SessionFamilyGroup(familyId));
+        }
+
         await base.OnConnectedAsync();
     }
 
@@ -29,11 +43,20 @@ public sealed class NotificationHub(LearnerDbContext dbContext) : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, AccountGroup(authAccountId));
         }
 
+        var sessionFamilyId = Context.User?.FindFirstValue(AuthTokenService.SessionFamilyClaimType);
+        if (Guid.TryParse(sessionFamilyId, out var familyId))
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, SessionFamilyGroup(familyId));
+        }
+
         await base.OnDisconnectedAsync(exception);
     }
 
     public static string AccountGroup(string authAccountId)
         => $"account:{authAccountId}";
+
+    public static string SessionFamilyGroup(Guid sessionFamilyId)
+        => $"session-family:{sessionFamilyId}";
 
     private async Task<string?> ResolveAuthAccountIdAsync()
     {

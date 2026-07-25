@@ -1577,6 +1577,9 @@ public class AuthFlowsTests
             dataProtectionProvider,
             new HttpContextAccessor(),
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            new NoopSecurityEventLogger(),
+            new NoopSessionRevocationService(),
+            new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base()),
             now);
 
         return new AuthServiceHarness(
@@ -1927,6 +1930,27 @@ public class AuthFlowsTests
     {
         public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("Simulated delivery failure.");
+    }
+
+    /// <summary>No-op test double — these tests exercise password/lockout/session
+    /// rotation behavior, not security-event telemetry (which has its own tests).</summary>
+    private sealed class NoopSecurityEventLogger : ISecurityEventLogger
+    {
+        public Task TryLogAsync(
+            string? authAccountId, string kind, Guid? sessionFamilyId = null, string? deviceId = null,
+            object? details = null, string? severity = null, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    /// <summary>No-op test double — none of these tests exercise multi-session
+    /// revocation (single active session has its own dedicated tests).</summary>
+    private sealed class NoopSessionRevocationService : ISessionRevocationService
+    {
+        public Task<int> RevokeAllFamiliesAsync(string authAccountId, Guid? exceptFamilyId, string reason, CancellationToken ct)
+            => Task.FromResult(0);
+
+        public Task<bool> RevokeFamilyAsync(string authAccountId, Guid familyId, string reason, CancellationToken ct)
+            => Task.FromResult(false);
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider

@@ -205,6 +205,7 @@ builder.Services.AddHttpContextAccessor();
 // session/device/playback/risk events). Uses its own DB scope per write —
 // see SecurityEventLogger's class doc for why.
 builder.Services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
+builder.Services.AddScoped<ISessionRevocationService, SessionRevocationService>();
 builder.Services.AddScoped<AuthService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
@@ -539,6 +540,17 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             await using var scope = context.HttpContext.RequestServices.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
+
+            // Security spec §3.1: single active session. Keyed on the refresh-
+            // token FAMILY (survives rotation), not "sid" (changes every
+            // refresh) — see AuthTokenService.SessionFamilyClaimType. Tokens
+            // issued before this claim existed simply have none, so they skip
+            // the check and self-heal within one access-token lifetime.
+            var sessionFamilyClaim = principal?.FindFirst(AuthTokenService.SessionFamilyClaimType)?.Value;
+            var sessionFamilyId = Guid.TryParse(sessionFamilyClaim, out var parsedFamilyId)
+                ? parsedFamilyId
+                : (Guid?)null;
+
             var accountState = await db.ApplicationUserAccounts
                 .AsNoTracking()
                 .Where(account => account.Id == authAccountId)
@@ -559,7 +571,11 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                     ExpertIsActive = account.Role != ApplicationUserRoles.Expert
                         || db.ExpertUsers.Any(expert =>
                             expert.AuthAccountId == account.Id
-                            && expert.IsActive)
+                            && expert.IsActive),
+                    SessionFamilyAlive = sessionFamilyId == null || db.RefreshTokenRecords.Any(token =>
+                        token.FamilyId == sessionFamilyId.Value
+                        && token.RevokedAt == null
+                        && token.ExpiresAt > now)
                 })
                 .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
 
@@ -573,6 +589,17 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             {
                 context.Fail("account_deleted");
                 return;
+            }
+
+            if (sessionFamilyId is not null && !accountState.SessionFamilyAlive)
+            {
+                var settingsProvider = scope.ServiceProvider.GetRequiredService<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider>();
+                var effective = await settingsProvider.GetAsync(context.HttpContext.RequestAborted);
+                if (effective.Security.SingleActiveSessionEnabled)
+                {
+                    context.Fail("session_revoked");
+                    return;
+                }
             }
 
             if (string.Equals(accountState.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))

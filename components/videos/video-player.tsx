@@ -330,6 +330,29 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
+  // Security spec §3.1: "the previous device must lose playback access even
+  // if the video page was already open" — the SignalR session_revoked push
+  // (contexts/notification-center-context.tsx) fires this before its own
+  // hard-navigation redirect unmounts everything anyway, so playback stops
+  // and goes silent within the same tick rather than waiting for that
+  // navigation or the next renew call.
+  useEffect(() => {
+    const onSessionRevoked = () => {
+      videoRef.current?.pause();
+      if (renewTimerRef.current !== null) {
+        window.clearTimeout(renewTimerRef.current);
+        renewTimerRef.current = null;
+      }
+      setPhase({
+        kind: 'error',
+        code: 'SECURITY_VIOLATION',
+        message: 'This account signed in on another device, so playback here has stopped.',
+      });
+    };
+    window.addEventListener('oet:session-revoked', onSessionRevoked);
+    return () => window.removeEventListener('oet:session-revoked', onSessionRevoked);
+  }, []);
+
   // Focus/visibility loss while playing — Course Platform Security
   // Requirements §2.2 "detect loss of focus... as risk signals without
   // relying on these signals alone". Report-only: never pauses or gates

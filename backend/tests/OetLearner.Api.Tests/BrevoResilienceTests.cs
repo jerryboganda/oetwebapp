@@ -174,6 +174,7 @@ public class BrevoResilienceTests
             Pronunciation: TestRuntimeSettingsProvider.DefaultPronunciation(),
             AuthTokens: TestRuntimeSettingsProvider.DefaultAuthTokens(),
             VideoProtection: TestRuntimeSettingsProvider.DefaultVideoProtection(),
+            Security: TestRuntimeSettingsProvider.DefaultSecurity(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);
