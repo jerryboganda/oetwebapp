@@ -238,6 +238,7 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       paymentWebhookEventsDays: 180,
       paymentWebhookPiiNullOutAgeDays: 90,
       notificationDeliveryAttemptsDays: 90,
+      securityEventsDays: 180,
       sweepIntervalHours: 24,
       batchSize: 5000,
     },

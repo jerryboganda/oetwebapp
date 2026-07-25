@@ -266,7 +266,7 @@ internal static class TestEffectiveSettingsFactory
             Paymob: new PaymobSettings("https://accept.paymob.com", null, null, null, new Dictionary<string, int>(), 0, null, null),
             PayTabs: new PayTabsSettings("https://secure.paytabs.com", null, null, null, null, null),
             Soketi: new SoketiSettings("localhost", 6001, "oet-app", "oet-key", null, false, false),
-            DataRetention: new DataRetentionSettings(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.FromHours(6), 5000),
+            DataRetention: new DataRetentionSettings(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.FromHours(6), 5000),
             ExpertAutoAssignment: new ExpertAutoAssignmentSettings(false, 30, 60, 48, 12, 8, 24, 50),
             PasswordPolicy: new PasswordPolicySettings(10, false, false, false, false, "https://api.pwnedpasswords.com/", TimeSpan.FromSeconds(3)),
             AiAssistant: new AiAssistantSettings(false, true, 10, 50, 30, 1_048_576, 300, 3, 60, 10, 300, "text-embedding-3-small", 512),

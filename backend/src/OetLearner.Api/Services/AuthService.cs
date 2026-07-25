@@ -14,6 +14,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 
 namespace OetLearner.Api.Services;
 
@@ -31,6 +32,7 @@ public sealed class AuthService(
     IDataProtectionProvider dataProtectionProvider,
     IHttpContextAccessor httpContextAccessor,
     IMemoryCache memoryCache,
+    ISecurityEventLogger securityEventLogger,
     TimeProvider timeProvider)
 {
     private const int AllowedAuthenticatorDriftWindows = 1;
@@ -314,6 +316,7 @@ public sealed class AuthService(
             }
             account.UpdatedAt = nowForLockout;
             await db.SaveChangesAsync(cancellationToken);
+            await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInFailed, cancellationToken: cancellationToken);
             throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
         }
 
@@ -338,6 +341,7 @@ public sealed class AuthService(
         account.LastLoginAt = now;
         account.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
+        await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
 
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         return await CreateSessionFromSubjectAsync(account, subject, cancellationToken);
@@ -418,6 +422,11 @@ public sealed class AuthService(
                 {
                     await db.SaveChangesAsync(cancellationToken);
                 }
+                await securityEventLogger.TryLogAsync(
+                    refreshToken.ApplicationUserAccountId,
+                    SecurityEventKinds.AuthRefreshReuseDetected,
+                    sessionFamilyId: familyId,
+                    cancellationToken: cancellationToken);
             }
             throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
         }
@@ -585,6 +594,7 @@ public sealed class AuthService(
         if (!AuthenticatorTotp.VerifyCode(secretKey, request.Code, timeProvider.GetUtcNow(), AllowedAuthenticatorDriftWindows))
         {
             RegisterMfaFailure(account.Id);
+            await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthMfaFailed, cancellationToken: cancellationToken);
             throw ApiException.Validation("invalid_authenticator_code", "The authenticator code is invalid.");
         }
 
@@ -615,6 +625,7 @@ public sealed class AuthService(
         if (recoveryCode is null)
         {
             RegisterMfaFailure(account.Id);
+            await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthMfaFailed, cancellationToken: cancellationToken);
             throw ApiException.Validation("invalid_mfa_recovery_code", "The recovery code is invalid or already used.");
         }
 
@@ -784,6 +795,11 @@ public sealed class AuthService(
 
         token.RevokedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(cancellationToken);
+        await securityEventLogger.TryLogAsync(
+            account.Id,
+            SecurityEventKinds.SessionRevoked,
+            sessionFamilyId: token.FamilyId,
+            cancellationToken: cancellationToken);
     }
 
     public async Task<int> RevokeAllOtherSessionsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
@@ -809,6 +825,14 @@ public sealed class AuthService(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        if (count > 0)
+        {
+            await securityEventLogger.TryLogAsync(
+                account.Id,
+                SecurityEventKinds.SessionRevokedAll,
+                details: new { revokedCount = count },
+                cancellationToken: cancellationToken);
+        }
         return count;
     }
 
@@ -961,6 +985,13 @@ public sealed class AuthService(
         if (activeFamilyTokens.Count > 0)
         {
             await db.SaveChangesAsync(cancellationToken);
+            // Both callers of this method are sign-out paths (explicit token
+            // sign-out and bearer-only sign-out) — see call sites.
+            await securityEventLogger.TryLogAsync(
+                activeFamilyTokens[0].ApplicationUserAccountId,
+                SecurityEventKinds.AuthSignOut,
+                sessionFamilyId: familyId,
+                cancellationToken: cancellationToken);
         }
     }
 
@@ -993,6 +1024,7 @@ public sealed class AuthService(
             if (ipAddress?.Length > 64) ipAddress = ipAddress[..64];
         }
 
+        var resolvedFamilyId = familyId ?? sessionId;
         db.RefreshTokenRecords.Add(new RefreshTokenRecord
         {
             Id = sessionId,
@@ -1002,12 +1034,25 @@ public sealed class AuthService(
             // Rotation paths pass the presented token's FamilyId so the chain is
             // preserved across refreshes; reuse of a revoked token then burns
             // the entire family. See RefreshAsync.
-            FamilyId = familyId ?? sessionId,
+            FamilyId = resolvedFamilyId,
             ExpiresAt = issuedSession.RefreshTokenExpiresAt,
             CreatedAt = timeProvider.GetUtcNow(),
             DeviceInfo = deviceInfo,
             IpAddress = ipAddress
         });
+
+        // Fresh sign-in (familyId is null on entry) vs. rotation (familyId ==
+        // resolvedFamilyId, an existing family continuing) — only log the
+        // former as a distinct "new session" event; rotation churn on the
+        // same family is not itself security-interesting.
+        if (familyId is null)
+        {
+            await securityEventLogger.TryLogAsync(
+                account.Id,
+                SecurityEventKinds.SessionCreated,
+                sessionFamilyId: resolvedFamilyId,
+                cancellationToken: cancellationToken);
+        }
 
         await Task.CompletedTask;
 
@@ -1199,6 +1244,7 @@ public sealed class AuthService(
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
         return session;
     }
 
@@ -1519,6 +1565,23 @@ public sealed class AuthService(
                 .SingleOrDefaultAsync(x => x.AuthAccountId == account.Id, cancellationToken);
 
             if (expert is null || !expert.IsActive)
+            {
+                throw ApiException.Forbidden("account_suspended", "This account is suspended.");
+            }
+        }
+
+        if (string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
+        {
+            // Security spec §4.4: admin accounts must be revocable too. AdminUser.Id
+            // shares the ApplicationUserAccount primary key (see AdminEndpoints.cs
+            // FindAsync([userId]) call sites). A missing row is treated as active —
+            // AdminUser rows are only created for permission-bearing admins, and the
+            // "system_admin" bootstrap account may predate this table.
+            var admin = await db.AdminUsers
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == account.Id, cancellationToken);
+
+            if (admin is not null && !admin.IsActive)
             {
                 throw ApiException.Forbidden("account_suspended", "This account is suspended.");
             }

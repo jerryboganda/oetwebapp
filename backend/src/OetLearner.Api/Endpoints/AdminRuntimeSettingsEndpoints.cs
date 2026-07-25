@@ -442,6 +442,7 @@ public static class AdminRuntimeSettingsEndpoints
                 paymentWebhookEventsDays = (int)Math.Round(settings.DataRetention.PaymentWebhookEvents.TotalDays),
                 paymentWebhookPiiNullOutAgeDays = (int)Math.Round(settings.DataRetention.PaymentWebhookPiiNullOutAge.TotalDays),
                 notificationDeliveryAttemptsDays = (int)Math.Round(settings.DataRetention.NotificationDeliveryAttempts.TotalDays),
+                securityEventsDays = (int)Math.Round(settings.DataRetention.SecurityEvents.TotalDays),
                 sweepIntervalHours = (int)Math.Round(settings.DataRetention.SweepInterval.TotalHours),
                 batchSize = settings.DataRetention.BatchSize,
             },
@@ -1163,6 +1164,7 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableInt(d.PaymentWebhookEventsDays, v => row.DataRetentionPaymentWebhookEventsDays = v, "dataRetention.paymentWebhookEventsDays", changed, min: 0, max: 36500)) { }
         if (TrySetNullableInt(d.PaymentWebhookPiiNullOutAgeDays, v => row.DataRetentionPaymentWebhookPiiNullOutAgeDays = v, "dataRetention.paymentWebhookPiiNullOutAgeDays", changed, min: 0, max: 36500)) { }
         if (TrySetNullableInt(d.NotificationDeliveryAttemptsDays, v => row.DataRetentionNotificationDeliveryAttemptsDays = v, "dataRetention.notificationDeliveryAttemptsDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableInt(d.SecurityEventsDays, v => row.DataRetentionSecurityEventsDays = v, "dataRetention.securityEventsDays", changed, min: 0, max: 36500)) { }
         if (TrySetNullableInt(d.SweepIntervalHours, v => row.DataRetentionSweepIntervalHours = v, "dataRetention.sweepIntervalHours", changed, min: 1, max: 8760)) { }
         if (TrySetNullableInt(d.BatchSize, v => row.DataRetentionBatchSize = v, "dataRetention.batchSize", changed, min: 1, max: 1_000_000)) { }
     }
@@ -2247,6 +2249,7 @@ public sealed class RuntimeSettingsDataRetentionUpdate
     public JsonElement? PaymentWebhookEventsDays { get; set; }
     public JsonElement? PaymentWebhookPiiNullOutAgeDays { get; set; }
     public JsonElement? NotificationDeliveryAttemptsDays { get; set; }
+    public JsonElement? SecurityEventsDays { get; set; }
     public JsonElement? SweepIntervalHours { get; set; }
     public JsonElement? BatchSize { get; set; }
 }

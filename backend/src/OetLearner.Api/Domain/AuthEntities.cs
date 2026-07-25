@@ -213,6 +213,14 @@ public static class AdminPermissions
     public const string SystemAdmin = "system_admin";
     public const string ManagePermissions = "manage_permissions";
 
+    /// <summary>Security spec §4.4: read access to the security events feed,
+    /// active sessions/devices, and computed risk alerts.</summary>
+    public const string SecurityRead = "security:read";
+
+    /// <summary>Security spec §4.4: revoke a session/device, reset a user's
+    /// trusted device, or block playback immediately.</summary>
+    public const string SecurityWrite = "security:write";
+
     /// <summary>Full permission set granted to system administrators.</summary>
     public static readonly string[] All =
     [
@@ -224,7 +232,7 @@ public static class AdminPermissions
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
         FeatureFlags, Notifications, AuditLogs, SystemAdmin,
-        ManagePermissions
+        ManagePermissions, SecurityRead, SecurityWrite
     ];
 }
 

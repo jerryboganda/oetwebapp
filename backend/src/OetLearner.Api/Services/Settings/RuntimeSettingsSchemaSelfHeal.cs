@@ -240,5 +240,8 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoAttestationKeysE
 -- Support (public WhatsApp proof channel) -- sync with migration 20260729092000
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportWhatsAppNumber"" character varying(32);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportWhatsAppProofTemplate"" character varying(1000);
+
+-- Security spec §4.4 retention -- sync with migration 20260812090000_AddSecurityEvents
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionSecurityEventsDays"" integer;
 ";
 }

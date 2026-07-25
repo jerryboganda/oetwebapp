@@ -230,6 +230,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<LaunchReadinessSettings> LaunchReadinessSettings => Set<LaunchReadinessSettings>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
+    // Security spec §4.4: machine-generated security telemetry (auth
+    // lifecycle, session/device changes, playback, risk signals, admin
+    // security actions). See Domain/SecurityEntities.cs.
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
+
     // AI usage accounting. See docs/AI-USAGE-POLICY.md. Every AI call made
     // through AiGatewayService produces exactly one AiUsageRecord row.
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
@@ -640,6 +645,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             // column to TEXT so full payloads survive (paired migration:
             // WidenAuditEventDetailsToText).
             modelBuilder.Entity<AuditEvent>().Property(x => x.Details).HasColumnType("text");
+            modelBuilder.Entity<SecurityEvent>().Property(x => x.DetailsJson).HasColumnType("text");
 
             // Composite primary keys on the range-partitioned append-only
             // tables. Postgres requires every UNIQUE/PK on a partitioned
@@ -658,6 +664,13 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             modelBuilder.Entity<AnalyticsEventRecord>().HasKey(x => new { x.OccurredAt, x.Id });
             modelBuilder.Entity<AuditEvent>().HasKey(x => new { x.OccurredAt, x.Id });
             modelBuilder.Entity<AiUsageRecord>().HasKey(x => new { x.CreatedAt, x.Id });
+
+            // SecurityEvents is created range-partitioned from the start (no
+            // legacy heap table to convert — see migration
+            // 20260812090000_AddSecurityEvents), so the composite PK is
+            // required immediately rather than the opt-in-GUC dance the
+            // three tables above use.
+            modelBuilder.Entity<SecurityEvent>().HasKey(x => new { x.OccurredAt, x.Id });
         }
         modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReviewRequest>().Property(x => x.State).IsConcurrencyToken();

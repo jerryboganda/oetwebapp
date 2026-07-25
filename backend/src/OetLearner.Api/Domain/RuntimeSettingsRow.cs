@@ -263,6 +263,12 @@ public class RuntimeSettingsRow
     public int? DataRetentionSweepIntervalHours { get; set; }
     public int? DataRetentionBatchSize { get; set; }
 
+    /// <summary>Security spec §4.4 retention for the SecurityEvents table
+    /// (auth lifecycle / session / device / risk telemetry). Default (env):
+    /// 180 days — shorter than AuditEvents because volume is much higher and
+    /// the forensic value decays faster than admin-action history.</summary>
+    public int? DataRetentionSecurityEventsDays { get; set; }
+
     // ── Expert auto-assignment loop (Writing review queue) ─────────
     public bool? ExpertAutoAssignmentEnabled { get; set; }
     public int? ExpertAutoAssignmentPollingIntervalSeconds { get; set; }

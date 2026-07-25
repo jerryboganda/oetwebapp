@@ -106,11 +106,22 @@ public sealed class DataRetentionWorker(
                 .ExecuteDeleteAsync(ct);
         }
 
-        if (analytics + audit + webhooks + deliveries > 0)
+        var securityEvents = 0;
+        if (settings.SecurityEvents > TimeSpan.Zero)
+        {
+            var cutoff = now - settings.SecurityEvents;
+            securityEvents = await db.SecurityEvents
+                .Where(e => e.OccurredAt < cutoff)
+                .OrderBy(e => e.OccurredAt)
+                .Take(batch)
+                .ExecuteDeleteAsync(ct);
+        }
+
+        if (analytics + audit + webhooks + deliveries + securityEvents > 0)
         {
             logger.LogInformation(
-                "Data-retention swept: analytics={A} audit={U} webhooks={W} deliveries={D}",
-                analytics, audit, webhooks, deliveries);
+                "Data-retention swept: analytics={A} audit={U} webhooks={W} deliveries={D} securityEvents={S}",
+                analytics, audit, webhooks, deliveries, securityEvents);
         }
     }
 }

@@ -6,7 +6,7 @@ namespace OetLearner.Api.Services;
 /// <summary>
 /// Background sweeper that ensures <em>next-month</em> partitions exist for
 /// candidate high-volume, time-ordered tables (<c>AnalyticsEvents</c>,
-/// <c>AuditEvents</c>, <c>AiUsageRecords</c>). Uses the pl/pgsql helper
+/// <c>AuditEvents</c>, <c>AiUsageRecords</c>, <c>SecurityEvents</c>). Uses the pl/pgsql helper
 /// <c>public.ensure_monthly_partition</c> installed by migration
 /// <c>20260424180000_AddMonthlyPartitionHelper</c>.
 ///
@@ -27,6 +27,7 @@ public sealed class PartitionMaintenanceWorker(
         "public.\"AnalyticsEvents\"",
         "public.\"AuditEvents\"",
         "public.\"AiUsageRecords\"",
+        "public.\"SecurityEvents\"",
     };
 
     /// <summary>Partition columns aligned with <see cref="Candidates"/>.</summary>
@@ -35,6 +36,7 @@ public sealed class PartitionMaintenanceWorker(
         "OccurredAt",
         "OccurredAt",
         "CreatedAt",
+        "OccurredAt",
     };
 
     /// <summary>How many months ahead to pre-create partitions.</summary>

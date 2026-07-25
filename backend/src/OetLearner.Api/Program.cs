@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
@@ -201,6 +202,10 @@ else
 }
 builder.Services.AddScoped<EmailOtpService>();
 builder.Services.AddHttpContextAccessor();
+// Security spec §4.4: machine-generated security telemetry (auth lifecycle,
+// session/device/playback/risk events). Uses its own DB scope per write —
+// see SecurityEventLogger's class doc for why.
+builder.Services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
 builder.Services.AddScoped<AuthService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
@@ -232,11 +237,28 @@ if (corsOrigins.Length > 0)
     });
 }
 
+// Security spec §3.3 hardening: trusting X-Forwarded-For unconditionally lets any
+// internet client spoof their IP, which corrupts every IP-based session/risk record.
+// Only the reverse proxy hop(s) actually in front of this API on the VPS are trusted;
+// everything else falls through to the raw connection's RemoteIpAddress. Configurable
+// via "Proxy:KnownNetworks" (CIDR strings) so this can be adjusted without code changes
+// if the deploy topology changes; defaults cover loopback + the docker bridge subnets
+// used by the blue/green stack on the same host.
+var knownNetworksConfig = builder.Configuration.GetSection("Proxy:KnownNetworks").Get<string[]>()
+    ?? new[] { "127.0.0.1/8", "::1/128", "172.16.0.0/12", "10.0.0.0/8" };
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
+    options.ForwardLimit = 2;
+    foreach (var cidr in knownNetworksConfig)
+    {
+        if (IPNetwork.TryParse(cidr, out var network))
+        {
+            options.KnownIPNetworks.Add(network);
+        }
+    }
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -704,6 +726,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminManagePermissions", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "manage_permissions", "system_admin")));
+    options.AddPolicy("AdminSecurityRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "security:read", "system_admin")));
+    options.AddPolicy("AdminSecurityWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "security:write", "system_admin")));
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
@@ -2200,6 +2228,7 @@ app.MapExpertCompensationEndpoints();
 app.MapAdminEndpoints();
 app.MapVoiceDesignAdminEndpoints();
 app.MapAdminAlertEndpoints();
+app.MapAdminSecurityEndpoints();
 app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();

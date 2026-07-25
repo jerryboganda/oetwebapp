@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.VideoLibrary;
@@ -44,6 +45,7 @@ public sealed class VideoPlaybackSessionService(
     IRuntimeSettingsProvider settingsProvider,
     VideoLibraryLearnerService learnerService,
     IVideoEntitlementService entitlements,
+    ISecurityEventLogger securityEventLogger,
     ILogger<VideoPlaybackSessionService> logger) : IVideoPlaybackSessionService
 {
     private const int MaxConcurrentDistinctVideos = 3;
@@ -123,6 +125,22 @@ public sealed class VideoPlaybackSessionService(
         logger.LogInformation(
             "Issued video playback session {SessionId} for user {UserId} video {VideoId} on {Platform} (expires {ExpiresAt:O}).",
             session.Id, userId, video.Id, platform, expiresAt);
+
+        // userId here is LearnerUser.Id, not the auth-account id SecurityEvent
+        // keys on elsewhere (auth.* / session.* events) — resolve it so the
+        // admin security feed can join playback activity to the same account
+        // as sign-ins/session revocations.
+        var authAccountId = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.AuthAccountId)
+            .FirstOrDefaultAsync(ct);
+        await securityEventLogger.TryLogAsync(
+            authAccountId,
+            SecurityEventKinds.PlaybackSessionStarted,
+            deviceId: null,
+            details: new { videoId = video.Id, platform },
+            cancellationToken: ct);
+
         return result;
     }
 

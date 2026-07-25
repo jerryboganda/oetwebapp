@@ -250,6 +250,7 @@ export interface DataRetentionSettings {
   paymentWebhookEventsDays: number | null;
   paymentWebhookPiiNullOutAgeDays: number | null;
   notificationDeliveryAttemptsDays: number | null;
+  securityEventsDays: number | null;
   sweepIntervalHours: number | null;
   batchSize: number | null;
 }
@@ -719,6 +720,7 @@ const DATA_RETENTION_FIELDS: FieldDef<DataRetentionSettings>[] = [
   { key: 'paymentWebhookEventsDays', label: 'Payment Webhook Retention (days)', type: 'number', hint: 'How long processed gateway webhook rows are kept (default 180).' },
   { key: 'paymentWebhookPiiNullOutAgeDays', label: 'Webhook Payload PII Null-out (days)', type: 'number', hint: 'Age after which webhook payload bodies are nulled while metadata is kept (default 90).' },
   { key: 'notificationDeliveryAttemptsDays', label: 'Notification Attempts Retention (days)', type: 'number', hint: 'How long delivery-attempt rows are kept (default 90).' },
+  { key: 'securityEventsDays', label: 'Security Events Retention (days)', type: 'number', hint: 'How long auth/session/device/playback security telemetry rows are kept (default 180).' },
   { key: 'sweepIntervalHours', label: 'Sweep Interval (hours)', type: 'number', hint: 'How often the retention sweeper runs (default 24).' },
   { key: 'batchSize', label: 'Batch Size (rows per table per sweep)', type: 'number', hint: 'Caps rows deleted per table per sweep to avoid long locks (default 5000).' },
 ];
@@ -1130,6 +1132,7 @@ function emptyResponse(): RuntimeSettingsResponse {
       paymentWebhookEventsDays: null,
       paymentWebhookPiiNullOutAgeDays: null,
       notificationDeliveryAttemptsDays: null,
+      securityEventsDays: null,
       sweepIntervalHours: null,
       batchSize: null,
     },

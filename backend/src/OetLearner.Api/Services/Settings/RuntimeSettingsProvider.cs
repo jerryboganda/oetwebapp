@@ -624,6 +624,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             PaymentWebhookEvents: DaysOrDefault(r.DataRetentionPaymentWebhookEventsDays, env.PaymentWebhookEvents),
             PaymentWebhookPiiNullOutAge: DaysOrDefault(r.DataRetentionPaymentWebhookPiiNullOutAgeDays, env.PaymentWebhookPiiNullOutAge),
             NotificationDeliveryAttempts: DaysOrDefault(r.DataRetentionNotificationDeliveryAttemptsDays, env.NotificationDeliveryAttempts),
+            SecurityEvents: DaysOrDefault(r.DataRetentionSecurityEventsDays, env.SecurityEvents),
             SweepInterval: HoursOrDefault(r.DataRetentionSweepIntervalHours, env.SweepInterval),
             BatchSize: r.DataRetentionBatchSize is > 0 ? r.DataRetentionBatchSize.Value : (env.BatchSize <= 0 ? 5000 : env.BatchSize));
 

@@ -48,6 +48,14 @@ public sealed class DataRetentionOptions
     public TimeSpan NotificationDeliveryAttempts { get; set; } = TimeSpan.FromDays(90);
 
     /// <summary>
+    /// How long <c>SecurityEvents</c> rows are kept (Course Platform Security
+    /// Requirements §4.4). Default: 180 days. Shorter than AuditEvents because
+    /// this table is far higher volume (every sign-in, refresh, playback
+    /// start) and its forensic value decays faster than an admin action log.
+    /// </summary>
+    public TimeSpan SecurityEvents { get; set; } = TimeSpan.FromDays(180);
+
+    /// <summary>
     /// How often the sweeper runs. Default: 24 hours.
     /// </summary>
     public TimeSpan SweepInterval { get; set; } = TimeSpan.FromHours(24);
