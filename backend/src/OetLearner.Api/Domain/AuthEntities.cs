@@ -103,6 +103,17 @@ public class RefreshTokenRecord
     [MaxLength(128)]
     public string? DeviceId { get; set; }
 
+    /// <summary>X-OET-Client-Platform at session create (web | tauri |
+    /// capacitor-android | capacitor-ios). Surfaced in the session list
+    /// (Security spec §3.3). Null for sessions minted before this column.</summary>
+    [MaxLength(32)]
+    public string? Platform { get; set; }
+
+    /// <summary>X-App-Version (the forced-update gate's version header) at
+    /// session create. Null for web clients or pre-column sessions.</summary>
+    [MaxLength(64)]
+    public string? AppVersion { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
 }
 

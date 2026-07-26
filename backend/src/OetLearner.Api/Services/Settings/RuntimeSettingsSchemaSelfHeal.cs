@@ -266,5 +266,12 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityInactiveSessi
 -- Security spec §3 mobile integrity blocking -- sync with migration 20260818090000_AddVideoProtectionIntegrityBlocking
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionBlockRootedDevices"" boolean;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""VideoProtectionBlockEmulators"" boolean;
+
+-- Security spec §4.2 learner email gate + §3.3 country allow-list -- sync with migration 20260819090000_AddSecurityGateAndCountryControls
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityRequireVerifiedEmailForLearners"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityCountryAllowList"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityCountryAllowListMode"" character varying(16);
+ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""Platform"" character varying(32);
+ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""AppVersion"" character varying(64);
 ";
 }

@@ -130,6 +130,7 @@ public static class NotificationCatalog
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => "Notification delivery failures need attention",
             NotificationEventKey.AdminFreezePolicyChanged => "Freeze policy updated",
             NotificationEventKey.AdminFreezeLifecycleAction => "Freeze lifecycle action completed",
+            NotificationEventKey.AdminSecurityRiskAlert => "High-risk sign-in blocked",
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "your tutor")}",
             NotificationEventKey.LearnerPrivateSpeakingReminder => $"Upcoming session with {ReadToken(tokens, "tutorName", "your tutor")} in {ReadReminderTimeUntil(tokens)}",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => "Your private speaking session has been cancelled",
@@ -192,6 +193,7 @@ public static class NotificationCatalog
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => ReadToken(tokens, "message", "Notification delivery failures crossed the alert threshold."),
             NotificationEventKey.AdminFreezePolicyChanged => ReadToken(tokens, "message", "Freeze policy settings were updated."),
             NotificationEventKey.AdminFreezeLifecycleAction => ReadToken(tokens, "message", "A freeze lifecycle action was processed."),
+            NotificationEventKey.AdminSecurityRiskAlert => ReadToken(tokens, "message", "The sign-in risk engine blocked a high-risk attempt."),
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"Your session with {ReadToken(tokens, "tutorName", "your tutor")} is confirmed for {ReadToken(tokens, "sessionTime", "the scheduled time")}. A Zoom link will be sent shortly.",
             NotificationEventKey.LearnerPrivateSpeakingReminder => $"Your private speaking session starts in {ReadReminderTimeUntil(tokens)}. Check your booking details for the Zoom link.",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => ReadToken(tokens, "message", "Your private speaking session has been cancelled. If you paid, a refund will be processed."),
@@ -254,6 +256,7 @@ public static class NotificationCatalog
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => "/admin/notifications",
             NotificationEventKey.AdminFreezePolicyChanged => "/admin/freeze",
             NotificationEventKey.AdminFreezeLifecycleAction => "/admin/freeze",
+            NotificationEventKey.AdminSecurityRiskAlert => "/admin/security",
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerPrivateSpeakingReminder => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => "/private-speaking",
@@ -320,6 +323,7 @@ public static class NotificationCatalog
             new(NotificationEventKey.AdminNotificationDeliveryFailureAlert, ApplicationUserRoles.Admin, "operations", "Notification Delivery Failure Alert", "Notify admins when notification delivery failures cross alert thresholds.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminFreezePolicyChanged, ApplicationUserRoles.Admin, "operations", "Freeze Policy Changed", "Notify admins when freeze policy settings are updated.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
             new(NotificationEventKey.AdminFreezeLifecycleAction, ApplicationUserRoles.Admin, "operations", "Freeze Lifecycle Action", "Notify admins when freeze requests are approved, rejected, started, ended, or force-ended.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
+            new(NotificationEventKey.AdminSecurityRiskAlert, ApplicationUserRoles.Admin, "operations", "Security Risk Alert", "Notify admins when the sign-in risk engine blocks a high-risk attempt (Security spec §3.3).", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
 
             // Private Speaking Session notifications
             new(NotificationEventKey.LearnerPrivateSpeakingBooked, ApplicationUserRoles.Learner, "private_speaking", "Session Booked", "Notify learners when a private speaking session is booked.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),

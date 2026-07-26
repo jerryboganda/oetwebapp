@@ -115,6 +115,9 @@ export interface SecuritySettings {
   deviceChangeWindowDays: number | null;
   deviceChangeMaxPerWindow: number | null;
   inactiveSessionTimeoutDays: number | null;
+  requireVerifiedEmailForLearners: boolean | null;
+  countryAllowList: string | null;
+  countryAllowListMode: string;
 }
 
 /** Course Platform Security Requirements §2.4 — video capture-protection response. */
@@ -623,6 +626,19 @@ const SECURITY_FIELDS: FieldDef<SecuritySettings>[] = [
   { key: 'deviceChangeWindowDays', label: 'Device Change Window (days)', type: 'number', hint: 'Rolling window for the device-change cooldown, 1-365.' },
   { key: 'deviceChangeMaxPerWindow', label: 'Max Device Changes per Window', type: 'number', hint: 'Device changes allowed within the window before further changes are blocked, 1-100.' },
   { key: 'inactiveSessionTimeoutDays', label: 'Inactive Session Timeout (days)', type: 'number', hint: 'Security spec §4.2. Sessions idle this long are revoked by the auth data-retention sweep, 1-365.' },
+  { key: 'requireVerifiedEmailForLearners', label: 'Require verified email for learners', type: 'checkbox', hint: 'Security spec §4.2 hard gate. When ON, unverified learners get 403 email_verification_required on every learner endpoint and are routed to the verify screen. Leave OFF until the banner has drained the unverified backlog.' },
+  { key: 'countryAllowList', label: 'Country Allow-List', type: 'text', placeholder: 'e.g. EG,SA,AE', hint: 'Security spec §3.3. Comma-separated 2-letter ISO codes a sign-in country must be in. Empty = no restriction. Sign-ins with unknown country always pass.' },
+  {
+    key: 'countryAllowListMode',
+    label: 'Country Allow-List Mode',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off — list is ignored' },
+      { value: 'step_up', label: 'Step up — email-OTP challenge outside the list' },
+      { value: 'block', label: 'Block — reject sign-ins outside the list' },
+    ],
+    hint: 'What happens to a sign-in from outside the allow-list.',
+  },
 ];
 
 const VIDEO_PROTECTION_FIELDS: FieldDef<VideoProtectionSettings>[] = [
@@ -1338,6 +1354,9 @@ function emptyResponse(): RuntimeSettingsResponse {
       deviceChangeWindowDays: null,
       deviceChangeMaxPerWindow: null,
       inactiveSessionTimeoutDays: null,
+      requireVerifiedEmailForLearners: null,
+      countryAllowList: '',
+      countryAllowListMode: 'off',
     },
     videoProtection: {
       revokeOnCaptureDetected: null,

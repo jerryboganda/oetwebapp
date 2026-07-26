@@ -153,14 +153,23 @@ account's own history (no external IP-intelligence lookup yet):
   7 days → medium risk.
 
 Every signal is recorded as a `SecurityEvent` regardless of mode. In
-`enforce` mode (not yet enabled — see runbook), a High-risk sign-in is
-rejected outright with `403 sign_in_blocked_risk`; the risk check runs
-*before* any existing session is touched, so a false-positive block never
-costs the account its legitimate session. Datacenter/VPN/Tor detection and a
-country allow-list are **not implemented** — reliable detection needs a paid
-IP-intelligence feed (ipinfo/MaxMind), and static IP-range lists are not
-trustworthy enough to act on; this is a clean, documented later integration
-point (`IIpIntelligenceService` interface exists with a no-op default).
+`enforce` mode (not yet enabled — see runbook), a Medium-risk sign-in must
+pass an email-OTP step-up (the same challenge transport as device
+verification; sign-ins that already carried a second factor skip it) and a
+High-risk sign-in is rejected outright with `403 sign_in_blocked_risk`,
+raising an admin notification and a security-alert email to the account
+owner. The risk check runs *before* any existing session is touched, so a
+false-positive block never costs the account its legitimate session.
+
+A **country allow-list** is available as an independent fence
+(`security.countryAllowList` + `security.countryAllowListMode`, default
+off): sign-ins from outside the listed ISO codes are either challenged
+(`step_up`) or rejected (`block`); unknown-country sign-ins always pass.
+Datacenter/VPN/Tor detection is **not active** — reliable detection needs a
+paid IP-intelligence feed (ipinfo/MaxMind), and static IP-range lists are
+not trustworthy enough to act on; the `IIpIntelligenceService` interface
+exists with a registered no-op default, so wiring a provider later requires
+no changes to the risk engine.
 
 ## 8. Audit logging & admin controls (spec §4.4) — shipped
 

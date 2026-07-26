@@ -40,6 +40,7 @@ public enum NotificationEventKey
     AdminNotificationDeliveryFailureAlert,
     AdminFreezePolicyChanged,
     AdminFreezeLifecycleAction,
+    AdminSecurityRiskAlert,
 
     // Private Speaking Session notifications
     LearnerPrivateSpeakingBooked,

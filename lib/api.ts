@@ -543,6 +543,19 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
           if (response.status === 426 && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('oet:upgrade-required', { detail: error }));
           }
+
+          // Security spec §4.2 learner hard gate: once the owner flips
+          // Security.RequireVerifiedEmailForLearners, unverified learners get
+          // this 403 on every learner endpoint — route them to the verify
+          // screen (skip if we're already on it to avoid a redirect loop).
+          if (
+            response.status === 403 &&
+            code === 'email_verification_required' &&
+            typeof window !== 'undefined' &&
+            !window.location.pathname.startsWith('/verify-email')
+          ) {
+            window.location.assign('/verify-email');
+          }
         } catch (err) {
           if (response.status === 401) {
             code = 'not_authenticated';
@@ -1657,11 +1670,27 @@ export interface ActiveSession {
   lastUsedAt: string | null;
   createdAt: string;
   isCurrent: boolean;
+  countryCode?: string | null;
+  platform?: string | null;
+}
+
+/** The account's currently-trusted device (security spec §3.2) — null until
+ * one is bootstrapped on first sign-in with a device id. */
+export interface TrustedDeviceSelf {
+  deviceName: string | null;
+  platform: string | null;
+  trustedAt: string;
+  lastSeenAt: string | null;
+  isCurrentDevice: boolean;
 }
 
 export async function fetchActiveSessions(): Promise<ActiveSession[]> {
   const data = await apiRequest<{ sessions: ActiveSession[] }>('/v1/auth/sessions');
   return Array.isArray(data.sessions) ? data.sessions : [];
+}
+
+export async function fetchTrustedDevice(): Promise<TrustedDeviceSelf | null> {
+  return (await apiRequest<TrustedDeviceSelf | null>('/v1/auth/device')) ?? null;
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {

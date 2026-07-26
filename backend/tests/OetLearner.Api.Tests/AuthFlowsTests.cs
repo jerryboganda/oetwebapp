@@ -1961,7 +1961,7 @@ public class AuthFlowsTests
     /// scoring (it has its own dedicated tests).</summary>
     private sealed class NoopSignInRiskService : ISignInRiskService
     {
-        public Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, CancellationToken ct)
+        public Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, string? ipAddress, CancellationToken ct)
             => Task.FromResult(new SignInRiskAssessment(SignInRiskLevel.None, []));
     }
 
@@ -1980,6 +1980,9 @@ public class AuthFlowsTests
 
         public Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
             => Task.CompletedTask;
+
+        public Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct)
+            => Task.FromResult<TrustedDevice?>(null);
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider

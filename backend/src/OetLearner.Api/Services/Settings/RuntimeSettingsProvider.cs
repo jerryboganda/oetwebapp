@@ -473,7 +473,12 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
                 TrustedDeviceRequired: r.SecurityTrustedDeviceRequired ?? false,
                 DeviceChangeWindowDays: r.SecurityDeviceChangeWindowDays is > 0 ? r.SecurityDeviceChangeWindowDays.Value : 7,
                 DeviceChangeMaxPerWindow: r.SecurityDeviceChangeMaxPerWindow is > 0 ? r.SecurityDeviceChangeMaxPerWindow.Value : 3,
-                InactiveSessionTimeoutDays: r.SecurityInactiveSessionTimeoutDays is > 0 ? r.SecurityInactiveSessionTimeoutDays.Value : 30),
+                InactiveSessionTimeoutDays: r.SecurityInactiveSessionTimeoutDays is > 0 ? r.SecurityInactiveSessionTimeoutDays.Value : 30,
+                RequireVerifiedEmailForLearners: r.SecurityRequireVerifiedEmailForLearners ?? false,
+                CountryAllowList: r.SecurityCountryAllowList ?? string.Empty,
+                CountryAllowListMode: string.IsNullOrWhiteSpace(r.SecurityCountryAllowListMode)
+                    ? SecurityCountryAllowListModes.Off
+                    : r.SecurityCountryAllowListMode),
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt)

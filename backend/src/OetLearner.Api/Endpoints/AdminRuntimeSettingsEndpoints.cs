@@ -404,6 +404,9 @@ public static class AdminRuntimeSettingsEndpoints
                 deviceChangeWindowDays = settings.Security.DeviceChangeWindowDays,
                 deviceChangeMaxPerWindow = settings.Security.DeviceChangeMaxPerWindow,
                 inactiveSessionTimeoutDays = settings.Security.InactiveSessionTimeoutDays,
+                requireVerifiedEmailForLearners = settings.Security.RequireVerifiedEmailForLearners,
+                countryAllowList = settings.Security.CountryAllowList,
+                countryAllowListMode = settings.Security.CountryAllowListMode,
             },
             paymob = new
             {
@@ -1205,7 +1208,43 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableInt(d.DeviceChangeWindowDays, v => row.SecurityDeviceChangeWindowDays = v, "security.deviceChangeWindowDays", changed, min: 1, max: 365)) { }
         if (TrySetNullableInt(d.DeviceChangeMaxPerWindow, v => row.SecurityDeviceChangeMaxPerWindow = v, "security.deviceChangeMaxPerWindow", changed, min: 1, max: 100)) { }
         if (TrySetNullableInt(d.InactiveSessionTimeoutDays, v => row.SecurityInactiveSessionTimeoutDays = v, "security.inactiveSessionTimeoutDays", changed, min: 1, max: 365)) { }
+        if (TrySetNullableBool(d.RequireVerifiedEmailForLearners, v => row.SecurityRequireVerifiedEmailForLearners = v, "security.requireVerifiedEmailForLearners", changed)) { }
+        if (d.CountryAllowList is not null)
+        {
+            var codes = d.CountryAllowList
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(c => c.ToUpperInvariant())
+                .Distinct()
+                .ToArray();
+            if (codes.Any(c => c.Length != 2 || !c.All(char.IsAsciiLetterUpper)))
+            {
+                throw new RuntimeSettingsValidationException("security.countryAllowList must be comma-separated 2-letter ISO country codes (e.g. \"EG,SA,AE\").");
+            }
+            var normalized = string.Join(',', codes);
+            if (normalized.Length > 512)
+            {
+                throw new RuntimeSettingsValidationException("security.countryAllowList is too long (max 512 characters).");
+            }
+            row.SecurityCountryAllowList = normalized.Length > 0 ? normalized : null;
+            changed.Add("security.countryAllowList");
+        }
+        if (d.CountryAllowListMode is not null)
+        {
+            if (!ValidCountryAllowListModes.Contains(d.CountryAllowListMode))
+            {
+                throw new RuntimeSettingsValidationException("security.countryAllowListMode must be one of: off, step_up, block.");
+            }
+            row.SecurityCountryAllowListMode = d.CountryAllowListMode;
+            changed.Add("security.countryAllowListMode");
+        }
     }
+
+    private static readonly HashSet<string> ValidCountryAllowListModes =
+    [
+        SecurityCountryAllowListModes.Off,
+        SecurityCountryAllowListModes.StepUp,
+        SecurityCountryAllowListModes.Block,
+    ];
 
     private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
     {
@@ -1823,7 +1862,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ? Ok(sectionId, "Web push is enabled and VAPID keys are configured (Push section).", testedAt)
                     : Failed(sectionId, "Web push is enabled but VAPID keys are missing. Configure them in the Push section.", testedAt))
                 : Ok(sectionId, "Web push is disabled. Enable it (with VAPID keys) to allow browser notifications.", testedAt),
-            "security" => Ok(sectionId, $"Single active session {(settings.Security.SingleActiveSessionEnabled ? "enforced" : "off")}; risk mode '{settings.Security.RiskMode}'; device verification {(settings.Security.TrustedDeviceRequired ? "required" : "off")}; inactive session timeout {settings.Security.InactiveSessionTimeoutDays}d. No live sign-in was attempted.", testedAt),
+            "security" => Ok(sectionId, $"Single active session {(settings.Security.SingleActiveSessionEnabled ? "enforced" : "off")}; risk mode '{settings.Security.RiskMode}'; device verification {(settings.Security.TrustedDeviceRequired ? "required" : "off")}; inactive session timeout {settings.Security.InactiveSessionTimeoutDays}d; learner verified-email gate {(settings.Security.RequireVerifiedEmailForLearners ? "ON" : "off")}; country allow-list mode '{settings.Security.CountryAllowListMode}'. No live sign-in was attempted.", testedAt),
             "videoprotection" => Ok(sectionId, $"Revoke-on-capture {(settings.VideoProtection.RevokeOnCaptureDetected ? "on" : "off")}; block rooted devices {(settings.VideoProtection.BlockRootedDevices ? "on" : "off")}; block emulators {(settings.VideoProtection.BlockEmulators ? "on" : "off")}. No playback session was probed.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
@@ -2384,6 +2423,12 @@ public sealed class RuntimeSettingsSecurityUpdate
     public JsonElement? DeviceChangeMaxPerWindow { get; set; }
     /// <summary>Idle sessions past this many days are revoked by AuthDataRetentionWorker (spec §4.2).</summary>
     public JsonElement? InactiveSessionTimeoutDays { get; set; }
+    /// <summary>Spec §4.2 hard gate: learner API access requires a verified email.</summary>
+    public JsonElement? RequireVerifiedEmailForLearners { get; set; }
+    /// <summary>Comma-separated 2-letter ISO country codes; "" clears the list.</summary>
+    public string? CountryAllowList { get; set; }
+    /// <summary>"off" | "step_up" | "block" — see SecurityCountryAllowListModes.</summary>
+    public string? CountryAllowListMode { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

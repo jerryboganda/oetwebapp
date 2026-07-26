@@ -4,6 +4,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
@@ -208,6 +209,11 @@ builder.Services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
 builder.Services.AddScoped<ISessionRevocationService, SessionRevocationService>();
 builder.Services.AddScoped<ISignInRiskService, SignInRiskService>();
 builder.Services.AddScoped<ITrustedDeviceService, TrustedDeviceService>();
+// Spec §3.3 upgrade seam — noop until a paid IP-intelligence provider is wired.
+builder.Services.AddSingleton<IIpIntelligenceService, NoopIpIntelligenceService>();
+// Spec §4.2 learner verified-email gate (toggle-backed, see EmailVerifiedGate.cs).
+builder.Services.AddScoped<IAuthorizationHandler, EmailVerifiedRequirementHandler>();
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, EmailVerifiedAuthorizationResultHandler>();
 builder.Services.AddScoped<AuthService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
@@ -658,7 +664,12 @@ else
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole(ApplicationUserRoles.Learner));
+    options.AddPolicy("LearnerOnly", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole(ApplicationUserRoles.Learner)
+        // Spec §4.2: inert until Security.RequireVerifiedEmailForLearners is
+        // flipped on in Runtime Settings — see EmailVerifiedGate.cs.
+        .AddRequirements(new EmailVerifiedRequirement()));
     options.AddPolicy("ExpertOnly", policy => policy
         .RequireAuthenticatedUser()
         .RequireRole(ApplicationUserRoles.Expert)

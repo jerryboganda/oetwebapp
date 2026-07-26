@@ -38,7 +38,13 @@ public sealed class AuthService(
     ISignInRiskService signInRiskService,
     ITrustedDeviceService trustedDeviceService,
     IRuntimeSettingsProvider runtimeSettingsProvider,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    // Optional (DI always supplies them; the unit-test harness constructs
+    // AuthService without the full notification/email stack). Used only for
+    // the best-effort §3.3 blocked-sign-in side channel.
+    NotificationService? notifications = null,
+    IEmailSender? emailSender = null,
+    ILogger<AuthService>? logger = null)
 {
     private const int AllowedAuthenticatorDriftWindows = 1;
     // H2 (security): cap MFA/recovery attempts per account inside the
@@ -721,7 +727,9 @@ public sealed class AuthService(
         account.UpdatedAt = now;
 
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
-        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        // The device email-OTP just verified IS the §3.3 step-up — evaluating
+        // step-up again here would loop the challenge forever.
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken, riskStepUpSatisfied: true);
         await db.SaveChangesAsync(cancellationToken);
         await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
         return session;
@@ -858,10 +866,35 @@ public sealed class AuthService(
             t.IpAddress,
             t.LastUsedAt,
             t.CreatedAt,
-            t.Id == currentSessionId
+            t.Id == currentSessionId,
+            t.CountryCode,
+            t.Platform
         )).ToList();
 
         return new ActiveSessionListResponse(sessions);
+    }
+
+    /// <summary>The account's currently-trusted device (spec §3.2), for the
+    /// learner's own sessions screen. Null when none has been bootstrapped
+    /// yet. IsCurrentDevice compares against this request's X-OET-Device-Id.</summary>
+    public async Task<TrustedDeviceSelfResponse?> GetTrustedDeviceAsync(
+        ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var device = await trustedDeviceService.GetActiveDeviceAsync(account.Id, cancellationToken);
+        if (device is null)
+        {
+            return null;
+        }
+
+        var presentedDeviceId = httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString();
+        return new TrustedDeviceSelfResponse(
+            device.DeviceName,
+            device.Platform,
+            device.TrustedAt,
+            device.LastSeenAt,
+            !string.IsNullOrWhiteSpace(presentedDeviceId)
+                && string.Equals(device.DeviceId, presentedDeviceId, StringComparison.Ordinal));
     }
 
     public async Task RevokeSessionAsync(ClaimsPrincipal principal, Guid sessionId, CancellationToken cancellationToken = default)
@@ -1101,7 +1134,8 @@ public sealed class AuthService(
         ApplicationUserAccount account,
         AuthenticatedSessionSubject subject,
         CancellationToken cancellationToken,
-        Guid? familyId = null)
+        Guid? familyId = null,
+        bool riskStepUpSatisfied = false)
     {
         var sessionId = Guid.NewGuid();
         // Fresh sign-in (familyId is null on entry) starts its own family;
@@ -1128,18 +1162,61 @@ public sealed class AuthService(
             if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128) deviceId = null;
         }
         var platform = httpContext?.Request.Headers["X-OET-Client-Platform"].ToString();
-        if (string.IsNullOrWhiteSpace(platform)) platform = null;
+        if (string.IsNullOrWhiteSpace(platform) || platform.Length > 32) platform = null;
+        var appVersion = httpContext?.Request.Headers["X-App-Version"].ToString();
+        if (string.IsNullOrWhiteSpace(appVersion) || appVersion.Length > 64) appVersion = null;
 
         // Security spec §3.3: risk-score a genuinely fresh sign-in BEFORE
         // touching any existing session — a blocked high-risk attempt must
         // never cost the account its already-legitimate session(s). Never
         // evaluated on a refresh rotation (the user isn't present for that).
+        // riskStepUpSatisfied marks sign-ins that already carried a second
+        // factor this attempt (TOTP MFA, device email-OTP) — those skip the
+        // step-up challenge (it would loop) but High-risk still blocks.
         if (familyId is null)
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
+
+            // §3.3 country allow-list — an independent control that works even
+            // with the risk engine off. Sign-ins with no CF-IPCountry (local
+            // dev, direct-to-origin) always pass: the control is a policy
+            // fence, not an authenticity proof.
+            if (!string.Equals(security.CountryAllowListMode, SecurityCountryAllowListModes.Off, StringComparison.Ordinal)
+                && IsOutsideCountryAllowList(security.CountryAllowList, countryCode))
+            {
+                if (string.Equals(security.CountryAllowListMode, SecurityCountryAllowListModes.Block, StringComparison.Ordinal))
+                {
+                    var reasons = new[] { "country_not_allowed" };
+                    await securityEventLogger.TryLogAsync(
+                        account.Id, SecurityEventKinds.RiskSignInBlocked,
+                        details: new { reasons, countryCode },
+                        cancellationToken: cancellationToken);
+                    await NotifyRiskSignInBlockedAsync(account, reasons, countryCode, cancellationToken);
+                    throw ApiException.Forbidden(
+                        "sign_in_blocked_risk",
+                        "Sign-in from this location is not permitted for your account. Contact support if this was you.");
+                }
+
+                // step_up
+                if (!riskStepUpSatisfied)
+                {
+                    await securityEventLogger.TryLogAsync(
+                        account.Id, SecurityEventKinds.RiskStepUpRequired,
+                        details: new { reasons = new[] { "country_not_allowed" }, countryCode, stepUpAvailable = deviceId is not null },
+                        cancellationToken: cancellationToken);
+                    if (deviceId is not null)
+                    {
+                        throw new DeviceVerificationRequiredException(
+                            account.Email, CreateDeviceChallengeToken(account.Id, deviceId));
+                    }
+                    // No device id (old cached shell) → fail open; the event
+                    // above still records that a step-up was warranted.
+                }
+            }
+
             if (!string.Equals(security.RiskMode, SecurityRiskModes.Off, StringComparison.Ordinal))
             {
-                var risk = await signInRiskService.EvaluateAsync(account.Id, countryCode, cancellationToken);
+                var risk = await signInRiskService.EvaluateAsync(account.Id, countryCode, ipAddress, cancellationToken);
                 if (risk.Level != SignInRiskLevel.None)
                 {
                     var kind = risk.Reasons.Contains("impossible_travel")
@@ -1149,16 +1226,36 @@ public sealed class AuthService(
                         account.Id, kind, details: new { reasons = risk.Reasons, countryCode },
                         cancellationToken: cancellationToken);
 
-                    if (risk.Level == SignInRiskLevel.High
-                        && string.Equals(security.RiskMode, SecurityRiskModes.Enforce, StringComparison.Ordinal))
+                    if (string.Equals(security.RiskMode, SecurityRiskModes.Enforce, StringComparison.Ordinal))
                     {
-                        await securityEventLogger.TryLogAsync(
-                            account.Id, SecurityEventKinds.RiskSignInBlocked,
-                            details: new { reasons = risk.Reasons, countryCode },
-                            cancellationToken: cancellationToken);
-                        throw ApiException.Forbidden(
-                            "sign_in_blocked_risk",
-                            "This sign-in was blocked for unusual account activity. Contact support if this was you.");
+                        if (risk.Level == SignInRiskLevel.High)
+                        {
+                            await securityEventLogger.TryLogAsync(
+                                account.Id, SecurityEventKinds.RiskSignInBlocked,
+                                details: new { reasons = risk.Reasons, countryCode },
+                                cancellationToken: cancellationToken);
+                            await NotifyRiskSignInBlockedAsync(account, risk.Reasons, countryCode, cancellationToken);
+                            throw ApiException.Forbidden(
+                                "sign_in_blocked_risk",
+                                "This sign-in was blocked for unusual account activity. Contact support if this was you.");
+                        }
+
+                        // Medium → email-OTP step-up (spec §3.3), reusing the
+                        // device-challenge transport the sign-in UI already
+                        // handles. Skipped when this attempt already proved a
+                        // second factor, or when no device id is present.
+                        if (risk.Level == SignInRiskLevel.Medium && !riskStepUpSatisfied)
+                        {
+                            await securityEventLogger.TryLogAsync(
+                                account.Id, SecurityEventKinds.RiskStepUpRequired,
+                                details: new { reasons = risk.Reasons, countryCode, stepUpAvailable = deviceId is not null },
+                                cancellationToken: cancellationToken);
+                            if (deviceId is not null)
+                            {
+                                throw new DeviceVerificationRequiredException(
+                                    account.Email, CreateDeviceChallengeToken(account.Id, deviceId));
+                            }
+                        }
                     }
                 }
             }
@@ -1230,7 +1327,9 @@ public sealed class AuthService(
             DeviceInfo = deviceInfo,
             IpAddress = ipAddress,
             CountryCode = countryCode,
-            DeviceId = deviceId
+            DeviceId = deviceId,
+            Platform = platform,
+            AppVersion = appVersion
         });
 
         // Fresh sign-in (familyId is null on entry) vs. rotation (familyId ==
@@ -1258,6 +1357,86 @@ public sealed class AuthService(
             issuedSession.AccessTokenExpiresAt,
             issuedSession.RefreshTokenExpiresAt,
             BuildCurrentUserResponse(subject));
+    }
+
+    /// <summary>Spec §3.3 country allow-list check. Unknown countries (no
+    /// CF-IPCountry — local dev, direct-to-origin) and an empty list both
+    /// pass: the control is a policy fence, not an authenticity proof.</summary>
+    private static bool IsOutsideCountryAllowList(string allowListCsv, string? countryCode)
+    {
+        if (string.IsNullOrWhiteSpace(allowListCsv) || string.IsNullOrWhiteSpace(countryCode))
+        {
+            return false;
+        }
+
+        foreach (var entry in allowListCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (string.Equals(entry, countryCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Spec §3.3 enforce-mode side channel: a blocked high-risk
+    /// sign-in raises an admin notification and a security-alert email to the
+    /// account owner. Both are best-effort — a notification/email outage must
+    /// never change the block outcome (the SecurityEvent row is the durable
+    /// record either way).</summary>
+    private async Task NotifyRiskSignInBlockedAsync(
+        ApplicationUserAccount account,
+        IReadOnlyList<string> reasons,
+        string? countryCode,
+        CancellationToken cancellationToken)
+    {
+        var reasonText = string.Join(", ", reasons);
+        if (notifications is not null)
+        {
+            try
+            {
+                await notifications.CreateForAdminsAsync(
+                    NotificationEventKey.AdminSecurityRiskAlert,
+                    "auth_account",
+                    account.Id,
+                    timeProvider.GetUtcNow().UtcDateTime.Ticks.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["message"] = $"A high-risk sign-in for {account.Email} was blocked ({reasonText}; country: {countryCode ?? "unknown"}).",
+                    },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to raise admin risk alert for blocked sign-in on account {AccountId}", account.Id);
+            }
+        }
+
+        if (emailSender is not null)
+        {
+            try
+            {
+                await emailSender.SendAsync(
+                    new EmailMessage(
+                        account.Email,
+                        "Security alert: a sign-in to your account was blocked",
+                        $"A sign-in attempt to your OET account from {(countryCode is null ? "an unrecognised location" : $"country {countryCode}")} "
+                        + "was blocked because it looked unusual. If this was you, contact support; "
+                        + "if it was not, we recommend changing your password.",
+                        TemplateKey: EmailTemplateKeys.SecurityAlert,
+                        TemplateParameters: new Dictionary<string, object?>
+                        {
+                            ["reason"] = reasonText,
+                            ["country"] = countryCode ?? "unknown",
+                        }),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to send security-alert email for blocked sign-in on account {AccountId}", account.Id);
+            }
+        }
     }
 
     private async Task<AuthenticatedSessionSubject> ResolveSubjectAsync(
@@ -1434,7 +1613,9 @@ public sealed class AuthService(
         account.UpdatedAt = now;
 
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
-        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        // TOTP MFA already proved a second factor this attempt — a risk
+        // step-up on top of it would be redundant (High-risk still blocks).
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken, riskStepUpSatisfied: true);
         await db.SaveChangesAsync(cancellationToken);
         await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
         return session;

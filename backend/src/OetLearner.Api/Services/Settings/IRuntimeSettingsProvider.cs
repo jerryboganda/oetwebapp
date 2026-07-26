@@ -744,11 +744,32 @@ public sealed record SecuritySettings(
     int DeviceChangeMaxPerWindow,
     /// <summary>Idle sessions (no activity for this many days) are revoked by
     /// <c>AuthDataRetentionWorker</c> (spec §4.2). Default 30.</summary>
-    int InactiveSessionTimeoutDays = 30);
+    int InactiveSessionTimeoutDays = 30,
+    /// <summary>Spec §4.2 hard gate: learner API access requires a verified
+    /// email (403 email_verification_required otherwise). Default FALSE —
+    /// the banner ships first; the owner flips this once the unverified
+    /// backlog has drained.</summary>
+    bool RequireVerifiedEmailForLearners = false,
+    /// <summary>Spec §3.3: comma-separated ISO 3166-1 alpha-2 codes a sign-in
+    /// country must be in. Empty = no restriction.</summary>
+    string CountryAllowList = "",
+    /// <summary>Spec §3.3: "off" | "step_up" | "block" — see
+    /// <see cref="SecurityCountryAllowListModes"/>. Default "off".</summary>
+    string CountryAllowListMode = SecurityCountryAllowListModes.Off);
 
 public static class SecurityRiskModes
 {
     public const string Off = "off";
     public const string LogOnly = "log_only";
     public const string Enforce = "enforce";
+}
+
+/// <summary>What happens to a sign-in from outside the country allow-list
+/// (spec §3.3). "step_up" reuses the device email-OTP challenge; "block"
+/// rejects with 403 sign_in_blocked_risk. Unknown countries always pass.</summary>
+public static class SecurityCountryAllowListModes
+{
+    public const string Off = "off";
+    public const string StepUp = "step_up";
+    public const string Block = "block";
 }

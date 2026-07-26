@@ -75,7 +75,18 @@ public sealed record ActiveSessionResponse(
     string? IpAddress,
     DateTimeOffset? LastUsedAt,
     DateTimeOffset CreatedAt,
-    bool IsCurrent);
+    bool IsCurrent,
+    string? CountryCode = null,
+    string? Platform = null);
+
+/// <summary>The account's currently-trusted device (Security spec §3.2), as
+/// shown on the learner's own sessions screen.</summary>
+public sealed record TrustedDeviceSelfResponse(
+    string? DeviceName,
+    string? Platform,
+    DateTimeOffset TrustedAt,
+    DateTimeOffset? LastSeenAt,
+    bool IsCurrentDevice);
 
 public sealed record ActiveSessionListResponse(
     IReadOnlyList<ActiveSessionResponse> Sessions);

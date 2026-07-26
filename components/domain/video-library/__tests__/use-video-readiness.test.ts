@@ -18,6 +18,7 @@ function makeVideo(overrides: Partial<AdminVideoDetail> = {}): AdminVideoDetail 
     targetProfessionIds: [],
     bunnyVideoId: 'bunny-1',
     bunnyCollectionId: null,
+    courseFolder: null,
     encodeStatus: 'ready',
     encodeProgress: 100,
     encodeError: null,

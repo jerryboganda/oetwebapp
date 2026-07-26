@@ -44,6 +44,10 @@ public interface ITrustedDeviceService
     /// device is a security-boundary reset, revokes every live session too —
     /// spec §4.4 admin device reset.</summary>
     Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct);
+
+    /// <summary>The account's currently-trusted device, or null when none has
+    /// been bootstrapped yet. Read-only (no LastSeenAt touch).</summary>
+    Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct);
 }
 
 public sealed class TrustedDeviceService(
@@ -163,4 +167,11 @@ public sealed class TrustedDeviceService(
         // a security boundary if the old device's live session survives it.
         await sessionRevocationService.RevokeAllFamiliesAsync(authAccountId, exceptFamilyId: null, reason: reason, ct);
     }
+
+    public Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct)
+        => db.TrustedDevices
+            .AsNoTracking()
+            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
+            .OrderByDescending(d => d.TrustedAt)
+            .FirstOrDefaultAsync(ct);
 }

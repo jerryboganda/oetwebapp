@@ -399,6 +399,9 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       deviceChangeWindowDays: 7,
       deviceChangeMaxPerWindow: 3,
       inactiveSessionTimeoutDays: 30,
+      requireVerifiedEmailForLearners: false,
+      countryAllowList: '',
+      countryAllowListMode: 'off',
     },
     videoProtection: {
       revokeOnCaptureDetected: true,

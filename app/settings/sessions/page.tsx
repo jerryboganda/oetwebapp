@@ -10,6 +10,7 @@ import {
   Globe,
   Loader2,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -20,9 +21,11 @@ import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import {
   fetchActiveSessions,
+  fetchTrustedDevice,
   revokeSession,
   revokeAllOtherSessions,
   type ActiveSession,
+  type TrustedDeviceSelf,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +58,17 @@ function parseDeviceLabel(userAgent: string | null): { label: string; icon: type
   return { label: 'Browser', icon: Monitor };
 }
 
+function platformLabel(platform: string | null | undefined): string | null {
+  if (!platform) return null;
+  switch (platform) {
+    case 'web': return 'Web';
+    case 'tauri': return 'Desktop App';
+    case 'capacitor-android': return 'Android App';
+    case 'capacitor-ios': return 'iOS App';
+    default: return platform;
+  }
+}
+
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Never';
   const date = new Date(dateStr);
@@ -73,6 +87,7 @@ function formatRelativeTime(dateStr: string | null): string {
 export default function SessionsPage() {
   const router = useRouter();
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
+  const [trustedDevice, setTrustedDevice] = useState<TrustedDeviceSelf | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -85,6 +100,12 @@ export default function SessionsPage() {
       setError(null);
       const data = await fetchActiveSessions();
       setSessions(data);
+      // Trusted device is informational — never block the sessions list on it.
+      try {
+        setTrustedDevice(await fetchTrustedDevice());
+      } catch {
+        setTrustedDevice(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sessions.');
     } finally {
@@ -156,6 +177,33 @@ export default function SessionsPage() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
+        {trustedDevice ? (
+          <div className="bg-surface rounded-2xl border border-border shadow-sm p-4 sm:p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border bg-emerald-500/10 border-emerald-500/20">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-navy truncate">
+                  Trusted device: {trustedDevice.deviceName || platformLabel(trustedDevice.platform) || 'Unknown device'}
+                </h3>
+                {trustedDevice.isCurrentDevice ? (
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                    This device
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted mt-0.5">
+                {platformLabel(trustedDevice.platform) ? `${platformLabel(trustedDevice.platform)} · ` : ''}
+                Trusted {formatRelativeTime(trustedDevice.trustedAt)} · Last seen {formatRelativeTime(trustedDevice.lastSeenAt)}
+              </p>
+              <p className="text-[11px] text-muted/60 mt-0.5">
+                Signing in on a different device may require an email verification code and signs the old device out.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         {otherSessionCount > 0 && !loading ? (
           <div className="flex justify-end">
             <Button
@@ -217,7 +265,10 @@ export default function SessionsPage() {
                           ) : null}
                         </div>
                         <p className="text-xs text-muted mt-0.5 truncate">
-                          IP: {masked} · {lastActive}
+                          IP: {masked}
+                          {session.countryCode ? ` (${session.countryCode})` : ''}
+                          {platformLabel(session.platform) ? ` · ${platformLabel(session.platform)}` : ''}
+                          {` · ${lastActive}`}
                         </p>
                         <p className="text-[11px] text-muted/60 mt-0.5">
                           Created {formatRelativeTime(session.createdAt)}

@@ -184,6 +184,12 @@ public static class AuthEndpoints
             })
             .RequireAuthorization();
 
+        // Spec §3.2: the account's currently-trusted device for the sessions
+        // screen. 200 with null body when none exists yet.
+        auth.MapGet("/device", async (ClaimsPrincipal user, AuthService service, CancellationToken ct)
+                => Results.Ok(await service.GetTrustedDeviceAsync(user, ct)))
+            .RequireAuthorization();
+
         return app;
     }
 

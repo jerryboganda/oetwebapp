@@ -517,6 +517,25 @@ public class RuntimeSettingsRow
     /// defaults to 30.</summary>
     public int? SecurityInactiveSessionTimeoutDays { get; set; }
 
+    /// <summary>Security spec §4.2 hard gate: when true, learner API access
+    /// requires a verified email — unverified learners get
+    /// 403 email_verification_required and the app routes them to the verify
+    /// screen. Null defaults to FALSE (banner-only) so the owner can flip it
+    /// once the banner has drained the unverified backlog.</summary>
+    public bool? SecurityRequireVerifiedEmailForLearners { get; set; }
+
+    /// <summary>Security spec §3.3: comma-separated ISO 3166-1 alpha-2 codes
+    /// (e.g. "EG,SA,AE") a sign-in country must be in. Empty/null = no
+    /// restriction. Only consulted when the mode below is not "off".</summary>
+    [MaxLength(512)]
+    public string? SecurityCountryAllowList { get; set; }
+
+    /// <summary>"off" | "step_up" | "block" — what happens to a sign-in from
+    /// outside the allow-list (step_up = email-OTP challenge, block = 403).
+    /// Null defaults to "off". Sign-ins with no CF-IPCountry always pass.</summary>
+    [MaxLength(16)]
+    public string? SecurityCountryAllowListMode { get; set; }
+
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on
     // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back

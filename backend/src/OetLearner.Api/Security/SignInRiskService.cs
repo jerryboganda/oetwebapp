@@ -14,11 +14,12 @@ public sealed record SignInRiskAssessment(SignInRiskLevel Level, IReadOnlyList<s
 
 public interface ISignInRiskService
 {
-    /// <summary>Pure rule evaluation over the account's own sign-in history —
-    /// no external IP-intelligence lookups yet (Course Platform Security
-    /// Requirements §3.3 treats those as a later, optional upgrade; see
-    /// class doc). Never throws; callers decide what to do with the result.</summary>
-    Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, CancellationToken ct);
+    /// <summary>Rule evaluation over the account's own sign-in history plus
+    /// an optional <see cref="IIpIntelligenceService"/> lookup (noop until a
+    /// paid provider is configured — Course Platform Security Requirements
+    /// §3.3 treats that as a later, optional upgrade; see class doc). Never
+    /// throws; callers decide what to do with the result.</summary>
+    Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, string? ipAddress, CancellationToken ct);
 }
 
 /// <summary>
@@ -30,14 +31,17 @@ public interface ISignInRiskService
 /// reliable enough to act on. That integration is a documented upgrade path,
 /// not implemented here.
 /// </summary>
-public sealed class SignInRiskService(LearnerDbContext db, TimeProvider timeProvider) : ISignInRiskService
+public sealed class SignInRiskService(
+    LearnerDbContext db,
+    IIpIntelligenceService ipIntelligence,
+    TimeProvider timeProvider) : ISignInRiskService
 {
     private static readonly TimeSpan ImpossibleTravelWindow = TimeSpan.FromHours(2);
     private const int DeviceChurnWindowDays = 7;
     private const int DeviceChurnThreshold = 5;
 
     public async Task<SignInRiskAssessment> EvaluateAsync(
-        string authAccountId, string? currentCountryCode, CancellationToken ct)
+        string authAccountId, string? currentCountryCode, string? ipAddress, CancellationToken ct)
     {
         var reasons = new List<string>();
         var level = SignInRiskLevel.None;
@@ -78,6 +82,18 @@ public sealed class SignInRiskService(LearnerDbContext db, TimeProvider timeProv
             {
                 level = SignInRiskLevel.Medium;
                 reasons.Add("frequent_sign_ins");
+            }
+        }
+
+        // External IP intelligence (noop by default — returns null). A known
+        // anonymizer/datacenter address bumps the score to at least Medium.
+        var intel = await ipIntelligence.LookupAsync(ipAddress, ct);
+        if (intel?.IsHighRiskNetwork == true)
+        {
+            reasons.Add("high_risk_network");
+            if (level == SignInRiskLevel.None)
+            {
+                level = SignInRiskLevel.Medium;
             }
         }
 
