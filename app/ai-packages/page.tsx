@@ -14,15 +14,20 @@ import type { AiPackage, AiPackageCreditSnapshot, AiPackagesResponse } from '@/l
 import { formatMoney } from '@/lib/money';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 import { CartNavButton } from '@/components/cart';
+import {
+  resolveWebsitePackageByCode,
+  resolveWebsitePackageBySlug,
+  type WebsitePackage,
+} from '@/lib/catalog-website-packages';
 
 type PackageTab = 'full' | 'separate' | 'mock';
 type SeparateKey = 'listening' | 'reading' | 'writing' | 'speaking';
 
 const SEPARATE_SECTIONS: Array<{ key: SeparateKey; label: string; icon: React.ReactNode }> = [
-  { key: 'listening', label: 'Listening', icon: <Headphones className="h-4 w-4" /> },
-  { key: 'reading', label: 'Reading', icon: <FileText className="h-4 w-4" /> },
-  { key: 'writing', label: 'Writing', icon: <ClipboardCheck className="h-4 w-4" /> },
-  { key: 'speaking', label: 'Speaking', icon: <Mic2 className="h-4 w-4" /> },
+  { key: 'listening', label: 'Separate Listening Packages', icon: <Headphones className="h-4 w-4" /> },
+  { key: 'reading', label: 'Separate Reading Packages', icon: <FileText className="h-4 w-4" /> },
+  { key: 'writing', label: 'Separate Writing Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
+  { key: 'speaking', label: 'Separate Speaking Packages', icon: <Mic2 className="h-4 w-4" /> },
 ];
 
 function formatAllowance(value: number | null, label: string) {
@@ -35,12 +40,21 @@ function formatDate(value?: string | null) {
   return Number.isNaN(parsed.getTime()) ? 'No active expiry' : parsed.toLocaleDateString();
 }
 
-function packageHeadline(pkg: AiPackage) {
-  if (pkg.group === 'mock') return `${pkg.mocks} full mock${pkg.mocks === 1 ? '' : 's'}`;
-  if (pkg.group === 'writing') return `${pkg.writingCredits} Writing credits`;
-  if (pkg.group === 'speaking') return `${pkg.speakingCredits} Speaking credits`;
-  if (pkg.credits > 0) return `${pkg.credits} flexible credits`;
-  return 'Practice allowance';
+function canonicalAiPackage(pkg: AiPackage): WebsitePackage | undefined {
+  const websitePackage = resolveWebsitePackageByCode(pkg.code);
+  return websitePackage && websitePackage.packageNo >= 30 && websitePackage.packageNo <= 47
+    ? websitePackage
+    : undefined;
+}
+
+function canonicalAiRows(rows: AiPackage[]): AiPackage[] {
+  return rows
+    .filter((pkg) => canonicalAiPackage(pkg) != null)
+    .sort(
+      (left, right) =>
+        (canonicalAiPackage(left)?.packageNo ?? Number.MAX_SAFE_INTEGER) -
+        (canonicalAiPackage(right)?.packageNo ?? Number.MAX_SAFE_INTEGER),
+    );
 }
 
 export default function AiPackagesPage() {
@@ -93,15 +107,30 @@ export default function AiPackagesPage() {
     };
   }, [isAuthenticated]);
 
-  const visibleCount = useMemo(() => {
-    if (!packages) return 0;
-    return packages.full.length
-      + packages.separate.listening.length
-      + packages.separate.reading.length
-      + packages.separate.writing.length
-      + packages.separate.speaking.length
-      + packages.mock.length;
+  const visiblePackages = useMemo<AiPackagesResponse | null>(() => {
+    if (!packages) return null;
+    return {
+      ...packages,
+      full: canonicalAiRows(packages.full),
+      separate: {
+        listening: canonicalAiRows(packages.separate.listening),
+        reading: canonicalAiRows(packages.separate.reading),
+        writing: canonicalAiRows(packages.separate.writing),
+        speaking: canonicalAiRows(packages.separate.speaking),
+      },
+      mock: canonicalAiRows(packages.mock),
+    };
   }, [packages]);
+
+  const visibleCount = useMemo(() => {
+    if (!visiblePackages) return 0;
+    return visiblePackages.full.length
+      + visiblePackages.separate.listening.length
+      + visiblePackages.separate.reading.length
+      + visiblePackages.separate.writing.length
+      + visiblePackages.separate.speaking.length
+      + visiblePackages.mock.length;
+  }, [visiblePackages]);
 
   const startCheckout = useCallback(async (pkg: AiPackage) => {
     if (authLoading) return;
@@ -113,53 +142,90 @@ export default function AiPackagesPage() {
     submittingRef.current = true;
     setBusyCode(pkg.code);
     setMessage(null);
-    addToCart({ code: pkg.code, kind: 'addon', name: pkg.name, price: pkg.price, currency: pkg.currency });
+    addToCart({
+      code: pkg.code,
+      kind: 'addon',
+      name: canonicalAiPackage(pkg)?.name ?? pkg.name,
+      price: pkg.price,
+      currency: pkg.currency,
+    });
     setBusyCode(null);
     submittingRef.current = false;
   }, [authLoading, isAuthenticated, router, addToCart]);
 
   useEffect(() => {
     const code = searchParams?.get('package');
-    if (!code || !packages || authLoading || !isAuthenticated || submittingRef.current) return;
+    if (!code || !visiblePackages || authLoading || !isAuthenticated || submittingRef.current) return;
     const allPackages = [
-      ...packages.full,
-      ...packages.separate.listening,
-      ...packages.separate.reading,
-      ...packages.separate.writing,
-      ...packages.separate.speaking,
-      ...packages.mock,
+      ...visiblePackages.full,
+      ...visiblePackages.separate.listening,
+      ...visiblePackages.separate.reading,
+      ...visiblePackages.separate.writing,
+      ...visiblePackages.separate.speaking,
+      ...visiblePackages.mock,
     ];
-    const selected = allPackages.find((pkg) => pkg.code === code);
+    const requestedPackage = resolveWebsitePackageBySlug(code) ?? resolveWebsitePackageByCode(code);
+    const selected = allPackages.find(
+      (pkg) => (resolveWebsitePackageByCode(pkg.code)?.code ?? pkg.code) === (requestedPackage?.code ?? code),
+    );
     if (selected) {
       void startCheckout(selected);
     }
-  }, [authLoading, isAuthenticated, packages, searchParams, startCheckout]);
+  }, [authLoading, isAuthenticated, searchParams, startCheckout, visiblePackages]);
 
-  const renderCard = (pkg: AiPackage) => (
+  const renderCard = (pkg: AiPackage) => {
+    const websitePackage = canonicalAiPackage(pkg);
+    if (!websitePackage) return null;
+    return (
     <article key={pkg.code} className="flex min-h-[320px] flex-col rounded-lg border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-navy">{pkg.name}</h2>
-          <p className="mt-1 text-sm font-medium text-primary">{packageHeadline(pkg)}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+            Package {websitePackage.packageNo}
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-navy">{websitePackage.name}</h2>
         </div>
-        {pkg.priorityQueue ? <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Priority</span> : null}
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {websitePackage.badges.map((badge) => (
+            <span key={badge} className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+              {badge}
+            </span>
+          ))}
+        </div>
       </div>
-      <p className="mt-3 text-sm leading-6 text-muted">{pkg.description}</p>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {websitePackage.metaChips.map((chip) => (
+          <span key={chip} className="rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+            {chip}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        <span className="font-semibold text-navy">Category:</span> {websitePackage.category}
+      </p>
+      <p className="mt-3 text-sm leading-6 text-muted">{websitePackage.description}</p>
+      <p className="mt-3 text-sm text-muted">
+        <span className="font-semibold text-navy">Format:</span> {websitePackage.formatLine}
+      </p>
       <p className="mt-4 text-3xl font-semibold text-navy">{formatMoney(pkg.price, { currency: pkg.currency })}</p>
       <ul className="mt-4 flex-1 space-y-2 text-sm text-navy">
-        {pkg.features.map((feature) => (
+        {websitePackage.features.map((feature) => (
           <li key={feature} className="flex gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
             <span>{feature}</span>
           </li>
         ))}
       </ul>
+      <p className="mt-4 rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy">
+        <span className="font-bold">Best for:</span> {websitePackage.bestFor}
+      </p>
       <Button className="mt-5" fullWidth loading={busyCode === pkg.code} onClick={() => startCheckout(pkg)}>
         <ShoppingCart className="h-4 w-4" />
         Add to cart
       </Button>
     </article>
-  );
+    );
+  };
 
   return (
     <main className="min-h-screen bg-background text-navy">
@@ -201,9 +267,9 @@ export default function AiPackagesPage() {
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Tabs
           tabs={[
-            { id: 'full', label: 'Full Packages', icon: <PackageCheck className="h-4 w-4" /> },
+            { id: 'full', label: 'AI Grading Packages', icon: <PackageCheck className="h-4 w-4" /> },
+            { id: 'mock', label: 'Full Mock Exam Packages', icon: <Bot className="h-4 w-4" /> },
             { id: 'separate', label: 'Separate Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
-            { id: 'mock', label: 'Mock Packages', icon: <Bot className="h-4 w-4" /> },
           ]}
           activeTab={activeTab}
           onChange={(tab: string) => setActiveTab(tab as PackageTab)}
@@ -218,20 +284,20 @@ export default function AiPackagesPage() {
         ) : (
           <>
             <TabPanel id="full" activeTab={activeTab}>
-              <div className="mt-6 grid gap-4 lg:grid-cols-3">{packages?.full.map(renderCard)}</div>
+              <div className="mt-6 grid gap-4 lg:grid-cols-3">{visiblePackages?.full.map(renderCard)}</div>
             </TabPanel>
             <TabPanel id="separate" activeTab={activeTab}>
               <div className="mt-6 space-y-5 sm:space-y-8">
                 {SEPARATE_SECTIONS.map((section) => (
                   <section key={section.key}>
                     <h2 className="flex items-center gap-2 text-xl font-semibold text-navy">{section.icon}{section.label}</h2>
-                    <div className="mt-3 grid gap-4 lg:grid-cols-3">{packages?.separate[section.key].map(renderCard)}</div>
+                    <div className="mt-3 grid gap-4 lg:grid-cols-3">{visiblePackages?.separate[section.key].map(renderCard)}</div>
                   </section>
                 ))}
               </div>
             </TabPanel>
             <TabPanel id="mock" activeTab={activeTab}>
-              <div className="mt-6 grid gap-4 lg:grid-cols-3">{packages?.mock.map(renderCard)}</div>
+              <div className="mt-6 grid gap-4 lg:grid-cols-3">{visiblePackages?.mock.map(renderCard)}</div>
             </TabPanel>
           </>
         )}

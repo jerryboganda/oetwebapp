@@ -18,6 +18,7 @@ import {
   formatAccessDuration,
   formatPrice,
 } from '@/lib/catalog-presentation';
+import { resolveWebsitePackageByCode, type WebsitePackage } from '@/lib/catalog-website-packages';
 import { CATALOG_ACCENT_TILE } from './catalog-plan-card';
 
 export interface CatalogPlanDetailDrawerProps {
@@ -36,8 +37,11 @@ interface BundledStat {
   value: string;
 }
 
-function bundledStats(plan: PublicCatalogPlanRow): BundledStat[] {
-  const stats: BundledStat[] = [{ label: 'Access', value: formatAccessDuration(plan.accessDurationDays) }];
+function bundledStats(plan: PublicCatalogPlanRow, websitePackage?: WebsitePackage): BundledStat[] {
+  const stats: BundledStat[] = [
+    { label: 'Access', value: websitePackage?.access ?? formatAccessDuration(plan.accessDurationDays) },
+  ];
+  if (websitePackage?.duration) stats.push({ label: 'Duration', value: websitePackage.duration });
   if (plan.bundledWritingAssessments > 0) stats.push({ label: 'Writing assessments', value: String(plan.bundledWritingAssessments) });
   if (plan.bundledSpeakingSessions > 0) stats.push({ label: 'Speaking sessions', value: String(plan.bundledSpeakingSessions) });
   if (plan.bundledAiCredits > 0) stats.push({ label: 'AI credits', value: String(plan.bundledAiCredits) });
@@ -47,17 +51,18 @@ function bundledStats(plan: PublicCatalogPlanRow): BundledStat[] {
 }
 
 export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, variant, onClose, onAddToCart }: CatalogPlanDetailDrawerProps) {
+  const websitePackage = plan ? resolveWebsitePackageByCode(plan.code) : undefined;
   const card = plan ? resolveCardPresentation(plan.code, presentation) : {};
   const Icon = plan ? (resolveCatalogIcon(card.iconKey) ?? defaultIconForCategory(plan.productCategory)) : Layers;
   const accent = normalizeAccent(card.accent, config.accent);
   const tile = CATALOG_ACCENT_TILE[accent] ?? CATALOG_ACCENT_TILE.primary;
-  const bullets = plan ? planFeatureBullets(plan, card) : [];
+  const bullets = plan ? websitePackage?.features ?? planFeatureBullets(plan, card) : [];
   const flags = plan ? addOnEnabledFlags(plan) : [];
-  const stats = plan ? bundledStats(plan) : [];
+  const stats = plan ? bundledStats(plan, websitePackage) : [];
   const hasDiscount = plan?.originalPrice != null && plan.originalPrice > plan.price;
 
   return (
-    <Drawer open={plan != null} onClose={onClose} title={plan?.name ?? 'Package details'}>
+    <Drawer open={plan != null} onClose={onClose} title={websitePackage?.name ?? plan?.name ?? 'Package details'}>
       {plan ? (
         <div className="space-y-6">
           <div className="flex items-start gap-4">
@@ -66,9 +71,9 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                <span>{professionLabel(config, plan.profession)}</span>
+                <span>{websitePackage?.profession ?? professionLabel(config, plan.profession)}</span>
                 <span aria-hidden="true">·</span>
-                <span>{categoryLabel(config, plan.productCategory)}</span>
+                <span>{websitePackage?.category ?? categoryLabel(config, plan.productCategory)}</span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-navy">{formatPrice(plan.price, plan.currency)}</span>
@@ -79,8 +84,10 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             </div>
           </div>
 
-          {card.tagline || plan.description ? (
-            <p className="text-sm leading-relaxed text-muted">{card.tagline ?? plan.description}</p>
+          {websitePackage?.description || card.tagline || plan.description ? (
+            <p className="text-sm leading-relaxed text-muted">
+              {websitePackage?.description ?? card.tagline ?? plan.description}
+            </p>
           ) : null}
 
           {stats.length > 0 ? (
@@ -105,6 +112,17 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
                   </li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+
+          {websitePackage ? (
+            <div className="space-y-3 rounded-xl border border-border bg-background-light px-4 py-3 text-sm">
+              <p className="text-navy">
+                <span className="font-bold">Format:</span> {websitePackage.formatLine}
+              </p>
+              <p className="text-navy">
+                <span className="font-bold">Best for:</span> {websitePackage.bestFor}
+              </p>
             </div>
           ) : null}
 

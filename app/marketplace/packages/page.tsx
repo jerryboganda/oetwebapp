@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Package, Check, Star, ChevronRight } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Package, Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -16,6 +16,10 @@ import type {
   FreePreviewAsset,
   PaginatedResponse,
 } from '@/lib/types/content-hierarchy';
+import {
+  resolveWebsitePackageByCode,
+  websitePackagePurchaseHref,
+} from '@/lib/catalog-website-packages';
 
 const PACKAGE_TYPE_COLORS: Record<string, string> = {
   full_course: 'bg-primary/10 text-primary',
@@ -70,6 +74,16 @@ export default function PackagesPage() {
     return () => { cancelled = true; };
   }, [typeFilter]);
 
+  const displayPackages = useMemo(
+    () =>
+      [...packages].sort((left, right) => {
+        const leftNumber = resolveWebsitePackageByCode(left.code)?.packageNo ?? Number.MAX_SAFE_INTEGER;
+        const rightNumber = resolveWebsitePackageByCode(right.code)?.packageNo ?? Number.MAX_SAFE_INTEGER;
+        return leftNumber - rightNumber || left.displayOrder - right.displayOrder;
+      }),
+    [packages],
+  );
+
   return (
     <LearnerDashboardShell>
       <LearnerPageHero
@@ -116,47 +130,102 @@ export default function PackagesPage() {
           ) : (
             <MotionSection>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {packages.map((pkg, i) => (
-                  <MotionItem key={pkg.id}>
-                    <div className={`relative rounded-xl border border-border bg-surface p-6 flex flex-col h-full ${i === 0 ? 'ring-2 ring-primary' : ''}`}>
-                      {i === 0 && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <Badge className="bg-primary text-white dark:bg-violet-700">
-                            <Star className="w-3 h-3 mr-1" /> Most Popular
-                          </Badge>
-                        </div>
-                      )}
-
-                      <Badge className={`self-start text-[10px] mb-3 ${PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-muted'}`}>
-                        {PACKAGE_TYPE_LABELS[pkg.packageType] ?? pkg.packageType}
-                      </Badge>
-
-                      <h3 className="text-lg font-semibold mb-1">{pkg.title}</h3>
-                      {pkg.description && (
-                        <p className="text-sm text-muted mb-4 line-clamp-2">{pkg.description}</p>
-                      )}
-
-                      {/* Feature comparison list */}
-                      {pkg.comparisonFeatures.length > 0 && (
-                        <ul className="space-y-2 mb-4 flex-1">
-                          {pkg.comparisonFeatures.map((feature, fi) => (
-                            <li key={fi} className="flex items-start gap-2 text-sm">
-                              <Check className="w-4 h-4 text-success shrink-0 mt-0.5" />
-                              <span>{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      <Link
-                        href={`/marketplace/packages/${pkg.id}`}
-                        className="mt-auto flex items-center justify-center gap-1 rounded-lg bg-primary text-white px-4 py-2.5 text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
+                {displayPackages.map((pkg) => {
+                  const websitePackage = resolveWebsitePackageByCode(pkg.code);
+                  const features = websitePackage?.features ?? pkg.comparisonFeatures;
+                  return (
+                    <MotionItem key={pkg.id}>
+                      <div
+                        className={`relative flex h-full flex-col rounded-xl border border-border bg-surface p-6 ${
+                          websitePackage?.featured ? 'ring-2 ring-primary' : ''
+                        }`}
                       >
-                        View Details <ChevronRight className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  </MotionItem>
-                ))}
+                        {websitePackage ? (
+                          <>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                              Package {websitePackage.packageNo}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {websitePackage.badges.map((badge) => (
+                                <Badge key={badge} className="bg-primary/10 text-primary">
+                                  {badge}
+                                </Badge>
+                              ))}
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {websitePackage.metaChips.map((chip) => (
+                                <span
+                                  key={chip}
+                                  className="rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted"
+                                >
+                                  {chip}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-xs text-muted">
+                              <span className="font-semibold text-navy">Category:</span>{' '}
+                              {websitePackage.category}
+                            </p>
+                          </>
+                        ) : (
+                          <Badge
+                            className={`mb-3 self-start text-[10px] ${
+                              PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-muted'
+                            }`}
+                          >
+                            {PACKAGE_TYPE_LABELS[pkg.packageType] ?? pkg.packageType}
+                          </Badge>
+                        )}
+
+                        <h3 className="mt-3 text-lg font-semibold">
+                          {websitePackage?.name ?? pkg.title}
+                        </h3>
+                        {websitePackage?.description ?? pkg.description ? (
+                          <p className="mt-2 text-sm leading-6 text-muted">
+                            {websitePackage?.description ?? pkg.description}
+                          </p>
+                        ) : null}
+                        {websitePackage ? (
+                          <p className="mt-3 text-sm text-muted">
+                            <span className="font-semibold text-navy">Format:</span>{' '}
+                            {websitePackage.formatLine}
+                          </p>
+                        ) : null}
+
+                        {features.length > 0 ? (
+                          <ul className="mb-4 mt-4 flex-1 space-y-2">
+                            {features.map((feature) => (
+                              <li key={feature} className="flex items-start gap-2 text-sm">
+                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                                <span>{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="flex-1" />
+                        )}
+
+                        {websitePackage ? (
+                          <p className="mb-4 rounded-lg border border-border bg-background-light px-3 py-2 text-sm">
+                            <span className="font-semibold">Best for:</span>{' '}
+                            {websitePackage.bestFor}
+                          </p>
+                        ) : null}
+
+                        <Link
+                          href={
+                            websitePackage
+                              ? websitePackagePurchaseHref(websitePackage)
+                              : `/marketplace/packages/${encodeURIComponent(pkg.code)}`
+                          }
+                          className="mt-auto flex items-center justify-center gap-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+                        >
+                          View Details <ChevronRight className="h-4 w-4" />
+                        </Link>
+                      </div>
+                    </MotionItem>
+                  );
+                })}
               </div>
             </MotionSection>
           )}

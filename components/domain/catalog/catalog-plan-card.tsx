@@ -16,6 +16,7 @@ import {
   formatAccessDuration,
   formatPrice,
 } from '@/lib/catalog-presentation';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 
 export const CATALOG_ACCENT_TILE: Record<string, string> = {
   primary: 'bg-primary/10 text-primary',
@@ -38,12 +39,13 @@ export interface CatalogPlanCardProps {
 }
 
 export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }: CatalogPlanCardProps) {
+  const websitePackage = resolveWebsitePackageByCode(plan.code);
   const Icon = resolveCatalogIcon(presentation.iconKey) ?? defaultIconForCategory(plan.productCategory);
   const accent = normalizeAccent(presentation.accent, config.accent);
   const tile = CATALOG_ACCENT_TILE[accent] ?? CATALOG_ACCENT_TILE.primary;
-  const bullets = planFeatureBullets(plan, presentation).slice(0, 3);
+  const bullets = (websitePackage?.features ?? planFeatureBullets(plan, presentation)).slice(0, 3);
   const flags = addOnEnabledFlags(plan);
-  const tagline = presentation.tagline ?? plan.description ?? '';
+  const tagline = websitePackage?.description ?? presentation.tagline ?? plan.description ?? '';
   const hasDiscount = plan.originalPrice != null && plan.originalPrice > plan.price;
 
   return (
@@ -70,12 +72,23 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
           </div>
         </div>
         <div>
-          <h3 className="text-lg font-bold leading-snug text-navy">{plan.name}</h3>
+          <h3 className="text-lg font-bold leading-snug text-navy">{websitePackage?.name ?? plan.name}</h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-            <span>{professionLabel(config, plan.profession)}</span>
-            <span aria-hidden="true">·</span>
-            <span>{formatAccessDuration(plan.accessDurationDays)}</span>
+            {websitePackage ? (
+              websitePackage.metaChips.map((chip) => <span key={chip}>{chip}</span>)
+            ) : (
+              <>
+                <span>{professionLabel(config, plan.profession)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{formatAccessDuration(plan.accessDurationDays)}</span>
+              </>
+            )}
           </div>
+          {websitePackage ? (
+            <p className="mt-2 text-xs text-muted">
+              <span className="font-semibold text-navy">Category:</span> {websitePackage.category}
+            </p>
+          ) : null}
           {tagline ? <p className="mt-3 text-sm leading-relaxed text-muted line-clamp-3">{tagline}</p> : null}
         </div>
         {bullets.length > 0 ? (

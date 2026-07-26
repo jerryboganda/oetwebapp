@@ -7,12 +7,22 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Sparkles, Tag as TagIcon } 
 import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
+import {
+  resolveWebsitePackageByCode,
+  resolveWebsitePackageBySlug,
+  websitePackageCheckoutHref,
+  websitePackagePurchaseHref,
+} from '@/lib/catalog-website-packages';
 
 export default function PackageDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const rawId = params?.id;
   const code = typeof rawId === 'string' ? decodeURIComponent(rawId) : '';
+  const requestedWebsitePackage =
+    resolveWebsitePackageBySlug(code) ??
+    resolveWebsitePackageByCode(code) ??
+    (code.startsWith('pkg_') ? resolveWebsitePackageByCode(code.slice(4)) : undefined);
 
   const [plans, setPlans] = useState<PublicCatalogPlanRow[]>([]);
   const [addOns, setAddOns] = useState<PublicCatalogAddOnRow[]>([]);
@@ -34,7 +44,20 @@ export default function PackageDetailPage() {
     })();
   }, []);
 
-  const plan = useMemo(() => plans.find((p) => p.code === code), [plans, code]);
+  useEffect(() => {
+    if (requestedWebsitePackage?.productType !== 'addon_purchase') return;
+    router.replace(websitePackagePurchaseHref(requestedWebsitePackage));
+  }, [requestedWebsitePackage, router]);
+
+  const plan = useMemo(
+    () =>
+      plans.find((candidate) => {
+        if (!requestedWebsitePackage) return candidate.code === code;
+        return resolveWebsitePackageByCode(candidate.code)?.code === requestedWebsitePackage.code;
+      }),
+    [plans, code, requestedWebsitePackage],
+  );
+  const websitePackage = requestedWebsitePackage ?? (plan ? resolveWebsitePackageByCode(plan.code) : undefined);
 
   const writingAddons = useMemo(
     () => (plan?.writingAddonsEnabled ? addOns.filter((a) => a.eligibilityFlag === 'writing_addons') : []),
@@ -48,6 +71,26 @@ export default function PackageDetailPage() {
     () => (plan?.tutorBookDiscountEnabled ? addOns.find((a) => a.eligibilityFlag === 'tutor_book_discount') : undefined),
     [plan, addOns],
   );
+  const tutorBookWebsitePackage = tutorBookAddon
+    ? resolveWebsitePackageByCode(tutorBookAddon.code)
+    : undefined;
+
+  if (requestedWebsitePackage?.productType === 'addon_purchase') {
+    const purchaseHref = websitePackagePurchaseHref(requestedWebsitePackage);
+    return (
+      <div className="min-h-screen bg-background-light p-12">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-8 text-center">
+          <h1 className="text-xl font-bold text-navy">Opening {requestedWebsitePackage.name}</h1>
+          <p className="mt-2 text-sm text-muted">
+            Taking you to the correct purchase options for this add-on.
+          </p>
+          <Link href={purchaseHref} className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-primary">
+            Continue <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return <div className="min-h-screen bg-background-light p-12"><div className="mx-auto h-96 max-w-5xl animate-pulse rounded-2xl bg-surface" /></div>;
@@ -76,12 +119,18 @@ export default function PackageDetailPage() {
           </Link>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-6">
             <div className="flex-1 min-w-[260px]">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">{plan.productCategory.replace(/_/g, ' ')}</p>
-              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{plan.name}</h1>
-              {plan.description && <p className="mt-3 max-w-2xl text-sm text-white/80">{plan.description}</p>}
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">
+                {websitePackage ? `Package ${websitePackage.packageNo} · ${websitePackage.category}` : plan.productCategory.replace(/_/g, ' ')}
+              </p>
+              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{websitePackage?.name ?? plan.name}</h1>
+              {(websitePackage?.description ?? plan.description) ? (
+                <p className="mt-3 max-w-2xl text-sm text-white/80">
+                  {websitePackage?.description ?? plan.description}
+                </p>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                <HeroTag>{labelForProfession(plan.profession)}</HeroTag>
-                <HeroTag><Clock className="mr-1 h-3 w-3" /> {formatAccess(plan.accessDurationDays)} access</HeroTag>
+                <HeroTag>{websitePackage?.profession ?? labelForProfession(plan.profession)}</HeroTag>
+                <HeroTag><Clock className="mr-1 h-3 w-3" /> {websitePackage?.access ?? `${formatAccess(plan.accessDurationDays)} access`}</HeroTag>
                 {plan.writingAddonsEnabled && <HeroTag gold>W add-ons</HeroTag>}
                 {plan.speakingAddonsEnabled && <HeroTag gold>S add-ons</HeroTag>}
                 {tutorBookAddon && <HeroTag gold>Tutor Book £32</HeroTag>}
@@ -94,14 +143,23 @@ export default function PackageDetailPage() {
               )}
               <button
                 type="button"
-                onClick={() => router.push(`/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`)}
+                onClick={() =>
+                  router.push(
+                    websitePackage
+                      ? websitePackageCheckoutHref(websitePackage, plan.code)
+                      : `/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`,
+                  )
+                }
                 className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4A44F] px-5 py-2.5 text-sm font-bold text-[#0E2841] shadow-sm transition-colors hover:bg-[#bf8e3d]"
               >
-                Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
+                {websitePackage?.code === 'tutor-book'
+                  ? 'Contact admin to enable'
+                  : `Buy for £${plan.price.toFixed(0)}`}{' '}
+                <ArrowRight className="h-4 w-4" />
               </button>
               <p className="mt-2 text-[10px] text-white/60">
-                {plan.code === 'tutor-book'
-                  ? 'Pay normally, then contact us on WhatsApp for manual delivery. No platform access is unlocked.'
+                {websitePackage?.code === 'tutor-book' || plan.code === 'tutor-book'
+                  ? 'TutorBook is enabled manually by an administrator and is not sold through self-checkout.'
                   : 'Charged in GBP. No auto-renewal.'}
               </p>
             </div>
@@ -115,13 +173,18 @@ export default function PackageDetailPage() {
           <div className="lg:col-span-2">
             <h2 className="text-xl font-bold">What you&apos;ll get</h2>
             <ul className="mt-4 space-y-2">
-              {plan.dashboardModules.map((module) => (
-                <li key={module} className="flex items-start gap-2 text-sm">
+              {(websitePackage?.features ?? plan.dashboardModules.map(prettyModule)).map((feature) => (
+                <li key={feature} className="flex items-start gap-2 text-sm">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
-                  <span>{prettyModule(module)}</span>
+                  <span>{feature}</span>
                 </li>
               ))}
             </ul>
+            {websitePackage ? (
+              <p className="mt-6 rounded-2xl border border-border bg-surface p-4 text-sm">
+                <span className="font-bold">Best for:</span> {websitePackage.bestFor}
+              </p>
+            ) : null}
 
             {(plan.bundledWritingAssessments > 0 ||
               plan.bundledSpeakingSessions > 0 ||
@@ -156,10 +219,11 @@ export default function PackageDetailPage() {
 
           <aside className="space-y-4 text-sm">
             <SidebarBlock title="Access window">
-              {formatAccess(plan.accessDurationDays)} from purchase.
+              {websitePackage?.access ?? `${formatAccess(plan.accessDurationDays)} from purchase.`}
             </SidebarBlock>
-            <SidebarBlock title="Profession">{labelForProfession(plan.profession)}</SidebarBlock>
-            <SidebarBlock title="Format">Recorded video + materials. Assessments are reviewed by Dr Ahmed (48-72h turnaround, Friday off).</SidebarBlock>
+            <SidebarBlock title="Profession">{websitePackage?.profession ?? labelForProfession(plan.profession)}</SidebarBlock>
+            <SidebarBlock title="Category">{websitePackage?.category ?? plan.productCategory.replace(/_/g, ' ')}</SidebarBlock>
+            <SidebarBlock title="Format">{websitePackage?.formatLine ?? 'Recorded video + materials. Assessments are reviewed by Dr Ahmed (48-72h turnaround, Friday off).'}</SidebarBlock>
           </aside>
         </div>
       </section>
@@ -185,8 +249,12 @@ export default function PackageDetailPage() {
                 <div className="mt-3 max-w-sm rounded-2xl border border-border bg-surface p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h4 className="font-bold">{tutorBookAddon.name}</h4>
-                      {tutorBookAddon.description && <p className="mt-1 text-xs text-muted">{tutorBookAddon.description}</p>}
+                      <h4 className="font-bold">{tutorBookWebsitePackage?.name ?? tutorBookAddon.name}</h4>
+                      {(tutorBookWebsitePackage?.description ?? tutorBookAddon.description) ? (
+                        <p className="mt-1 text-xs text-muted">
+                          {tutorBookWebsitePackage?.description ?? tutorBookAddon.description}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold">£{tutorBookAddon.price.toFixed(0)}</div>
@@ -213,7 +281,11 @@ export default function PackageDetailPage() {
       <AddonPurchaseModal
         open={modalAddOn !== null}
         addOnCode={modalAddOn?.code ?? null}
-        addOnLabel={modalAddOn?.name ?? null}
+        addOnLabel={
+          modalAddOn
+            ? resolveWebsitePackageByCode(modalAddOn.code)?.name ?? modalAddOn.name
+            : null
+        }
         addOnPriceGbp={modalAddOn?.price ?? null}
         onClose={() => setModalAddOn(null)}
         checkoutPath="/checkout/review"
@@ -235,12 +307,18 @@ function AddonGroup({
     <div className="mt-6">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">{title}</h3>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {addons.map((addon) => (
+        {addons.map((addon) => {
+          const websitePackage = resolveWebsitePackageByCode(addon.code);
+          return (
           <div key={addon.code} className="rounded-2xl border border-border bg-surface p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h4 className="font-bold">{addon.name}</h4>
-                {addon.description && <p className="mt-1 text-xs text-muted">{addon.description}</p>}
+                <h4 className="font-bold">{websitePackage?.name ?? addon.name}</h4>
+                {(websitePackage?.description ?? addon.description) ? (
+                  <p className="mt-1 text-xs text-muted">
+                    {websitePackage?.description ?? addon.description}
+                  </p>
+                ) : null}
               </div>
               <div className="text-right">
                 <div className="text-lg font-bold">£{addon.price.toFixed(0)}</div>
@@ -258,7 +336,8 @@ function AddonGroup({
               <TagIcon className="h-3 w-3" /> Add to order
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

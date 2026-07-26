@@ -121,6 +121,138 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
+    public async Task WritingStarter_SixDebitUnits_FundExactlyThreeAdvertisedLetters()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_writing_starter", 30, 3,
+                """{"package_type":"writing","writing_only_credits":6,"writing_items":3}"""),
+            1,
+            "cs_writing_truthful",
+            null,
+            CancellationToken.None);
+
+        var first = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-1", 2, CancellationToken.None);
+        var second = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-2", 2, CancellationToken.None);
+        var third = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-3", 2, CancellationToken.None);
+        var fourth = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-4", 2, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(first.Debited);
+        Assert.True(second.Debited);
+        Assert.True(third.Debited);
+        Assert.False(fourth.Debited);
+        Assert.Equal("no_ai_package_credits", fourth.ErrorCode);
+        Assert.Equal(0, snapshot.WritingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task OetMastery_BypassesWritingAndSpeakingOnlyWhilePurchaseItemIsActive()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        var now = DateTimeOffset.UtcNow;
+        await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_oet_mastery", 180, 0,
+                """{"package_type":"full","unlimited_grading":true,"listening_tests":null,"reading_tests":null}"""),
+            1,
+            "cs_mastery_unlimited",
+            null,
+            CancellationToken.None);
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-mastery",
+            UserId = "learner-1",
+            PlanId = "plan-free",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddDays(180),
+            ExpiresAt = now.AddDays(180),
+            PriceAmount = 0,
+            Currency = "GBP",
+            Interval = "one_time"
+        });
+        var item = new SubscriptionItem
+        {
+            Id = "item-mastery",
+            SubscriptionId = "sub-mastery",
+            ItemCode = "pkg_oet_mastery",
+            ItemType = "addon",
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now,
+            EndsAt = now.AddDays(180),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.SubscriptionItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var writing = await service.DeductGradingCreditAsync(
+            "learner-1", "writing", "mastery-writing", 2, CancellationToken.None);
+        var speaking = await service.CheckGradingCreditAsync(
+            "learner-1", "speaking", CancellationToken.None);
+
+        Assert.True(writing.Debited);
+        Assert.True(speaking.Debited);
+        Assert.Empty(await db.AiPackageCreditTransactions
+            .Where(row => row.Reason == AiPackageCreditReason.GradingDeduct)
+            .ToListAsync());
+
+        item.Status = SubscriptionItemStatus.Cancelled;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        var revoked = await service.CheckGradingCreditAsync(
+            "learner-1", "writing", 2, CancellationToken.None);
+        Assert.False(revoked.Debited);
+        Assert.Equal("no_ai_package_credits", revoked.ErrorCode);
+
+        item.Status = SubscriptionItemStatus.Active;
+        item.EndsAt = null;
+        await db.SaveChangesAsync();
+
+        var malformedPermanentItem = await service.CheckGradingCreditAsync(
+            "learner-1", "writing", 2, CancellationToken.None);
+        Assert.False(malformedPermanentItem.Debited);
+        Assert.Equal("no_ai_package_credits", malformedPermanentItem.ErrorCode);
+
+        item.EndsAt = now.AddMinutes(-1);
+        var account = await db.AiPackageCreditAccounts.SingleAsync(row => row.UserId == "learner-1");
+        account.ExpiresAt = now.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expired = await service.CheckGradingCreditAsync(
+            "learner-1", "writing", 2, CancellationToken.None);
+        Assert.False(expired.Debited);
+        Assert.Equal("ai_package_expired", expired.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ObjectiveOnlyPurchase_IsNotTreatedAsLegacyUnlimitedGrading()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_listening_starter", 30, 0,
+                """{"package_type":"listening","listening_tests":3}"""),
+            1,
+            "cs_listening_only",
+            null,
+            CancellationToken.None);
+
+        var result = await service.CheckGradingCreditAsync(
+            "learner-1", "writing", 2, CancellationToken.None);
+
+        Assert.False(result.Debited);
+        Assert.Equal("no_ai_package_credits", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task WritingExam_SpillsFromWritingThenFlexible()
     {
         await using var db = NewContext();

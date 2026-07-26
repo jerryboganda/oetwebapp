@@ -23,6 +23,7 @@ import {
   CatalogEntitlementSummary,
 } from './catalog-sections';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 
 export interface CatalogStorefrontProps {
   variant: 'dashboard' | 'public';
@@ -180,7 +181,14 @@ export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
         variant={variant}
         onClose={() => setSelectedPlan(null)}
         onAddToCart={(plan) => {
-          addToCart({ code: plan.code, kind: 'plan', name: plan.name, price: plan.price, currency: plan.currency });
+          const websitePackage = resolveWebsitePackageByCode(plan.code);
+          addToCart({
+            code: plan.code,
+            kind: 'plan',
+            name: websitePackage?.name ?? plan.name,
+            price: plan.price,
+            currency: plan.currency,
+          });
           setSelectedPlan(null);
         }}
       />

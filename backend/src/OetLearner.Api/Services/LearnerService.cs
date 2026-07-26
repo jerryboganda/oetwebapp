@@ -3739,8 +3739,19 @@ public partial class LearnerService(
 
     public async Task<object> GetAiPackagesAsync()
     {
+        string[] canonicalCodes =
+        [
+            "pkg_quick_check", "pkg_exam_prep_pro", "pkg_oet_mastery",
+            "pkg_mock_1", "pkg_mock_3", "pkg_mock_5",
+            "pkg_listening_starter", "pkg_listening_standard", "pkg_listening_pro",
+            "pkg_reading_starter", "pkg_reading_standard", "pkg_reading_pro",
+            "pkg_writing_starter", "pkg_writing_standard", "pkg_writing_pro",
+            "pkg_speaking_starter", "pkg_speaking_standard", "pkg_speaking_pro"
+        ];
         var addOns = await db.BillingAddOns.AsNoTracking()
-            .Where(x => x.Status == BillingAddOnStatus.Active && x.AddonKind == "ai_package")
+            .Where(x => x.Status == BillingAddOnStatus.Active
+                        && x.AddonKind == "ai_package"
+                        && canonicalCodes.Contains(x.Code))
             .OrderBy(x => x.DisplayOrder)
             .ThenBy(x => x.Price)
             .ToListAsync();
@@ -3761,6 +3772,9 @@ public partial class LearnerService(
             mocks = v.Mocks,
             validityDays = v.ValidityDays,
             priorityQueue = v.PriorityQueue,
+            unlimitedGrading = v.UnlimitedGrading,
+            unlimitedListening = v.UnlimitedListening,
+            unlimitedReading = v.UnlimitedReading,
             group = v.Group,
             features = v.Features,
         };
@@ -3788,8 +3802,11 @@ public partial class LearnerService(
             ? ResolveAiPackageGroup(x.Code)
             : x.AiPackageGroup.Trim().ToLowerInvariant();
         var credits = extras.FlexibleCredits ?? x.GrantCredits;
-        var writingCredits = extras.WritingCredits ?? x.LettersGranted;
-        var speakingCredits = extras.SpeakingCredits ?? x.SessionsGranted;
+        // Writing balance units are deliberately twice the advertised item
+        // count because a WritingExam debit costs two units. Keep the public
+        // numeric fields aligned to the 3/8/15 letters candidates purchase.
+        var writingCredits = extras.WritingItems ?? extras.WritingCredits ?? x.LettersGranted;
+        var speakingCredits = extras.SpeakingItems ?? extras.SpeakingCredits ?? x.SessionsGranted;
         if (group == "writing" && writingCredits == 0) writingCredits = credits;
         if (group == "speaking" && speakingCredits == 0) speakingCredits = credits;
         // Prefer admin-authored feature bullets; fall back to auto-generated copy when none stored.
@@ -3806,7 +3823,9 @@ public partial class LearnerService(
         return new AiPackageView(
             x.Code, x.Name, x.Description ?? string.Empty,
             x.Price, x.Currency, credits, writingCredits,
-            speakingCredits, extras.Mocks, x.DurationDays, extras.PriorityQueue, group, features);
+            speakingCredits, extras.Mocks, x.DurationDays, extras.PriorityQueue,
+            extras.UnlimitedGrading, extras.UnlimitedListening, extras.UnlimitedReading,
+            group, features);
     }
 
     private static string ResolveAiPackageGroup(string code)
@@ -3907,26 +3926,37 @@ public partial class LearnerService(
 
     private static AiPackageExtras ReadAiPackageExtras(string? grantEntitlementsJson)
     {
-        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return new(null, null, null, null, null, 0, false);
+        if (string.IsNullOrWhiteSpace(grantEntitlementsJson))
+            return new(null, null, null, null, null, null, null, 0, false, false, false, false);
         try
         {
             using var doc = JsonDocument.Parse(grantEntitlementsJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return new(null, null, null, null, null, 0, false);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return new(null, null, null, null, null, null, null, 0, false, false, false, false);
             var root = doc.RootElement;
             var mocks = ReadInt(root, "mock_exams") ?? ReadInt(root, "mockFull") ?? 0;
             var pq = root.TryGetProperty("priority_queue", out var p) && p.ValueKind == JsonValueKind.True;
+            var unlimitedGrading = root.TryGetProperty("unlimited_grading", out var grading)
+                                   && grading.ValueKind == JsonValueKind.True;
+            var unlimitedListening = IsExplicitNull(root, "listening_tests");
+            var unlimitedReading = IsExplicitNull(root, "reading_tests");
             return new(
                 ReadInt(root, "flexible_credits"),
                 ReadInt(root, "writing_only_credits"),
                 ReadInt(root, "speaking_only_credits"),
+                ReadInt(root, "writing_items"),
+                ReadInt(root, "speaking_items"),
                 ReadNullableAllowance(root, "listening_tests"),
                 ReadNullableAllowance(root, "reading_tests"),
                 mocks,
-                pq);
+                pq,
+                unlimitedGrading,
+                unlimitedListening,
+                unlimitedReading);
         }
         catch (JsonException)
         {
-            return new(null, null, null, null, null, 0, false);
+            return new(null, null, null, null, null, null, null, 0, false, false, false, false);
         }
     }
 
@@ -3944,19 +3974,28 @@ public partial class LearnerService(
         return value.TryGetInt32(out var parsed) ? Math.Max(0, parsed) : null;
     }
 
+    private static bool IsExplicitNull(JsonElement root, string name)
+        => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Null;
+
     private sealed record AiPackageExtras(
         int? FlexibleCredits,
         int? WritingCredits,
         int? SpeakingCredits,
+        int? WritingItems,
+        int? SpeakingItems,
         int? ListeningTests,
         int? ReadingTests,
         int Mocks,
-        bool PriorityQueue);
+        bool PriorityQueue,
+        bool UnlimitedGrading,
+        bool UnlimitedListening,
+        bool UnlimitedReading);
 
     private sealed record AiPackageView(
         string Code, string Name, string Description, decimal Price, string Currency,
         int Credits, int WritingCredits, int SpeakingCredits, int Mocks, int ValidityDays,
-        bool PriorityQueue, string Group, IReadOnlyList<string> Features);
+        bool PriorityQueue, bool UnlimitedGrading, bool UnlimitedListening, bool UnlimitedReading,
+        string Group, IReadOnlyList<string> Features);
 
     public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
     {

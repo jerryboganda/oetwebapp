@@ -144,6 +144,15 @@ public sealed class Oet2026CatalogSeeder(
         LearnerDbContext db, PlanDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
     {
         var existing = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == dto.Code, ct);
+        if (existing is null && LegacyPlanCodeFor(dto.Code) is { } legacyCode)
+        {
+            // The first production catalogue used *-plan for the two standalone
+            // Speaking plans. Reuse that row instead of creating a second plan;
+            // the public slug remains canonical while historical subscriptions
+            // and checkout snapshots keep their stable identifiers.
+            existing = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == legacyCode, ct);
+        }
+
         BillingPlan plan;
         bool isNew = existing is null;
 
@@ -277,6 +286,13 @@ public sealed class Oet2026CatalogSeeder(
         LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
     {
         var existing = await db.BillingAddOns.FirstOrDefaultAsync(a => a.Code == dto.Code, ct);
+        if (existing is null && LegacyAddOnCodeFor(dto.Code) is { } legacyCode)
+        {
+            // The original rows used the bare Speaking code. Keep the existing
+            // row/id so a reseed cannot produce duplicate purchasable add-ons.
+            existing = await db.BillingAddOns.FirstOrDefaultAsync(a => a.Code == legacyCode, ct);
+        }
+
         BillingAddOn addon;
         bool isNew = existing is null;
 
@@ -320,6 +336,10 @@ public sealed class Oet2026CatalogSeeder(
         addon.LettersGranted = dto.LettersGranted;
         addon.SessionsGranted = dto.SessionsGranted;
         addon.ExtensionDays = dto.ExtensionDays;
+        addon.AiPackageGroup = dto.AiPackageGroup ?? string.Empty;
+        addon.AiFeaturesJson = dto.AiFeatures is null
+            ? "[]"
+            : JsonSerializer.Serialize(dto.AiFeatures);
 
         var activeVersion = await db.BillingAddOnVersions
             .FirstOrDefaultAsync(v => v.AddOnId == addon.Id && v.Status == BillingAddOnStatus.Active, ct);
@@ -348,15 +368,42 @@ public sealed class Oet2026CatalogSeeder(
 
     private static string BuildGrantEntitlementsJson(AddOnDto dto)
     {
-        var grants = new Dictionary<string, object>();
+        var grants = new Dictionary<string, object?>();
         if (dto.LettersGranted > 0) grants["writing_assessments"] = dto.LettersGranted;
         if (dto.SessionsGranted > 0) grants["speaking_sessions"] = dto.SessionsGranted;
-        if (dto.GrantCredits > 0) grants["ai_credits"] = dto.GrantCredits;
-        if (dto.MockEntitlements > 0) grants["mockFull"] = dto.MockEntitlements;
-        // Explicit L&R allowances (0 = none included). Omit entirely to keep the
-        // default "unlimited" behaviour readers infer from an absent/null key.
-        if (dto.ListeningTests.HasValue) grants["listening_tests"] = dto.ListeningTests.Value;
-        if (dto.ReadingTests.HasValue) grants["reading_tests"] = dto.ReadingTests.Value;
+        if (string.Equals(dto.AddonKind, "ai_package", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(dto.AiPackageGroup))
+            {
+                grants["package_type"] = dto.AiPackageGroup.Trim().ToLowerInvariant();
+            }
+
+            if (dto.WritingOnlyCredits > 0)
+            {
+                grants["writing_only_credits"] = dto.WritingOnlyCredits;
+            }
+            else if (dto.SpeakingOnlyCredits > 0)
+            {
+                grants["speaking_only_credits"] = dto.SpeakingOnlyCredits;
+            }
+            else if (dto.GrantCredits > 0)
+            {
+                grants["flexible_credits"] = dto.GrantCredits;
+            }
+        }
+        else if (dto.GrantCredits > 0)
+        {
+            grants["ai_credits"] = dto.GrantCredits;
+        }
+
+        if (dto.WritingItems > 0) grants["writing_items"] = dto.WritingItems;
+        if (dto.SpeakingItems > 0) grants["speaking_items"] = dto.SpeakingItems;
+        if (dto.MockEntitlements > 0) grants["mock_exams"] = dto.MockEntitlements;
+        if (dto.UnlimitedListening) grants["listening_tests"] = null;
+        else if (dto.ListeningTests.HasValue) grants["listening_tests"] = dto.ListeningTests.Value;
+        if (dto.UnlimitedReading) grants["reading_tests"] = null;
+        else if (dto.ReadingTests.HasValue) grants["reading_tests"] = dto.ReadingTests.Value;
+        if (dto.UnlimitedGrading) grants["unlimited_grading"] = true;
         if (dto.PriorityQueue) grants["priority_queue"] = true;
         // Tutor Book purchases are fulfilled outside the platform through WhatsApp.
         // The paid order/item is retained, but no learner entitlement is granted.
@@ -389,21 +436,48 @@ public sealed class Oet2026CatalogSeeder(
         dst.LettersGranted = src.LettersGranted;
         dst.SessionsGranted = src.SessionsGranted;
         dst.ExtensionDays = src.ExtensionDays;
+        dst.AiPackageGroup = src.AiPackageGroup;
+        dst.AiFeaturesJson = src.AiFeaturesJson;
     }
 
     private static async Task UpsertPlanPackageAsync(
         LearnerDbContext db, PlanDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
     {
-        var existing = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == dto.Code, ct);
+        var legacyBillingPlanCode = LegacyPlanCodeFor(dto.Code);
+        var billingPlan = db.BillingPlans.Local.FirstOrDefault(
+                              p => p.Code == dto.Code
+                                   || (legacyBillingPlanCode != null && p.Code == legacyBillingPlanCode))
+                          ?? await db.BillingPlans.FirstAsync(
+                              p => p.Code == dto.Code
+                                   || (legacyBillingPlanCode != null && p.Code == legacyBillingPlanCode),
+                              ct);
+        var existing = await db.ContentPackages.FirstOrDefaultAsync(
+            p => p.BillingPlanId == billingPlan.Id, ct);
+        if (existing is null)
+        {
+            existing = await db.ContentPackages.FirstOrDefaultAsync(
+                p => p.Code == dto.Code && p.BillingAddOnId == null, ct);
+        }
+        if (existing is null && legacyBillingPlanCode is not null)
+        {
+            existing = await db.ContentPackages.FirstOrDefaultAsync(
+                p => p.Code == legacyBillingPlanCode && p.BillingAddOnId == null, ct);
+        }
+
         ContentPackage pkg;
         bool isNew = existing is null;
 
         if (isNew)
         {
+            var canonicalCodeInUse = db.ContentPackages.Local.Any(p => p.Code == dto.Code)
+                                     || await db.ContentPackages.AnyAsync(p => p.Code == dto.Code, ct);
+            var packageCode = canonicalCodeInUse && legacyBillingPlanCode is not null
+                ? legacyBillingPlanCode
+                : dto.Code;
             pkg = new ContentPackage
             {
-                Id = $"pkg_{dto.Code}",
-                Code = dto.Code,
+                Id = $"pkg_{packageCode}",
+                Code = packageCode,
                 CreatedAt = now,
             };
             db.ContentPackages.Add(pkg);
@@ -418,7 +492,7 @@ public sealed class Oet2026CatalogSeeder(
         pkg.PackageType = MapProductCategoryToPackageType(dto.ProductCategory);
         pkg.ProfessionId = dto.Profession;
         pkg.InstructionLanguage = "en";
-        pkg.BillingPlanId = $"plan_{dto.Code}";
+        pkg.BillingPlanId = billingPlan.Id;
         pkg.BillingAddOnId = null;
         pkg.Status = dto.IsDraft ? ContentStatus.Draft : ContentStatus.Published;
         pkg.ComparisonFeaturesJson = JsonSerializer.Serialize(dto.ComparisonFeatures ?? new List<string>());
@@ -462,7 +536,10 @@ public sealed class Oet2026CatalogSeeder(
         pkg.BillingPlanId = null;
         pkg.BillingAddOnId = $"addon_{dto.Code}";
         pkg.Status = ContentStatus.Published;
-        pkg.ComparisonFeaturesJson = JsonSerializer.Serialize(new[] { dto.Description ?? string.Empty });
+        pkg.ComparisonFeaturesJson = JsonSerializer.Serialize(
+            dto.AiFeatures is { Count: > 0 }
+                ? dto.AiFeatures
+                : new List<string> { dto.Description ?? string.Empty });
         pkg.DisplayOrder = dto.DisplayOrder;
         pkg.ExamFamilyCode = "oet";
         pkg.ExamTypeCode = "oet";
@@ -476,8 +553,16 @@ public sealed class Oet2026CatalogSeeder(
     private static async Task DraftParentRequiredAddOnPackageAsync(
         LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
     {
+        var legacyBillingAddOnCode = LegacyAddOnCodeFor(dto.Code);
+        var billingAddOn = db.BillingAddOns.Local.FirstOrDefault(
+                               a => a.Code == dto.Code
+                                    || (legacyBillingAddOnCode != null && a.Code == legacyBillingAddOnCode))
+                           ?? await db.BillingAddOns.FirstAsync(
+                               a => a.Code == dto.Code
+                                    || (legacyBillingAddOnCode != null && a.Code == legacyBillingAddOnCode),
+                               ct);
         var existing = await db.ContentPackages
-            .FirstOrDefaultAsync(p => p.Code == dto.Code || p.BillingAddOnId == $"addon_{dto.Code}", ct);
+            .FirstOrDefaultAsync(p => p.BillingAddOnId == billingAddOn.Id, ct);
         if (existing is null)
         {
             return;
@@ -486,7 +571,7 @@ public sealed class Oet2026CatalogSeeder(
         existing.Status = ContentStatus.Draft;
         existing.PackageType = "addon_internal";
         existing.BillingPlanId = null;
-        existing.BillingAddOnId = $"addon_{dto.Code}";
+        existing.BillingAddOnId = billingAddOn.Id;
         existing.PublishedAt = null;
         existing.UpdatedAt = now;
         result.PackagesUpdated++;
@@ -500,6 +585,20 @@ public sealed class Oet2026CatalogSeeder(
         "combo_double" or "combo_mega" => "combo",
         "foundation" => "foundation",
         _ => "standalone"
+    };
+
+    private static string? LegacyPlanCodeFor(string canonicalCode) => canonicalCode switch
+    {
+        "speaking-1session" => "speaking-1session-plan",
+        "speaking-2sessions" => "speaking-2sessions-plan",
+        _ => null
+    };
+
+    private static string? LegacyAddOnCodeFor(string canonicalCode) => canonicalCode switch
+    {
+        "addon-speaking-1session" => "speaking-1session",
+        "addon-speaking-2sessions" => "speaking-2sessions",
+        _ => null
     };
 
     // ── DTOs for the manifest ──────────────────────────────────────────────
@@ -560,10 +659,19 @@ public sealed class Oet2026CatalogSeeder(
         public int ExtensionDays { get; set; }
         public int GrantCredits { get; set; }
         public int MockEntitlements { get; set; }
-        /// <summary>Listening practice tests included. Null/omitted = unlimited; 0 = none.</summary>
+        /// <summary>Listening practice tests included. Null/omitted = none unless UnlimitedListening is true.</summary>
         public int? ListeningTests { get; set; }
-        /// <summary>Reading practice tests included. Null/omitted = unlimited; 0 = none.</summary>
+        /// <summary>Reading practice tests included. Null/omitted = none unless UnlimitedReading is true.</summary>
         public int? ReadingTests { get; set; }
+        public bool UnlimitedListening { get; set; }
+        public bool UnlimitedReading { get; set; }
+        public bool UnlimitedGrading { get; set; }
+        public int WritingOnlyCredits { get; set; }
+        public int SpeakingOnlyCredits { get; set; }
+        public int WritingItems { get; set; }
+        public int SpeakingItems { get; set; }
+        public string? AiPackageGroup { get; set; }
+        public List<string>? AiFeatures { get; set; }
         public bool PriorityQueue { get; set; }
         public bool IsStackable { get; set; } = true;
         public int DurationDays { get; set; } = 180;

@@ -12,7 +12,7 @@ import {
   fetchMyEntitlementSnapshot,
   type MyEntitlementSnapshot,
 } from '@/lib/api';
-import type { PublicCatalogResponse } from '@/lib/types/admin';
+import type { PublicCatalogPlanRow, PublicCatalogResponse } from '@/lib/types/admin';
 import type { AiPackagesResponse } from '@/lib/billing-types';
 import { formatPrice, type PublicCatalogResponseWithPresentation } from '@/lib/catalog-presentation';
 import {
@@ -29,6 +29,7 @@ import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 
 // Live billing values (price is the source of truth for what the learner is charged).
 interface LivePrice {
+  code: string;
   price: number;
   originalPrice: number | null;
   currency: string;
@@ -51,8 +52,12 @@ function buildPriceMap(
   ai: AiPackagesResponse | null,
 ): Map<string, LivePrice> {
   const map = new Map<string, LivePrice>();
-  const put = (code: string, price: number, originalPrice: number | null, currency: string, profession?: string) =>
-    map.set(code, { price, originalPrice, currency: currency || 'GBP', profession });
+  const put = (code: string, price: number, originalPrice: number | null, currency: string, profession?: string) => {
+    const live = { code, price, originalPrice, currency: currency || 'GBP', profession };
+    map.set(code, live);
+    const canonicalCode = resolveWebsitePackageByCode(code)?.code;
+    if (canonicalCode) map.set(canonicalCode, live);
+  };
 
   for (const p of catalog?.plans ?? []) put(p.code, p.price, p.originalPrice ?? null, p.currency, p.profession);
   for (const a of catalog?.addOns ?? []) put(a.code, a.price, a.originalPrice ?? null, a.currency);
@@ -70,6 +75,14 @@ function buildPriceMap(
   return map;
 }
 
+function isConditionalPackageVisible(pkg: WebsitePackage, ownedPlan: PublicCatalogPlanRow | null): boolean {
+  if (pkg.code === 'tutor-book-addon') return ownedPlan?.tutorBookDiscountEnabled === true;
+  if (pkg.code.startsWith('addon-') && pkg.code.endsWith('-letters')) {
+    return ownedPlan?.writingAddonsEnabled === true;
+  }
+  return true;
+}
+
 function SubscriptionPackageCard({
   pkg,
   live,
@@ -77,21 +90,21 @@ function SubscriptionPackageCard({
   highlighted,
 }: {
   pkg: WebsitePackage;
-  live: LivePrice | undefined;
+  live: LivePrice;
   owned: boolean;
   highlighted: boolean;
 }) {
   const { addToCart } = useAddToCart();
-  const currency = live?.currency ?? 'GBP';
-  const price = live?.price;
-  const hasDiscount = live?.originalPrice != null && price != null && live.originalPrice > price;
+  const currency = live.currency;
+  const price = live.price;
+  const hasDiscount = live.originalPrice != null && live.originalPrice > price;
 
   const onAddToCart = () => {
     addToCart({
-      code: pkg.code,
+      code: live.code,
       kind: pkg.productType === 'plan_purchase' ? 'plan' : 'addon',
       name: pkg.name,
-      price: price ?? 0,
+      price,
       currency,
     });
   };
@@ -115,7 +128,7 @@ function SubscriptionPackageCard({
         <div className="flex items-start justify-between gap-3">
           <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Package {pkg.packageNo}</span>
           <div className="text-right">
-            <div className="text-2xl font-bold text-navy">{price != null ? formatPrice(price, currency) : '—'}</div>
+            <div className="text-2xl font-bold text-navy">{formatPrice(price, currency)}</div>
             {hasDiscount ? (
               <div className="text-xs text-muted line-through">was {formatPrice(live!.originalPrice as number, currency)}</div>
             ) : null}
@@ -136,6 +149,9 @@ function SubscriptionPackageCard({
               ))}
             </div>
           ) : null}
+          <p className="mt-2 text-xs text-muted">
+            <span className="font-semibold text-navy">Category:</span> {pkg.category}
+          </p>
         </div>
 
         {pkg.formatLine ? (
@@ -254,6 +270,17 @@ export function SubscriptionsCatalog() {
   const priceMap = useMemo(() => buildPriceMap(catalog, ai), [catalog, ai]);
   const websitePackages = catalog?.presentation?.websitePackages;
   const ownedPlanCode = entitlement?.planCode ?? null;
+  const canonicalOwnedPlanCode = ownedPlanCode
+    ? resolveWebsitePackageByCode(ownedPlanCode)?.code ?? ownedPlanCode
+    : null;
+  const ownedPlan = useMemo(
+    () =>
+      catalog?.plans.find((plan) => {
+        const canonicalCode = resolveWebsitePackageByCode(plan.code)?.code ?? plan.code;
+        return canonicalOwnedPlanCode != null && canonicalCode === canonicalOwnedPlanCode;
+      }) ?? null,
+    [canonicalOwnedPlanCode, catalog?.plans],
+  );
 
   // Discipline tabs are derived from the profession of the Full Recorded courses.
   const professions = useMemo(() => {
@@ -270,6 +297,7 @@ export function SubscriptionsCatalog() {
     const grouped = new Map<WebsiteSectionKey, WebsitePackage[]>();
     for (const section of WEBSITE_SECTIONS) grouped.set(section.key, []);
     for (const pkg of WEBSITE_PACKAGES) {
+      if (!priceMap.has(pkg.code) || !isConditionalPackageVisible(pkg, ownedPlan)) continue;
       // Full Recorded courses respect the active discipline filter; every other
       // section is discipline-agnostic (all "All disciplines") and always shown.
       if (pkg.section === 'full-recorded' && activeProfession !== 'all') {
@@ -280,7 +308,7 @@ export function SubscriptionsCatalog() {
       grouped.get(pkg.section)?.push(applyWebsitePackageOverlay(pkg, overlay));
     }
     return grouped;
-  }, [activeProfession, priceMap, websitePackages]);
+  }, [activeProfession, ownedPlan, priceMap, websitePackages]);
 
   // Deep-link: /subscriptions?package=<slug|code> from the website CTAs — scroll to
   // and briefly highlight the requested package once the catalogue has loaded.
@@ -325,12 +353,11 @@ export function SubscriptionsCatalog() {
         WEBSITE_SECTIONS.map((section) => {
           const packages = packagesBySection.get(section.key) ?? [];
           if (packages.length === 0) return null;
-          const sectionOverlay = websitePackages?.sections?.[section.key];
           return (
             <section key={section.key} id={`section-${section.key}`} className="space-y-4">
               <LearnerSurfaceSectionHeader
-                title={sectionOverlay?.title ?? section.title}
-                description={sectionOverlay?.description ?? section.description}
+                title={section.title}
+                description={section.description}
               />
 
               {section.key === 'full-recorded' && professions.length > 1 ? (
@@ -360,8 +387,8 @@ export function SubscriptionsCatalog() {
                   <SubscriptionPackageCard
                     key={pkg.code}
                     pkg={pkg}
-                    live={priceMap.get(pkg.code)}
-                    owned={ownedPlanCode != null && ownedPlanCode === pkg.code}
+                    live={priceMap.get(pkg.code)!}
+                    owned={canonicalOwnedPlanCode != null && canonicalOwnedPlanCode === pkg.code}
                     highlighted={highlightCode === pkg.code}
                   />
                 ))}

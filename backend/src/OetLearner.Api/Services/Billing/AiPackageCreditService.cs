@@ -167,20 +167,29 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+        var now = DateTimeOffset.UtcNow;
+        await ExpireIfNeededAsync(account, now, ct);
         if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.GradingDeduct, ct))
         {
             return new(false, "already_debited", "This grading job has already consumed a credit.", referenceId);
         }
 
-        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
+        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
         {
+            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+        }
+
+        if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
+        {
+            // OET Mastery is unlimited for Writing and Speaking for the life of
+            // its purchased subscription item. No finite wallet unit or ledger
+            // debit is created; cancellation/refund revokes the active item.
             return new(true, null, null, referenceId);
         }
 
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
+        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
         {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+            return new(true, null, null, referenceId);
         }
 
         // The dedicated subtest pool (Writing-only / Speaking-only) is drawn
@@ -248,17 +257,23 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
 
         var account = await GetOrCreateAccountAsync(userId, ct);
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+        var now = DateTimeOffset.UtcNow;
+        await ExpireIfNeededAsync(account, now, ct);
         await db.SaveChangesAsync(ct);
 
-        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
+        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
+        {
+            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+        }
+
+        if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
         {
             return new(true, null, null, null);
         }
 
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
+        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
         {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+            return new(true, null, null, null);
         }
 
         // Mirror DeductGradingCreditAsync's pool sizing so the start-of-exam
@@ -599,6 +614,21 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         => await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.ReferenceId == referenceId && row.Reason == reason, ct);
 
+    private Task<bool> HasActiveUnlimitedGradingAsync(string userId, DateTimeOffset now, CancellationToken ct)
+        => (from item in db.SubscriptionItems.AsNoTracking()
+            join subscription in db.Subscriptions.AsNoTracking()
+                on item.SubscriptionId equals subscription.Id
+            where subscription.UserId == userId
+                  && item.ItemCode == "pkg_oet_mastery"
+                  && item.Status == SubscriptionItemStatus.Active
+                  && item.StartsAt <= now
+                  // Mastery is a strict 180-day product. A malformed/historical
+                  // item without an end date must fail closed, never become
+                  // permanent unlimited grading.
+                  && item.EndsAt != null
+                  && item.EndsAt > now
+            select item.Id).AnyAsync(ct);
+
     private async Task<bool> ShouldBypassGradingDebitForLegacyAccountAsync(AiPackageCreditAccount account, CancellationToken ct)
     {
         if (account.FlexibleCredits != 0
@@ -610,7 +640,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         return !await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.AccountId == account.Id
-                             && (row.FlexibleCreditsDelta > 0
+                             && (row.Reason == AiPackageCreditReason.Purchase
+                                 || row.FlexibleCreditsDelta > 0
                                  || row.WritingOnlyCreditsDelta > 0
                                  || row.SpeakingOnlyCreditsDelta > 0), ct);
     }

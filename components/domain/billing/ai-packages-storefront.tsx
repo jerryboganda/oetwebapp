@@ -10,27 +10,36 @@ import { makeBillingCopy } from '@/lib/billing-copy-defaults';
 import type { AiPackage, AiPackagesResponse } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
+import {
+  resolveWebsitePackageByCode,
+  type WebsitePackage,
+} from '@/lib/catalog-website-packages';
 
 const AI_PACKAGE_SUBTEST_SECTIONS: Array<{
   key: 'listening' | 'reading' | 'writing' | 'speaking';
-  copyKey: string;
+  title: string;
   headerClass: string;
 }> = [
-  { key: 'listening', copyKey: 'billing.ai.section.listening', headerClass: 'bg-blue-700' },
-  { key: 'reading', copyKey: 'billing.ai.section.reading', headerClass: 'bg-purple-700' },
-  { key: 'writing', copyKey: 'billing.ai.section.writing', headerClass: 'bg-amber-600' },
-  { key: 'speaking', copyKey: 'billing.ai.section.speaking', headerClass: 'bg-emerald-700' },
+  { key: 'listening', title: 'Separate Listening Packages', headerClass: 'bg-blue-700' },
+  { key: 'reading', title: 'Separate Reading Packages', headerClass: 'bg-purple-700' },
+  { key: 'writing', title: 'Separate Writing Packages', headerClass: 'bg-amber-600' },
+  { key: 'speaking', title: 'Separate Speaking Packages', headerClass: 'bg-emerald-700' },
 ];
 
-function aiPackageValidityLabel(validityDays: number): string {
-  if (validityDays <= 0) return '';
-  return validityDays >= 180 ? '6-month validity' : `${validityDays}-day validity`;
+interface CanonicalAiPackage {
+  live: AiPackage;
+  website: WebsitePackage;
 }
 
-function aiPackageHeadline(pkg: AiPackage): string {
-  if (pkg.group === 'mock') return `${pkg.mocks} full mock${pkg.mocks === 1 ? '' : 's'}`;
-  if (pkg.credits > 0) return `${pkg.credits} AI credit${pkg.credits === 1 ? '' : 's'}`;
-  return 'Practice access';
+function canonicalAiRows(rows: AiPackage[]): CanonicalAiPackage[] {
+  return rows
+    .flatMap((live) => {
+      const website = resolveWebsitePackageByCode(live.code);
+      return website && website.packageNo >= 30 && website.packageNo <= 47
+        ? [{ live, website }]
+        : [];
+    })
+    .sort((left, right) => left.website.packageNo - right.website.packageNo);
 }
 
 /**
@@ -43,7 +52,7 @@ export function AiPackagesStorefront() {
   const { addToCart } = useAddToCart();
   const [packages, setPackages] = useState<AiPackagesResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'full' | 'separate'>('full');
+  const [view, setView] = useState<'full' | 'mock' | 'separate'>('full');
 
   const [billingCopy, setBillingCopy] = useState<Record<string, string> | null>(null);
   const copy = useMemo(() => makeBillingCopy(billingCopy), [billingCopy]);
@@ -80,33 +89,70 @@ export function AiPackagesStorefront() {
     };
   }, []);
 
-  const renderCard = (pkg: AiPackage) => {
-    const validity = aiPackageValidityLabel(pkg.validityDays);
+  const canonicalPackages = useMemo(() => {
+    if (!packages) return null;
+    return {
+      full: canonicalAiRows(packages.full),
+      mock: canonicalAiRows(packages.mock),
+      separate: {
+        listening: canonicalAiRows(packages.separate.listening),
+        reading: canonicalAiRows(packages.separate.reading),
+        writing: canonicalAiRows(packages.separate.writing),
+        speaking: canonicalAiRows(packages.separate.speaking),
+      },
+    };
+  }, [packages]);
+
+  const renderCard = ({ live, website }: CanonicalAiPackage) => {
     return (
       <article
-        key={pkg.code}
+        key={website.code}
         className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm"
       >
         <div className="flex items-start justify-between gap-3">
-          <h3 className="text-xl font-semibold tracking-tight text-navy">{pkg.name}</h3>
-          {pkg.priorityQueue ? (
-            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-800 dark:bg-amber-300/20 dark:text-amber-200">
-              {copy('billing.ai.priority')}
-            </span>
-          ) : null}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+              Package {website.packageNo}
+            </p>
+            <h3 className="mt-1 text-xl font-semibold tracking-tight text-navy">{website.name}</h3>
+          </div>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {website.badges.map((badge) => (
+              <span
+                key={badge}
+                className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-primary"
+              >
+                {badge}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="mt-2 text-sm leading-6 text-muted">{pkg.description}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {website.metaChips.map((chip) => (
+            <span
+              key={chip}
+              className="inline-flex items-center rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          <span className="font-semibold text-navy">Category:</span> {website.category}
+        </p>
+        <p className="mt-3 text-sm leading-6 text-muted">{website.description}</p>
+        <p className="mt-3 text-sm text-muted">
+          <span className="font-semibold text-navy">Format:</span> {website.formatLine}
+        </p>
         <div className="mt-4 rounded-xl border border-border/70 bg-background-light/60 p-4">
-          <p className="text-2xl font-semibold tracking-tight text-navy">{formatMoney(pkg.price, { currency: pkg.currency })}</p>
-          <p className="mt-1 text-sm text-muted">
-            {aiPackageHeadline(pkg)}
-            {validity ? ` · ${validity}` : ''}
+          <p className="text-2xl font-semibold tracking-tight text-navy">
+            {formatMoney(live.price, { currency: live.currency })}
           </p>
         </div>
-        {pkg.features.length > 0 ? (
+        {website.features.length > 0 ? (
           <ul className="mt-4 flex-1 space-y-2 text-sm text-navy">
-            {pkg.features.map((feature, index) => (
-              <li key={index} className="flex items-start gap-2">
+            {website.features.map((feature) => (
+              <li key={feature} className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                 <span>{feature}</span>
               </li>
@@ -115,10 +161,21 @@ export function AiPackagesStorefront() {
         ) : (
           <div className="flex-1" />
         )}
+        <p className="mt-4 rounded-xl border border-border bg-background-light px-3 py-2 text-sm text-navy">
+          <span className="font-bold">Best for:</span> {website.bestFor}
+        </p>
         <Button
           className="mt-5"
           fullWidth
-          onClick={() => addToCart({ code: pkg.code, kind: 'addon', name: pkg.name, price: pkg.price, currency: pkg.currency })}
+          onClick={() =>
+            addToCart({
+              code: live.code,
+              kind: 'addon',
+              name: website.name,
+              price: live.price,
+              currency: live.currency,
+            })
+          }
         >
           <ShoppingCart className="h-4 w-4" />
           Add to cart
@@ -142,7 +199,7 @@ export function AiPackagesStorefront() {
             <Skeleton key={i} className="h-72 rounded-2xl" />
           ))}
         </div>
-      ) : !packages ? (
+      ) : !canonicalPackages ? (
         <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
           {copy('billing.ai.unavailable')}
         </div>
@@ -151,8 +208,9 @@ export function AiPackagesStorefront() {
           <div className="mb-5 inline-flex rounded-xl border border-border bg-background-light p-1">
             {(
               [
-                { id: 'full' as const, label: copy('billing.ai.toggle.full') },
-                { id: 'separate' as const, label: copy('billing.ai.toggle.separate') },
+                { id: 'full' as const, label: 'AI Grading Packages' },
+                { id: 'mock' as const, label: 'Full Mock Exam Packages' },
+                { id: 'separate' as const, label: 'Separate Packages' },
               ]
             ).map((tab) => (
               <button
@@ -170,12 +228,24 @@ export function AiPackagesStorefront() {
           </div>
 
           <p className="mb-5 text-sm text-muted">
-            {view === 'full' ? copy('billing.ai.fullIntro') : copy('billing.ai.separateIntro')}
+            {view === 'full'
+              ? copy('billing.ai.fullIntro')
+              : view === 'mock'
+                ? 'Full OET mock exam packages covering Listening, Reading, Writing, and Speaking in exam-style runs.'
+                : copy('billing.ai.separateIntro')}
           </p>
 
           {view === 'full' ? (
-            packages.full.length > 0 ? (
-              <div className="grid gap-4 lg:grid-cols-3">{packages.full.map(renderCard)}</div>
+            canonicalPackages.full.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-3">{canonicalPackages.full.map(renderCard)}</div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
+                {copy('billing.ai.fullEmpty')}
+              </div>
+            )
+          ) : view === 'mock' ? (
+            canonicalPackages.mock.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-3">{canonicalPackages.mock.map(renderCard)}</div>
             ) : (
               <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
                 {copy('billing.ai.fullEmpty')}
@@ -184,12 +254,12 @@ export function AiPackagesStorefront() {
           ) : (
             <div className="space-y-6">
               {AI_PACKAGE_SUBTEST_SECTIONS.map((sectionDef) => {
-                const sectionPackages = packages.separate[sectionDef.key];
+                const sectionPackages = canonicalPackages.separate[sectionDef.key];
                 if (!sectionPackages || sectionPackages.length === 0) return null;
                 return (
                   <section key={sectionDef.key}>
                     <div className={`mb-3 inline-block rounded-lg px-3 py-1.5 text-sm font-semibold text-white ${sectionDef.headerClass}`}>
-                      {copy(sectionDef.copyKey)} {copy('billing.ai.sectionSuffix')}
+                      {sectionDef.title}
                     </div>
                     <div className="grid gap-4 lg:grid-cols-3">{sectionPackages.map(renderCard)}</div>
                   </section>
@@ -197,18 +267,6 @@ export function AiPackagesStorefront() {
               })}
             </div>
           )}
-
-          {packages.mock.length > 0 ? (
-            <div className="mt-8">
-              <LearnerSurfaceSectionHeader
-                eyebrow={copy('billing.ai.mock.eyebrow')}
-                title={copy('billing.ai.mock.title')}
-                description={copy('billing.ai.mock.description')}
-                className="mb-4"
-              />
-              <div className="grid gap-4 lg:grid-cols-3">{packages.mock.map(renderCard)}</div>
-            </div>
-          ) : null}
         </>
       )}
     </section>

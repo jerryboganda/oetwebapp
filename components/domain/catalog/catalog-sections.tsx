@@ -14,6 +14,7 @@ import {
   professionLabel,
   formatPrice,
 } from '@/lib/catalog-presentation';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 
 export function CatalogHero({ config }: { config: CatalogStorefrontConfig }) {
   const accent = normalizeAccent(config.hero.accent, config.accent);
@@ -125,11 +126,13 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
         description="Add-ons attach to an eligible parent course. Each card shows the eligibility flag the parent must have."
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {addOns.map((addon) => (
+        {addOns.map((addon) => {
+          const websitePackage = resolveWebsitePackageByCode(addon.code);
+          return (
           <Card key={addon.code} padding="md" className="flex h-full flex-col">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h4 className="font-bold text-navy">{addon.name}</h4>
+                <h4 className="font-bold text-navy">{websitePackage?.name ?? addon.name}</h4>
                 <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
                   requires {addon.eligibilityFlag || 'n/a'}
                 </p>
@@ -141,9 +144,33 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
                 ) : null}
               </div>
             </div>
-            {addon.description ? <p className="mt-3 text-sm text-muted">{addon.description}</p> : null}
+            {websitePackage ? (
+              <>
+                <p className="mt-3 text-xs text-muted">
+                  <span className="font-semibold text-navy">Category:</span> {websitePackage.category}
+                </p>
+                <p className="mt-2 text-sm text-muted">{websitePackage.description}</p>
+                <p className="mt-2 text-sm text-muted">
+                  <span className="font-semibold text-navy">Format:</span> {websitePackage.formatLine}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-sm text-navy">
+                  {websitePackage.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-sm text-navy">
+                  <span className="font-bold">Best for:</span> {websitePackage.bestFor}
+                </p>
+              </>
+            ) : addon.description ? (
+              <p className="mt-3 text-sm text-muted">{addon.description}</p>
+            ) : null}
           </Card>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
