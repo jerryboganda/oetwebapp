@@ -238,6 +238,15 @@ public class MockBooking
     [MaxLength(64)]
     public string? MockAttemptId { get; set; }
 
+    /// <summary>
+    /// MockSectionAttempt id forwarded from the Full Mock Speaking Gateway
+    /// (2026-07-22 7-day AI/tutor rule). Scopes the booking to the exact
+    /// Speaking section it satisfies so the completion evidence gate can
+    /// match per section, not just per attempt. Null for standalone bookings.
+    /// </summary>
+    [MaxLength(64)]
+    public string? MockSectionId { get; set; }
+
     public DateTimeOffset ScheduledStartAt { get; set; }
 
     [MaxLength(80)]
@@ -275,6 +284,20 @@ public class MockBooking
 
     [MaxLength(64)]
     public string? ZoomMeetingPassword { get; set; }
+
+    /// <summary>
+    /// Real-Zoom provisioning state: null (legacy/no meeting), "pending",
+    /// "creating", "created", or "failed". Learner projections only surface
+    /// <see cref="ZoomJoinUrl"/> when this is "created" — legacy rows stored
+    /// the internal speaking-room route in that column instead.
+    /// </summary>
+    [MaxLength(32)]
+    public string? ZoomStatus { get; set; }
+
+    [MaxLength(512)]
+    public string? ZoomError { get; set; }
+
+    public int ZoomRetryCount { get; set; }
 
     [MaxLength(2000)]
     public string? LearnerNotes { get; set; }

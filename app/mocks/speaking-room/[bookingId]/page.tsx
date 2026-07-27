@@ -14,7 +14,9 @@
  * Privacy & integrity (mission-critical invariants):
  *   - Interlocutor identity is NEVER displayed; the backend booking projection
  *     for non-admins strips it (`interlocutorCardVisible: false`).
- *   - Zoom start URL / password are NEVER returned to learners.
+ *   - Zoom start URL / password are NEVER returned to learners. The learner
+ *     gets only `zoomJoinUrl` — the participant join link of the real Zoom
+ *     meeting provisioned for this booking — surfaced in the Live Call panel.
  *   - Recording is gated on `consentToRecording === true`; both the chunked
  *     upload and finalize endpoints reject otherwise.
  *   - Audio bytes flow through the backend's `IFileStorage` pipeline only —
@@ -33,6 +35,7 @@ import {
   ShieldCheck,
   Square,
   Upload,
+  Video,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -368,6 +371,8 @@ export default function SpeakingLiveRoomPage() {
 
             <PhaseStepper phase={phase} roleplayCount={roleplayCount} />
 
+            {phase !== 'done' ? <LiveCallPanel booking={booking} /> : null}
+
             {phase === 'pre' ? (
               <PreRoom
                 booking={booking}
@@ -495,6 +500,42 @@ function PhaseStepper({ phase, roleplayCount }: { phase: Phase; roleplayCount: n
         );
       })}
     </ol>
+  );
+}
+
+function LiveCallPanel({ booking }: { booking: MockBooking }) {
+  // Only a real provisioned Zoom participant link is ever rendered — the
+  // backend already gates this, but guard the scheme again client-side.
+  const zoomUrl =
+    booking.zoomJoinUrl && /^https:\/\//i.test(booking.zoomJoinUrl) ? booking.zoomJoinUrl : null;
+
+  return (
+    <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Video className="h-4 w-4 text-primary" />
+            <p className="text-[11px] font-black uppercase tracking-widest text-muted">Live call</p>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            {zoomUrl
+              ? 'Your role-play happens over Zoom with your interlocutor. Join the call first, then run the timed flow below while you speak — your audio is still recorded here for marking.'
+              : 'Your Zoom call link is being prepared. It will appear here once the meeting is provisioned — refresh this page shortly before your session starts.'}
+          </p>
+        </div>
+        {zoomUrl ? (
+          <a
+            href={zoomUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+          >
+            <Video className="h-4 w-4" />
+            Join Zoom call
+          </a>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

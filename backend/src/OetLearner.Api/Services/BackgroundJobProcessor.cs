@@ -790,6 +790,12 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await psSvc.ProcessNoShowSweepAsync(cancellationToken);
                 break;
             }
+            case JobType.MockBookingZoomCreate:
+            {
+                var provisioner = services.GetRequiredService<Mocks.MockBookingZoomProvisioner>();
+                await provisioner.CreateZoomMeetingForMockBookingAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
             case JobType.SubscriptionLifecycleCheck:
                 await RunSubscriptionLifecycleCheckAsync(db, notifications, cancellationToken);
                 break;

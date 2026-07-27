@@ -127,6 +127,23 @@ public class LearnerGoalExamDateTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task SpeakingAccess_ReturnsRequiresAiOnlyFalse_AtExactly7Days()
+    {
+        // Boundary: the rule is "< 7", so exactly 7 days out still allows a tutor.
+        var userId = "examdate-speaking-access-boundary";
+        await SeedLearnerWithRegistrationProfileAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)));
+
+        using var client = CreateDebugClient(userId);
+        (await client.GetAsync("/v1/settings")).EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/v1/mocks/speaking-access");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("requiresAiOnly").GetBoolean());
+        Assert.Equal(7, json.RootElement.GetProperty("daysUntilExam").GetInt32());
+    }
+
+    [Fact]
     public async Task SpeakingAccess_ReturnsRequiresAiOnlyFalse_WhenExam7OrMoreDaysAway()
     {
         var userId = "examdate-speaking-access-later";

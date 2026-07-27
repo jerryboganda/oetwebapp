@@ -785,6 +785,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<MockBookingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBookingZoomProvisioner>();
 builder.Services.AddScoped<MockBookingRecordingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.Results.IMockSectionResultAdapter,
     OetLearner.Api.Services.Mocks.Results.ReadingMockSectionResultAdapter>();

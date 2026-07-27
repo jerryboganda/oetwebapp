@@ -279,6 +279,8 @@ internal static class TestEffectiveSettingsFactory
             PdfExtraction: new PdfExtractionSettings("auto", string.Empty, null, 50),
             Pronunciation: new PronunciationSettings("auto", string.Empty, "en-GB", string.Empty, "whisper-1", "https://generativelanguage.googleapis.com/v1beta", "gemini-3.5-flash", 1, 45, -1, 7),
             AuthTokens: new AuthTokenSettings(TimeSpan.FromMinutes(15), TimeSpan.FromDays(30), TimeSpan.FromMinutes(10), null),
+            VideoProtection: TestRuntimeSettingsProvider.DefaultVideoProtection(),
+            Security: TestRuntimeSettingsProvider.DefaultSecurity(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null)

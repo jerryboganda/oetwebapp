@@ -865,9 +865,13 @@ public sealed class MockService(
             return;
         }
 
+        // Section-scoped when the booking carries a MockSectionId (set by the
+        // Speaking Gateway since 2026-07-27); attempt-scoped for older rows
+        // and standalone bookings that predate section forwarding.
         var hasBooking = await db.MockBookings.AsNoTracking().AnyAsync(b =>
             b.UserId == userId
             && b.MockAttemptId == attempt.Id
+            && (b.MockSectionId == null || b.MockSectionId == section.Id)
             && b.Status != MockBookingStatuses.Cancelled,
             ct);
         var hasSpeakingPayload = sectionStarted && request.Evidence is { Count: > 0 };
@@ -1282,13 +1286,12 @@ public sealed class MockService(
             DeliveryMode = deliveryMode,
             LearnerNotes = string.IsNullOrWhiteSpace(request.LearnerNotes) ? null : request.LearnerNotes.Trim(),
             LiveRoomState = MockLiveRoomStates.Waiting,
-            ZoomMeetingId = $"sandbox-{Guid.NewGuid():N}"[..24],
-            ZoomJoinUrl = $"/mocks/speaking-room/{{bookingId}}",
+            ZoomStatus = Mocks.MockBookingZoomStatuses.Pending,
             CreatedAt = now,
             UpdatedAt = now
         };
-        booking.ZoomJoinUrl = $"/mocks/speaking-room/{Uri.EscapeDataString(booking.Id)}";
         db.MockBookings.Add(booking);
+        Mocks.MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
         RecordEvent(userId, "mock_booking_created", new { bookingId = booking.Id, bundleId = bundle.Id, deliveryMode, booking.ScheduledStartAt });
         await db.SaveChangesAsync(ct);
         return ProjectBookingLearner(booking, bundle);
@@ -1326,6 +1329,13 @@ public sealed class MockService(
             }
             booking.ScheduledStartAt = request.ScheduledStartAt.Value.ToUniversalTime();
             booking.RescheduleCount += 1;
+            // Re-provision the Zoom meeting for the new time (the job deletes
+            // the stale meeting before creating the replacement).
+            if (booking.ZoomStatus is not null)
+            {
+                booking.ZoomStatus = Mocks.MockBookingZoomStatuses.Pending;
+                Mocks.MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
+            }
         }
         if (request.TimezoneIana is not null)
         {
@@ -2720,6 +2730,7 @@ public sealed class MockService(
         bookingId = booking.Id,
         mockBundleId = booking.MockBundleId,
         mockAttemptId = booking.MockAttemptId,
+        mockSectionId = booking.MockSectionId,
         title = bundle?.Title ?? "Scheduled mock",
         scheduledStartAt = booking.ScheduledStartAt,
         timezoneIana = booking.TimezoneIana,
@@ -2728,7 +2739,8 @@ public sealed class MockService(
         liveRoomState = booking.LiveRoomState,
         consentToRecording = booking.ConsentToRecording,
         rescheduleCount = booking.RescheduleCount,
-        joinUrl = booking.ZoomJoinUrl,
+        joinUrl = Mocks.MockBookingPresentation.RoomRoute(booking),
+        zoomJoinUrl = Mocks.MockBookingPresentation.LearnerZoomJoinUrl(booking),
         learnerNotes = booking.LearnerNotes,
         releasePolicy = bundle?.ReleasePolicy ?? MockReleasePolicies.Instant,
         candidateCardVisible = true,
@@ -2768,7 +2780,9 @@ public sealed class MockService(
         status = booking.Status,
         liveRoomState = booking.LiveRoomState,
         startUrl = booking.ZoomStartUrl,
-        joinUrl = booking.ZoomJoinUrl,
+        zoomStartUrl = Mocks.MockBookingPresentation.ExpertZoomStartUrl(booking),
+        joinUrl = Mocks.MockBookingPresentation.LearnerZoomJoinUrl(booking),
+        zoomJoinUrl = Mocks.MockBookingPresentation.LearnerZoomJoinUrl(booking),
         consentToRecording = booking.ConsentToRecording,
         candidateCardVisible = true,
         interlocutorCardVisible = true,

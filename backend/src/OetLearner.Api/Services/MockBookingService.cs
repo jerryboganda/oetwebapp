@@ -23,11 +23,16 @@ public sealed class MockBookingService
 
     private readonly LearnerDbContext _db;
     private readonly IHubContext<MockLiveRoomHub> _liveRoomHub;
+    private readonly MockBookingZoomProvisioner _zoomProvisioner;
 
-    public MockBookingService(LearnerDbContext db, IHubContext<MockLiveRoomHub> liveRoomHub)
+    public MockBookingService(
+        LearnerDbContext db,
+        IHubContext<MockLiveRoomHub> liveRoomHub,
+        MockBookingZoomProvisioner zoomProvisioner)
     {
         _db = db;
         _liveRoomHub = liveRoomHub;
+        _zoomProvisioner = zoomProvisioner;
     }
 
     public async Task<object> ListForUserAsync(string userId, CancellationToken ct)
@@ -86,10 +91,12 @@ public sealed class MockBookingService
             ConsentToRecording = request.ConsentToRecording,
             LearnerNotes = request.LearnerNotes,
             LiveRoomState = MockLiveRoomStates.Waiting,
+            ZoomStatus = MockBookingZoomStatuses.Pending,
             CreatedAt = now,
             UpdatedAt = now,
         };
         _db.MockBookings.Add(booking);
+        MockBookingZoomProvisioner.QueueZoomCreateJob(_db, booking.Id);
         await _db.SaveChangesAsync(ct);
         return Project(booking, isAdmin: false, bundle);
     }
@@ -113,6 +120,12 @@ public sealed class MockBookingService
         if (!string.IsNullOrWhiteSpace(request.TimezoneIana)) booking.TimezoneIana = request.TimezoneIana!;
         booking.RescheduleCount++;
         booking.UpdatedAt = DateTimeOffset.UtcNow;
+        // Re-provision the Zoom meeting for the new time.
+        if (booking.ZoomStatus is not null)
+        {
+            booking.ZoomStatus = MockBookingZoomStatuses.Pending;
+            MockBookingZoomProvisioner.QueueZoomCreateJob(_db, booking.Id);
+        }
         await _db.SaveChangesAsync(ct);
         return Project(booking, isAdmin: false);
     }
@@ -130,6 +143,8 @@ public sealed class MockBookingService
         booking.Status = MockBookingStatuses.Cancelled;
         booking.CancelledAt = DateTimeOffset.UtcNow;
         booking.UpdatedAt = booking.CancelledAt.Value;
+        // Best-effort: a Zoom outage must never block a cancellation.
+        await _zoomProvisioner.DeleteZoomMeetingBestEffortAsync(booking, ct);
         await _db.SaveChangesAsync(ct);
         return Project(booking, isAdmin: false);
     }
@@ -408,6 +423,7 @@ public sealed class MockBookingService
             ["title"] = bundle?.Title ?? "Scheduled mock",
             ["mockBundleTitle"] = bundle?.Title,
             ["mockAttemptId"] = b.MockAttemptId,
+            ["mockSectionId"] = b.MockSectionId,
             ["scheduledStartAt"] = b.ScheduledStartAt,
             ["timezoneIana"] = b.TimezoneIana,
             ["status"] = b.Status,
@@ -429,16 +445,19 @@ public sealed class MockBookingService
             baseObj["assignedInterlocutorId"] = b.AssignedInterlocutorId;
             baseObj["learnerNotes"] = b.LearnerNotes;
             baseObj["zoomMeetingId"] = b.ZoomMeetingId;
-            baseObj["zoomJoinUrl"] = b.ZoomJoinUrl;
-            baseObj["zoomStartUrl"] = b.ZoomStartUrl;
+            // Gated: legacy rows stored the internal learner-room route in
+            // ZoomJoinUrl; only surface real provisioned Zoom URLs here.
+            baseObj["zoomJoinUrl"] = MockBookingPresentation.LearnerZoomJoinUrl(b);
+            baseObj["zoomStartUrl"] = MockBookingPresentation.ExpertZoomStartUrl(b);
             baseObj["candidateCardVisible"] = true;
             baseObj["interlocutorCardVisible"] = true;
         }
         else
         {
-            // Learner-facing: never expose start URL, password, or interlocutor identity.
-            baseObj["joinUrl"] = b.ZoomJoinUrl;
-            baseObj["zoomJoinUrl"] = b.ZoomJoinUrl;
+            // Learner-facing: never expose start URL, password, or interlocutor
+            // identity. joinUrl is always the in-app speaking-room route.
+            baseObj["joinUrl"] = MockBookingPresentation.RoomRoute(b);
+            baseObj["zoomJoinUrl"] = MockBookingPresentation.LearnerZoomJoinUrl(b);
             baseObj["candidateCardVisible"] = true;
             baseObj["interlocutorCardVisible"] = false;
         }

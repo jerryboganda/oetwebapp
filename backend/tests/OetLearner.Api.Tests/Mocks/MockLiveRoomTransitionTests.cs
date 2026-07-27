@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -24,7 +26,7 @@ public class MockLiveRoomTransitionTests
         SeedBooking(db);
         await db.SaveChangesAsync();
         var hub = new RecordingHubContext<MockLiveRoomHub>();
-        var service = new MockBookingService(db, hub);
+        var service = new MockBookingService(db, hub, NewZoomProvisioner(db));
 
         var result = await service.TransitionLiveRoomAsync(
             "expert-tutor",
@@ -64,7 +66,7 @@ public class MockLiveRoomTransitionTests
         await using var db = NewDb();
         SeedBooking(db);
         await db.SaveChangesAsync();
-        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>(), NewZoomProvisioner(db));
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
             "learner-1",
@@ -85,7 +87,7 @@ public class MockLiveRoomTransitionTests
         SeedBooking(db);
         await db.SaveChangesAsync();
         var hub = new RecordingHubContext<MockLiveRoomHub>();
-        var service = new MockBookingService(db, hub);
+        var service = new MockBookingService(db, hub, NewZoomProvisioner(db));
 
         var request = new LiveRoomTransitionRequest(MockLiveRoomStates.InProgress, ClientTransitionId: " start-once ");
         await service.TransitionLiveRoomAsync("learner-1", ApplicationUserRoles.Learner, false, BookingId, request, CancellationToken.None);
@@ -104,7 +106,7 @@ public class MockLiveRoomTransitionTests
         await using var db = NewDb();
         SeedBooking(db, MockLiveRoomStates.InProgress, MockBookingStatuses.InProgress);
         await db.SaveChangesAsync();
-        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>(), NewZoomProvisioner(db));
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
             "learner-1",
@@ -124,7 +126,7 @@ public class MockLiveRoomTransitionTests
         await using var db = NewDb();
         SeedBooking(db, MockLiveRoomStates.InProgress, MockBookingStatuses.InProgress, recordingFinalizedAt: DateTimeOffset.UtcNow.AddMinutes(-1));
         await db.SaveChangesAsync();
-        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>(), NewZoomProvisioner(db));
 
         await service.TransitionLiveRoomAsync(
             "learner-1",
@@ -146,7 +148,7 @@ public class MockLiveRoomTransitionTests
         await using var db = NewDb();
         SeedBooking(db, bookingStatus: MockBookingStatuses.Cancelled);
         await db.SaveChangesAsync();
-        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>(), NewZoomProvisioner(db));
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
             "expert-tutor",
@@ -166,7 +168,7 @@ public class MockLiveRoomTransitionTests
         await using var db = NewDb();
         SeedBooking(db);
         await db.SaveChangesAsync();
-        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>(), NewZoomProvisioner(db));
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
             "learner-1",
@@ -186,7 +188,7 @@ public class MockLiveRoomTransitionTests
         await using var db = NewDb();
         SeedBooking(db);
         await db.SaveChangesAsync();
-        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>());
+        var service = new MockBookingService(db, new RecordingHubContext<MockLiveRoomHub>(), NewZoomProvisioner(db));
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => service.TransitionLiveRoomAsync(
             "learner-1",
@@ -239,6 +241,22 @@ public class MockLiveRoomTransitionTests
             CreatedAt = now,
             UpdatedAt = now,
         });
+    }
+
+    /// <summary>Zoom-disabled provisioner — live-room transitions never touch
+    /// Zoom, so this only satisfies the constructor.</summary>
+    private static MockBookingZoomProvisioner NewZoomProvisioner(LearnerDbContext db)
+        => new(
+            db,
+            new ZoomMeetingService(
+                new NoopHttpClientFactory(),
+                TestRuntimeSettingsProvider.FromZoomOptions(new ZoomOptions { Enabled = false }),
+                NullLogger<ZoomMeetingService>.Instance),
+            NullLogger<MockBookingZoomProvisioner>.Instance);
+
+    private sealed class NoopHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
     }
 
     private sealed class RecordingHubContext<THub> : IHubContext<THub> where THub : Hub

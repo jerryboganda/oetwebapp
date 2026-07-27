@@ -228,6 +228,7 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             o.PaymentWebhookEvents,
             o.PaymentWebhookPiiNullOutAge,
             o.NotificationDeliveryAttempts,
+            o.SecurityEvents,
             o.SweepInterval,
             o.BatchSize);
 

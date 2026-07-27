@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Mocks;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -202,6 +203,35 @@ public static class MockBookingEndpoints
                 .FirstOrDefaultAsync(b => b.Id == body.BundleId, ct)
                 ?? throw ApiException.NotFound("bundle_not_found", "Mock bundle not found.");
 
+            if (!string.IsNullOrWhiteSpace(body.MockAttemptId))
+            {
+                var attemptOwned = await db.MockAttempts.AsNoTracking()
+                    .AnyAsync(a => a.Id == body.MockAttemptId && a.UserId == userId, ct);
+                if (!attemptOwned)
+                {
+                    throw ApiException.NotFound("mock_attempt_not_found", "Mock attempt not found.");
+                }
+
+                // Server-side 7-day AI/tutor rule (2026-07-22). The Speaking
+                // Gateway already hides the tutor option client-side; enforce
+                // here too so a crafted request can't book a tutor inside the
+                // AI-only window. Only gateway-scoped bookings (mockAttemptId
+                // present) fall under the rule — standalone bookings don't.
+                var targetExamDate = await db.Goals.AsNoTracking()
+                    .Where(g => g.UserId == userId)
+                    .Select(g => (DateOnly?)g.TargetExamDate)
+                    .SingleOrDefaultAsync(ct);
+                var daysUntilExam = targetExamDate is null
+                    ? (int?)null
+                    : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
+                if (daysUntilExam is < 7)
+                {
+                    throw ApiException.Conflict(
+                        "speaking_tutor_window_closed",
+                        "Your exam is less than 7 days away — Speaking in this mock must be completed with AI.");
+                }
+            }
+
             // Idempotency guard — same user + same exact slot must not create duplicate rows
             // even under double-submit. Scope/Key form mirrors LearnerService usage.
             var scope = "mock_booking_create";
@@ -238,20 +268,21 @@ public static class MockBookingEndpoints
                 // this booking for that specific attempt. Null for a standalone
                 // ahead-of-time booking made outside any active mock.
                 MockAttemptId = string.IsNullOrWhiteSpace(body.MockAttemptId) ? null : body.MockAttemptId,
+                MockSectionId = string.IsNullOrWhiteSpace(body.MockSectionId) ? null : body.MockSectionId,
                 ScheduledStartAt = scheduledStartAt,
                 TimezoneIana = timezoneIana,
                 Status = MockBookingStatuses.Scheduled,
                 ConsentToRecording = body.ConsentToRecording ?? false,
                 DeliveryMode = MockDeliveryModes.Computer,
                 LiveRoomState = MockLiveRoomStates.Waiting,
+                ZoomStatus = MockBookingZoomStatuses.Pending,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
-            // Same internal room route the MockService creator stamps — without
-            // it, bookings made through this endpoint had no joinUrl and the
-            // learner's "join" affordances render nothing.
-            booking.ZoomJoinUrl = $"/mocks/speaking-room/{Uri.EscapeDataString(booking.Id)}";
             db.MockBookings.Add(booking);
+            // Real Zoom meeting is provisioned out-of-band; commits atomically
+            // with the booking row.
+            MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
 
             db.AuditEvents.Add(new AuditEvent
             {
@@ -268,6 +299,8 @@ public static class MockBookingEndpoints
                     scheduledStartAt = booking.ScheduledStartAt,
                     timezoneIana = booking.TimezoneIana,
                     consentToRecording = booking.ConsentToRecording,
+                    mockAttemptId = booking.MockAttemptId,
+                    mockSectionId = booking.MockSectionId,
                 }),
             });
 
@@ -370,6 +403,14 @@ public static class MockBookingEndpoints
             booking.RescheduleCount++;
             booking.UpdatedAt = now;
 
+            // The Zoom meeting carries the old start time — re-provision (the
+            // job deletes the stale meeting before creating the new one).
+            if (booking.ZoomStatus is not null)
+            {
+                booking.ZoomStatus = MockBookingZoomStatuses.Pending;
+                MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
+            }
+
             var after = new
             {
                 scheduledStartAt = booking.ScheduledStartAt,
@@ -402,6 +443,7 @@ public static class MockBookingEndpoints
             HttpContext http,
             string bookingId,
             LearnerDbContext db,
+            MockBookingZoomProvisioner zoomProvisioner,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -438,6 +480,9 @@ public static class MockBookingEndpoints
             booking.Status = MockBookingStatuses.Cancelled;
             booking.CancelledAt = now;
             booking.UpdatedAt = now;
+
+            // Best-effort: a Zoom outage must never block a cancellation.
+            await zoomProvisioner.DeleteZoomMeetingBestEffortAsync(booking, ct);
 
             var after = new
             {
@@ -523,6 +568,8 @@ public static class MockBookingEndpoints
     /// Learner-facing projection. Mirrors the shape used by
     /// <c>MockBookingService.Project</c> with <c>isAdmin = false</c>; tutor /
     /// interlocutor identity and Zoom start URL are deliberately excluded.
+    /// <c>joinUrl</c> is always the in-app speaking-room route; the real Zoom
+    /// join link is surfaced separately once provisioning succeeded.
     /// </summary>
     private static Dictionary<string, object?> ProjectBooking(MockBooking b, MockBundle? bundle)
     {
@@ -534,6 +581,7 @@ public static class MockBookingEndpoints
             ["mockBundleId"] = b.MockBundleId,
             ["mockBundleTitle"] = bundle?.Title,
             ["mockAttemptId"] = b.MockAttemptId,
+            ["mockSectionId"] = b.MockSectionId,
             ["scheduledStartAt"] = b.ScheduledStartAt,
             ["timezoneIana"] = b.TimezoneIana,
             ["status"] = b.Status,
@@ -541,7 +589,8 @@ public static class MockBookingEndpoints
             ["deliveryMode"] = b.DeliveryMode,
             ["rescheduleCount"] = b.RescheduleCount,
             ["consentToRecording"] = b.ConsentToRecording,
-            ["joinUrl"] = b.ZoomJoinUrl,
+            ["joinUrl"] = MockBookingPresentation.RoomRoute(b),
+            ["zoomJoinUrl"] = MockBookingPresentation.LearnerZoomJoinUrl(b),
             ["createdAt"] = b.CreatedAt,
             ["updatedAt"] = b.UpdatedAt,
             ["cancelledAt"] = b.CancelledAt,

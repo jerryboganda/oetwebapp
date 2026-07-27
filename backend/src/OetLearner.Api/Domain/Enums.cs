@@ -180,9 +180,11 @@ public enum JobType
     BillingAbandonedCartEmail,           // Daily sweep at 03:00 UTC; emails carts idle >24h that have not been recovered yet
     BillingRenewalReminder,              // 3-day "heads up renewal" email triggered by Stripe invoice.upcoming webhook
 
+    PrivateSpeakingNoShowSweep,          // Detect/mark no-shows from Zoom attendance data (logically Private Speaking)
+
     // NOTE: keep this value LAST. JobType is persisted as an int ordinal, so any new value
     // MUST be appended at the very end to avoid renumbering existing BackgroundJobs rows.
-    PrivateSpeakingNoShowSweep           // Detect/mark no-shows from Zoom attendance data (logically Private Speaking)
+    MockBookingZoomCreate                // Create the real Zoom meeting for a Full Mock speaking booking
 }
 
 public enum ConfidenceBand
