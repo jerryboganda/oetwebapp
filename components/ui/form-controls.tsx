@@ -160,6 +160,50 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
 );
 Checkbox.displayName = 'Checkbox';
 
+/* ─── Checkbox Group (multi-select) ─── */
+export interface CheckboxGroupOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+interface CheckboxGroupProps {
+  label?: string;
+  options: CheckboxGroupOption[];
+  values: string[];
+  onChange: (values: string[]) => void;
+  error?: string;
+  className?: string;
+}
+
+export function CheckboxGroup({ label, options, values, onChange, error, className }: CheckboxGroupProps) {
+  const toggle = (value: string) => {
+    onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
+  };
+  return (
+    <fieldset className={cn('flex flex-col gap-2', className)}>
+      {label && <legend className="mb-1 text-sm font-semibold tracking-tight text-navy">{label}</legend>}
+      <div className="flex flex-col gap-2">
+        {options.map((opt) => (
+          <label key={opt.value} className="flex items-start gap-3 rounded-2xl border border-border bg-background-light px-4 py-3 shadow-sm transition-colors hover:border-border-hover">
+            <input
+              type="checkbox"
+              checked={values.includes(opt.value)}
+              onChange={() => toggle(opt.value)}
+              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <div>
+              <span className="text-sm font-medium text-navy">{opt.label}</span>
+              {opt.description && <p className="mt-1 text-xs leading-5 text-muted">{opt.description}</p>}
+            </div>
+          </label>
+        ))}
+      </div>
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+    </fieldset>
+  );
+}
+
 /* ─── Radio Group ─── */
 export interface RadioOption {
   value: string;

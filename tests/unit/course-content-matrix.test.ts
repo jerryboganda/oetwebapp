@@ -16,10 +16,10 @@ describe('profession-first course content matrix', () => {
           const targets = expectedVideoTargets(language, subtest, profession.id);
           if (language === 'en' || subtest === 'listening' || subtest === 'reading') {
             expect(targets).toEqual([]);
-          } else if (['medicine', 'physiotherapy', 'dentistry', 'radiography'].includes(profession.id)) {
-            expect(targets).toEqual(['medicine', 'physiotherapy', 'dentistry', 'radiography']);
           } else {
-            expect(targets).not.toBeNull();
+            // Arabic Writing/Speaking now defaults to targeting only the source
+            // profession — no forced bundling with other professions.
+            expect(targets).toEqual([profession.id]);
           }
         }
       }

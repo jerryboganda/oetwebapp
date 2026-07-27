@@ -8,10 +8,11 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Checkbox, Input, RadioGroup } from '@/components/ui/form-controls';
+import { Checkbox, CheckboxGroup, Input, RadioGroup } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAdminWizard } from '@/components/domain/wizard/useAdminWizard';
 import { useStepRegistration } from '@/lib/wizard/use-step-registration';
+import { COURSE_PROFESSIONS } from '@/lib/course-content-matrix';
 import {
   adminPatchVideo,
   type AdminVideoDetail,
@@ -20,7 +21,6 @@ import {
 } from '@/lib/api/video-library';
 
 type LanguageChoice = VideoLanguage | 'unset';
-type ArabicSource = 'medicine' | 'nursing' | 'pharmacy';
 
 /** ISO string → value for a `datetime-local` input (local time, minute precision). */
 function toDatetimeLocal(iso: string | null): string {
@@ -37,8 +37,8 @@ export function StepAccess() {
 
   const [accessTier, setAccessTier] = useState<VideoAccessTier>(video.accessTier ?? 'free');
   const [language, setLanguage] = useState<LanguageChoice>(video.language ?? 'unset');
-  const [arabicSource, setArabicSource] = useState<ArabicSource>(
-    video.targetProfessionIds.includes('nursing') ? 'nursing' : video.targetProfessionIds.includes('pharmacy') ? 'pharmacy' : 'medicine',
+  const [arabicTargets, setArabicTargets] = useState<string[]>(
+    video.targetProfessionIds.filter((id) => COURSE_PROFESSIONS.some((p) => p.id === id)),
   );
   const [isFeatured, setIsFeatured] = useState(Boolean(video.isFeatured));
   const [sortOrder, setSortOrder] = useState(String(video.sortOrder ?? 0));
@@ -46,7 +46,8 @@ export function StepAccess() {
   const [error, setError] = useState<string | null>(null);
 
   const isArabicProfessionSpecific = language === 'ar' && (video.subtestCode === 'writing' || video.subtestCode === 'speaking');
-  const canAdvance = (accessTier === 'free' || accessTier === 'premium') && language !== 'unset' && Boolean(video.subtestCode);
+  const canAdvance = (accessTier === 'free' || accessTier === 'premium') && language !== 'unset' && Boolean(video.subtestCode)
+    && (!isArabicProfessionSpecific || arabicTargets.length > 0);
 
   const submit = useCallback(async () => {
     let publishAtIso: string | null = null;
@@ -67,9 +68,11 @@ export function StepAccess() {
       setError('Choose a language and a subtest before saving access.');
       throw new Error('invalid');
     }
-    const targetProfessionIds = isArabicProfessionSpecific
-      ? (arabicSource === 'medicine' ? ['medicine', 'physiotherapy'] : [arabicSource])
-      : [];
+    if (isArabicProfessionSpecific && arabicTargets.length === 0) {
+      setError('Select at least one profession for this Arabic Writing/Speaking video.');
+      throw new Error('invalid');
+    }
+    const targetProfessionIds = isArabicProfessionSpecific ? arabicTargets : [];
     await adminPatchVideo(video.videoId, {
       accessTier,
       language,
@@ -79,7 +82,7 @@ export function StepAccess() {
       publishAt: publishAtIso,
     });
     await wizard.refresh();
-  }, [video.videoId, video.subtestCode, accessTier, language, isArabicProfessionSpecific, arabicSource, isFeatured, sortOrder, publishAt, wizard]);
+  }, [video.videoId, video.subtestCode, accessTier, language, isArabicProfessionSpecific, arabicTargets, isFeatured, sortOrder, publishAt, wizard]);
 
   useStepRegistration('access', { canAdvance, submit });
 
@@ -116,16 +119,12 @@ export function StepAccess() {
       />
 
       {isArabicProfessionSpecific ? (
-        <RadioGroup
-          name="arabic-source"
-          label="Arabic profession set"
-          value={arabicSource}
-          onChange={(value) => setArabicSource(value as ArabicSource)}
-          options={[
-            { value: 'medicine', label: 'Medicine + Physiotherapy', description: 'One canonical set shared by both professions.' },
-            { value: 'nursing', label: 'Nursing', description: 'Nursing-specific Arabic set.' },
-            { value: 'pharmacy', label: 'Pharmacy', description: 'Pharmacy-specific Arabic set.' },
-          ]}
+        <CheckboxGroup
+          label="Professions"
+          values={arabicTargets}
+          onChange={setArabicTargets}
+          error={arabicTargets.length === 0 ? 'Select at least one profession.' : undefined}
+          options={COURSE_PROFESSIONS.map((p) => ({ value: p.id, label: p.label }))}
         />
       ) : (
         <InlineAlert variant="info">This language and subtest are shared automatically. Profession targets cannot drift.</InlineAlert>

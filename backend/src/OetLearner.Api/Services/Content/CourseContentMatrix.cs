@@ -39,14 +39,9 @@ public static class CourseContentMatrix
         if (language != "ar" || subtest is not ("writing" or "speaking"))
             throw new ArgumentException("Unsupported course-video language or subtest.");
 
-        return sourceProfession switch
-        {
-            "medicine" or "physiotherapy" or "dentistry" or "radiography" =>
-                ["medicine", "physiotherapy", "dentistry", "radiography"],
-            "nursing" => ["nursing"],
-            "pharmacy" => ["pharmacy"],
-            _ => throw new ArgumentException("Unsupported profession for Arabic Writing/Speaking."),
-        };
+        if (!IsProfession(sourceProfession))
+            throw new ArgumentException("Unsupported profession for Arabic Writing/Speaking.");
+        return [sourceProfession];
     }
 
     public static bool TryValidateVideo(string? language, string? subtest, IReadOnlyCollection<string> targets, out string message)
@@ -74,15 +69,8 @@ public static class CourseContentMatrix
             return normalized.Length == 0;
         }
 
-        var allowed = new[]
-        {
-            Array.Empty<string>(), // not valid; retained only to keep comparisons explicit below
-            new[] { "medicine", "physiotherapy", "dentistry", "radiography" },
-            new[] { "nursing" },
-            new[] { "pharmacy" },
-        };
-        var valid = allowed.Skip(1).Any(a => a.Order().SequenceEqual(normalized));
-        message = valid ? string.Empty : "Arabic Writing/Speaking must use Medicine + Physiotherapy + Dentistry + Radiography, Nursing, or Pharmacy.";
+        var valid = normalized.Length > 0;
+        message = valid ? string.Empty : "Arabic Writing/Speaking must target at least one profession.";
         return valid;
     }
 
@@ -98,9 +86,11 @@ public static class CourseContentMatrix
     {
         if (string.Equals(language, "en", StringComparison.OrdinalIgnoreCase)) return "Shared English";
         if (subtest?.Trim().ToLowerInvariant() is "listening" or "reading") return "Shared Arabic";
-        if (targets.Contains("nursing", StringComparer.OrdinalIgnoreCase)) return "Nursing Arabic";
-        if (targets.Contains("pharmacy", StringComparer.OrdinalIgnoreCase)) return "Pharmacy Arabic";
-        return "Medicine Arabic (shared with Physiotherapy, Dentistry and Radiography)";
+        var labels = Professions
+            .Where(p => targets.Contains(p.Id, StringComparer.OrdinalIgnoreCase))
+            .Select(p => p.Label)
+            .ToArray();
+        return labels.Length == 0 ? "Arabic" : $"{string.Join(" + ", labels)} Arabic";
     }
 
     public static string? ResolveCourseFolder(string? subtest, string? courseFolder, string? title)

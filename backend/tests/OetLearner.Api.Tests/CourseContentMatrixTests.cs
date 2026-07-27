@@ -14,31 +14,36 @@ public sealed class CourseContentMatrixTests
         foreach (var language in new[] { "en", "ar" })
         foreach (var subtest in CourseContentMatrix.Subtests)
         {
+            // Each profession can now be targeted individually — no forced bundling.
             IReadOnlyList<string> targets = language == "ar" && (subtest is "writing" or "speaking")
-                ? profession.Id switch
-                {
-                    "nursing" => ["nursing"],
-                    "pharmacy" => ["pharmacy"],
-                    _ => ["medicine", "physiotherapy"],
-                }
+                ? [profession.Id]
                 : [];
 
             var appears = CourseContentMatrix.VideoAppearsFor(profession.Id, language, subtest, targets);
-            var expected = (subtest is "listening" or "reading")
-                || (profession.Id is "medicine" or "nursing" or "pharmacy" or "physiotherapy");
-            Assert.Equal(expected, appears);
+            Assert.True(appears);
         }
     }
 
     [Theory]
     [InlineData("dentistry")]
     [InlineData("radiography")]
-    public void Dentistry_And_Radiography_Cannot_Receive_Writing_Or_Speaking(string professionId)
+    public void Dentistry_And_Radiography_Can_Be_Targeted_Individually(string professionId)
     {
-        Assert.False(CourseContentMatrix.VideoAppearsFor(professionId, "en", "writing", []));
-        Assert.False(CourseContentMatrix.VideoAppearsFor(professionId.ToUpperInvariant(), "EN", "Writing", []));
-        Assert.False(CourseContentMatrix.VideoAppearsFor(professionId, "ar", "speaking", ["medicine", "physiotherapy"]));
-        Assert.Throws<ArgumentException>(() => CourseContentMatrix.ExpectedVideoTargets("ar", "writing", professionId));
+        // English is always shared across every profession — untargeted (empty) is a pass, not a block.
+        Assert.True(CourseContentMatrix.VideoAppearsFor(professionId, "en", "writing", []));
+        Assert.True(CourseContentMatrix.VideoAppearsFor(professionId.ToUpperInvariant(), "EN", "Writing", []));
+        Assert.True(CourseContentMatrix.VideoAppearsFor(professionId, "ar", "speaking", [professionId]));
+        Assert.Equal([professionId], CourseContentMatrix.ExpectedVideoTargets("ar", "writing", professionId));
+    }
+
+    [Fact]
+    public void Medicine_Only_Target_Does_Not_Leak_To_Physiotherapy_Dentistry_Or_Radiography()
+    {
+        string[] medicineOnly = ["medicine"];
+        Assert.True(CourseContentMatrix.VideoAppearsFor("medicine", "ar", "writing", medicineOnly));
+        Assert.False(CourseContentMatrix.VideoAppearsFor("physiotherapy", "ar", "writing", medicineOnly));
+        Assert.False(CourseContentMatrix.VideoAppearsFor("dentistry", "ar", "writing", medicineOnly));
+        Assert.False(CourseContentMatrix.VideoAppearsFor("radiography", "ar", "writing", medicineOnly));
     }
 
     [Fact]

@@ -17,10 +17,7 @@ export function expectedVideoTargets(
   profession: CourseProfessionId,
 ): string[] | null {
   if (language === 'en' || subtest === 'listening' || subtest === 'reading') return [];
-  if (profession === 'medicine' || profession === 'physiotherapy' || profession === 'dentistry' || profession === 'radiography') {
-    return ['medicine', 'physiotherapy', 'dentistry', 'radiography'];
-  }
-  if (profession === 'nursing') return ['nursing'];
-  if (profession === 'pharmacy') return ['pharmacy'];
-  return null;
+  // Each profession is targeted individually by default — admins can add more
+  // professions afterwards from the Access step's checkbox list.
+  return [profession];
 }
