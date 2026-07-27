@@ -140,11 +140,11 @@ describe('forced-update', () => {
   });
 
   describe('openAppStore', () => {
-    it('opens the signed Android download fallback when Play is not configured', async () => {
+    it('opens the Android install-instructions page when Play is not configured', async () => {
       mockBrowser.open.mockResolvedValue(undefined);
       await expect(openAppStore()).resolves.toBe(true);
       expect(mockBrowser.open).toHaveBeenCalledWith({
-        url: 'https://app.oetwithdrhesham.co.uk/api/download/android',
+        url: 'https://app.oetwithdrhesham.co.uk/get-app/android-install',
       });
     });
 

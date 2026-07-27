@@ -19,7 +19,10 @@ export interface UpdateCheckResult {
 
 // ── Configuration ───────────────────────────────────────────────
 
-const DEFAULT_ANDROID_UPDATE_URL = 'https://app.oetwithdrhesham.co.uk/api/download/android';
+// A bare APK link only downloads a file — Android never auto-installs it, so
+// every fallback route points at the instructions page (which explains the
+// manual "tap the file, then Install" step) rather than the raw binary.
+const DEFAULT_ANDROID_UPDATE_URL = 'https://app.oetwithdrhesham.co.uk/get-app/android-install';
 
 function getStoreUrl(platform: 'android' | 'ios'): string | null {
   if (platform === 'android') {

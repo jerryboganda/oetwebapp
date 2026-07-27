@@ -15,7 +15,6 @@ import {
   Video,
 } from 'lucide-react';
 import {
-  ANDROID_DOWNLOAD_URL,
   detectVisitorOs,
   IOS_STORE_URL,
   MAC_DOWNLOAD_URL,
@@ -25,16 +24,21 @@ import {
 
 const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 
+// Android ships as a direct APK (no Play Store listing yet), so the CTA sends
+// users to the install-instructions page rather than the bare binary — a raw
+// APK link only downloads a file, it never triggers Android's install step.
+const ANDROID_INSTALL_URL = '/get-app/android-install';
+
 const OS_CTA: Partial<Record<DesktopOsKind, { label: string; href: string }>> = {
   windows: { label: 'Download for Windows', href: WINDOWS_DOWNLOAD_URL },
   mac: { label: 'Download for Mac', href: MAC_DOWNLOAD_URL },
-  android: { label: 'Download the Android app', href: ANDROID_DOWNLOAD_URL },
+  android: { label: 'Download the Android app', href: ANDROID_INSTALL_URL },
 };
 
 const FEATURES = [
   { icon: Video, title: 'Video Library', text: 'Expert-led OET video lessons stream exclusively inside the apps — with resume, chapters, captions, and handouts.' },
   { icon: PlayCircle, title: 'Full practice suite', text: 'Listening, Reading, Writing, Speaking and full mock exams — the complete platform, everywhere.' },
-  { icon: ShieldCheck, title: 'Secure & up to date', text: 'The desktop app updates itself automatically; mobile updates arrive through the store.' },
+  { icon: ShieldCheck, title: 'Secure & up to date', text: 'The desktop app updates itself automatically; the app tells you in-app when an Android or iOS update is ready.' },
   { icon: BellRing, title: 'Notifications', text: 'Get notified the moment new videos, recalls, and mock results land.' },
 ];
 
@@ -118,7 +122,7 @@ export default function GetAppPage() {
           </a>
 
           <a
-            href={ANDROID_DOWNLOAD_URL}
+            href={ANDROID_INSTALL_URL}
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
             <Smartphone className="h-8 w-8 text-primary" />

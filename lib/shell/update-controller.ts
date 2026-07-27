@@ -96,11 +96,17 @@ export async function checkForUpdates(): Promise<UpdateState> {
         : policy.latestVersion;
       const outdated =
         policy.forceUpdate || compareVersions(current, latest) < 0;
+      // A raw APK link only downloads a file — Android never auto-installs it —
+      // so the Android fallback (no admin-configured Play Store URL) points at
+      // the install-instructions page instead of the bare binary.
+      const fallbackStoreUrl = platform === 'android' && nativeRelease
+        ? 'https://app.oetwithdrhesham.co.uk/get-app/android-install'
+        : nativeRelease?.downloadUrl ?? null;
       return {
         phase: outdated ? 'available' : 'uptodate',
         version: latest,
         currentVersion: identity.version ?? undefined,
-        storeUrl: policy.storeUrl ?? nativeRelease?.downloadUrl ?? null,
+        storeUrl: policy.storeUrl ?? fallbackStoreUrl,
       };
     }
 
