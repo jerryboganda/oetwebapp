@@ -5,9 +5,10 @@ import {
   FileText, Music, Image as ImageIcon, Video, File as FileIcon,
   Download, Play, Loader2, ChevronRight,
 } from 'lucide-react';
-import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { fetchAuthorizedBlob, fetchAuthorizedObjectUrl } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
+import { isNativeDownloadPlatform, saveBlobNative } from '@/lib/mobile/file-download';
 import { buildDownloadFilename, formatBytes } from '@/lib/materials-tree';
 import type { LearnerMaterialFileDto } from '@/lib/materials-api';
 
@@ -74,13 +75,20 @@ export function MaterialFileRow({
     setError(false);
     let objectUrl: string | null = null;
     try {
-      objectUrl = await fetchAuthorizedObjectUrl(file.downloadUrl);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = buildDownloadFilename(file);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      if (isNativeDownloadPlatform()) {
+        // The browser `<a download>` convention is a no-op in Capacitor's
+        // native WebView — there's no download manager for blob: URLs there.
+        const blob = await fetchAuthorizedBlob(file.downloadUrl);
+        await saveBlobNative(blob, buildDownloadFilename(file));
+      } else {
+        objectUrl = await fetchAuthorizedObjectUrl(file.downloadUrl);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = buildDownloadFilename(file);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
       analytics.track('material_file_downloaded', {
         fileId: file.id, kind: file.kind, subtest: file.subtestCode,
       });

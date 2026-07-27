@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { analytics } from '@/lib/analytics';
 import { fetchAuthorizedBlob } from '@/lib/api';
+import { isNativeDownloadPlatform, saveBlobNative } from '@/lib/mobile/file-download';
 import {
   flattenFiles, searchFiles, folderStats, resolveTrail, formatBytes, collectFolderFiles,
 } from '@/lib/materials-tree';
@@ -30,9 +31,15 @@ async function downloadFolderAsZip(folder: LearnerMaterialFolderDto): Promise<vo
     zip.file(relativePath, blob);
   }
   const archive = await zip.generateAsync({ type: 'blob' });
+  const safeName = folder.name.replace(/[/\\:*?"<>|]/g, '-').trim() || 'materials';
+  if (isNativeDownloadPlatform()) {
+    // Same blob:-URL dead end as single-file downloads — write the archive
+    // to disk and hand it to the native share sheet instead.
+    await saveBlobNative(archive, `${safeName}.zip`);
+    return;
+  }
   const url = URL.createObjectURL(archive);
   try {
-    const safeName = folder.name.replace(/[/\\:*?"<>|]/g, '-').trim() || 'materials';
     const a = document.createElement('a');
     a.href = url;
     a.download = `${safeName}.zip`;
