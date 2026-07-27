@@ -249,10 +249,6 @@ export default function Dashboard() {
   const aiPackageCredits = aiPackageCreditsQuery.data ?? null;
   const subscriptionLoading = subscriptionQuery.isPending;
   const subscriptionError = Boolean(subscriptionQuery.error);
-  const supplementalError = scoringPolicyQuery.error
-    ?? entitlementQuery.error
-    ?? subscriptionQuery.error
-    ?? aiPackageCreditsQuery.error;
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
@@ -377,11 +373,6 @@ export default function Dashboard() {
               AI package purchase received. Current balances: {aiPackageCredits
                 ? `${aiPackageCredits.flexibleCredits} flexible, ${aiPackageCredits.writingOnlyCredits} writing, ${aiPackageCredits.speakingOnlyCredits} speaking, ${aiPackageCredits.mockExamsRemaining} mocks.`
                 : 'refreshing your package balance.'}
-            </InlineAlert>
-          ) : null}
-          {supplementalError ? (
-            <InlineAlert variant="warning">
-              Some scoring, entitlement, or subscription details could not be refreshed. Previously loaded details may be out of date.
             </InlineAlert>
           ) : null}
           <LearnerPageHero
