@@ -190,7 +190,7 @@ export function CatalogEntitlementSummary({ snapshot }: { snapshot: MyEntitlemen
 
   return (
     <Card padding="md" className="border-primary/20 bg-primary/5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <CheckCircle2 className="h-5 w-5" />
