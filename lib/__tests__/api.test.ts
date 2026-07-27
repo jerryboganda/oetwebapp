@@ -421,6 +421,69 @@ describe('billing wallet top-up API helper', () => {
   });
 });
 
+describe('admin billing plan API helpers', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  // Regression: updateAdminBillingPlan/createAdminBillingPlan used to rebuild the request
+  // body from a hand-listed set of fields that omitted deliveryMethod, telegramInviteUrl,
+  // deliveryInstructions and contentOverridesJson. Callers passed these through via object
+  // spread, which TypeScript's excess-property check does not catch, so admin edits to a
+  // plan's Always-include/exclude video list (and delivery method) silently never reached
+  // the API — every BillingPlan.ContentOverridesJson in production stayed null despite the
+  // admin UI reporting "Saved".
+  it('forwards contentOverridesJson and delivery fields on update', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const { updateAdminBillingPlan } = await import('../api');
+    await updateAdminBillingPlan('plan_full-condensed-medicine', {
+      code: 'full-condensed-medicine',
+      name: 'Full Condensed Recorded OET Course - Medicine',
+      price: 100,
+      interval: 'one_time',
+      deliveryMethod: 'automatic_web',
+      telegramInviteUrl: '',
+      deliveryInstructions: '',
+      contentOverridesJson: '{"videos":{"exclude":["vid-1","vid-2"]}}',
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(String(init?.body));
+    expect(body.contentOverridesJson).toBe('{"videos":{"exclude":["vid-1","vid-2"]}}');
+    expect(body.deliveryMethod).toBe('automatic_web');
+  });
+
+  it('forwards contentOverridesJson and delivery fields on create', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const { createAdminBillingPlan } = await import('../api');
+    await createAdminBillingPlan({
+      name: 'Full Condensed Recorded OET Course - Medicine',
+      price: 100,
+      interval: 'one_time',
+      deliveryMethod: 'automatic_web',
+      contentOverridesJson: '{"videos":{"exclude":["vid-1"]}}',
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(String(init?.body));
+    expect(body.contentOverridesJson).toBe('{"videos":{"exclude":["vid-1"]}}');
+    expect(body.deliveryMethod).toBe('automatic_web');
+  });
+});
+
 describe('admin mock bundle API helpers', () => {
   const originalFetch = globalThis.fetch;
 

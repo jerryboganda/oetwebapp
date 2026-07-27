@@ -5658,6 +5658,11 @@ export interface AdminBillingPlanOet2026Fields {
   recallUpdatesEnabled?: boolean;
   // "What's included" bullet list — persisted on the linked ContentPackage.
   comparisonFeaturesJson?: string;
+  // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
+  deliveryMethod?: string;
+  telegramInviteUrl?: string;
+  deliveryInstructions?: string;
+  contentOverridesJson?: string;
 }
 
 export async function createAdminBillingPlan(payload: {
@@ -5713,6 +5718,10 @@ export async function createAdminBillingPlan(payload: {
       extensionAllowed: payload.extensionAllowed ?? null,
       recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
       comparisonFeaturesJson: payload.comparisonFeaturesJson ?? null,
+      deliveryMethod: payload.deliveryMethod ?? null,
+      telegramInviteUrl: payload.telegramInviteUrl ?? null,
+      deliveryInstructions: payload.deliveryInstructions ?? null,
+      contentOverridesJson: payload.contentOverridesJson ?? null,
     }),
   });
 }
@@ -5770,6 +5779,10 @@ export async function updateAdminBillingPlan(planId: string, payload: {
       extensionAllowed: payload.extensionAllowed ?? null,
       recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
       comparisonFeaturesJson: payload.comparisonFeaturesJson ?? null,
+      deliveryMethod: payload.deliveryMethod ?? null,
+      telegramInviteUrl: payload.telegramInviteUrl ?? null,
+      deliveryInstructions: payload.deliveryInstructions ?? null,
+      contentOverridesJson: payload.contentOverridesJson ?? null,
     }),
   });
 }
