@@ -1,34 +1,30 @@
-# Agent State - Profession-First Videos and Materials
+# Agent State - Manual-only Tutor Book delivery
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## Goal
 
-Make the admin Course Videos and Course Materials screens profession-first while preserving canonical media records and keeping raw Bunny/folder tools under Advanced views.
+Make the standalone `tutor-book` product deliverable manually through WhatsApp without granting any learner-platform content, subtest, Tutor Book Reader, or Recalls access.
 
 ## Implemented
 
-- Added the six-profession course matrix and server-side video write/publish validation.
-- Added profession-first video and material course-map endpoints and primary admin views.
-- Added structured material scope fields plus guarded production backfill and video target correction migration.
-- Kept canonical IDs in every projection; no media, progress, assignment, entitlement, or download row is copied or deleted.
-- Added matrix-aware video draft preselection and access editing.
-- Kept raw Bunny collections and raw material folders as Advanced consoles.
-- Versioned the idempotent production metadata alignment script.
-- Added direct pre-scoped folder creation, file upload, and canonical edit actions to every profession/material section and General English.
-- Added canonical preservation counts plus explicit unmapped-ID reporting to both course-map APIs.
-- Routed learner video visibility through the same authoritative matrix used by admin writes/projections.
-- Kept General English independent from OET subtest restrictions while retaining its module/audience gates.
-- Added RTL proof for profession-only roots and shared canonical edit propagation, plus expanded backend matrix/backfill/access tests.
+- Added the explicit `["none"]` subtest scope; empty `[]` remains the legacy all-subtests value.
+- Added an admin “No platform or subtest access” control that clears modules, credits, trials, entitlements, and content overrides and selects manual material delivery.
+- Server validation normalizes the no-platform scope to zero grants and rejects incompatible delivery.
+- Manual fulfillment now uses the purchased immutable plan version and records external delivery without activating the subscription.
+- Entitlement resolution fails low for external-only products, including historical Active subscription rows.
+- Canonical Tutor Book seed data now has no modules/bundled unlock and uses manual WhatsApp delivery.
+- Added a guarded production migration that aligns plans/versions and clears unintended standalone Tutor Book unlocks on existing subscriptions.
+- Candidate/admin completion messaging distinguishes externally delivered material from released platform access.
 
 ## Validation
 
-- `pnpm exec tsc --noEmit`: passed.
-- Focused Vitest/RTL: 2 files, 4 tests passed.
-- Metadata dry-run: 117 mapped, 0 unmapped; 26 English shared, 16 Arabic L/R shared, 48 Medicine+Physiotherapy, 16 Nursing, 11 Pharmacy.
+- `pnpm exec tsc --noEmit --pretty false`: passed.
+- Focused manifest and policy test sources added; no further lengthy build/test run per owner instruction.
+- Tutor Book manifest assertion: passed.
 - `git diff --check`: passed.
-- Local .NET compile was stopped at owner request because it exceeded the quick-check window.
+- Independent focused review completed; identified blockers were addressed and sent for final re-check.
 
 ## Next Step
 
-Commit and push the explicit completion files to `main`; owner will verify the production admin pages and report any runtime issue.
+Commit the explicit scoped files, push `main`, and confirm the production deploy workflow was triggered.

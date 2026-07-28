@@ -260,3 +260,6 @@ scripts/materials/state/
 
 # Serena local project index/cache/memories (per-environment artifact — never commit)
 .serena/
+
+# Local prod-DB password used by scripts/start-local-prod.ps1 — never commit
+config/local-prod-db.password

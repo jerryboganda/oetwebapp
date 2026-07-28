@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>OET Mobile View (local)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #1c1c1e;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .stage {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 24px;
+  }
+  .phone {
+    width: 390px;
+    height: 844px;
+    max-height: calc(100vh - 48px);
+    background: #000;
+    border-radius: 48px;
+    padding: 14px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 0 2px #333;
+    position: relative;
+  }
+  .notch {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 28px;
+    background: #000;
+    border-radius: 0 0 18px 18px;
+    z-index: 2;
+  }
+  .screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 34px;
+    overflow: hidden;
+    background: #f7f5ef;
+  }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+  .panel {
+    color: #d0d0d5;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 260px;
+  }
+  .panel h1 { font-size: 16px; color: #fff; margin: 0 0 8px; }
+  .panel code {
+    background: #2c2c2e;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #9ecbff;
+  }
+  .panel button {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border: 1px solid #444;
+    background: #2c2c2e;
+    color: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .panel button:hover { background: #3a3a3c; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <iframe id="frame" src="http://localhost:3000" title="OET mobile view"></iframe>
+      </div>
+    </div>
+    <div class="panel">
+      <h1>OET — local mobile view</h1>
+      <p>This is a phone-framed webview of <code>http://localhost:3000</code> — the same page Capacitor's native
+      shell loads on a real device. Not the actual APK; a visual/interaction stand-in for fast iteration.</p>
+      <p>Edits under <code>app/</code>, <code>components/</code>, or <code>lib/</code> hot-reload here exactly like
+      the desktop browser.</p>
+      <button onclick="document.getElementById('frame').src = document.getElementById('frame').src">Reload</button>
+    </div>
+  </div>
+</body>
+</html>
