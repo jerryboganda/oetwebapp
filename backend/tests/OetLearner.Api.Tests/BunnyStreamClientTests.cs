@@ -38,7 +38,7 @@ public class BunnyStreamClientTests
             TokenAuthKey: "token-auth-key",
             WebhookSecret: null,
             CollectionId: null,
-            PlaybackTokenTtlSeconds: 14400);
+            PlaybackTokenTtlSeconds: 1800);
         var client = new BunnyStreamClient(
             new ThrowingHttpClientFactory(),
             new FakeSettingsProvider(settings),
@@ -133,7 +133,7 @@ public class BunnyStreamClientTests
         var bunny = new BunnyStreamSettings(
             Enabled: true, LibraryId: "123456", ApiKey: "k", CdnHostname: "vz-test.b-cdn.net",
             TokenAuthKey: "token-auth-key", WebhookSecret: null, CollectionId: null,
-            PlaybackTokenTtlSeconds: 14400);
+            PlaybackTokenTtlSeconds: 1800);
         var video = new LibraryVideo
         {
             Id = "v1",
@@ -172,7 +172,7 @@ public class BunnyStreamClientTests
         var bunny = new BunnyStreamSettings(
             Enabled: true, LibraryId: "123456", ApiKey: "k", CdnHostname: "vz-test.b-cdn.net",
             TokenAuthKey: "token-auth-key", WebhookSecret: null, CollectionId: null,
-            PlaybackTokenTtlSeconds: 14400);
+            PlaybackTokenTtlSeconds: 1800);
         var video = new LibraryVideo
         {
             Id = "v1",

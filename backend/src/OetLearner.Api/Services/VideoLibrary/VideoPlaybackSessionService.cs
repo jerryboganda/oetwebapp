@@ -121,10 +121,16 @@ public sealed class VideoPlaybackSessionService(
                 $"You already have {MaxConcurrentDistinctVideos} active playback sessions. Close one before starting another video.");
         }
 
-        // Session TTL = min(max(2 × duration, 1h), configured cap [default 4h]).
+        // Session TTL = min(max(2 × duration, 15min), configured cap [default 30min]).
+        // Floor kept low (900s) so a captured/leaked signed CDN URL can't outlive
+        // its own revoke-on-DB-flag by hours — Bunny's edge has no revocation
+        // callback, so TTL length IS the worst-case exposure window. The frontend
+        // player already renews ~2min before expiry regardless of TTL length
+        // (components/videos/video-player.tsx), so a shorter floor only makes
+        // that existing renewal fire somewhat more often — no UX change.
         var settings = (await settingsProvider.GetAsync(ct)).BunnyStream;
         var ttlSeconds = Math.Min(
-            Math.Max(2L * Math.Max(0, video.DurationSeconds), 3600L),
+            Math.Max(2L * Math.Max(0, video.DurationSeconds), 900L),
             settings.PlaybackTokenTtlSeconds);
         var expiresAt = now.AddSeconds(ttlSeconds);
 

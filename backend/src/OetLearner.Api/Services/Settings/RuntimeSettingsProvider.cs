@@ -511,9 +511,14 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     // (DB-over-env: null DB field → BunnyStream:* / VideoAttestation:* config)
     private BunnyStreamSettings ResolveBunnyStream(RuntimeSettingsRow r)
     {
+        // Default lowered 4h → 30min (2026-07-29 mitigation): a revoked/leaked
+        // signed CDN URL keeps working at Bunny's edge until its own expiry
+        // (revoke only flips a DB flag), so the shipped default IS the
+        // worst-case exposure window. Admins can still raise it back up to the
+        // existing [300, 86_400] clamp below if they have an operational reason.
         var ttl = r.BunnyStreamPlaybackTokenTtlSeconds
             ?? ParseInt(_config["BunnyStream:PlaybackTokenTtlSeconds"])
-            ?? 14400;
+            ?? 1800;
         return new BunnyStreamSettings(
             Enabled: r.BunnyStreamEnabled ?? ParseBool(_config["BunnyStream:Enabled"]) ?? false,
             LibraryId: Coalesce(r.BunnyStreamLibraryId, _config["BunnyStream:LibraryId"]),

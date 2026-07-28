@@ -175,7 +175,7 @@ public sealed record BunnyStreamSettings(
         && !string.IsNullOrWhiteSpace(TokenAuthKey);
 
     public static BunnyStreamSettings Unconfigured { get; } =
-        new(false, null, null, null, null, null, null, 14400);
+        new(false, null, null, null, null, null, null, 1800);
 }
 
 /// <summary>
