@@ -57,6 +57,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 - [2 Private Speaking Assessment Sessions](#25-2-private-speaking-assessment-sessions)
 - [Double Special Package - Writing + Speaking](#26-double-special-package-writing-speaking)
 - [Mega Special Package](#27-mega-special-package)
+- [Listening Recalls](#48-listening-recalls)
 
 ## TutorBook
 
@@ -1074,6 +1075,29 @@ This addendum contains the website descriptions for the AI grading packages, ful
 **Best for:** Candidates who want an intensive Speaking-only AI grading option.
 
 <!-- Original source page(s): 19 -->
+
+### 48. Listening Recalls
+
+**Profession:** All disciplines | **Category:** Recall-based Listening vocabulary package
+
+**Website description:** Master your OET Listening with more than 2,500 essential words, including the latest additions and commonly tested spellings. Listen, repeat, and memorise each word to improve your accuracy and confidence.
+
+**Access:** 180 days | **Format:** Interactive tap-to-listen vocabulary drills
+
+#### Included components
+
+- More Than 2,500 Words
+- Latest Words Added Regularly
+- British Accent Audio
+- Tap Any Word to Listen
+- Repeat Words Multiple Times
+- Master Correct Spelling
+- Add Words to Favourites
+- Master Your OET Listening
+
+**Best for:** Candidates who want focused, repeatable vocabulary practice for OET Listening.
+
+<!-- Added post-launch 2026-07-29: standalone Recalls-only package, not part of the original PDF sources. -->
 
 ---
 

@@ -1028,6 +1028,44 @@
                                    "Already-included add-on exams with more recent recall-based practice",
                                    "Private update channel access for new book updates and recall additions"
                                ]
+    },
+    {
+        "code":  "listening-recalls",
+        "name":  "Listening Recalls",
+        "description":  "Master your OET Listening with more than 2,500 essential words, including the latest additions and commonly tested spellings. Listen, repeat, and memorise each word to improve your accuracy and confidence.",
+        "price":  17,
+        "originalPrice":  null,
+        "accessDays":  180,
+        "productCategory":  "recall_package",
+        "profession":  "all",
+        "writingAddons":  false,
+        "speakingAddons":  false,
+        "tutorBookDiscount":  false,
+        "bundled":  {
+                        "writingAssessments":  0,
+                        "speakingSessions":  0,
+                        "aiCredits":  0,
+                        "tutorBook":  false,
+                        "basicEnglish":  false
+                    },
+        "isDraft":  false,
+        "isVisible":  true,
+        "extensionAllowed":  true,
+        "recallUpdatesEnabled":  true,
+        "displayOrder":  465,
+        "dashboardModules":  [
+                                 "Recalls"
+                             ],
+        "comparisonFeatures":  [
+                                   "More Than 2,500 Words",
+                                   "Latest Words Added Regularly",
+                                   "British Accent Audio",
+                                   "Tap Any Word to Listen",
+                                   "Repeat Words Multiple Times",
+                                   "Master Correct Spelling",
+                                   "Add Words to Favourites",
+                                   "Master Your OET Listening"
+                               ]
     }
   ],
   "addOns": [

@@ -106,6 +106,7 @@ const RECALLS_PLAN_CODES = new Set([
   'crash-course',
   'crash-3letters',
   'crash-5letters',
+  'listening-recalls',
 ]);
 const MODULE_STATUS_OPTIONS = [
   { value: 'enabled', label: 'Enabled' },

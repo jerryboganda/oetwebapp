@@ -26,6 +26,13 @@ export const IOS_STORE_URL = process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
 
 export const GET_APP_PATH = '/get-app';
 
+/**
+ * Android ships as a direct APK (no Play Store listing yet), so app-download
+ * CTAs send users to the install-instructions page rather than the bare binary —
+ * a raw APK link only downloads a file, it never triggers Android's install step.
+ */
+export const ANDROID_INSTALL_URL = `${GET_APP_PATH}/android-install`;
+
 export type DesktopOsKind = 'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'unknown';
 
 /** Best-effort OS detection for tailoring the /get-app hero CTA. UX only. */

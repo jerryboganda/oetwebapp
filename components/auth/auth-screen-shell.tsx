@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AppStoreBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
+import { ANDROID_INSTALL_URL } from '@/lib/app-downloads';
 import styles from './auth-screen-shell.module.scss';
 
 interface SocialAction {
@@ -111,6 +113,14 @@ export function AuthScreenShell({
 
             {footer ? <div className={styles.footer}>{footer}</div> : null}
             {terms ? <div className={styles.terms}>{terms}</div> : null}
+          </div>
+
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Get the app</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <GooglePlayBadge href={ANDROID_INSTALL_URL} />
+              <AppStoreBadge />
+            </div>
           </div>
         </div>
       </main>

@@ -15,19 +15,15 @@ import {
   Video,
 } from 'lucide-react';
 import {
+  ANDROID_INSTALL_URL,
   detectVisitorOs,
-  IOS_STORE_URL,
   MAC_DOWNLOAD_URL,
   WINDOWS_DOWNLOAD_URL,
   type DesktopOsKind,
 } from '@/lib/app-downloads';
+import { AppStoreBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
 
 const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
-
-// Android ships as a direct APK (no Play Store listing yet), so the CTA sends
-// users to the install-instructions page rather than the bare binary — a raw
-// APK link only downloads a file, it never triggers Android's install step.
-const ANDROID_INSTALL_URL = '/get-app/android-install';
 
 const OS_CTA: Partial<Record<DesktopOsKind, { label: string; href: string }>> = {
   windows: { label: 'Download for Windows', href: WINDOWS_DOWNLOAD_URL },
@@ -121,41 +117,23 @@ export default function GetAppPage() {
             <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Download</span>
           </a>
 
-          <a
-            href={ANDROID_INSTALL_URL}
-            className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
-          >
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary">
             <Smartphone className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">Android</h2>
               <p className="mt-1 text-xs text-muted">Signed APK (.apk) — latest release</p>
             </div>
-            <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Download</span>
-          </a>
+            <GooglePlayBadge href={ANDROID_INSTALL_URL} />
+          </div>
 
-          {IOS_STORE_URL ? (
-            <a
-              href={IOS_STORE_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
-            >
-              <Apple className="h-8 w-8 text-primary" />
-              <div>
-                <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
-                <p className="mt-1 text-xs text-muted">App Store</p>
-              </div>
-              <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Get the app</span>
-            </a>
-          ) : (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-surface p-6 text-center shadow-sm">
-              <Apple className="h-8 w-8 text-muted" />
-              <div>
-                <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
-                <p className="mt-1 text-xs text-muted">Coming soon to the App Store</p>
-              </div>
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+            <Apple className="h-8 w-8 text-primary" />
+            <div>
+              <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
+              <p className="mt-1 text-xs text-muted">Coming soon to the App Store</p>
             </div>
-          )}
+            <AppStoreBadge />
+          </div>
         </section>
 
         <section className="mt-8 grid gap-6 md:grid-cols-[280px_minmax(0,1fr)]">

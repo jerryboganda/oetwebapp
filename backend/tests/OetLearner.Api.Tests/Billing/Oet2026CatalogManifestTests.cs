@@ -30,7 +30,8 @@ public sealed class Oet2026CatalogManifestTests
         "speaking-2sessions",
         "double-special",
         "mega-special",
-        "tutor-book"
+        "tutor-book",
+        "listening-recalls"
     ];
 
     private static readonly string[] ExpectedPortfolioAddOnCodes =
@@ -73,7 +74,8 @@ public sealed class Oet2026CatalogManifestTests
         "full-allied-health",
         "crash-course",
         "crash-3letters",
-        "crash-5letters"
+        "crash-5letters",
+        "listening-recalls"
     ];
 
     [Fact]

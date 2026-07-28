@@ -22,6 +22,7 @@ public static class PlanModulePolicy
         "crash-course",
         "crash-3letters",
         "crash-5letters",
+        "listening-recalls",
     };
 
     public static bool AllowsRecalls(string? planCode)
