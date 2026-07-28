@@ -1,6 +1,7 @@
 'use client';
 
 import { FileText } from 'lucide-react';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 interface WritingCaseNotePanelProps {
   html?: string;
@@ -23,7 +24,7 @@ export function WritingCaseNotePanel({ html, title = 'Case notes', compact = fal
       {html ? (
         <div
           className={`prose prose-sm max-w-none text-navy ${compact ? 'max-h-72 overflow-auto' : ''}`}
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(html) }}
         />
       ) : (
         <div className="rounded-xl border border-dashed border-border bg-background-light p-4 text-sm leading-6 text-muted">

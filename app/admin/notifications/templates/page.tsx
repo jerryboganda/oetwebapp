@@ -30,6 +30,7 @@ import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -639,7 +640,7 @@ export default function AdminNotificationTemplatesPage() {
                   <div
                     className="rounded-admin border border-admin-border bg-white p-3 text-sm"
                     dangerouslySetInnerHTML={{
-                      __html: renderPreview(previewTemplate.htmlTemplate),
+                      __html: sanitizeBodyHtml(renderPreview(previewTemplate.htmlTemplate)),
                     }}
                   />
                 </div>
