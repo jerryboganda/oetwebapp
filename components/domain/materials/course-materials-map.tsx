@@ -8,13 +8,18 @@ import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { adminGetMaterialCourseMap, type MaterialCourseMap } from '@/lib/materials-api';
+import { MaterialsCourseBrowser } from './materials-course-browser';
 
 interface CourseMaterialsMapProps {
   onAdvanced: () => void;
-  onCreateFolder: (professionId: string | null, professionLabel: string, subtestCode: string | null) => void;
+  onCreateFolder: (professionId: string | null, professionLabel: string, subtestCode: string | null, parentFolderId?: string | null) => void;
   onAddFile: (folderId: string, subtestCode: string) => void;
   onEditFolder: (folderId: string) => void;
   onEditFile: (fileId: string) => void;
+}
+
+function subtestTitle(subtestCode: string): string {
+  return `${subtestCode.charAt(0).toUpperCase()}${subtestCode.slice(1)}`;
 }
 
 export function CourseMaterialsMap({
@@ -27,12 +32,45 @@ export function CourseMaterialsMap({
   const [data, setData] = useState<MaterialCourseMap | null>(null);
   const [selectedId, setSelectedId] = useState('medicine');
   const [error, setError] = useState<string | null>(null);
+  const [browsing, setBrowsing] = useState<{ professionId: string; professionLabel: string; subtestCode: string } | null>(null);
 
   useEffect(() => {
     void adminGetMaterialCourseMap().then(setData).catch((reason: Error) => setError(reason.message));
   }, []);
 
   const selected = data?.professions.find((profession) => profession.id === selectedId);
+  const browsingSection = browsing
+    ? data?.professions
+        .find((profession) => profession.id === browsing.professionId)
+        ?.sections.find((section) => section.subtestCode === browsing.subtestCode)
+    : undefined;
+
+  if (browsing && browsingSection) {
+    const browseTitle = browsingSection.sharing === 'shared'
+      ? subtestTitle(browsing.subtestCode)
+      : `${browsing.professionLabel} ${subtestTitle(browsing.subtestCode)}`;
+    return (
+      <AdminCatalogLayout
+        title={browseTitle}
+        eyebrow="CMS"
+        description={`${browsingSection.sharing === 'shared' ? 'Shared canonical' : 'Profession-specific'} · ${browsingSection.folderCount} folders · ${browsingSection.fileCount} files`}
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Content', href: '/admin/content' }, { label: 'Course Materials' }]}
+        hideViewModeToggle
+      >
+        <div className="col-span-full">
+          <MaterialsCourseBrowser
+            section={browsingSection}
+            title={browseTitle}
+            onBack={() => setBrowsing(null)}
+            onCreateFolder={(parentFolderId) => onCreateFolder(browsing.professionId, browsing.professionLabel, browsing.subtestCode, parentFolderId)}
+            onAddFile={(folderId) => onAddFile(folderId, browsing.subtestCode)}
+            onEditFolder={onEditFolder}
+            onEditFile={onEditFile}
+          />
+        </div>
+      </AdminCatalogLayout>
+    );
+  }
 
   return (
     <AdminCatalogLayout
@@ -115,22 +153,12 @@ export function CourseMaterialsMap({
                       <p className="text-xs text-admin-fg-muted">{section.folderCount} folders · {section.fileCount} files</p>
                       <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => onCreateFolder(selected.id, selected.label, section.subtestCode)}><FolderPlus className="mr-1 h-3.5 w-3.5" />New folder</Button>
-                        {section.folders[0] ? <Button size="sm" onClick={() => onAddFile(section.folders[0].canonicalFolderId, section.subtestCode)}><Plus className="mr-1 h-3.5 w-3.5" />Add file</Button> : null}
-                      </div>
-                      <div className="space-y-1.5">
-                        {section.folders.map((folder) => (
-                          <div key={folder.canonicalFolderId} className="flex items-center gap-2 rounded-admin border border-admin-border px-2.5 py-2 text-xs">
-                            <span className="min-w-0 flex-1 truncate font-medium text-admin-fg-strong">{folder.name}</span>
-                            <Button size="sm" variant="ghost" aria-label={`Edit ${folder.name}`} onClick={() => onEditFolder(folder.canonicalFolderId)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ))}
-                        {section.files.slice(0, 8).map((file) => (
-                          <div key={file.canonicalFileId} className="flex items-center gap-2 rounded-admin bg-admin-bg-subtle px-2.5 py-2 text-xs">
-                            <span className="min-w-0 flex-1 truncate font-medium text-admin-fg-strong">{file.title}<span className="ml-1 font-normal text-admin-fg-muted">· {file.status}</span></span>
-                            <Button size="sm" variant="ghost" aria-label={`Edit ${file.title}`} onClick={() => onEditFile(file.canonicalFileId)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ))}
-                        {section.files.length === 0 ? <p className="text-xs text-admin-fg-muted">No files assigned.</p> : null}
+                        <Button
+                          size="sm"
+                          onClick={() => setBrowsing({ professionId: selected.id, professionLabel: selected.label, subtestCode: section.subtestCode })}
+                        >
+                          Browse folders
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
