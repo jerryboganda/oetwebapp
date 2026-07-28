@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
+  ChevronDown,
+  ChevronUp,
   Coins,
   KeyRound,
   Lock,
@@ -20,6 +22,7 @@ import {
   User as UserIcon,
   UserLock,
   Video,
+  Zap,
 } from 'lucide-react';
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent } from '@/components/admin/ui/card';
@@ -31,6 +34,7 @@ import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { ManageAccessPanel } from '@/components/admin/user-access/manage-access-panel';
+import { QuickGrantModal } from '@/components/admin/user-access/quick-grant-modal';
 import type { GrantUserPackageInput, UserAccessSubscriptionRow } from '@/lib/api/user-access-packages';
 import {
   adjustAdminUserCredits,
@@ -210,9 +214,17 @@ export default function UserDetailPage() {
   const [access, setAccess] = useState<UserAccess | null>(null);
   const [originalAccess, setOriginalAccess] = useState<UserAccess | null>(null);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
+  const [isQuickGrantOpen, setIsQuickGrantOpen] = useState(false);
+  const [advancedAccessOpen, setAdvancedAccessOpen] = useState(false);
   const [securitySessions, setSecuritySessions] = useState<AdminSecuritySession[]>([]);
   const [securityDevices, setSecurityDevices] = useState<AdminSecurityDevice[]>([]);
   const [isLoadingSecurityDetail, setIsLoadingSecurityDetail] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#access') {
+      setAdvancedAccessOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -1265,28 +1277,47 @@ export default function UserDetailPage() {
 
                 {user.role === 'learner' ? (
                   <SettingsSection
+                    id="access"
                     title="Access & Allocation"
                     description="Packages, add-ons, module access, and content scope for this learner."
                     actions={
-                      access ? (
-                        <Button size="sm" onClick={handleSaveAccess} loading={isSavingAccess}>
-                          Save Access
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setIsQuickGrantOpen(true)}>
+                          <Zap className="h-4 w-4" />
+                          Quick Grant
                         </Button>
-                      ) : null
+                        {access && advancedAccessOpen ? (
+                          <Button size="sm" onClick={handleSaveAccess} loading={isSavingAccess}>
+                            Save Access
+                          </Button>
+                        ) : null}
+                      </div>
                     }
                   >
-                    {access ? (
-                      <ManageAccessPanel
-                        userId={user.id}
-                        value={access}
-                        onChange={setAccess}
-                        learnerProfessionId={user.professionId ?? user.profession ?? ''}
-                        learnerProfessionLabel={displayedProfession}
-                        disabled={isSavingAccess}
-                      />
-                    ) : (
-                      <p className="text-sm text-muted">Unable to load access details for this learner.</p>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAdvancedAccessOpen((current) => !current)}
+                      className="flex items-center gap-1 text-sm font-medium text-primary"
+                    >
+                      {advancedAccessOpen ? 'Hide advanced' : 'Advanced (full manual control)'}
+                      {advancedAccessOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                    {advancedAccessOpen ? (
+                      <div className="mt-3">
+                        {access ? (
+                          <ManageAccessPanel
+                            userId={user.id}
+                            value={access}
+                            onChange={setAccess}
+                            learnerProfessionId={user.professionId ?? user.profession ?? ''}
+                            learnerProfessionLabel={displayedProfession}
+                            disabled={isSavingAccess}
+                          />
+                        ) : (
+                          <p className="text-sm text-muted">Unable to load access details for this learner.</p>
+                        )}
+                      </div>
+                    ) : null}
                   </SettingsSection>
                 ) : null}
 
@@ -1524,6 +1555,22 @@ export default function UserDetailPage() {
           </div>
         ) : null}
       </Modal>
+
+      {user && user.role === 'learner' ? (
+        <QuickGrantModal
+          userId={user.id}
+          userLabel={user.name || user.email}
+          learnerProfessionId={user.professionId ?? user.profession ?? ''}
+          open={isQuickGrantOpen}
+          onClose={() => setIsQuickGrantOpen(false)}
+          onCustom={() => setAdvancedAccessOpen(true)}
+          onGranted={(saved) => {
+            setAccess(saved);
+            setOriginalAccess(saved);
+            setToast({ variant: 'success', message: `Access updated for ${user.email}.` });
+          }}
+        />
+      ) : null}
     </AdminSettingsLayout>
   );
 }

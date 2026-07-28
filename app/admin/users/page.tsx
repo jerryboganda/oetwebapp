@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   CheckCircle2,
@@ -17,9 +18,11 @@ import {
   UserMinus,
   Users,
   UserX,
+  Zap,
 } from 'lucide-react';
 import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AddUserModal } from '@/components/admin/user-access/add-user-modal';
+import { QuickGrantModal } from '@/components/admin/user-access/quick-grant-modal';
 import type { CreateAdminUserResult } from '@/lib/user-access';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -122,6 +125,7 @@ function uiRoleLabel(role: string) {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
   const [tab, setTab] = useState<HubTab>('all');
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
@@ -136,6 +140,7 @@ export default function UsersPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [quickGrantUser, setQuickGrantUser] = useState<AdminUserRow | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const { options: professionOptions } = useProfessions();
@@ -271,6 +276,22 @@ export default function UsersPage() {
           </span>
         ),
       },
+      {
+        key: 'actions',
+        header: '',
+        render: (user) =>
+          user.role === 'learner' ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setQuickGrantUser(user)}
+              aria-label={`Quick grant access for ${user.name}`}
+            >
+              <Zap className="h-4 w-4" />
+            </Button>
+          ) : null,
+      },
     ],
     [],
   );
@@ -305,7 +326,13 @@ export default function UsersPage() {
           <p className="mt-1 font-medium text-admin-fg-strong">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</p>
         </div>
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {user.role === 'learner' ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => setQuickGrantUser(user)}>
+            <Zap className="h-4 w-4" />
+            Quick Grant
+          </Button>
+        ) : null}
         <Link href={`/admin/users/${user.id}`} className="inline-flex items-center justify-center rounded-2xl border border-border/60 bg-surface px-4 py-2 text-sm font-semibold text-admin-fg-strong shadow-sm hover:bg-surface">
           View profile
         </Link>
@@ -559,6 +586,25 @@ export default function UsersPage() {
         onClose={() => setIsAddUserOpen(false)}
         onCreated={handleUserCreated}
       />
+
+      {quickGrantUser ? (
+        <QuickGrantModal
+          userId={quickGrantUser.id}
+          userLabel={quickGrantUser.name || quickGrantUser.email}
+          learnerProfessionId={quickGrantUser.profession ?? undefined}
+          open={Boolean(quickGrantUser)}
+          onClose={() => setQuickGrantUser(null)}
+          onCustom={() => {
+            const id = quickGrantUser.id;
+            setQuickGrantUser(null);
+            router.push(`/admin/users/${id}#access`);
+          }}
+          onGranted={() => {
+            setToast({ variant: 'success', message: `Access updated for ${quickGrantUser.email}.` });
+            setQuickGrantUser(null);
+          }}
+        />
+      ) : null}
     </AdminRouteWorkspace>
   );
 }
