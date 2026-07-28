@@ -813,6 +813,130 @@ public sealed class NotificationService(
         return MapSuppression(suppression);
     }
 
+    // Brevo hard-bounces/blocks/spam-complains against an address but this app never
+    // learned about it — NotificationSuppressions existed and was already checked by
+    // ResolveChannelComplianceAsync, but nothing ever populated it from Brevo, so
+    // permanently-dead addresses were re-emailed by every digest run forever, which is
+    // what drove the account's bounce rate to 12.99% (Brevo recommends <1%) and put
+    // domain sending reputation at risk for every learner on this domain.
+    private static readonly HashSet<string> BrevoSuppressingEvents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "hard_bounce", "blocked", "spam", "invalid_email", "unsubscribed"
+    };
+
+    public async Task<int> HandleBrevoWebhookEventsAsync(string rawPayload, string? providedSecret, CancellationToken ct)
+    {
+        var settings = await runtimeSettingsProvider.GetAsync(ct);
+        var configuredSecret = settings.Email.BrevoWebhookSecret;
+        if (string.IsNullOrWhiteSpace(configuredSecret) || !FixedTimeSecretEquals(configuredSecret, providedSecret ?? string.Empty))
+        {
+            throw ApiException.Unauthorized("invalid_webhook_secret", "The Brevo webhook secret is missing or incorrect.");
+        }
+
+        var events = ParseBrevoWebhookEvents(rawPayload);
+        var now = timeProvider.GetUtcNow();
+        var suppressedCount = 0;
+
+        foreach (var webhookEvent in events)
+        {
+            if (string.IsNullOrWhiteSpace(webhookEvent.Email) || string.IsNullOrWhiteSpace(webhookEvent.Event)
+                || !BrevoSuppressingEvents.Contains(webhookEvent.Event))
+            {
+                continue;
+            }
+
+            string normalizedEmail;
+            try
+            {
+                normalizedEmail = AuthEmailAddress.NormalizeOrThrow(webhookEvent.Email);
+            }
+            catch (ApiException)
+            {
+                continue;
+            }
+
+            var account = await db.ApplicationUserAccounts
+                .FirstOrDefaultAsync(a => a.NormalizedEmail == normalizedEmail && a.DeletedAt == null, ct);
+            if (account is null)
+            {
+                continue;
+            }
+
+            var alreadySuppressed = await db.NotificationSuppressions.AnyAsync(
+                s => s.AuthAccountId == account.Id && s.Channel == NotificationChannel.Email && s.IsActive && s.EventKey == null,
+                ct);
+            if (alreadySuppressed)
+            {
+                continue;
+            }
+
+            db.NotificationSuppressions.Add(new NotificationSuppression
+            {
+                Id = Guid.NewGuid(),
+                AuthAccountId = account.Id,
+                Channel = NotificationChannel.Email,
+                EventKey = null,
+                IsActive = true,
+                ReasonCode = $"brevo_{webhookEvent.Event.ToLowerInvariant()}",
+                Reason = string.IsNullOrWhiteSpace(webhookEvent.Reason)
+                    ? $"Brevo reported '{webhookEvent.Event}' for this address."
+                    : $"Brevo reported '{webhookEvent.Event}': {webhookEvent.Reason}",
+                CreatedByAdminId = "system:brevo-webhook",
+                CreatedByAdminName = "Brevo Webhook",
+                StartsAt = now,
+                ExpiresAt = null,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            suppressedCount++;
+        }
+
+        if (suppressedCount > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("Brevo webhook suppressed email delivery for {Count} account(s).", suppressedCount);
+        }
+
+        return suppressedCount;
+    }
+
+    private static bool FixedTimeSecretEquals(string configured, string provided)
+    {
+        var configuredBytes = System.Text.Encoding.UTF8.GetBytes(configured);
+        var providedBytes = System.Text.Encoding.UTF8.GetBytes(provided);
+        return configuredBytes.Length == providedBytes.Length
+            && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(configuredBytes, providedBytes);
+    }
+
+    private static List<BrevoWebhookEvent> ParseBrevoWebhookEvents(string rawPayload)
+    {
+        if (string.IsNullOrWhiteSpace(rawPayload))
+        {
+            return [];
+        }
+
+        try
+        {
+            var trimmed = rawPayload.TrimStart();
+            if (trimmed.StartsWith('['))
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<BrevoWebhookEvent>>(rawPayload) ?? [];
+            }
+
+            var single = System.Text.Json.JsonSerializer.Deserialize<BrevoWebhookEvent>(rawPayload);
+            return single is null ? [] : [single];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
+    }
+
+    private sealed record BrevoWebhookEvent(
+        [property: System.Text.Json.Serialization.JsonPropertyName("event")] string? Event,
+        [property: System.Text.Json.Serialization.JsonPropertyName("email")] string? Email,
+        [property: System.Text.Json.Serialization.JsonPropertyName("reason")] string? Reason);
+
     public Task<IReadOnlyList<AdminNotificationCatalogEntry>> GetAdminCatalogAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AdminNotificationCatalogEntry>>(NotificationCatalog.ToAdminEntries());
 

@@ -2263,6 +2263,7 @@ app.MapBillingSubscriptionEndpoints();
 app.MapBillingPromoCodeEndpoints();
 app.MapAiPackageCreditEndpoints();
 app.MapStripeWebhookEndpoints();
+app.MapBrevoWebhookEndpoints();
 // Video Library — learner catalog + attested playback, admin CRUD, Bunny webhook.
 app.MapVideoLibraryEndpoints();
 app.MapVideoProtectionEndpoints();
