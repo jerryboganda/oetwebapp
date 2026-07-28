@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
@@ -80,6 +81,7 @@ public partial class LearnerService(
     IInvoicePdfService? invoicePdfService = null,
     IPlanContentAvailabilityService? planContentAvailability = null,
     IManualPaymentService? manualPaymentService = null,
+    IPasswordHasher<ApplicationUserAccount>? passwordHasher = null,
     ILogger<LearnerService>? logger = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
@@ -701,7 +703,40 @@ public partial class LearnerService(
 
             if (request.Values.TryGetValue("email", out var email))
             {
-                user.Email = ReadString(email) ?? user.Email;
+                var newEmail = ReadString(email);
+                if (!string.IsNullOrWhiteSpace(newEmail) && !string.Equals(newEmail, user.Email, StringComparison.OrdinalIgnoreCase))
+                {
+                    // H1 (security): changing the sign-in/billing email is a sensitive action —
+                    // require re-proving the account password, mirroring AuthService.DeleteAccountAsync,
+                    // so a hijacked session token alone can't redirect billing/receipt email elsewhere.
+                    // Other profile fields (name, phone, profession, etc.) stay password-free.
+                    if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+                    {
+                        throw ApiException.Validation(
+                            "current_password_required",
+                            "Enter your current password to confirm this email change.",
+                            [new ApiFieldError("currentPassword", "current_password_required", "Enter your current password to confirm this email change.")]);
+                    }
+
+                    if (passwordHasher is null)
+                    {
+                        throw ApiException.ServiceUnavailable(
+                            "password_hasher_unavailable",
+                            "Unable to verify your password right now. Please try again shortly.");
+                    }
+
+                    var account = string.IsNullOrEmpty(user.AuthAccountId)
+                        ? null
+                        : await db.ApplicationUserAccounts.FirstOrDefaultAsync(x => x.Id == user.AuthAccountId, cancellationToken);
+
+                    if (account is null ||
+                        passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed)
+                    {
+                        throw ApiException.Unauthorized("invalid_current_password", "The current password you entered is incorrect.");
+                    }
+
+                    user.Email = newEmail;
+                }
             }
 
             if (request.Values.TryGetValue("professionId", out var professionId))

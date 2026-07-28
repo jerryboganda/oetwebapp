@@ -20,7 +20,12 @@ public record PatchGoalsRequest(
     string? TargetExamMode = null,
     string? ConfidenceLevel = null);
 
-public record PatchSectionRequest(Dictionary<string, object?> Values);
+/// <summary>
+/// <paramref name="CurrentPassword"/> is only required by the "profile" section handler
+/// (see LearnerService.PatchSettingsSectionAsync) when the patch actually changes the
+/// account's email address; every other section/field ignores it.
+/// </summary>
+public record PatchSectionRequest(Dictionary<string, object?> Values, string? CurrentPassword = null);
 
 /// <summary>
 /// Sets or clears the current learner's avatar. <paramref name="AvatarUrl"/> must be a

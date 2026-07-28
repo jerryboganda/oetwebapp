@@ -766,12 +766,19 @@ function SettingsSectionForm({
   data,
   onChange,
   professionLocked = false,
+  originalEmail,
+  emailPassword = '',
+  onEmailPasswordChange,
 }: {
   accent: LearnerSurfaceAccent;
   data: SettingsSectionData;
   onChange: (key: string, value: string | boolean) => void;
   /** Set once the backend has rejected a change with `profession_locked`. */
   professionLocked?: boolean;
+  /** The account's currently-stored email (pre-edit), used to detect a real change. */
+  originalEmail?: string;
+  emailPassword?: string;
+  onEmailPasswordChange?: (value: string) => void;
 }) {
   const { options: professionOptions } = useProfessions();
   const config = SECTION_CONFIG[data.section];
@@ -790,6 +797,14 @@ function SettingsSectionForm({
             const selectOptions: SelectOption[] = isProfessionField
               ? professionSelectOptions(professionOptions, String(value))
               : (field.options ?? []);
+            // H1 (security): an email change is re-authenticated with the current
+            // password (see LearnerService.PatchSettingsSectionAsync) — reveal the
+            // confirmation field only once the learner has actually edited it away
+            // from the stored value, so every other profile field stays password-free.
+            const isEmailField = field.key === 'email';
+            const emailChanged = isEmailField
+              && originalEmail !== undefined
+              && String(value).trim().toLowerCase() !== originalEmail.trim().toLowerCase();
 
             return (
               <div key={field.key} className={cn('transition-colors duration-300 hover:bg-background-light', i !== config.fields.length - 1 && 'border-b border-border')}>
@@ -842,6 +857,27 @@ function SettingsSectionForm({
                     )}
                   </div>
                 </div>
+                {emailChanged ? (
+                  <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                      <label htmlFor="email-current-password" className="block text-sm font-bold text-amber-900">
+                        Confirm your current password
+                      </label>
+                      <p className="mt-1 text-xs font-medium text-amber-800/80">
+                        For your security, changing your email requires your current password.
+                      </p>
+                      <input
+                        id="email-current-password"
+                        type="password"
+                        autoComplete="current-password"
+                        value={emailPassword}
+                        onChange={(event) => onEmailPasswordChange?.(event.target.value)}
+                        placeholder="Current password"
+                        className={cn(inputClasses(accent), 'mt-3 h-12 font-bold')}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 {isLocked ? (
                   <div id={`${field.key}-lock`} className="px-6 pb-6 sm:px-8 sm:pb-8">
                     <ProfessionLockNotice />
@@ -1214,6 +1250,9 @@ export default function LearnerSettingsSectionPage() {
   // Sticky for the page session: the lock is only discoverable from a rejected save, and
   // it can never lift on its own — a purchase is not undone.
   const [professionLocked, setProfessionLocked] = useState(false);
+  // H1 (security): only used to confirm a profile email change — see handleSave and
+  // LearnerService.PatchSettingsSectionAsync. Cleared on a successful save.
+  const [emailPassword, setEmailPassword] = useState('');
   const [feedback, setFeedback] = useState<{
     key: string;
     error: string | null;
@@ -1222,14 +1261,19 @@ export default function LearnerSettingsSectionPage() {
   const data = draft?.key === draftKey ? draft.data : sectionQuery.data ?? null;
   const actionError = feedback?.key === draftKey ? feedback.error : null;
   const successMessage = feedback?.key === draftKey ? feedback.successMessage : null;
+  const storedEmail = section === 'profile' ? String(sectionQuery.data?.values.email ?? '') : '';
+  const draftEmail = section === 'profile' && data ? String(data.values.email ?? '') : '';
+  const emailChangeRequiresPassword = section === 'profile'
+    && draftEmail.trim().toLowerCase() !== storedEmail.trim().toLowerCase();
   const updateMutation = useMutation({
-    mutationFn: ({ targetSection, values }: {
+    mutationFn: ({ targetSection, values, currentPassword }: {
       userId: string;
       draftKey: string;
       targetSection: EditableSettingsSectionId;
       values: SettingsSectionData['values'];
+      currentPassword?: string;
     }) =>
-      updateSettingsSection(targetSection, values),
+      updateSettingsSection(targetSection, values, currentPassword),
     onSuccess: async (response, variables) => {
       const nextData = {
         section: variables.targetSection,
@@ -1240,6 +1284,7 @@ export default function LearnerSettingsSectionPage() {
         nextData,
       );
       setDraft((current) => current?.key === variables.draftKey ? null : current);
+      setEmailPassword('');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.settings.home(variables.userId) }),
         queryClient.invalidateQueries({
@@ -1292,6 +1337,7 @@ export default function LearnerSettingsSectionPage() {
         draftKey: activeDraftKey,
         targetSection: section as EditableSettingsSectionId,
         values: data.values,
+        currentPassword: emailChangeRequiresPassword ? emailPassword : undefined,
       });
       setFeedback({ key: activeDraftKey, error: null, successMessage: 'Settings saved.' });
     } catch (err) {
@@ -1419,6 +1465,9 @@ export default function LearnerSettingsSectionPage() {
                 data={data}
                 onChange={handleChange}
                 professionLocked={professionLocked}
+                originalEmail={section === 'profile' ? storedEmail : undefined}
+                emailPassword={emailPassword}
+                onEmailPasswordChange={setEmailPassword}
               />
 
               <div className="rounded-[2rem] border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">

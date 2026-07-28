@@ -1646,10 +1646,15 @@ export interface UpdateSettingsSectionResponse {
   [key: string]: unknown;
 }
 
-export async function updateSettingsSection(section: 'profile' | 'goals' | 'notifications' | 'privacy' | 'accessibility' | 'audio' | 'study', values: Record<string, unknown>): Promise<UpdateSettingsSectionResponse> {
+/**
+ * `currentPassword` is only required by the backend when `section === 'profile'` and
+ * `values.email` differs from the account's current email (H1 security gate — see
+ * LearnerService.PatchSettingsSectionAsync). Every other section/field ignores it.
+ */
+export async function updateSettingsSection(section: 'profile' | 'goals' | 'notifications' | 'privacy' | 'accessibility' | 'audio' | 'study', values: Record<string, unknown>, currentPassword?: string): Promise<UpdateSettingsSectionResponse> {
   return apiRequest<UpdateSettingsSectionResponse>(`/v1/settings/${section}`, {
     method: 'PATCH',
-    body: JSON.stringify({ values }),
+    body: JSON.stringify(currentPassword ? { values, currentPassword } : { values }),
   });
 }
 
