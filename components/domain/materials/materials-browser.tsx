@@ -52,15 +52,18 @@ async function downloadFolderAsZip(folder: LearnerMaterialFolderDto): Promise<vo
 }
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
-type Subtest = (typeof SUBTESTS)[number];
+export type Subtest = (typeof SUBTESTS)[number];
 
 /**
  * Each OET subtest owns a signature colour + icon so the library reads at a
  * glance — a learner spots "Listening" by its blue headphones before reading a
  * single label. Folders whose name doesn't map to a subtest fall back to the
  * app's violet so nested folders stay cohesive.
+ *
+ * Exported so the admin Course Materials drill-down
+ * (materials-course-browser.tsx) can reuse the same visual language.
  */
-interface SectionSkin {
+export interface SectionSkin {
   Icon: LucideIcon;
   tile: string;   // gradient + foreground for the icon tile
   bar: string;    // left accent bar
@@ -68,7 +71,7 @@ interface SectionSkin {
   glow: string;   // hover background wash
 }
 
-const SECTION_SKINS: Record<Subtest, SectionSkin> = {
+export const SECTION_SKINS: Record<Subtest, SectionSkin> = {
   listening: {
     Icon: Headphones,
     tile: 'from-blue-500/20 to-blue-500/5 text-blue-600 dark:text-blue-300',
@@ -91,7 +94,7 @@ const SECTION_SKINS: Record<Subtest, SectionSkin> = {
   },
 };
 
-const DEFAULT_SKIN: SectionSkin = {
+export const DEFAULT_SKIN: SectionSkin = {
   Icon: Folder,
   tile: 'from-primary/20 to-primary/5 text-primary',
   bar: 'bg-primary', ring: 'hover:border-primary/40', glow: 'hover:bg-primary/[0.03]',
