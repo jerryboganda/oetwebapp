@@ -178,6 +178,7 @@ const PUBLIC_PATHS = new Set([
   '/device/verify',
   '/auth/callback',
   '/get-app',
+  '/get-app/android-install',
   '/.well-known/apple-app-site-association',
   '/.well-known/assetlinks.json',
 ]);
