@@ -106,6 +106,21 @@ public static class SecurityEventKinds
     public const string AdminAccountReactivated = "admin.account_reactivated";
     public const string AdminPlaybackBlocked = "admin.playback_blocked";
 
+    // Mirrors OetLearner.Api.Domain.VideoProtectionKinds 1:1 (same suffixes,
+    // "video." prefix) so capture/tamper telemetry — already written to the
+    // dedicated VideoProtectionEvents table by VideoProtectionEventService —
+    // is ALSO visible in the general admin security-events feed for ad-hoc
+    // browsing/filtering, alongside auth/session/device/risk/admin events.
+    public const string VideoProtectionEngaged = "video.protection_engaged";
+    public const string VideoProtectionUnavailable = "video.protection_unavailable";
+    public const string VideoCaptureDetected = "video.capture_detected";
+    public const string VideoScreenshotDetected = "video.screenshot_detected";
+    public const string VideoWatermarkTampered = "video.watermark_tampered";
+    public const string VideoDevtoolsSuspected = "video.devtools_suspected";
+    public const string VideoVisibilityHidden = "video.visibility_hidden";
+    public const string VideoFocusLost = "video.focus_lost";
+    public const string VideoIntegritySignal = "video.integrity_signal";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         AuthSignInSucceeded, AuthSignInFailed, AuthSignOut, AuthMfaFailed,
@@ -115,6 +130,8 @@ public static class SecurityEventKinds
         PlaybackSessionStarted, PlaybackSessionsRevoked,
         RiskCountryChanged, RiskImpossibleTravel, RiskStepUpRequired, RiskSignInBlocked,
         AdminSessionRevoked, AdminDeviceReset, AdminAccountSuspended, AdminAccountReactivated, AdminPlaybackBlocked,
+        VideoProtectionEngaged, VideoProtectionUnavailable, VideoCaptureDetected, VideoScreenshotDetected,
+        VideoWatermarkTampered, VideoDevtoolsSuspected, VideoVisibilityHidden, VideoFocusLost, VideoIntegritySignal,
     };
 
     public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)
@@ -129,6 +146,11 @@ public static class SecurityEventKinds
             or RiskStepUpRequired => "warning",
         AuthRefreshReuseDetected or AuthRefreshDeviceMismatch or RiskImpossibleTravel or RiskSignInBlocked
             or AdminAccountSuspended or AdminPlaybackBlocked => "critical",
+        // Matches VideoProtectionKinds.DefaultSeverity exactly — kept in sync
+        // by convention, not by shared code, since the two whitelists live in
+        // different domains (SecurityEvent vs VideoProtectionEvent).
+        VideoCaptureDetected or VideoScreenshotDetected or VideoWatermarkTampered or VideoIntegritySignal => "critical",
+        VideoDevtoolsSuspected => "warning",
         _ => "info",
     };
 }

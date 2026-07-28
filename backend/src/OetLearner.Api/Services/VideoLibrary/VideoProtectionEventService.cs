@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.VideoLibrary;
@@ -26,6 +27,7 @@ public sealed class VideoProtectionEventService(
     LearnerDbContext db,
     IRuntimeSettingsProvider settingsProvider,
     IVideoPlaybackSessionService playbackSessions,
+    ISecurityEventLogger securityEventLogger,
     ILogger<VideoProtectionEventService> logger)
 {
     private const int BatchMax = 20;
@@ -35,6 +37,27 @@ public sealed class VideoProtectionEventService(
     {
         VideoProtectionKinds.CaptureDetected,
         VideoProtectionKinds.ScreenshotDetected,
+    };
+
+    /// <summary>Maps <see cref="VideoProtectionKinds"/> onto the matching
+    /// <see cref="SecurityEventKinds"/> "video.*" constant (third write path,
+    /// see class doc) — a 1:1 switch rather than string concatenation so a
+    /// typo/rename in either whitelist is a compile error, not a silent
+    /// feed gap. <paramref name="kind"/> is always one of
+    /// <see cref="VideoProtectionKinds"/>.All by the time this is called
+    /// (validated in the loop below), so the fallback arm is unreachable.</summary>
+    private static string ToSecurityEventKind(string kind) => kind switch
+    {
+        VideoProtectionKinds.ProtectionEngaged => SecurityEventKinds.VideoProtectionEngaged,
+        VideoProtectionKinds.ProtectionUnavailable => SecurityEventKinds.VideoProtectionUnavailable,
+        VideoProtectionKinds.CaptureDetected => SecurityEventKinds.VideoCaptureDetected,
+        VideoProtectionKinds.ScreenshotDetected => SecurityEventKinds.VideoScreenshotDetected,
+        VideoProtectionKinds.WatermarkTampered => SecurityEventKinds.VideoWatermarkTampered,
+        VideoProtectionKinds.DevtoolsSuspected => SecurityEventKinds.VideoDevtoolsSuspected,
+        VideoProtectionKinds.VisibilityHidden => SecurityEventKinds.VideoVisibilityHidden,
+        VideoProtectionKinds.FocusLost => SecurityEventKinds.VideoFocusLost,
+        VideoProtectionKinds.IntegritySignal => SecurityEventKinds.VideoIntegritySignal,
+        _ => $"video.{kind}",
     };
 
     public async Task<object> RecordAsync(
@@ -58,6 +81,16 @@ public sealed class VideoProtectionEventService(
         var accepted = 0;
         var dropped = 0;
         string? sessionToRevoke = null;
+
+        // userId here is LearnerUser.Id, not the auth-account id SecurityEvent
+        // keys on elsewhere (auth.* / session.* / playback.* events) — resolve
+        // it once up front (mirrors VideoPlaybackSessionService.IssueAsync) so
+        // the admin security feed can join this telemetry to the same account
+        // as sign-ins, session revocations, and playback activity.
+        var authAccountId = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.AuthAccountId)
+            .FirstOrDefaultAsync(ct);
 
         foreach (var ev in events)
         {
@@ -115,6 +148,22 @@ public sealed class VideoProtectionEventService(
                     OccurredAt = now,
                 });
             }
+
+            // Third write path (additive, alongside VideoProtectionEvents above
+            // and the AuditEvents mirror): every accepted kind, not just the
+            // AuditWorthy subset, so admins can browse/filter this telemetry in
+            // the general security-events feed the same way they already do
+            // for auth/session/device/risk events. Uses its own DB scope (see
+            // SecurityEventLogger) so a logging failure here can never break
+            // event ingestion. Does not affect AdminAlertService's existing
+            // capture_protection_triggered alert, which reads VideoProtectionEvents directly.
+            await securityEventLogger.TryLogAsync(
+                authAccountId,
+                ToSecurityEventKind(ev.Kind),
+                deviceId: null,
+                details: new { kind = ev.Kind, videoId = ev.VideoId, sessionId = ev.SessionId, platform },
+                severity: severity,
+                cancellationToken: ct);
 
             if (settings.VideoProtection.RevokeOnCaptureDetected
                 && RevocableKinds.Contains(ev.Kind)
