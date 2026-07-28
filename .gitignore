@@ -257,3 +257,6 @@ scripts/materials/state/
 
 # CodeGraph index (per-environment artifact — never commit)
 .codegraph/
+
+# Serena local project index/cache/memories (per-environment artifact — never commit)
+.serena/
