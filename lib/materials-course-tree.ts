@@ -26,8 +26,8 @@ export function buildChildrenByParent(
   return map;
 }
 
-export function buildFilesByFolder(files: MaterialCourseMapItem[]): Map<string, MaterialCourseMapItem[]> {
-  const map = new Map<string, MaterialCourseMapItem[]>();
+export function buildFilesByFolder(files: MaterialCourseMapItem[]): Map<string | null, MaterialCourseMapItem[]> {
+  const map = new Map<string | null, MaterialCourseMapItem[]>();
   for (const file of files) {
     const bucket = map.get(file.folderId);
     if (bucket) bucket.push(file);
@@ -44,7 +44,7 @@ export function buildFoldersById(folders: MaterialCourseMapFolder[]): Map<string
 export function countDescendants(
   folderId: string,
   childrenByParent: Map<string | null, MaterialCourseMapFolder[]>,
-  filesByFolder: Map<string, MaterialCourseMapItem[]>,
+  filesByFolder: Map<string | null, MaterialCourseMapItem[]>,
 ): FolderCounts {
   let folderCount = 0;
   let fileCount = filesByFolder.get(folderId)?.length ?? 0;
