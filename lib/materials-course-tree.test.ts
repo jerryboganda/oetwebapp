@@ -5,6 +5,7 @@ import {
   buildFoldersById,
   buildBreadcrumbTrail,
   countDescendants,
+  resolveVirtualRoot,
 } from './materials-course-tree';
 import type { MaterialCourseMapFolder, MaterialCourseMapItem } from './materials-api';
 
@@ -122,5 +123,74 @@ describe('buildBreadcrumbTrail', () => {
     const folders = [folder({ canonicalFolderId: 'a', name: 'Orphaned', parentFolderId: 'not-in-this-section' })];
     const foldersById = buildFoldersById(folders);
     expect(buildBreadcrumbTrail('a', foldersById).map((f) => f.name)).toEqual(['Orphaned']);
+  });
+
+  it('excludes everything at or above stopAtId, e.g. a virtual root', () => {
+    const folders = [
+      folder({ canonicalFolderId: 'a', name: 'Jahshan' }),
+      folder({ canonicalFolderId: 'b', name: 'Listening', parentFolderId: 'a' }),
+      folder({ canonicalFolderId: 'c', name: 'Audio', parentFolderId: 'b' }),
+    ];
+    const foldersById = buildFoldersById(folders);
+    expect(buildBreadcrumbTrail('c', foldersById, 'a').map((f) => f.name)).toEqual(['Listening', 'Audio']);
+    expect(buildBreadcrumbTrail('a', foldersById, 'a')).toEqual([]);
+  });
+});
+
+describe('resolveVirtualRoot', () => {
+  it('unwraps a single shared wrapper folder down to its real top-level folders (Listening case)', () => {
+    // Matches production: "Listening" wrapper -> Benchmark Exams / Extra Listening Exams / Jahshan.
+    const folders = [
+      folder({ canonicalFolderId: 'listening', name: 'Listening' }),
+      folder({ canonicalFolderId: 'benchmark', name: 'Benchmark Exams', parentFolderId: 'listening' }),
+      folder({ canonicalFolderId: 'extra', name: 'Extra Listening Exams', parentFolderId: 'listening' }),
+      folder({ canonicalFolderId: 'jahshan', name: 'Jahshan', parentFolderId: 'listening' }),
+    ];
+    const childrenByParent = buildChildrenByParent(folders);
+    const filesByFolder = buildFilesByFolder([]);
+    expect(resolveVirtualRoot(childrenByParent, filesByFolder)).toBe('listening');
+  });
+
+  it('unwraps a single profession wrapper down to the level with mixed folders and files (Speaking/Medicine case)', () => {
+    // Matches production: "Speaking" (excluded from this section already) -> "Medicine" (only
+    // profession-scoped folder left, orphaned to root) -> "Official Samples" + 3 direct files.
+    const folders = [
+      folder({ canonicalFolderId: 'medicine', name: 'Medicine' }),
+      folder({ canonicalFolderId: 'samples', name: 'Official Samples', parentFolderId: 'medicine' }),
+    ];
+    const files = [
+      file({ canonicalFileId: 'f1', folderId: 'medicine', title: 'Sample 1' }),
+      file({ canonicalFileId: 'f2', folderId: 'medicine', title: 'Sample 2' }),
+    ];
+    const childrenByParent = buildChildrenByParent(folders);
+    const filesByFolder = buildFilesByFolder(files);
+    expect(resolveVirtualRoot(childrenByParent, filesByFolder)).toBe('medicine');
+  });
+
+  it('does not unwrap when the root already branches into multiple folders', () => {
+    const folders = [
+      folder({ canonicalFolderId: 'a', name: 'Benchmark Exams' }),
+      folder({ canonicalFolderId: 'b', name: 'Jahshan' }),
+    ];
+    const childrenByParent = buildChildrenByParent(folders);
+    const filesByFolder = buildFilesByFolder([]);
+    expect(resolveVirtualRoot(childrenByParent, filesByFolder)).toBeNull();
+  });
+
+  it('returns null for a section with no folders yet', () => {
+    const childrenByParent = buildChildrenByParent([]);
+    const filesByFolder = buildFilesByFolder([]);
+    expect(resolveVirtualRoot(childrenByParent, filesByFolder)).toBeNull();
+  });
+
+  it('stops unwrapping the moment a single-child level also has its own files', () => {
+    const folders = [
+      folder({ canonicalFolderId: 'a', name: 'Wrapper' }),
+      folder({ canonicalFolderId: 'b', name: 'Child', parentFolderId: 'a' }),
+    ];
+    const files = [file({ canonicalFileId: 'f1', folderId: 'a', title: 'Loose file' })];
+    const childrenByParent = buildChildrenByParent(folders);
+    const filesByFolder = buildFilesByFolder(files);
+    expect(resolveVirtualRoot(childrenByParent, filesByFolder)).toBe('a');
   });
 });

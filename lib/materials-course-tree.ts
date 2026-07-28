@@ -63,15 +63,21 @@ export function countDescendants(
  * itself — callers prepend their own section title as the first crumb). The
  * walk stops (rather than throwing) if an ancestor isn't in `foldersById` —
  * the same "outside this scoped set" case `buildChildrenByParent` handles.
+ *
+ * `stopAtId` (default null — the true section root) also ends the walk early
+ * without including that folder in the trail. Callers pass `resolveVirtualRoot`'s
+ * result here so a wrapper folder unwrapped away by that function never
+ * reappears as a redundant breadcrumb crumb.
  */
 export function buildBreadcrumbTrail(
   folderId: string | null,
   foldersById: Map<string, MaterialCourseMapFolder>,
+  stopAtId: string | null = null,
 ): MaterialCourseMapFolder[] {
   const trail: MaterialCourseMapFolder[] = [];
   let currentId = folderId;
   const seen = new Set<string>();
-  while (currentId) {
+  while (currentId && currentId !== stopAtId) {
     const current = foldersById.get(currentId);
     if (!current || seen.has(currentId)) break;
     seen.add(currentId);
@@ -79,4 +85,33 @@ export function buildBreadcrumbTrail(
     currentId = current.parentFolderId ?? null;
   }
   return trail;
+}
+
+/**
+ * A subtest section is conceptually rooted at a single "Listening" /
+ * "Reading" / "Writing" / "Speaking" wrapper folder (and, for the
+ * profession-specific subtests, a second per-profession wrapper beneath
+ * that) — but those wrapper folders exist purely to anchor the section's
+ * scope, not as content the admin should have to click through. Repeatedly
+ * unwraps any level that holds exactly one child folder and no files of its
+ * own, landing on the first level that actually branches (multiple folders)
+ * or holds content (any files) — that's what the drill-down browser should
+ * treat as its root, matching how the same data already reads one level
+ * higher for candidates (tap "Listening" once, see the real folders).
+ */
+export function resolveVirtualRoot(
+  childrenByParent: Map<string | null, MaterialCourseMapFolder[]>,
+  filesByFolder: Map<string | null, MaterialCourseMapItem[]>,
+): string | null {
+  let current: string | null = null;
+  const seen = new Set<string>();
+  for (;;) {
+    const children: MaterialCourseMapFolder[] = childrenByParent.get(current) ?? [];
+    const files: MaterialCourseMapItem[] = filesByFolder.get(current) ?? [];
+    if (children.length !== 1 || files.length > 0) return current;
+    const only: MaterialCourseMapFolder = children[0];
+    if (seen.has(only.canonicalFolderId)) return current;
+    seen.add(only.canonicalFolderId);
+    current = only.canonicalFolderId;
+  }
 }

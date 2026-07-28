@@ -8,6 +8,7 @@ import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { adminGetMaterialCourseMap, type MaterialCourseMap } from '@/lib/materials-api';
+import { buildChildrenByParent, buildFilesByFolder, resolveVirtualRoot } from '@/lib/materials-course-tree';
 import { MaterialsCourseBrowser } from './materials-course-browser';
 
 interface CourseMaterialsMapProps {
@@ -54,7 +55,7 @@ export function CourseMaterialsMap({
         title={browseTitle}
         eyebrow="CMS"
         description={`${browsingSection.sharing === 'shared' ? 'Shared canonical' : 'Profession-specific'} · ${browsingSection.folderCount} folders · ${browsingSection.fileCount} files`}
-        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Content', href: '/admin/content' }, { label: 'Course Materials' }]}
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Content', href: '/admin/content' }, { label: 'Course Materials' }, { label: browsing.professionLabel }]}
         hideViewModeToggle
       >
         <div className="col-span-full">
@@ -143,26 +144,65 @@ export function CourseMaterialsMap({
 
             {selected ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {selected.sections.map((section) => (
-                  <Card key={section.subtestCode}>
-                    <CardContent className="space-y-3 p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="font-bold capitalize text-admin-fg-strong">{section.subtestCode}</h2>
-                        <Badge variant={section.sharing === 'shared' ? 'success' : 'secondary'}>{section.sharing === 'shared' ? 'Shared canonical' : 'Profession-specific'}</Badge>
-                      </div>
-                      <p className="text-xs text-admin-fg-muted">{section.folderCount} folders · {section.fileCount} files</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" onClick={() => onCreateFolder(selected.id, selected.label, section.subtestCode)}><FolderPlus className="mr-1 h-3.5 w-3.5" />New folder</Button>
-                        <Button
-                          size="sm"
-                          onClick={() => setBrowsing({ professionId: selected.id, professionLabel: selected.label, subtestCode: section.subtestCode })}
-                        >
-                          Browse folders
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {selected.sections.map((section) => {
+                  // The real content for a subtest sits one (or two) levels beneath its
+                  // "Listening"/"Reading"/"Writing"/"Speaking" wrapper folder — Add folder /
+                  // Add file from the card should target that real level, not the wrapper
+                  // itself and not a stray new database-root folder.
+                  const virtualRootId = resolveVirtualRoot(
+                    buildChildrenByParent(section.folders),
+                    buildFilesByFolder(section.files),
+                  );
+                  const openBrowser = () => setBrowsing({ professionId: selected.id, professionLabel: selected.label, subtestCode: section.subtestCode });
+                  return (
+                    <Card
+                      key={section.subtestCode}
+                      interactive
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${section.subtestCode}`}
+                      onClick={openBrowser}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openBrowser();
+                        }
+                      }}
+                    >
+                      <CardContent className="space-y-3 p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <h2 className="font-bold capitalize text-admin-fg-strong">{section.subtestCode}</h2>
+                          <Badge variant={section.sharing === 'shared' ? 'success' : 'secondary'}>{section.sharing === 'shared' ? 'Shared canonical' : 'Profession-specific'}</Badge>
+                        </div>
+                        <p className="text-xs text-admin-fg-muted">{section.folderCount} folders · {section.fileCount} files</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onCreateFolder(selected.id, selected.label, section.subtestCode, virtualRootId);
+                            }}
+                          >
+                            <FolderPlus className="mr-1 h-3.5 w-3.5" />
+                            Add folder
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={virtualRootId === null}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (virtualRootId) onAddFile(virtualRootId, section.subtestCode);
+                            }}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            Add file
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             ) : null}
           </>

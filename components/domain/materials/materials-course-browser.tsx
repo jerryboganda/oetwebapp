@@ -25,6 +25,7 @@ import {
   buildFilesByFolder,
   buildFoldersById,
   countDescendants,
+  resolveVirtualRoot,
 } from '@/lib/materials-course-tree';
 import { DEFAULT_SKIN, SECTION_SKINS, type Subtest } from './materials-browser';
 
@@ -62,14 +63,24 @@ export function MaterialsCourseBrowser({
   onEditFolder,
   onEditFile,
 }: MaterialsCourseBrowserProps) {
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-
   const foldersById = useMemo(() => buildFoldersById(section.folders), [section.folders]);
   const childrenByParent = useMemo(() => buildChildrenByParent(section.folders), [section.folders]);
   const filesByFolder = useMemo(() => buildFilesByFolder(section.files), [section.files]);
+  // Production content nests real folders one (or two) levels beneath a
+  // "Listening"/"Reading"/"Writing"/"Speaking" wrapper folder that exists
+  // purely to anchor the section's scope — never real content the admin
+  // should have to click through. This unwraps down to wherever the real
+  // folders/files actually start, so "Reading" opens straight onto Jahshan /
+  // Benchmark / etc. instead of a single redundant "Reading" folder card.
+  const virtualRootId = useMemo(
+    () => resolveVirtualRoot(childrenByParent, filesByFolder),
+    [childrenByParent, filesByFolder],
+  );
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(virtualRootId);
+
   const trail = useMemo(
-    () => buildBreadcrumbTrail(currentFolderId, foldersById),
-    [currentFolderId, foldersById],
+    () => buildBreadcrumbTrail(currentFolderId, foldersById, virtualRootId),
+    [currentFolderId, foldersById, virtualRootId],
   );
 
   const childFolders = childrenByParent.get(currentFolderId) ?? [];
@@ -106,8 +117,8 @@ export function MaterialsCourseBrowser({
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm">
           <button
             type="button"
-            className={currentFolderId === null ? 'font-semibold text-admin-fg-strong' : 'font-semibold text-admin-fg-muted hover:text-admin-fg-strong'}
-            onClick={() => setCurrentFolderId(null)}
+            className={currentFolderId === virtualRootId ? 'font-semibold text-admin-fg-strong' : 'font-semibold text-admin-fg-muted hover:text-admin-fg-strong'}
+            onClick={() => setCurrentFolderId(virtualRootId)}
           >
             {title}
           </button>
