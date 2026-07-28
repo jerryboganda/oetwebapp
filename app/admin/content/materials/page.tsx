@@ -637,20 +637,32 @@ export default function AdminMaterialsPage() {
     ));
   }
 
-  function openCourseCreateFolder(professionId: string | null, professionLabel: string, subtestCode: string | null) {
+  function openCourseCreateFolder(
+    professionId: string | null,
+    professionLabel: string,
+    subtestCode: string | null,
+    parentFolderId: string | null = null,
+  ) {
     const isGeneralEnglish = professionId === null;
     const isShared = subtestCode === 'listening' || subtestCode === 'reading';
     const sectionLabel = subtestCode ? `${subtestCode[0].toUpperCase()}${subtestCode.slice(1)}` : '';
+    // Only auto-name/auto-classify when creating a section's top-level
+    // canonical folder. A subfolder created from inside the drill-down
+    // browser (parentFolderId set) gets a blank name and inherits its
+    // parent's scope — auto-filling "Listening" here would recreate the
+    // exact duplicate-name confusion this feature exists to fix.
+    const isTopLevel = parentFolderId === null;
     setEditingFolder(null);
-    setParentFolderIdForNew(null);
+    setParentFolderIdForNew(parentFolderId);
     setFolderForm({
       ...defaultFolderForm,
-      name: isGeneralEnglish ? 'General English' : isShared ? sectionLabel : `${professionLabel} ${sectionLabel}`,
+      name: isTopLevel
+        ? (isGeneralEnglish ? 'General English' : isShared ? sectionLabel : `${professionLabel} ${sectionLabel}`)
+        : '',
       subtestCode: subtestCode ?? '',
-      scopeKind: isGeneralEnglish ? 'general_english' : isShared ? 'shared' : 'profession',
-      professionId: !isGeneralEnglish && !isShared ? professionId ?? '' : '',
+      scopeKind: isTopLevel ? (isGeneralEnglish ? 'general_english' : isShared ? 'shared' : 'profession') : '',
+      professionId: isTopLevel && !isGeneralEnglish && !isShared ? professionId ?? '' : '',
     });
-    setViewMode('tree');
     setFolderModalOpen(true);
   }
 
@@ -662,7 +674,6 @@ export default function AdminMaterialsPage() {
       return;
     }
     setSelectedFolder(folder);
-    setViewMode('tree');
     openEditFolder(folder);
   }
 
@@ -678,7 +689,6 @@ export default function AdminMaterialsPage() {
     setFileForm({ ...defaultFileForm, folderId, subtestCode });
     setUploadFile(null);
     setUploadProgress(0);
-    setViewMode('tree');
     setFileModalOpen(true);
   }
 
@@ -690,18 +700,175 @@ export default function AdminMaterialsPage() {
       return;
     }
     setSelectedFolder(file.folderId ? findFolder(tree, file.folderId) : null);
-    setViewMode('tree');
     openEditFile(file);
   }
 
 
-  if (viewMode === 'course') return <CourseMaterialsMap
-    onAdvanced={() => setViewMode('tree')}
-    onCreateFolder={openCourseCreateFolder}
-    onAddFile={openCourseAddFile}
-    onEditFolder={openCourseEditFolder}
-    onEditFile={openCourseEditFile}
-  />;
+  // Folder/file/audience modals and the toast render regardless of
+  // viewMode, so editing from Course Materials (or the new Browse view)
+  // opens the modal in place instead of navigating away.
+  const modals = (
+    <>
+      {/* Folder create/edit modal */}
+      <Modal open={folderModalOpen} onClose={() => setFolderModalOpen(false)} title={editingFolder ? 'Edit Folder' : 'New Folder'}>
+        <div className="space-y-4 p-4">
+          <Input
+            label="Name"
+            value={folderForm.name}
+            onChange={(e) => setFolderForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="e.g. Mock Test 1"
+            maxLength={200}
+          />
+          <Input
+            label="Description (optional)"
+            value={folderForm.description}
+            onChange={(e) => setFolderForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Short description"
+            maxLength={1024}
+          />
+          <Select
+            label="Subtest hint (optional)"
+            value={folderForm.subtestCode}
+            onChange={(e) => setFolderForm((f) => ({ ...f, subtestCode: e.target.value }))}
+            options={SUBTEST_OPTIONS}
+          />
+          <Select
+            label="Course scope"
+            value={folderForm.scopeKind}
+            onChange={(e) => setFolderForm((f) => ({ ...f, scopeKind: e.target.value as '' | MaterialScopeKind, professionId: e.target.value === 'profession' ? f.professionId : '' }))}
+            options={[
+              { value: '', label: 'Inherit / legacy' },
+              { value: 'shared', label: 'Shared across professions' },
+              { value: 'profession', label: 'Profession-specific' },
+              { value: 'general_english', label: 'General English' },
+            ]}
+          />
+          {folderForm.scopeKind === 'profession' ? <Select
+            label="Profession"
+            value={folderForm.professionId}
+            onChange={(e) => setFolderForm((f) => ({ ...f, professionId: e.target.value }))}
+            options={[
+              { value: '', label: 'Select a profession' },
+              { value: 'medicine', label: 'Medicine' },
+              { value: 'nursing', label: 'Nursing' },
+              { value: 'pharmacy', label: 'Pharmacy' },
+              { value: 'physiotherapy', label: 'Physiotherapy' },
+              { value: 'dentistry', label: 'Dentistry' },
+              { value: 'radiography', label: 'Radiography' },
+            ]}
+          /> : null}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setFolderModalOpen(false)}>Cancel</Button>
+            <Button onClick={() => void saveFolder()} disabled={savingFolder}>
+              {savingFolder ? 'Saving…' : editingFolder ? 'Save changes' : 'Create folder'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Audience modal */}
+      <Modal open={audienceModalOpen} onClose={() => setAudienceModalOpen(false)} title={`Audience — ${audienceTargetFolder?.name ?? ''}`}>
+        <div className="p-4 space-y-4">
+          <p className="text-xs text-admin-fg-muted">
+            Control which learners can see this folder and its contents.
+            Child folders set to &quot;Inherit&quot; will use this setting.
+          </p>
+          <AudiencePicker
+            audienceMode={audienceForm.audienceMode}
+            audiences={audienceForm.audiences}
+            onChange={(mode, audiences) => setAudienceForm({ audienceMode: mode, audiences })}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setAudienceModalOpen(false)}>Cancel</Button>
+            <Button onClick={() => void saveAudience()} disabled={savingAudience}>
+              {savingAudience ? 'Saving…' : 'Save audience'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* File create/edit modal */}
+      <Modal open={fileModalOpen} onClose={() => setFileModalOpen(false)} title={editingFile ? 'Edit File' : 'Add File'}>
+        <div className="p-4 space-y-4">
+          <Input
+            label="Title"
+            value={fileForm.title}
+            onChange={(e) => setFileForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="e.g. Listening Practice — Case 3"
+            maxLength={200}
+          />
+          <Input
+            label="Description (optional)"
+            value={fileForm.description}
+            onChange={(e) => setFileForm((f) => ({ ...f, description: e.target.value }))}
+            maxLength={1024}
+          />
+          <div>
+            <Select
+              label="Destination folder"
+              value={fileForm.folderId}
+              onChange={(e) => changeFileFolder(e.target.value)}
+              options={folderOptions}
+            />
+            <p className="mt-1 text-xs text-admin-fg-muted">
+              Saving to: <span className="font-medium text-admin-fg">{buildFolderPath(flatFolders, fileForm.folderId || null)}</span>
+            </p>
+          </div>
+          <Select
+            label="Subtest (auto-set from folder — change if needed)"
+            value={fileForm.subtestCode}
+            onChange={(e) => setFileForm((f) => ({ ...f, subtestCode: e.target.value }))}
+            options={SUBTEST_OPTIONS.filter((o) => o.value !== '')}
+          />
+          <div>
+            <label className="block text-xs font-semibold text-admin-fg-muted mb-1.5">
+              {editingFile ? 'Replace file (leave blank to keep current)' : 'File'}
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov"
+              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-admin-fg file:mr-3 file:rounded-md file:border-0 file:bg-admin-hover file:px-3 file:py-1.5 file:text-xs file:font-semibold"
+            />
+            {uploadFile && (
+              <p className="mt-1 text-xs text-admin-fg-muted">{uploadFile.name} ({formatBytes(uploadFile.size)})</p>
+            )}
+            {savingFile && uploadProgress > 0 && uploadProgress < 1 && (
+              <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
+                <div className="h-full bg-primary transition-all" style={{ width: `${Math.round(uploadProgress * 100)}%` }} />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setFileModalOpen(false)}>Cancel</Button>
+            <Button onClick={() => void saveFile()} disabled={savingFile}>
+              {savingFile ? 'Saving…' : editingFile ? 'Save changes' : 'Add file'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {toast && (
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
+      )}
+    </>
+  );
+
+  if (viewMode === 'course') {
+    return (
+      <>
+        <CourseMaterialsMap
+          onAdvanced={() => setViewMode('tree')}
+          onCreateFolder={openCourseCreateFolder}
+          onAddFile={openCourseAddFile}
+          onEditFolder={openCourseEditFolder}
+          onEditFile={openCourseEditFile}
+        />
+        {modals}
+      </>
+    );
+  }
 
   return (
     <AdminCatalogLayout
@@ -853,149 +1020,7 @@ export default function AdminMaterialsPage() {
         </div>
       </div>
 
-      {/* Folder create/edit modal */}
-      <Modal open={folderModalOpen} onClose={() => setFolderModalOpen(false)} title={editingFolder ? 'Edit Folder' : 'New Folder'}>
-        <div className="space-y-4 p-4">
-          <Input
-            label="Name"
-            value={folderForm.name}
-            onChange={(e) => setFolderForm((f) => ({ ...f, name: e.target.value }))}
-            placeholder="e.g. Mock Test 1"
-            maxLength={200}
-          />
-          <Input
-            label="Description (optional)"
-            value={folderForm.description}
-            onChange={(e) => setFolderForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder="Short description"
-            maxLength={1024}
-          />
-          <Select
-            label="Subtest hint (optional)"
-            value={folderForm.subtestCode}
-            onChange={(e) => setFolderForm((f) => ({ ...f, subtestCode: e.target.value }))}
-            options={SUBTEST_OPTIONS}
-          />
-          <Select
-            label="Course scope"
-            value={folderForm.scopeKind}
-            onChange={(e) => setFolderForm((f) => ({ ...f, scopeKind: e.target.value as '' | MaterialScopeKind, professionId: e.target.value === 'profession' ? f.professionId : '' }))}
-            options={[
-              { value: '', label: 'Inherit / legacy' },
-              { value: 'shared', label: 'Shared across professions' },
-              { value: 'profession', label: 'Profession-specific' },
-              { value: 'general_english', label: 'General English' },
-            ]}
-          />
-          {folderForm.scopeKind === 'profession' ? <Select
-            label="Profession"
-            value={folderForm.professionId}
-            onChange={(e) => setFolderForm((f) => ({ ...f, professionId: e.target.value }))}
-            options={[
-              { value: '', label: 'Select a profession' },
-              { value: 'medicine', label: 'Medicine' },
-              { value: 'nursing', label: 'Nursing' },
-              { value: 'pharmacy', label: 'Pharmacy' },
-              { value: 'physiotherapy', label: 'Physiotherapy' },
-              { value: 'dentistry', label: 'Dentistry' },
-              { value: 'radiography', label: 'Radiography' },
-            ]}
-          /> : null}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setFolderModalOpen(false)}>Cancel</Button>
-            <Button onClick={() => void saveFolder()} disabled={savingFolder}>
-              {savingFolder ? 'Saving…' : editingFolder ? 'Save changes' : 'Create folder'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Audience modal */}
-      <Modal open={audienceModalOpen} onClose={() => setAudienceModalOpen(false)} title={`Audience — ${audienceTargetFolder?.name ?? ''}`}>
-        <div className="p-4 space-y-4">
-          <p className="text-xs text-admin-fg-muted">
-            Control which learners can see this folder and its contents.
-            Child folders set to &quot;Inherit&quot; will use this setting.
-          </p>
-          <AudiencePicker
-            audienceMode={audienceForm.audienceMode}
-            audiences={audienceForm.audiences}
-            onChange={(mode, audiences) => setAudienceForm({ audienceMode: mode, audiences })}
-          />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setAudienceModalOpen(false)}>Cancel</Button>
-            <Button onClick={() => void saveAudience()} disabled={savingAudience}>
-              {savingAudience ? 'Saving…' : 'Save audience'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* File create/edit modal */}
-      <Modal open={fileModalOpen} onClose={() => setFileModalOpen(false)} title={editingFile ? 'Edit File' : 'Add File'}>
-        <div className="p-4 space-y-4">
-          <Input
-            label="Title"
-            value={fileForm.title}
-            onChange={(e) => setFileForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="e.g. Listening Practice — Case 3"
-            maxLength={200}
-          />
-          <Input
-            label="Description (optional)"
-            value={fileForm.description}
-            onChange={(e) => setFileForm((f) => ({ ...f, description: e.target.value }))}
-            maxLength={1024}
-          />
-          <div>
-            <Select
-              label="Destination folder"
-              value={fileForm.folderId}
-              onChange={(e) => changeFileFolder(e.target.value)}
-              options={folderOptions}
-            />
-            <p className="mt-1 text-xs text-admin-fg-muted">
-              Saving to: <span className="font-medium text-admin-fg">{buildFolderPath(flatFolders, fileForm.folderId || null)}</span>
-            </p>
-          </div>
-          <Select
-            label="Subtest (auto-set from folder — change if needed)"
-            value={fileForm.subtestCode}
-            onChange={(e) => setFileForm((f) => ({ ...f, subtestCode: e.target.value }))}
-            options={SUBTEST_OPTIONS.filter((o) => o.value !== '')}
-          />
-          <div>
-            <label className="block text-xs font-semibold text-admin-fg-muted mb-1.5">
-              {editingFile ? 'Replace file (leave blank to keep current)' : 'File'}
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov"
-              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-admin-fg file:mr-3 file:rounded-md file:border-0 file:bg-admin-hover file:px-3 file:py-1.5 file:text-xs file:font-semibold"
-            />
-            {uploadFile && (
-              <p className="mt-1 text-xs text-admin-fg-muted">{uploadFile.name} ({formatBytes(uploadFile.size)})</p>
-            )}
-            {savingFile && uploadProgress > 0 && uploadProgress < 1 && (
-              <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
-                <div className="h-full bg-primary transition-all" style={{ width: `${Math.round(uploadProgress * 100)}%` }} />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setFileModalOpen(false)}>Cancel</Button>
-            <Button onClick={() => void saveFile()} disabled={savingFile}>
-              {savingFile ? 'Saving…' : editingFile ? 'Save changes' : 'Add file'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {toast && (
-        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
-      )}
+      {modals}
     </AdminCatalogLayout>
   );
 }
