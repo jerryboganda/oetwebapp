@@ -10,6 +10,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Endpoints;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Entitlements;
@@ -27,7 +28,8 @@ public partial class AdminService(
     OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue? vocabularyAudioQueue = null,
     IConversationOptionsProvider? conversationOptionsProvider = null,
     OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService? voiceDesignRegeneration = null,
-    OetLearner.Api.Services.Professions.IProfessionCatalogService? professionCatalog = null)
+    OetLearner.Api.Services.Professions.IProfessionCatalogService? professionCatalog = null,
+    ISecurityEventLogger? securityEventLogger = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -4130,6 +4132,16 @@ public partial class AdminService(
             }
 
             await db.SaveChangesAsync(ct);
+            if (securityEventLogger is not null)
+            {
+                await securityEventLogger.TryLogAsync(
+                    expert.AuthAccountId,
+                    requestedStatus == ActiveUserStatus
+                        ? SecurityEventKinds.AdminAccountReactivated
+                        : SecurityEventKinds.AdminAccountSuspended,
+                    details: new { adminId, userId },
+                    cancellationToken: ct);
+            }
             await LogAuditAsync(adminId, adminName, requestedStatus == ActiveUserStatus ? "Reactivated User" : "Suspended User",
                 "User", userId, $"Status changed to {requestedStatus}" + (request.Reason != null ? $": {request.Reason}" : ""), ct);
             await NotifyAdminsAsync(
@@ -4152,6 +4164,16 @@ public partial class AdminService(
             }
 
             await db.SaveChangesAsync(ct);
+            if (securityEventLogger is not null)
+            {
+                await securityEventLogger.TryLogAsync(
+                    learner.AuthAccountId,
+                    requestedStatus == ActiveUserStatus
+                        ? SecurityEventKinds.AdminAccountReactivated
+                        : SecurityEventKinds.AdminAccountSuspended,
+                    details: new { adminId, userId },
+                    cancellationToken: ct);
+            }
             await LogAuditAsync(adminId, adminName, requestedStatus == ActiveUserStatus ? "Reactivated User" : "Suspended User",
                 "User", userId, $"Status changed to {requestedStatus}" + (request.Reason != null ? $": {request.Reason}" : ""), ct);
             await notifications.CreateForLearnerAsync(

@@ -548,6 +548,7 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             await using var scope = context.HttpContext.RequestServices.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
+            var securityEventLogger = scope.ServiceProvider.GetRequiredService<ISecurityEventLogger>();
 
             // Security spec §3.1: single active session. Keyed on the refresh-
             // token FAMILY (survives rotation), not "sid" (changes every
@@ -589,12 +590,24 @@ void ConfigureJwtBearer(JwtBearerOptions options)
 
             if (accountState is null)
             {
+                await securityEventLogger.TryLogAsync(
+                    authAccountId,
+                    SecurityEventKinds.AuthTokenRejected,
+                    sessionFamilyId: sessionFamilyId,
+                    details: new { reason = "account_not_found" },
+                    cancellationToken: context.HttpContext.RequestAborted);
                 context.Fail("account_not_found");
                 return;
             }
 
             if (accountState.DeletedAt is not null)
             {
+                await securityEventLogger.TryLogAsync(
+                    authAccountId,
+                    SecurityEventKinds.AuthTokenRejected,
+                    sessionFamilyId: sessionFamilyId,
+                    details: new { reason = "account_deleted" },
+                    cancellationToken: context.HttpContext.RequestAborted);
                 context.Fail("account_deleted");
                 return;
             }
@@ -605,6 +618,12 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                 var effective = await settingsProvider.GetAsync(context.HttpContext.RequestAborted);
                 if (effective.Security.SingleActiveSessionEnabled)
                 {
+                    await securityEventLogger.TryLogAsync(
+                        authAccountId,
+                        SecurityEventKinds.AuthTokenRejected,
+                        sessionFamilyId: sessionFamilyId,
+                        details: new { reason = "session_revoked" },
+                        cancellationToken: context.HttpContext.RequestAborted);
                     context.Fail("session_revoked");
                     return;
                 }
@@ -614,12 +633,24 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             {
                 if (!accountState.LearnerIsActive)
                 {
+                    await securityEventLogger.TryLogAsync(
+                        authAccountId,
+                        SecurityEventKinds.AuthTokenRejected,
+                        sessionFamilyId: sessionFamilyId,
+                        details: new { reason = "account_suspended" },
+                        cancellationToken: context.HttpContext.RequestAborted);
                     context.Fail("account_suspended");
                     return;
                 }
 
                 if (accountState.LearnerAccessExpiresAt is { } accessExpiry && accessExpiry <= now)
                 {
+                    await securityEventLogger.TryLogAsync(
+                        authAccountId,
+                        SecurityEventKinds.AuthTokenRejected,
+                        sessionFamilyId: sessionFamilyId,
+                        details: new { reason = "subscription_expired" },
+                        cancellationToken: context.HttpContext.RequestAborted);
                     context.Fail("subscription_expired");
                 }
 
@@ -629,6 +660,12 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             if (string.Equals(accountState.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
                 && !accountState.ExpertIsActive)
             {
+                await securityEventLogger.TryLogAsync(
+                    authAccountId,
+                    SecurityEventKinds.AuthTokenRejected,
+                    sessionFamilyId: sessionFamilyId,
+                    details: new { reason = "account_suspended" },
+                    cancellationToken: context.HttpContext.RequestAborted);
                 context.Fail("account_suspended");
             }
         }

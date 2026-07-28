@@ -103,6 +103,7 @@ public static class SecurityEventKinds
     public const string AdminSessionRevoked = "admin.session_revoked";
     public const string AdminDeviceReset = "admin.device_reset";
     public const string AdminAccountSuspended = "admin.account_suspended";
+    public const string AdminAccountReactivated = "admin.account_reactivated";
     public const string AdminPlaybackBlocked = "admin.playback_blocked";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
@@ -113,7 +114,7 @@ public static class SecurityEventKinds
         DeviceTrustRequested, DeviceTrusted, DeviceRevoked, DeviceChangeBlockedCooldown, DeviceAdminReset,
         PlaybackSessionStarted, PlaybackSessionsRevoked,
         RiskCountryChanged, RiskImpossibleTravel, RiskStepUpRequired, RiskSignInBlocked,
-        AdminSessionRevoked, AdminDeviceReset, AdminAccountSuspended, AdminPlaybackBlocked,
+        AdminSessionRevoked, AdminDeviceReset, AdminAccountSuspended, AdminAccountReactivated, AdminPlaybackBlocked,
     };
 
     public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)
