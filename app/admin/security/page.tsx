@@ -42,6 +42,7 @@ const KIND_OPTIONS = [
   'auth.refresh_reuse_detected', 'auth.refresh_device_mismatch', 'auth.token_rejected',
   'session.created', 'session.revoked', 'session.revoked_all',
   'device.trust_requested', 'device.trusted', 'device.revoked', 'device.change_blocked_cooldown', 'device.admin_reset',
+  'playback.session_started', 'playback.sessions_revoked',
   'risk.country_changed', 'risk.impossible_travel', 'risk.step_up_required', 'risk.sign_in_blocked',
   'admin.session_revoked', 'admin.device_reset', 'admin.account_suspended', 'admin.playback_blocked',
 ];

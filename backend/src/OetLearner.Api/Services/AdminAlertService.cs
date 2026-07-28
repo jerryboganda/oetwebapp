@@ -89,6 +89,28 @@ public class AdminAlertService(LearnerDbContext db)
         if (captureEventsCount > 0)
             alerts.Add(new AdminAlertItemResponse("capture_protection_triggered", "warning", "Capture Protection Triggered", $"{captureEventsCount} capture/tamper event(s) in the last 24h", "/admin/security", now));
 
+        // Mass playback: an account starting an abnormal number of NEW
+        // playback sessions in 24h (each PlaybackSessionStarted event is a
+        // genuinely new session — VideoPlaybackSessionService only logs it
+        // on issuance of a new/expired session, not on renew or re-use of a
+        // still-active one) is a signal of bulk downloading/content
+        // extraction rather than normal viewing. Threshold chosen the same
+        // way SignInRiskService picks its device-churn threshold (5 distinct
+        // device families / 7 days => "frequent_sign_ins"), scaled up for
+        // playback's naturally higher event volume: normal viewing is capped
+        // by VideoPlaybackSessionService.MaxConcurrentDistinctVideos (3
+        // concurrent), so even a heavy binge-watcher rarely starts more than
+        // a couple dozen distinct/renewed-after-expiry sessions in one day —
+        // 40 is comfortably above that range.
+        const int massPlaybackThreshold = 40;
+        var massPlaybackAccounts = await db.SecurityEvents.AsNoTracking()
+            .Where(e => e.Kind == SecurityEventKinds.PlaybackSessionStarted && e.OccurredAt >= last24h && e.AuthAccountId != null)
+            .GroupBy(e => e.AuthAccountId)
+            .Where(g => g.Count() >= massPlaybackThreshold)
+            .CountAsync(ct);
+        if (massPlaybackAccounts > 0)
+            alerts.Add(new AdminAlertItemResponse("mass_playback", "warning", "Mass Playback Volume", $"{massPlaybackAccounts} account(s) started {massPlaybackThreshold}+ playback sessions in the last 24h", "/admin/security", now));
+
         var criticalCount = alerts.Count(a => a.Severity == "critical");
         var warningCount = alerts.Count(a => a.Severity == "warning");
         var infoCount = alerts.Count(a => a.Severity == "info");
