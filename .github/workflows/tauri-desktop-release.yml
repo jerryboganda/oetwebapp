@@ -16,8 +16,13 @@ name: Tauri Desktop Release
 #                                          (generate: pnpm dlx @tauri-apps/cli signer generate;
 #                                          the matching pubkey lives in src-tauri/tauri.conf.json)
 #  - TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — its password ('' if none)
-#  Windows Authenticode (optional until wired into NSIS signCommand): the same
-#  AZURE_* / WIN_CSC_* groups documented in desktop-release.yml.
+#  - WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD (optional) — base64-encoded
+#    PFX + its password for Windows Authenticode code-signing. When set, the
+#    Windows leg imports the cert into CurrentUser\My, reads back its thumbprint,
+#    and stamps bundle.windows.certificateThumbprint (+ digestAlgorithm/timestampUrl)
+#    into tauri.conf.json before `tauri build`, so the NSIS installer is signed
+#    with a SHA-256 digest and an RFC3161 timestamp automatically. If unset, the
+#    Windows build proceeds unsigned (no code changes needed either way).
 #  macOS signing/notarisation (optional): APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
 #  APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (tauri-cli reads these).
 #
@@ -162,6 +167,7 @@ jobs:
 
       - name: Import Windows code-signing certificate
         if: runner.os == 'Windows'
+        id: import-cert
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -169,18 +175,51 @@ jobs:
         run: |
           if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
             Write-Host "No WINDOWS_CERTIFICATE secret set - skipping Authenticode import."
-            Write-Host "NOTE: installer code-signing is disabled by default (no certificateThumbprint"
-            Write-Host "in tauri.conf.json), so the Windows build produces an UNSIGNED NSIS installer."
-            Write-Host "See README 'Desktop signing' to enable Authenticode."
+            Write-Host "NOTE: installer code-signing is disabled (no certificateThumbprint will be"
+            Write-Host "stamped into tauri.conf.json), so the Windows build produces an UNSIGNED"
+            Write-Host "NSIS installer. See README 'Desktop signing' to enable Authenticode."
             exit 0
           }
           $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
           $pfx = Join-Path $env:RUNNER_TEMP 'oet-codesign.pfx'
           [IO.File]::WriteAllBytes($pfx, $bytes)
           $pw = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
-          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw | Out-Null
+          $imported = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
           Remove-Item $pfx -Force
+          # A signing PFX can bundle intermediate/chain certs alongside the leaf
+          # cert, so Import-PfxCertificate may return more than one object here.
+          # Only the leaf cert carries the private key signtool needs - pick that
+          # one explicitly rather than trusting array/member-enumeration order.
+          $cert = $imported | Where-Object { $_.HasPrivateKey } | Select-Object -First 1
+          if (-not $cert) {
+            Write-Error "Imported PFX did not yield a certificate with a private key - cannot sign with it."
+            exit 1
+          }
           Write-Host "Imported code-signing certificate into CurrentUser\My."
+          Write-Host "Subject: $($cert.Subject)  Thumbprint: $($cert.Thumbprint)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "thumbprint=$($cert.Thumbprint)"
+
+      # Wires the cert imported above into the actual build: Tauri's Windows
+      # bundler signs the NSIS installer natively (via signtool, which it
+      # locates on the runner itself) when bundle.windows.certificateThumbprint
+      # is set. The committed tauri.conf.json intentionally has no thumbprint
+      # (so local/dev builds stay unsigned without a cert in the store) — this
+      # stamps it in on the runner only, same pattern as the version stamp above.
+      - name: Stamp Windows Authenticode signing config
+        if: runner.os == 'Windows' && steps.import-cert.outputs.thumbprint != ''
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const p = 'src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(p, 'utf8'));
+            conf.bundle.windows = conf.bundle.windows || {};
+            conf.bundle.windows.certificateThumbprint = '${{ steps.import-cert.outputs.thumbprint }}';
+            conf.bundle.windows.digestAlgorithm = 'sha256';
+            conf.bundle.windows.timestampUrl = 'http://timestamp.digicert.com';
+            fs.writeFileSync(p, JSON.stringify(conf, null, 2) + '\n');
+          "
+          echo "Stamped certificateThumbprint into bundle.windows - installer will be signed during bundling."
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

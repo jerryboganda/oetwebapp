@@ -85,14 +85,16 @@ the `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL` env vars).
 
 ### Desktop signing
 
-Installers are currently **unsigned** (no Authenticode / Apple Developer ID).
-
-- **Updater artifacts** are still signed with a minisign key — set
+- **Updater artifacts** are signed with a minisign key — set
   `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in CI; the
   matching public key lives in `src-tauri/tauri.conf.json`.
-- **Windows Authenticode:** add a `bundle.windows.certificateThumbprint` (or a
-  `signCommand`) in `src-tauri/tauri.conf.json` and provide the cert via the
-  `WINDOWS_CERTIFICATE` CI secret (the release workflow imports it).
+- **Windows Authenticode:** the release workflow imports the `WINDOWS_CERTIFICATE`
+  CI secret into the runner's cert store, reads back its thumbprint, and stamps
+  `bundle.windows.certificateThumbprint` (+ `digestAlgorithm: sha256` and an
+  RFC3161 `timestampUrl`) into `src-tauri/tauri.conf.json` before `tauri build`,
+  so the NSIS installer is signed automatically. The committed config has no
+  thumbprint, so local/dev builds stay unsigned unless you stamp one in yourself.
+  If `WINDOWS_CERTIFICATE` is unset, CI produces an unsigned installer as before.
 - **macOS notarization:** add the `APPLE_*` secrets and map them in
   `.github/workflows/tauri-desktop-release.yml`. Until then, the macOS `.dmg` is
   unsigned (open it with right-click → Open the first time).

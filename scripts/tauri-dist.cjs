@@ -11,9 +11,12 @@
 // Signing:
 //   - Updater artifacts: set TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 //     (minisign; the matching pubkey lives in src-tauri/tauri.conf.json).
-//   - Installer code-signing (Windows Authenticode / Apple notarization) is
-//     currently DISABLED — builds are unsigned. See README "Desktop signing"
-//     for how to re-enable.
+//   - Windows Authenticode: the release workflow (.github/workflows/tauri-desktop-release.yml)
+//     imports the WINDOWS_CERTIFICATE secret and stamps bundle.windows.certificateThumbprint
+//     into tauri.conf.json before this script runs, so `tauri build` signs the NSIS
+//     installer natively. Running this script directly (no cert imported/stamped
+//     first) produces an unsigned installer. See README "Desktop signing".
+//   - Apple notarization is currently DISABLED — macOS builds are unsigned.
 
 const { spawnSync } = require('child_process');
 const path = require('path');
