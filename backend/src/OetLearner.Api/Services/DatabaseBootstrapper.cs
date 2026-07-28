@@ -508,14 +508,14 @@ public static class DatabaseBootstrapper
                 """,
                 cancellationToken);
 
-                        await db.Database.ExecuteSqlRawAsync($"""
+                        await db.Database.ExecuteSqlInterpolatedAsync($"""
                                 UPDATE "ConversationSettings"
-                                SET "ElevenLabsDefaultVoiceId" = '{DefaultElevenLabsVoiceId}'
+                                SET "ElevenLabsDefaultVoiceId" = {DefaultElevenLabsVoiceId}
                                 WHERE "Id" = 'default'
                                     AND (
                                         "ElevenLabsDefaultVoiceId" IS NULL
                                         OR btrim("ElevenLabsDefaultVoiceId") = ''
-                                        OR "ElevenLabsDefaultVoiceId" = '{LegacyElevenLabsVoiceId}'
+                                        OR "ElevenLabsDefaultVoiceId" = {LegacyElevenLabsVoiceId}
                                     );
                                 """,
                                 cancellationToken);
@@ -533,14 +533,14 @@ public static class DatabaseBootstrapper
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsStyle"" REAL NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsUseSpeakerBoost"" INTEGER NULL", cancellationToken);
 
-                        await db.Database.ExecuteSqlRawAsync($"""
+                        await db.Database.ExecuteSqlInterpolatedAsync($"""
                                 UPDATE "ConversationSettings"
-                                SET "ElevenLabsDefaultVoiceId" = '{DefaultElevenLabsVoiceId}'
+                                SET "ElevenLabsDefaultVoiceId" = {DefaultElevenLabsVoiceId}
                                 WHERE "Id" = 'default'
                                     AND (
                                         "ElevenLabsDefaultVoiceId" IS NULL
                                         OR trim("ElevenLabsDefaultVoiceId") = ''
-                                        OR "ElevenLabsDefaultVoiceId" = '{LegacyElevenLabsVoiceId}'
+                                        OR "ElevenLabsDefaultVoiceId" = {LegacyElevenLabsVoiceId}
                                     );
                                 """,
                                 cancellationToken);
