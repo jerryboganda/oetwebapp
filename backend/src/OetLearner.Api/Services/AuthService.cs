@@ -1177,6 +1177,22 @@ public sealed class AuthService(
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
 
+            // A device that already completed the persistent §3.2 trusted-device
+            // check is a stronger identity signal than the heuristic §3.3 risk
+            // scoring below — re-challenging it on every IP-derived country
+            // wobble (CF-IPCountry flips between edges/VPN/mobile handoff for the
+            // same physical device) is the "asks for OTP again and again on the
+            // SAME device" regression this guards against. Only exempts the
+            // MEDIUM-risk/step-up paths below; High-risk (impossible travel)
+            // still blocks outright regardless of device trust, since a
+            // replayed/stolen session can present the same device id from a
+            // different place.
+            var trustedDevice = deviceId is not null
+                ? await trustedDeviceService.GetActiveDeviceAsync(account.Id, cancellationToken)
+                : null;
+            var deviceAlreadyTrusted = trustedDevice is not null
+                && string.Equals(trustedDevice.DeviceId, deviceId, StringComparison.Ordinal);
+
             // §3.3 country allow-list — an independent control that works even
             // with the risk engine off. Sign-ins with no CF-IPCountry (local
             // dev, direct-to-origin) always pass: the control is a policy
@@ -1198,7 +1214,7 @@ public sealed class AuthService(
                 }
 
                 // step_up
-                if (!riskStepUpSatisfied)
+                if (!riskStepUpSatisfied && !deviceAlreadyTrusted)
                 {
                     await securityEventLogger.TryLogAsync(
                         account.Id, SecurityEventKinds.RiskStepUpRequired,
@@ -1243,8 +1259,10 @@ public sealed class AuthService(
                         // Medium → email-OTP step-up (spec §3.3), reusing the
                         // device-challenge transport the sign-in UI already
                         // handles. Skipped when this attempt already proved a
-                        // second factor, or when no device id is present.
-                        if (risk.Level == SignInRiskLevel.Medium && !riskStepUpSatisfied)
+                        // second factor, when no device id is present, or when
+                        // this device already holds the account's persistent
+                        // §3.2 trust (see deviceAlreadyTrusted above).
+                        if (risk.Level == SignInRiskLevel.Medium && !riskStepUpSatisfied && !deviceAlreadyTrusted)
                         {
                             await securityEventLogger.TryLogAsync(
                                 account.Id, SecurityEventKinds.RiskStepUpRequired,
