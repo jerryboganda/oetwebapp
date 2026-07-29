@@ -54,6 +54,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
   // render ("Loading secure payment…" then a blank box). Covers live + sandbox (both
   // are *.paypal.com) and Venmo, which the SDK offers alongside PayPal.
   const paypalHttpOrigins = ['https://*.paypal.com', 'https://*.paypalobjects.com', 'https://*.venmo.com'];
+  const bunnyPlayerOrigins = ['https://iframe.mediadelivery.net', 'https://player.mediadelivery.net'];
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
@@ -90,7 +91,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     `connect-src ${connectSrc}`,
     `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')}`,
     `worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}`,
-    `frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}`,
+    `frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${bunnyPlayerOrigins.join(' ')}`,
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",

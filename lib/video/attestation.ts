@@ -1,18 +1,20 @@
 /**
- * Playback attestation orchestration — the client half of the
- * native-app-only video playback gate.
+ * Playback authorisation orchestration.
  *
  * Flow (see `VideoAttestationService.cs` server-side):
  *   1. Fetch a single-use challenge nonce from the API (90s TTL).
- *   2. Ask the NATIVE layer to sign `"{nonce}|{videoId}|{userId}|{platform}|{keyId}"`
+ *   2. Native: ask the shell to sign
+ *      `"{nonce}|{videoId}|{userId}|{platform}|{keyId}"`
  *      with a build-embedded HMAC-SHA256 secret:
  *        - Tauri desktop  → `window.desktopBridge.attestation.signVideoChallenge`
  *        - Capacitor      → `PlaybackAttestation` plugin (lib/mobile/playback-attestation)
- *   3. POST the signature to mint a playback session + signed CDN URL.
+ *      Web: submit the authenticated one-time nonce with the reserved
+ *      `web:browser-session` identity (a browser cannot safely hold a secret).
+ *   3. POST the proof to mint a playback session + short-lived secure embed.
  *
- * The secret never exists in JS (both shells load this same remote web app),
- * so a browser cannot produce a valid signature no matter what it spoofs.
- * Runtime detection here is UX-only — the server rejects anything unsigned.
+ * Native secrets never exist in JS. Web relies on the authenticated token
+ * family, trusted-device policy, user-bound nonce, entitlement and
+ * single-session enforcement, plus watermark/audit compensating controls.
  */
 import { isApiError } from '@/lib/api';
 import {
@@ -61,13 +63,13 @@ export interface NativeSignature {
 
 export interface PlaybackAttestor {
   available: true;
-  runtimeKind: Exclude<AppRuntimeKind, 'web'>;
+  runtimeKind: AppRuntimeKind;
   sign(nonce: string, videoId: string, userId: string): Promise<NativeSignature>;
 }
 
 export interface UnavailableAttestor {
   available: false;
-  reason: 'WEB_NOT_ALLOWED' | 'DESKTOP_UPDATE_REQUIRED' | 'MOBILE_UPDATE_REQUIRED';
+  reason: 'DESKTOP_UPDATE_REQUIRED' | 'MOBILE_UPDATE_REQUIRED';
 }
 
 type DesktopAttestationBridge = {
@@ -119,7 +121,16 @@ export function getPlaybackAttestor(): PlaybackAttestor | UnavailableAttestor {
     };
   }
 
-  return { available: false, reason: 'WEB_NOT_ALLOWED' };
+  return {
+    available: true,
+    runtimeKind: 'web',
+    sign: async () => ({
+      signature: '',
+      platform: 'web',
+      keyId: 'browser-session',
+      appVersion: 'web',
+    }),
+  };
 }
 
 function mapApiFailure(error: unknown): PlaybackGateError {
@@ -168,9 +179,13 @@ async function attemptSession(
     // Native command exists but failed (e.g. release build without an embedded
     // secret, or plugin-level rejection). Treat as an update/config problem
     // rather than a web denial so the message stays actionable.
-    throw new PlaybackGateError(
-      attestor.runtimeKind === 'desktop' ? 'DESKTOP_UPDATE_REQUIRED' : 'MOBILE_UPDATE_REQUIRED',
-    );
+    if (attestor.runtimeKind === 'desktop') {
+      throw new PlaybackGateError('DESKTOP_UPDATE_REQUIRED');
+    }
+    if (attestor.runtimeKind === 'capacitor-native') {
+      throw new PlaybackGateError('MOBILE_UPDATE_REQUIRED');
+    }
+    throw new PlaybackGateError('ATTESTATION_UNAVAILABLE');
   }
 
   // Best-effort, native-only (getDeviceIntegrity is no-throw and resolves

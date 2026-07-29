@@ -22,9 +22,7 @@ import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchVideo, toggleVideoBookmark } from '@/lib/api/videos';
-import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import type { VideoDetail } from '@/lib/types/videos';
-import { PlayerLockScreen } from '@/components/videos/player-lock-screen';
 import { VideoPlayer, type VideoPlayerHandle } from '@/components/videos/video-player';
 import { useLowBandwidthMode } from '@/hooks/use-media-preferences';
 
@@ -58,13 +56,6 @@ export default function VideoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<VideoPlayerHandle | null>(null);
   const lowBandwidth = useLowBandwidthMode();
-
-  // Runtime kind is stamped pre-paint on <html data-runtime-kind>, but reading
-  // it during SSR is impossible — resolve after mount to avoid hydration drift.
-  const [runtimeKind, setRuntimeKind] = useState<'web' | 'desktop' | 'capacitor-native' | null>(null);
-  useEffect(() => {
-    setRuntimeKind(getAppRuntimeKind());
-  }, []);
 
   useEffect(() => {
     if (!videoId) return;
@@ -183,11 +174,7 @@ export default function VideoDetailPage() {
           <div className="space-y-6">
             <div className="overflow-hidden rounded-2xl bg-background-dark shadow-sm">
               <div className="aspect-video">
-                {runtimeKind === null ? (
-                  <Skeleton className="h-full w-full" />
-                ) : runtimeKind === 'web' ? (
-                  <PlayerLockScreen title={video.title} thumbnailUrl={video.thumbnailUrl} />
-                ) : locked ? (
+                {locked ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/65">
                     <LockKeyhole className="h-16 w-16" />
                     <span className="max-w-md text-sm">
@@ -281,7 +268,7 @@ export default function VideoDetailPage() {
                       key={`${chapter.timeSeconds}-${chapter.title}`}
                       type="button"
                       onClick={() => playerRef.current?.seekTo(chapter.timeSeconds)}
-                      disabled={runtimeKind === 'web' || locked}
+                      disabled={locked}
                       className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left text-sm hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:text-inherit"
                     >
                       <span>{chapter.title}</span>

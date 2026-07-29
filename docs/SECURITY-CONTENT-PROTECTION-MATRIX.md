@@ -12,13 +12,13 @@ and partially built. Each row says which.
 
 | Requirement area | Status | Notes |
 |---|---|---|
-| Screenshot protection | **Implemented** (Win/macOS/Android) / **Partial** (iOS) | Windows/macOS/Android block the capture at the OS level. iOS cannot block a still screenshot of an arbitrary WKWebView — see §3.3. Detection-after-the-fact (`userDidTakeScreenshotNotification`) is shipped as of Phase 8; still logs-only, never a block. |
+| Screenshot protection | **Implemented** (Win/macOS/Android) / **Compensated limitation** (iOS/web) | Windows/macOS/Android block capture at OS level. iOS detects a still capture, immediately pauses/mutes playback, logs it, and revokes the playback session. Web has no capture API, so it uses the moving identifying watermark, short token, session enforcement, and audit controls. |
 | Screen-recording protection | **Implemented** (Win/macOS/Android/iOS) | All four platforms blank the app during active recording/mirroring. See §3. |
 | Dynamic watermark | **Implemented** | Shipped and live — full name, masked email, live clock, session reference; moves on a randomized interval; tiled low-opacity forensic layer; integrity watchdog. See §2. |
-| DRM and encrypted streaming | **Not implemented** (documented upgrade path) | Native-only playback + token-signed HLS + OS capture blocking is the current model. No DRM/EME. See §4. |
+| DRM and encrypted streaming | **Application ready; provider activation unverified** | Clients receive only a 5-minute token-authenticated Bunny embed; raw HLS/MP4 URLs are no longer exposed. That player is the required MediaCage surface. Basic or Enterprise DRM must still be enabled in the Bunny account and proven with a real library/video. See §4. |
 | One active session only | **Implemented** | Shipped and live — signing in anywhere revokes every other session within seconds via a SignalR push, with a family-liveness check as the hard backstop. See §5. |
-| Device binding and reset | **Backend + frontend shipped, ships DARK** | Full flow built (§6): email-OTP challenge on a new device, sign-in UI, admin reset. `SecurityTrustedDeviceRequired` stays off until a genuine end-to-end OTP round-trip has been observed against a non-stale backend. |
-| IP and risk monitoring | **Implemented (log-only)** | Shipped and live in log-only mode — country-change and impossible-travel detection, device-churn detection. Enforcement mode (blocking) is built and ready but held off pending a review week. See §7. |
+| Device binding and reset | **Implemented and enforced** | Email-OTP challenge on a new device, old-device session revocation, self-service flow, admin reset, and change cooldown. The production profile enables `SecurityTrustedDeviceRequired`; completed production trust-device OTPs were observed before activation. |
+| IP and risk monitoring | **Implemented and enforced; VPN/Tor feed pending** | Country-change, impossible-travel, device-churn, step-up, and high-risk blocking run in `enforce` mode. The optional paid VPN/datacenter/Tor intelligence provider remains external work. See §7. |
 | Audit logs and admin controls | **Implemented** | `SecurityEvents` telemetry, a full `/admin/security` console (events feed, filters, computed alerts), and per-account session/device management (targeted revoke, device reset, block playback) are all live. See §8. |
 | Root/jailbreak/emulator detection | **Implemented (heuristics)** | Android + iOS native plugins report best-effort signals on every playback-session request; `VideoProtectionBlockRootedDevices`/`BlockEmulators` (default: on) reject a new session with 403 `device_integrity` when present. See §10. |
 
@@ -33,7 +33,7 @@ and partially built. Each row says which.
 | **Linux (Tauri)** | Not blocked | Not blocked | No equivalent API wired; `apply_capture_protection` returns `false` (no-op). | **Not implemented** — documented limitation, no compensating control beyond the watermark. Not currently a supported desktop target. |
 | **Android (Capacitor)** | Blocked | Blocked | `WindowManager.LayoutParams.FLAG_SECURE` (`PlaybackAttestationPlugin.java`). The OS itself renders both stills and recordings as black — there is nothing to *detect*, the block is unconditional. | **Shipped** |
 | **iOS (Capacitor)** | **Not blockable** | Blocked | Screen recording/mirroring: observes `UIScreen.capturedDidChangeNotification` and overlays an opaque black view for the duration (`PlaybackAttestationPlugin.swift`, `enableCaptureBlackout`). Still screenshots: iOS provides no API to make an arbitrary WKWebView render black in a screenshot — only DRM/AVPlayer-protected content gets that treatment from the OS. | Recording: **shipped**. Screenshot: **limitation** — see §3. |
-| **Web (browser)** | Not applicable | Not applicable | Browsers never receive playback at all — `getAppRuntimeKind()` routes web sessions to a "download the app" screen, and the server independently refuses to issue a playback session to a non-attested client regardless of what the client claims. | **Shipped** — the spec explicitly blesses restricting sensitive video to a native app when a browser can't provide reliable capture blocking (§2.2). |
+| **Web (browser)** | Not blockable | Not blockable | The course remains functional on web as required. Playback uses a 5-minute signed secure embed, server-side entitlement/session checks, a moving identifying watermark, single-session enforcement, and immediate audit/revocation for signals the browser can provide. | **Implemented with compensating controls** — browsers expose no reliable screenshot/recording-block API. |
 
 **OBS / third-party capture tools, remote desktop, HDMI capture, camera-at-screen:** OBS and generic screen-recording tools ride the same OS capture APIs as the built-in recorder on Windows/macOS/Android, so they are blocked identically. Remote-desktop protocols that use a different scan-out path than the standard capture API (some RDP shadowing modes) are a known theoretical gap — not separately tested. A physical camera pointed at a screen, or an HDMI capture card between the GPU and a monitor, defeats **any** software control on **any** platform; the moving, identifying watermark is the sole compensating control for that class of attack, on every platform, by design.
 
@@ -57,39 +57,30 @@ The compensating controls actually shipped: (1) the watermark is visible and
 identifying at the exact moment a screenshot is taken, so a leaked still
 still traces back to the account; (2) iOS screenshot **detection** — via
 `UIApplication.userDidTakeScreenshotNotification` (Phase 8, shipped) —
-reports a `screenshot_detected` protection event to the server and shows the
-learner a brief on-screen notice that the activity is logged; this catches
-it after the fact rather than preventing it, which is the honest limit of
-what iOS allows for non-DRM content. It does not currently revoke the
-session by itself (unlike `capture_detected`, which can under
-`VideoProtectionRevokeOnCaptureDetected`) — a single still screenshot is a
-weaker signal than an active recording.
+reports a `screenshot_detected` protection event to the server, immediately
+pauses and mutes playback, and shows the learner a brief notice. With
+`VideoProtectionRevokeOnCaptureDetected` enabled, the server revokes that
+playback session. This reacts after capture rather than preventing the
+captured frame, which is the honest limit of non-DRM iOS content.
 
 ## 4. DRM and encrypted streaming
 
-**Not implemented; a documented upgrade path, not a gap being silently
-carried.** The current model is: native-app-only playback (§2 above),
-HMAC-attested clients only, short-lived signed HLS URLs (see §5 of the spec
-requirements and the `BunnyStreamClient` token scheme), and OS-level capture
-blocking. There is no EME/Widevine/FairPlay/ClearKey anywhere in the stack,
-and Bunny Stream's delivery is unencrypted-HLS-with-signed-URLs, not
-encrypted-at-rest video.
+The application path is now MediaCage-ready. `BunnyStreamClient` signs the
+Bunny iframe with `SHA256(libraryApiKey + videoId + expires)`, the API clamps
+that view token to 5–15 minutes (the production profile sets 5 minutes), and
+the frontend renders the provider player inside the first-party fullscreen
+container so the forensic watermark remains above it. Raw HLS and MP4 URLs
+are not returned to the client. The iframe is origin-checked, sandboxed, and
+controlled with a minimal audited `player.js` postMessage adapter.
 
-**Upgrade path:** Bunny Stream offers a paid "MediaCage" DRM tier. Adopting
-it would mean replacing the current `hls.js` pipeline with the browser's
-Encrypted Media Extensions API, re-implementing the token-renewal and
-`TokenPropagatingLoader` logic against a DRM license server instead of a
-signed-URL scheme, and re-validating the WebView2 capture-protection fix
-(the `--disable-gpu-compositing` flag interacts with how video frames are
-composited — a DRM-decoded surface changes that path and would need
-re-testing on every platform). This is a real project, not a toggle. Given
-that native-only playback + OS capture blocking + the identifying watermark
-already cover the realistic leak paths, and DRM's marginal win is
-essentially "iOS still-screenshot blocking" (which needs FairPlay
-specifically) plus wire-level encryption, this is recorded as an owner
-decision to revisit, not something silently skipped. (`docs/CONTENT-UPLOAD-PLAN.md`
-independently recorded a "no DRM needed" decision earlier in the project's
-life — this is the same conclusion, restated with the reasoning.)
+The remaining step is account-level provider activation and live evidence.
+Bunny MediaCage Basic supplies dynamic clear-key encryption/download
+resistance through this embed. Enterprise DRM adds Widevine and FairPlay,
+including the stronger protected-surface behavior needed for iOS
+still-screenshot blocking; it requires a Bunny enterprise contract and
+Apple FairPlay certificate material. Neither tier can be asserted active
+from source code alone, so this row remains explicitly unverified until the
+Bunny library setting and a real playback/network test are recorded.
 
 ## 5. Single active session (spec §3.1) — shipped
 
@@ -117,9 +108,9 @@ life — this is the same conclusion, restated with the reasoning.)
 - **Relationship to device binding:** single active session does not by
   itself require a device to be "known," only that there is exactly one live
   session at a time. Device *binding* (spec §3.2) is a separate, additional
-  gate — see §6 — built and ready but not yet enforced.
+  gate — see §6 — is also enforced.
 
-## 6. Device binding (spec §3.2) — shipped, ships DARK
+## 6. Device binding (spec §3.2) — shipped and enforced
 
 A `TrustedDevice` row per account; a client-generated device id
 (`lib/device-id.ts`) sent as the `X-OET-Device-Id` header on every auth
@@ -133,14 +124,13 @@ more than a handful of device changes in a rolling week. An admin can also
 reset an account's trusted device from `/admin/security` or the user detail
 page, which revokes its sessions the same way.
 
-**Ships DARK on purpose:** `SecurityTrustedDeviceRequired` defaults off. Both
-halves of the flow are code-complete, but a genuine end-to-end OTP
-round-trip (email actually arriving, challenge actually completing into a
-session) has not yet been observed against a non-stale backend in this
-environment. Flip the toggle in Admin → Runtime Settings → Security only
-after that verification.
+`SecurityTrustedDeviceRequired` defaults on in the mandatory production
+profile. Before activation, the production OTP ledger showed successful
+`trust_device` challenge completions. The activation migration revokes
+legacy active refresh tokens that have no device id so they cannot bypass
+the binding rule.
 
-## 7. IP / location risk signals (spec §3.3) — shipped, log-only
+## 7. IP / location risk signals (spec §3.3) — shipped and enforced
 
 A rule-based `SignInRiskService` evaluates every fresh sign-in against the
 account's own history (no external IP-intelligence lookup yet):
@@ -152,8 +142,8 @@ account's own history (no external IP-intelligence lookup yet):
 - **Device/family churn** — 5 or more distinct sessions created in a rolling
   7 days → medium risk.
 
-Every signal is recorded as a `SecurityEvent` regardless of mode. In
-`enforce` mode (not yet enabled — see runbook), a Medium-risk sign-in must
+Every signal is recorded as a `SecurityEvent` regardless of mode. In the
+production `enforce` mode, a Medium-risk sign-in must
 pass an email-OTP step-up (the same challenge transport as device
 verification; sign-ins that already carried a second factor skip it) and a
 High-risk sign-in is rejected outright with `403 sign_in_blocked_risk`,
@@ -231,22 +221,22 @@ Attest) — evadable by sufficiently determined tooling (Magisk hides most of
 the Android checks), which is why the spec's "where reasonably detectable"
 qualifier is the right bar for a first version.
 
-**Not yet shipped: the actual mobile release.** All of the above is
-merged code, not yet in learners' hands — it ships to real devices only
-once a signed Android+iOS build is cut via `mobile-release.yml` and clears
-app-store review (Google Play review is typically hours; Apple App Store
-review can take days and is outside engineering's control). Desktop
+**Release state:** the signed Android v1.4.1 APK/AAB contains the Phase 8
+plugin and is published; signed Windows/macOS desktop 0.7.0 is also
+published. The iOS source is implemented, but no signed IPA
+has been produced because the Apple team id, distribution certificate,
+provisioning profile, and valid associated-domain file are not available to
+the release workflow. Desktop
 (Tauri) integrity heuristics are explicitly **out of scope for v1** — the
 capture blackout (§2) already blanks the screen regardless of device
 integrity, so the marginal security value is lower there; documented as a
 residual gap, not silently skipped.
 
-## 11. MP4-fallback closure (owner action, not yet executed)
+## 11. Direct-file closure and provider verification
 
-The Bunny Stream directory token that authorizes `/{videoId}/playlist.m3u8`
-mathematically **also** authorizes `/{videoId}/play_720p.mp4` if MP4
-Fallback is left on in the Bunny console — a single-request full-file pull
-that bypasses the whole attestation/renewal dance. No client-side or
-token-scoping fix closes this; it requires disabling MP4 Fallback in the
-Bunny Stream library settings. See the admin runbook for the exact
-checklist and the verification step.
+The learner API no longer emits directory-scoped CDN tokens, HLS manifests,
+or MP4 URLs. It emits only a short-lived token-authenticated embed URL, so
+the former token-reuse path to `play_720p.mp4` is closed in application
+code. MediaCage must still be enabled in the Bunny library and verified
+against a real video; Basic DRM disables direct downloads through the embed,
+while Enterprise DRM provides Widevine/FairPlay license enforcement.

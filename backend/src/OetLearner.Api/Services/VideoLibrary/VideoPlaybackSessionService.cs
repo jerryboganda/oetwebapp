@@ -7,8 +7,8 @@ using OetLearner.Api.Services.Settings;
 namespace OetLearner.Api.Services.VideoLibrary;
 
 /// <summary>
-/// Issues and renews token-signed playback sessions for attested native
-/// clients. Attestation + entitlement checks happen BEFORE this service is
+/// Issues and renews short-lived protected playback sessions for authorised
+/// native and web clients. Proof + entitlement checks happen BEFORE this service is
 /// invoked on the ISSUE path (see VideoLibraryEndpoints); this service owns
 /// concurrency limits, session persistence, CDN URL signing, and the watermark
 /// text. RENEW re-checks visibility + entitlement itself: it mints a fresh
@@ -16,18 +16,20 @@ namespace OetLearner.Api.Services.VideoLibrary;
 /// </summary>
 public interface IVideoPlaybackSessionService
 {
-    /// <summary>Issue (or re-use) a playback session for an attested caller.</summary>
+    /// <summary>Issue (or re-use) a playback session for an authorised caller.</summary>
     Task<PlaybackSessionResult> IssueAsync(
         string userId,
         LibraryVideo video,
         string platform,
         string keyId,
+        string? deviceId,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct);
 
     /// <summary>Renew the signed URL of a still-valid session (403 session_expired otherwise).</summary>
-    Task<PlaybackSessionResult> RenewAsync(string userId, string sessionId, CancellationToken ct);
+    Task<PlaybackSessionResult> RenewAsync(
+        string userId, string sessionId, string? deviceId, CancellationToken ct);
 
     /// <summary>Immediately revokes one session owned by <paramref name="userId"/>
     /// (e.g. a capture-detected protection event, per RuntimeSettings
@@ -65,7 +67,9 @@ public sealed record PlaybackWatermark(
 public sealed record PlaybackSessionResult(
     string SessionId,
     string PlaybackUrl,
+    string DeliveryMode,
     DateTimeOffset ExpiresAt,
+    DateTimeOffset SessionExpiresAt,
     string WatermarkText,
     PlaybackWatermark Watermark,
     IReadOnlyList<PlaybackSessionCaption> Captions);
@@ -80,13 +84,14 @@ public sealed class VideoPlaybackSessionService(
     ILogger<VideoPlaybackSessionService> logger) : IVideoPlaybackSessionService
 {
     private const int MaxConcurrentDistinctVideos = 3;
-    private static readonly TimeSpan RenewMinRemaining = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MaxSessionLifetime = TimeSpan.FromHours(8);
 
     public async Task<PlaybackSessionResult> IssueAsync(
         string userId,
         LibraryVideo video,
         string platform,
         string keyId,
+        string? deviceId,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct)
@@ -99,6 +104,7 @@ public sealed class VideoPlaybackSessionService(
             .AsNoTracking()
             .Where(s => s.UserId == userId
                 && s.VideoId == video.Id
+                && s.DeviceId == deviceId
                 && s.RevokedAt == null
                 && s.ExpiresAt > now)
             .OrderByDescending(s => s.IssuedAt)
@@ -121,18 +127,14 @@ public sealed class VideoPlaybackSessionService(
                 $"You already have {MaxConcurrentDistinctVideos} active playback sessions. Close one before starting another video.");
         }
 
-        // Session TTL = min(max(2 × duration, 15min), configured cap [default 30min]).
-        // Floor kept low (900s) so a captured/leaked signed CDN URL can't outlive
-        // its own revoke-on-DB-flag by hours — Bunny's edge has no revocation
-        // callback, so TTL length IS the worst-case exposure window. The frontend
-        // player already renews ~2min before expiry regardless of TTL length
-        // (components/videos/video-player.tsx), so a shorter floor only makes
-        // that existing renewal fire somewhat more often — no UX change.
-        var settings = (await settingsProvider.GetAsync(ct)).BunnyStream;
-        var ttlSeconds = Math.Min(
+        // The database session is deliberately longer than the URL token. A
+        // learner can finish a normal lesson without re-attesting every five
+        // minutes, while the bearer URL itself is short-lived and renewed only
+        // after this service re-checks auth, publication and entitlement.
+        var sessionLifetimeSeconds = Math.Min(
             Math.Max(2L * Math.Max(0, video.DurationSeconds), 900L),
-            settings.PlaybackTokenTtlSeconds);
-        var expiresAt = now.AddSeconds(ttlSeconds);
+            (long)MaxSessionLifetime.TotalSeconds);
+        var expiresAt = now.AddSeconds(sessionLifetimeSeconds);
 
         var session = new VideoPlaybackSession
         {
@@ -143,6 +145,7 @@ public sealed class VideoPlaybackSessionService(
             AttestationKeyId = keyId,
             IpAddress = Truncate(ipAddress, 64),
             UserAgent = Truncate(userAgent, 256),
+            DeviceId = Truncate(deviceId, 128),
             IssuedAt = now,
             ExpiresAt = expiresAt,
         };
@@ -174,25 +177,39 @@ public sealed class VideoPlaybackSessionService(
         await securityEventLogger.TryLogAsync(
             authAccountId,
             SecurityEventKinds.PlaybackSessionStarted,
-            deviceId: null,
+            deviceId: deviceId,
             details: new { videoId = video.Id, platform },
             cancellationToken: ct);
 
         return result;
     }
 
-    public async Task<PlaybackSessionResult> RenewAsync(string userId, string sessionId, CancellationToken ct)
+    public async Task<PlaybackSessionResult> RenewAsync(
+        string userId, string sessionId, string? deviceId, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var session = await db.VideoPlaybackSessions.AsNoTracking()
+        var session = await db.VideoPlaybackSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
 
         if (session is null
             || session.RevokedAt is not null
-            || session.ExpiresAt <= now.Add(RenewMinRemaining))
+            || session.ExpiresAt <= now)
         {
             throw ApiException.Forbidden("session_expired",
                 "This playback session has expired. Start the video again to get a new session.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.DeviceId)
+            && !string.Equals(session.DeviceId, deviceId, StringComparison.Ordinal))
+        {
+            session.RevokedAt = now;
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning(
+                "Revoked video playback session {SessionId}: device mismatch.",
+                sessionId);
+            throw ApiException.Forbidden(
+                "session_device_mismatch",
+                "This playback session belongs to a different device.");
         }
 
         // A renew mints a NEW signed CDN URL, so it must re-earn the grant that issued the
@@ -262,8 +279,16 @@ public sealed class VideoPlaybackSessionService(
             throw new BunnyNotConfiguredException();
         }
 
+        var settings = (await settingsProvider.GetAsync(ct)).BunnyStream;
+        var playbackUrlExpiresAt = DateTimeOffset.UtcNow.AddSeconds(
+            Math.Clamp(settings.PlaybackTokenTtlSeconds, 300, 900));
+        if (playbackUrlExpiresAt > expiresAt)
+        {
+            playbackUrlExpiresAt = expiresAt;
+        }
+
         var playbackUrl = await bunny.SignPlaybackUrlAsync(
-            video.BunnyVideoId, expiresAt.ToUnixTimeSeconds(), ct);
+            video.BunnyVideoId, playbackUrlExpiresAt.ToUnixTimeSeconds(), ct);
 
         var learner = await db.Users.AsNoTracking()
             .Where(u => u.Id == userId)
@@ -295,7 +320,15 @@ public sealed class VideoPlaybackSessionService(
         var watermarkText = $"{learner?.Email ?? userId} · {sessionRef}";
         var watermark = new PlaybackWatermark(fullName, maskedEmail, userRef, sessionRef, platform, issuedAt);
 
-        return new PlaybackSessionResult(sessionId, playbackUrl, expiresAt, watermarkText, watermark, captions);
+        return new PlaybackSessionResult(
+            sessionId,
+            playbackUrl,
+            "secure_embed",
+            playbackUrlExpiresAt,
+            expiresAt,
+            watermarkText,
+            watermark,
+            captions);
     }
 
     /// <summary>Masks an email for on-screen display (Course Platform Security

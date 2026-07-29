@@ -10,15 +10,18 @@ namespace OetLearner.Api.Services.VideoLibrary;
 // ═════════════════════════════════════════════════════════════════════════════
 // Video playback attestation — MISSION-CRITICAL gate.
 //
-// Playback sessions are issued ONLY to attested native clients (Tauri desktop /
-// Capacitor mobile), never to browsers. The handshake:
+// Native clients (Tauri desktop / Capacitor mobile) use the strongest available
+// HMAC attestation. Web is also a supported course platform: it uses the same
+// authenticated, user-bound, single-use nonce without pretending a browser can
+// safely hold an application secret. The handshake:
 //
 //   1. POST /v1/video-library/attestation/challenge → single-use nonce
 //      (base64url of 32 random bytes, 90s TTL, bound to the caller's user id).
 //   2. The native shell signs "{nonce}|{videoId}|{userId}|{platform}|{keyId}"
 //      (UTF-8) with its embedded per-platform HMAC-SHA256 secret and sends the
 //      LOWERCASE HEX signature to POST /videos/{videoId}/playback-session.
-//   3. The server consumes the nonce atomically (single use), looks up the
+//   3. The server consumes the nonce atomically (single use). For native
+//      clients it then looks up the
 //      "{platform}:{keyId}" secret from RuntimeSettings, recomputes the HMAC
 //      with ITS OWN authenticated user id (a spoofed id simply fails the
 //      compare) and verifies via CryptographicOperations.FixedTimeEquals.
@@ -54,6 +57,8 @@ public sealed class VideoAttestationService(
     ILogger<VideoAttestationService> logger) : IVideoAttestationService
 {
     private static readonly TimeSpan ChallengeTtl = TimeSpan.FromSeconds(90);
+    public const string WebPlatform = "web";
+    public const string WebKeyId = "browser-session";
 
     public async Task<VideoAttestationChallengeResult> IssueChallengeAsync(string userId, CancellationToken ct)
     {
@@ -90,6 +95,17 @@ public sealed class VideoAttestationService(
         {
             await RecordFailureAsync(userId, videoId, "nonce_invalid", platform, ipAddress, ct);
             throw ApiException.Forbidden("attestation_invalid", "Attestation challenge is invalid or expired.");
+        }
+
+        // Browsers cannot protect an embedded HMAC secret. Their authorisation
+        // boundary is the authenticated access-token family plus this
+        // user-bound, one-time nonce, followed by entitlement, trusted-device,
+        // single-session and playback-session checks in the endpoint/service.
+        if (string.Equals(platform, WebPlatform, StringComparison.Ordinal)
+            && string.Equals(keyId, WebKeyId, StringComparison.Ordinal)
+            && string.IsNullOrEmpty(signature))
+        {
+            return;
         }
 
         // (b) Key lookup "{platform}:{keyId}".

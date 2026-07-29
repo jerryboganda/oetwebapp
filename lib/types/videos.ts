@@ -3,9 +3,8 @@
  *
  * Mirrors the backend contracts served by `VideoLibraryEndpoints.cs`
  * (`/v1/video-library/*`). Playback URLs are NEVER present on catalog or
- * detail DTOs — they are only issued through an attested playback session
- * (see `lib/video/attestation.ts`), which is what enforces the
- * native-app-only playback rule.
+ * detail DTOs — they are issued only through the protected playback-session
+ * flow (see `lib/video/attestation.ts`).
  */
 
 export type VideoAccessTier = 'free' | 'premium';
@@ -104,7 +103,12 @@ export type PlaybackWatermark = {
 export type PlaybackSession = {
   sessionId: string;
   playbackUrl: string;
+  /** Optional only while an older API replica drains during deployment. */
+  deliveryMode?: 'secure_embed' | 'direct_hls';
+  /** Short-lived embed-view token expiry. */
   expiresAt: string;
+  /** Server-side playback-session expiry; renewed URLs never outlive this. */
+  sessionExpiresAt?: string;
   /** @deprecated kept for one deploy cycle in case of frontend/backend skew; use `watermark`. */
   watermarkText: string;
   /** Null only during the brief window where the backend hasn't deployed the

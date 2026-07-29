@@ -17,6 +17,7 @@ vi.mock('@/lib/runtime-signals', () => ({
 vi.mock('@/lib/mobile/playback-attestation', () => ({
   isPlaybackAttestationAvailable: mockIsAvailable,
   signVideoChallenge: mockSignViaCapacitor,
+  getDeviceIntegrity: vi.fn().mockResolvedValue(null),
   setSecureScreen: vi.fn(),
 }));
 
@@ -40,8 +41,10 @@ function installBridge(bridge: BridgeShape) {
 
 const SESSION = {
   sessionId: 'sess-1',
-  playbackUrl: 'https://vz-test.b-cdn.net/bunny-1/playlist.m3u8?token=t&expires=1&token_path=%2Fbunny-1%2F',
+  playbackUrl: 'https://iframe.mediadelivery.net/embed/123/bunny-1?token=t&expires=1',
+  deliveryMode: 'secure_embed' as const,
   expiresAt: '2026-07-03T12:00:00Z',
+  sessionExpiresAt: '2026-07-03T13:00:00Z',
   watermarkText: 'learner@example.com · sess-1',
   captions: [],
 };
@@ -64,11 +67,17 @@ afterEach(() => {
 });
 
 describe('getPlaybackAttestor', () => {
-  it('reports WEB_NOT_ALLOWED on web runtimes', () => {
+  it('uses the authenticated browser-session proof on web runtimes', async () => {
     mockGetAppRuntimeKind.mockReturnValue('web');
     const attestor = getPlaybackAttestor();
-    expect(attestor.available).toBe(false);
-    if (!attestor.available) expect(attestor.reason).toBe('WEB_NOT_ALLOWED');
+    expect(attestor.available).toBe(true);
+    if (attestor.available) {
+      await expect(attestor.sign('nonce', 'video', 'user')).resolves.toMatchObject({
+        signature: '',
+        platform: 'web',
+        keyId: 'browser-session',
+      });
+    }
   });
 
   it('reports DESKTOP_UPDATE_REQUIRED when the v0.3 bridge lacks attestation', () => {
@@ -96,11 +105,16 @@ describe('requestPlaybackSession', () => {
     return sign;
   }
 
-  it('rejects immediately on web without touching the API', async () => {
+  it('uses a one-time authenticated nonce on web', async () => {
     mockGetAppRuntimeKind.mockReturnValue('web');
-    await expect(requestPlaybackSession('video-1', 'user-1')).rejects.toMatchObject({ code: 'WEB_NOT_ALLOWED' });
-    expect(mockFetchChallenge).not.toHaveBeenCalled();
-    expect(mockCreateSession).not.toHaveBeenCalled();
+    await expect(requestPlaybackSession('video-1', 'user-1')).resolves.toEqual(SESSION);
+    expect(mockFetchChallenge).toHaveBeenCalledTimes(1);
+    expect(mockCreateSession).toHaveBeenCalledWith('video-1', {
+      nonce: 'nonce-1',
+      platform: 'web',
+      keyId: 'browser-session',
+      signature: '',
+    });
   });
 
   it('runs challenge → native sign → session on desktop', async () => {

@@ -27,6 +27,11 @@ export interface VideoProtectionEventInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface VideoProtectionReportOptions {
+  /** Flush this event now instead of waiting for the normal telemetry batch. */
+  immediate?: boolean;
+}
+
 interface QueuedEvent {
   videoId?: string;
   sessionId?: string;
@@ -68,7 +73,10 @@ async function flush(): Promise<void> {
 /** Fire-and-forget: queues the event and flushes on a short timer (or
  * immediately once the queue fills a batch), so a burst of signals (e.g.
  * several risk events in one tick) costs one request, not several. */
-export function reportProtectionEvent(input: VideoProtectionEventInput): void {
+export function reportProtectionEvent(
+  input: VideoProtectionEventInput,
+  options: VideoProtectionReportOptions = {},
+): void {
   queue.push({
     videoId: input.videoId,
     sessionId: input.sessionId,
@@ -77,7 +85,7 @@ export function reportProtectionEvent(input: VideoProtectionEventInput): void {
     metadata: input.metadata,
   });
 
-  if (queue.length >= BATCH_MAX) {
+  if (options.immediate || queue.length >= BATCH_MAX) {
     void flush();
     return;
   }

@@ -6,10 +6,10 @@
  * headers stay consistent. Kept out of `lib/api.ts` per the feature-scoped
  * client convention (see `lib/api/speaking-sessions.ts`).
  *
- * SECURITY NOTE: `createPlaybackSession` only succeeds for attested native
- * clients (Tauri desktop / Capacitor mobile). Browsers always receive 403 —
- * that server-side rejection, not any client check, is the enforcement
- * boundary for the app-only playback rule.
+ * SECURITY NOTE: native clients use shell-held HMAC attestation. Web clients
+ * use an authenticated, user-bound, single-use nonce because a browser cannot
+ * safely hold an application secret. Both paths then pass the same
+ * entitlement, device, session, concurrency, short-token and audit controls.
  */
 import { apiClient } from '@/lib/api';
 import type {

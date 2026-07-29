@@ -11,6 +11,7 @@ import {
 import { env } from './env';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
 import { getClientIdentitySnapshot } from './client-version';
+import { getDeviceId } from './device-id';
 import type { CurrentUser } from './types/auth';
 import type {
   ExamFamilyCode,
@@ -408,6 +409,13 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     if (identity.version) {
       headers.set('X-App-Version', identity.version);
     }
+  }
+
+  // Bind protected resource calls (especially playback sessions) to the same
+  // opaque device identity used at sign-in/refresh.
+  const deviceId = getDeviceId();
+  if (deviceId) {
+    headers.set('X-OET-Device-Id', deviceId);
   }
 
   try {

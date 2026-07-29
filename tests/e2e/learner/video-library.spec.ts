@@ -68,6 +68,41 @@ async function mockVideoLibraryApis(page: Page) {
   await page.route(/\/v1\/video-library\/videos\/video-1$/, async (route) => {
     await route.fulfill({ json: videoDetail });
   });
+
+  await page.route(/\/v1\/video-library\/attestation\/challenge$/, async (route) => {
+    await route.fulfill({ json: { nonce: 'web-nonce', expiresAt: '2026-07-29T12:01:30Z' } });
+  });
+
+  await page.route(/\/v1\/video-library\/videos\/video-1\/playback-session$/, async (route) => {
+    await route.fulfill({
+      json: {
+        sessionId: 'session-web-1',
+        playbackUrl:
+          'https://iframe.mediadelivery.net/embed/123/video-guid?token=signed&expires=1999999999',
+        deliveryMode: 'secure_embed',
+        expiresAt: '2033-05-18T03:33:19Z',
+        sessionExpiresAt: '2033-05-18T04:33:19Z',
+        watermarkText: 'Learner · session',
+        watermark: {
+          fullName: 'Test Learner',
+          maskedEmail: 'te***@example.test',
+          userRef: 'user-1',
+          sessionRef: 'session-web-1',
+          platform: 'web',
+          issuedAt: '2026-07-29T12:00:00Z',
+        },
+        captions: [],
+      },
+    });
+  });
+
+  await page.route(/\/v1\/video-library\/protection-events$/, async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.route('https://iframe.mediadelivery.net/embed/**', async (route) => {
+    await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Protected video</title>' });
+  });
 }
 
 test.describe('Learner video library @learner @smoke', () => {
@@ -94,7 +129,7 @@ test.describe('Learner video library @learner @smoke', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('web browser gets the lock screen — no video element, no playback-session call', async ({ page }, testInfo) => {
+  test('web browser receives only the short-lived protected embed', async ({ page }, testInfo) => {
     const diagnostics = observePage(page);
     const playbackSessionCalls: string[] = [];
     const cdnCalls: string[] = [];
@@ -108,18 +143,21 @@ test.describe('Learner video library @learner @smoke', () => {
     await page.goto('/videos/video-1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /Writing task planning/i })).toBeVisible();
 
-    // MISSION-CRITICAL: browsers never render a player or request playback.
-    await expect(page.getByText(/Videos play only in the OET app/i)).toBeVisible();
+    // MISSION-CRITICAL: web is functional, but never receives raw HLS/MP4.
+    const protectedFrame = page.locator('iframe[title="Protected course video"]');
+    await expect(protectedFrame).toBeVisible();
+    await expect(protectedFrame).toHaveAttribute(
+      'src',
+      /iframe\.mediadelivery\.net\/embed\/123\/video-guid\?token=signed&expires=1999999999/,
+    );
     await expect(page.locator('video')).toHaveCount(0);
-    expect(playbackSessionCalls).toHaveLength(0);
+    expect(playbackSessionCalls).toHaveLength(1);
     expect(cdnCalls).toHaveLength(0);
+    await expect(page.getByText(/Test Learner/i).first()).toBeVisible();
 
     // The catalog metadata stays fully browsable (chapters, handouts, next step).
     await expect(page.getByText(/Plan the answer/i)).toBeVisible();
     await expect(page.getByText(/Planning checklist/i)).toBeVisible();
-
-    // Download CTAs are present on the lock screen.
-    await expect(page.getByRole('link', { name: /Desktop app/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true, allowNotificationReconnectNoise: true });
     diagnostics.detach();

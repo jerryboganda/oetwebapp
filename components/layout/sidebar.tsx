@@ -121,8 +121,8 @@ export const mobileNavItems: NavItem[] = [
 ];
 
 // Curated 7-item learner bottom-nav (fits grid-cols-7 without overflow).
-// Videos takes the 7th slot (mobile is a primary Video Library surface —
-// playback is native-app-only); Materials, Progress and Billing remain
+// Videos takes the 7th slot (mobile is a primary Video Library surface);
+// Materials, Progress and Billing remain
 // reachable via the desktop sidebar and Settings page.
 export const learnerMobileNavItems: NavItem[] = [
   learnerMainNavItems[0], // Dashboard

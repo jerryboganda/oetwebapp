@@ -308,6 +308,9 @@ public class VideoPlaybackSession
     [MaxLength(256)]
     public string? UserAgent { get; set; }
 
+    [MaxLength(128)]
+    public string? DeviceId { get; set; }
+
     public DateTimeOffset IssuedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }

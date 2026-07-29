@@ -101,10 +101,9 @@ public sealed class FakeBunnyStreamClient : IBunnyStreamClient
 
     public Task<string> SignPlaybackUrlAsync(string bunnyVideoId, long expiresUnix, CancellationToken ct)
     {
-        var tokenPath = $"/{bunnyVideoId}/";
-        var token = BunnyStreamClient.ComputeCdnToken("token-auth-key", tokenPath, expiresUnix);
-        return Task.FromResult(BunnyStreamClient.BuildSignedPlaybackUrl(
-            "vz-test.b-cdn.net", bunnyVideoId, token, expiresUnix, tokenPath));
+        var token = BunnyStreamClient.ComputeEmbedToken("test-api-key", bunnyVideoId, expiresUnix);
+        return Task.FromResult(BunnyStreamClient.BuildSignedEmbedUrl(
+            "123456", bunnyVideoId, token, expiresUnix));
     }
 
     // ── Collections ──────────────────────────────────────────────────────────

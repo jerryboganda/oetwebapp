@@ -29,10 +29,15 @@ import {
 import { postVideoEvent, postVideoProgress, renewPlaybackSession } from '@/lib/api/videos';
 import { reportProtectionEvent } from '@/lib/api/video-protection';
 import { setVideoScreenProtection } from '@/lib/video/screen-protection';
+import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { addCaptureStateListener, addScreenshotListener } from '@/lib/mobile/playback-attestation';
 import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/types/videos';
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
 import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
+import {
+  SecureEmbedPlayer,
+  type SecureEmbedPlayerHandle,
+} from '@/components/videos/secure-embed-player';
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const HEARTBEAT_INTERVAL_MS = 60_000;
@@ -94,10 +99,10 @@ export interface VideoPlayerProps {
 }
 
 /**
- * Native-only video player. Mounted exclusively when the runtime is a native
- * shell — but even if forced to mount on web, the server refuses the playback
- * session, so nothing plays. Renders its own controls so the forensic
- * watermark survives fullscreen (the CONTAINER fullscreens, not the video).
+ * Protected course player for web and native shells. Native runtimes add
+ * HMAC attestation and OS capture exclusion; web uses authenticated nonce,
+ * session, watermark and audit compensating controls. The container, not the
+ * media element, enters fullscreen so the forensic watermark remains visible.
  */
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
   { videoId, userId, durationSeconds, initialProgress, chapters, onProgressPersisted, lowBandwidth = false },
@@ -105,12 +110,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const embedPlayerRef = useRef<SecureEmbedPlayerHandle | null>(null);
   const engineRef = useRef<HlsEngineHandle | null>(null);
   const sessionRef = useRef<PlaybackSession | null>(null);
   const renewTimerRef = useRef<number | null>(null);
   const heartbeatTimerRef = useRef<number | null>(null);
   const maxWatchedRef = useRef(initialProgress?.positionSeconds ?? 0);
   const lastReportedRef = useRef(initialProgress?.positionSeconds ?? 0);
+  const currentTimeRef = useRef(initialProgress?.positionSeconds ?? 0);
   const resumedRef = useRef(false);
   const recoveringRef = useRef(false);
   const watermarkTamperCountRef = useRef(0);
@@ -132,8 +139,11 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {
       const video = videoRef.current;
-      if (!video) return;
-      video.currentTime = Math.max(0, Math.min(seconds, video.duration || seconds));
+      if (video) {
+        video.currentTime = Math.max(0, Math.min(seconds, video.duration || seconds));
+      } else {
+        embedPlayerRef.current?.seekTo(seconds);
+      }
       void postVideoEvent({ videoId, sessionId: sessionRef.current?.sessionId, eventType: 'seek', positionSeconds: seconds });
     },
   }));
@@ -154,6 +164,64 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     [onProgressPersisted, videoId],
   );
 
+  const handleEmbedTimeUpdate = useCallback(
+    (seconds: number, reportedDuration: number) => {
+      const watched = Math.floor(seconds);
+      currentTimeRef.current = seconds;
+      setCurrentTime(seconds);
+      if (reportedDuration > 0) setDuration(reportedDuration);
+      maxWatchedRef.current = Math.max(maxWatchedRef.current, watched);
+      if (maxWatchedRef.current - lastReportedRef.current >= 15) {
+        lastReportedRef.current = maxWatchedRef.current;
+        void reportProgress(maxWatchedRef.current);
+      }
+    },
+    [reportProgress],
+  );
+
+  const handleEmbedPlay = useCallback(() => {
+    setIsPlaying(true);
+    void postVideoEvent({
+      videoId,
+      sessionId: sessionRef.current?.sessionId,
+      eventType: 'play',
+      positionSeconds: currentTimeRef.current,
+    });
+  }, [videoId]);
+
+  const handleEmbedPause = useCallback(() => {
+    setIsPlaying(false);
+    if (maxWatchedRef.current > lastReportedRef.current) {
+      lastReportedRef.current = maxWatchedRef.current;
+      void reportProgress(maxWatchedRef.current);
+    }
+    void postVideoEvent({
+      videoId,
+      sessionId: sessionRef.current?.sessionId,
+      eventType: 'pause',
+      positionSeconds: currentTimeRef.current,
+    });
+  }, [reportProgress, videoId]);
+
+  const handleEmbedEnded = useCallback(() => {
+    setIsPlaying(false);
+    const completedAt = Math.floor(currentTimeRef.current);
+    maxWatchedRef.current = Math.max(maxWatchedRef.current, completedAt);
+    lastReportedRef.current = maxWatchedRef.current;
+    void reportProgress(maxWatchedRef.current);
+    void postVideoEvent({
+      videoId,
+      sessionId: sessionRef.current?.sessionId,
+      eventType: 'complete',
+      positionSeconds: completedAt,
+    });
+  }, [reportProgress, videoId]);
+
+  const handleEmbedError = useCallback(() => {
+    setIsPlaying(false);
+    setPhase({ kind: 'error', code: 'NETWORK', message: gateMessage('NETWORK') });
+  }, []);
+
   // Watermark integrity watchdog callback (Course Platform Security
   // Requirements §2.3). The overlay reports at most once per continuous
   // tampered state; remount it (bumping the key) so a hidden/removed node
@@ -168,10 +236,12 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       videoId,
       sessionId: sessionRef.current?.sessionId,
       metadata: { count },
-    });
+    }, { immediate: true });
     setWatermarkKey((key) => key + 1);
     if (count >= 3) {
       videoRef.current?.pause();
+      embedPlayerRef.current?.pause();
+      embedPlayerRef.current?.mute();
       setPhase({ kind: 'error', code: 'SECURITY_VIOLATION', message: gateMessage('SECURITY_VIOLATION') });
     }
   }, [videoId]);
@@ -204,7 +274,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
               videoId,
               sessionId: renewed.sessionId,
               eventType: 'session_renewed',
-              positionSeconds: videoRef.current?.currentTime ?? 0,
+              positionSeconds: currentTimeRef.current,
             });
             scheduleRenewal(renewed, onRenewFailed);
           } catch {
@@ -217,9 +287,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   );
 
   const startPlayback = useCallback(async () => {
-    const video = videoRef.current;
-    if (!video) return;
-
     setPhase({ kind: 'attesting' });
     teardownEngine();
 
@@ -251,7 +318,9 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         try {
           const fresh = await requestPlaybackSession(videoId, userId);
           sessionRef.current = fresh;
-          await engineRef.current?.recoverWithUrl(fresh.playbackUrl);
+          if (fresh.deliveryMode !== 'secure_embed') {
+            await engineRef.current?.recoverWithUrl(fresh.playbackUrl);
+          }
           setPhase({ kind: 'playing', session: fresh });
           scheduleRenewal(fresh, reattest);
         } catch {
@@ -261,6 +330,20 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         }
       })();
     };
+
+    if (session.deliveryMode === 'secure_embed') {
+      setPhase({ kind: 'playing', session });
+      scheduleRenewal(session, reattest);
+      return;
+    }
+
+    // Rolling-deploy compatibility: an older API may still return the legacy
+    // direct-HLS response briefly. New sessions use secure_embed exclusively.
+    const video = videoRef.current;
+    if (!video) {
+      setPhase({ kind: 'error', code: 'NETWORK', message: gateMessage('NETWORK') });
+      return;
+    }
 
     try {
       const engine = await createHlsEngine(video, session.playbackUrl);
@@ -293,11 +376,25 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   // Boot: attest + attach. Also engage OS screen-capture protection for the
   // lifetime of the player on every native shell — desktop (Tauri window
   // capture-exclusion) AND mobile (Android FLAG_SECURE) — so screenshots and
-  // screen recorders capture only black. No-op on web. Best-effort, never a gate.
+  // screen recorders capture only black. This is a hard playback gate.
   useEffect(() => {
-    void setVideoScreenProtection(true);
-    void startPlayback();
+    let cancelled = false;
+    void (async () => {
+      const runtimeKind = getAppRuntimeKind();
+      const protectionEngaged = await setVideoScreenProtection(true);
+      if (cancelled) return;
+      if (runtimeKind !== 'web' && !protectionEngaged) {
+        setPhase({
+          kind: 'error',
+          code: 'SECURITY_VIOLATION',
+          message: 'Secure display protection is unavailable. Update the app before playing protected video.',
+        });
+        return;
+      }
+      await startPlayback();
+    })();
     return () => {
+      cancelled = true;
       teardownEngine();
       if (heartbeatTimerRef.current !== null) window.clearInterval(heartbeatTimerRef.current);
       void setVideoScreenProtection(false);
@@ -317,7 +414,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         videoId,
         sessionId: sessionRef.current?.sessionId,
         eventType: 'heartbeat',
-        positionSeconds: videoRef.current?.currentTime ?? 0,
+        positionSeconds: currentTimeRef.current,
       });
     }, HEARTBEAT_INTERVAL_MS);
     return () => {
@@ -343,6 +440,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   useEffect(() => {
     const onSessionRevoked = () => {
       videoRef.current?.pause();
+      embedPlayerRef.current?.pause();
+      embedPlayerRef.current?.mute();
       if (renewTimerRef.current !== null) {
         window.clearTimeout(renewTimerRef.current);
         renewTimerRef.current = null;
@@ -393,7 +492,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     let removeCaptureListener = () => {};
 
     void addScreenshotListener(() => {
-      reportProtectionEvent({ kind: 'screenshot_detected', videoId, sessionId: activeSessionId });
+      reportProtectionEvent(
+        { kind: 'screenshot_detected', videoId, sessionId: activeSessionId },
+        { immediate: true },
+      );
+      videoRef.current?.pause();
+      embedPlayerRef.current?.pause();
+      embedPlayerRef.current?.mute();
+      setIsPlaying(false);
       setCaptureWarning('screenshot');
       if (warningTimer !== null) window.clearTimeout(warningTimer);
       warningTimer = window.setTimeout(() => setCaptureWarning(null), 3000);
@@ -404,7 +510,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
 
     void addCaptureStateListener((isCaptured) => {
       if (isCaptured) {
-        reportProtectionEvent({ kind: 'capture_detected', videoId, sessionId: activeSessionId });
+        reportProtectionEvent(
+          { kind: 'capture_detected', videoId, sessionId: activeSessionId },
+          { immediate: true },
+        );
+        videoRef.current?.pause();
+        embedPlayerRef.current?.pause();
+        embedPlayerRef.current?.mute();
+        setIsPlaying(false);
       }
       setCaptureWarning(isCaptured ? 'recording' : null);
     }).then((remove) => {
@@ -453,13 +566,17 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      if (isPlaying) embedPlayerRef.current?.pause();
+      else embedPlayerRef.current?.play();
+      return;
+    }
     if (video.paused) {
       void video.play().catch(() => undefined);
     } else {
       video.pause();
     }
-  }, []);
+  }, [isPlaying]);
 
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
@@ -480,12 +597,18 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       const video = videoRef.current;
-      if (!video) return;
       const key = event.key;
       if (key === ' ' || key.toLowerCase() === 'k') {
         event.preventDefault();
         togglePlay();
-      } else if (key === 'ArrowLeft') {
+        return;
+      }
+      if (key.toLowerCase() === 'f') {
+        toggleFullscreen();
+        return;
+      }
+      if (!video) return;
+      if (key === 'ArrowLeft') {
         event.preventDefault();
         seekBy(-5);
       } else if (key === 'ArrowRight') {
@@ -498,8 +621,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       } else if (key.toLowerCase() === 'm') {
         video.muted = !video.muted;
         setMuted(video.muted);
-      } else if (key.toLowerCase() === 'f') {
-        toggleFullscreen();
       } else if (key.toLowerCase() === 'c') {
         toggleCaptions();
       } else if (/^[0-9]$/.test(key) && Number.isFinite(video.duration)) {
@@ -541,6 +662,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     );
   }
 
+  const isSecureEmbedPlayback =
+    phase.kind === 'playing' && phase.session.deliveryMode === 'secure_embed';
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
   return (
@@ -552,8 +675,20 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       aria-label="Video player"
       onKeyDown={handleKeyDown}
     >
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- caption tracks arrive via the HLS manifest */}
-      <video
+      {isSecureEmbedPlayback ? (
+        <SecureEmbedPlayer
+          ref={embedPlayerRef}
+          src={phase.session.playbackUrl}
+          title="Protected course video"
+          initialPositionSeconds={initialProgress?.completed ? 0 : initialProgress?.positionSeconds ?? 0}
+          onPlay={handleEmbedPlay}
+          onPause={handleEmbedPause}
+          onTimeUpdate={handleEmbedTimeUpdate}
+          onEnded={handleEmbedEnded}
+          onError={handleEmbedError}
+        />
+      ) : (
+        <video
         ref={videoRef}
         className="h-full w-full"
         playsInline
@@ -575,6 +710,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         }}
         onTimeUpdate={(event) => {
           const watched = Math.floor(event.currentTarget.currentTime);
+          currentTimeRef.current = event.currentTarget.currentTime;
           setCurrentTime(event.currentTarget.currentTime);
           maxWatchedRef.current = Math.max(maxWatchedRef.current, watched);
           if (maxWatchedRef.current - lastReportedRef.current >= 15) {
@@ -616,7 +752,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
             positionSeconds: Math.floor(duration),
           });
         }}
-      />
+        />
+      )}
 
       {phase.kind === 'attesting' && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-navy/90 text-white">
@@ -644,8 +781,20 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         </div>
       )}
 
-      {/* Controls */}
-      <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pb-2 pt-8 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+      {isSecureEmbedPlayback && (
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          className="absolute right-3 top-3 z-50 rounded-lg bg-black/65 p-2 text-white shadow-lg hover:bg-black/80"
+        >
+          {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+        </button>
+      )}
+
+      {/* Legacy direct-HLS controls retained only for rolling-deploy compatibility. */}
+      {!isSecureEmbedPlayback && (
+        <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pb-2 pt-8 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
         <div className="relative mb-2 h-1.5 w-full cursor-pointer rounded-full bg-white/25"
           role="slider"
           aria-label="Seek"
@@ -748,7 +897,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 });

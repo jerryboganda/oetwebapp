@@ -20,17 +20,20 @@ import { reportProtectionEvent } from '@/lib/api/video-protection';
  *     iOS is handled separately (see Phase 8 — `screenshotTaken` listener).
  *   - Web: no such capability — resolves false.
  *
- * Hardening ONLY, never a gate: callers treat a false result as "protection
- * unavailable on this platform" and continue playing. No-throw. The caller
- * (video-player.tsx) reports the outcome as a `protection_engaged` /
- * `protection_unavailable` telemetry event — see reportProtectionEvent.
+ * Returns false when the control cannot be engaged. Protected-course callers
+ * treat that as a hard gate in native shells; web browsers continue with the
+ * watermark, short token, session and audit compensating controls. The caller
+ * reports `protection_engaged` / `protection_unavailable` telemetry.
  */
 export async function setVideoScreenProtection(enabled: boolean): Promise<boolean> {
   const runtime = getAppRuntimeKind();
   const engaged = await engage(runtime, enabled);
 
   if (enabled) {
-    void reportProtectionEvent({ kind: engaged ? 'protection_engaged' : 'protection_unavailable' });
+    void reportProtectionEvent(
+      { kind: engaged ? 'protection_engaged' : 'protection_unavailable' },
+      { immediate: !engaged },
+    );
   }
 
   return engaged;

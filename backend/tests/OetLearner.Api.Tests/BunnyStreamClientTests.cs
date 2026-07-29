@@ -88,6 +88,35 @@ public class BunnyStreamClientTests
     }
 
     [Fact]
+    public void EmbedToken_MatchesPinnedVector()
+    {
+        var token = BunnyStreamClient.ComputeEmbedToken(
+            "test-api-key", "video-guid-1", 1700000000);
+
+        Assert.Equal(
+            "96cf13992101f9b18c6594586a091adb0cca54e39966f440628af03c8f5ca456",
+            token);
+    }
+
+    [Fact]
+    public void SignedEmbedUrl_UsesMediaCagePlayerWithoutExposingRawHls()
+    {
+        var token = BunnyStreamClient.ComputeEmbedToken(
+            "test-api-key", "video-guid-1", 1700000000);
+        var url = BunnyStreamClient.BuildSignedEmbedUrl(
+            "123456", "video-guid-1", token, 1700000000);
+
+        Assert.StartsWith(
+            "https://iframe.mediadelivery.net/embed/123456/video-guid-1?",
+            url,
+            StringComparison.Ordinal);
+        Assert.Contains($"token={token}", url, StringComparison.Ordinal);
+        Assert.Contains("expires=1700000000", url, StringComparison.Ordinal);
+        Assert.DoesNotContain("playlist.m3u8", url, StringComparison.Ordinal);
+        Assert.DoesNotContain(".mp4", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThumbnailToken_MatchesPinnedVector()
     {
         // base64url-nopad(raw sha256("token-auth-key" + "/video-guid-1/thumbnail.jpg"

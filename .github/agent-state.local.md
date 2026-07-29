@@ -1,30 +1,56 @@
-# Agent State - Manual-only Tutor Book delivery
+# Agent State - Course platform security production completion
 
-Last updated: 2026-07-24
+Last updated: 2026-07-29
 
 ## Goal
 
-Make the standalone `tutor-book` product deliverable manually through WhatsApp without granting any learner-platform content, subtest, Tutor Book Reader, or Recalls access.
+Implement and production-verify the controls in
+`OET_Course_Platform_Security_Requirements (1).pdf`, preserving explicit
+evidence for platform limitations and external provider blockers.
 
 ## Implemented
 
-- Added the explicit `["none"]` subtest scope; empty `[]` remains the legacy all-subtests value.
-- Added an admin “No platform or subtest access” control that clears modules, credits, trials, entitlements, and content overrides and selects manual material delivery.
-- Server validation normalizes the no-platform scope to zero grants and rejects incompatible delivery.
-- Manual fulfillment now uses the purchased immutable plan version and records external delivery without activating the subscription.
-- Entitlement resolution fails low for external-only products, including historical Active subscription rows.
-- Canonical Tutor Book seed data now has no modules/bundled unlock and uses manual WhatsApp delivery.
-- Added a guarded production migration that aligns plans/versions and clears unintended standalone Tutor Book unlocks on existing subscriptions.
-- Candidate/admin completion messaging distinguishes externally delivered material from released platform access.
+- Replaced learner-visible direct HLS URLs with 5-minute token-authenticated
+  Bunny embed URLs, ready for MediaCage and never exposing the library key.
+- Enabled the protected player on web using an authenticated, user-bound,
+  single-use nonce; native clients retain shell-held HMAC attestation.
+- Playback sessions persist the request device id and revoke if renewal is
+  attempted from a different device.
+- Added a sandboxed, origin-checked embed controller while keeping the moving
+  forensic watermark above the provider player, including parent fullscreen.
+- Native shells now fail closed when OS capture protection cannot engage.
+  Web remains functional under watermark, token, session, and audit controls.
+- Screenshot/capture/tamper signals flush immediately and pause/mute both
+  direct and embedded playback before server-side revocation.
+- The production migration enables single-session, risk enforcement,
+  trusted-device OTP binding, verified-email gating, rooted/emulator blocks,
+  capture revocation, and a 300-second playback token TTL. Legacy device-unbound
+  refresh tokens and active playback sessions are revoked.
+- Updated the security matrix, acceptance report, and admin runbook with the
+  actual implementation state and remaining external/manual evidence.
 
 ## Validation
 
-- `pnpm exec tsc --noEmit --pretty false`: passed.
-- Focused manifest and policy test sources added; no further lengthy build/test run per owner instruction.
-- Tutor Book manifest assertion: passed.
-- `git diff --check`: passed.
-- Independent focused review completed; identified blockers were addressed and sent for final re-check.
+- Focused Vitest (attestation + embed-origin controller): 11/11 passed.
+- Focused ESLint across every touched frontend/test file: passed.
+- `pnpm exec tsc --noEmit --pretty false`: first run reached only four
+  pre-existing unrelated errors in `lib/__tests__/api.test.ts` (lines 458,
+  459, 480, 481); the post-change rerun hit the host timeout.
+- Focused .NET test/build attempts hit the repository's known MSBuild host
+  stall and were terminated; the GitHub production build is the compile gate.
+
+## External Blockers / Residual Evidence
+
+- Bunny MediaCage Basic or Enterprise DRM must be enabled and verified in the
+  authenticated Bunny account; provider dashboard access is unavailable here.
+- A signed iOS IPA requires Apple team id, distribution certificate,
+  provisioning profile, and a non-placeholder associated-domain file.
+- Android 1.4.1 and Windows/macOS desktop 0.7.0 are signed and published.
+- VPN/datacenter/Tor scoring needs an external IP-intelligence provider.
+- Hardware OBS/RDP/mirroring/screenshot tests remain manual acceptance work.
 
 ## Next Step
 
-Commit the explicit scoped files, push `main`, and confirm the production deploy workflow was triggered.
+Commit explicit security files, push `main`, wait for the exact production
+workflow to succeed, then verify active image SHAs, migration, runtime settings,
+health, and public CSP on production.

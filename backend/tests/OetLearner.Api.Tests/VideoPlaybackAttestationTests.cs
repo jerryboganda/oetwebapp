@@ -12,10 +12,10 @@ using OetLearner.Api.Tests.Infrastructure;
 namespace OetLearner.Api.Tests;
 
 /// <summary>
-/// MISSION-CRITICAL: playback sessions must only ever be issued to callers
-/// that pass the native-client HMAC attestation. Anything else — missing
-/// body, wrong signature, replayed/expired/foreign nonce, unknown platform,
-/// unconfigured keys — is a 403, and the signed URL never leaks.
+/// MISSION-CRITICAL: native playback requires shell HMAC attestation. Web
+/// playback requires an authenticated, user-bound, single-use nonce. Missing,
+/// invalid, replayed, expired or foreign proof is rejected before the secure
+/// embed URL is issued.
 /// </summary>
 public class VideoPlaybackAttestationTests(TestWebApplicationFactory factory) : IClassFixture<TestWebApplicationFactory>
 {
@@ -164,6 +164,52 @@ public class VideoPlaybackAttestationTests(TestWebApplicationFactory factory) : 
     // ── Success + concurrency paths ─────────────────────────────────────────
 
     [Fact]
+    public async Task PlaybackSession_WebNonce_EndToEnd_ReturnsSecureEmbed()
+    {
+        var (videoId, userId) = await SeedAsync(configureKeys: false, configureBunny: true);
+        using var client = CreateLearnerClient(userId);
+        var nonce = await IssueChallengeAsync(client);
+
+        var response = await client.PostAsJsonAsync(
+            $"/v1/video-library/videos/{videoId}/playback-session",
+            new { nonce, platform = "web", keyId = "browser-session", signature = "" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("secure_embed", payload.RootElement.GetProperty("deliveryMode").GetString());
+        Assert.StartsWith(
+            "https://iframe.mediadelivery.net/embed/",
+            payload.RootElement.GetProperty("playbackUrl").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PlaybackSession_RenewFromDifferentDevice_RevokesSession()
+    {
+        var (videoId, userId) = await SeedAsync(configureKeys: false, configureBunny: true);
+        using var client = CreateLearnerClient(userId);
+        var nonce = await IssueChallengeAsync(client);
+        var issue = await client.PostAsJsonAsync(
+            $"/v1/video-library/videos/{videoId}/playback-session",
+            new { nonce, platform = "web", keyId = "browser-session", signature = "" });
+        issue.EnsureSuccessStatusCode();
+        using var payload = JsonDocument.Parse(await issue.Content.ReadAsStringAsync());
+        var sessionId = payload.RootElement.GetProperty("sessionId").GetString();
+
+        client.DefaultRequestHeaders.Remove("X-OET-Device-Id");
+        client.DefaultRequestHeaders.Add("X-OET-Device-Id", "test-device-2");
+        var renew = await client.PostAsJsonAsync(
+            $"/v1/video-library/playback-sessions/{sessionId}/renew", new { });
+
+        Assert.Equal(HttpStatusCode.Forbidden, renew.StatusCode);
+        Assert.Contains("session_device_mismatch", await renew.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.NotNull((await db.VideoPlaybackSessions.SingleAsync(s => s.Id == sessionId)).RevokedAt);
+    }
+
+    [Fact]
     public async Task PlaybackSession_ValidHmac_EndToEnd_ReturnsSignedUrl()
     {
         var (videoId, userId) = await SeedAsync(configureKeys: true, configureBunny: true);
@@ -185,10 +231,15 @@ public class VideoPlaybackAttestationTests(TestWebApplicationFactory factory) : 
 
         Assert.False(string.IsNullOrWhiteSpace(sessionId));
         Assert.NotNull(playbackUrl);
-        Assert.Contains("playlist.m3u8", playbackUrl, StringComparison.Ordinal);
+        Assert.StartsWith("https://iframe.mediadelivery.net/embed/", playbackUrl, StringComparison.Ordinal);
         Assert.Contains("token=", playbackUrl, StringComparison.Ordinal);
         Assert.Contains("expires=", playbackUrl, StringComparison.Ordinal);
-        Assert.Contains("token_path=", playbackUrl, StringComparison.Ordinal);
+        Assert.DoesNotContain("playlist.m3u8", playbackUrl, StringComparison.Ordinal);
+        Assert.Equal("secure_embed", root.GetProperty("deliveryMode").GetString());
+        var urlExpiresAt = root.GetProperty("expiresAt").GetDateTimeOffset();
+        var sessionExpiresAt = root.GetProperty("sessionExpiresAt").GetDateTimeOffset();
+        Assert.InRange(urlExpiresAt, DateTimeOffset.UtcNow.AddMinutes(4), DateTimeOffset.UtcNow.AddMinutes(16));
+        Assert.True(sessionExpiresAt > urlExpiresAt);
         Assert.NotNull(watermark);
         Assert.Contains(sessionId![..8], watermark, StringComparison.Ordinal);
         Assert.Equal(JsonValueKind.Array, root.GetProperty("captions").ValueKind);
@@ -239,6 +290,7 @@ public class VideoPlaybackAttestationTests(TestWebApplicationFactory factory) : 
         client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{learnerId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", learnerId);
+        client.DefaultRequestHeaders.Add("X-OET-Device-Id", "test-device-1");
         return client;
     }
 

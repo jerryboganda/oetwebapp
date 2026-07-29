@@ -170,9 +170,8 @@ public sealed class BunnyStreamClient(
     public async Task<string> SignPlaybackUrlAsync(string bunnyVideoId, long expiresUnix, CancellationToken ct)
     {
         var s = await RequireConfiguredAsync(ct);
-        var tokenPath = $"/{bunnyVideoId}/";
-        var token = ComputeCdnToken(s.TokenAuthKey!, tokenPath, expiresUnix);
-        return BuildSignedPlaybackUrl(s.CdnHostname!, bunnyVideoId, token, expiresUnix, tokenPath);
+        var token = ComputeEmbedToken(s.ApiKey!, bunnyVideoId, expiresUnix);
+        return BuildSignedEmbedUrl(s.LibraryId!, bunnyVideoId, token, expiresUnix);
     }
 
     // ── Collections (live Bunny library management) ──────────────────────────
@@ -429,6 +428,24 @@ public sealed class BunnyStreamClient(
         string cdnHostname, string bunnyVideoId, string token, long expiresUnix, string tokenPath)
         => $"https://{cdnHostname}/{bunnyVideoId}/playlist.m3u8"
            + $"?token={token}&expires={expiresUnix}&token_path={Uri.EscapeDataString(tokenPath)}";
+
+    /// <summary>
+    /// Bunny embed-view token authentication:
+    /// SHA256_HEX(libraryApiKey + videoId + expires). MediaCage DRM only works
+    /// through this player surface; the API key never leaves the server.
+    /// </summary>
+    public static string ComputeEmbedToken(string libraryApiKey, string bunnyVideoId, long expiresUnix)
+    {
+        var payload = $"{libraryApiKey}{bunnyVideoId}{expiresUnix}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))
+            .ToLowerInvariant();
+    }
+
+    /// <summary>Compose the signed MediaCage-capable Bunny embed URL.</summary>
+    public static string BuildSignedEmbedUrl(
+        string libraryId, string bunnyVideoId, string token, long expiresUnix)
+        => $"https://iframe.mediadelivery.net/embed/{Uri.EscapeDataString(libraryId)}/{Uri.EscapeDataString(bunnyVideoId)}"
+           + $"?token={token}&expires={expiresUnix}&autoplay=false&preload=true";
 
     /// <summary>
     /// Append a <b>file-scoped</b> Bunny CDN token to an auto-generated thumbnail

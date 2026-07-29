@@ -78,27 +78,28 @@ Status mapping (verified): `0 Queued, 1 Processing, 2 Encoding, 3 Finished→Rea
 4 ResolutionFinished→Ready, 5 Failed`. The webhook is a convenience; the leader-locked
 `BunnyEncodeStatusWorker` reconciles status every 5 min regardless.
 
-## 5. App attestation secrets (playback is native-app-only)
+## 5. Playback authorisation
 
-Playback sessions are issued only to attested Tauri/Capacitor clients. Generate two random
-64-char secrets and set them in **both** places (they must match byte-for-byte):
+Native playback sessions use attested Tauri/Capacitor clients. Generate two
+random 64-char secrets and set them in **both** places (they must match
+byte-for-byte):
 
 - GitHub repo secrets `OET_DESKTOP_ATTEST_SECRET`, `OET_MOBILE_ATTEST_SECRET` (baked into the
   app binaries at build time).
 - The admin **attestation key map**, e.g.
   `{"tauri:v1":"<desktop-secret>","capacitor-android:v1":"<mobile-secret>","capacitor-ios:v1":"<mobile-secret>"}`.
 
-Then ship the app releases: tag `desktop-v0.4.0` and dispatch mobile release `1.2.0`. Older
-app builds show a friendly "update your app" screen; browsers always show the locked player.
+Web playback uses the authenticated access-token family plus a user-bound,
+single-use 90-second nonce. It intentionally does not embed a browser secret.
+Both native and web receive only a short-lived signed Bunny embed.
 
 ## Verified signing algorithms (pinned by `BunnyStreamClientTests`)
 
 - **TUS presigned upload**: `sha256_hex(libraryId + apiKey + expires + videoId)` — confirmed
   (valid → 201, wrong → 401).
-- **CDN playback token** (directory auth): `base64url_nopad( sha256( tokenAuthKey + tokenPath
-  + expires + "token_path=" + tokenPath ) )`, where `tokenPath = /{videoId}/`. The trailing
-  `token_path=` parameter-data suffix is **required** — omitting it returns 403. URL:
-  `https://{host}/{videoId}/playlist.m3u8?token=…&expires=…&token_path=%2F{videoId}%2F`.
-  The **same** token authorizes all child media playlists/segments under `/{videoId}/`; the
-  player (hls.js) re-appends the query to every child request, and Apple native HLS propagates
-  it automatically — worth a one-time live check on iOS/macOS.
+- **Embed view token** (all learner playback):
+  `sha256_hex(libraryApiKey + videoId + expires)`. URL:
+  `https://iframe.mediadelivery.net/embed/{libraryId}/{videoId}?token=…&expires=…`.
+  Production uses a 300-second expiry. The raw HLS/MP4 URL is never returned.
+- **CDN file token** remains only for exact-path signed thumbnails; it cannot
+  authorise the video directory or playback manifest.

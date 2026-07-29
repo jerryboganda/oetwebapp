@@ -130,7 +130,7 @@ public static class VideoLibraryEndpoints
         .RequireRateLimiting("PerUserWrite")
         .WithName("RecordVideoLibraryEvent");
 
-        // ── Attested playback (native clients only) ───────────────────────
+        // ── Protected playback (native HMAC + authenticated web nonce) ────
 
         group.MapPost("/attestation/challenge", async (
             HttpContext http,
@@ -157,6 +157,7 @@ public static class VideoLibraryEndpoints
         {
             var userId = http.LearnerId();
             var ip = http.Connection.RemoteIpAddress?.ToString();
+            var deviceId = ReadDeviceId(http);
 
             var video = await learnerService.FindVisibleVideoAsync(userId, videoId, DateTimeOffset.UtcNow, ct);
             if (video is null)
@@ -188,6 +189,7 @@ public static class VideoLibraryEndpoints
                     userId, video,
                     request.Platform?.Trim() ?? string.Empty,
                     request.KeyId?.Trim() ?? string.Empty,
+                    deviceId,
                     ip,
                     http.Request.Headers.UserAgent.ToString(),
                     ct);
@@ -199,7 +201,7 @@ public static class VideoLibraryEndpoints
             }
         })
         .WithName("IssueVideoPlaybackSession")
-        .WithSummary("Issues a token-signed playback session to an attested native client.");
+        .WithSummary("Issues a short-lived protected playback session to an authorised native or web client.");
 
         group.MapPost("/playback-sessions/{sessionId}/renew", async (
             HttpContext http,
@@ -209,7 +211,8 @@ public static class VideoLibraryEndpoints
         {
             try
             {
-                var result = await sessions.RenewAsync(http.LearnerId(), sessionId, ct);
+                var result = await sessions.RenewAsync(
+                    http.LearnerId(), sessionId, ReadDeviceId(http), ct);
                 return Results.Ok(ToPlaybackResponse(result));
             }
             catch (BunnyNotConfiguredException)
@@ -226,7 +229,9 @@ public static class VideoLibraryEndpoints
     {
         sessionId = result.SessionId,
         playbackUrl = result.PlaybackUrl,
+        deliveryMode = result.DeliveryMode,
         expiresAt = result.ExpiresAt,
+        sessionExpiresAt = result.SessionExpiresAt,
         watermarkText = result.WatermarkText,
         watermark = new
         {
@@ -309,6 +314,12 @@ public static class VideoLibraryEndpoints
     private static string LearnerId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
+
+    private static string? ReadDeviceId(HttpContext httpContext)
+    {
+        var value = httpContext.Request.Headers["X-OET-Device-Id"].ToString().Trim();
+        return string.IsNullOrEmpty(value) ? null : value[..Math.Min(value.Length, 128)];
+    }
 }
 
 public sealed record VideoProgressUpdateRequest(int PositionSeconds);

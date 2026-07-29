@@ -9,10 +9,9 @@ import { getSecureItem, setSecureItem } from '@/lib/mobile/secure-storage';
  * `localStorage` (clearable, which only forces re-verification on next
  * sign-in — safe-by-default, never a security hole), native via the OS
  * keychain/keystore (lib/mobile/secure-storage.ts, key 'device_id').
- * Sent as the X-OET-Device-Id header on every auth request
- * (lib/auth-client.ts); the backend treats an absent header as "old client,
- * skip enforcement" so shipping this ahead of enabling
- * SecurityTrustedDeviceRequired is always safe.
+ * Sent as the X-OET-Device-Id header on auth requests and shared API calls
+ * (`lib/auth-client.ts`, `lib/api.ts`) so refresh and protected playback can
+ * enforce the same device boundary.
  */
 
 const WEB_STORAGE_KEY = 'oet_device_id';

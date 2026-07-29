@@ -49,6 +49,7 @@ const paypalHttpOrigins = ['https://*.paypal.com', 'https://*.paypalobjects.com'
 // header, so omitting Bunny here blocks EVERY native video (connect-src violation →
 // hls.js manifestLoadError code=0 → black frame) even though the header allows it.
 const bunnyOrigins = ['https://*.b-cdn.net', 'https://video.bunnycdn.com'];
+const bunnyPlayerOrigins = ['https://iframe.mediadelivery.net', 'https://player.mediadelivery.net'];
 
 const metaScriptSrc =
   process.env.NODE_ENV === 'production'
@@ -145,7 +146,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         <meta
           httpEquiv="Content-Security-Policy"
-          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${zoomWebSocketOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${bunnyOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${bunnyOrigins.join(' ')}; worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}; frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')}; object-src 'none'; base-uri 'self'; form-action 'self';`}
+          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${zoomWebSocketOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${bunnyOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${bunnyOrigins.join(' ')}; worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}; frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${bunnyPlayerOrigins.join(' ')}; object-src 'none'; base-uri 'self'; form-action 'self';`}
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>

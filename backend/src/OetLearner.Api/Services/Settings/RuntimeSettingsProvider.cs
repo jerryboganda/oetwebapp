@@ -469,12 +469,12 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
                 BlockEmulators: r.VideoProtectionBlockEmulators ?? true),
             Security: new SecuritySettings(
                 SingleActiveSessionEnabled: r.SecuritySingleActiveSessionEnabled ?? true,
-                RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.LogOnly : r.SecurityRiskMode,
-                TrustedDeviceRequired: r.SecurityTrustedDeviceRequired ?? false,
+                RiskMode: string.IsNullOrWhiteSpace(r.SecurityRiskMode) ? SecurityRiskModes.Enforce : r.SecurityRiskMode,
+                TrustedDeviceRequired: r.SecurityTrustedDeviceRequired ?? true,
                 DeviceChangeWindowDays: r.SecurityDeviceChangeWindowDays is > 0 ? r.SecurityDeviceChangeWindowDays.Value : 7,
                 DeviceChangeMaxPerWindow: r.SecurityDeviceChangeMaxPerWindow is > 0 ? r.SecurityDeviceChangeMaxPerWindow.Value : 3,
                 InactiveSessionTimeoutDays: r.SecurityInactiveSessionTimeoutDays is > 0 ? r.SecurityInactiveSessionTimeoutDays.Value : 30,
-                RequireVerifiedEmailForLearners: r.SecurityRequireVerifiedEmailForLearners ?? false,
+                RequireVerifiedEmailForLearners: r.SecurityRequireVerifiedEmailForLearners ?? true,
                 CountryAllowList: r.SecurityCountryAllowList ?? string.Empty,
                 CountryAllowListMode: string.IsNullOrWhiteSpace(r.SecurityCountryAllowListMode)
                     ? SecurityCountryAllowListModes.Off

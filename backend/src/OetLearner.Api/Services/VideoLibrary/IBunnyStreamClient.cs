@@ -91,8 +91,8 @@ public interface IBunnyStreamClient
     Task SetThumbnailAsync(string bunnyVideoId, string thumbnailUrl, CancellationToken ct);
 
     /// <summary>
-    /// Mint a token-signed HLS playback URL:
-    /// https://{cdnHost}/{bunnyVideoId}/playlist.m3u8?token=...&amp;expires=...&amp;token_path=/{bunnyVideoId}/
+    /// Mint a short-lived token-signed Bunny embed URL. The embed player is
+    /// required for MediaCage DRM; raw HLS URLs are never returned to clients.
     /// </summary>
     Task<string> SignPlaybackUrlAsync(string bunnyVideoId, long expiresUnix, CancellationToken ct);
 

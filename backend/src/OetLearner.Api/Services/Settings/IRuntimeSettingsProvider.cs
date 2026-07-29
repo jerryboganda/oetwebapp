@@ -730,15 +730,13 @@ public sealed record SecuritySettings(
     /// session immediately (spec §3.1). Default: true (owner directive).</summary>
     bool SingleActiveSessionEnabled,
     /// <summary>Sign-in risk scoring mode (spec §3.3): "off" evaluates
-    /// nothing; "log_only" (default) logs risk.* SecurityEvents but never
-    /// blocks a sign-in; "enforce" additionally rejects High-risk sign-ins
-    /// with 403 sign_in_blocked_risk. Ship in log_only, review a week of
-    /// events, then flip to enforce once false-positive rate looks safe.</summary>
+    /// nothing; "log_only" records risk.* SecurityEvents without blocking;
+    /// "enforce" (default) rejects High-risk sign-ins with
+    /// 403 sign_in_blocked_risk.</summary>
     string RiskMode,
     /// <summary>Require email-OTP verification of a new device before it can
-    /// sign in (spec §3.2). Default FALSE — see RuntimeSettingsRow doc:
-    /// flipping this on requires the frontend device-challenge UI to exist
-    /// first, or new-device sign-ins have no way to complete the challenge.</summary>
+    /// sign in (spec §3.2). Default TRUE; the frontend device-challenge flow
+    /// completes trust before a session is minted.</summary>
     bool TrustedDeviceRequired,
     int DeviceChangeWindowDays,
     int DeviceChangeMaxPerWindow,
@@ -746,10 +744,9 @@ public sealed record SecuritySettings(
     /// <c>AuthDataRetentionWorker</c> (spec §4.2). Default 30.</summary>
     int InactiveSessionTimeoutDays = 30,
     /// <summary>Spec §4.2 hard gate: learner API access requires a verified
-    /// email (403 email_verification_required otherwise). Default FALSE —
-    /// the banner ships first; the owner flips this once the unverified
-    /// backlog has drained.</summary>
-    bool RequireVerifiedEmailForLearners = false,
+    /// email (403 email_verification_required otherwise). Default TRUE for the
+    /// mandatory course-platform security profile.</summary>
+    bool RequireVerifiedEmailForLearners = true,
     /// <summary>Spec §3.3: comma-separated ISO 3166-1 alpha-2 codes a sign-in
     /// country must be in. Empty = no restriction.</summary>
     string CountryAllowList = "",

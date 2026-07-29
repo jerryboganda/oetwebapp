@@ -16,9 +16,9 @@ namespace OetLearner.Api.Services.VideoLibrary;
 /// renders blank. We therefore append a Bunny CDN token here at read time.
 ///
 /// The token is <b>file-scoped</b> to the exact <c>thumbnail.jpg</c> path — NOT
-/// the <c>/{videoId}/</c> directory that <see cref="BunnyStreamClient.SignPlaybackUrlAsync"/>
-/// signs — so a token lifted from the (public) card image cannot be replayed to
-/// fetch <c>playlist.m3u8</c> and bypass the native-app-only playback attestation.
+/// the <c>/{videoId}/</c> directory — so a token lifted from the (public) card
+/// image cannot be replayed to fetch <c>playlist.m3u8</c>. Playback itself is
+/// issued only through the short-lived token-authenticated embed.
 /// </summary>
 public static class VideoThumbnailUrl
 {
