@@ -135,11 +135,22 @@ public sealed class TrustedDeviceService(
             // no exception revokes every current session for the account;
             // the NEW session for this sign-in is created by the caller
             // (AuthService) AFTER this method returns, so there is nothing
-            // live yet to accidentally except-out.
+            // live yet to accidentally except-out. Only one such call is
+            // needed regardless of how many prior device rows there are —
+            // it revokes every family for the account, not per-device.
             await sessionRevocationService.RevokeAllFamiliesAsync(authAccountId, exceptFamilyId: null, reason: "device_trusted", ct);
-            await securityEventLogger.TryLogAsync(
-                authAccountId, SecurityEventKinds.DeviceRevoked,
-                deviceId: priorDevices[0].DeviceId, cancellationToken: ct);
+
+            // Normally there is exactly one prior row (single-writer usage),
+            // but a race between two concurrent TrustDeviceAsync calls could
+            // leave more than one non-revoked row here — log one DeviceRevoked
+            // event per row actually revoked above, not just the first, so the
+            // audit trail doesn't silently under-report what was revoked.
+            foreach (var prior in priorDevices)
+            {
+                await securityEventLogger.TryLogAsync(
+                    authAccountId, SecurityEventKinds.DeviceRevoked,
+                    deviceId: prior.DeviceId, cancellationToken: ct);
+            }
         }
     }
 
@@ -151,6 +162,15 @@ public sealed class TrustedDeviceService(
             .ToListAsync(ct);
         if (current.Count == 0)
         {
+            // Nothing to revoke, but an admin's reset attempt is itself a
+            // security-relevant action worth an audit trail — silence here
+            // would make it impossible to tell "reset was never attempted"
+            // apart from "reset was attempted against an account with no
+            // active device", which an admin reviewing the log needs to
+            // distinguish.
+            await securityEventLogger.TryLogAsync(
+                authAccountId, SecurityEventKinds.DeviceAdminReset,
+                details: new { noActiveDevice = true }, cancellationToken: ct);
             return;
         }
 

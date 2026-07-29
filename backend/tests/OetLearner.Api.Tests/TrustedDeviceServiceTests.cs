@@ -246,18 +246,19 @@ public class TrustedDeviceServiceTests
     }
 
     /// <summary>
-    /// Documents current behavior for an anomalous state that should never
-    /// arise under single-writer operation (TrustDeviceAsync always revokes
-    /// every prior active device before adding the new one) but could occur
-    /// under a concurrent-sign-in race: two prior active rows exist. All
-    /// prior rows DO get revoked in the database and session revocation
-    /// still fires once (RevokeAllFamiliesAsync revokes every family for the
-    /// account regardless of device count), but ONLY ONE DeviceRevoked
-    /// security-event is logged (using priorDevices[0]) — see the flagged
-    /// discrepancy in the final report to the human reviewer.
+    /// Anomalous state that should never arise under single-writer operation
+    /// (TrustDeviceAsync always revokes every prior active device before
+    /// adding the new one) but could occur under a concurrent-sign-in race:
+    /// two prior active rows exist. All prior rows get revoked in the
+    /// database, session revocation fires exactly once (RevokeAllFamiliesAsync
+    /// revokes every family for the account regardless of device count), and
+    /// — per the fix closing a prior under-reporting gap — a DeviceRevoked
+    /// security event is logged for EACH prior row, not just the first, so
+    /// the audit trail doesn't silently omit which devices were actually
+    /// revoked.
     /// </summary>
     [Fact]
-    public async Task TrustDeviceAsync_MultiplePriorActiveDeviceRows_RevokesAllRowsInDbButLogsOnlyOneRevokedEvent()
+    public async Task TrustDeviceAsync_MultiplePriorActiveDeviceRows_RevokesAllRowsAndLogsOneRevokedEventPerRow()
     {
         var (db, service, clock, sessions, events) = Build();
         await SeedDeviceAsync(db, AccountId, "device-a", clock.GetUtcNow().AddMinutes(-10));
@@ -274,8 +275,9 @@ public class TrustedDeviceServiceTests
         Assert.Equal(AccountId, revokeCall.AuthAccountId);
 
         var revokedEvents = events.Calls.Where(c => c.Kind == SecurityEventKinds.DeviceRevoked).ToList();
-        var revokedEvent = Assert.Single(revokedEvents);
-        Assert.True(revokedEvent.DeviceId is "device-a" or "device-b");
+        Assert.Equal(2, revokedEvents.Count);
+        Assert.Contains(revokedEvents, c => c.DeviceId == "device-a");
+        Assert.Contains(revokedEvents, c => c.DeviceId == "device-b");
     }
 
     // ---------------------------------------------------------------
@@ -313,21 +315,28 @@ public class TrustedDeviceServiceTests
     }
 
     /// <summary>
-    /// When there is nothing to reset, ResetDeviceAsync returns early —
-    /// before logging a <see cref="SecurityEventKinds.DeviceAdminReset"/>
-    /// event or calling session revocation at all. Worth a human look: an
-    /// admin-triggered reset attempted against an account with no active
-    /// device currently leaves ZERO audit trail of the attempt.
+    /// When there is nothing to reset, ResetDeviceAsync still logs a
+    /// DeviceAdminReset event (flagged noActiveDevice=true in its details) —
+    /// per the fix closing a prior gap where an admin-triggered reset attempt
+    /// against an account with no active device left ZERO audit trail that
+    /// it was even attempted. Session revocation is correctly still skipped:
+    /// there is nothing live tied to a device that never existed.
     /// </summary>
     [Fact]
-    public async Task ResetDeviceAsync_NoActiveDevice_IsSilentNoOp_LogsNothingAndRevokesNoSessions()
+    public async Task ResetDeviceAsync_NoActiveDevice_LogsAttemptButRevokesNoSessions()
     {
         var (db, service, _, sessions, events) = Build();
 
         await service.ResetDeviceAsync(AccountId, "owner_requested_reset", default);
 
         Assert.Equal(0, await db.TrustedDevices.CountAsync(d => d.ApplicationUserAccountId == AccountId));
-        Assert.Empty(events.Calls);
+
+        var logged = Assert.Single(events.Calls);
+        Assert.Equal(SecurityEventKinds.DeviceAdminReset, logged.Kind);
+        Assert.Equal(AccountId, logged.AuthAccountId);
+        var noActiveDevice = logged.Details?.GetType().GetProperty("noActiveDevice")?.GetValue(logged.Details) as bool?;
+        Assert.True(noActiveDevice);
+
         Assert.Empty(sessions.RevokeAllCalls);
     }
 
