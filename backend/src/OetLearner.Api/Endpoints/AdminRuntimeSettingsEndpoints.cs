@@ -407,6 +407,7 @@ public static class AdminRuntimeSettingsEndpoints
                 requireVerifiedEmailForLearners = settings.Security.RequireVerifiedEmailForLearners,
                 countryAllowList = settings.Security.CountryAllowList,
                 countryAllowListMode = settings.Security.CountryAllowListMode,
+                deviceVerificationExemptEmails = settings.Security.DeviceVerificationExemptEmails,
                 ipIntelligenceProvider = settings.IpIntelligence.Provider,
                 ipinfoToken = MaskPlainSecret(settings.IpIntelligence.IpinfoToken),
                 ipIntelligenceConfigured = settings.IpIntelligence.IsConfigured,
@@ -1243,6 +1244,30 @@ public static class AdminRuntimeSettingsEndpoints
             }
             row.SecurityCountryAllowListMode = d.CountryAllowListMode;
             changed.Add("security.countryAllowListMode");
+        }
+        if (d.DeviceVerificationExemptEmails is not null)
+        {
+            string[] emails;
+            try
+            {
+                emails = d.DeviceVerificationExemptEmails
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(AuthEmailAddress.NormalizeOrThrow)
+                    .Distinct()
+                    .ToArray();
+            }
+            catch (ApiException)
+            {
+                throw new RuntimeSettingsValidationException(
+                    "security.deviceVerificationExemptEmails must be a comma-separated list of valid email addresses.");
+            }
+            var normalized = string.Join(',', emails);
+            if (normalized.Length > 2000)
+            {
+                throw new RuntimeSettingsValidationException("security.deviceVerificationExemptEmails is too long (max 2000 characters).");
+            }
+            row.SecurityDeviceVerificationExemptEmails = normalized.Length > 0 ? normalized : null;
+            changed.Add("security.deviceVerificationExemptEmails");
         }
         if (d.IpIntelligenceProvider is not null)
         {
@@ -2453,6 +2478,9 @@ public sealed class RuntimeSettingsSecurityUpdate
     public string? CountryAllowList { get; set; }
     /// <summary>"off" | "step_up" | "block" — see SecurityCountryAllowListModes.</summary>
     public string? CountryAllowListMode { get; set; }
+    /// <summary>Comma-separated emails fully exempt from device-verification
+    /// OTP and risk step-up (owner/staff accounts). "" clears the list.</summary>
+    public string? DeviceVerificationExemptEmails { get; set; }
     /// <summary>"off" | "ipinfo". IPinfo Core or better supplies privacy flags.</summary>
     public string? IpIntelligenceProvider { get; set; }
     /// <summary>Write-only IPinfo API token. "********" keeps the existing value.</summary>

@@ -536,6 +536,14 @@ public class RuntimeSettingsRow
     [MaxLength(16)]
     public string? SecurityCountryAllowListMode { get; set; }
 
+    /// <summary>Spec §3.2/§3.3 safety valve: comma-separated, normalized
+    /// (upper-invariant) emails fully exempt from the trusted-device OTP
+    /// challenge AND the risk-based step-up — owner/staff accounts that must
+    /// never be blocked by a flaky IP-derived country signal or the
+    /// device-churn heuristic. Null/empty = no exemptions.</summary>
+    [MaxLength(2000)]
+    public string? SecurityDeviceVerificationExemptEmails { get; set; }
+
     /// <summary>External VPN/proxy/Tor/datacenter intelligence provider:
     /// "off" or "ipinfo". Null falls back to configuration.</summary>
     [MaxLength(32)]
