@@ -536,6 +536,15 @@ public class RuntimeSettingsRow
     [MaxLength(16)]
     public string? SecurityCountryAllowListMode { get; set; }
 
+    /// <summary>External VPN/proxy/Tor/datacenter intelligence provider:
+    /// "off" or "ipinfo". Null falls back to configuration.</summary>
+    [MaxLength(32)]
+    public string? SecurityIpIntelligenceProvider { get; set; }
+
+    /// <summary>Encrypted IPinfo Core/Plus/Max API token. The free Lite tier
+    /// does not include the privacy/network flags used by the risk engine.</summary>
+    public string? SecurityIpinfoTokenEncrypted { get; set; }
+
     // ── Support (WhatsApp proof channel) ───────────────────────────
     // Public support number offered next to every package ("send your proof on
     // WhatsApp"). Not a secret — it is printed in the learner UI. Null falls back

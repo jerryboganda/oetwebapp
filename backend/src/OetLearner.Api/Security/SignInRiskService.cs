@@ -15,21 +15,19 @@ public sealed record SignInRiskAssessment(SignInRiskLevel Level, IReadOnlyList<s
 public interface ISignInRiskService
 {
     /// <summary>Rule evaluation over the account's own sign-in history plus
-    /// an optional <see cref="IIpIntelligenceService"/> lookup (noop until a
-    /// paid provider is configured — Course Platform Security Requirements
-    /// §3.3 treats that as a later, optional upgrade; see class doc). Never
-    /// throws; callers decide what to do with the result.</summary>
+    /// an optional <see cref="IIpIntelligenceService"/> lookup. The external
+    /// provider is fail-open when it is disabled, unavailable, or not
+    /// configured. Never throws for provider failures; callers decide what to
+    /// do with the result.</summary>
     Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, string? ipAddress, CancellationToken ct);
 }
 
 /// <summary>
 /// Rule-based sign-in risk scoring (Course Platform Security Requirements
-/// §3.3). v1 deliberately covers only what's derivable from data already
-/// captured on <c>RefreshTokenRecord</c> — country-of-record via CF-IPCountry
-/// and device/family churn — NOT datacenter/VPN/Tor detection, which needs a
-/// paid IP-intelligence feed (ipinfo/MaxMind) and static lists are not
-/// reliable enough to act on. That integration is a documented upgrade path,
-/// not implemented here.
+/// §3.3). It combines account history captured on
+/// <c>RefreshTokenRecord</c> (country-of-record via CF-IPCountry plus
+/// device/family churn) with optional IPinfo privacy/network intelligence for
+/// public client IPs.
 /// </summary>
 public sealed class SignInRiskService(
     LearnerDbContext db,
@@ -73,20 +71,31 @@ public sealed class SignInRiskService(
 
         if (level != SignInRiskLevel.High)
         {
-            var recentFamilies = await db.RefreshTokenRecords
-                .Where(t => t.ApplicationUserAccountId == authAccountId && t.CreatedAt > now.AddDays(-DeviceChurnWindowDays))
-                .Select(t => t.FamilyId)
+            // Counts DISTINCT DEVICES, not sign-in/family count — a single
+            // device re-authenticating often (short-lived sessions, active
+            // daily use) is not device churn and must never trip this. Only
+            // genuinely DIFFERENT devices signing in within the window are a
+            // credential-sharing/compromise signal. (Previously counted
+            // FamilyId, which is unique per fresh sign-in even from the exact
+            // same device — that miscounted routine reuse as churn and could
+            // pin an active account at Medium risk indefinitely, forcing a
+            // step-up on every sign-in regardless of device trust.)
+            var recentDevices = await db.RefreshTokenRecords
+                .Where(t => t.ApplicationUserAccountId == authAccountId
+                    && t.CreatedAt > now.AddDays(-DeviceChurnWindowDays)
+                    && t.DeviceId != null)
+                .Select(t => t.DeviceId)
                 .Distinct()
                 .CountAsync(ct);
-            if (recentFamilies >= DeviceChurnThreshold)
+            if (recentDevices >= DeviceChurnThreshold)
             {
                 level = SignInRiskLevel.Medium;
                 reasons.Add("frequent_sign_ins");
             }
         }
 
-        // External IP intelligence (noop by default — returns null). A known
-        // anonymizer/datacenter address bumps the score to at least Medium.
+        // External IP intelligence returns null while disabled or unavailable.
+        // A known anonymizer/datacenter address bumps the score to at least Medium.
         var intel = await ipIntelligence.LookupAsync(ipAddress, ct);
         if (intel?.IsHighRiskNetwork == true)
         {

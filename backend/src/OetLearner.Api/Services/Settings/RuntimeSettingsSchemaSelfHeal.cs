@@ -253,6 +253,8 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecuritySingleActiveS
 -- Security spec §3.3 sign-in risk signals -- sync with migration 20260815090000_AddSignInRiskSignals
 ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""CountryCode"" character varying(8);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityRiskMode"" character varying(16);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityIpIntelligenceProvider"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityIpinfoTokenEncrypted"" text;
 
 -- Security spec §3.2 trusted devices -- sync with migration 20260816090000_AddTrustedDevices
 ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""DeviceId"" character varying(128);
@@ -273,5 +275,8 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityCountryAllowL
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityCountryAllowListMode"" character varying(16);
 ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""Platform"" character varying(32);
 ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""AppVersion"" character varying(64);
+
+-- Security spec §3.2/§3.3 device-verification exemption list -- sync with migration 20260827090000_AddDeviceVerificationExemptEmails
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceVerificationExemptEmails"" character varying(2000);
 ";
 }

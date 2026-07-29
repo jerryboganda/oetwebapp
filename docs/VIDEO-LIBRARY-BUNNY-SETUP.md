@@ -1,35 +1,29 @@
 # Video Library — Bunny Stream setup & activation runbook
 
-Everything below was **verified end-to-end against the live Bunny Stream API on 2026-07-03**
-using a throwaway library. The feature is dormant until these steps are done.
+This runbook describes the current short-lived, token-authenticated Bunny embed
+contract used by production. Provider-side values still have to be checked
+against the real library after every security-setting change.
 
 ## 1. Create the Bunny Stream library
 
-In the Bunny dashboard → **Stream** → create a video library. Then, in the library's
-**Security → General** page, use the **maximum-security** configuration below (owner directive
-2026-07-14). The one non-obvious requirement: with **Block direct url file access ON** you
-MUST allow-list the app domain, or the CDN returns `403 Forbidden` on every HLS request
-*before the playback token is even evaluated* (the app's own requests match no referrer).
+In the Bunny dashboard → **Stream** → create or open the production video
+library. In its security settings, use this application-compatible profile:
 
 | Setting | Value | Why |
 |---|---|---|
-| **CDN token authentication** | **ON** | THE control. The app signs every `playlist.m3u8` + segment URL (directory token, see §"Verified signing"), per-video and time-limited, and only after native-app attestation. Cryptographic and unforgeable — this alone is maximum security. Verified 2026-07-14: signed → 200 valid HLS, unsigned → 403. |
-| **Embed view token authentication** | **ON** (optional) | Governs Bunny's *iframe* embed player, which we do **not** use — harmless to leave on. |
-| **Block direct url file access** (`BlockNoneReferrer`) | **OFF** | ⚠️ **Must be OFF for native-app playback.** It 403s any request without an accepted `Referer`, and the Tauri/Capacitor WebViews do **not** reliably send one — so with it ON, *no* video plays (proven 2026-07-14: signed URL → 200 *with* a referer, 403 *without*; the desktop app sent none). It is also pure referrer-checking = trivially spoofable (a scripted fake `Referer` passes it), so it adds **no** real security over CDN token auth. Leaving it OFF loses nothing and is required for playback. |
-| **Allowed domains** | leave empty | Only relevant if the referrer block is on (which it must not be). |
-| **Allow Direct Play** (`AllowDirectPlay`) | **ON** | We stream `playlist.m3u8` into hls.js / native HLS, not Bunny's iframe player. Off ⇒ 403. |
+| **Embed view token authentication** | **ON** | The API signs the iframe embed for one video and a maximum of 300 seconds. |
+| **MediaCage Basic DRM** | **ON** at minimum | The supported encrypted/download-resistant playback surface is Bunny's embed player. Use Enterprise DRM when Widevine/FairPlay license enforcement is required. |
+| **MP4 fallback** | **OFF** | Prevents a downloadable MP4 fallback from weakening the protected stream. |
+| **Allow Direct Play** (`AllowDirectPlay`) | **OFF** | Learner playback never receives a raw HLS/MP4 URL. |
+| **Expose/keep original files** | **OFF** | Prevents original uploads from being directly retrievable after encoding. |
+| **Block direct URL file access** (`BlockNoneReferrer`) | **OFF** | Native WebViews do not reliably send a browser `Referer`; embed token auth and MediaCage are the enforceable controls. |
+| **Allowed domains** | production web/app domains | Defense in depth for browser embedding; do not rely on this instead of signed embeds. |
+| **CDN token authentication** | **ON** | Still protects exact-path signed thumbnails and other CDN assets. Video playback itself uses the signed embed. |
 
-Optional: MP4 fallback can stay on; it doesn't affect HLS.
-
-> **Why not keep the referrer block on for "extra" security?** Because it is referrer-based
-> (spoofable) and native WebViews don't send an accepted Referer, so it only ever blocks your
-> *own* app while a determined hotlinker can forge the header anyway. CDN **token**
-> authentication — signed, per-video, expiring, attestation-gated — is the real, unforgeable
-> control and stays ON. That is the maximum *effective* security.
-
-> **Token key must match.** The library's **Token authentication key** (Security → General)
-> is what the app signs with. If it is ever regenerated (↻), paste the new value into
-> Admin → Settings → Bunny Stream → **CDN token-auth key** or every URL 403s.
+> **Keys must match their purpose.** The library **API key** signs learner
+> embeds. The pull-zone **Token authentication key** signs exact-path CDN
+> assets. If either is regenerated, update only its corresponding encrypted
+> Admin → Settings field.
 
 > **Diagnose fast.** `scripts/videos/diagnose-playback.mjs` signs a real playback URL the
 > same way the backend does and probes it (with/without referer + encode status) so you can
@@ -37,11 +31,12 @@ Optional: MP4 fallback can stay on; it doesn't affect HLS.
 
 ## 2. Enable pull-zone token authentication
 
-The library has an attached **pull zone** (CDN). In the pull zone → **Security**:
+The library has an attached **pull zone** (CDN). In the pull zone →
+**Security**:
 
 - Turn **Token Authentication ON** (`ZoneSecurityEnabled = true`).
-- Copy the pull zone **Token Authentication Key** (`ZoneSecurityKey`, a 36-char string).
-  This is the value you paste into the admin panel as the **CDN token-auth key**.
+- Copy the pull zone **Token Authentication Key** (`ZoneSecurityKey`). This is
+  the value you paste into the admin panel as the **CDN token-auth key**.
 
 > Note: after toggling token auth there is a short (~seconds to a minute) propagation
 > window before it is enforced at the edge.
@@ -53,7 +48,7 @@ The library has an attached **pull zone** (CDN). In the pull zone → **Security
 | Library ID | the numeric library `Id` |
 | API key | the library's **API Key** (per-library, used for uploads/metadata) |
 | CDN hostname | the pull zone hostname, e.g. `vz-xxxxxxxx-xxx.b-cdn.net` |
-| CDN token-auth key | the pull zone **ZoneSecurityKey** from step 2 |
+| CDN token-auth key | the pull zone **ZoneSecurityKey** from step 2 (exact-path CDN assets) |
 | Webhook secret | any strong random string you choose (see step 4) |
 | Attestation keys | the two app-attestation secrets (see step 5) |
 

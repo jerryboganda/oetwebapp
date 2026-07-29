@@ -1177,6 +1177,14 @@ public sealed class AuthService(
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
 
+            // Spec §3.2/§3.3 safety valve (RuntimeSettings.Security.
+            // DeviceVerificationExemptEmails): owner/staff accounts explicitly
+            // exempted from BOTH the risk-based step-up below and the
+            // trusted-device gate further down — never challenged, on any
+            // device, from any country.
+            var deviceVerificationExempt = IsDeviceVerificationExempt(
+                account.NormalizedEmail, security.DeviceVerificationExemptEmails);
+
             // A device that already completed the persistent §3.2 trusted-device
             // check is a stronger identity signal than the heuristic §3.3 risk
             // scoring below — re-challenging it on every IP-derived country
@@ -1197,7 +1205,8 @@ public sealed class AuthService(
             // with the risk engine off. Sign-ins with no CF-IPCountry (local
             // dev, direct-to-origin) always pass: the control is a policy
             // fence, not an authenticity proof.
-            if (!string.Equals(security.CountryAllowListMode, SecurityCountryAllowListModes.Off, StringComparison.Ordinal)
+            if (!deviceVerificationExempt
+                && !string.Equals(security.CountryAllowListMode, SecurityCountryAllowListModes.Off, StringComparison.Ordinal)
                 && IsOutsideCountryAllowList(security.CountryAllowList, countryCode))
             {
                 if (string.Equals(security.CountryAllowListMode, SecurityCountryAllowListModes.Block, StringComparison.Ordinal))
@@ -1230,7 +1239,7 @@ public sealed class AuthService(
                 }
             }
 
-            if (!string.Equals(security.RiskMode, SecurityRiskModes.Off, StringComparison.Ordinal))
+            if (!deviceVerificationExempt && !string.Equals(security.RiskMode, SecurityRiskModes.Off, StringComparison.Ordinal))
             {
                 var risk = await signInRiskService.EvaluateAsync(account.Id, countryCode, ipAddress, cancellationToken);
                 if (risk.Level != SignInRiskLevel.None)
@@ -1288,7 +1297,9 @@ public sealed class AuthService(
         if (familyId is null)
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
-            if (security.TrustedDeviceRequired)
+            var deviceVerificationExempt = IsDeviceVerificationExempt(
+                account.NormalizedEmail, security.DeviceVerificationExemptEmails);
+            if (security.TrustedDeviceRequired && !deviceVerificationExempt)
             {
                 var resolution = await trustedDeviceService.ResolveForSignInAsync(
                     account.Id, deviceId, security.DeviceChangeWindowDays, security.DeviceChangeMaxPerWindow, cancellationToken);
@@ -1400,6 +1411,30 @@ public sealed class AuthService(
         }
 
         return true;
+    }
+
+    /// <summary>RuntimeSettings.Security.DeviceVerificationExemptEmails safety
+    /// valve: owner/staff accounts fully exempt from device-verification OTP
+    /// and risk step-up. <paramref name="normalizedEmail"/> is the account's
+    /// already-normalized (upper-invariant) email; the CSV is normalized the
+    /// same way at write time (<see cref="AuthEmailAddress.NormalizeOrThrow"/>),
+    /// so an ordinal-ignore-case compare here is defensive, not load-bearing.</summary>
+    private static bool IsDeviceVerificationExempt(string normalizedEmail, string exemptEmailsCsv)
+    {
+        if (string.IsNullOrWhiteSpace(exemptEmailsCsv))
+        {
+            return false;
+        }
+
+        foreach (var candidate in exemptEmailsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (string.Equals(candidate, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Spec §3.3 enforce-mode side channel: a blocked high-risk

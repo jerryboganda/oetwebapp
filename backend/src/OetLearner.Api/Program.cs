@@ -209,8 +209,14 @@ builder.Services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
 builder.Services.AddScoped<ISessionRevocationService, SessionRevocationService>();
 builder.Services.AddScoped<ISignInRiskService, SignInRiskService>();
 builder.Services.AddScoped<ITrustedDeviceService, TrustedDeviceService>();
-// Spec §3.3 upgrade seam — noop until a paid IP-intelligence provider is wired.
-builder.Services.AddSingleton<IIpIntelligenceService, NoopIpIntelligenceService>();
+// Spec §3.3 — optional IPinfo Core/Plus/Max privacy/network intelligence.
+// The service stays fail-open until an encrypted token is configured at runtime.
+builder.Services.AddHttpClient(IpinfoIpIntelligenceService.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri("https://api.ipinfo.io/");
+    client.Timeout = TimeSpan.FromSeconds(3);
+});
+builder.Services.AddScoped<IIpIntelligenceService, IpinfoIpIntelligenceService>();
 // Spec §4.2 learner verified-email gate (toggle-backed, see EmailVerifiedGate.cs).
 builder.Services.AddScoped<IAuthorizationHandler, EmailVerifiedRequirementHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, EmailVerifiedAuthorizationResultHandler>();

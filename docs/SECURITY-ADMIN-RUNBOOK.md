@@ -152,11 +152,11 @@ Everything in §§1–3 is live code. The honest residual list:
 - **iOS still-screenshot BLOCKING** — platform limitation; iOS only allows
   detection, not prevention. Compensating controls: detection event +
   watermark + `videoProtection.revokeOnCaptureDetected`. See the matrix §5.
-- **External IP-intelligence (VPN/datacenter/Tor) detection** — the code
-  seam exists (`IIpIntelligenceService`), but the registered implementation
-  is a no-op until a paid provider (ipinfo/MaxMind) is configured; until
-  then `high_risk_network` never fires. See the matrix §7 for why static
-  lists were rejected.
+- **External IP-intelligence (VPN/datacenter/Tor) activation** — the IPinfo
+  Core/Plus/Max integration is implemented and configurable under
+  Admin → Settings → Security. Until a paid token is stored and provider
+  `ipinfo` selected, the service fails open and `high_risk_network` does not
+  fire. Provider errors also fail open to avoid an account-wide lockout.
 - **MediaCage provider activation** — the secure-embed/token application
   path is complete, but Basic/Enterprise DRM must be enabled and verified
   in the authenticated Bunny library (§4).

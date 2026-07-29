@@ -118,6 +118,9 @@ export interface SecuritySettings {
   requireVerifiedEmailForLearners: boolean | null;
   countryAllowList: string | null;
   countryAllowListMode: string;
+  ipIntelligenceProvider: string;
+  ipinfoToken: string;
+  ipIntelligenceConfigured?: boolean | null;
 }
 
 /** Course Platform Security Requirements §2.4 — video capture-protection response. */
@@ -638,6 +641,22 @@ const SECURITY_FIELDS: FieldDef<SecuritySettings>[] = [
       { value: 'block', label: 'Block — reject sign-ins outside the list' },
     ],
     hint: 'What happens to a sign-in from outside the allow-list.',
+  },
+  {
+    key: 'ipIntelligenceProvider',
+    label: 'IP Intelligence Provider',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off — account-history risk signals only' },
+      { value: 'ipinfo', label: 'IPinfo — VPN, proxy, Tor and hosting detection' },
+    ],
+    hint: 'IPinfo Core or better is required. Provider errors fail open so sign-in remains available.',
+  },
+  {
+    key: 'ipinfoToken',
+    label: 'IPinfo API Token',
+    secret: true,
+    hint: 'Stored encrypted. Use an IPinfo Core, Plus or Max token; the free Lite tier lacks privacy flags.',
   },
 ];
 
@@ -1357,6 +1376,9 @@ function emptyResponse(): RuntimeSettingsResponse {
       requireVerifiedEmailForLearners: null,
       countryAllowList: '',
       countryAllowListMode: 'off',
+      ipIntelligenceProvider: 'off',
+      ipinfoToken: '',
+      ipIntelligenceConfigured: false,
     },
     videoProtection: {
       revokeOnCaptureDetected: null,
@@ -1488,6 +1510,10 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       tokenAuthKey: maskUnexpectedSecret(data.bunnyStream.tokenAuthKey),
       webhookSecret: maskUnexpectedSecret(data.bunnyStream.webhookSecret),
       videoAttestationKeysJson: maskUnexpectedSecret(data.bunnyStream.videoAttestationKeysJson),
+    },
+    security: {
+      ...data.security,
+      ipinfoToken: maskUnexpectedSecret(data.security.ipinfoToken),
     },
     paymob: {
       ...data.paymob,

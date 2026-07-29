@@ -1,6 +1,6 @@
 # Agent State - Course platform security production completion
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
 ## Goal
 
@@ -28,6 +28,8 @@ evidence for platform limitations and external provider blockers.
   trusted-device OTP binding, verified-email gating, rooted/emulator blocks,
   capture revocation, and a 300-second playback token TTL. Legacy device-unbound
   refresh tokens and active playback sessions are revoked.
+- Added encrypted runtime configuration and a fail-open IPinfo
+  Core/Plus/Max integration for VPN/proxy/Tor/hosting sign-in signals.
 - Updated the security matrix, acceptance report, and admin runbook with the
   actual implementation state and remaining external/manual evidence.
 
@@ -40,6 +42,8 @@ evidence for platform limitations and external provider blockers.
   459, 480, 481); the post-change rerun hit the host timeout.
 - Focused .NET test/build attempts hit the repository's known MSBuild host
   stall and were terminated; the GitHub production build is the compile gate.
+- A focused ESLint retry also hit the host command timeout; no lint result was
+  claimed.
 
 ## External Blockers / Residual Evidence
 
@@ -47,12 +51,17 @@ evidence for platform limitations and external provider blockers.
   authenticated Bunny account; provider dashboard access is unavailable here.
 - A signed iOS IPA requires Apple team id, distribution certificate,
   provisioning profile, and a non-placeholder associated-domain file.
-- Android 1.4.1 and Windows/macOS desktop 0.7.0 are signed and published.
-- VPN/datacenter/Tor scoring needs an external IP-intelligence provider.
+- Android 1.4.1 and Windows/macOS desktop 0.7.0 are signed and published, but
+  both tags predate the final security commits. The installed Windows 0.7.0
+  app remained capturable in a foreground `CopyFromScreen` test, so corrected
+  releases must be published from the post-deploy `main` SHA.
+- IPinfo code is complete; production activation still needs a paid provider
+  token entered through Admin → Settings → Security.
 - Hardware OBS/RDP/mirroring/screenshot tests remain manual acceptance work.
 
 ## Next Step
 
 Commit explicit security files, push `main`, wait for the exact production
-workflow to succeed, then verify active image SHAs, migration, runtime settings,
-health, and public CSP on production.
+workflow to succeed, then publish corrected desktop/Android releases from that
+SHA and verify active image SHAs, migration, runtime settings, health, updater
+metadata, and the installed Windows capture behavior.

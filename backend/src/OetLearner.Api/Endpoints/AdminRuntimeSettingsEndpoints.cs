@@ -95,7 +95,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyCheckoutCom(row, request.CheckoutCom, provider, changedKeys);
                     ApplyBunnyStream(row, request.BunnyStream, provider, changedKeys);
                     ApplyVideoProtection(row, request.VideoProtection, changedKeys);
-                    ApplySecurity(row, request.Security, changedKeys);
+                    ApplySecurity(row, request.Security, provider, changedKeys);
                     ApplyPaymob(row, request.Paymob, provider, changedKeys);
                     ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
                     ApplyEasyKash(row, request.EasyKash, provider, changedKeys);
@@ -407,6 +407,9 @@ public static class AdminRuntimeSettingsEndpoints
                 requireVerifiedEmailForLearners = settings.Security.RequireVerifiedEmailForLearners,
                 countryAllowList = settings.Security.CountryAllowList,
                 countryAllowListMode = settings.Security.CountryAllowListMode,
+                ipIntelligenceProvider = settings.IpIntelligence.Provider,
+                ipinfoToken = MaskPlainSecret(settings.IpIntelligence.IpinfoToken),
+                ipIntelligenceConfigured = settings.IpIntelligence.IsConfigured,
             },
             paymob = new
             {
@@ -1191,7 +1194,11 @@ public static class AdminRuntimeSettingsEndpoints
         SecurityRiskModes.Enforce,
     };
 
-    private static void ApplySecurity(RuntimeSettingsRow row, RuntimeSettingsSecurityUpdate? d, List<string> changed)
+    private static void ApplySecurity(
+        RuntimeSettingsRow row,
+        RuntimeSettingsSecurityUpdate? d,
+        IRuntimeSettingsProvider p,
+        List<string> changed)
     {
         if (d is null) return;
         if (TrySetNullableBool(d.SingleActiveSessionEnabled, v => row.SecuritySingleActiveSessionEnabled = v, "security.singleActiveSessionEnabled", changed)) { }
@@ -1237,6 +1244,23 @@ public static class AdminRuntimeSettingsEndpoints
             row.SecurityCountryAllowListMode = d.CountryAllowListMode;
             changed.Add("security.countryAllowListMode");
         }
+        if (d.IpIntelligenceProvider is not null)
+        {
+            var normalized = d.IpIntelligenceProvider.Trim().ToLowerInvariant();
+            if (normalized is not (IpIntelligenceProviders.Off or IpIntelligenceProviders.Ipinfo))
+            {
+                throw new RuntimeSettingsValidationException(
+                    "security.ipIntelligenceProvider must be one of: off, ipinfo.");
+            }
+            row.SecurityIpIntelligenceProvider = normalized;
+            changed.Add("security.ipIntelligenceProvider");
+        }
+        if (TrySetSecret(
+                d.IpinfoToken,
+                p,
+                v => row.SecurityIpinfoTokenEncrypted = v,
+                "security.ipinfoToken",
+                changed)) { }
     }
 
     private static readonly HashSet<string> ValidCountryAllowListModes =
@@ -2429,6 +2453,10 @@ public sealed class RuntimeSettingsSecurityUpdate
     public string? CountryAllowList { get; set; }
     /// <summary>"off" | "step_up" | "block" — see SecurityCountryAllowListModes.</summary>
     public string? CountryAllowListMode { get; set; }
+    /// <summary>"off" | "ipinfo". IPinfo Core or better supplies privacy flags.</summary>
+    public string? IpIntelligenceProvider { get; set; }
+    /// <summary>Write-only IPinfo API token. "********" keeps the existing value.</summary>
+    public string? IpinfoToken { get; set; }
 }
 
 /// <summary>Paymob payment gateway overrides.</summary>

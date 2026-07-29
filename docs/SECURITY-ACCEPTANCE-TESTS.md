@@ -71,4 +71,10 @@ filter for.
    `security.trustedDeviceRequired` ON. Run the two-device sequence with a
    dedicated test account and preserve the OTP, revocation, and audit
    evidence.
-5. Re-run this whole report whenever a deferred item's status changes.
+5. **§3.3 (VPN/proxy/Tor/datacenter signal)** — configure an IPinfo
+   Core/Plus/Max token under Admin → Settings → Security, select `ipinfo`,
+   then sign in from a known provider test address. Confirm the
+   `high_risk_network` reason is recorded and the enforce-mode step-up is
+   required. Also confirm an IPinfo outage does not prevent an otherwise
+   low-risk learner sign-in.
+6. Re-run this whole report whenever a deferred item's status changes.

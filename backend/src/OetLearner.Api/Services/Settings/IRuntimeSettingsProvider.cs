@@ -119,6 +119,7 @@ public sealed record EffectiveSettings(
     // provider sets them via object initializer in Merge.
     public BunnyStreamSettings BunnyStream { get; init; } = BunnyStreamSettings.Unconfigured;
     public VideoAttestationSettings VideoAttestation { get; init; } = VideoAttestationSettings.Unconfigured;
+    public IpIntelligenceSettings IpIntelligence { get; init; } = IpIntelligenceSettings.Unconfigured;
 
     // EasyKash (Egypt hosted Direct-Pay). Init-only property (like BunnyStream)
     // so the existing EffectiveSettings construction sites keep compiling; the
@@ -190,6 +191,28 @@ public sealed record VideoAttestationSettings(
 
     public static VideoAttestationSettings Unconfigured { get; } =
         new(new Dictionary<string, string>(StringComparer.Ordinal));
+}
+
+/// <summary>
+/// External sign-in IP intelligence. The token is decrypted only inside the
+/// runtime-settings provider and is never returned to clients unmasked.
+/// </summary>
+public sealed record IpIntelligenceSettings(
+    string Provider,
+    string? IpinfoToken)
+{
+    public bool IsConfigured =>
+        string.Equals(Provider, IpIntelligenceProviders.Ipinfo, StringComparison.Ordinal)
+        && !string.IsNullOrWhiteSpace(IpinfoToken);
+
+    public static IpIntelligenceSettings Unconfigured { get; } =
+        new(IpIntelligenceProviders.Off, null);
+}
+
+public static class IpIntelligenceProviders
+{
+    public const string Off = "off";
+    public const string Ipinfo = "ipinfo";
 }
 
 public sealed record EmailSettings(
@@ -752,7 +775,13 @@ public sealed record SecuritySettings(
     string CountryAllowList = "",
     /// <summary>Spec §3.3: "off" | "step_up" | "block" — see
     /// <see cref="SecurityCountryAllowListModes"/>. Default "off".</summary>
-    string CountryAllowListMode = SecurityCountryAllowListModes.Off);
+    string CountryAllowListMode = SecurityCountryAllowListModes.Off,
+    /// <summary>Comma-separated, normalized (upper-invariant) email addresses
+    /// fully exempt from BOTH the §3.2 trusted-device OTP challenge and the
+    /// §3.3 risk-based step-up (country-changed/impossible-travel/frequent-
+    /// sign-ins) — owner/staff accounts that must never be blocked by a
+    /// flaky IP-derived country signal. Empty = no exemptions (default).</summary>
+    string DeviceVerificationExemptEmails = "");
 
 public static class SecurityRiskModes
 {

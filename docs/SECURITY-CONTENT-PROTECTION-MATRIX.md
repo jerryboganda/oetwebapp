@@ -18,7 +18,7 @@ and partially built. Each row says which.
 | DRM and encrypted streaming | **Application ready; provider activation unverified** | Clients receive only a 5-minute token-authenticated Bunny embed; raw HLS/MP4 URLs are no longer exposed. That player is the required MediaCage surface. Basic or Enterprise DRM must still be enabled in the Bunny account and proven with a real library/video. See §4. |
 | One active session only | **Implemented** | Shipped and live — signing in anywhere revokes every other session within seconds via a SignalR push, with a family-liveness check as the hard backstop. See §5. |
 | Device binding and reset | **Implemented and enforced** | Email-OTP challenge on a new device, old-device session revocation, self-service flow, admin reset, and change cooldown. The production profile enables `SecurityTrustedDeviceRequired`; completed production trust-device OTPs were observed before activation. |
-| IP and risk monitoring | **Implemented and enforced; VPN/Tor feed pending** | Country-change, impossible-travel, device-churn, step-up, and high-risk blocking run in `enforce` mode. The optional paid VPN/datacenter/Tor intelligence provider remains external work. See §7. |
+| IP and risk monitoring | **Implemented and enforced; provider token pending** | Country-change, impossible-travel, device-churn, step-up, and high-risk blocking run in `enforce` mode. IPinfo Core/Plus/Max can now be enabled with an encrypted runtime token; production provider activation remains an account action. See §7. |
 | Audit logs and admin controls | **Implemented** | `SecurityEvents` telemetry, a full `/admin/security` console (events feed, filters, computed alerts), and per-account session/device management (targeted revoke, device reset, block playback) are all live. See §8. |
 | Root/jailbreak/emulator detection | **Implemented (heuristics)** | Android + iOS native plugins report best-effort signals on every playback-session request; `VideoProtectionBlockRootedDevices`/`BlockEmulators` (default: on) reject a new session with 403 `device_integrity` when present. See §10. |
 
@@ -157,11 +157,14 @@ A **country allow-list** is available as an independent fence
 (`security.countryAllowList` + `security.countryAllowListMode`, default
 off): sign-ins from outside the listed ISO codes are either challenged
 (`step_up`) or rejected (`block`); unknown-country sign-ins always pass.
-Datacenter/VPN/Tor detection is **not active** — reliable detection needs a
-paid IP-intelligence feed (ipinfo/MaxMind), and static IP-range lists are
-not trustworthy enough to act on; the `IIpIntelligenceService` interface
-exists with a registered no-op default, so wiring a provider later requires
-no changes to the risk engine.
+Datacenter/VPN/Tor detection uses the production-configurable
+`IpinfoIpIntelligenceService`. It sends only parsed public addresses over
+HTTPS using bearer authentication, maps IPinfo anonymity/hosting flags,
+caches results for one hour, and fails open on provider timeout/error. The
+token is stored encrypted through runtime settings and never returned
+unmasked. Until a paid Core/Plus/Max token is stored and provider `ipinfo`
+selected, lookups remain disabled; static IP-range lists are intentionally
+not used.
 
 ## 8. Audit logging & admin controls (spec §4.4) — shipped
 

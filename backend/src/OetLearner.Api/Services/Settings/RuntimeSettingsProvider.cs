@@ -478,13 +478,15 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
                 CountryAllowList: r.SecurityCountryAllowList ?? string.Empty,
                 CountryAllowListMode: string.IsNullOrWhiteSpace(r.SecurityCountryAllowListMode)
                     ? SecurityCountryAllowListModes.Off
-                    : r.SecurityCountryAllowListMode),
+                    : r.SecurityCountryAllowListMode,
+                DeviceVerificationExemptEmails: r.SecurityDeviceVerificationExemptEmails ?? string.Empty),
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt)
         {
             BunnyStream = bunnyStream,
             VideoAttestation = videoAttestation,
+            IpIntelligence = ResolveIpIntelligence(r),
             EasyKash = easyKash,
             Support = support,
         };
@@ -553,6 +555,26 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             // sessions return 403 attestation_unavailable, never a weaker check).
             return VideoAttestationSettings.Unconfigured;
         }
+    }
+
+    private IpIntelligenceSettings ResolveIpIntelligence(RuntimeSettingsRow r)
+    {
+        var provider = Coalesce(
+                r.SecurityIpIntelligenceProvider,
+                _config["IpIntelligence:Provider"],
+                IpIntelligenceProviders.Off)!
+            .Trim()
+            .ToLowerInvariant();
+
+        if (provider is not (IpIntelligenceProviders.Off or IpIntelligenceProviders.Ipinfo))
+        {
+            provider = IpIntelligenceProviders.Off;
+        }
+
+        return new IpIntelligenceSettings(
+            Provider: provider,
+            IpinfoToken: Unprotect(r.SecurityIpinfoTokenEncrypted)
+                ?? NullIfEmpty(_config["IpIntelligence:IpinfoToken"]));
     }
 
     // ── Payment gateways + Soketi (DB-over-env, null DB field → env value) ──
