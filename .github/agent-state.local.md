@@ -16,6 +16,8 @@ evidence for platform limitations and external provider blockers.
   single-use nonce; native clients retain shell-held HMAC attestation.
 - Playback sessions persist the request device id and revoke if renewal is
   attempted from a different device.
+- Auth and API requests await native secure-storage device-id initialization;
+  enforced fresh sign-ins reject a missing device id instead of failing open.
 - Added a sandboxed, origin-checked embed controller while keeping the moving
   forensic watermark above the provider player, including parent fullscreen.
 - Native shells now fail closed when OS capture protection cannot engage.

@@ -12,7 +12,7 @@ import {
   updateStoredUser,
 } from './auth-storage';
 import { env } from './env';
-import { getDeviceId } from './device-id';
+import { getDeviceIdForRequest } from './device-id';
 import type {
   AuthenticatorSetup,
   AuthSession,
@@ -112,7 +112,7 @@ function resolveClientPlatform(): 'web' | 'desktop' | 'capacitor' {
   return 'web';
 }
 
-function buildHeaders(contentType?: string, accessToken?: string | null): Headers {
+async function buildHeaders(contentType?: string, accessToken?: string | null): Promise<Headers> {
   const headers = new Headers();
   if (contentType) {
     headers.set('Content-Type', contentType);
@@ -124,7 +124,7 @@ function buildHeaders(contentType?: string, accessToken?: string | null): Header
   }
   // Security spec §3.2: device identity, sent ahead of enabling
   // SecurityTrustedDeviceRequired server-side — see lib/device-id.ts.
-  const deviceId = getDeviceId();
+  const deviceId = await getDeviceIdForRequest();
   if (deviceId) {
     headers.set('X-OET-Device-Id', deviceId);
   }
@@ -178,7 +178,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 async function postJson<TResponse>(path: string, body: unknown, accessToken?: string | null): Promise<TResponse> {
-  const headers = buildHeaders('application/json', accessToken);
+  const headers = await buildHeaders('application/json', accessToken);
   try {
     const response = await fetchWithTimeout(resolveUrl(path), {
       method: 'POST',
@@ -198,7 +198,7 @@ async function postJson<TResponse>(path: string, body: unknown, accessToken?: st
 }
 
 async function getJson<TResponse>(path: string, accessToken?: string | null): Promise<TResponse> {
-  const headers = buildHeaders(undefined, accessToken);
+  const headers = await buildHeaders(undefined, accessToken);
   try {
     const response = await fetchWithTimeout(resolveUrl(path), {
       method: 'GET',

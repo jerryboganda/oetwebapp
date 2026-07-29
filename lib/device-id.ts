@@ -17,7 +17,7 @@ import { getSecureItem, setSecureItem } from '@/lib/mobile/secure-storage';
 const WEB_STORAGE_KEY = 'oet_device_id';
 
 let cachedDeviceId: string | null = null;
-let nativeInitStarted = false;
+let nativeInitPromise: Promise<void> | null = null;
 
 function generateId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -68,9 +68,22 @@ export function getDeviceId(): string | null {
     return cachedDeviceId;
   }
 
-  if (!nativeInitStarted) {
-    nativeInitStarted = true;
-    void initNativeDeviceId();
-  }
+  nativeInitPromise ??= initNativeDeviceId();
   return null;
+}
+
+/**
+ * Request-safe device identity. Native secure storage is asynchronous, so
+ * security-boundary calls await the first keychain/keystore lookup instead of
+ * silently omitting the header during app startup.
+ */
+export async function getDeviceIdForRequest(): Promise<string | null> {
+  const immediate = getDeviceId();
+  if (immediate || typeof window === 'undefined' || !Capacitor.isNativePlatform()) {
+    return immediate;
+  }
+
+  nativeInitPromise ??= initNativeDeviceId();
+  await nativeInitPromise;
+  return cachedDeviceId;
 }

@@ -128,7 +128,9 @@ page, which revokes its sessions the same way.
 profile. Before activation, the production OTP ledger showed successful
 `trust_device` challenge completions. The activation migration revokes
 legacy active refresh tokens that have no device id so they cannot bypass
-the binding rule.
+the binding rule. Web/desktop device ids initialize synchronously; native
+auth requests await keychain/keystore initialization. A fresh enforced
+sign-in with no device id is rejected with `device_id_required`.
 
 ## 7. IP / location risk signals (spec §3.3) — shipped and enforced
 

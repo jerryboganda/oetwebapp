@@ -97,9 +97,9 @@ public class RefreshTokenRecord
     public string? CountryCode { get; set; }
 
     /// <summary>The client-supplied X-OET-Device-Id at the time this session
-    /// was created (Security spec §3.2). Null when the client sent no header
-    /// (old shell build) — refresh-time device-mismatch detection is skipped
-    /// whenever either side is null, so old clients degrade gracefully.</summary>
+    /// was created (Security spec §3.2). Legacy null-device records are revoked
+    /// by the mandatory security-profile migration; enforced fresh sign-ins
+    /// require a device id.</summary>
     [MaxLength(128)]
     public string? DeviceId { get; set; }
 

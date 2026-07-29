@@ -6,8 +6,8 @@ namespace OetLearner.Api.Security;
 
 public enum DeviceResolution
 {
-    /// <summary>No device id was presented (old client / missing header) —
-    /// enforcement is skipped entirely; fail-open.</summary>
+    /// <summary>No device id was presented. The auth service rejects this
+    /// result whenever trusted-device enforcement is active.</summary>
     NoDeviceId,
 
     /// <summary>The presented device id matches the account's current

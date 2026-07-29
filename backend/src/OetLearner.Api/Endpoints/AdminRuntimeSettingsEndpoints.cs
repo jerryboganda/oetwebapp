@@ -2416,8 +2416,8 @@ public sealed class RuntimeSettingsSecurityUpdate
     public JsonElement? SingleActiveSessionEnabled { get; set; }
     /// <summary>"off" | "log_only" | "enforce" — see SecurityRiskModes.</summary>
     public string? RiskMode { get; set; }
-    /// <summary>Do not enable until the frontend device-challenge UI ships —
-    /// see the migration doc comment on SecurityTrustedDeviceRequired.</summary>
+    /// <summary>Mandatory device-binding gate. Keep enabled; the frontend
+    /// device-challenge flow and secure device-id initialization are shipped.</summary>
     public JsonElement? TrustedDeviceRequired { get; set; }
     public JsonElement? DeviceChangeWindowDays { get; set; }
     public JsonElement? DeviceChangeMaxPerWindow { get; set; }

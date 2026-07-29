@@ -1265,8 +1265,8 @@ public sealed class AuthService(
         // than the one currently trusted needs an email-OTP challenge before
         // it can proceed — evaluated BEFORE IssueSession/revoke-others so an
         // OtpRequired/CooldownBlocked outcome never touches the account's
-        // existing legitimate session. Skipped entirely for old clients that
-        // send no X-OET-Device-Id header (fail-open).
+        // existing legitimate session. When enforcement is active a missing
+        // device id is rejected; it is not a bypass for old clients.
         if (familyId is null)
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
@@ -1289,7 +1289,11 @@ public sealed class AuthService(
                             account.Id, deviceId!, deviceInfo, platform, "bootstrap", cancellationToken);
                         break;
                     case DeviceResolution.Trusted:
+                        break;
                     case DeviceResolution.NoDeviceId:
+                        throw ApiException.Forbidden(
+                            "device_id_required",
+                            "This app must identify the device before signing in. Update the app and try again.");
                     default:
                         break;
                 }
