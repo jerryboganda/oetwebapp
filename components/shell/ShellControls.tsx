@@ -13,9 +13,7 @@ import { UpdateDialog } from './UpdateDialog';
  * platform's lavender/violet brand theme.
  *
  * Collapsed by default: displays a floating right-edge handle trigger button.
- * Expanded: smoothly slides open to reveal "Reload" (hard-reload: drop caches,
- * re-fetch fresh settings from server), "Check for updates" (animated UpdateDialog),
- * and a collapse toggle handle.
+ * Expanded: smoothly slides open into a vertical stacked list card displaying icon + title + description.
  */
 export function ShellControls() {
   const [mounted, setMounted] = useState(false);
@@ -69,7 +67,7 @@ export function ShellControls() {
             type="button"
             onClick={() => setIsExpanded(true)}
             aria-expanded={false}
-            aria-label="Open quick access toolbar"
+            aria-label="Open quick access menu"
             title="Quick access controls"
             className="group flex h-10 items-center gap-1 rounded-l-full border-y border-l border-primary/25 bg-lavender/90 py-1.5 pl-2.5 pr-1.5 text-primary shadow-lg shadow-primary/15 backdrop-blur-md transition-all hover:border-primary/40 hover:bg-lavender hover:shadow-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-95 motion-reduce:active:scale-100 dark:border-white/20 dark:bg-slate-900/90 dark:text-violet-200 dark:hover:bg-slate-900"
           >
@@ -79,33 +77,49 @@ export function ShellControls() {
             </div>
           </button>
         ) : (
-          /* Expanded Quick Access Toolbar Panel */
+          /* Expanded Stacked Vertical Card Menu */
           <div
             aria-expanded={true}
-            className="flex items-center gap-1.5 rounded-l-full border-y border-l border-primary/30 bg-lavender/95 py-1.5 pl-2.5 pr-1.5 shadow-xl shadow-primary/20 backdrop-blur-md animate-in slide-in-from-right-3 duration-200 dark:border-white/20 dark:bg-slate-900/95 dark:shadow-black/50"
+            className="mr-2 w-64 rounded-2xl border border-primary/25 bg-lavender/95 p-2.5 shadow-2xl shadow-primary/20 backdrop-blur-xl animate-in slide-in-from-right-4 duration-200 dark:border-white/20 dark:bg-slate-900/95 dark:shadow-black/60"
           >
-            <IconButton
-              label="Reload (fetch latest from server)"
-              onClick={() => void hardReload()}
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            </IconButton>
+            {/* Menu Header */}
+            <div className="mb-2 flex items-center justify-between border-b border-primary/15 pb-2 pl-1 pr-0.5 dark:border-white/15">
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary/80 dark:text-violet-200/80">
+                Quick Access
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsExpanded(false)}
+                aria-label="Collapse quick access menu"
+                title="Close menu"
+                className="flex h-6 w-6 items-center justify-center rounded-full text-primary/70 transition-colors hover:bg-primary/15 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-violet-300/70 dark:hover:bg-white/15 dark:hover:text-violet-200"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
 
-            <IconButton
-              label="Check for updates"
-              onClick={() => setUpdateOpen(true)}
-            >
-              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-            </IconButton>
+            {/* Stacked Menu Options */}
+            <div className="flex flex-col gap-1">
+              <MenuItem
+                icon={<RefreshCw className="h-4 w-4" />}
+                title="Reload App"
+                description="Fetch latest content & settings"
+                onClick={() => {
+                  setIsExpanded(false);
+                  void hardReload();
+                }}
+              />
 
-            <div className="mx-0.5 h-4 w-px bg-primary/20 dark:bg-white/20" aria-hidden="true" />
-
-            <IconButton
-              label="Collapse quick access toolbar"
-              onClick={() => setIsExpanded(false)}
-            >
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </IconButton>
+              <MenuItem
+                icon={<ArrowDownToLine className="h-4 w-4" />}
+                title="Check for Updates"
+                description="Download latest app version"
+                onClick={() => {
+                  setIsExpanded(false);
+                  setUpdateOpen(true);
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -115,16 +129,34 @@ export function ShellControls() {
   );
 }
 
-function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+function MenuItem({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
-      title={label}
-      className="flex h-8 w-8 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-95 motion-reduce:active:scale-100 dark:text-violet-200 dark:hover:bg-white/15"
+      className="group flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-all hover:bg-primary/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98] motion-reduce:active:scale-100 dark:hover:bg-white/12"
     >
-      {children}
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white dark:bg-white/10 dark:text-violet-200 dark:group-hover:bg-violet-500 dark:group-hover:text-white">
+        {icon}
+      </div>
+      <div className="flex flex-col min-w-0">
+        <span className="text-sm font-medium leading-tight text-primary dark:text-violet-100">
+          {title}
+        </span>
+        <span className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+          {description}
+        </span>
+      </div>
     </button>
   );
 }
