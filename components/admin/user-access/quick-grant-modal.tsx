@@ -16,6 +16,7 @@ import {
   fetchAdminRecallSetTags,
   fetchAllocatableVideos,
   fetchUserAccess,
+  hasEligiblePackage,
   putUserAccessScope,
   type AllocatableVideo,
   type RecallSetTagDto,
@@ -37,14 +38,6 @@ interface QuickGrantModalProps {
    *  that means (expand the full Advanced panel in place, or navigate to it). */
   onCustom: () => void;
   onGranted: (access: UserAccess) => void;
-}
-
-/** True if a subscription still counts as "active enough" to unlock gated modules. */
-function isEligibleSubscription(sub: { status: string; expiresAt: string | null }): boolean {
-  const status = sub.status.toLowerCase();
-  if (status === 'suspended' || status === 'pending' || status === 'cancelled') return false;
-  if (sub.expiresAt && new Date(sub.expiresAt).getTime() <= Date.now()) return false;
-  return true;
 }
 
 /**
@@ -108,11 +101,11 @@ export function QuickGrantModal({
     };
   }, [open, userId]);
 
-  const hasEligiblePackage = baseline?.subscriptions.some(isEligibleSubscription) ?? false;
+  const learnerHasEligiblePackage = baseline ? hasEligiblePackage(baseline.subscriptions) : false;
   const selectedPlan = plans.find((plan) => (plan.code ?? plan.id) === planCode);
   const professionMismatch = isProfessionMismatch(selectedPlan, learnerProfessionId);
   const blockedByProfession = professionMismatch && !overrideProfession;
-  const needsPlan = !hasEligiblePackage;
+  const needsPlan = !learnerHasEligiblePackage;
   const canGrant = Boolean(selectedPreset) && (!needsPlan || (planCode && !blockedByProfession)) && !isSaving;
 
   function handlePickPreset(preset: AccessPreset) {

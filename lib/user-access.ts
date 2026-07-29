@@ -83,6 +83,37 @@ export function isModuleEnabled(overrides: UserAccessModuleOverride[], moduleKey
   return overrides.find((o) => o.moduleKey === moduleKey)?.enabled ?? false;
 }
 
+/**
+ * True if a subscription still counts as "active enough" to unlock gated
+ * modules — mirrors `EffectiveEntitlementResolver`'s eligibility gate
+ * (Active/Trial/FreezeRequested, not expired). A pending (not-yet-saved)
+ * draft counts as eligible: the backend always creates a freshly granted
+ * package as Active, and pending packages are persisted before module/scope
+ * overrides on save (see `handleSaveAccess`), so by the time the override
+ * takes effect server-side the package already exists.
+ *
+ * Best-effort UI hint only — the backend remains the real gate.
+ */
+export function isEligibleSubscription(sub: Pick<UserAccessSubscription, 'status' | 'expiresAt' | 'isPending'>): boolean {
+  if (sub.isPending) return true;
+  const status = sub.status.toLowerCase();
+  if (status === 'suspended' || status === 'pending' || status === 'cancelled') return false;
+  if (sub.expiresAt && new Date(sub.expiresAt).getTime() <= Date.now()) return false;
+  return true;
+}
+
+/**
+ * Module/content-scope grants (Recalls, Materials, Videos, Mocks — see
+ * `EffectiveEntitlementResolver.ResolveCoreAsync`) only ever take effect on
+ * top of an eligible package; with zero eligible packages the resolver
+ * returns fail-low before it even reads `UserModuleOverride` rows, so every
+ * toggle below is a silent no-op. Used to warn admins in the Advanced panel,
+ * mirroring the `needsPlan` guard Quick Grant already enforces.
+ */
+export function hasEligiblePackage(subscriptions: UserAccessSubscription[]): boolean {
+  return subscriptions.some(isEligibleSubscription);
+}
+
 // ── Create user ──────────────────────────────────────────────────────────
 
 export interface CreateAdminUserPayload {

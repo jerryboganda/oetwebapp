@@ -18,6 +18,7 @@ import {
   fetchAdminBillingPlans,
   fetchAdminRecallSetTags,
   fetchAllocatableVideos,
+  hasEligiblePackage,
   isModuleEnabled,
   type AllocatableVideo,
   type RecallSetTagDto,
@@ -137,6 +138,16 @@ export function ManageAccessPanel({
   const recallsEnabled = isModuleEnabled(value.moduleOverrides, 'Recalls');
   const professionDisplay = learnerProfessionLabel?.trim() || learnerProfessionId?.trim() || null;
 
+  // Module toggles and content scope (recall sets, folders, videos) only ever take
+  // effect on top of an eligible package — with none, the backend fails low before
+  // it even reads these overrides, so saving them here would silently do nothing.
+  const learnerHasEligiblePackage = hasEligiblePackage(value.subscriptions);
+  const hasAnyModuleGrant = value.moduleOverrides.some((override) => override.enabled)
+    || value.recallSetCodes.length > 0
+    || value.materialFolderIds.length > 0
+    || value.videoIds.length > 0;
+  const grantWouldBeNoOp = !learnerHasEligiblePackage && hasAnyModuleGrant;
+
   /**
    * Re-reads the changed package from the server response but keeps the local
    * draft as the source of truth for membership, so an unsaved grant or removal
@@ -209,6 +220,14 @@ export function ManageAccessPanel({
           disabled={disabled || isLoadingOptions}
         />
       </section>
+
+      {grantWouldBeNoOp ? (
+        <InlineAlert variant="warning" title="No active package">
+          This learner has no eligible package. Recalls, Materials, Videos, and Mocks access all require one —
+          the module toggles and content scope below will have no effect until a package is added above (or
+          reactivated if suspended/expired).
+        </InlineAlert>
+      ) : null}
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-navy">Module access</h3>
