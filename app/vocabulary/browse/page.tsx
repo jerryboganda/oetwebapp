@@ -11,7 +11,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -38,7 +38,7 @@ async function cacheVocabularyToIndexedDb(terms: unknown[]) {
   } catch {/* offline cache is best-effort */}
 }
 
-type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'exampleSentence' | 'ipaPronunciation' | 'sourceProvenance' | 'isLocked' | 'isFreePreview'>;
+type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'exampleSentence' | 'ipaPronunciation' | 'sourceProvenance' | 'isLocked' | 'isFreePreview' | 'examFrequencyCount' | 'recallSetOccurrences' | 'updatedAt'>;
 
 export default function BrowseVocabularyPage() {
   const [terms, setTerms] = useState<TermRow[]>([]);
@@ -287,6 +287,11 @@ export default function BrowseVocabularyPage() {
                       >
                         {term.term}
                       </Link>
+                      <RecallTierBadge
+                        count={term.examFrequencyCount ?? 0}
+                        occurrences={term.recallSetOccurrences}
+                        lastUpdatedAt={term.updatedAt}
+                      />
                       {term.ipaPronunciation && (
                         <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
                       )}

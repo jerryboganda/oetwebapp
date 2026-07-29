@@ -46,6 +46,7 @@ type VocabRow = {
   hasAudio?: boolean;
   isFreePreview?: boolean;
   examFrequencyCount?: number;
+  updatedAt?: string;
 };
 
 type ListResponse = {
@@ -419,7 +420,7 @@ export default function AdminVocabularyPage() {
         <div className="flex flex-col">
           <span className="flex items-center gap-1.5 font-semibold text-admin-fg-strong">
             {row.term}
-            <RecallTierBadge count={row.examFrequencyCount ?? 0} />
+            <RecallTierBadge count={row.examFrequencyCount ?? 0} lastUpdatedAt={row.updatedAt} />
           </span>
           <span className="text-xs text-admin-fg-muted line-clamp-1">{row.definition}</span>
         </div>

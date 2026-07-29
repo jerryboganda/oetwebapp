@@ -1006,7 +1006,8 @@ public class VocabularyService(
                 RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray(),
                 ExamFrequencyCount: t.ExamFrequencyCount,
                 IsFreePreview: false,
-                IsLocked: true);
+                IsLocked: true,
+                UpdatedAt: t.UpdatedAt);
         }
 
         return new(
@@ -1034,7 +1035,8 @@ public class VocabularyService(
             ExamFrequencyCount: t.ExamFrequencyCount,
             IsFreePreview: t.IsFreePreview,
             IsLocked: false,
-            RecallSetOccurrences: ParseRecallSetOccurrences(t.RecallSetOccurrencesJson));
+            RecallSetOccurrences: ParseRecallSetOccurrences(t.RecallSetOccurrencesJson),
+            UpdatedAt: t.UpdatedAt);
     }
 
     private static bool IsInternalAudioReference(string? audioUrl)
@@ -1109,7 +1111,8 @@ public class VocabularyService(
         Synonyms: ParseStringArray(term.SynonymsJson).ToArray(),
         Mastery: lv.Mastery,
         ExamFrequencyCount: term.ExamFrequencyCount,
-        RecallSetOccurrences: ParseRecallSetOccurrences(term.RecallSetOccurrencesJson));
+        RecallSetOccurrences: ParseRecallSetOccurrences(term.RecallSetOccurrencesJson),
+        UpdatedAt: term.UpdatedAt);
 
     private static List<string> ParseStringArray(string? json)
     {

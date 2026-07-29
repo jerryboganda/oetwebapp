@@ -153,6 +153,7 @@ export function RecallTierBadge({
   className,
   occurrences,
   setLabels,
+  lastUpdatedAt,
 }: {
   count: number;
   className?: string;
@@ -164,6 +165,12 @@ export function RecallTierBadge({
   occurrences?: Record<string, number> | null;
   /** Optional set-code → human label map for the tooltip (falls back to code). */
   setLabels?: Record<string, string>;
+  /**
+   * When this word's frequency was last incremented (its `updatedAt`).
+   * Surfaced in the tooltip so a recently-repeated word can be told apart
+   * from one that hasn't recurred in a while, without a separate UI.
+   */
+  lastUpdatedAt?: string | null;
 }) {
   if (!count || count < 2) return null;
 
@@ -181,9 +188,17 @@ export function RecallTierBadge({
         .map(([code, n]) => `${setLabels?.[code] ?? code} ×${n}`)
         .join(' · ')
     : '';
+  const lastRepeated = lastUpdatedAt
+    ? (() => {
+        const d = new Date(lastUpdatedAt);
+        return Number.isNaN(d.getTime())
+          ? ''
+          : ` — last repeated ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+      })()
+    : '';
   const title = breakdown
-    ? `Appeared ${count} times across recall exams — ${breakdown}`
-    : `Appeared ${count} times across recall exams`;
+    ? `Appeared ${count} times across recall exams — ${breakdown}${lastRepeated}`
+    : `Appeared ${count} times across recall exams${lastRepeated}`;
 
   return (
     <span

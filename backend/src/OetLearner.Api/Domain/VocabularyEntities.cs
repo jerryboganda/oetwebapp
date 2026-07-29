@@ -106,18 +106,23 @@ public class VocabularyTerm
 
     /// <summary>
     /// Per-recall-set occurrence map — SOURCE OF TRUTH for the ×N badge. JSON
-    /// object: canonical set code → times the term appears in THAT set's CSV,
-    /// e.g. {"old":2,"2023-2025":3,"2026":12}. Invariants re-derived on every
-    /// import: <see cref="ExamFrequencyCount"/> == sum(values); keys ==
-    /// <see cref="RecallSetCodesJson"/>. Empty "{}" until a set is (re-)imported.
+    /// object: canonical set code → cumulative times the term has been
+    /// recalled under that set across every import, e.g.
+    /// {"old":2,"2023-2025":3,"2026":12}. Each completed import ADDS to the
+    /// relevant set's count rather than replacing it — re-uploading a word
+    /// (whether under the same or a different recall set) always increments
+    /// ×N; it is never ignored. Invariant: <see cref="ExamFrequencyCount"/>
+    /// == sum(values); keys == <see cref="RecallSetCodesJson"/>. Empty "{}"
+    /// until a set is first imported.
     /// </summary>
     public string RecallSetOccurrencesJson { get; set; } = "{}";
 
     /// <summary>
     /// How many times this term has appeared across recall exams — the learner
     /// "×N" badge. DERIVED CACHE of <see cref="RecallSetOccurrencesJson"/>:
-    /// equals the sum of that map's per-set counts. Recomputed on every import;
-    /// rebuildable by re-importing each set's CSV.
+    /// equals the sum of that map's per-set counts. Grows by one for every row
+    /// occurrence encountered on every import commit, whether the word is
+    /// brand-new (starts at 1) or already on file (incremented, never reset).
     /// </summary>
     public int ExamFrequencyCount { get; set; } = 1;
 

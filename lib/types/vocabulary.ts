@@ -38,6 +38,11 @@ export interface VocabularyTerm {
    */
   recallSetOccurrences?: Record<string, number> | null;
   /**
+   * When this term's content or ×N frequency was last touched — lets the UI
+   * identify recently-repeated words without treating them as brand new.
+   */
+  updatedAt?: string;
+  /**
    * Admin-curated flag marking this term as part of the free preview a
    * non-subscribed learner may access in the Recall Vocabulary Bank.
    */
@@ -131,6 +136,8 @@ export interface VocabularyFlashcard {
    * badge breakdown tooltip.
    */
   recallSetOccurrences?: Record<string, number> | null;
+  /** When this term's content or ×N frequency was last touched. */
+  updatedAt?: string;
 }
 
 export interface VocabularyStats {

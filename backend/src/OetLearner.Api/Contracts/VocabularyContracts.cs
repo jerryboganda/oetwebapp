@@ -55,7 +55,12 @@ public sealed record VocabularyTermResponse(
     /// The sum equals ExamFrequencyCount. Null when redacted or not yet rebuilt.
     /// Powers the ×N badge breakdown tooltip.
     /// </summary>
-    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null
+    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null,
+    /// <summary>
+    /// When this term's content or ×N frequency was last touched. Lets the UI
+    /// identify recently-repeated words without treating them as brand new.
+    /// </summary>
+    DateTimeOffset UpdatedAt = default
 );
 
 /// <summary>One row in the canonical recall-set registry response.</summary>
@@ -144,7 +149,9 @@ public sealed record VocabularyFlashcardDto(
     /// Per-recall-set occurrence breakdown behind <see cref="ExamFrequencyCount"/>
     /// (set code → count). Sum equals ExamFrequencyCount. Null until rebuilt.
     /// </summary>
-    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null
+    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null,
+    /// <summary>When this term's content or ×N frequency last changed.</summary>
+    DateTimeOffset UpdatedAt = default
 );
 
 public sealed record FlashcardReviewResponse(
