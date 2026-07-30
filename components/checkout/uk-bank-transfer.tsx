@@ -98,9 +98,9 @@ export function UkBankTransfer() {
       </button>
 
       {open ? (
-        <div className="border-t border-border px-4 pb-4 pt-3.5">
+        <div className="border-t border-border px-3 pb-4 pt-3.5 sm:px-4">
           {/* Bank selector */}
-          <div className="flex gap-1.5 rounded-xl border border-border bg-surface p-1">
+          <div className="flex gap-1 rounded-xl border border-border bg-surface p-1 sm:gap-1.5">
             {BANKS.map((b) => {
               const active = b.id === bankId;
               return (
@@ -109,12 +109,12 @@ export function UkBankTransfer() {
                   type="button"
                   onClick={() => setBankId(b.id)}
                   className={cn(
-                    'flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold transition',
+                    'flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1.5 py-2 text-xs font-bold transition sm:px-2',
                     active ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-navy',
                   )}
                 >
-                  <span className={cn('h-2 w-2 rounded-full', active ? 'bg-white/90' : b.swatch)} />
-                  {b.tag}
+                  <span className={cn('h-2 w-2 shrink-0 rounded-full', active ? 'bg-white/90' : b.swatch)} />
+                  <span className="truncate">{b.tag}</span>
                 </button>
               );
             })}
@@ -172,12 +172,12 @@ function ScopeButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold transition',
+        'flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-1.5 py-2 text-xs font-bold transition sm:px-2',
         active ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-navy',
       )}
     >
-      {icon}
-      {label}
+      <span className="shrink-0">{icon}</span>
+      <span className="truncate">{label}</span>
     </button>
   );
 }

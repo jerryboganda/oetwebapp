@@ -194,9 +194,7 @@ export default function ReadingHome() {
           highlights={heroHighlights}
         />
 
-        <div className="flex justify-end">
-          <CreditsGuideButton />
-        </div>
+        <CreditsGuideButton variant="banner" />
 
         <LearnerSkillSwitcher compact />
 

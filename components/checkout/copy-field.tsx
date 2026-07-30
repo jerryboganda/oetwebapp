@@ -36,11 +36,11 @@ export function CopyField({
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3.5 py-2.5',
+        'flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 sm:gap-3 sm:px-3.5',
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
         <p
           className={cn('mt-0.5 truncate text-sm text-navy', mono ? 'font-mono tracking-tight' : 'font-medium')}
@@ -54,14 +54,14 @@ export function CopyField({
         onClick={copy}
         aria-label={`Copy ${label}`}
         className={cn(
-          'inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition',
+          'inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-semibold transition sm:px-2.5',
           copied
             ? 'border-success/40 bg-success/10 text-success'
             : 'border-border text-muted hover:border-primary/50 hover:text-primary',
         )}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        {copied ? 'Copied' : 'Copy'}
+        <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
       </button>
     </div>
   );

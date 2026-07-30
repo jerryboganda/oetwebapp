@@ -5,7 +5,20 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+
+// Overlays render through a body portal: the app shell's scroll containers
+// create their own stacking contexts (`relative z-10`), so an inline `z-50`
+// dialog would still paint BELOW the fixed bottom nav (`z-40`) on mobile.
+// Portaling to <body> lets `z-50` win everywhere, like a native app sheet.
+function useBodyPortalTarget() {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setTarget(document.body);
+  }, []);
+  return target;
+}
 
 interface ModalProps {
   open: boolean;
@@ -186,6 +199,7 @@ function OverlayCloseButton({ onClose }: { onClose: () => void }) {
 }
 
 export function Modal({ open, onClose, title, children, className, size = 'md' }: ModalProps) {
+  const portalTarget = useBodyPortalTarget();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -266,7 +280,9 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
     queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
   }, []);
 
-  return (
+  if (!portalTarget) return null;
+
+  return createPortal(
     <AnimatePresence initial={false} mode={presenceMode} onExitComplete={handleExitComplete}>
       {open ? (
         <div
@@ -306,7 +322,8 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           </motion.div>
         </div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    portalTarget,
   );
 }
 
@@ -327,6 +344,7 @@ interface DrawerProps {
 }
 
 export function Drawer({ open, onClose, title, children, side = 'right', className, restoreFocusOnClose = true }: DrawerProps) {
+  const portalTarget = useBodyPortalTarget();
   const drawerTitleId = useId();
   const drawerRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -422,7 +440,9 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
     queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
   }, [restoreFocusOnClose]);
 
-  return (
+  if (!portalTarget) return null;
+
+  return createPortal(
     <AnimatePresence initial={false} mode={presenceMode} onExitComplete={handleExitComplete}>
       {open ? (
         <div
@@ -462,6 +482,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
           </motion.div>
         </div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    portalTarget,
   );
 }

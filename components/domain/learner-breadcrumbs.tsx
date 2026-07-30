@@ -56,9 +56,9 @@ function humanizeSegment(segment: string) {
     return 'Detail';
   }
   // Prefixed entity id (e.g. la-c9252face1f74936..., lt-001, mock-abc123,
-  // expert-001). Treat as opaque detail label rather than mangling the
-  // raw id into the breadcrumb text.
-  if (/^[a-z]{1,16}-[0-9a-z-]{3,}$/i.test(segment) && /\d/.test(segment)) {
+  // Vid_e670bb4a..., expert-001). Treat as opaque detail label rather than
+  // mangling the raw id into the breadcrumb text.
+  if (/^[a-z]{1,16}[-_][0-9a-z_-]{3,}$/i.test(segment) && /\d/.test(segment)) {
     return 'Detail';
   }
 

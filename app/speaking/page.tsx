@@ -128,9 +128,7 @@ export default function SpeakingHome() {
           ]}
         />
 
-        <div className="flex justify-end">
-          <CreditsGuideButton />
-        </div>
+        <CreditsGuideButton variant="banner" />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 

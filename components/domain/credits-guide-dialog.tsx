@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   BookOpen,
+  ChevronRight,
   ClipboardCheck,
   Coins,
   Headphones,
@@ -106,23 +107,53 @@ const ROWS: CreditRow[] = [
 export function CreditsGuideButton({
   className = '',
   label = 'How credits work',
+  variant = 'pill',
 }: {
   className?: string;
   label?: string;
+  /** `pill` is the compact inline chip; `banner` is a full-width strip for
+   *  placing under a page hero, so the trigger doesn't float in empty space. */
+  variant?: 'pill' | 'banner';
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        data-testid="credits-guide-trigger"
-        className={`inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-2 text-sm font-semibold text-navy shadow-sm transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-white/5 ${className}`}
-      >
-        <Coins className="h-4 w-4 text-primary" aria-hidden />
-        {label}
-      </button>
+      {variant === 'banner' ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          data-testid="credits-guide-trigger"
+          className={`group flex w-full items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/[0.08] via-primary/[0.04] to-transparent px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/35 hover:from-primary/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+            aria-hidden
+          >
+            <Coins className="h-[18px] w-[18px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-navy">{label}</span>
+            <span className="mt-0.5 hidden text-xs text-muted sm:block">
+              What each exam costs, and when credits are taken.
+            </span>
+          </span>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          data-testid="credits-guide-trigger"
+          className={`inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-2 text-sm font-semibold text-navy shadow-sm transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-white/5 ${className}`}
+        >
+          <Coins className="h-4 w-4 text-primary" aria-hidden />
+          {label}
+        </button>
+      )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="How credits work" size="lg">
         <div className="space-y-5">

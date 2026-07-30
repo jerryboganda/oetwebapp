@@ -213,9 +213,7 @@ export default function ListeningHome() {
           highlights={heroHighlights}
         />
 
-        <div className="flex justify-end">
-          <CreditsGuideButton />
-        </div>
+        <CreditsGuideButton variant="banner" />
 
         <LearnerSkillSwitcher compact />
 

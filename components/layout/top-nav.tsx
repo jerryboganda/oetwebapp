@@ -48,9 +48,12 @@ interface TopNavProps {
   sidebarCollapsed?: boolean;
 }
 
-/** Bordered circular icon button used by the bell and theme toggle. */
+/** Bordered circular icon button used by the bell and theme toggle.
+ *  Compact (36px) on mobile so the header reads like a native app bar,
+ *  full-size (44px) from lg up. */
 const ICON_BUTTON_CLASS = cn(
-  'h-11 w-11 !rounded-full p-0 text-muted hover:bg-surface hover:text-navy',
+  'h-9 w-9 lg:h-11 lg:w-11 !rounded-full p-0 text-muted hover:bg-surface hover:text-navy',
+  '[&_svg]:h-[18px] [&_svg]:w-[18px] lg:[&_svg]:h-5 lg:[&_svg]:w-5',
   HEADER_CHIP,
   HEADER_CHIP_HOVER,
 );
@@ -111,12 +114,12 @@ function ProfileMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          'flex items-center gap-2.5 rounded-xl p-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:pr-3',
+          'flex items-center gap-2.5 rounded-full p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:rounded-xl lg:p-1.5 lg:pr-3',
           HEADER_CHIP,
           HEADER_CHIP_HOVER,
         )}
       >
-        <UserAvatar avatarUrl={avatarUrl} displayName={displayName} className="h-9 w-9" />
+        <UserAvatar avatarUrl={avatarUrl} displayName={displayName} className="h-7 w-7 lg:h-9 lg:w-9" />
         <span className="hidden min-w-0 text-left leading-tight xl:block">
           <span className="block max-w-[9rem] truncate text-[13px] font-bold text-navy">{displayName}</span>
           <span className="block text-[11px] text-muted">{roleLabel}</span>
@@ -305,7 +308,7 @@ export function TopNav({
       <motion.header
         className={cn(
           'sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-3 safe-area-inset-top lg:px-5',
-          showBrand ? 'h-16 lg:h-24' : 'glass-panel h-11 justify-between border-border/60 lg:h-12 lg:px-6',
+          showBrand ? 'h-14 lg:h-24' : 'glass-panel h-11 justify-between border-border/60 lg:h-12 lg:px-6',
           className,
         )}
         layout={!reducedMotion}
@@ -313,7 +316,7 @@ export function TopNav({
       >
         <div className={cn('flex items-center gap-2.5', showBrand && 'shrink-0')}>
           <button
-            className="touch-target pressable -ml-1 rounded-xl p-1.5 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary lg:hidden"
+            className={cn('pressable -ml-1 inline-flex items-center justify-center lg:hidden', ICON_BUTTON_CLASS)}
             onClick={() => {
               void triggerImpactHaptic('LIGHT');
               setMobileMenuOpen((current) => !current);
@@ -353,7 +356,7 @@ export function TopNav({
                 width={400}
                 height={200}
                 priority
-                className="h-12 w-auto object-contain sm:h-14 lg:h-20"
+                className="h-[3.25rem] w-auto object-contain lg:h-[5.5rem]"
               />
             </Link>
           ) : null}
@@ -379,7 +382,7 @@ export function TopNav({
         ) : null}
 
         <motion.div
-          className={cn('flex items-center justify-end gap-1.5 sm:gap-2', showBrand ? 'shrink-0' : 'flex-wrap gap-1')}
+          className={cn('ml-auto flex items-center justify-end gap-1.5 sm:gap-2', showBrand ? 'shrink-0' : 'flex-wrap gap-1')}
           layout={!reducedMotion}
         >
           {actions}

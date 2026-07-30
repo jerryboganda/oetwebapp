@@ -18,7 +18,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 24px;
+    gap: 32px;
     flex-wrap: wrap;
     padding: 24px;
   }
@@ -31,6 +31,8 @@
     padding: 14px;
     box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 0 2px #333;
     position: relative;
+    display: flex;
+    flex-direction: column;
   }
   .notch {
     position: absolute;
@@ -44,23 +46,46 @@
     z-index: 2;
   }
   .screen {
-    width: 100%;
-    height: 100%;
+    flex: 1;
     border-radius: 34px;
     overflow: hidden;
     background: #f7f5ef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    text-align: center;
   }
-  iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    display: block;
+  .screen p {
+    color: #4b4b52;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0;
+  }
+  .launch {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 12px 20px;
+    border: none;
+    background: #6d28d9;
+    color: #fff;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .launch:hover { background: #7c3aed; }
+  .hint {
+    margin-top: 14px;
+    font-size: 12px;
+    color: #8a8a90;
   }
   .panel {
     color: #d0d0d5;
     font-size: 13px;
     line-height: 1.6;
-    max-width: 260px;
+    max-width: 280px;
   }
   .panel h1 { font-size: 16px; color: #fff; margin: 0 0 8px; }
   .panel code {
@@ -69,17 +94,6 @@
     border-radius: 4px;
     color: #9ecbff;
   }
-  .panel button {
-    margin-top: 12px;
-    padding: 8px 12px;
-    border: 1px solid #444;
-    background: #2c2c2e;
-    color: #fff;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  .panel button:hover { background: #3a3a3c; }
 </style>
 </head>
 <body>
@@ -87,17 +101,43 @@
     <div class="phone">
       <div class="notch"></div>
       <div class="screen">
-        <iframe id="frame" src="http://localhost:3000" title="OET mobile view"></iframe>
+        <div>
+          <p>Tap below to open the app.</p>
+          <a id="launch" class="launch" href="http://localhost:3000" target="_blank" rel="noopener noreferrer">Open mobile view &rarr;</a>
+          <p class="hint">Opens a phone-sized window (390&times;844).</p>
+        </div>
       </div>
     </div>
     <div class="panel">
       <h1>OET — local mobile view</h1>
-      <p>This is a phone-framed webview of <code>http://localhost:3000</code> — the same page Capacitor's native
-      shell loads on a real device. Not the actual APK; a visual/interaction stand-in for fast iteration.</p>
-      <p>Edits under <code>app/</code>, <code>components/</code>, or <code>lib/</code> hot-reload here exactly like
+      <p>This links straight to <code>http://localhost:3000</code> &mdash; the same page Capacitor's
+      native shell loads on a real device. It can't be shown inside this frame because the app sends
+      <code>X-Frame-Options: DENY</code> (clickjacking protection), which is correct behaviour left
+      intact rather than weakened for this dev tool.</p>
+      <p>Not the actual APK; a visual/interaction stand-in for fast iteration. Edits under
+      <code>app/</code>, <code>components/</code>, or <code>lib/</code> hot-reload there exactly like
       the desktop browser.</p>
-      <button onclick="document.getElementById('frame').src = document.getElementById('frame').src">Reload</button>
     </div>
   </div>
+  <script>
+    // A popup opened synchronously inside a real click handler is a direct response to a
+    // user gesture, so Chrome/Firefox/Edge popup blockers let it through — unlike window.open()
+    // called after an async delay, which they silently block.
+    document.getElementById('launch').addEventListener('click', function (event) {
+      event.preventDefault();
+      const width = 400;
+      const height = 860;
+      const left = Math.max(0, Math.round((screen.availWidth - width) / 2));
+      const top = Math.max(0, Math.round((screen.availHeight - height) / 2));
+      const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no`;
+      const win = window.open('http://localhost:3000', 'oet-mobile-view', features);
+      if (!win) {
+        // Fall back to a normal tab if a popup blocker still stepped in.
+        window.open('http://localhost:3000', '_blank', 'noopener,noreferrer');
+      } else {
+        win.focus();
+      }
+    });
+  </script>
 </body>
 </html>

@@ -8,7 +8,6 @@ import {
   Download,
   FileText,
   Receipt,
-  ShieldCheck,
   Snowflake,
   Stethoscope,
 } from 'lucide-react';
@@ -56,6 +55,36 @@ function getPaymentBanner(payment: string | null, gateway: string | null) {
     default:
       return { variant: 'info' as const, message: `Checkout status: ${payment}.` };
   }
+}
+
+/** Green status pill shared by the subscription header and invoice rows. */
+function StatusPill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success ring-1 ring-success/20">
+      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+/** Long marketing plan descriptions collapse to three lines on small screens. */
+function PlanDescription({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 220;
+  return (
+    <div className="mt-3 max-w-md">
+      <p className={`text-sm leading-6 text-muted ${!expanded && isLong ? 'line-clamp-3' : ''}`}>{text}</p>
+      {isLong ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="mt-1 text-xs font-semibold text-primary transition-colors hover:text-primary/80"
+        >
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 type BillingTabId = 'overview' | 'invoices';
@@ -232,10 +261,8 @@ export default function BillingPage() {
           title={copy('billing.hero.title')}
           description={copy('billing.hero.description')}
           highlights={[
-            { icon: ShieldCheck, label: copy('billing.hero.highlight.currentPlan'), value: data.currentPlan },
             { icon: CheckCircle2, label: 'Status', value: formatSubscriptionStatus(data.status) },
             { icon: Calendar, label: 'Subscription ends', value: formatOptionalDate(data.nextRenewal) },
-            { icon: Stethoscope, label: 'Profession', value: professionLabel(DEFAULT_CATALOG_STOREFRONT, data.profession) },
           ]}
         />
 
@@ -272,32 +299,42 @@ export default function BillingPage() {
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-stretch">
             {/* Current subscription */}
             <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.currentSubscription')}</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy">{data.currentPlan}</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    {data.price} / {formatBillingInterval(data.interval)}
+                  <h2 className="mt-2 text-xl font-semibold leading-snug tracking-tight text-navy sm:text-2xl">{data.currentPlan}</h2>
+                  <p className="mt-1 text-sm font-semibold text-primary">
+                    {data.price} <span className="font-medium text-muted">/ {formatBillingInterval(data.interval)}</span>
                   </p>
-                  {data.planDescription ? (
-                    <p className="mt-3 max-w-md text-sm leading-6 text-muted">{data.planDescription}</p>
-                  ) : null}
                 </div>
-                <span className="inline-flex items-center gap-2 text-sm font-extrabold text-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
-                  {formatSubscriptionStatus(data.status)}
-                </span>
+                <StatusPill label={formatSubscriptionStatus(data.status)} />
               </div>
+              {data.planDescription ? <PlanDescription text={data.planDescription} /> : null}
 
-              <dl className="mt-6 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
-                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Subscription ends</dt>
+              <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-border/70 bg-background-light/60 p-3.5">
+                  <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
+                    <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                    Ends
+                  </dt>
                   <dd className="mt-1.5 text-sm font-semibold text-navy">
                     {formatOptionalDate(data.nextRenewal)}
                   </dd>
                 </div>
-                <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
-                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.invoiceAccess')}</dt>
+                <div className="rounded-xl border border-border/70 bg-background-light/60 p-3.5">
+                  <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
+                    <Stethoscope className="h-3.5 w-3.5" aria-hidden="true" />
+                    Profession
+                  </dt>
+                  <dd className="mt-1.5 text-sm font-semibold text-navy">
+                    {professionLabel(DEFAULT_CATALOG_STOREFRONT, data.profession)}
+                  </dd>
+                </div>
+                <div className="col-span-2 rounded-xl border border-border/70 bg-background-light/60 p-3.5 sm:col-span-1">
+                  <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
+                    <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                    {copy('billing.overview.invoiceAccess')}
+                  </dt>
                   <dd className="mt-1.5 text-sm font-semibold text-navy">
                     {invoiceDownloadsAvailable ? copy('billing.overview.invoiceAccessAvailable') : copy('billing.overview.invoiceAccessUnavailable')}
                   </dd>
@@ -420,10 +457,7 @@ export default function BillingPage() {
                         </p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-success">
-                      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
-                      {invoice.status}
-                    </span>
+                    <StatusPill label={invoice.status} />
                   </li>
                 ))}
               </ul>
@@ -467,11 +501,8 @@ export default function BillingPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-success">
-                        <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
-                        {invoice.status}
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                      <StatusPill label={invoice.status} />
                       <Button
                         variant="outline"
                         loading={busyKey === `invoice:${invoice.id}`}

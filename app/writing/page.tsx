@@ -97,9 +97,7 @@ export default function WritingHome() {
           ]}
         />
 
-        <div className="flex justify-end">
-          <CreditsGuideButton />
-        </div>
+        <CreditsGuideButton variant="banner" />
 
         <LearnerSkillSwitcher compact />
 

@@ -390,15 +390,15 @@ function CheckoutReviewContent() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
+      <section className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
         {/* LEFT · payment routes (prominent) */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
           {quoteRefreshed && !error ? (
             <InlineAlert variant="info">Your quote was refreshed with current pricing.</InlineAlert>
           ) : null}
 
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               <Wallet className="h-5 w-5 text-primary" /> How would you like to pay?
             </h2>
@@ -505,7 +505,7 @@ function CheckoutReviewContent() {
         </div>
 
         {/* RIGHT · order summary (compact, sticky) */}
-        <aside className="space-y-4 lg:sticky lg:top-8">
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-8">
           <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               <ShoppingBag className="h-5 w-5 text-primary" /> Order summary

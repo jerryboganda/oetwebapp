@@ -32,22 +32,11 @@ for ($i = 0; $i -lt 60; $i++) {
 if ($ready) {
     Write-Host "      API is healthy." -ForegroundColor Green
 } else {
-    Write-Host "      API not healthy yet — it may still be compiling. Check: podman logs oet-hotreload-api" -ForegroundColor Red
+    Write-Host "      API not healthy yet - it may still be compiling." -ForegroundColor Red
 }
 
-# 3. Start the native Next.js dev server (foreground; Ctrl+C to stop)
 Write-Host "`n[3/3] Starting native Next.js dev server (pnpm dev)..." -ForegroundColor Yellow
-Write-Host @"
-
-  Frontend : http://localhost:3000   (native, hot reload ~1s)
-  API      : http://localhost:8080   (Podman, dotnet watch)
-  Swagger  : http://localhost:8080/swagger
-  Database : localhost:5433          (Podman, user oet_user)
-
-  Edit anything under app/ components/ lib/ etc. -> browser updates in ~1s.
-  Press Ctrl+C to stop the frontend (containers keep running).
-  Stop containers later with:  podman compose -f docker-compose.hotreload.yml down
-
-"@ -ForegroundColor White
+Write-Host "Frontend: http://localhost:3000" -ForegroundColor White
+Write-Host "API: http://localhost:8080" -ForegroundColor White
 
 pnpm run dev
