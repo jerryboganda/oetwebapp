@@ -6,7 +6,7 @@ import { Heart } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { Badge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   fetchRecallsLibrary,
@@ -96,6 +96,11 @@ export default function RecallsFavouritesPage() {
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-navy">{it.term}</span>
+                      <RecallTierBadge
+                        count={it.examFrequencyCount ?? 0}
+                        occurrences={it.recallSetOccurrences}
+                        lastUpdatedAt={it.updatedAt}
+                      />
                       <Badge variant={MASTERY_BADGES[it.mastery] ?? 'muted'}>{it.mastery}</Badge>
                       {it.starReason && <Badge variant="warning">{it.starReason}</Badge>}
                     </div>

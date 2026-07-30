@@ -6685,6 +6685,12 @@ export interface RecallsQueueItem {
   mastery: string;
   ipa: string | null;
   extraJson: string | null;
+  /** How many times this vocab term has appeared across recall exams (the ×N badge). 0 for 'review' items. */
+  examFrequencyCount?: number;
+  /** Per-recall-set occurrence breakdown behind examFrequencyCount. */
+  recallSetOccurrences?: Record<string, number> | null;
+  /** When the underlying vocab term's content or ×N frequency was last touched. */
+  updatedAt?: string | null;
 }
 
 export type RecallsStarReason = 'spelling' | 'pronunciation' | 'meaning' | 'hearing' | 'confused';
@@ -6702,6 +6708,12 @@ export interface RecallsLibraryItem {
   intervalDays: number;
   reviewCount: number;
   correctCount: number;
+  /** How many times this term has appeared across recall exams (the ×N badge). */
+  examFrequencyCount?: number;
+  /** Per-recall-set occurrence breakdown behind examFrequencyCount. */
+  recallSetOccurrences?: Record<string, number> | null;
+  /** When this term's content or ×N frequency was last touched. */
+  updatedAt?: string | null;
 }
 
 export async function fetchRecallsToday() {

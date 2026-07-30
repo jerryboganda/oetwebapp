@@ -680,6 +680,13 @@ export default function RecallsWordsPage() {
                     ) : (
                       <span className="font-semibold text-navy">{it.title}</span>
                     )}
+                    {it.kind === 'vocab' && (
+                      <RecallTierBadge
+                        count={it.examFrequencyCount ?? 0}
+                        occurrences={it.recallSetOccurrences}
+                        lastUpdatedAt={it.updatedAt}
+                      />
+                    )}
                     <Badge variant={it.kind === 'vocab' ? 'info' : 'default'}>{it.kind}</Badge>
                     {it.starred && (
                       <Badge variant="warning">

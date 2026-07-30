@@ -144,7 +144,10 @@ public sealed class RecallsService(
             StarReason: x.lv.StarReason,
             Mastery: x.lv.Mastery,
             Ipa: x.t.IpaPronunciation,
-            ExtraJson: null)));
+            ExtraJson: null,
+            ExamFrequencyCount: x.t.ExamFrequencyCount,
+            RecallSetOccurrences: ParseRecallSetOccurrences(x.t.RecallSetOccurrencesJson),
+            UpdatedAt: x.t.UpdatedAt)));
         queue.AddRange(reviewItems.Select(r => new RecallsQueueItem(
             Kind: "review",
             Id: r.Id,
@@ -352,10 +355,15 @@ public sealed class RecallsService(
                 break;
         }
 
+        // Materialise the join first — ParseRecallSetOccurrences below can't be
+        // translated to SQL, so the projection into RecallsLibraryItem must
+        // happen in memory, not inside the IQueryable pipeline.
         var rows = await q
             .OrderBy(x => x.t.Term)
             .Take(200)
-            .Select(x => new RecallsLibraryItem(
+            .ToListAsync(ct);
+
+        var items = rows.Select(x => new RecallsLibraryItem(
                 CardId: x.lv.Id.ToString(),
                 TermId: x.t.Id,
                 Term: x.t.Term,
@@ -367,10 +375,13 @@ public sealed class RecallsService(
                 LastErrorTypeCode: x.lv.LastErrorTypeCode,
                 IntervalDays: x.lv.IntervalDays,
                 ReviewCount: x.lv.ReviewCount,
-                CorrectCount: x.lv.CorrectCount))
-            .ToListAsync(ct);
+                CorrectCount: x.lv.CorrectCount,
+                ExamFrequencyCount: x.t.ExamFrequencyCount,
+                RecallSetOccurrences: ParseRecallSetOccurrences(x.t.RecallSetOccurrencesJson),
+                UpdatedAt: x.t.UpdatedAt))
+            .ToList();
 
-        return new RecallsLibraryResponse(rows);
+        return new RecallsLibraryResponse(items);
     }
 
     private static string HumanReason(string code) => code switch
@@ -604,6 +615,27 @@ public sealed class RecallsService(
             throw ApiException.Validation("INVALID_REASON", $"Reason must be one of: {string.Join(',', allowed)}.");
     }
 
+    /// <summary>
+    /// Parses the per-set occurrence map (set code → count) for the ×N badge
+    /// breakdown. Returns null for an empty/malformed map so the DTO omits it.
+    /// MUST be applied after the query has been materialised (e.g. following
+    /// a <c>ToListAsync</c>) — calling this inside an IQueryable projection
+    /// would throw because EF Core cannot translate it into SQL.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int>? ParseRecallSetOccurrences(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
+        try
+        {
+            var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(json!);
+            return map is { Count: > 0 } ? map : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
 }
 
 // ── DTOs ────────────────────────────────────────────────────────────────
@@ -631,7 +663,16 @@ public record RecallsQueueItem(
     string? StarReason,
     string Mastery,
     string? Ipa,
-    string? ExtraJson);
+    string? ExtraJson,
+    /// <summary>
+    /// How many times this vocab term has appeared across recall exams (the
+    /// ×N badge). 0 for "review" kind items, which have no vocabulary term.
+    /// </summary>
+    int ExamFrequencyCount = 0,
+    /// <summary>Per-recall-set occurrence breakdown behind ExamFrequencyCount.</summary>
+    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null,
+    /// <summary>When the underlying vocab term's content or ×N frequency was last touched.</summary>
+    DateTimeOffset? UpdatedAt = null);
 
 public record RecallsStarRequest(string Kind, string Id, bool Starred, string? Reason);
 
@@ -651,7 +692,13 @@ public record RecallsLibraryItem(
     string? LastErrorTypeCode,
     int IntervalDays,
     int ReviewCount,
-    int CorrectCount);
+    int CorrectCount,
+    /// <summary>How many times this term has appeared across recall exams (the ×N badge).</summary>
+    int ExamFrequencyCount = 0,
+    /// <summary>Per-recall-set occurrence breakdown behind ExamFrequencyCount.</summary>
+    IReadOnlyDictionary<string, int>? RecallSetOccurrences = null,
+    /// <summary>When this term's content or ×N frequency was last touched.</summary>
+    DateTimeOffset? UpdatedAt = null);
 
 public record RecallsBulkUploadRow(
     string Term,
