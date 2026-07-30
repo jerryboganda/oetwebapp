@@ -342,16 +342,18 @@ builder.Services.AddRateLimiter(options =>
             ?? "unknown";
         return RateLimitPartition.GetFixedWindowLimiter($"ai-validate-{key}", _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 5,
+            PermitLimit = 20,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
         });
     });
     // Tighter policy for anonymous auth endpoints to mitigate credential stuffing,
     // OTP bombing, and account-enumeration probes. Partitioned by IP because callers
-    // are unauthenticated; users behind NAT share a bucket (acceptable trade-off).
+    // are unauthenticated; users behind NAT share a bucket. Raised generously (10 -> 100)
+    // after real users on shared/NAT'd networks (e.g. hospital or clinic WiFi) were
+    // getting false-positive 429s during normal sign-in/OTP-verify flows.
     // Dev/test gets headroom so the E2E matrix doesn't false-positive.
-    var authBrutePermit = builder.Environment.IsDevelopment() ? 500 : 10;
+    var authBrutePermit = builder.Environment.IsDevelopment() ? 500 : 100;
     options.AddPolicy("AuthBruteforce", httpContext =>
     {
         var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -368,7 +370,7 @@ builder.Services.AddRateLimiter(options =>
     // sign-in/register starves real users behind NAT and trips 429s during
     // multi-tab use. Single-use refresh-token rotation already provides the
     // anti-replay guarantee, so a higher limit here is safe.
-    var authRefreshPermit = builder.Environment.IsDevelopment() ? 500 : 120;
+    var authRefreshPermit = builder.Environment.IsDevelopment() ? 500 : 300;
     options.AddPolicy("AuthRefresh", httpContext =>
     {
         var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -379,7 +381,7 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
-    var devicePairingRedeemPermit = builder.Environment.IsDevelopment() ? 100 : 5;
+    var devicePairingRedeemPermit = builder.Environment.IsDevelopment() ? 100 : 50;
     options.AddPolicy("DevicePairingRedeem", httpContext =>
     {
         var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -393,8 +395,10 @@ builder.Services.AddRateLimiter(options =>
     // Email-scoped OTP throttle. Applied to endpoints that accept a target email
     // in the request body (verification OTP, forgot-password). Key is derived from
     // a header the handler sets; handlers MUST call context.Items["otp_email"] = normalizedEmail
-    // before RequireRateLimiting runs for this policy.
-    var otpPermit = builder.Environment.IsDevelopment() ? 100 : 5;
+    // before RequireRateLimiting runs for this policy. Raised generously (5 -> 50/hour)
+    // so users who need several "Resend it" clicks (slow email delivery, spam
+    // filtering, retries) don't get locked out of receiving a code.
+    var otpPermit = builder.Environment.IsDevelopment() ? 100 : 50;
     options.AddPolicy("AuthOtpSend", httpContext =>
     {
         var email = (httpContext.Items["otp_email"] as string)
@@ -426,8 +430,8 @@ builder.Services.AddRateLimiter(options =>
     // endpoints were pinned to a free-only policy with NO paid bump ever wired up,
     // so paying users were wrongly throttled to the free daily cap and hit
     // "Too many requests" after only a handful of submissions.
-    var writingSubmissionsFreeDay = builder.Environment.IsDevelopment() ? 500 : 5;
-    var writingSubmissionsPaidDay = builder.Environment.IsDevelopment() ? 3000 : 30;
+    var writingSubmissionsFreeDay = builder.Environment.IsDevelopment() ? 500 : 20;
+    var writingSubmissionsPaidDay = builder.Environment.IsDevelopment() ? 3000 : 100;
     options.AddPolicy("writing-submissions", httpContext =>
     {
         var key = ResolveWritingUserKey(httpContext);
@@ -447,7 +451,7 @@ builder.Services.AddRateLimiter(options =>
     // Coach: 1 hint per 30 seconds per session. Partition key includes the
     // sessionId pulled from the request body header (handler sets it on
     // HttpContext.Items["writing_coach_session"] before the limiter runs).
-    var writingCoachPermit = builder.Environment.IsDevelopment() ? 200 : 1;
+    var writingCoachPermit = builder.Environment.IsDevelopment() ? 200 : 5;
     options.AddPolicy("writing-coach", httpContext =>
     {
         var userKey = ResolveWritingUserKey(httpContext);
@@ -460,7 +464,7 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
-    var writingDrillsPermit = builder.Environment.IsDevelopment() ? 500 : 5;
+    var writingDrillsPermit = builder.Environment.IsDevelopment() ? 500 : 30;
     options.AddPolicy("writing-drills", httpContext =>
     {
         var key = ResolveWritingUserKey(httpContext);
@@ -472,7 +476,7 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
-    var writingOcrFreePermit = builder.Environment.IsDevelopment() ? 200 : 5;
+    var writingOcrFreePermit = builder.Environment.IsDevelopment() ? 200 : 20;
     options.AddPolicy("writing-ocr-free", httpContext =>
     {
         var key = ResolveWritingUserKey(httpContext);
@@ -485,7 +489,7 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
-    var writingOcrPaidPermit = builder.Environment.IsDevelopment() ? 1000 : 30;
+    var writingOcrPaidPermit = builder.Environment.IsDevelopment() ? 1000 : 100;
     options.AddPolicy("writing-ocr-paid", httpContext =>
     {
         var key = ResolveWritingUserKey(httpContext);
