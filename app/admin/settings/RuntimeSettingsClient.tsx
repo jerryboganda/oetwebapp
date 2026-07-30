@@ -118,6 +118,7 @@ export interface SecuritySettings {
   requireVerifiedEmailForLearners: boolean | null;
   countryAllowList: string | null;
   countryAllowListMode: string;
+  deviceVerificationExemptEmails: string | null;
   ipIntelligenceProvider: string;
   ipinfoToken: string;
   ipIntelligenceConfigured?: boolean | null;
@@ -641,6 +642,13 @@ const SECURITY_FIELDS: FieldDef<SecuritySettings>[] = [
       { value: 'block', label: 'Block — reject sign-ins outside the list' },
     ],
     hint: 'What happens to a sign-in from outside the allow-list.',
+  },
+  {
+    key: 'deviceVerificationExemptEmails',
+    label: 'Device Verification Exemption List',
+    type: 'text',
+    placeholder: 'e.g. owner@example.com,support@example.com',
+    hint: 'Comma-separated emails fully exempt from BOTH the trusted-device OTP challenge and the risk-based step-up above — never asked to verify, on any device, from any location. Reserve for owner/staff accounts that must never be locked out.',
   },
   {
     key: 'ipIntelligenceProvider',
@@ -1376,6 +1384,7 @@ function emptyResponse(): RuntimeSettingsResponse {
       requireVerifiedEmailForLearners: null,
       countryAllowList: '',
       countryAllowListMode: 'off',
+      deviceVerificationExemptEmails: '',
       ipIntelligenceProvider: 'off',
       ipinfoToken: '',
       ipIntelligenceConfigured: false,
