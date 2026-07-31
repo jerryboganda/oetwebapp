@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { GlobalSearch } from './global-search';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
-import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
+import { getWorkspaceSettingsHref, mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
 import { LearnerStreakBadges } from './learner-streak-badges';
@@ -398,7 +398,7 @@ export function TopNav({
                 avatarUrl={authContext?.user?.avatarUrl}
                 email={userSummary?.email ?? ''}
                 roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
-                settingsHref={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
+                settingsHref={getWorkspaceSettingsHref(workspaceRole)}
                 onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
                 workspaceRole={workspaceRole}
               />
@@ -482,7 +482,7 @@ export function TopNav({
                         <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
                         <div className="grid grid-cols-2 gap-2">
                           <Link
-                            href={workspaceRole === 'expert' ? '/expert/settings' : '/settings'}
+                            href={getWorkspaceSettingsHref(workspaceRole)}
                             onClick={handleMobileItemClick}
                             className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >
