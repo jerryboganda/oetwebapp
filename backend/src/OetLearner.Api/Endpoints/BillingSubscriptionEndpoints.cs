@@ -36,8 +36,7 @@ public static class BillingSubscriptionEndpoints
         LearnerDbContext db,
         CancellationToken ct)
     {
-        var sub = await QueryUserSubscriptions(db, GetUserId(http))
-            .FirstOrDefaultAsync(ct);
+        var sub = await GetCurrentSubscriptionAsync(db, GetUserId(http), ct);
         return sub is null ? TypedResults.NotFound() : TypedResults.Ok(await ProjectAsync(db, sub, ct));
     }
 
@@ -88,7 +87,7 @@ public static class BillingSubscriptionEndpoints
         CancellationToken ct)
     {
         var userId = GetUserId(http);
-        var sub = await QueryUserSubscriptions(db, userId).FirstOrDefaultAsync(ct);
+        var sub = await GetCurrentSubscriptionAsync(db, userId, ct);
         if (sub is null) return TypedResults.BadRequest("No subscription found.");
 
         var now = DateTimeOffset.UtcNow;
@@ -105,7 +104,7 @@ public static class BillingSubscriptionEndpoints
         LearnerDbContext db,
         CancellationToken ct)
     {
-        var sub = await QueryUserSubscriptions(db, GetUserId(http)).FirstOrDefaultAsync(ct);
+        var sub = await GetCurrentSubscriptionAsync(db, GetUserId(http), ct);
         if (sub is null) return TypedResults.BadRequest("No subscription found.");
         return await RequestFreezeCore(db, sub, "candidate_requested_freeze", ct);
     }
@@ -115,7 +114,7 @@ public static class BillingSubscriptionEndpoints
         LearnerDbContext db,
         CancellationToken ct)
     {
-        var sub = await QueryUserSubscriptions(db, GetUserId(http)).FirstOrDefaultAsync(ct);
+        var sub = await GetCurrentSubscriptionAsync(db, GetUserId(http), ct);
         if (sub is null) return TypedResults.BadRequest("No subscription found.");
         return await ResumeCore(db, sub, ct);
     }
@@ -224,6 +223,19 @@ public static class BillingSubscriptionEndpoints
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.ChangedAt)
             .ThenByDescending(s => s.StartedAt);
+
+    /// <summary>The subscription that currently represents this user's plan: the most
+    /// recently changed row that still owns its plan slot (see
+    /// SubscriptionStateMachine.CurrentOwnershipStatuses), falling back to the most
+    /// recently changed row overall when none are currently owned. A bare "latest
+    /// changed" pick would let a just-cancelled OLD package (e.g. an admin swapping
+    /// packages: grant new, then cancel old) outrank the learner's real current one,
+    /// since cancelling also touches ChangedAt.</summary>
+    private static async Task<Subscription?> GetCurrentSubscriptionAsync(LearnerDbContext db, string userId, CancellationToken ct)
+        => await QueryUserSubscriptions(db, userId)
+                .Where(s => SubscriptionStateMachine.CurrentOwnershipStatuses.Contains(s.Status))
+                .FirstOrDefaultAsync(ct)
+            ?? await QueryUserSubscriptions(db, userId).FirstOrDefaultAsync(ct);
 
     private static async Task<SubscriptionMeDto> ProjectAsync(LearnerDbContext db, Subscription sub, CancellationToken ct)
     {

@@ -97,6 +97,21 @@ public static class SubscriptionStateMachine
             },
         };
 
+    /// <summary>Statuses where a subscription still owns its plan slot — actively
+    /// granting access (Active/Trial/FreezeRequested) or paused-but-owned (Frozen).
+    /// Use this (never a bare <c>OrderByDescending(ChangedAt).First()</c>) whenever
+    /// picking "the" subscription that represents a user's current package: a stale
+    /// mutation on an OLD package (e.g. an admin cancelling it right after granting a
+    /// replacement) sets that row's ChangedAt to now, which must never let it outrank
+    /// the package that is actually current.</summary>
+    public static readonly SubscriptionStatus[] CurrentOwnershipStatuses =
+    {
+        SubscriptionStatus.Active,
+        SubscriptionStatus.Trial,
+        SubscriptionStatus.FreezeRequested,
+        SubscriptionStatus.Frozen,
+    };
+
     public static bool IsLegal(SubscriptionStatus from, SubscriptionStatus to)
         => Allowed.TryGetValue(from, out var set) && set.Contains(to);
 

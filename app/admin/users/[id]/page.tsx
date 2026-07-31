@@ -468,6 +468,10 @@ export default function UserDetailPage() {
 
       setAccess(saved);
       setOriginalAccess(saved);
+      // The "Subscription" summary card above and other user-detail fields are
+      // sourced from `user`, not `access` — without this, a package swap here
+      // looks like it silently didn't take until the admin manually reloads the page.
+      await reloadUser();
       setToast({ variant: 'success', message: `Access updated for ${user.email}.` });
     } catch (error) {
       console.error(error);
@@ -1567,6 +1571,8 @@ export default function UserDetailPage() {
           onGranted={(saved) => {
             setAccess(saved);
             setOriginalAccess(saved);
+            // See handleSaveAccess: the "Subscription" summary card reads `user`, not `access`.
+            void reloadUser();
             setToast({ variant: 'success', message: `Access updated for ${user.email}.` });
           }}
         />

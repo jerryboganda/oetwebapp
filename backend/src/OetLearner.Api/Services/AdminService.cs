@@ -4616,21 +4616,35 @@ public partial class AdminService(
 
     private async Task<object?> BuildLearnerSubscriptionAsync(string userId, CancellationToken ct)
     {
+        // Prefer the subscription that still owns its plan slot (see
+        // SubscriptionStateMachine.CurrentOwnershipStatuses) so this admin-facing
+        // summary reflects the learner's REAL current package. Without this, swapping
+        // packages (grant new, then cancel the old one) makes the just-cancelled row
+        // "more recently changed" than the new one, so it wrongly wins a bare
+        // OrderByDescending(ChangedAt) and the admin sees the old/removed package.
         var subscription = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId)
+            .Where(s => s.UserId == userId && SubscriptionStateMachine.CurrentOwnershipStatuses.Contains(s.Status))
             .OrderByDescending(s => s.ChangedAt)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            ?? await db.Subscriptions.AsNoTracking()
+                .Where(s => s.UserId == userId)
+                .OrderByDescending(s => s.ChangedAt)
+                .FirstOrDefaultAsync(ct);
         if (subscription is null) return null;
 
+        // Subscription.PlanId holds the plan CODE (see UserAccessAllocationService.
+        // GrantPackageAsync: `PlanId = plan.Code`), not the plan's own Id — which for
+        // every real seeded plan is a different, prefixed string (e.g. "plan_<code>").
+        // Matching on Id alone means `plan` is always null and planCode always null.
         var plan = await db.BillingPlans.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == subscription.PlanId, ct);
+            .FirstOrDefaultAsync(p => p.Code == subscription.PlanId || p.Id == subscription.PlanId, ct);
 
         return new
         {
             subscription.Id,
             planId = subscription.PlanId,
             planName = plan?.Name ?? subscription.PlanId,
-            planCode = plan?.Code,
+            planCode = plan?.Code ?? subscription.PlanId,
             status = subscription.Status.ToString().ToLowerInvariant(),
             startedAt = subscription.StartedAt,
             nextRenewalAt = subscription.NextRenewalAt,
