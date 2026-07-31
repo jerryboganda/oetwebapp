@@ -541,7 +541,7 @@ public class EffectiveEntitlementResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_PerUserDisable_SurvivesFailOpenWhenEnabledListEmpties()
+    public async Task ResolveAsync_PerUserDisable_DoesNotReopenFailOpenWhenPlanHadExplicitModules()
     {
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
@@ -574,10 +574,95 @@ public class EffectiveEntitlementResolverTests
 
         var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-single", default);
 
-        // Disabling the only module must NOT re-open everything via fail-open.
+        // Disabling the plan's only module empties EnabledModules, but the plan DID
+        // explicitly configure a (non-empty) module list, so this must NOT be treated
+        // as a legacy "no config at all" plan: nothing the plan never listed re-opens.
+        Assert.False(snapshot.HasNoExplicitModuleConfig);
         Assert.False(snapshot.IsModuleEnabled("Mocks"));
-        // An unrelated module the plan never listed stays fail-open (unchanged behaviour).
-        Assert.True(snapshot.IsModuleEnabled("Recalls"));
+        Assert.False(snapshot.IsModuleEnabled("Recalls"));
+        Assert.False(snapshot.IsModuleEnabled("MaterialsLibrary"));
+        Assert.False(snapshot.IsModuleEnabled("VideoLibrary"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DisablingSoleModuleOnNarrowPlan_DoesNotGrantUnrelatedModules()
+    {
+        // Mirrors a real single-purpose package (e.g. "Listening Recalls": 180 days of
+        // access to ONLY the Recalls module, no Materials/Videos/Mocks bundled). An
+        // admin disabling that one module for a learner (e.g. to lock the account down)
+        // must never incidentally grant Materials/VideoLibrary the plan never included.
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-recalls-only",
+            Code = "listening-recalls",
+            Name = "Listening Recalls",
+            DashboardModulesJson = "[\"Recalls\"]",
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-recalls-only",
+            UserId = "learner-recalls-only",
+            PlanId = "plan-recalls-only",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-5),
+            ChangedAt = now.AddDays(-5),
+            ExpiresAt = now.AddDays(30),
+        });
+        db.UserModuleOverrides.Add(new UserModuleOverride
+        {
+            Id = "umo-recalls-only",
+            UserId = "learner-recalls-only",
+            ModuleKey = "Recalls",
+            Enabled = false,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-recalls-only", default);
+
+        Assert.False(snapshot.HasNoExplicitModuleConfig);
+        Assert.False(snapshot.IsModuleEnabled("Recalls"));
+        Assert.False(snapshot.IsModuleEnabled("MaterialsLibrary"));
+        Assert.False(snapshot.IsModuleEnabled("VideoLibrary"));
+        Assert.False(snapshot.IsModuleEnabled("Mocks"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_TrueLegacyPlanWithNoModuleConfig_StillFailsOpenForMaterialsAndVideo()
+    {
+        // The genuine legacy case HasNoExplicitModuleConfig exists to preserve: a plan
+        // that never configured DashboardModulesJson at all still fails open for
+        // Materials/VideoLibrary (Mocks/Recalls remain opt-in either way).
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-legacy",
+            Code = "legacy",
+            Name = "Legacy",
+            DashboardModulesJson = "[]",
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-legacy",
+            UserId = "learner-legacy",
+            PlanId = "plan-legacy",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-5),
+            ChangedAt = now.AddDays(-5),
+            ExpiresAt = now.AddDays(30),
+        });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-legacy", default);
+
+        Assert.True(snapshot.HasNoExplicitModuleConfig);
+        Assert.True(snapshot.IsModuleEnabled("MaterialsLibrary"));
+        Assert.True(snapshot.IsModuleEnabled("VideoLibrary"));
+        Assert.False(snapshot.IsModuleEnabled("Mocks"));
+        Assert.False(snapshot.IsModuleEnabled("Recalls"));
     }
 
     [Fact]

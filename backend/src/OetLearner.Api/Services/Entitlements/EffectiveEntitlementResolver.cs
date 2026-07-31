@@ -110,13 +110,18 @@ public sealed record EffectiveEntitlementSnapshot(
 
     /// <summary>
     /// Whether an admin-togglable subscription module (see <see cref="ModuleKeys"/>) is enabled
-    /// for this snapshot. FAIL-OPEN by design: when the plan carries no explicit module list
-    /// (legacy plans, malformed JSON, non-subscribers whose list is empty) every module reads
-    /// as enabled, so this check can only ever RESTRICT — it never elevates access beyond the
-    /// module's own subscription/credit gate, and never locks out a plan that simply predates
-    /// the module list. A module is blocked only when the list is present and non-empty AND does
-    /// not contain the key (case-insensitive). Owner directive 2026-07-11: existing plans are
-    /// back-filled with all four keys ON, so this only bites once an admin explicitly disables one.
+    /// for this snapshot. FAIL-OPEN by design: when NO effective package ever configured an
+    /// explicit module list at all (see <see cref="HasNoExplicitModuleConfig"/> — legacy plans,
+    /// malformed JSON, non-subscribers) every module reads as enabled, so this check can only
+    /// ever RESTRICT — it never elevates access beyond the module's own subscription/credit
+    /// gate, and never locks out a plan that simply predates the module list. Once ANY effective
+    /// package DID configure an explicit list, a module is enabled only when it is actually
+    /// present in <see cref="EnabledModules"/> (case-insensitive) — this is what keeps a
+    /// per-user override that empties out an already-non-empty list (e.g. disabling the sole
+    /// module a narrow single-purpose plan like "Listening Recalls" grants) from re-opening
+    /// modules the plan never included; it must block everything, not fail open. Owner directive
+    /// 2026-07-11: existing plans are back-filled with all four keys ON, so the legacy fail-open
+    /// path only bites plans that genuinely predate the module list.
     /// </summary>
     public bool IsModuleEnabled(string moduleKey)
     {
@@ -132,7 +137,7 @@ public sealed record EffectiveEntitlementSnapshot(
             }
         }
 
-        if (EnabledModules is null || EnabledModules.Count == 0)
+        if (HasNoExplicitModuleConfig)
         {
             // Mocks are separate-purchase only and Recalls are pricing-list opt-in.
             // Neither may inherit the legacy fail-open behavior used for Materials/Videos.
@@ -152,6 +157,17 @@ public sealed record EffectiveEntitlementSnapshot(
     /// fail-open empty-list contract. Empty for every user without overrides.
     /// </summary>
     public IReadOnlyList<string> DisabledModules { get; init; } = Array.Empty<string>();
+
+    /// <summary>True only when NO effective package (nor the primary resolved plan) ever
+    /// configured an explicit DashboardModulesJson list — a true legacy/never-backfilled plan.
+    /// This is computed from the plan-derived module list(s) BEFORE per-user
+    /// <see cref="Domain.UserModuleOverride"/> rows are applied, and is the ONLY condition under
+    /// which <see cref="IsModuleEnabled"/> fails open for Materials/VideoLibrary (Mocks/Recalls
+    /// stay opt-in either way). Because it is fixed before overrides run, a per-user override
+    /// that empties an ALREADY-non-empty <see cref="EnabledModules"/> list — e.g. disabling the
+    /// only module a narrow single-purpose plan grants — can never flip this to true and
+    /// re-open modules the plan never included.</summary>
+    public bool HasNoExplicitModuleConfig { get; init; } = true;
 }
 
 public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
@@ -366,12 +382,14 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         if (eligible && plan is not null)
         {
             var (allSubtests, includedSubtests) = UnionIncludedSubtests(new[] { plan });
+            var parsedModules = ParseDashboardModules(plan.DashboardModulesJson);
             snapshot = snapshot with
             {
                 AllSubtestsIncluded = allSubtests,
                 IncludedSubtests = includedSubtests,
                 ContentOverrides = MergeContentOverrides(new[] { plan }),
-                EnabledModules = ParseDashboardModules(plan.DashboardModulesJson),
+                EnabledModules = parsedModules,
+                HasNoExplicitModuleConfig = parsedModules.Count == 0,
                 WritingAddonsEnabled = plan.WritingAddonsEnabled,
                 SpeakingAddonsEnabled = plan.SpeakingAddonsEnabled,
                 SpeakingPracticeAccessEnabled = plan.SpeakingPracticeAccessEnabled,
@@ -493,6 +511,11 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 trace.Add($"packages.{effectivePackages.Count}");
             }
 
+            var aggregatedEnabledModules = snapshot.EnabledModules
+                .Concat(effectivePackages.SelectMany(p => p.Modules))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
             snapshot = snapshot with
             {
                 AllSubtestsIncluded = aggAllSubtests,
@@ -513,10 +536,8 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
-                EnabledModules = snapshot.EnabledModules
-                    .Concat(effectivePackages.SelectMany(p => p.Modules))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
+                EnabledModules = aggregatedEnabledModules,
+                HasNoExplicitModuleConfig = aggregatedEnabledModules.Length == 0,
                 WritingAddonsEnabled = effectivePackages.Any(p => p.Plan.WritingAddonsEnabled),
                 SpeakingAddonsEnabled = effectivePackages.Any(p => p.Plan.SpeakingAddonsEnabled),
                 SpeakingPracticeAccessEnabled = effectivePackages.Any(p => p.Plan.SpeakingPracticeAccessEnabled),
