@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { EmailVerificationBanner } from '@/components/domain/email-verification-banner';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
-import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
+import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
@@ -72,7 +72,6 @@ export function AppShell({
   const pathname = usePathname() ?? 'root';
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const routeMotionProps = getSurfaceMotion('route', reducedMotion);
-  const presenceMode = getMotionPresenceMode(reducedMotion);
   const isAdminWorkspace = workspaceRole === 'admin' || requiredRole === 'admin';
   const isLearnerWorkspace = (workspaceRole ?? requiredRole) === 'learner' && !isAdminWorkspace;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -102,7 +101,7 @@ export function AppShell({
         userSummary={userSummary}
         workspaceRole={workspaceRole}
       />
-      <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
+      <AnimatePresence initial={!reducedMotion} mode="popLayout">
         <motion.main
           id="main-content"
           tabIndex={-1}
@@ -148,7 +147,7 @@ export function AppShell({
           workspaceRole={workspaceRole}
         />
         <div className="flex min-w-0 flex-1 min-h-0 flex-col">
-          <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
+          <AnimatePresence initial={!reducedMotion} mode="popLayout">
             <motion.main
               id="main-content"
               tabIndex={-1}
@@ -194,7 +193,7 @@ export function AppShell({
           userSummary={userSummary}
           workspaceRole={workspaceRole}
         />
-        <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
+        <AnimatePresence initial={!reducedMotion} mode="popLayout">
           <motion.main
             id="main-content"
             tabIndex={-1}
