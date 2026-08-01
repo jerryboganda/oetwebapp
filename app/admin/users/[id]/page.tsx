@@ -428,8 +428,9 @@ export default function UserDetailPage() {
     if (!user || !access) return;
     setIsSavingAccess(true);
     try {
-      // Persist any locally drafted packages, then remove any that were
-      // dropped from the original server-fetched list.
+      let currentAccess = access;
+
+      // Persist any locally drafted packages, updating currentAccess with the response
       for (const sub of access.subscriptions as UserAccessSubscriptionRow[]) {
         if (sub.isPending) {
           const payload: GrantUserPackageInput = {
@@ -440,20 +441,20 @@ export default function UserDetailPage() {
             grantIncludedCredits: sub.grantIncludedCredits,
             overrideProfessionMismatch: sub.overrideProfessionMismatch,
           };
-          await grantUserPackage(user.id, payload);
+          currentAccess = await grantUserPackage(user.id, payload);
         }
       }
       const remainingIds = new Set(access.subscriptions.filter((sub) => !sub.isPending).map((sub) => sub.id));
       for (const originalSub of originalAccess?.subscriptions ?? []) {
         if (!remainingIds.has(originalSub.id)) {
-          await removeUserPackage(user.id, originalSub.id);
+          currentAccess = await removeUserPackage(user.id, originalSub.id);
         }
       }
 
       // Add-ons have no removal endpoint — only newly drafted ones are sent.
       for (const addOn of access.addOns) {
         if (addOn.isPending) {
-          await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
+          currentAccess = await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
         }
       }
 
@@ -462,8 +463,7 @@ export default function UserDetailPage() {
         materialFolderIds: access.materialFolderIds,
         videoIds: access.videoIds,
         recallSetCodes: access.recallSetCodes,
-        accessExpiresAt: access.accessExpiresAt,
-        clearAccessExpiry: !access.accessExpiresAt,
+        accessExpiresAt: currentAccess.accessExpiresAt,
       });
 
       setAccess(saved);

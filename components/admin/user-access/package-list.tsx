@@ -77,6 +77,7 @@ export function PackageList({
   const [grantIncludedCredits, setGrantIncludedCredits] = useState(true);
   const [overrideProfession, setOverrideProfession] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
 
   const planOptions = plans.map((plan) => ({
     value: plan.code ?? plan.id,
@@ -91,6 +92,62 @@ export function PackageList({
   const professionMismatch = isProfessionMismatch(selectedPlan, learnerProfessionId);
   const blockedByProfession = professionMismatch && !overrideProfession;
 
+  function syncDraft(
+    code: string,
+    starts: string,
+    expiryOverrideVal: string,
+    primaryVal: boolean,
+    creditsVal: boolean,
+    overrideProfVal: boolean,
+  ) {
+    if (!code) {
+      if (activeDraftId) {
+        onChange(subscriptions.filter((sub) => sub.id !== activeDraftId));
+        setActiveDraftId(null);
+      }
+      return;
+    }
+
+    const selPlan = plans.find((p) => (p.code ?? p.id) === code);
+    const mismatch = isProfessionMismatch(selPlan, learnerProfessionId);
+    if (mismatch && !overrideProfVal) {
+      if (activeDraftId) {
+        onChange(subscriptions.filter((sub) => sub.id !== activeDraftId));
+        setActiveDraftId(null);
+      }
+      return;
+    }
+
+    const idToUse = activeDraftId ?? makeLocalId();
+    if (!activeDraftId) {
+      setActiveDraftId(idToUse);
+    }
+
+    const durationDays = planAccessDurationDays(selPlan);
+    const defExpiry = starts ? addDays(starts, durationDays) : '';
+    const effExpiry = expiryOverrideVal || defExpiry;
+
+    const draft: UserAccessSubscriptionRow = {
+      id: idToUse,
+      planCode: code,
+      planName: selPlan?.name ?? code,
+      status: 'pending',
+      startsAt: toIso(starts),
+      expiresAt: toIso(effExpiry),
+      isPrimary: primaryVal,
+      isPending: true,
+      grantIncludedCredits: creditsVal,
+      overrideProfessionMismatch: mismatch && overrideProfVal,
+    };
+
+    const withoutDraft = subscriptions.filter((sub) => sub.id !== idToUse);
+    const next = primaryVal
+      ? withoutDraft.map((sub) => ({ ...sub, isPrimary: false })).concat(draft)
+      : withoutDraft.concat(draft);
+
+    onChange(next);
+  }
+
   function resetForm() {
     setPlanCode('');
     setStartsAt(toDateInput(new Date()));
@@ -98,32 +155,22 @@ export function PackageList({
     setMakePrimary(false);
     setGrantIncludedCredits(true);
     setOverrideProfession(false);
+    setActiveDraftId(null);
   }
 
   function handleAdd() {
     if (!planCode || blockedByProfession) return;
-    const draft: UserAccessSubscriptionRow = {
-      id: makeLocalId(),
-      planCode,
-      planName: selectedPlan?.name ?? planCode,
-      status: 'pending',
-      startsAt: toIso(startsAt),
-      expiresAt: toIso(effectiveExpiry),
-      isPrimary: makePrimary,
-      isPending: true,
-      grantIncludedCredits,
-      overrideProfessionMismatch: professionMismatch && overrideProfession,
-    };
-    const next = makePrimary
-      ? subscriptions.map((sub) => ({ ...sub, isPrimary: false })).concat(draft)
-      : subscriptions.concat(draft);
-    onChange(next);
+    setActiveDraftId(null);
     resetForm();
   }
 
   function handleRemove(id: string) {
     setConfirmRemoveId(null);
-    onChange(subscriptions.filter((sub) => sub.id !== id));
+    if (id === activeDraftId) {
+      resetForm();
+    } else {
+      onChange(subscriptions.filter((sub) => sub.id !== id));
+    }
   }
 
   return (
@@ -134,8 +181,10 @@ export function PackageList({
             label="Plan"
             value={planCode}
             onChange={(event) => {
-              setPlanCode(event.target.value);
+              const val = event.target.value;
+              setPlanCode(val);
               setOverrideProfession(false);
+              syncDraft(val, startsAt, expiryOverride, makePrimary, grantIncludedCredits, false);
             }}
             options={[{ value: '', label: 'Select a plan...' }, ...planOptions]}
             disabled={disabled}
@@ -144,7 +193,11 @@ export function PackageList({
             label="Start date"
             type="date"
             value={startsAt}
-            onChange={(event) => setStartsAt(event.target.value)}
+            onChange={(event) => {
+              const val = event.target.value;
+              setStartsAt(val);
+              syncDraft(planCode, val, expiryOverride, makePrimary, grantIncludedCredits, overrideProfession);
+            }}
             hint="Access begins on this date."
             disabled={disabled}
           />
@@ -152,7 +205,11 @@ export function PackageList({
             label="Expiry date"
             type="date"
             value={effectiveExpiry}
-            onChange={(event) => setExpiryOverride(event.target.value)}
+            onChange={(event) => {
+              const val = event.target.value;
+              setExpiryOverride(val);
+              syncDraft(planCode, startsAt, val, makePrimary, grantIncludedCredits, overrideProfession);
+            }}
             hint={`Defaults to ${accessDurationDays} days after the start date${
               isExpiryOverridden ? ' — overridden' : ''
             }.`}
@@ -164,7 +221,10 @@ export function PackageList({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setExpiryOverride('')}
+                onClick={() => {
+                  setExpiryOverride('');
+                  syncDraft(planCode, startsAt, '', makePrimary, grantIncludedCredits, overrideProfession);
+                }}
                 disabled={disabled}
               >
                 Use default ({accessDurationDays} days)
@@ -184,7 +244,11 @@ export function PackageList({
               label="Grant anyway (override the profession check)"
               className="mt-3 bg-transparent"
               checked={overrideProfession}
-              onChange={(event) => setOverrideProfession(event.target.checked)}
+              onChange={(event) => {
+                const val = event.target.checked;
+                setOverrideProfession(val);
+                syncDraft(planCode, startsAt, expiryOverride, makePrimary, grantIncludedCredits, val);
+              }}
               disabled={disabled}
             />
           </InlineAlert>
@@ -194,13 +258,21 @@ export function PackageList({
           <Checkbox
             label="Make primary"
             checked={makePrimary}
-            onChange={(event) => setMakePrimary(event.target.checked)}
+            onChange={(event) => {
+              const val = event.target.checked;
+              setMakePrimary(val);
+              syncDraft(planCode, startsAt, expiryOverride, val, grantIncludedCredits, overrideProfession);
+            }}
             disabled={disabled}
           />
           <Checkbox
             label="Grant included credits"
             checked={grantIncludedCredits}
-            onChange={(event) => setGrantIncludedCredits(event.target.checked)}
+            onChange={(event) => {
+              const val = event.target.checked;
+              setGrantIncludedCredits(val);
+              syncDraft(planCode, startsAt, expiryOverride, makePrimary, val, overrideProfession);
+            }}
             disabled={disabled}
           />
         </div>

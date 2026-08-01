@@ -4622,10 +4622,33 @@ public partial class AdminService(
         // packages (grant new, then cancel the old one) makes the just-cancelled row
         // "more recently changed" than the new one, so it wrongly wins a bare
         // OrderByDescending(ChangedAt) and the admin sees the old/removed package.
-        var subscription = await db.Subscriptions.AsNoTracking()
+        var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var currentPlanId = learner?.CurrentPlanId?.Trim();
+
+        var activeSubs = await db.Subscriptions.AsNoTracking()
             .Where(s => s.UserId == userId && SubscriptionStateMachine.CurrentOwnershipStatuses.Contains(s.Status))
             .OrderByDescending(s => s.ChangedAt)
-            .FirstOrDefaultAsync(ct)
+            .ToListAsync(ct);
+
+        Subscription? subscription = null;
+        if (!string.IsNullOrWhiteSpace(currentPlanId) && activeSubs.Count > 0)
+        {
+            var plans = await db.BillingPlans.AsNoTracking().ToListAsync(ct);
+            var planMap = new Dictionary<string, BillingPlan>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in plans)
+            {
+                planMap.TryAdd(p.Code, p);
+                planMap.TryAdd(p.Id, p);
+            }
+            subscription = activeSubs.FirstOrDefault(s =>
+                string.Equals(s.PlanId, currentPlanId, StringComparison.OrdinalIgnoreCase) ||
+                (planMap.TryGetValue(s.PlanId, out var p) && (
+                    string.Equals(p.Code, currentPlanId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p.Id, currentPlanId, StringComparison.OrdinalIgnoreCase)
+                )));
+        }
+
+        subscription ??= activeSubs.FirstOrDefault()
             ?? await db.Subscriptions.AsNoTracking()
                 .Where(s => s.UserId == userId)
                 .OrderByDescending(s => s.ChangedAt)

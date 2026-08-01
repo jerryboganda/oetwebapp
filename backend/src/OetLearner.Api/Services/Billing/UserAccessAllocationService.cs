@@ -49,9 +49,15 @@ public sealed class UserAccessAllocationService(
             .ToListAsync(ct);
 
         var planCodes = subs.Select(s => s.PlanId).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToList();
-        var planNames = await db.BillingPlans.AsNoTracking()
-            .Where(p => planCodes.Contains(p.Code))
-            .ToDictionaryAsync(p => p.Code, p => p.Name, ct);
+        var matchingPlans = await db.BillingPlans.AsNoTracking()
+            .Where(p => planCodes.Contains(p.Code) || planCodes.Contains(p.Id))
+            .ToListAsync(ct);
+        var planMap = new Dictionary<string, BillingPlan>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in matchingPlans)
+        {
+            planMap.TryAdd(p.Code, p);
+            planMap.TryAdd(p.Id, p);
+        }
 
         var subIds = subs.Select(s => s.Id).ToList();
         var now = timeProvider.GetUtcNow();
@@ -77,15 +83,26 @@ public sealed class UserAccessAllocationService(
         var recallSetCodes = await db.UserRecallSetAccesses.AsNoTracking()
             .Where(x => x.UserId == userId).Select(x => x.RecallSetCode).ToListAsync(ct);
 
-        var subscriptionDtos = subs.Select(s => new UserAccessSubscriptionDto(
-            s.Id,
-            s.PlanId,
-            planNames.TryGetValue(s.PlanId, out var name) ? name : s.PlanId,
-            s.Status.ToString(),
-            s.ExpiresAt,
-            string.Equals(s.PlanId, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase),
-            s.StartedAt,
-            s.FulfilmentStatus)).ToList();
+        var subscriptionDtos = subs.Select(s => {
+            var planObj = planMap.TryGetValue(s.PlanId, out var p) ? p : null;
+            var planName = planObj?.Name ?? s.PlanId;
+            var isPrimary = !string.IsNullOrWhiteSpace(learner.CurrentPlanId) && (
+                string.Equals(s.PlanId, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase) ||
+                (planObj is not null && (
+                    string.Equals(planObj.Code, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(planObj.Id, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase)
+                ))
+            );
+            return new UserAccessSubscriptionDto(
+                s.Id,
+                s.PlanId,
+                planName,
+                s.Status.ToString(),
+                s.ExpiresAt,
+                isPrimary,
+                s.StartedAt,
+                s.FulfilmentStatus);
+        }).ToList();
 
         return new UserAccessDto(
             subscriptionDtos,

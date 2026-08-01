@@ -108,6 +108,8 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
         sendInvite: loginSetup === 'invite',
       });
 
+      let currentAccess = access;
+
       for (const sub of access.subscriptions as UserAccessSubscriptionRow[]) {
         const payload: GrantUserPackageInput = {
           planCode: sub.planCode,
@@ -117,11 +119,11 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
           grantIncludedCredits: sub.grantIncludedCredits,
           overrideProfessionMismatch: sub.overrideProfessionMismatch,
         };
-        await grantUserPackage(created.id, payload);
+        currentAccess = await grantUserPackage(created.id, payload);
       }
 
       for (const addOn of access.addOns) {
-        await grantUserAddon(created.id, {
+        currentAccess = await grantUserAddon(created.id, {
           addonCode: addOn.code,
           subscriptionId: addOn.subscriptionId,
         });
@@ -132,8 +134,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
         materialFolderIds: access.materialFolderIds,
         videoIds: access.videoIds,
         recallSetCodes: access.recallSetCodes,
-        accessExpiresAt: access.accessExpiresAt,
-        clearAccessExpiry: !access.accessExpiresAt,
+        accessExpiresAt: currentAccess.accessExpiresAt,
       });
 
       onCreated(created);
