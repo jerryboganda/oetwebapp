@@ -104,7 +104,7 @@ export const SecureEmbedPlayer = forwardRef<SecureEmbedPlayerHandle, SecureEmbed
         title={title}
         className="h-full w-full border-0"
         allow="autoplay; encrypted-media; picture-in-picture"
-        referrerPolicy="no-referrer"
+        referrerPolicy="strict-origin-when-cross-origin"
         sandbox="allow-scripts allow-same-origin allow-presentation"
       />
     );

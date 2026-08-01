@@ -170,7 +170,8 @@ public sealed class BunnyStreamClient(
     public async Task<string> SignPlaybackUrlAsync(string bunnyVideoId, long expiresUnix, CancellationToken ct)
     {
         var s = await RequireConfiguredAsync(ct);
-        var token = ComputeEmbedToken(s.ApiKey!, bunnyVideoId, expiresUnix);
+        var signingKey = !string.IsNullOrWhiteSpace(s.TokenAuthKey) ? s.TokenAuthKey : s.ApiKey;
+        var token = ComputeEmbedToken(signingKey!, bunnyVideoId, expiresUnix);
         return BuildSignedEmbedUrl(s.LibraryId!, bunnyVideoId, token, expiresUnix);
     }
 

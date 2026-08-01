@@ -117,6 +117,29 @@ public class BunnyStreamClientTests
     }
 
     [Fact]
+    public async Task SignPlaybackUrlAsync_UsesTokenAuthKey_WhenAvailable()
+    {
+        var settings = new BunnyStreamSettings(
+            Enabled: true,
+            LibraryId: "123456",
+            ApiKey: "api-key-123",
+            CdnHostname: "vz-test.b-cdn.net",
+            TokenAuthKey: "token-auth-key-789",
+            WebhookSecret: null,
+            CollectionId: null,
+            PlaybackTokenTtlSeconds: 1800);
+        var client = new BunnyStreamClient(
+            new ThrowingHttpClientFactory(),
+            new FakeSettingsProvider(settings),
+            NullLogger<BunnyStreamClient>.Instance);
+
+        var url = await client.SignPlaybackUrlAsync("video-guid-1", 1700000000, default);
+
+        var expectedToken = BunnyStreamClient.ComputeEmbedToken("token-auth-key-789", "video-guid-1", 1700000000);
+        Assert.Contains($"token={expectedToken}", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThumbnailToken_MatchesPinnedVector()
     {
         // base64url-nopad(raw sha256("token-auth-key" + "/video-guid-1/thumbnail.jpg"
