@@ -49,6 +49,7 @@ import {
 } from '@/lib/materials-api';
 import { uploadFileChunked, type PaperAssetRole } from '@/lib/content-upload-api';
 import { CourseMaterialsMap } from '@/components/domain/materials/course-materials-map';
+import { titleFromFilename } from '@/lib/filename-utils';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -264,8 +265,9 @@ export default function AdminMaterialsPage() {
   const [fileModalOpen, setFileModalOpen] = useState(false);
   const [editingFile, setEditingFile] = useState<MaterialFileDto | null>(null);
   const [fileForm, setFileForm] = useState(defaultFileForm);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileIndex, setUploadFileIndex] = useState(0);
   const [savingFile, setSavingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -483,8 +485,9 @@ export default function AdminMaterialsPage() {
       folderId,
       subtestCode: inherited || defaultFileForm.subtestCode,
     });
-    setUploadFile(null);
+    setUploadFiles([]);
     setUploadProgress(0);
+    setUploadFileIndex(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setFileModalOpen(true);
   }
@@ -507,32 +510,72 @@ export default function AdminMaterialsPage() {
       subtestCode: file.subtestCode,
       folderId: file.folderId ?? '',
     });
-    setUploadFile(null);
+    setUploadFiles([]);
     setUploadProgress(0);
+    setUploadFileIndex(0);
     setFileModalOpen(true);
   }
 
   async function saveFile() {
-    if (!fileForm.title.trim()) {
+    // Batch mode: creating brand-new files from 2+ selected files. Each becomes
+    // its own MaterialFile record, sharing folder/subtest/description, with the
+    // title auto-derived per file (no per-file title UI to fill in).
+    const isBatch = !editingFile && uploadFiles.length > 1;
+
+    if (!isBatch && !fileForm.title.trim()) {
       setToast({ variant: 'error', message: 'Title is required.' });
       return;
     }
-    if (!editingFile && !uploadFile) {
+    if (!editingFile && uploadFiles.length === 0) {
       setToast({ variant: 'error', message: 'Please select a file to upload.' });
       return;
     }
 
     setSavingFile(true);
     setUploadProgress(0);
+    setUploadFileIndex(0);
     try {
-      let mediaAssetId = editingFile?.mediaAssetId ?? '';
+      if (isBatch) {
+        const failures: string[] = [];
+        for (let i = 0; i < uploadFiles.length; i++) {
+          const file = uploadFiles[i];
+          setUploadFileIndex(i);
+          setUploadProgress(0);
+          try {
+            const isMedia = /\.(mp3|m4a|wav|ogg|mp4|webm|mov)$/i.test(file.name);
+            const role: PaperAssetRole = isMedia ? 'Audio' : 'Supplementary';
+            const result = await uploadFileChunked(file, role, setUploadProgress);
+            await adminCreateMaterialFile({
+              folderId: fileForm.folderId || null,
+              mediaAssetId: result.mediaAssetId,
+              subtestCode: fileForm.subtestCode,
+              title: titleFromFilename(file.name),
+              description: fileForm.description || null,
+            });
+          } catch (e) {
+            failures.push(`${file.name} (${(e as Error).message})`);
+          }
+        }
+        const addedCount = uploadFiles.length - failures.length;
+        setToast(
+          failures.length === 0
+            ? { variant: 'success', message: `Added ${addedCount} file${addedCount === 1 ? '' : 's'}.` }
+            : { variant: 'error', message: `Added ${addedCount} of ${uploadFiles.length} files. Failed: ${failures.join('; ')}` },
+        );
+        setFileModalOpen(false);
+        await loadFiles(selectedFolder?.id ?? null);
+        return;
+      }
 
-      if (uploadFile) {
+      let mediaAssetId = editingFile?.mediaAssetId ?? '';
+      const singleFile = uploadFiles[0];
+
+      if (singleFile) {
         // Audio and video use the larger media size slot (150 MB); everything else
         // (PDF, docs, images) uses the Supplementary slot (25 MB).
-        const isMedia = /\.(mp3|m4a|wav|ogg|mp4|webm|mov)$/i.test(uploadFile.name);
+        const isMedia = /\.(mp3|m4a|wav|ogg|mp4|webm|mov)$/i.test(singleFile.name);
         const role: PaperAssetRole = isMedia ? 'Audio' : 'Supplementary';
-        const result = await uploadFileChunked(uploadFile, role, setUploadProgress);
+        const result = await uploadFileChunked(singleFile, role, setUploadProgress);
         mediaAssetId = result.mediaAssetId;
       }
 
@@ -542,7 +585,7 @@ export default function AdminMaterialsPage() {
           description: fileForm.description || null,
           subtestCode: fileForm.subtestCode,
           folderId: fileForm.folderId || null,
-          ...(uploadFile ? { mediaAssetId } : {}),
+          ...(singleFile ? { mediaAssetId } : {}),
         });
         setToast({ variant: 'success', message: 'File updated.' });
       } else {
@@ -563,6 +606,7 @@ export default function AdminMaterialsPage() {
     } finally {
       setSavingFile(false);
       setUploadProgress(0);
+      setUploadFileIndex(0);
     }
   }
 
@@ -687,8 +731,9 @@ export default function AdminMaterialsPage() {
     setSelectedFolder(folder);
     setEditingFile(null);
     setFileForm({ ...defaultFileForm, folderId, subtestCode });
-    setUploadFile(null);
+    setUploadFiles([]);
     setUploadProgress(0);
+    setUploadFileIndex(0);
     setFileModalOpen(true);
   }
 
@@ -790,13 +835,20 @@ export default function AdminMaterialsPage() {
       {/* File create/edit modal */}
       <Modal open={fileModalOpen} onClose={() => setFileModalOpen(false)} title={editingFile ? 'Edit File' : 'Add File'}>
         <div className="p-4 space-y-4">
-          <Input
-            label="Title"
-            value={fileForm.title}
-            onChange={(e) => setFileForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="e.g. Listening Practice — Case 3"
-            maxLength={200}
-          />
+          {editingFile || uploadFiles.length <= 1 ? (
+            <Input
+              label="Title"
+              value={fileForm.title}
+              onChange={(e) => setFileForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Listening Practice — Case 3"
+              maxLength={200}
+            />
+          ) : (
+            <p className="text-xs text-admin-fg-muted">
+              Adding <span className="font-medium text-admin-fg">{uploadFiles.length} files</span> — each will be
+              added as its own entry, titled from its filename.
+            </p>
+          )}
           <Input
             label="Description (optional)"
             value={fileForm.description}
@@ -822,17 +874,30 @@ export default function AdminMaterialsPage() {
           />
           <div>
             <label className="block text-xs font-semibold text-admin-fg-muted mb-1.5">
-              {editingFile ? 'Replace file (leave blank to keep current)' : 'File'}
+              {editingFile ? 'Replace file (leave blank to keep current)' : 'File(s) — select multiple to add them all at once'}
             </label>
             <input
               ref={fileInputRef}
               type="file"
+              multiple={!editingFile}
               accept=".pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov"
-              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => setUploadFiles(Array.from(e.target.files ?? []))}
               className="block w-full text-sm text-admin-fg file:mr-3 file:rounded-md file:border-0 file:bg-admin-hover file:px-3 file:py-1.5 file:text-xs file:font-semibold"
             />
-            {uploadFile && (
-              <p className="mt-1 text-xs text-admin-fg-muted">{uploadFile.name} ({formatBytes(uploadFile.size)})</p>
+            {uploadFiles.length === 1 && (
+              <p className="mt-1 text-xs text-admin-fg-muted">{uploadFiles[0].name} ({formatBytes(uploadFiles[0].size)})</p>
+            )}
+            {uploadFiles.length > 1 && (
+              <ul className="mt-1 max-h-28 space-y-0.5 overflow-y-auto text-xs text-admin-fg-muted list-disc pl-4">
+                {uploadFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`}>{f.name} ({formatBytes(f.size)})</li>
+                ))}
+              </ul>
+            )}
+            {savingFile && uploadFiles.length > 1 && (
+              <p className="mt-2 text-xs text-admin-fg-muted">
+                Uploading {uploadFileIndex + 1} of {uploadFiles.length}: {uploadFiles[uploadFileIndex]?.name}
+              </p>
             )}
             {savingFile && uploadProgress > 0 && uploadProgress < 1 && (
               <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
@@ -843,7 +908,13 @@ export default function AdminMaterialsPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setFileModalOpen(false)}>Cancel</Button>
             <Button onClick={() => void saveFile()} disabled={savingFile}>
-              {savingFile ? 'Saving…' : editingFile ? 'Save changes' : 'Add file'}
+              {savingFile
+                ? 'Saving…'
+                : editingFile
+                  ? 'Save changes'
+                  : uploadFiles.length > 1
+                    ? `Add ${uploadFiles.length} files`
+                    : 'Add file'}
             </Button>
           </div>
         </div>

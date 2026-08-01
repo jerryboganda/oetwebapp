@@ -22,6 +22,7 @@ import {
   fetchAuthorizedObjectUrl,
   type ResultTemplateDto,
 } from '@/lib/api';
+import { titleFromFilename, slugifyFilename, uniqueSlug } from '@/lib/filename-utils';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -60,7 +61,7 @@ export default function AdminResultTemplatesPage() {
   const [filterProfession, setFilterProfession] = useState('');
 
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadForm, setUploadForm] = useState({
     templateKey: '',
     title: '',
@@ -87,31 +88,60 @@ export default function AdminResultTemplatesPage() {
 
   async function handleUpload(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!uploadFile) {
+    if (uploadFiles.length === 0) {
       setToast({ variant: 'error', message: 'Pick an image file first (JPG, PNG, or WebP).' });
       return;
     }
-    if (!uploadForm.templateKey.trim()) {
-      setToast({ variant: 'error', message: 'Template key is required (slug-like, unique).' });
-      return;
-    }
-    if (!uploadForm.title.trim()) {
-      setToast({ variant: 'error', message: 'Title is required.' });
-      return;
+    const isBatch = uploadFiles.length > 1;
+    if (!isBatch) {
+      if (!uploadForm.templateKey.trim()) {
+        setToast({ variant: 'error', message: 'Template key is required (slug-like, unique).' });
+        return;
+      }
+      if (!uploadForm.title.trim()) {
+        setToast({ variant: 'error', message: 'Title is required.' });
+        return;
+      }
     }
     setUploading(true);
     try {
-      const created = await adminUploadResultTemplate({
-        file: uploadFile,
-        templateKey: uploadForm.templateKey.trim(),
-        title: uploadForm.title.trim(),
-        description: uploadForm.description.trim() || null,
-        professionId: uploadForm.professionId.trim() || null,
-        sortOrder: uploadForm.sortOrder,
-      });
-      setToast({ variant: 'success', message: `Uploaded "${created.title}" (inactive).` });
+      if (isBatch) {
+        const usedKeys = new Set<string>();
+        const failures: string[] = [];
+        for (const file of uploadFiles) {
+          const key = uniqueSlug(slugifyFilename(file.name), usedKeys);
+          try {
+            await adminUploadResultTemplate({
+              file,
+              templateKey: key,
+              title: titleFromFilename(file.name),
+              description: uploadForm.description.trim() || null,
+              professionId: uploadForm.professionId.trim() || null,
+              sortOrder: uploadForm.sortOrder,
+            });
+          } catch (err) {
+            failures.push(`${file.name} (${(err as Error).message})`);
+          }
+        }
+        const addedCount = uploadFiles.length - failures.length;
+        setToast(
+          failures.length === 0
+            ? { variant: 'success', message: `Uploaded ${addedCount} template${addedCount === 1 ? '' : 's'} (inactive).` }
+            : { variant: 'error', message: `Uploaded ${addedCount} of ${uploadFiles.length}. Failed: ${failures.join('; ')}` },
+        );
+      } else {
+        const created = await adminUploadResultTemplate({
+          file: uploadFiles[0],
+          templateKey: uploadForm.templateKey.trim(),
+          title: uploadForm.title.trim(),
+          description: uploadForm.description.trim() || null,
+          professionId: uploadForm.professionId.trim() || null,
+          sortOrder: uploadForm.sortOrder,
+        });
+        setToast({ variant: 'success', message: `Uploaded "${created.title}" (inactive).` });
+      }
       setUploadOpen(false);
-      setUploadFile(null);
+      setUploadFiles([]);
       setUploadForm({ templateKey: '', title: '', description: '', professionId: '', sortOrder: 0 });
       if (fileRef.current) fileRef.current.value = '';
       await reload();
@@ -242,34 +272,53 @@ export default function AdminResultTemplatesPage() {
         <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="Upload result-template image">
           <form className="space-y-3" onSubmit={(e) => void handleUpload(e)}>
             <div>
-              <label className="block text-sm font-medium mb-1">Image (JPG/PNG/WebP, max 10 MB)</label>
+              <label className="block text-sm font-medium mb-1">
+                Image(s) (JPG/PNG/WebP, max 10 MB each) — select multiple to upload them all at once
+              </label>
               <input
                 ref={fileRef}
                 type="file"
+                multiple
                 accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => setUploadFiles(Array.from(e.target.files ?? []))}
                 className="w-full text-sm"
               />
-              {uploadFile ? (
+              {uploadFiles.length === 1 ? (
                 <p className="text-xs text-muted mt-1">
-                  {uploadFile.name} - {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                  {uploadFiles[0].name} - {(uploadFiles[0].size / 1024 / 1024).toFixed(2)} MB
                 </p>
               ) : null}
+              {uploadFiles.length > 1 ? (
+                <ul className="mt-1 max-h-28 space-y-0.5 overflow-y-auto text-xs text-muted list-disc pl-4">
+                  {uploadFiles.map((f, i) => (
+                    <li key={`${f.name}-${i}`}>{f.name} - {(f.size / 1024 / 1024).toFixed(2)} MB</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
-            <Input
-              label="Template key (slug, unique)"
-              value={uploadForm.templateKey}
-              onChange={(e) => setUploadForm({ ...uploadForm, templateKey: e.target.value })}
-              placeholder='e.g. "ielts-style-band-chart"'
-              required
-            />
-            <Input
-              label="Title"
-              value={uploadForm.title}
-              onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
-              placeholder='e.g. "Standard OET Score Report"'
-              required
-            />
+            {uploadFiles.length <= 1 ? (
+              <>
+                <Input
+                  label="Template key (slug, unique)"
+                  value={uploadForm.templateKey}
+                  onChange={(e) => setUploadForm({ ...uploadForm, templateKey: e.target.value })}
+                  placeholder='e.g. "ielts-style-band-chart"'
+                  required
+                />
+                <Input
+                  label="Title"
+                  value={uploadForm.title}
+                  onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
+                  placeholder='e.g. "Standard OET Score Report"'
+                  required
+                />
+              </>
+            ) : (
+              <p className="text-xs text-muted">
+                Uploading <span className="font-medium text-admin-fg">{uploadFiles.length} templates</span> — each will get
+                its own key/title derived from its filename.
+              </p>
+            )}
             <Textarea
               label="Description (optional)"
               value={uploadForm.description}
@@ -291,7 +340,9 @@ export default function AdminResultTemplatesPage() {
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
               <Button type="submit" disabled={uploading}>
-                {uploading ? 'Uploading...' : (<><UploadIcon className="h-4 w-4 mr-1" />Upload</>)}
+                {uploading ? 'Uploading...' : (
+                  <><UploadIcon className="h-4 w-4 mr-1" />{uploadFiles.length > 1 ? `Upload ${uploadFiles.length}` : 'Upload'}</>
+                )}
               </Button>
             </div>
           </form>
