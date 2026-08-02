@@ -63,6 +63,7 @@ import {
   type UserAccess,
 } from '@/lib/user-access';
 import { getAdminUserDetailData } from '@/lib/admin';
+import { useProfessions } from '@/lib/hooks/use-professions';
 import {
   blockAdminUserPlayback,
   clearAdminUserDeviceCooldown,
@@ -1566,12 +1567,46 @@ export default function UserDetailPage() {
                   onChange={(event) => updateProfileField('timezone', event.target.value)}
                   hint="IANA timezone, e.g. Europe/London."
                 />
-                <Input
-                  label="Specialties"
-                  value={profileForm.specialties}
-                  onChange={(event) => updateProfileField('specialties', event.target.value)}
-                  hint="Comma-separated list."
-                />
+                <div className="space-y-2">
+                  <Input
+                    label="Specialties"
+                    value={profileForm.specialties}
+                    onChange={(event) => updateProfileField('specialties', event.target.value)}
+                    hint="Comma-separated list or tick from options below."
+                  />
+                  <div className="rounded-xl border border-border/80 bg-admin-bg-subtle p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-admin-fg-strong">
+                      Quick Specialty Select (Tick to add/remove)
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {['medicine', 'nursing', 'dentistry', 'pharmacy', 'physiotherapy', 'radiography', 'veterinary', 'optometry', 'other-allied', 'general-english'].map((profKey) => {
+                        const currentList = profileForm.specialties
+                          ? profileForm.specialties.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+                          : [];
+                        const checked = currentList.includes(profKey);
+                        return (
+                          <label key={profKey} className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-xs transition ${checked ? 'border-primary/50 bg-primary/10 font-medium text-admin-fg-strong' : 'border-border/60 text-admin-fg-muted'}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                let updated: string[];
+                                if (e.target.checked) {
+                                  updated = Array.from(new Set([...currentList, profKey]));
+                                } else {
+                                  updated = currentList.filter((item) => item !== profKey);
+                                }
+                                updateProfileField('specialties', updated.join(', '));
+                              }}
+                              className="h-3.5 w-3.5 rounded border-border text-primary"
+                            />
+                            <span className="capitalize">{profKey.replace('-', ' ')}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </>
             ) : (
               <>

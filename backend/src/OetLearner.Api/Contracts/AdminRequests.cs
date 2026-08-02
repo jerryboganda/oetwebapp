@@ -235,7 +235,8 @@ public record AdminUserInviteRequest(
     string Name,
     string Email,
     string Role,
-    string? ProfessionId);
+    string? ProfessionId,
+    IReadOnlyList<string>? Specialties = null);
 
 public record AdminUserStatusRequest(string Status, string? Reason);
 

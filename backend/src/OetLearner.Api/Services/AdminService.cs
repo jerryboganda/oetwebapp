@@ -3103,11 +3103,16 @@ public partial class AdminService(
         var professionId = string.IsNullOrWhiteSpace(request.ProfessionId)
             ? null
             : request.ProfessionId.Trim();
-        if (role is ApplicationUserRoles.Learner or ApplicationUserRoles.Expert)
+
+        var specialties = (request.Specialties is { Count: > 0 }
+            ? request.Specialties.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct()
+            : (professionId is not null ? new[] { professionId } : Array.Empty<string>())).ToArray();
+
+        if (role == ApplicationUserRoles.Learner)
         {
             if (string.IsNullOrWhiteSpace(professionId))
             {
-                throw ApiException.Validation("profession_required", "A profession is required for learner and expert invitations.");
+                throw ApiException.Validation("profession_required", "A profession is required for learner invitations.");
             }
 
             var professionExists = await db.Professions.AsNoTracking().AnyAsync(
@@ -3116,6 +3121,13 @@ public partial class AdminService(
             if (!professionExists)
             {
                 throw ApiException.Validation("invalid_profession", "The selected profession is not active or does not exist.");
+            }
+        }
+        else if (role == ApplicationUserRoles.Expert)
+        {
+            if (specialties.Length == 0)
+            {
+                throw ApiException.Validation("specialties_required", "At least one specialty is required for tutor invitations.");
             }
         }
         else if (professionId is not null)
@@ -3181,7 +3193,7 @@ public partial class AdminService(
                     Role = ApplicationUserRoles.Expert,
                     DisplayName = displayName,
                     Email = email,
-                    SpecialtiesJson = JsonSupport.Serialize(new[] { professionId! }),
+                    SpecialtiesJson = JsonSupport.Serialize(specialties),
                     Timezone = "UTC",
                     IsActive = true,
                     CreatedAt = now

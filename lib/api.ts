@@ -5485,7 +5485,7 @@ export async function fetchAdminUserDetail(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}`);
 }
 
-export async function inviteAdminUser(payload: { name: string; email: string; role: 'learner' | 'expert' | 'admin'; professionId?: string }): Promise<{
+export async function inviteAdminUser(payload: { name: string; email: string; role: 'learner' | 'expert' | 'admin'; professionId?: string; specialties?: string[] }): Promise<{
   id: string; email: string; role: string;
   temporaryPassword?: string | null;
   invitation?: { purpose: string; deliveryChannel: string; destinationHint: string; expiresAt: string; retryAfterSeconds: number } | null;

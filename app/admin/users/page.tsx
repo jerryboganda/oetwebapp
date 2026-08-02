@@ -77,6 +77,7 @@ interface InviteFormState {
   // UI uses "tutor"; mapped to API "expert" on submit.
   role: 'learner' | 'tutor' | 'admin';
   professionId: string;
+  specialties: string[];
 }
 
 const defaultInviteForm: InviteFormState = {
@@ -84,6 +85,7 @@ const defaultInviteForm: InviteFormState = {
   email: '',
   role: 'learner',
   professionId: '',
+  specialties: [],
 };
 
 const PERM_GROUPS: Record<string, string> = {
@@ -376,8 +378,12 @@ export default function UsersPage() {
       setToast({ variant: 'error', message: 'Please enter a valid email address.' });
       return;
     }
-    if (inviteForm.role !== 'admin' && !inviteForm.professionId) {
-      setToast({ variant: 'error', message: 'Please pick a profession for this account.' });
+    if (inviteForm.role === 'tutor' && inviteForm.specialties.length === 0 && !inviteForm.professionId) {
+      setToast({ variant: 'error', message: 'Please select at least one specialty for this tutor.' });
+      return;
+    }
+    if (inviteForm.role === 'learner' && !inviteForm.professionId) {
+      setToast({ variant: 'error', message: 'Please pick a profession for this learner.' });
       return;
     }
     setIsInviting(true);
@@ -388,7 +394,8 @@ export default function UsersPage() {
         name,
         email,
         role: apiRole as 'learner' | 'expert' | 'admin',
-        professionId: inviteForm.role === 'admin' ? undefined : inviteForm.professionId,
+        professionId: inviteForm.role === 'admin' ? undefined : (inviteForm.professionId || inviteForm.specialties[0]),
+        specialties: inviteForm.role === 'tutor' ? (inviteForm.specialties.length > 0 ? inviteForm.specialties : (inviteForm.professionId ? [inviteForm.professionId] : undefined)) : undefined,
       });
 
       await reloadUsers();
@@ -557,9 +564,85 @@ export default function UsersPage() {
               { value: 'admin', label: 'Admin' },
             ]}
           />
-          {inviteForm.role !== 'admin' ? (
+          {inviteForm.role === 'tutor' ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-admin-fg-strong">
+                  Tutor Specialties (Tick all that apply)
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInviteForm((curr) => ({
+                        ...curr,
+                        specialties: professionOptions.map((p) => p.value),
+                      }))
+                    }
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-xs text-muted">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setInviteForm((curr) => ({ ...curr, specialties: [] }))}
+                    className="text-xs font-medium text-muted hover:text-foreground"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid max-h-56 overflow-y-auto grid-cols-1 gap-2 rounded-xl border border-border bg-admin-bg-subtle p-3 sm:grid-cols-2">
+                {professionOptions.map((opt) => {
+                  const checked = inviteForm.specialties.includes(opt.value);
+                  return (
+                    <label
+                      key={opt.value}
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-sm transition ${
+                        checked
+                          ? 'border-primary/50 bg-primary/10 font-medium text-admin-fg-strong'
+                          : 'border-border/60 hover:bg-muted/30 text-admin-fg-muted'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked;
+                          setInviteForm((curr) => {
+                            const next = isChecked
+                              ? [...curr.specialties, opt.value]
+                              : curr.specialties.filter((s) => s !== opt.value);
+                            return { ...curr, specialties: next };
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <span>{opt.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {inviteForm.specialties.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {professionOptions
+                    .filter((p) => inviteForm.specialties.includes(p.value))
+                    .map((p) => (
+                      <Badge key={p.value} variant="outline" className="bg-primary/5 text-primary border-primary/20 text-xs">
+                        {p.label}
+                      </Badge>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs font-medium text-amber-500">Tick at least one specialty above</p>
+              )}
+            </div>
+          ) : inviteForm.role === 'learner' ? (
             <Select
-              label={inviteForm.role === 'tutor' ? 'Primary Specialty' : 'Profession'}
+              label="Profession"
               value={inviteForm.professionId}
               onChange={(event) => setInviteForm((current) => ({ ...current, professionId: event.target.value }))}
               options={[{ value: '', label: 'Select a profession...' }, ...professionOptions]}
