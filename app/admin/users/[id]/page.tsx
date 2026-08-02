@@ -16,9 +16,11 @@ import {
   Pencil,
   Phone,
   RefreshCcw,
+  RotateCcw,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  ShieldOff,
   User as UserIcon,
   UserLock,
   Video,
@@ -548,6 +550,42 @@ export default function UserDetailPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to block playback.') });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleToggleDeviceExemption() {
+    if (!user || !user.security) return;
+    const targetState = !user.security.deviceVerificationExempt;
+    setIsMutating(true);
+    try {
+      await toggleAdminUserDeviceExemption(user.id, targetState);
+      setToast({
+        variant: 'success',
+        message: targetState
+          ? '"Too Many Device Changes" security disabled for this account.'
+          : '"Too Many Device Changes" security enabled for this account.',
+      });
+      await reloadUser();
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to update device security exemption.') });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleClearDeviceCooldown() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      await clearAdminUserDeviceCooldown(user.id);
+      setToast({ variant: 'success', message: 'Device change cooldown cleared — user can sign in now.' });
+      await reloadUser();
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to clear device cooldown.') });
     } finally {
       setIsMutating(false);
     }
@@ -1247,6 +1285,63 @@ export default function UserDetailPage() {
                             ))}
                           </div>
                         )}
+                      </div>
+
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              {user.security.deviceVerificationExempt ? (
+                                <ShieldOff className="h-4 w-4 text-amber-500" />
+                              ) : (
+                                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                              )}
+                              <p className="text-sm font-semibold text-admin-fg-strong">
+                                &quot;Too Many Device Changes&quot; Security
+                              </p>
+                              <Badge variant={user.security.deviceVerificationExempt ? 'danger' : 'success'}>
+                                {user.security.deviceVerificationExempt ? 'Disabled (Exempt)' : 'Enabled (Enforced)'}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-muted">
+                              {user.security.deviceVerificationExempt
+                                ? 'Device change security is DISABLED for this account. This user can sign in across any number of devices without triggering the "Too many device changes" cooldown block.'
+                                : 'Device change security is ACTIVE for this account. Multiple device sign-ins are monitored and limited according to security policy.'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant={user.security.deviceVerificationExempt ? 'primary' : 'outline'}
+                              onClick={handleToggleDeviceExemption}
+                              loading={isMutating}
+                              size="sm"
+                              className="gap-1.5"
+                            >
+                              {user.security.deviceVerificationExempt ? (
+                                <>
+                                  <ShieldCheck className="h-3.5 w-3.5" />
+                                  Enable Security Enforcement
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldOff className="h-3.5 w-3.5" />
+                                  Disable Security (Exempt Account)
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={handleClearDeviceCooldown}
+                              loading={isMutating}
+                              size="sm"
+                              className="gap-1.5"
+                              title="Clear any active device change cooldown block immediately"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Clear Device Cooldown
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </SettingsSection>

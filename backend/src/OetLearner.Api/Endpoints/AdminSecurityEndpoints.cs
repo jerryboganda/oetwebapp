@@ -184,6 +184,22 @@ public static class AdminSecurityEndpoints
                 => Results.Ok(new { revoked = await service.BlockPlaybackAsync(http.AdminId(), http.AdminName(), userId, ct) }))
             .WithAdminWrite("AdminSecurityWrite");
 
+        userSecurity.MapPost("/device-exemption", async (
+                string userId, SetDeviceExemptionRequest request, HttpContext http, AdminSecurityService service, CancellationToken ct) =>
+        {
+            var result = await service.SetDeviceExemptionAsync(http.AdminId(), http.AdminName(), userId, request.Exempt, ct);
+            return Results.Ok(new { exempt = result });
+        })
+            .WithAdminWrite("AdminSecurityWrite");
+
+        userSecurity.MapPost("/clear-cooldown", async (
+                string userId, HttpContext http, AdminSecurityService service, CancellationToken ct) =>
+        {
+            await service.ClearDeviceCooldownAsync(http.AdminId(), http.AdminName(), userId, ct);
+            return Results.Ok(new { cleared = true });
+        })
+            .WithAdminWrite("AdminSecurityWrite");
+
         return app;
     }
 
@@ -194,3 +210,5 @@ public static class AdminSecurityEndpoints
     private static string AdminName(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
 }
+
+public sealed record SetDeviceExemptionRequest(bool Exempt);

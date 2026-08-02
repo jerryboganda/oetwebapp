@@ -21,7 +21,8 @@ public sealed class AdminSecurityService(
     ISessionRevocationService sessionRevocationService,
     ITrustedDeviceService trustedDeviceService,
     IVideoPlaybackSessionService playbackSessions,
-    ISecurityEventLogger securityEventLogger)
+    ISecurityEventLogger securityEventLogger,
+    OetLearner.Api.Services.Settings.IRuntimeSettingsProvider runtimeSettingsProvider)
 {
     public async Task<IReadOnlyList<AdminSecuritySessionResponse>> GetSessionsAsync(string userId, CancellationToken ct)
     {
@@ -80,6 +81,81 @@ public sealed class AdminSecurityService(
         await securityEventLogger.TryLogAsync(authAccountId, SecurityEventKinds.AdminDeviceReset, cancellationToken: ct);
         await LogAuditAsync(adminId, adminName, "Reset Trusted Device", "User", userId,
             "Cleared the account's trusted device; next sign-in bootstraps a new one.", ct);
+    }
+
+    public async Task<bool> SetDeviceExemptionAsync(
+        string adminId, string adminName, string userId, bool exempt, CancellationToken ct)
+    {
+        var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (learner is null)
+        {
+            throw ApiException.NotFound("user_not_found", "User not found.");
+        }
+
+        var authAccountId = learner.AuthAccountId;
+        var emailToToggle = learner.Email?.Trim();
+        if (string.IsNullOrWhiteSpace(emailToToggle) && authAccountId is not null)
+        {
+            var authAcc = await db.ApplicationUserAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == authAccountId, ct);
+            emailToToggle = authAcc?.Email?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(emailToToggle))
+        {
+            throw ApiException.Validation("email_missing", "This user account does not have an email address.");
+        }
+
+        var normalizedEmail = AuthEmailAddress.NormalizeOrThrow(emailToToggle);
+
+        var row = await db.RuntimeSettings.FirstOrDefaultAsync(ct)
+            ?? new RuntimeSettingsRow { Id = "default" };
+
+        var currentList = (row.SecurityDeviceVerificationExemptEmails ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList();
+
+        if (exempt)
+        {
+            if (!currentList.Contains(normalizedEmail, StringComparer.OrdinalIgnoreCase))
+            {
+                currentList.Add(normalizedEmail);
+            }
+            if (authAccountId is not null)
+            {
+                await trustedDeviceService.ResetDeviceAsync(authAccountId, "admin_exemption_granted", ct);
+            }
+        }
+        else
+        {
+            currentList.RemoveAll(e => string.Equals(e, normalizedEmail, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var updatedCsv = string.Join(',', currentList);
+        row.SecurityDeviceVerificationExemptEmails = updatedCsv.Length > 0 ? updatedCsv : null;
+
+        if (db.Entry(row).State == EntityState.Detached)
+        {
+            db.RuntimeSettings.Add(row);
+        }
+        await db.SaveChangesAsync(ct);
+        runtimeSettingsProvider.Invalidate();
+
+        await LogAuditAsync(adminId, adminName, exempt ? "Granted Device Security Exemption" : "Revoked Device Security Exemption",
+            "User", userId, $"Set 'Too Many Device Changes' security exemption to {exempt} for {normalizedEmail}.", ct);
+
+        return exempt;
+    }
+
+    public async Task ClearDeviceCooldownAsync(
+        string adminId, string adminName, string userId, CancellationToken ct)
+    {
+        var authAccountId = await RequireAuthAccountIdAsync(userId, ct);
+        await trustedDeviceService.ResetDeviceAsync(authAccountId, "admin_clear_cooldown", ct);
+        await securityEventLogger.TryLogAsync(authAccountId, SecurityEventKinds.AdminDeviceReset, cancellationToken: ct);
+        await LogAuditAsync(adminId, adminName, "Cleared Device Cooldown", "User", userId,
+            "Cleared active device change cooldown and reset trusted device for sign-in.", ct);
     }
 
     public async Task<int> BlockPlaybackAsync(string adminId, string adminName, string userId, CancellationToken ct)

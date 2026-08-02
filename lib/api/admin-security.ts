@@ -99,3 +99,20 @@ export async function resetAdminUserDevice(userId: string): Promise<{ reset: boo
 export async function blockAdminUserPlayback(userId: string): Promise<{ revoked: number }> {
   return apiClient.post<{ revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/security/block-playback`, {});
 }
+
+export async function toggleAdminUserDeviceExemption(
+  userId: string,
+  exempt: boolean,
+): Promise<{ exempt: boolean }> {
+  return apiClient.post<{ exempt: boolean }>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/security/device-exemption`,
+    { exempt },
+  );
+}
+
+export async function clearAdminUserDeviceCooldown(userId: string): Promise<{ cleared: boolean }> {
+  return apiClient.post<{ cleared: boolean }>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/security/clear-cooldown`,
+    {},
+  );
+}

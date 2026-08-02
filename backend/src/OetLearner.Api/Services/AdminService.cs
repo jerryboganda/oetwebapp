@@ -2937,7 +2937,7 @@ public partial class AdminService(
             var status = ResolveUserStatus(learner.AccountStatus, authAccount?.DeletedAt is not null);
             var attemptCount = await db.Attempts.CountAsync(a => a.UserId == userId, ct);
             var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct);
-            var security = await BuildSecuritySnapshotAsync(authAccount, ct);
+            var security = await BuildSecuritySnapshotAsync(authAccount, learner.Email, ct);
             var subscription = await BuildLearnerSubscriptionAsync(learner.Id, ct);
             var recentActivity = await GetRecentUserActivityAsync(learner.Id, learner.AuthAccountId, ct);
             var registration = await db.LearnerRegistrationProfiles.AsNoTracking()
@@ -4576,10 +4576,12 @@ public partial class AdminService(
         int ActiveSessionCount,
         DateTimeOffset? LastSessionAt,
         string? LastSessionIp,
-        string? LastSessionDevice);
+        string? LastSessionDevice,
+        bool DeviceVerificationExempt);
 
     private async Task<AdminUserSecuritySnapshot?> BuildSecuritySnapshotAsync(
         ApplicationUserAccount? authAccount,
+        string? learnerEmail,
         CancellationToken ct)
     {
         if (authAccount is null) return null;
@@ -4602,6 +4604,11 @@ public partial class AdminService(
         var activeCount = sessions.Count;
         var latest = sessions.FirstOrDefault();
 
+        var securitySettings = (await runtimeSettingsProvider.GetAsync(ct)).Security;
+        var emailToTest = (authAccount.NormalizedEmail ?? learnerEmail)?.Trim();
+        var deviceVerificationExempt = !string.IsNullOrWhiteSpace(emailToTest)
+            && AuthService.IsDeviceVerificationExempt(emailToTest, securitySettings.DeviceVerificationExemptEmails);
+
         return new AdminUserSecuritySnapshot(
             MfaEnabled: authAccount.AuthenticatorEnabledAt is not null,
             FailedSignInCount: authAccount.FailedSignInCount,
@@ -4611,7 +4618,8 @@ public partial class AdminService(
             ActiveSessionCount: activeCount,
             LastSessionAt: latest?.LastUsedAt ?? latest?.CreatedAt,
             LastSessionIp: latest?.IpAddress,
-            LastSessionDevice: latest?.DeviceInfo);
+            LastSessionDevice: latest?.DeviceInfo,
+            DeviceVerificationExempt: deviceVerificationExempt);
     }
 
     private async Task<object?> BuildLearnerSubscriptionAsync(string userId, CancellationToken ct)

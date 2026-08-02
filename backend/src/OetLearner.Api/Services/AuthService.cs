@@ -1419,7 +1419,7 @@ public sealed class AuthService(
     /// already-normalized (upper-invariant) email; the CSV is normalized the
     /// same way at write time (<see cref="AuthEmailAddress.NormalizeOrThrow"/>),
     /// so an ordinal-ignore-case compare here is defensive, not load-bearing.</summary>
-    private static bool IsDeviceVerificationExempt(string normalizedEmail, string exemptEmailsCsv)
+    internal static bool IsDeviceVerificationExempt(string normalizedEmail, string exemptEmailsCsv)
     {
         if (string.IsNullOrWhiteSpace(exemptEmailsCsv))
         {
