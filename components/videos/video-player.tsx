@@ -33,6 +33,7 @@ import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { addCaptureStateListener, addScreenshotListener } from '@/lib/mobile/playback-attestation';
 import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/types/videos';
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
+import { WebNotAllowedNotice } from '@/components/videos/web-not-allowed-notice';
 import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
 import {
   SecureEmbedPlayer,
@@ -71,8 +72,9 @@ function gateMessage(code: PlaybackGateErrorCode): string {
       return 'Video playback is unavailable on this device.';
     case 'ATTESTATION_REJECTED':
     case 'ATTESTATION_UNAVAILABLE':
-    case 'WEB_NOT_ALLOWED':
       return 'This device could not be verified for secure playback.';
+    case 'WEB_NOT_ALLOWED':
+      return 'Video playback is strictly available on the official Desktop & Mobile apps only.';
     default:
       return 'Could not start playback. Check your connection and try again.';
   }
@@ -381,9 +383,17 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     let cancelled = false;
     void (async () => {
       const runtimeKind = getAppRuntimeKind();
+      if (runtimeKind === 'web') {
+        setPhase({
+          kind: 'error',
+          code: 'WEB_NOT_ALLOWED',
+          message: gateMessage('WEB_NOT_ALLOWED'),
+        });
+        return;
+      }
       const protectionEngaged = await setVideoScreenProtection(true);
       if (cancelled) return;
-      if (runtimeKind !== 'web' && !protectionEngaged) {
+      if (!protectionEngaged) {
         setPhase({
           kind: 'error',
           code: 'SECURITY_VIOLATION',
@@ -647,6 +657,9 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   }
 
   if (phase.kind === 'error') {
+    if (phase.code === 'WEB_NOT_ALLOWED') {
+      return <WebNotAllowedNotice />;
+    }
     return (
       <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-4 bg-navy px-6 py-10 text-center">
         <p className="max-w-md text-sm leading-6 text-white/75">{phase.message}</p>

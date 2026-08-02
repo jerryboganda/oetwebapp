@@ -164,7 +164,7 @@ public class VideoPlaybackAttestationTests(TestWebApplicationFactory factory) : 
     // ── Success + concurrency paths ─────────────────────────────────────────
 
     [Fact]
-    public async Task PlaybackSession_WebNonce_EndToEnd_ReturnsSecureEmbed()
+    public async Task PlaybackSession_WebNonce_Returns403NativeClientRequired()
     {
         var (videoId, userId) = await SeedAsync(configureKeys: false, configureBunny: true);
         using var client = CreateLearnerClient(userId);
@@ -174,24 +174,21 @@ public class VideoPlaybackAttestationTests(TestWebApplicationFactory factory) : 
             $"/v1/video-library/videos/{videoId}/playback-session",
             new { nonce, platform = "web", keyId = "browser-session", signature = "" });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("secure_embed", payload.RootElement.GetProperty("deliveryMode").GetString());
-        Assert.StartsWith(
-            "https://iframe.mediadelivery.net/embed/",
-            payload.RootElement.GetProperty("playbackUrl").GetString(),
-            StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("native_client_required", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task PlaybackSession_RenewFromDifferentDevice_RevokesSession()
     {
-        var (videoId, userId) = await SeedAsync(configureKeys: false, configureBunny: true);
+        var (videoId, userId) = await SeedAsync(configureKeys: true, configureBunny: true);
         using var client = CreateLearnerClient(userId);
         var nonce = await IssueChallengeAsync(client);
+        var signature = VideoAttestationService.ComputeSignature(
+            TauriSecretHex, nonce, videoId, userId, "tauri", "v1");
         var issue = await client.PostAsJsonAsync(
             $"/v1/video-library/videos/{videoId}/playback-session",
-            new { nonce, platform = "web", keyId = "browser-session", signature = "" });
+            new { nonce, platform = "tauri", keyId = "v1", signature });
         issue.EnsureSuccessStatusCode();
         using var payload = JsonDocument.Parse(await issue.Content.ReadAsStringAsync());
         var sessionId = payload.RootElement.GetProperty("sessionId").GetString();

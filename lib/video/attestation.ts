@@ -124,12 +124,12 @@ export function getPlaybackAttestor(): PlaybackAttestor | UnavailableAttestor {
   return {
     available: true,
     runtimeKind: 'web',
-    sign: async () => ({
-      signature: '',
-      platform: 'web',
-      keyId: 'browser-session',
-      appVersion: 'web',
-    }),
+    sign: async () => {
+      throw new PlaybackGateError(
+        'WEB_NOT_ALLOWED',
+        'Video playback is strictly available on the official Desktop & Mobile apps only. Download the app to watch this video.',
+      );
+    },
   };
 }
 

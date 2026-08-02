@@ -97,15 +97,13 @@ public sealed class VideoAttestationService(
             throw ApiException.Forbidden("attestation_invalid", "Attestation challenge is invalid or expired.");
         }
 
-        // Browsers cannot protect an embedded HMAC secret. Their authorisation
-        // boundary is the authenticated access-token family plus this
-        // user-bound, one-time nonce, followed by entitlement, trusted-device,
-        // single-session and playback-session checks in the endpoint/service.
-        if (string.Equals(platform, WebPlatform, StringComparison.Ordinal)
-            && string.Equals(keyId, WebKeyId, StringComparison.Ordinal)
-            && string.IsNullOrEmpty(signature))
+        // Video playback is STRICTLY prohibited on web browsers for anti-piracy and copyright protection.
+        // Playback is available exclusively inside the official Desktop & Mobile native apps.
+        if (string.Equals(platform, WebPlatform, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(platform, WebPlatform, StringComparison.OrdinalIgnoreCase) && string.Equals(keyId, WebKeyId, StringComparison.OrdinalIgnoreCase)))
         {
-            return;
+            await RecordFailureAsync(userId, videoId, "web_not_allowed", platform, ipAddress, ct);
+            throw ApiException.Forbidden("native_client_required", "Video playback is strictly available on the official Desktop & Mobile apps only.");
         }
 
         // (b) Key lookup "{platform}:{keyId}".
