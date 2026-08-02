@@ -29,7 +29,8 @@ public partial class AdminService(
     IConversationOptionsProvider? conversationOptionsProvider = null,
     OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService? voiceDesignRegeneration = null,
     OetLearner.Api.Services.Professions.IProfessionCatalogService? professionCatalog = null,
-    ISecurityEventLogger? securityEventLogger = null)
+    ISecurityEventLogger? securityEventLogger = null,
+    OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettingsProvider = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -3008,7 +3009,7 @@ public partial class AdminService(
                 : null;
             var status = ResolveUserStatus(expert.IsActive ? ActiveUserStatus : SuspendedUserStatus, authAccount?.DeletedAt is not null);
             var reviewCount = await db.ExpertReviewAssignments.CountAsync(a => a.AssignedReviewerId == userId, ct);
-            var security = await BuildSecuritySnapshotAsync(authAccount, ct);
+            var security = await BuildSecuritySnapshotAsync(authAccount, expert.Email, ct);
             var recentActivity = await GetRecentUserActivityAsync(expert.Id, expert.AuthAccountId, ct);
             return new
             {
@@ -3048,7 +3049,7 @@ public partial class AdminService(
         if (adminAccount is not null)
         {
             var status = ResolveUserStatus(ActiveUserStatus, adminAccount.DeletedAt is not null);
-            var security = await BuildSecuritySnapshotAsync(adminAccount, ct);
+            var security = await BuildSecuritySnapshotAsync(adminAccount, adminAccount.Email, ct);
             var recentActivity = await GetRecentUserActivityAsync(adminAccount.Id, adminAccount.Id, ct);
             return new
             {
@@ -4581,8 +4582,8 @@ public partial class AdminService(
 
     private async Task<AdminUserSecuritySnapshot?> BuildSecuritySnapshotAsync(
         ApplicationUserAccount? authAccount,
-        string? learnerEmail,
-        CancellationToken ct)
+        string? learnerEmail = null,
+        CancellationToken ct = default)
     {
         if (authAccount is null) return null;
         var now = timeProvider.GetUtcNow();
@@ -4604,10 +4605,14 @@ public partial class AdminService(
         var activeCount = sessions.Count;
         var latest = sessions.FirstOrDefault();
 
-        var securitySettings = (await runtimeSettingsProvider.GetAsync(ct)).Security;
-        var emailToTest = (authAccount.NormalizedEmail ?? learnerEmail)?.Trim();
-        var deviceVerificationExempt = !string.IsNullOrWhiteSpace(emailToTest)
-            && AuthService.IsDeviceVerificationExempt(emailToTest, securitySettings.DeviceVerificationExemptEmails);
+        var deviceVerificationExempt = false;
+        if (runtimeSettingsProvider is not null)
+        {
+            var securitySettings = (await runtimeSettingsProvider.GetAsync(ct)).Security;
+            var emailToTest = (authAccount.NormalizedEmail ?? learnerEmail)?.Trim();
+            deviceVerificationExempt = !string.IsNullOrWhiteSpace(emailToTest)
+                && AuthService.IsDeviceVerificationExempt(emailToTest, securitySettings.DeviceVerificationExemptEmails);
+        }
 
         return new AdminUserSecuritySnapshot(
             MfaEnabled: authAccount.AuthenticatorEnabledAt is not null,
