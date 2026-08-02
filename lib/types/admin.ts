@@ -269,6 +269,7 @@ export interface AdminUserSecuritySnapshot {
   lastSessionAt: string | null;
   lastSessionIp: string | null;
   lastSessionDevice: string | null;
+  deviceVerificationExempt?: boolean;
 }
 
 export interface AdminUserSubscriptionSnapshot {
