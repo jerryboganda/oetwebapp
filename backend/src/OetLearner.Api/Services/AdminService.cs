@@ -4609,9 +4609,9 @@ public partial class AdminService(
         if (runtimeSettingsProvider is not null)
         {
             var securitySettings = (await runtimeSettingsProvider.GetAsync(ct)).Security;
-            var emailToTest = (authAccount.NormalizedEmail ?? learnerEmail)?.Trim();
-            deviceVerificationExempt = !string.IsNullOrWhiteSpace(emailToTest)
-                && AuthService.IsDeviceVerificationExempt(emailToTest, securitySettings.DeviceVerificationExemptEmails);
+            deviceVerificationExempt = AuthService.IsDeviceVerificationExempt(authAccount.Email, securitySettings.DeviceVerificationExemptEmails)
+                || AuthService.IsDeviceVerificationExempt(authAccount.NormalizedEmail, securitySettings.DeviceVerificationExemptEmails)
+                || AuthService.IsDeviceVerificationExempt(learnerEmail, securitySettings.DeviceVerificationExemptEmails);
         }
 
         return new AdminUserSecuritySnapshot(

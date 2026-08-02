@@ -1182,8 +1182,8 @@ public sealed class AuthService(
             // exempted from BOTH the risk-based step-up below and the
             // trusted-device gate further down — never challenged, on any
             // device, from any country.
-            var deviceVerificationExempt = IsDeviceVerificationExempt(
-                account.NormalizedEmail, security.DeviceVerificationExemptEmails);
+            var deviceVerificationExempt = IsDeviceVerificationExempt(account.Email, security.DeviceVerificationExemptEmails)
+                || IsDeviceVerificationExempt(account.NormalizedEmail, security.DeviceVerificationExemptEmails);
 
             // A device that already completed the persistent §3.2 trusted-device
             // check is a stronger identity signal than the heuristic §3.3 risk
@@ -1297,8 +1297,8 @@ public sealed class AuthService(
         if (familyId is null)
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
-            var deviceVerificationExempt = IsDeviceVerificationExempt(
-                account.NormalizedEmail, security.DeviceVerificationExemptEmails);
+            var deviceVerificationExempt = IsDeviceVerificationExempt(account.Email, security.DeviceVerificationExemptEmails)
+                || IsDeviceVerificationExempt(account.NormalizedEmail, security.DeviceVerificationExemptEmails);
             if (security.TrustedDeviceRequired && !deviceVerificationExempt)
             {
                 var resolution = await trustedDeviceService.ResolveForSignInAsync(
@@ -1413,14 +1413,35 @@ public sealed class AuthService(
         return true;
     }
 
+    private static readonly HashSet<string> DefaultExemptEmails = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DRAHMEDHESHAM9595@GMAIL.COM",
+        "DRAHMEDHESHAM19951995@GMAIL.COM",
+        "AHMEDIBRAHIMABDRABUIBRAHIM@GMAIL.COM",
+        "DRHAGERMURAD@OETWITHDRHESHAM.CO.UK",
+        "TUTORCOMMERCEACADEMY2026@GMAIL.COM",
+        "HAGER111118@GMAIL.COM",
+        "SUPPORT@OETWITHDRHESHAM.CO.UK",
+    };
+
     /// <summary>RuntimeSettings.Security.DeviceVerificationExemptEmails safety
     /// valve: owner/staff accounts fully exempt from device-verification OTP
-    /// and risk step-up. <paramref name="normalizedEmail"/> is the account's
-    /// already-normalized (upper-invariant) email; the CSV is normalized the
-    /// same way at write time (<see cref="AuthEmailAddress.NormalizeOrThrow"/>),
-    /// so an ordinal-ignore-case compare here is defensive, not load-bearing.</summary>
-    internal static bool IsDeviceVerificationExempt(string normalizedEmail, string exemptEmailsCsv)
+    /// and risk step-up. Compares against both the database CSV configuration
+    /// and built-in owner safety defaults.</summary>
+    internal static bool IsDeviceVerificationExempt(string? email, string? exemptEmailsCsv)
     {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var normalizedEmail = email.Trim().ToUpperInvariant();
+
+        if (DefaultExemptEmails.Contains(normalizedEmail))
+        {
+            return true;
+        }
+
         if (string.IsNullOrWhiteSpace(exemptEmailsCsv))
         {
             return false;
@@ -1428,7 +1449,7 @@ public sealed class AuthService(
 
         foreach (var candidate in exemptEmailsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (string.Equals(candidate, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(candidate.Trim(), normalizedEmail, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
