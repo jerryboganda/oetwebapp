@@ -278,5 +278,8 @@ ALTER TABLE ""RefreshTokenRecords"" ADD COLUMN IF NOT EXISTS ""AppVersion"" char
 
 -- Security spec §3.2/§3.3 device-verification exemption list -- sync with migration 20260827090000_AddDeviceVerificationExemptEmails
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SecurityDeviceVerificationExemptEmails"" character varying(2000);
+
+-- Candidate device limit override
+ALTER TABLE ""ApplicationUserAccounts"" ADD COLUMN IF NOT EXISTS ""MaxDevicesOverride"" integer;
 ";
 }

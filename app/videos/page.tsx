@@ -26,6 +26,7 @@ import { Card } from '@/components/ui/card';
 import { fetchVideoLibraryHome, toggleVideoBookmark } from '@/lib/api/videos';
 import { analytics } from '@/lib/analytics';
 import { VideoCard, videoHasProgress } from '@/components/videos/video-card';
+import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
 import type { VideoLibraryCategory, VideoLibraryHome, VideoSummary } from '@/lib/types/videos';
 
 type LibraryView = 'browse' | 'continue' | 'saved';
@@ -468,6 +469,7 @@ export default function VideoLibraryPage() {
   return (
     <LearnerDashboardShell>
       <div className="space-y-6">
+        <AppDownloadPromo variant="banner" />
         <LearnerPageHero
           eyebrow="Video Library"
           title="Learn from expert-led OET video lessons"

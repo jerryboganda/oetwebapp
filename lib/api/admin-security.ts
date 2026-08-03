@@ -116,3 +116,23 @@ export async function clearAdminUserDeviceCooldown(userId: string): Promise<{ cl
     {},
   );
 }
+
+export async function setCandidateDeviceLimit(
+  userId: string,
+  maxDevices: number | null,
+): Promise<{ maxDevices: number | null }> {
+  return apiClient.post<{ maxDevices: number | null }>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/security/device-limit`,
+    { maxDevices },
+  );
+}
+
+export async function revokeAdminUserDevice(
+  userId: string,
+  deviceId: string,
+): Promise<{ revoked: boolean }> {
+  return apiClient.post<{ revoked: boolean }>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/security/devices/${encodeURIComponent(deviceId)}/revoke`,
+    {},
+  );
+}

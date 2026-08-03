@@ -17,9 +17,8 @@ export function WebNotAllowedNotice() {
         <h2 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
           App Required for Video Playback
         </h2>
-        <p className="text-sm leading-6 text-slate-300">
-          Course videos are protected with copyright &amp; anti-piracy security and can{' '}
-          <strong className="font-semibold text-amber-400">ONLY</strong> be played strictly inside the official Desktop or Mobile Apps. Video playback is disabled on web browsers.
+        <p className="text-base font-medium leading-7 text-slate-200">
+          Course videos are available exclusively through the OET with Dr Hesham applications. Please download the appropriate application to continue watching.
         </p>
       </div>
 

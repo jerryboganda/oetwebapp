@@ -70,7 +70,9 @@ import {
   fetchAdminUserDevices,
   fetchAdminUserSessions,
   resetAdminUserDevice,
+  revokeAdminUserDevice,
   revokeAdminUserSession,
+  setCandidateDeviceLimit,
   toggleAdminUserDeviceExemption,
   type AdminSecurityDevice,
   type AdminSecuritySession,
@@ -589,6 +591,38 @@ export default function UserDetailPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to clear device cooldown.') });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleRevokeDevice(deviceId: string) {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      await revokeAdminUserDevice(user.id, deviceId);
+      setToast({ variant: 'success', message: 'Device revoked.' });
+      const devices = await fetchAdminUserDevices(user.id);
+      setSecurityDevices(devices);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to revoke this device.') });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleSetDeviceLimit(val: string) {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      const maxDevices = val === 'default' ? null : val === 'unlimited' ? 0 : parseInt(val, 10);
+      await setCandidateDeviceLimit(user.id, maxDevices);
+      setToast({ variant: 'success', message: 'Candidate device limit updated.' });
+      await reloadUser();
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to update candidate device limit.') });
     } finally {
       setIsMutating(false);
     }
@@ -1260,30 +1294,74 @@ export default function UserDetailPage() {
                       </div>
 
                       <div>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-admin-bg-subtle p-3 text-sm">
+                          <div>
+                            <p className="font-semibold text-admin-fg-strong">Candidate Device Limit</p>
+                            <p className="text-xs text-muted">
+                              Specify maximum registered physical devices permitted for this candidate account.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium shadow-xs"
+                              onChange={(e) => handleSetDeviceLimit(e.target.value)}
+                              defaultValue="default"
+                              disabled={isMutating}
+                            >
+                              <option value="default">Default (Inherit Global)</option>
+                              <option value="1">1 Physical Device</option>
+                              <option value="2">2 Physical Devices</option>
+                              <option value="3">3 Physical Devices</option>
+                              <option value="5">5 Physical Devices</option>
+                              <option value="unlimited">Unlimited Devices</option>
+                            </select>
+                          </div>
+                        </div>
+
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Trusted device</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Registered Physical Devices</p>
                           {securityDevices.some((device) => !device.revokedAt) ? (
                             <Button variant="outline" onClick={handleResetDevice} loading={isMutating} className="gap-2">
                               <ShieldAlert className="h-3.5 w-3.5" />
-                              Reset Device
+                              Reset All Devices
                             </Button>
                           ) : null}
                         </div>
                         {isLoadingSecurityDetail ? (
                           <p className="text-sm text-admin-text-muted">Loading devices…</p>
                         ) : securityDevices.length === 0 ? (
-                          <p className="text-sm text-admin-text-muted">No trusted device recorded yet.</p>
+                          <p className="text-sm text-admin-text-muted">No trusted devices recorded yet.</p>
                         ) : (
                           <div className="space-y-2">
                             {securityDevices.map((device) => (
-                              <div key={device.id} className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-3 text-sm">
-                                <p className="font-medium text-admin-fg-strong">
-                                  {device.deviceName ?? device.platform ?? 'Unknown device'}
-                                  {device.revokedAt ? ' (revoked)' : ' (current)'}
-                                </p>
-                                <p className="text-xs text-muted">
-                                  Trusted {formatDate(device.trustedAt)} - last seen {formatDate(device.lastSeenAt, 'never')}
-                                </p>
+                              <div key={device.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-admin-bg-subtle p-3 text-sm">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-admin-fg-strong">
+                                      {device.deviceName ?? device.platform ?? 'Physical Device'}
+                                    </p>
+                                    <Badge variant={device.revokedAt ? 'danger' : 'success'}>
+                                      {device.revokedAt ? 'Revoked' : 'Active'}
+                                    </Badge>
+                                  </div>
+                                  <p className="truncate text-xs text-muted">
+                                    Device ID: {device.deviceId} &bull; Platform: {device.platform ?? 'Unknown'}
+                                  </p>
+                                  <p className="text-xs text-muted">
+                                    Registered {formatDate(device.trustedAt)} &bull; Last Seen {formatDate(device.lastSeenAt, 'never')}
+                                  </p>
+                                </div>
+                                {!device.revokedAt && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRevokeDevice(device.id)}
+                                    loading={isMutating}
+                                    className="shrink-0 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                  >
+                                    Revoke
+                                  </Button>
+                                )}
                               </div>
                             ))}
                           </div>

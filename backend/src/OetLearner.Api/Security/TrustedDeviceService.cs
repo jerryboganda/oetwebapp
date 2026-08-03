@@ -81,10 +81,21 @@ public sealed class TrustedDeviceService(
             return new DeviceResolutionResult(DeviceResolution.Trusted);
         }
 
+        var account = await db.ApplicationUserAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == authAccountId, ct);
+
+        var effectiveLimit = account?.MaxDevicesOverride switch
+        {
+            0 => int.MaxValue, // 0 means unlimited devices
+            > 0 => account.MaxDevicesOverride.Value,
+            _ => changeMaxPerWindow
+        };
+
         var windowStart = timeProvider.GetUtcNow().AddDays(-changeWindowDays);
         var recentChanges = await db.TrustedDevices
             .CountAsync(d => d.ApplicationUserAccountId == authAccountId && d.TrustedAt > windowStart, ct);
-        if (recentChanges >= changeMaxPerWindow)
+        if (recentChanges >= effectiveLimit)
         {
             await securityEventLogger.TryLogAsync(
                 authAccountId, SecurityEventKinds.DeviceChangeBlockedCooldown, deviceId: deviceId, cancellationToken: ct);

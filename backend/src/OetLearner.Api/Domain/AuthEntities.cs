@@ -48,6 +48,8 @@ public class ApplicationUserAccount
     // AuthService.SignInAsync) so support does not need to unlock accounts.
     public int FailedSignInCount { get; set; }
     public DateTimeOffset? LockoutUntil { get; set; }
+    /// <summary>Per-candidate max physical devices override (null = use system default, 0 = unlimited).</summary>
+    public int? MaxDevicesOverride { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

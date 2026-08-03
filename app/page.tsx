@@ -46,6 +46,7 @@ import { AsyncStateWrapper } from '@/components/state';
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
+import { AppDownloadPromo, PostLoginAppModal } from '@/components/marketing/app-download-promo';
 import { AuthContext } from '@/contexts/auth-context';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import {
@@ -368,6 +369,8 @@ export default function Dashboard() {
           }
         >
         <div className="space-y-6">
+          <PostLoginAppModal />
+          <AppDownloadPromo variant="banner" />
           {purchaseSuccess ? (
             <InlineAlert variant="success">
               AI package purchase received. Current balances: {aiPackageCredits

@@ -172,6 +172,17 @@
 }
 
 @layer utilities {
+  html {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    touch-action: manipulation;
+  }
+
+  .gpu-accelerated {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
   .font-display {
     font-family: var(--font-display), ui-serif, Georgia, serif;
     letter-spacing: -0.04em;

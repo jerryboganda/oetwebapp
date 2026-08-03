@@ -172,6 +172,48 @@ public sealed class AdminSecurityService(
         return revoked;
     }
 
+    public async Task<int?> SetCandidateDeviceLimitAsync(
+        string adminId, string adminName, string userId, int? maxDevices, CancellationToken ct)
+    {
+        var authAccountId = await RequireAuthAccountIdAsync(userId, ct);
+        var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == authAccountId, ct);
+        if (account is null)
+        {
+            throw ApiException.NotFound("user_not_found", "User account not found.");
+        }
+
+        account.MaxDevicesOverride = maxDevices;
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Updated Candidate Device Limit", "User", userId,
+            $"Updated candidate device limit override to {(maxDevices == 0 ? "unlimited" : maxDevices?.ToString() ?? "default")}.", ct);
+
+        return account.MaxDevicesOverride;
+    }
+
+    public async Task<bool> RevokeDeviceAsync(
+        string adminId, string adminName, string userId, Guid deviceId, CancellationToken ct)
+    {
+        var authAccountId = await RequireAuthAccountIdAsync(userId, ct);
+        var device = await db.TrustedDevices.FirstOrDefaultAsync(
+            d => d.ApplicationUserAccountId == authAccountId && d.Id == deviceId, ct);
+        if (device is null)
+        {
+            return false;
+        }
+
+        device.RevokedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        await securityEventLogger.TryLogAsync(
+            authAccountId, SecurityEventKinds.DeviceRevoked, deviceId: device.DeviceId, cancellationToken: ct);
+        await LogAuditAsync(adminId, adminName, "Revoked Device", "User", userId,
+            $"Revoked registered device {device.DeviceName ?? device.DeviceId}.", ct);
+
+        return true;
+    }
+
     private async Task<string> RequireAuthAccountIdAsync(string userId, CancellationToken ct)
         => await adminService.ResolveAuthAccountIdAsync(userId, ct)
            ?? throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account.");

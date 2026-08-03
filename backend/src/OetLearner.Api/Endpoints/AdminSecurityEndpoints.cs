@@ -200,6 +200,22 @@ public static class AdminSecurityEndpoints
         })
             .WithAdminWrite("AdminSecurityWrite");
 
+        userSecurity.MapPost("/device-limit", async (
+                string userId, SetCandidateDeviceLimitRequest request, HttpContext http, AdminSecurityService service, CancellationToken ct) =>
+        {
+            var maxDevices = await service.SetCandidateDeviceLimitAsync(http.AdminId(), http.AdminName(), userId, request.MaxDevices, ct);
+            return Results.Ok(new { maxDevices });
+        })
+            .WithAdminWrite("AdminSecurityWrite");
+
+        userSecurity.MapPost("/devices/{deviceId:guid}/revoke", async (
+                string userId, Guid deviceId, HttpContext http, AdminSecurityService service, CancellationToken ct) =>
+        {
+            var revoked = await service.RevokeDeviceAsync(http.AdminId(), http.AdminName(), userId, deviceId, ct);
+            return Results.Ok(new { revoked });
+        })
+            .WithAdminWrite("AdminSecurityWrite");
+
         return app;
     }
 
@@ -212,3 +228,4 @@ public static class AdminSecurityEndpoints
 }
 
 public sealed record SetDeviceExemptionRequest(bool Exempt);
+public sealed record SetCandidateDeviceLimitRequest(int? MaxDevices);
