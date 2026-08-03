@@ -455,7 +455,7 @@ describe('admin billing plan API helpers', () => {
       contentOverridesJson: '{"videos":{"exclude":["vid-1","vid-2"]}}',
     });
 
-    const init = fetchMock.mock.calls[0]?.[1];
+    const init = (fetchMock.mock.calls[0] as unknown as [unknown, RequestInit | undefined] | undefined)?.[1];
     const body = JSON.parse(String(init?.body));
     expect(body.contentOverridesJson).toBe('{"videos":{"exclude":["vid-1","vid-2"]}}');
     expect(body.deliveryMethod).toBe('automatic_web');
@@ -477,7 +477,7 @@ describe('admin billing plan API helpers', () => {
       contentOverridesJson: '{"videos":{"exclude":["vid-1"]}}',
     });
 
-    const init = fetchMock.mock.calls[0]?.[1];
+    const init = (fetchMock.mock.calls[0] as unknown as [unknown, RequestInit | undefined] | undefined)?.[1];
     const body = JSON.parse(String(init?.body));
     expect(body.contentOverridesJson).toBe('{"videos":{"exclude":["vid-1"]}}');
     expect(body.deliveryMethod).toBe('automatic_web');

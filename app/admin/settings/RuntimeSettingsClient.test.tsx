@@ -402,6 +402,9 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       requireVerifiedEmailForLearners: false,
       countryAllowList: '',
       countryAllowListMode: 'off',
+      deviceVerificationExemptEmails: '',
+      ipIntelligenceProvider: 'off',
+      ipinfoToken: '',
     },
     videoProtection: {
       revokeOnCaptureDetected: true,
