@@ -18,13 +18,17 @@ export const WINDOWS_DOWNLOAD_URL = '/api/download/windows';
 export const MAC_DOWNLOAD_URL = '/api/download/mac';
 export const ANDROID_DOWNLOAD_URL = '/api/download/android';
 
+export const GET_APP_PATH = '/get-app';
+
 export const ANDROID_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL ||
   ANDROID_DOWNLOAD_URL;
 
 export const IOS_STORE_URL = process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
 
-export const GET_APP_PATH = '/get-app';
+/** The current iOS destination, falling back to the public app-download page
+ * until the App Store listing is configured. */
+export const IOS_DOWNLOAD_URL = IOS_STORE_URL || GET_APP_PATH;
 
 /**
  * Android ships as a direct APK (no Play Store listing yet), so app-download

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Monitor, Smartphone, Download, ShieldCheck, X } from 'lucide-react';
+import { AppStoreBadge, DesktopAppBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
+import { ANDROID_INSTALL_URL, GET_APP_PATH, IOS_DOWNLOAD_URL } from '@/lib/app-downloads';
 
 interface AppDownloadPromoProps {
   variant?: 'banner' | 'card' | 'modal';
@@ -12,38 +14,32 @@ interface AppDownloadPromoProps {
 export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromoProps) {
   if (variant === 'banner') {
     return (
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-900 via-indigo-900 to-slate-900 p-4 text-white shadow-xl border border-teal-500/20">
-        <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/30">
-              <Download className="h-5 w-5" />
+      <section
+        aria-labelledby="app-download-strip-title"
+        className="rounded-2xl border border-primary/20 bg-surface px-4 py-4 shadow-sm sm:px-5"
+      >
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 text-center md:flex-row md:justify-between md:text-left">
+          <div className="min-w-0 max-w-2xl">
+            <div className="flex items-center justify-center gap-2 md:justify-start">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Download className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <h2 id="app-download-strip-title" className="text-sm font-bold text-navy">
+                Study anywhere with the official OET apps
+              </h2>
             </div>
-            <div>
-              <p className="text-sm font-bold text-white">Download Official Apps for Video Access &amp; Offline Study</p>
-              <p className="text-xs text-slate-300">
-                Course video playback is enabled exclusively on our official Windows, macOS, Android, and iOS applications.
-              </p>
-            </div>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Keep your account in sync across desktop and mobile, with secure video access and offline study.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Link
-              href="/get-app"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-500 px-3.5 py-1.5 text-xs font-semibold text-slate-950 hover:bg-teal-400 transition"
-            >
-              <Monitor className="h-3.5 w-3.5" />
-              Windows &amp; Mac
-            </Link>
-            <Link
-              href="/get-app"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition"
-            >
-              <Smartphone className="h-3.5 w-3.5" />
-              Android &amp; iOS
-            </Link>
+          <div className="grid w-full grid-cols-1 gap-2 min-[380px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center">
+            <DesktopAppBadge href={GET_APP_PATH} compact className="w-full justify-center sm:w-auto" />
+            <GooglePlayBadge href={ANDROID_INSTALL_URL} compact className="w-full justify-center sm:w-auto" />
+            <AppStoreBadge href={IOS_DOWNLOAD_URL} compact className="w-full justify-center sm:w-auto" />
           </div>
         </div>
-      </div>
+      </section>
     );
   }
 

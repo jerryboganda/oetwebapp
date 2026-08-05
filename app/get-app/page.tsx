@@ -17,11 +17,13 @@ import {
 import {
   ANDROID_INSTALL_URL,
   detectVisitorOs,
+  IOS_DOWNLOAD_URL,
+  IOS_STORE_URL,
   MAC_DOWNLOAD_URL,
   WINDOWS_DOWNLOAD_URL,
   type DesktopOsKind,
 } from '@/lib/app-downloads';
-import { AppStoreBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
+import { AppStoreBadge, DesktopAppBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
 
 const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 
@@ -93,8 +95,7 @@ export default function GetAppPage() {
         </section>
 
         <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <a
-            href={WINDOWS_DOWNLOAD_URL}
+          <div
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
             <Laptop className="h-8 w-8 text-primary" />
@@ -102,11 +103,10 @@ export default function GetAppPage() {
               <h2 className="text-sm font-bold text-navy">Windows</h2>
               <p className="mt-1 text-xs text-muted">Installer (.exe) — auto-updates</p>
             </div>
-            <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Download</span>
-          </a>
+            <DesktopAppBadge href={WINDOWS_DOWNLOAD_URL} label="Windows" compact />
+          </div>
 
-          <a
-            href={MAC_DOWNLOAD_URL}
+          <div
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
             <Apple className="h-8 w-8 text-primary" />
@@ -114,8 +114,8 @@ export default function GetAppPage() {
               <h2 className="text-sm font-bold text-navy">macOS</h2>
               <p className="mt-1 text-xs text-muted">Disk image (.dmg) — auto-updates</p>
             </div>
-            <span className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Download</span>
-          </a>
+            <DesktopAppBadge href={MAC_DOWNLOAD_URL} label="Mac" compact />
+          </div>
 
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary">
             <Smartphone className="h-8 w-8 text-primary" />
@@ -130,9 +130,11 @@ export default function GetAppPage() {
             <Apple className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
-              <p className="mt-1 text-xs text-muted">Coming soon to the App Store</p>
+              <p className="mt-1 text-xs text-muted">
+                {IOS_STORE_URL ? 'Official App Store download' : 'Open the current iOS download page'}
+              </p>
             </div>
-            <AppStoreBadge />
+            <AppStoreBadge href={IOS_DOWNLOAD_URL} />
           </div>
         </section>
 

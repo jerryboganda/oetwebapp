@@ -31,6 +31,12 @@ test.describe('Mobile viewport smoke @mobile', () => {
     await expect(page.locator('input[type="email"], input[name="email"]')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('input[type="password"]')).toBeVisible();
 
+    const appDownloadStrip = page.getByRole('region', { name: /official OET apps/i });
+    await expect(appDownloadStrip).toBeVisible();
+    await expect(appDownloadStrip.getByRole('link', { name: /Windows & Mac/i })).toHaveAttribute('href', '/get-app');
+    await expect(appDownloadStrip.getByRole('link', { name: /Google Play/i })).toHaveAttribute('href', '/get-app/android-install');
+    await expect(appDownloadStrip.getByRole('link', { name: /iPhone and iPad/i })).toHaveAttribute('href', '/get-app');
+
     // Mobile viewport dimensions should be applied
     const viewportSize = page.viewportSize();
     expect(viewportSize?.width).toBeLessThanOrEqual(430);

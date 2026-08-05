@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Apple } from 'lucide-react';
+import { Apple, MonitorDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -11,9 +11,10 @@ import { cn } from '@/lib/utils';
  * geometric approximation of the four-colour play mark, not a copy of
  * Google's exact vector.
  */
-function badgeShellClasses(disabled?: boolean) {
+function badgeShellClasses(disabled?: boolean, compact = false) {
   return cn(
-    'inline-flex h-14 items-center gap-3 rounded-xl border border-black/40 bg-black px-4 text-white shadow-sm transition-colors',
+    'inline-flex items-center rounded-xl border border-black/40 bg-black text-white shadow-sm transition-colors',
+    compact ? 'h-12 gap-2 px-3' : 'h-14 gap-3 px-4',
     disabled ? 'cursor-default opacity-90' : 'hover:bg-black/85 hover:border-black/60',
   );
 }
@@ -32,15 +33,22 @@ function GooglePlayGlyph() {
 interface GooglePlayBadgeProps {
   href: string;
   className?: string;
+  compact?: boolean;
 }
 
-export function GooglePlayBadge({ href, className }: GooglePlayBadgeProps) {
+export function GooglePlayBadge({ href, className, compact = false }: GooglePlayBadgeProps) {
   return (
-    <a href={href} className={cn(badgeShellClasses(), className)}>
-      <GooglePlayGlyph />
+    <a
+      href={href}
+      aria-label="Get the OET app on Google Play"
+      className={cn(badgeShellClasses(false, compact), className)}
+    >
+      <span className={compact ? '[&>svg]:h-5 [&>svg]:w-5' : undefined}>
+        <GooglePlayGlyph />
+      </span>
       <span className="flex flex-col leading-none">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-white/75">Get it on</span>
-        <span className="mt-0.5 text-lg font-semibold leading-tight">Google Play</span>
+        <span className={cn('font-medium uppercase tracking-wider text-white/75', compact ? 'text-[8px]' : 'text-[10px]')}>Get it on</span>
+        <span className={cn('font-semibold leading-tight', compact ? 'text-sm' : 'mt-0.5 text-lg')}>Google Play</span>
       </span>
     </a>
   );
@@ -48,31 +56,56 @@ export function GooglePlayBadge({ href, className }: GooglePlayBadgeProps) {
 
 interface AppStoreBadgeProps {
   className?: string;
+  compact?: boolean;
+  href?: string | null;
   tooltip?: string;
 }
 
-export function AppStoreBadge({ className, tooltip = 'Coming soon to the App Store' }: AppStoreBadgeProps) {
+export function AppStoreBadge({ className, compact = false, href, tooltip = 'Coming soon to the App Store' }: AppStoreBadgeProps) {
   const [showTip, setShowTip] = useState(false);
+  const badgeClassName = cn(badgeShellClasses(!href, compact), className);
+  const updateTooltip = (visible: boolean) => {
+    if (!href) setShowTip(visible);
+  };
+  const badgeContent = (
+    <>
+      <Apple className={cn('shrink-0 fill-current', compact ? 'h-5 w-5' : 'h-6 w-6')} aria-hidden="true" />
+      <span className="flex flex-col items-start leading-none">
+        <span className={cn('font-medium uppercase tracking-wider text-white/75', compact ? 'text-[8px]' : 'text-[10px]')}>Download on the</span>
+        <span className={cn('font-semibold leading-tight', compact ? 'text-sm' : 'mt-0.5 text-lg')}>App Store</span>
+      </span>
+    </>
+  );
 
   return (
     <span className="relative inline-block">
-      <button
-        type="button"
-        aria-disabled="true"
-        title={tooltip}
-        onClick={(event) => event.preventDefault()}
-        onMouseEnter={() => setShowTip(true)}
-        onMouseLeave={() => setShowTip(false)}
-        onFocus={() => setShowTip(true)}
-        onBlur={() => setShowTip(false)}
-        className={cn(badgeShellClasses(true), className)}
-      >
-        <Apple className="h-6 w-6 shrink-0 fill-current" aria-hidden="true" />
-        <span className="flex flex-col items-start leading-none">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-white/75">Download on the</span>
-          <span className="mt-0.5 text-lg font-semibold leading-tight">App Store</span>
-        </span>
-      </button>
+      {href ? (
+        <a
+          href={href}
+          aria-label="Download the OET app for iPhone and iPad"
+          onMouseEnter={() => updateTooltip(true)}
+          onMouseLeave={() => updateTooltip(false)}
+          onFocus={() => updateTooltip(true)}
+          onBlur={() => updateTooltip(false)}
+          className={badgeClassName}
+        >
+          {badgeContent}
+        </a>
+      ) : (
+        <button
+          type="button"
+          aria-disabled="true"
+          title={tooltip}
+          onClick={(event) => event.preventDefault()}
+          onMouseEnter={() => updateTooltip(true)}
+          onMouseLeave={() => updateTooltip(false)}
+          onFocus={() => updateTooltip(true)}
+          onBlur={() => updateTooltip(false)}
+          className={badgeClassName}
+        >
+          {badgeContent}
+        </button>
+      )}
       {showTip ? (
         <span
           role="tooltip"
@@ -82,5 +115,28 @@ export function AppStoreBadge({ className, tooltip = 'Coming soon to the App Sto
         </span>
       ) : null}
     </span>
+  );
+}
+
+interface DesktopAppBadgeProps {
+  href: string;
+  label?: string;
+  className?: string;
+  compact?: boolean;
+}
+
+export function DesktopAppBadge({ href, label = 'Windows & Mac', className, compact = false }: DesktopAppBadgeProps) {
+  return (
+    <a
+      href={href}
+      aria-label={`Download the OET app for ${label}`}
+      className={cn(badgeShellClasses(false, compact), className)}
+    >
+      <MonitorDown className={cn('shrink-0', compact ? 'h-5 w-5' : 'h-6 w-6')} aria-hidden="true" />
+      <span className="flex flex-col items-start leading-none">
+        <span className={cn('font-medium uppercase tracking-wider text-white/75', compact ? 'text-[8px]' : 'text-[10px]')}>Download for</span>
+        <span className={cn('font-semibold leading-tight', compact ? 'text-sm' : 'mt-0.5 text-lg')}>{label}</span>
+      </span>
+    </a>
   );
 }

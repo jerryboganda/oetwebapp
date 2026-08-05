@@ -2,6 +2,17 @@
 
 Last updated: 2026-08-05
 
+## Current Task - Responsive app download strip
+
+- Replaced the dark full-width sign-in app-download box with one compact,
+  responsive strip outside the auth card.
+- Added consistent desktop/mobile badges, actionable Google Play and iOS
+  destinations, and responsive mobile layout/link assertions.
+- Validation: focused Vitest 3/3, 390px Chromium Playwright sign-in smoke,
+  TypeScript, scoped ESLint with 0 errors, and diff-check passed.
+- Next step: stage only the implementation files, commit/push `main`, watch
+  the production blue/green deployment, and report the live release evidence.
+
 ## Current Task - Mobile device verification back navigation
 
 - Added a visible `Back to sign in` link to the shared device-verification

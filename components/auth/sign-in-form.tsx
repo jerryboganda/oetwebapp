@@ -20,7 +20,6 @@ import { buildExternalAuthStartHref } from '@/lib/auth-client';
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { resolveAuthenticatedDestination } from '@/lib/auth-routes';
 import { appendAuthNextParam, AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
-import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 
 interface SignInFormProps {
@@ -297,10 +296,6 @@ export function SignInForm({ nextHref, initialEmail, externalError, reason }: Si
           {isSubmitting ? 'Signing In…' : 'Sign In'}
         </button>
       </form>
-
-      <div className="mt-6">
-        <AppDownloadPromo variant="banner" />
-      </div>
 
       <ExpiredSubscriptionModal
         open={isExpiredSubscriptionModalOpen}
