@@ -168,3 +168,34 @@ test.describe('Mobile viewport smoke @mobile', () => {
     expect(text).toContain('com.oetprep.learner');
   });
 });
+
+test.describe('Mobile device verification recovery @mobile', () => {
+  test.use({
+    storageState: { cookies: [], origins: [] },
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+
+  test('Android and iOS-sized clients can return to sign in with another account', async ({ page }, testInfo) => {
+    if (!testInfo.project.name.includes('mobile')) {
+      test.skip();
+    }
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem('oet.auth.challenge.device', JSON.stringify({
+        email: 'wrong@example.com',
+        challengeToken: 'mobile-e2e-challenge',
+        rememberMe: true,
+      }));
+    });
+
+    await page.goto('/device/verify?next=%2Fdashboard', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Verify this device' })).toBeVisible();
+
+    await page.getByRole('link', { name: 'Back to sign in' }).click();
+
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fdashboard$/);
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+  });
+});

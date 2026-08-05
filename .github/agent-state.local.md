@@ -2,6 +2,21 @@
 
 Last updated: 2026-08-05
 
+## Current Task - Mobile device verification back navigation
+
+- Added a visible `Back to sign in` link to the shared device-verification
+  screen used by Android and iOS Capacitor webviews.
+- The link clears the pending challenge from AuthContext and persisted
+  web/native storage before preserving the requested destination on `/sign-in`.
+- Added focused component coverage, mobile Playwright coverage for Pixel/iPhone
+  projects, and Mobile CI path triggers for shared auth changes.
+- Validation: TypeScript, targeted ESLint, diff check, and 6 focused tests pass.
+  Local mobile Playwright attempt was stopped after WebKit failed immediately
+  and Chromium exceeded the local 120-second timeout; CI mobile builds remain
+  the native Android/iOS verification gate.
+- Next step: stage explicit files, commit/push `main`, watch Mobile CI and the
+  production deployment, then report the authenticated-device limitation.
+
 ## Current Task - Admin package removal and primary package
 
 - Implemented soft-revocation: cancelled packages are hidden from current

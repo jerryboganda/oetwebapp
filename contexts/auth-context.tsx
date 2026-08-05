@@ -15,6 +15,7 @@ import {
   signOut as signOutFromBackend,
   verifyEmailOtp as verifyEmailOtpRequest,
 } from '@/lib/auth-client';
+import { clearPendingDeviceChallenge } from '@/lib/auth-storage';
 import type {
   AuthSession,
   AuthenticatorSetup,
@@ -57,6 +58,8 @@ export interface AuthContextValue extends AuthState {
   /** Security spec §3.2: completes the device-binding email-OTP challenge
    * (`pendingDeviceChallenge`) and restores the session it was blocking. */
   completeDeviceVerification: (code: string) => Promise<AuthSession>;
+  /** Abandons a device challenge so the learner can sign in with another account. */
+  cancelDeviceVerification: () => void;
   clearError: () => void;
 }
 
@@ -338,6 +341,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pendingDeviceChallenge: null,
       });
       return session;
+    },
+    cancelDeviceVerification() {
+      clearPendingDeviceChallenge();
+      setState((current) => ({
+        ...current,
+        pendingDeviceChallenge: null,
+        error: null,
+      }));
     },
     clearError() {
       setState((current) => ({ ...current, error: null }));

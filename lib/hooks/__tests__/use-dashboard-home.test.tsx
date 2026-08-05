@@ -81,6 +81,7 @@ describe('useDashboardHome', () => {
       completeMfaChallenge: vi.fn(),
       completeRecoveryChallenge: vi.fn(),
       completeDeviceVerification: vi.fn(),
+      cancelDeviceVerification: vi.fn(),
       clearError: vi.fn(),
       ...overrides,
     };

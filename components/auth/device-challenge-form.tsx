@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowRight, Laptop, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { sendDeviceVerificationOtp } from '@/lib/auth-client';
+import { appendAuthNextParam, AUTH_ROUTES } from '@/lib/auth/routes';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from './auth-screen-shell';
 import { OtpCodeInput } from './otp-code-input';
@@ -17,7 +19,7 @@ interface DeviceChallengeFormProps {
 
 export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   const router = useRouter();
-  const { pendingDeviceChallenge, completeDeviceVerification } = useAuth();
+  const { pendingDeviceChallenge, completeDeviceVerification, cancelDeviceVerification } = useAuth();
   const [code, setCode] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +96,8 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     }
   };
 
+  const signInHref = appendAuthNextParam(AUTH_ROUTES.signIn, nextHref);
+
   return (
     <AuthScreenShell
       eyebrow="Device Verification"
@@ -154,6 +158,17 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
           <span>{isSubmitting ? 'Verifying device...' : 'Verify Device'}</span>
           {!isSubmitting ? <ArrowRight size={18} /> : null}
         </button>
+
+        <p className={styles.fieldHint} style={{ textAlign: 'center', marginTop: '0.75rem' }}>
+          Entered the wrong email or want to use another account?{' '}
+          <Link
+            href={signInHref}
+            className={styles.link}
+            onClick={cancelDeviceVerification}
+          >
+            Back to sign in
+          </Link>
+        </p>
       </form>
     </AuthScreenShell>
   );
