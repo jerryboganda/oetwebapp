@@ -342,7 +342,7 @@ export default function AdminFreezePage() {
         </div>
       }
     >
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()} errorMessage={error ?? undefined}>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => void load()} errorMessage={error ?? undefined}>
         {overview ? (
           <div className="space-y-6 p-4 sm:p-5">
             {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}

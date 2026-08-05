@@ -16,7 +16,7 @@
  * visual layer changed.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -262,26 +262,31 @@ export default function AdminDashboardPage() {
   const [status, setStatus] = useState<FetchStatus>('loading');
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadDashboard = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setStatus('loading');
     setError(null);
-    getAdminDashboardData()
-      .then((d) => {
-        if (cancelled) return;
-        setData(d);
-        setStatus('success');
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err : new Error('Failed to load dashboard'));
-        setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const nextData = await getAdminDashboardData();
+      if (requestId !== requestIdRef.current) return;
+      setData(nextData);
+      setStatus('success');
+    } catch (err: unknown) {
+      if (requestId !== requestIdRef.current) return;
+      setError(err instanceof Error ? err : new Error('Failed to load dashboard'));
+      setStatus('error');
+    }
   }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [loadDashboard]);
 
   // Auth gate — matches legacy behaviour. Server-side enforcement lives upstream;
   // this prevents an authenticated-but-wrong-role flash.
@@ -300,14 +305,14 @@ export default function AdminDashboardPage() {
             size="sm"
             variant="outline"
             startIcon={<RefreshCw className="h-4 w-4" />}
-            onClick={() => window.location.reload()}
+            onClick={() => void loadDashboard()}
             aria-label="Refresh dashboard data"
           >
             Refresh
           </Button>
         }
       >
-        {status === 'error' ? (
+        {status === 'error' && !data ? (
           <EmptyState
             variant="error"
             size="lg"
@@ -319,10 +324,10 @@ export default function AdminDashboardPage() {
             }
             primaryAction={{
               label: 'Retry',
-              onClick: () => window.location.reload(),
+              onClick: () => void loadDashboard(),
             }}
           />
-        ) : status === 'loading' || !data ? (
+        ) : !data ? (
           <DashboardSkeleton />
         ) : (
           <DashboardContent data={data} />

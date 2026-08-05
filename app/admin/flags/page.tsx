@@ -50,6 +50,7 @@ const defaultFormState: FlagFormState = {
 export default function FlagsPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [filters, setFilters] = useState<Record<string, string[]>>({ type: [] });
   const [flags, setFlags] = useState<AdminFlag[]>([]);
   const [form, setForm] = useState<FlagFormState>(defaultFormState);
@@ -85,7 +86,7 @@ export default function FlagsPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedType]);
+  }, [selectedType, retryNonce]);
 
   const metrics = useMemo(() => {
     const enabled = flags.filter((flag) => flag.enabled).length;
@@ -345,7 +346,7 @@ export default function FlagsPage() {
       >
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <div className="p-6">
               <EmptyState

@@ -708,6 +708,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         ref={videoRef}
         className="h-full w-full"
         playsInline
+        preload={lowBandwidth ? 'none' : 'metadata'}
         controls={false}
         controlsList="nodownload noremoteplayback"
         disablePictureInPicture

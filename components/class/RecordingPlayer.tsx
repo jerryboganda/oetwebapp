@@ -59,6 +59,7 @@ export function RecordingPlayer({
         <video
           ref={videoRef}
           src={videoUrl}
+          preload="metadata"
           controls
           className="h-full w-full rounded-xl"
         />

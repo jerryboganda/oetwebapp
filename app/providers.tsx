@@ -6,16 +6,13 @@ import { NextIntlClientProvider, type AbstractIntlMessages } from 'next-intl';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
 import { AccessibilityProvider } from '@/contexts/accessibility-context';
-import { MobileRuntimeBridge } from '@/components/mobile/mobile-runtime-bridge';
+import { MobileRuntimeGate } from '@/components/mobile/mobile-runtime-gate';
 import { RuntimeLifecycleBridge } from '@/components/runtime/runtime-lifecycle-bridge';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthenticatedNotificationCenter } from '@/components/providers/authenticated-notification-center';
 import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
-import { ShellControls } from '@/components/shell/ShellControls';
-import { ForcedUpdateOverlay } from '@/components/shell/ForcedUpdateOverlay';
-import { DesktopAutoUpdater } from '@/components/shell/DesktopAutoUpdater';
-import { MobileAutoUpdater } from '@/components/shell/MobileAutoUpdater';
+import { RuntimeShellBridges } from '@/components/shell/runtime-shell-bridges';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
 
@@ -95,7 +92,7 @@ export function AppProviders({
           <QueryProvider>
             <AuthProvider>
               <RuntimeLifecycleBridge />
-              <MobileRuntimeBridge />
+              <MobileRuntimeGate />
               {/*
                 AccessibilityProvider reads the learner's saved Settings →
                 Accessibility preferences (large text, high contrast, reduce
@@ -114,10 +111,7 @@ export function AppProviders({
                   non-dismissible forced-update overlay. Mounted here so they
                   inherit Theme + Tooltip context.
                 */}
-                <ShellControls />
-                <DesktopAutoUpdater />
-                <MobileAutoUpdater />
-                <ForcedUpdateOverlay />
+                <RuntimeShellBridges />
                 {/*
                   Global sonner toaster — rendered once at the root so any
                   `toast()` call anywhere in the tree surfaces in the same anchor.

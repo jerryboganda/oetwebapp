@@ -59,6 +59,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
   const { user } = useCurrentUser();
   const { options: professionOptions } = useProfessions();
   const [pageStatus, setPageStatus] = useState<PageStatus>(contentId ? 'loading' : 'success');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [activeTab, setActiveTab] = useState('metadata');
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [contentStatus, setContentStatus] = useState<string>('Draft');
@@ -116,7 +117,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
     return () => {
       cancelled = true;
     };
-  }, [contentId]);
+  }, [contentId, retryNonce]);
 
   useEffect(() => {
     let cancelled = false;
@@ -338,7 +339,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
         </div>
       </div>
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => setRetryNonce((current) => current + 1)}>
         <div className="space-y-6">
           {impact ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -23,10 +23,13 @@ export default function LiveClassJoinPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [meeting, setMeeting] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     fetchLiveClassJoinToken(sessionId)
       .then((data) => {
         if (!cancelled) setToken(data);
@@ -40,7 +43,7 @@ export default function LiveClassJoinPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, retryNonce]);
 
   const handleJoin = () => {
     if (!token) return;
@@ -141,7 +144,7 @@ export default function LiveClassJoinPage() {
           })()
         ) : null}
 
-        <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+        <Button type="button" variant="outline" onClick={() => setRetryNonce((current) => current + 1)}>
           Retry join preparation
         </Button>
       </div>

@@ -79,11 +79,11 @@ class AdminPageShellErrorBoundary extends React.Component<
           variant="error"
           size="lg"
           title="Something went wrong"
-          description="An unexpected error occurred while rendering this page. Try reloading or contact support if the problem persists."
+          description="An unexpected error occurred while rendering this page. Try again or contact support if the problem persists."
           primaryAction={{
-            label: 'Reload page',
+            label: 'Try again',
             onClick: () => {
-              if (typeof window !== 'undefined') window.location.reload();
+              this.setState({ hasError: false, error: undefined });
             },
           }}
           errorRef={this.state.error?.message}

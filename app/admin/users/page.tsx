@@ -131,6 +131,7 @@ export default function UsersPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [tab, setTab] = useState<HubTab>('all');
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [] });
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -200,7 +201,7 @@ export default function UsersPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [page, pageSize, tabRole, selectedStatus, searchQuery]);
+  }, [page, pageSize, tabRole, selectedStatus, searchQuery, retryNonce]);
 
   // Reset page when switching tabs.
   useEffect(() => {
@@ -499,7 +500,7 @@ export default function UsersPage() {
         ) : (
           <AsyncStateWrapper
             status={pageStatus}
-            onRetry={() => window.location.reload()}
+            onRetry={() => setRetryNonce((current) => current + 1)}
             emptyContent={
               <div className="p-6">
                 <EmptyState

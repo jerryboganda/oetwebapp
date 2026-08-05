@@ -204,6 +204,7 @@ export default function UserDetailPage() {
   const userId = params?.id ?? '';
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
@@ -323,7 +324,7 @@ export default function UserDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, retryNonce]);
 
   const closeCreditModal = useCallback(() => {
     setIsCreditModalOpen(false);
@@ -977,7 +978,7 @@ export default function UserDetailPage() {
     >
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => setRetryNonce((current) => current + 1)}>
         {user ? (
           <>
             <div className="flex flex-col gap-3 border-b border-admin-border pb-4 md:flex-row md:items-end md:justify-between">

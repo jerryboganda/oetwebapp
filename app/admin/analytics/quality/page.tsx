@@ -25,6 +25,7 @@ type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 export default function QualityAnalyticsPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [timeRange, setTimeRange] = useState('30d');
   const [filters, setFilters] = useState<Record<string, string[]>>({ subtest: [], profession: [] });
   const [analytics, setAnalytics] = useState<AdminQualityAnalytics | null>(null);
@@ -61,7 +62,7 @@ export default function QualityAnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [timeRange, selectedSubtest, selectedProfession]);
+  }, [timeRange, selectedSubtest, selectedProfession, retryNonce]);
 
   const filterGroups: FilterGroup[] = [
     {
@@ -179,7 +180,7 @@ export default function QualityAnalyticsPage() {
 
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <LegacyEmptyState
               icon={<BarChart3 className="h-10 w-10 text-admin-fg-muted" />}

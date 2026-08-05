@@ -593,6 +593,7 @@ export default function BillingPage() {
   const canWriteCatalog = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite, AdminPermission.BillingCatalogWrite);
   const canWriteSubscriptions = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite, AdminPermission.BillingSubscriptionWrite);
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [planFilters, setPlanFilters] = useState<Record<string, string[]>>({ status: [] });
   const [addOnFilters, setAddOnFilters] = useState<Record<string, string[]>>({ status: [] });
   const [couponFilters, setCouponFilters] = useState<Record<string, string[]>>({ status: [] });
@@ -1043,7 +1044,7 @@ export default function BillingPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch, selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch, paymentPage, paymentPageSize]);
+  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch, selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch, paymentPage, paymentPageSize, retryNonce]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2695,7 +2696,7 @@ export default function BillingPage() {
 
             <AsyncStateWrapper
               status={pageStatus}
-              onRetry={() => window.location.reload()}
+              onRetry={() => setRetryNonce((current) => current + 1)}
               emptyContent={
                 <EmptyState
                   illustration={<Receipt />}

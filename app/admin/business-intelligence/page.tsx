@@ -111,6 +111,7 @@ function buildLoadingContent() {
 export default function BusinessIntelligencePage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [data, setData] = useState<AdminBusinessIntelligenceData | null>(null);
 
   useEffect(() => {
@@ -144,7 +145,7 @@ export default function BusinessIntelligencePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retryNonce]);
 
   if (!isAuthenticated || role !== 'admin') return null;
 
@@ -182,7 +183,7 @@ export default function BusinessIntelligencePage() {
       >
       <AsyncStateWrapper
         status={pageStatus}
-        onRetry={() => window.location.reload()}
+        onRetry={() => setRetryNonce((current) => current + 1)}
         loadingContent={buildLoadingContent()}
         errorMessage="Unable to load business intelligence data."
       >

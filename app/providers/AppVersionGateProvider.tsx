@@ -2,9 +2,6 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { getAppRuntimeKind } from '@/lib/runtime-signals';
-import { resolveClientIdentity } from '@/lib/client-version';
-import { fetchAppReleasePolicy } from '@/lib/api';
-import { compareVersions } from '@/lib/mobile/forced-update';
 
 export interface GatePolicy {
   minVersion?: string;
@@ -53,6 +50,15 @@ export function AppVersionGateProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       if (getAppRuntimeKind() === 'web') return; // the website is never gated
+
+      // This provider is mounted at the root, but release checks only matter
+      // inside native shells. Keep the API client and Capacitor version helper
+      // out of public/auth startup until a shell actually needs them.
+      const [{ resolveClientIdentity }, { fetchAppReleasePolicy }, { compareVersions }] = await Promise.all([
+        import('@/lib/client-version'),
+        import('@/lib/api'),
+        import('@/lib/mobile/forced-update'),
+      ]);
 
       const identity = await resolveClientIdentity();
       if (!identity.version) return; // unknown version → fail open

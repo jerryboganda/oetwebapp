@@ -52,6 +52,7 @@ const defaultFormState: CriterionFormState = {
 export default function CriteriaPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [activeTab, setActiveTab] = useState('writing');
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [] });
   const [criteria, setCriteria] = useState<AdminCriterion[]>([]);
@@ -91,7 +92,7 @@ export default function CriteriaPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, selectedStatus]);
+  }, [activeTab, selectedStatus, retryNonce]);
 
   const filterGroups: FilterGroup[] = [
     {
@@ -249,7 +250,7 @@ export default function CriteriaPage() {
 
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <Card>
               <CardContent className="p-8">

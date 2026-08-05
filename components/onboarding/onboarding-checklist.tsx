@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, CheckCircle2, Circle, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, ProgressBar } from '@/components/ui';
-import { fetchUserProfile } from '@/lib/api';
+import { AuthContext } from '@/contexts/auth-context';
 import type { UserProfile } from '@/lib/mock-data';
 import { trackChecklistItemCompleted } from '@/lib/onboarding/tour-events';
+import { useUserProfileQuery } from '@/lib/query/hooks';
 import { useTourSafe } from './tour-provider';
 
 interface ChecklistItem {
@@ -21,26 +22,24 @@ interface ChecklistItem {
  * Contextual "Get started" checklist for the learner dashboard. Completion is
  * derived from real signals (profile fields, dashboard-tour flag, diagnostic
  * evidence) — never fabricated — and the card hides itself once the core setup
- * is finished. Uses useState+useEffect (not React Query) so it works in the
- * same test environment as the rest of the dashboard (vi.mock('@/lib/api')).
+ * is finished. Profile data shares the dashboard React Query cache so this
+ * card does not issue a second bootstrap request.
  */
 export function OnboardingChecklist() {
   const router = useRouter();
   const tour = useTourSafe();
-  const isAuthenticated = tour?.isAuthenticated ?? false;
-  const isCompleted = tour?.isCompleted ?? (() => false);
-  const startTour = tour?.startTour ?? (() => Promise.resolve());
+  const auth = useContext(AuthContext);
+  const isAuthenticated = tour?.isAuthenticated ?? auth?.isAuthenticated ?? false;
+  const queryUserId = auth?.user?.userId ?? 'current';
+  const isCompleted = tour?.isCompleted;
+  const startTour = tour?.startTour;
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    let cancelled = false;
-    fetchUserProfile()
-      .then((p) => { if (!cancelled) setProfile(p); })
-      .catch(() => { /* silently degrade — checklist hides until loaded */ });
-    return () => { cancelled = true; };
-  }, [isAuthenticated]);
+  const profileQuery = useUserProfileQuery(queryUserId, {
+    enabled: isAuthenticated && !auth?.loading,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const profile: UserProfile | null = profileQuery.data ?? null;
 
   const items = useMemo<ChecklistItem[]>(() => {
     const hasTarget = profile
@@ -71,9 +70,9 @@ export function OnboardingChecklist() {
       {
         id: 'platform-tour',
         label: 'Take the platform tour',
-        done: isCompleted('dashboard'),
+        done: Boolean(isCompleted?.('dashboard')),
         cta: 'Start tour',
-        onClick: () => void startTour('learner-dashboard', { replay: true }),
+        onClick: () => void startTour?.('learner-dashboard', { replay: true }),
       },
     ];
   }, [profile, isCompleted, router, startTour]);

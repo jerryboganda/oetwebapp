@@ -48,6 +48,20 @@ const admin = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  apiClient: {
+    get: vi.fn().mockResolvedValue({
+      subscriptions: [],
+      addOns: [],
+      moduleOverrides: [],
+      materialFolderIds: [],
+      videoIds: [],
+      recallSetCodes: [],
+      accessExpiresAt: null,
+    }),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+  },
   activateAdminAIConfig: vi.fn(),
   activateAdminFlag: vi.fn(),
   assignAdminReview: vi.fn(),
@@ -199,6 +213,7 @@ vi.mock('@/lib/admin', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
+  apiClient: api.apiClient,
   activateAdminAIConfig: api.activateAdminAIConfig,
   activateAdminFlag: api.activateAdminFlag,
   assignAdminReview: api.assignAdminReview,
@@ -309,6 +324,33 @@ describe('Admin Non-Editor Pages', () => {
     expect(screen.getByRole('heading', { name: /^operations$/i })).toBeInTheDocument();
     expect(screen.getByText(/platform health/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /view all review operations/i })).toBeInTheDocument();
+  });
+
+  it('refreshes the root dashboard in place without blanking existing data', async () => {
+    const user = userEvent.setup();
+    const dashboardData = {
+      generatedAt: '2026-04-01T09:00:00.000Z',
+      freshness: { qualityWindow: '30d' },
+      contentHealth: { published: 12, drafts: 3, archived: 2, staleDrafts: 1 },
+      reviewOps: { backlog: 5, overdue: 1, inProgress: 2, failedReviews: 1, failedJobs: 0 },
+      billingRisk: { failedInvoices: 2, pendingInvoices: 1, legacyPlans: 1, activeSubscribers: 123 },
+      quality: { agreementRate: 92, evaluationCount: 88, riskCases: 1 },
+      flags: { enabled: 4, total: 7, liveExperiments: 2, recentChanges: 3 },
+    };
+    const refreshPromise = new Promise<typeof dashboardData>(() => {
+      // Keep the second request pending to verify the previous dashboard stays visible.
+    });
+    admin.getAdminDashboardData
+      .mockResolvedValueOnce(dashboardData)
+      .mockReturnValueOnce(refreshPromise);
+
+    renderPage(<AdminDashboardPage />);
+
+    expect(await screen.findByRole('link', { name: /view all review operations/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /refresh dashboard data/i }));
+
+    expect(screen.getByRole('link', { name: /view all review operations/i })).toBeInTheDocument();
+    expect(admin.getAdminDashboardData).toHaveBeenCalledTimes(2);
   });
 
   it('renders the content library inside the learner-style route surface', async () => {
@@ -1369,4 +1411,3 @@ describe('Admin Non-Editor Pages', () => {
     expect((await screen.findAllByText(/published revision\./i)).length).toBeGreaterThan(0);
   });
 });
-

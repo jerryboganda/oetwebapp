@@ -68,6 +68,7 @@ const defaultFormState: AIConfigFormState = {
 export default function AIConfigPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [] });
   const [configs, setConfigs] = useState<AdminAIConfig[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,7 +123,7 @@ export default function AIConfigPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedStatus]);
+  }, [selectedStatus, retryNonce]);
 
   const metrics = useMemo(() => {
     const active = configs.filter((config) => config.status === 'active').length;
@@ -390,7 +391,7 @@ export default function AIConfigPage() {
       >
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <EmptyState
               illustration={<Cpu className="h-10 w-10" />}

@@ -55,6 +55,7 @@ function maskDeviceId(value: string): string {
 export default function AdminSecurityPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [rows, setRows] = useState<AdminSecurityEventRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -103,7 +104,7 @@ export default function AdminSecurityPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [accountId, selectedKind, selectedSeverity, page, pageSize]);
+  }, [accountId, selectedKind, selectedSeverity, page, pageSize, retryNonce]);
 
   const securityAlerts = useMemo(
     () => (alertSummary?.alerts ?? []).filter((alert) => alert.actionRoute === '/admin/security'),
@@ -284,7 +285,7 @@ export default function AdminSecurityPage() {
 
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <EmptyState
               illustration={<ShieldAlert />}

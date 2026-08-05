@@ -1,3 +1,32 @@
+# Current Task - Maximum performance optimisation across all runtimes
+
+Last updated: 2026-08-06
+
+## Outcome
+
+- Deferred Capacitor/desktop updater, forced-update, and settings-only API code
+  behind runtime/query boundaries so web and auth startup do not download native
+  or learner-only code.
+- Reused the dashboard profile React Query cache in the onboarding checklist,
+  bounded the promotional carousel to the active slide plus adjacent banners,
+  and changed admin/dashboard and learner Zoom retries to in-place refetches.
+- Converted ordinary admin retry paths and the admin shell error fallback away
+  from browser reloads; existing form/session state now remains in memory.
+
+## Validation
+
+- `pnpm exec tsc --noEmit --pretty false` passed.
+- Focused Vitest passed: 23 tests in the static import and admin non-editor
+  suites. The fixture emits only its existing jsdom navigation notice.
+- Scoped ESLint with `--quiet` passed with 0 errors.
+
+## Next step
+
+Inspect the final diff, stage explicit implementation/test/state paths, commit
+and push `main`, then watch the GitHub production deployment and report live
+health evidence. Device-specific Android/iOS/Windows/macOS hardware coverage
+remains an external validation boundary.
+
 # Agent State - Course platform security production completion
 
 Last updated: 2026-08-05

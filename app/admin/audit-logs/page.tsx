@@ -32,6 +32,7 @@ export default function AuditLogsPage() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams?.get('search') ?? '';
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [filters, setFilters] = useState<Record<string, string[]>>({ action: [], actor: [] });
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [rows, setRows] = useState<AdminAuditLogRow[]>([]);
@@ -94,7 +95,7 @@ export default function AuditLogsPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [selectedAction, selectedActor, searchQuery, page, pageSize, actionOptions.length, actorOptions.length]);
+  }, [selectedAction, selectedActor, searchQuery, page, pageSize, actionOptions.length, actorOptions.length, retryNonce]);
 
   useEffect(() => {
     if (!selectedLogId) {
@@ -295,7 +296,7 @@ export default function AuditLogsPage() {
 
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <EmptyState
               illustration={<FileText />}

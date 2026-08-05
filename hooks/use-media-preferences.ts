@@ -3,8 +3,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchSettingsSection } from '@/lib/api';
-import { queryKeys } from '@/lib/query/hooks';
+import { queryKeys } from '@/lib/query/keys';
 
 /**
  * Learner media preferences (Settings → Audio Preferences).
@@ -38,7 +37,10 @@ export function useLearnerMediaPreferences(): LearnerMediaPreferences {
 
   const query = useQuery({
     queryKey: queryKeys.settings.section(userId, 'audio'),
-    queryFn: () => fetchSettingsSection('audio'),
+    queryFn: async () => {
+      const { fetchSettingsSection } = await import('@/lib/api');
+      return fetchSettingsSection('audio');
+    },
     enabled: isAuthenticated && !loading,
     staleTime: 60_000,
     retry: false,

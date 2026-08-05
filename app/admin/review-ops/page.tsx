@@ -31,6 +31,7 @@ export default function ReviewOpsPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const prefersReducedMotion = useReducedMotion();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [], priority: [] });
   const [summary, setSummary] = useState<AdminReviewOpsSummary | null>(null);
   const [queue, setQueue] = useState<AdminReviewQueueItem[]>([]);
@@ -89,7 +90,7 @@ export default function ReviewOpsPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedStatus, selectedPriority]);
+  }, [selectedStatus, selectedPriority, retryNonce]);
 
   const filterGroups: FilterGroup[] = [
     {
@@ -570,7 +571,7 @@ export default function ReviewOpsPage() {
           primaryGrid={
             <AsyncStateWrapper
               status={pageStatus}
-              onRetry={() => window.location.reload()}
+              onRetry={() => setRetryNonce((current) => current + 1)}
               emptyContent={
                 <EmptyState
                   illustration={<Inbox />}

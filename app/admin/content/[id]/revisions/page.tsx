@@ -23,6 +23,7 @@ export default function AdminContentRevisionsPage() {
   const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const [revisions, setRevisions] = useState<AdminRevisionRow[]>([]);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
@@ -48,7 +49,7 @@ export default function AdminContentRevisionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [contentId]);
+  }, [contentId, retryNonce]);
 
   async function handleRestore(revisionId: string) {
     try {
@@ -107,7 +108,7 @@ export default function AdminContentRevisionsPage() {
       >
         <AsyncStateWrapper
           status={pageStatus}
-          onRetry={() => window.location.reload()}
+          onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={<EmptyState title="No revisions found" description="This content item has not accumulated revision history yet." />}
         >
           <div className="p-4 sm:p-5">

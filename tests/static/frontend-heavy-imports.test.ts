@@ -77,4 +77,31 @@ describe('frontend heavy import boundaries', () => {
     expect(workspaceProviders).toContain('@/components/onboarding/tour-provider');
     expect(workspaceProviders).toContain('@/components/system/LearnerPasteGuard');
   });
+
+  it('keeps native shell and settings-only startup code behind runtime boundaries', () => {
+    const coreProviders = source('app/providers.tsx');
+    const mobileGate = source('components/mobile/mobile-runtime-gate.tsx');
+    const shellBridges = source('components/shell/runtime-shell-bridges.tsx');
+    const versionGate = source('app/providers/AppVersionGateProvider.tsx');
+    const accessibility = source('contexts/accessibility-context.tsx');
+    const mediaPreferences = source('hooks/use-media-preferences.ts');
+    const promoSlider = source('components/domain/catalog/promo-hero-slider.tsx');
+
+    expect(coreProviders).not.toContain('@/components/mobile/mobile-runtime-bridge');
+    expect(coreProviders).not.toContain('@/components/shell/ShellControls');
+    expect(coreProviders).toContain('@/components/mobile/mobile-runtime-gate');
+    expect(coreProviders).toContain('@/components/shell/runtime-shell-bridges');
+    expect(mobileGate).toContain("import('./mobile-runtime-bridge')");
+    expect(mobileGate).toContain('ssr: false');
+    expect(shellBridges).toContain("import('./ShellControls')");
+    expect(shellBridges).toContain('ssr: false');
+    expect(versionGate).not.toContain("from '@/lib/api'");
+    expect(versionGate).toContain("import('@/lib/api')");
+    expect(accessibility).not.toContain("from '@/lib/api'");
+    expect(accessibility).toContain("import('@/lib/api')");
+    expect(mediaPreferences).not.toContain("from '@/lib/api'");
+    expect(mediaPreferences).toContain("import('@/lib/api')");
+    expect(promoSlider).toContain('renderedSlideIndices.map');
+    expect(promoSlider).not.toContain('{SLIDES.map((src, i) => (');
+  });
 });

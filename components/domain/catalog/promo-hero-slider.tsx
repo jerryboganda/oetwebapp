@@ -60,6 +60,14 @@ export function PromoHeroSlider({ className }: { className?: string }) {
     }
   };
 
+  // Keep the initial and adjacent banners warm for a smooth transition without
+  // putting every large promotional asset into the page's network queue.
+  const renderedSlideIndices = Array.from(new Set([
+    (index - 1 + SLIDE_COUNT) % SLIDE_COUNT,
+    index,
+    (index + 1) % SLIDE_COUNT,
+  ]));
+
   return (
     <div
       role="region"
@@ -82,23 +90,27 @@ export function PromoHeroSlider({ className }: { className?: string }) {
       </div>
 
       <div className="relative h-[420px] overflow-hidden rounded-xl bg-background-light sm:h-[520px] lg:h-[600px]">
-        {SLIDES.map((src, i) => (
-          // Decorative full-bleed promo banners cross-fading in a fixed box — a plain
-          // <img> is the right tool here (next/image fill + optimization fights the stack).
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={src}
-            src={src}
-            alt={`OET promotional offer ${i + 1}`}
-            loading={i === 0 ? 'eager' : 'lazy'}
-            decoding="async"
-            aria-hidden={i !== index}
-            className={cn(
-              'absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ease-in-out',
-              i === index ? 'opacity-100' : 'pointer-events-none opacity-0',
-            )}
-          />
-        ))}
+        {renderedSlideIndices.map((i) => {
+          const src = SLIDES[i];
+          return (
+            // Decorative full-bleed promo banners cross-fading in a fixed box — a plain
+            // <img> is the right tool here (next/image fill + optimization fights the stack).
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={src}
+              src={src}
+              alt={`OET promotional offer ${i + 1}`}
+              loading={i === index ? 'eager' : 'lazy'}
+              fetchPriority={i === index ? 'high' : 'low'}
+              decoding="async"
+              aria-hidden={i !== index}
+              className={cn(
+                'absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ease-in-out',
+                i === index ? 'opacity-100' : 'pointer-events-none opacity-0',
+              )}
+            />
+          );
+        })}
 
         <button
           type="button"

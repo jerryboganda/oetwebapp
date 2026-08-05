@@ -4,8 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { MotionConfig } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchSettingsSection } from '@/lib/api';
-import { queryKeys } from '@/lib/query/hooks';
+import { queryKeys } from '@/lib/query/keys';
 
 /**
  * Learner-facing accessibility preferences (Settings → Accessibility).
@@ -87,7 +86,13 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   // localStorage mirror without generating 403 noise on every page.
   const sectionQuery = useQuery({
     queryKey: queryKeys.settings.section(queryUserId, 'accessibility'),
-    queryFn: () => fetchSettingsSection('accessibility'),
+    queryFn: async () => {
+      // Accessibility is the only root-provider API request. Keep the full
+      // client out of public/auth startup and load it only for a learner who
+      // can actually use the response.
+      const { fetchSettingsSection } = await import('@/lib/api');
+      return fetchSettingsSection('accessibility');
+    },
     enabled: isAuthenticated && !loading && user?.role === 'learner',
     staleTime: 60_000,
     retry: false,
