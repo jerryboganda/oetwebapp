@@ -133,6 +133,11 @@ function formatDate(value: string | null | undefined, fallback = '-') {
   }
 }
 
+function maskDeviceId(value: string) {
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
 // UI translation: backend role "expert" → operator-facing "tutor".
 function uiRoleLabel(role: string) {
   return role === 'expert' ? 'tutor' : role;
@@ -616,9 +621,15 @@ export default function UserDetailPage() {
     if (!user) return;
     setIsMutating(true);
     try {
-      const maxDevices = val === 'default' ? null : val === 'unlimited' ? 0 : parseInt(val, 10);
-      await setCandidateDeviceLimit(user.id, maxDevices);
-      setToast({ variant: 'success', message: 'Candidate device limit updated.' });
+      const maxDevices = val === 'default' ? null : Number.parseInt(val, 10);
+      const result = await setCandidateDeviceLimit(user.id, maxDevices);
+      setToast({
+        variant: 'success',
+        message: result.revokedDevices > 0
+          ? `Device limit updated; ${result.revokedDevices} older approved identity(ies) were revoked.`
+          : 'Candidate device limit updated.',
+      });
+      setSecurityDevices(await fetchAdminUserDevices(user.id));
       await reloadUser();
     } catch (error) {
       console.error(error);
@@ -1296,30 +1307,33 @@ export default function UserDetailPage() {
                       <div>
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-admin-bg-subtle p-3 text-sm">
                           <div>
-                            <p className="font-semibold text-admin-fg-strong">Candidate Device Limit</p>
+                            <p className="font-semibold text-admin-fg-strong">Approved Client-Identity Limit</p>
                             <p className="text-xs text-muted">
-                              Specify maximum registered physical devices permitted for this candidate account.
+                              One stable browser profile or official app installation is allowed by default. Raising the limit retains more approved identities; the global single-active-session rule still prevents concurrent sessions.
+                            </p>
+                            <p className="mt-1 text-xs font-medium text-admin-fg-strong">
+                              Approved identities: {user.security.activeDeviceCount ?? 0}/{user.security.effectiveMaxDevices ?? 1}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <select
                               className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium shadow-xs"
                               onChange={(e) => handleSetDeviceLimit(e.target.value)}
-                              defaultValue="default"
+                              value={user.security.maxDevicesOverride == null ? 'default' : String(user.security.maxDevicesOverride)}
+                              aria-label="Approved client-identity limit"
                               disabled={isMutating}
                             >
-                              <option value="default">Default (Inherit Global)</option>
-                              <option value="1">1 Physical Device</option>
-                              <option value="2">2 Physical Devices</option>
-                              <option value="3">3 Physical Devices</option>
-                              <option value="5">5 Physical Devices</option>
-                              <option value="unlimited">Unlimited Devices</option>
+                              <option value="default">Default (1 identity)</option>
+                              <option value="1">1 approved identity</option>
+                              <option value="2">2 approved identities</option>
+                              <option value="3">3 approved identities</option>
+                              <option value="5">5 approved identities</option>
                             </select>
                           </div>
                         </div>
 
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Registered Physical Devices</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Registered Client Identities</p>
                           {securityDevices.some((device) => !device.revokedAt) ? (
                             <Button variant="outline" onClick={handleResetDevice} loading={isMutating} className="gap-2">
                               <ShieldAlert className="h-3.5 w-3.5" />
@@ -1345,7 +1359,7 @@ export default function UserDetailPage() {
                                     </Badge>
                                   </div>
                                   <p className="truncate text-xs text-muted">
-                                    Device ID: {device.deviceId} &bull; Platform: {device.platform ?? 'Unknown'}
+                                    Device ID: {maskDeviceId(device.deviceId)} &bull; Platform: {device.platform ?? 'Unknown'}
                                   </p>
                                   <p className="text-xs text-muted">
                                     Registered {formatDate(device.trustedAt)} &bull; Last Seen {formatDate(device.lastSeenAt, 'never')}

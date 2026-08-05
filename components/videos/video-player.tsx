@@ -448,7 +448,10 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   // and goes silent within the same tick rather than waiting for that
   // navigation or the next renew call.
   useEffect(() => {
-    const onSessionRevoked = () => {
+    const onSessionRevoked = (event: Event) => {
+      const message = event instanceof CustomEvent
+        ? (event as CustomEvent<{ message?: string }>).detail?.message
+        : null;
       videoRef.current?.pause();
       embedPlayerRef.current?.pause();
       embedPlayerRef.current?.mute();
@@ -459,7 +462,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       setPhase({
         kind: 'error',
         code: 'SECURITY_VIOLATION',
-        message: 'This account signed in on another device, so playback here has stopped.',
+        message: message ?? 'This account signed in on another device, so playback here has stopped.',
       });
     };
     window.addEventListener('oet:session-revoked', onSessionRevoked);

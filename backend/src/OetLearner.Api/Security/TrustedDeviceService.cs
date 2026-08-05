@@ -1,6 +1,8 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Security;
 
@@ -10,16 +12,18 @@ public enum DeviceResolution
     /// result whenever trusted-device enforcement is active.</summary>
     NoDeviceId,
 
-    /// <summary>The presented device id matches the account's current
-    /// trusted device (or there wasn't one to compare yet).</summary>
+    /// <summary>The device id was present but malformed or too long.</summary>
+    InvalidDeviceId,
+
+    /// <summary>The presented device id is already approved for the account.</summary>
     Trusted,
 
-    /// <summary>The account has no trusted device yet — this one is trusted
+    /// <summary>The account has no approved device yet — this one is trusted
     /// silently (registration already proved email ownership).</summary>
     Bootstrap,
 
-    /// <summary>A different device is already trusted — an email-OTP
-    /// challenge is required before this one can be trusted.</summary>
+    /// <summary>A different client identity needs email-OTP approval before it
+    /// can occupy a device slot.</summary>
     OtpRequired,
 
     /// <summary>Too many device changes in the configured rolling window.</summary>
@@ -33,20 +37,30 @@ public interface ITrustedDeviceService
     Task<DeviceResolutionResult> ResolveForSignInAsync(
         string authAccountId, string? deviceId, int changeWindowDays, int changeMaxPerWindow, CancellationToken ct);
 
-    /// <summary>Trusts <paramref name="deviceId"/>, revoking whatever device
-    /// was previously trusted (and, via <see cref="ISessionRevocationService"/>,
-    /// its sessions) — spec §3.2 "approving a new device revokes the old one".</summary>
+    /// <summary>Approves a client identity. The default policy keeps one active
+    /// identity and therefore revokes the previous device's sessions; an
+    /// explicit positive per-learner override may retain more identities.</summary>
     Task TrustDeviceAsync(
         string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct);
 
-    /// <summary>Admin-initiated: clears the account's current trusted device
-    /// (next sign-in bootstraps a new one silently) and, since a cleared
-    /// device is a security-boundary reset, revokes every live session too —
-    /// spec §4.4 admin device reset.</summary>
+    /// <summary>Admin-initiated: clears every approved device and revokes every
+    /// live session because a cleared device is a security-boundary reset.</summary>
     Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct);
 
-    /// <summary>The account's currently-trusted device, or null when none has
-    /// been bootstrapped yet. Read-only (no LastSeenAt touch).</summary>
+    /// <summary>Returns active approved client identities ordered by recent use.</summary>
+    Task<IReadOnlyList<TrustedDevice>> GetActiveDevicesAsync(string authAccountId, CancellationToken ct);
+
+    /// <summary>Returns the effective approved-device limit. The safe default is
+    /// one; invalid legacy overrides are treated as the default.</summary>
+    Task<int> GetEffectiveMaxDevicesAsync(string authAccountId, CancellationToken ct);
+
+    /// <summary>Immediately trims active devices after an admin lowers a
+    /// learner's limit and revokes sessions tied to identities that no longer
+    /// fit the policy.</summary>
+    Task<int> EnforceDeviceLimitAsync(string authAccountId, int maxDevices, CancellationToken ct);
+
+    /// <summary>Compatibility helper for the learner sessions card. Returns the
+    /// most recently used active identity, or null.</summary>
     Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct);
 }
 
@@ -56,66 +70,110 @@ public sealed class TrustedDeviceService(
     ISecurityEventLogger securityEventLogger,
     TimeProvider timeProvider) : ITrustedDeviceService
 {
+    public const int DefaultMaxDevices = 1;
+    public const int MaxAllowedDevicesOverride = 5;
+
     public async Task<DeviceResolutionResult> ResolveForSignInAsync(
         string authAccountId, string? deviceId, int changeWindowDays, int changeMaxPerWindow, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(deviceId))
+        var normalizedDeviceId = NormalizeDeviceId(deviceId);
+        if (normalizedDeviceId is null)
         {
-            return new DeviceResolutionResult(DeviceResolution.NoDeviceId);
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                await LogRejectedAsync(authAccountId, null, "missing_device_id", ct);
+                return new DeviceResolutionResult(DeviceResolution.NoDeviceId);
+            }
+
+            await LogRejectedAsync(authAccountId, deviceId, "invalid_device_id", ct);
+            return new DeviceResolutionResult(DeviceResolution.InvalidDeviceId);
         }
 
-        var current = await db.TrustedDevices
-            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
-            .OrderByDescending(d => d.TrustedAt)
-            .FirstOrDefaultAsync(ct);
+        var activeDevices = await GetTrackedActiveDevicesAsync(authAccountId, ct);
+        var matchingDevice = activeDevices.FirstOrDefault(d =>
+            string.Equals(d.DeviceId, normalizedDeviceId, StringComparison.Ordinal));
 
-        if (current is null)
+        if (matchingDevice is not null)
         {
-            return new DeviceResolutionResult(DeviceResolution.Bootstrap);
-        }
-
-        if (string.Equals(current.DeviceId, deviceId, StringComparison.Ordinal))
-        {
-            current.LastSeenAt = timeProvider.GetUtcNow();
+            matchingDevice.LastSeenAt = timeProvider.GetUtcNow();
             await db.SaveChangesAsync(ct);
             return new DeviceResolutionResult(DeviceResolution.Trusted);
         }
 
-        var account = await db.ApplicationUserAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Id == authAccountId, ct);
-
-        var effectiveLimit = account?.MaxDevicesOverride switch
+        if (activeDevices.Count == 0)
         {
-            0 => int.MaxValue, // 0 means unlimited devices
-            > 0 => account.MaxDevicesOverride.Value,
-            _ => changeMaxPerWindow
-        };
+            return new DeviceResolutionResult(DeviceResolution.Bootstrap);
+        }
 
-        var windowStart = timeProvider.GetUtcNow().AddDays(-changeWindowDays);
+        // This is deliberately separate from the per-learner number of active
+        // device slots. The rolling cooldown limits churn; an admin override
+        // changes how many identities may remain approved, not how many times
+        // a learner may rotate devices in a short period.
+        var windowStart = timeProvider.GetUtcNow().AddDays(-Math.Max(1, changeWindowDays));
         var recentChanges = await db.TrustedDevices
             .CountAsync(d => d.ApplicationUserAccountId == authAccountId && d.TrustedAt > windowStart, ct);
-        if (recentChanges >= effectiveLimit)
+        var effectiveChangeLimit = Math.Max(1, changeMaxPerWindow);
+        if (recentChanges >= effectiveChangeLimit)
         {
             await securityEventLogger.TryLogAsync(
-                authAccountId, SecurityEventKinds.DeviceChangeBlockedCooldown, deviceId: deviceId, cancellationToken: ct);
+                authAccountId,
+                SecurityEventKinds.DeviceChangeBlockedCooldown,
+                deviceId: normalizedDeviceId,
+                details: new
+                {
+                    reason = "cooldown",
+                    recentChanges,
+                    changeWindowDays,
+                    changeMaxPerWindow = effectiveChangeLimit,
+                    activeDeviceCount = activeDevices.Count,
+                },
+                cancellationToken: CancellationToken.None);
+            await LogRejectedAsync(authAccountId, normalizedDeviceId, "cooldown", CancellationToken.None);
             return new DeviceResolutionResult(DeviceResolution.CooldownBlocked);
         }
 
+        var maxDevices = await GetEffectiveMaxDevicesAsync(authAccountId, ct);
         await securityEventLogger.TryLogAsync(
-            authAccountId, SecurityEventKinds.DeviceTrustRequested, deviceId: deviceId, cancellationToken: ct);
+            authAccountId,
+            SecurityEventKinds.DeviceTrustRequested,
+            deviceId: normalizedDeviceId,
+            details: new { activeDeviceCount = activeDevices.Count, maxDevices },
+            cancellationToken: ct);
         return new DeviceResolutionResult(DeviceResolution.OtpRequired);
     }
 
-    public async Task TrustDeviceAsync(
+    public Task TrustDeviceAsync(
+        string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+        => WithDeviceMutationLockAsync(
+            authAccountId,
+            ct,
+            () => TrustDeviceCoreAsync(authAccountId, deviceId, deviceName, platform, grantedVia, ct));
+
+    private async Task TrustDeviceCoreAsync(
         string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
     {
+        var normalizedDeviceId = NormalizeDeviceId(deviceId)
+            ?? throw new InvalidOperationException("A valid device id is required to approve a device.");
         var now = timeProvider.GetUtcNow();
-        var priorDevices = await db.TrustedDevices
-            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
-            .ToListAsync(ct);
+        var maxDevices = await GetEffectiveMaxDevicesAsync(authAccountId, ct);
+        var activeDevices = await GetTrackedActiveDevicesAsync(authAccountId, ct);
 
-        foreach (var prior in priorDevices)
+        var existing = activeDevices.FirstOrDefault(d =>
+            string.Equals(d.DeviceId, normalizedDeviceId, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            existing.LastSeenAt = now;
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        var devicesToRevoke = activeDevices
+            .OrderBy(d => d.LastSeenAt ?? d.TrustedAt)
+            .ThenBy(d => d.TrustedAt)
+            .Take(Math.Max(0, activeDevices.Count - maxDevices + 1))
+            .ToList();
+
+        foreach (var prior in devicesToRevoke)
         {
             prior.RevokedAt = now;
         }
@@ -124,64 +182,95 @@ public sealed class TrustedDeviceService(
         {
             Id = Guid.NewGuid(),
             ApplicationUserAccountId = authAccountId,
-            DeviceId = deviceId,
-            DeviceName = deviceName,
-            Platform = platform,
+            DeviceId = normalizedDeviceId,
+            DeviceName = Truncate(deviceName, 256),
+            Platform = Truncate(platform, 32),
             CreatedAt = now,
             TrustedAt = now,
             LastSeenAt = now,
-            TrustGrantedVia = grantedVia,
+            TrustGrantedVia = Truncate(grantedVia, 32) ?? "otp_verified",
         });
-        await db.SaveChangesAsync(ct);
+        // Audit evidence must survive a client disconnect after the security
+        // decision has already been made.
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        var replacementReason = maxDevices == DefaultMaxDevices
+            ? "device_replaced"
+            : "device_limit_replaced";
 
         await securityEventLogger.TryLogAsync(
-            authAccountId, SecurityEventKinds.DeviceTrusted, deviceId: deviceId,
-            details: new { grantedVia }, cancellationToken: ct);
-
-        if (priorDevices.Count > 0)
-        {
-            // The old device's sessions must die too — a device change is
-            // meaningless as a security boundary if the previous device can
-            // keep using its still-live session. RevokeAllFamiliesAsync with
-            // no exception revokes every current session for the account;
-            // the NEW session for this sign-in is created by the caller
-            // (AuthService) AFTER this method returns, so there is nothing
-            // live yet to accidentally except-out. Only one such call is
-            // needed regardless of how many prior device rows there are —
-            // it revokes every family for the account, not per-device.
-            await sessionRevocationService.RevokeAllFamiliesAsync(authAccountId, exceptFamilyId: null, reason: "device_trusted", ct);
-
-            // Normally there is exactly one prior row (single-writer usage),
-            // but a race between two concurrent TrustDeviceAsync calls could
-            // leave more than one non-revoked row here — log one DeviceRevoked
-            // event per row actually revoked above, not just the first, so the
-            // audit trail doesn't silently under-report what was revoked.
-            foreach (var prior in priorDevices)
+            authAccountId,
+            SecurityEventKinds.DeviceTrusted,
+            deviceId: normalizedDeviceId,
+            details: new
             {
-                await securityEventLogger.TryLogAsync(
-                    authAccountId, SecurityEventKinds.DeviceRevoked,
-                    deviceId: prior.DeviceId, cancellationToken: ct);
-            }
+                grantedVia,
+                activeDeviceCount = activeDevices.Count - devicesToRevoke.Count + 1,
+                maxDevices,
+                replacedDeviceCount = devicesToRevoke.Count,
+            },
+            cancellationToken: CancellationToken.None);
+        await LogSystemAuditAsync(
+            authAccountId,
+            "Device Approved",
+            $"Approved client identity {MaskDeviceId(normalizedDeviceId)} via {grantedVia}. Active device count is now {activeDevices.Count - devicesToRevoke.Count + 1}/{maxDevices}.",
+            CancellationToken.None);
+
+        if (devicesToRevoke.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var prior in devicesToRevoke)
+        {
+            await securityEventLogger.TryLogAsync(
+                authAccountId,
+                SecurityEventKinds.DeviceRevoked,
+                deviceId: prior.DeviceId,
+                details: new { reason = replacementReason, replacedByDeviceId = normalizedDeviceId },
+                cancellationToken: CancellationToken.None);
+            await LogSystemAuditAsync(
+                authAccountId,
+                "Device Revoked",
+                $"Revoked client identity {MaskDeviceId(prior.DeviceId)} because {MaskDeviceId(normalizedDeviceId)} was approved under the active device limit.",
+                CancellationToken.None);
+        }
+
+        if (maxDevices == DefaultMaxDevices)
+        {
+            // The strict one-device rule revokes every previous family. There
+            // should be only one active identity, but this also heals an
+            // anomalous concurrent-write state without leaving a live session.
+            await sessionRevocationService.RevokeAllFamiliesAsync(
+                authAccountId, exceptFamilyId: null, reason: replacementReason, CancellationToken.None);
+            return;
+        }
+
+        foreach (var prior in devicesToRevoke)
+        {
+            await sessionRevocationService.RevokeDeviceFamiliesAsync(
+                authAccountId, prior.DeviceId, replacementReason, CancellationToken.None);
         }
     }
 
-    public async Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
+    public Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
+        => WithDeviceMutationLockAsync(
+            authAccountId,
+            ct,
+            () => ResetDeviceCoreAsync(authAccountId, reason, ct));
+
+    private async Task ResetDeviceCoreAsync(string authAccountId, string reason, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow();
-        var current = await db.TrustedDevices
-            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
-            .ToListAsync(ct);
+        var current = await GetTrackedActiveDevicesAsync(authAccountId, ct);
         if (current.Count == 0)
         {
-            // Nothing to revoke, but an admin's reset attempt is itself a
-            // security-relevant action worth an audit trail — silence here
-            // would make it impossible to tell "reset was never attempted"
-            // apart from "reset was attempted against an account with no
-            // active device", which an admin reviewing the log needs to
-            // distinguish.
             await securityEventLogger.TryLogAsync(
-                authAccountId, SecurityEventKinds.DeviceAdminReset,
-                details: new { noActiveDevice = true }, cancellationToken: ct);
+                authAccountId,
+                SecurityEventKinds.DeviceAdminReset,
+                details: new { noActiveDevice = true, reason },
+                cancellationToken: CancellationToken.None);
+            await LogSystemAuditAsync(authAccountId, "Device Approval Reset", "A device reset was requested while no active device was registered.", CancellationToken.None);
             return;
         }
 
@@ -189,20 +278,228 @@ public sealed class TrustedDeviceService(
         {
             device.RevokedAt = now;
         }
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(CancellationToken.None);
 
         await securityEventLogger.TryLogAsync(
-            authAccountId, SecurityEventKinds.DeviceAdminReset, cancellationToken: ct);
+            authAccountId,
+            SecurityEventKinds.DeviceAdminReset,
+            details: new { revokedDeviceCount = current.Count, reason },
+            cancellationToken: CancellationToken.None);
+        await LogSystemAuditAsync(
+            authAccountId,
+            "Device Approval Reset",
+            $"Cleared {current.Count} approved client identity(ies); the next sign-in must bootstrap a new device.",
+            CancellationToken.None);
 
-        // Same as an ordinary device change: clearing trust is meaningless as
-        // a security boundary if the old device's live session survives it.
-        await sessionRevocationService.RevokeAllFamiliesAsync(authAccountId, exceptFamilyId: null, reason: reason, ct);
+        await sessionRevocationService.RevokeAllFamiliesAsync(authAccountId, exceptFamilyId: null, reason, CancellationToken.None);
     }
 
-    public Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct)
-        => db.TrustedDevices
+    public async Task<IReadOnlyList<TrustedDevice>> GetActiveDevicesAsync(string authAccountId, CancellationToken ct)
+        => await db.TrustedDevices
             .AsNoTracking()
             .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
-            .OrderByDescending(d => d.TrustedAt)
+            .OrderByDescending(d => d.LastSeenAt ?? d.TrustedAt)
+            .ThenByDescending(d => d.TrustedAt)
+            .ToListAsync(ct);
+
+    public async Task<int> GetEffectiveMaxDevicesAsync(string authAccountId, CancellationToken ct)
+    {
+        var overrideValue = await db.ApplicationUserAccounts
+            .AsNoTracking()
+            .Where(a => a.Id == authAccountId)
+            .Select(a => a.MaxDevicesOverride)
             .FirstOrDefaultAsync(ct);
+        return ResolveEffectiveMaxDevices(overrideValue);
+    }
+
+    public Task<int> EnforceDeviceLimitAsync(string authAccountId, int maxDevices, CancellationToken ct)
+        => WithDeviceMutationLockResultAsync(
+            authAccountId,
+            ct,
+            () => EnforceDeviceLimitCoreAsync(authAccountId, maxDevices, ct));
+
+    private async Task<int> EnforceDeviceLimitCoreAsync(string authAccountId, int maxDevices, CancellationToken ct)
+    {
+        maxDevices = ResolveRequestedMaxDevices(maxDevices);
+        var now = timeProvider.GetUtcNow();
+        var activeDevices = await GetTrackedActiveDevicesAsync(authAccountId, ct);
+        var devicesToRevoke = activeDevices
+            .OrderBy(d => d.LastSeenAt ?? d.TrustedAt)
+            .ThenBy(d => d.TrustedAt)
+            .Take(Math.Max(0, activeDevices.Count - maxDevices))
+            .ToList();
+        if (devicesToRevoke.Count == 0) return 0;
+
+        foreach (var device in devicesToRevoke)
+        {
+            device.RevokedAt = now;
+        }
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        foreach (var device in devicesToRevoke)
+        {
+            await securityEventLogger.TryLogAsync(
+                authAccountId,
+                SecurityEventKinds.DeviceRevoked,
+                deviceId: device.DeviceId,
+                details: new { reason = "device_limit_reduced", maxDevices },
+                cancellationToken: CancellationToken.None);
+            await LogSystemAuditAsync(
+                authAccountId,
+                "Device Revoked",
+                $"Revoked client identity {MaskDeviceId(device.DeviceId)} because the approved-device limit was reduced to {maxDevices}.",
+                CancellationToken.None);
+            await sessionRevocationService.RevokeDeviceFamiliesAsync(
+                authAccountId, device.DeviceId, "device_limit_reduced", CancellationToken.None);
+        }
+
+        return devicesToRevoke.Count;
+    }
+
+    public async Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct)
+        => await db.TrustedDevices
+            .AsNoTracking()
+            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
+            .OrderByDescending(d => d.LastSeenAt ?? d.TrustedAt)
+            .ThenByDescending(d => d.TrustedAt)
+            .FirstOrDefaultAsync(ct);
+
+    private async Task<List<TrustedDevice>> GetTrackedActiveDevicesAsync(string authAccountId, CancellationToken ct)
+        => await db.TrustedDevices
+            .Where(d => d.ApplicationUserAccountId == authAccountId && d.RevokedAt == null)
+            .OrderByDescending(d => d.LastSeenAt ?? d.TrustedAt)
+            .ThenByDescending(d => d.TrustedAt)
+            .ToListAsync(ct);
+
+    private async Task LogRejectedAsync(string authAccountId, string? deviceId, string reason, CancellationToken ct)
+    {
+        await securityEventLogger.TryLogAsync(
+            authAccountId,
+            SecurityEventKinds.DeviceTrustRejected,
+            deviceId: Truncate(deviceId, 128),
+            details: new { reason },
+            cancellationToken: ct);
+        await LogSystemAuditAsync(
+            authAccountId,
+            "Device Rejected",
+            $"Rejected a device approval request ({reason}) for client identity {MaskDeviceId(deviceId)}.",
+            ct);
+    }
+
+    private async Task LogSystemAuditAsync(string authAccountId, string action, string details, CancellationToken ct)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = timeProvider.GetUtcNow(),
+            ActorId = "security-system",
+            ActorName = "Security System",
+            Action = action,
+            ResourceType = "AuthAccount",
+            ResourceId = authAccountId,
+            Details = details,
+        });
+        await db.SaveChangesAsync(CancellationToken.None);
+    }
+
+    /// <summary>Serializes device-slot mutations per authentication account on
+    /// PostgreSQL. Without the row lock, two concurrent OTP completions could
+    /// both observe a free slot and leave more active identities than the
+    /// policy allows. InMemory/SQLite test providers deliberately skip the
+    /// PostgreSQL-specific lock.</summary>
+    private async Task WithDeviceMutationLockAsync(
+        string authAccountId,
+        CancellationToken ct,
+        Func<Task> mutation)
+    {
+        if (!IsPostgresProvider())
+        {
+            await mutation();
+            return;
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        try
+        {
+            await LockAccountRowAsync(authAccountId, ct);
+            await mutation();
+            await transaction.CommitAsync(CancellationToken.None);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<T> WithDeviceMutationLockResultAsync<T>(
+        string authAccountId,
+        CancellationToken ct,
+        Func<Task<T>> mutation)
+    {
+        if (!IsPostgresProvider())
+        {
+            return await mutation();
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        try
+        {
+            await LockAccountRowAsync(authAccountId, ct);
+            var result = await mutation();
+            await transaction.CommitAsync(CancellationToken.None);
+            return result;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task LockAccountRowAsync(string authAccountId, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT \"Id\" FROM \"ApplicationUserAccounts\" WHERE \"Id\" = {authAccountId} FOR UPDATE",
+            ct);
+    }
+
+    private bool IsPostgresProvider()
+        => db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static int ResolveEffectiveMaxDevices(int? overrideValue)
+        => overrideValue is > 0 and <= MaxAllowedDevicesOverride
+            ? overrideValue.Value
+            : DefaultMaxDevices;
+
+    private static int ResolveRequestedMaxDevices(int maxDevices)
+    {
+        if (maxDevices is < 1 or > MaxAllowedDevicesOverride)
+        {
+            throw ApiException.Validation(
+                "invalid_device_limit",
+                $"The approved-device limit must be between 1 and {MaxAllowedDevicesOverride}.");
+        }
+
+        return maxDevices;
+    }
+
+    private static string? NormalizeDeviceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim();
+        if (normalized.Length > 128 || normalized.Any(char.IsControl)) return null;
+        return normalized;
+    }
+
+    private static string? Truncate(string? value, int maxLength)
+        => value is null ? null : value.Length > maxLength ? value[..maxLength] : value;
+
+    private static string MaskDeviceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "unknown device";
+        var normalized = new string(value.Trim().Select(character =>
+            char.IsControl(character) ? '?' : character).ToArray());
+        return normalized.Length <= 8 ? normalized : $"{normalized[..4]}…{normalized[^4..]}";
+    }
 }

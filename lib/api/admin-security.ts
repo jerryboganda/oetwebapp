@@ -62,6 +62,8 @@ export interface AdminSecuritySession {
   createdAt: string;
   lastUsedAt: string | null;
   expiresAt: string;
+  deviceId: string | null;
+  platform: string | null;
 }
 
 export interface AdminSecurityDevice {
@@ -120,8 +122,8 @@ export async function clearAdminUserDeviceCooldown(userId: string): Promise<{ cl
 export async function setCandidateDeviceLimit(
   userId: string,
   maxDevices: number | null,
-): Promise<{ maxDevices: number | null }> {
-  return apiClient.post<{ maxDevices: number | null }>(
+): Promise<{ maxDevices: number | null; effectiveMaxDevices: number; revokedDevices: number }> {
+  return apiClient.post<{ maxDevices: number | null; effectiveMaxDevices: number; revokedDevices: number }>(
     `/v1/admin/users/${encodeURIComponent(userId)}/security/device-limit`,
     { maxDevices },
   );

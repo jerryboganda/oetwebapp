@@ -39,7 +39,8 @@ public sealed class CookieBackedAuthCsrfGuard(
         }
 
         var platform = context.Request.Headers[ClientPlatformHeader].ToString();
-        return platform.Equals("capacitor", StringComparison.OrdinalIgnoreCase)
+        return platform.StartsWith("capacitor-", StringComparison.OrdinalIgnoreCase)
+            || platform.Equals("capacitor", StringComparison.OrdinalIgnoreCase)
             || platform.Equals("desktop", StringComparison.OrdinalIgnoreCase)
             || platform.Equals("native", StringComparison.OrdinalIgnoreCase);
     }

@@ -21,4 +21,10 @@ public interface ISessionRevocationService
     /// revoked or didn't exist.</summary>
     Task<bool> RevokeFamilyAsync(
         string authAccountId, Guid familyId, string reason, CancellationToken ct);
+
+    /// <summary>Revokes every active session family issued to one client
+    /// identity. Used when a one-device replacement or a reduced per-learner
+    /// limit removes that identity's approval.</summary>
+    Task<int> RevokeDeviceFamiliesAsync(
+        string authAccountId, string deviceId, string reason, CancellationToken ct);
 }

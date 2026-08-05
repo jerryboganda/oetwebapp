@@ -235,7 +235,8 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     // security actions). See Domain/SecurityEntities.cs.
     public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
-    // Security spec §3.2: one trusted device per account.
+    // Security spec §3.2: approved client identities per account (one by
+    // default, with a bounded admin override).
     public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
 
     // AI usage accounting. See docs/AI-USAGE-POLICY.md. Every AI call made

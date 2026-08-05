@@ -1955,6 +1955,9 @@ public class AuthFlowsTests
 
         public Task<bool> RevokeFamilyAsync(string authAccountId, Guid familyId, string reason, CancellationToken ct)
             => Task.FromResult(false);
+
+        public Task<int> RevokeDeviceFamiliesAsync(string authAccountId, string deviceId, string reason, CancellationToken ct)
+            => Task.FromResult(0);
     }
 
     /// <summary>No-op test double — none of these tests exercise sign-in risk
@@ -1983,6 +1986,15 @@ public class AuthFlowsTests
 
         public Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct)
             => Task.FromResult<TrustedDevice?>(null);
+
+        public Task<IReadOnlyList<TrustedDevice>> GetActiveDevicesAsync(string authAccountId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<TrustedDevice>>(Array.Empty<TrustedDevice>());
+
+        public Task<int> GetEffectiveMaxDevicesAsync(string authAccountId, CancellationToken ct)
+            => Task.FromResult(1);
+
+        public Task<int> EnforceDeviceLimitAsync(string authAccountId, int maxDevices, CancellationToken ct)
+            => Task.FromResult(0);
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider

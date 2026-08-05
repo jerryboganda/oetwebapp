@@ -38,7 +38,8 @@ public sealed class AdminSecurityService(
             .OrderByDescending(t => t.LastUsedAt ?? t.CreatedAt)
             .Take(20)
             .Select(t => new AdminSecuritySessionResponse(
-                t.FamilyId, t.IpAddress, t.CountryCode, t.DeviceInfo, t.CreatedAt, t.LastUsedAt, t.ExpiresAt))
+                t.FamilyId, t.IpAddress, t.CountryCode, t.DeviceInfo, t.CreatedAt, t.LastUsedAt, t.ExpiresAt,
+                t.DeviceId, t.Platform))
             .ToListAsync(ct);
     }
 
@@ -172,9 +173,16 @@ public sealed class AdminSecurityService(
         return revoked;
     }
 
-    public async Task<int?> SetCandidateDeviceLimitAsync(
+    public async Task<AdminDeviceLimitUpdateResponse> SetCandidateDeviceLimitAsync(
         string adminId, string adminName, string userId, int? maxDevices, CancellationToken ct)
     {
+        if (maxDevices is < 1 or > TrustedDeviceService.MaxAllowedDevicesOverride)
+        {
+            throw ApiException.Validation(
+                "invalid_device_limit",
+                $"The approved-device limit must be between 1 and {TrustedDeviceService.MaxAllowedDevicesOverride}, or left at default.");
+        }
+
         var authAccountId = await RequireAuthAccountIdAsync(userId, ct);
         var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == authAccountId, ct);
         if (account is null)
@@ -182,14 +190,28 @@ public sealed class AdminSecurityService(
             throw ApiException.NotFound("user_not_found", "User account not found.");
         }
 
+        var previousOverride = account.MaxDevicesOverride;
         account.MaxDevicesOverride = maxDevices;
         account.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
+        var effectiveMaxDevices = await trustedDeviceService.GetEffectiveMaxDevicesAsync(authAccountId, CancellationToken.None);
+        var revokedDevices = await trustedDeviceService.EnforceDeviceLimitAsync(authAccountId, effectiveMaxDevices, CancellationToken.None);
+        await securityEventLogger.TryLogAsync(
+            authAccountId,
+            SecurityEventKinds.AdminDeviceLimitOverride,
+            details: new
+            {
+                previousOverride,
+                maxDevices,
+                effectiveMaxDevices,
+                revokedDevices,
+            },
+            cancellationToken: CancellationToken.None);
         await LogAuditAsync(adminId, adminName, "Updated Candidate Device Limit", "User", userId,
-            $"Updated candidate device limit override to {(maxDevices == 0 ? "unlimited" : maxDevices?.ToString() ?? "default")}.", ct);
+            $"Updated approved client-identity limit override from {previousOverride?.ToString() ?? "default"} to {maxDevices?.ToString() ?? "default"}. Effective limit: {effectiveMaxDevices}; revoked devices: {revokedDevices}.", CancellationToken.None);
 
-        return account.MaxDevicesOverride;
+        return new AdminDeviceLimitUpdateResponse(maxDevices, effectiveMaxDevices, revokedDevices);
     }
 
     public async Task<bool> RevokeDeviceAsync(
@@ -204,12 +226,19 @@ public sealed class AdminSecurityService(
         }
 
         device.RevokedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        var revokedSessions = await sessionRevocationService.RevokeDeviceFamiliesAsync(
+            authAccountId, device.DeviceId, "admin_device_revoke", CancellationToken.None);
 
         await securityEventLogger.TryLogAsync(
-            authAccountId, SecurityEventKinds.DeviceRevoked, deviceId: device.DeviceId, cancellationToken: ct);
+            authAccountId,
+            SecurityEventKinds.DeviceRevoked,
+            deviceId: device.DeviceId,
+            details: new { reason = "admin_device_revoke", revokedSessions },
+            cancellationToken: CancellationToken.None);
         await LogAuditAsync(adminId, adminName, "Revoked Device", "User", userId,
-            $"Revoked registered device {device.DeviceName ?? device.DeviceId}.", ct);
+            $"Revoked registered device {device.DeviceName ?? device.DeviceId}; revoked {revokedSessions} associated session family(ies).", CancellationToken.None);
 
         return true;
     }
@@ -244,7 +273,14 @@ public sealed record AdminSecuritySessionResponse(
     string? DeviceInfo,
     DateTimeOffset CreatedAt,
     DateTimeOffset? LastUsedAt,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    string? DeviceId,
+    string? Platform);
+
+public sealed record AdminDeviceLimitUpdateResponse(
+    int? MaxDevices,
+    int EffectiveMaxDevices,
+    int RevokedDevices);
 
 public sealed record AdminSecurityDeviceResponse(
     Guid Id,

@@ -4590,7 +4590,10 @@ public partial class AdminService(
         DateTimeOffset? LastSessionAt,
         string? LastSessionIp,
         string? LastSessionDevice,
-        bool DeviceVerificationExempt);
+        bool DeviceVerificationExempt,
+        int? MaxDevicesOverride,
+        int EffectiveMaxDevices,
+        int ActiveDeviceCount);
 
     private async Task<AdminUserSecuritySnapshot?> BuildSecuritySnapshotAsync(
         ApplicationUserAccount? authAccount,
@@ -4616,6 +4619,14 @@ public partial class AdminService(
 
         var activeCount = sessions.Count;
         var latest = sessions.FirstOrDefault();
+        var activeDeviceCount = await db.TrustedDevices.AsNoTracking()
+            .Where(d => d.ApplicationUserAccountId == authAccount.Id && d.RevokedAt == null)
+            .Select(d => d.DeviceId)
+            .Distinct()
+            .CountAsync(ct);
+        var effectiveMaxDevices = authAccount.MaxDevicesOverride is > 0 and <= TrustedDeviceService.MaxAllowedDevicesOverride
+            ? authAccount.MaxDevicesOverride.Value
+            : TrustedDeviceService.DefaultMaxDevices;
 
         var deviceVerificationExempt = false;
         if (runtimeSettingsProvider is not null)
@@ -4636,7 +4647,10 @@ public partial class AdminService(
             LastSessionAt: latest?.LastUsedAt ?? latest?.CreatedAt,
             LastSessionIp: latest?.IpAddress,
             LastSessionDevice: latest?.DeviceInfo,
-            DeviceVerificationExempt: deviceVerificationExempt);
+            DeviceVerificationExempt: deviceVerificationExempt,
+            MaxDevicesOverride: authAccount.MaxDevicesOverride,
+            EffectiveMaxDevices: effectiveMaxDevices,
+            ActiveDeviceCount: activeDeviceCount);
     }
 
     private async Task<object?> BuildLearnerSubscriptionAsync(string userId, CancellationToken ct)

@@ -62,7 +62,9 @@ function platformLabel(platform: string | null | undefined): string | null {
   if (!platform) return null;
   switch (platform) {
     case 'web': return 'Web';
+    case 'desktop': return 'Desktop App';
     case 'tauri': return 'Desktop App';
+    case 'capacitor': return 'Mobile App';
     case 'capacitor-android': return 'Android App';
     case 'capacitor-ios': return 'iOS App';
     default: return platform;
@@ -197,8 +199,11 @@ export default function SessionsPage() {
                 {platformLabel(trustedDevice.platform) ? `${platformLabel(trustedDevice.platform)} · ` : ''}
                 Trusted {formatRelativeTime(trustedDevice.trustedAt)} · Last seen {formatRelativeTime(trustedDevice.lastSeenAt)}
               </p>
+              <p className="text-[11px] text-muted mt-1">
+                Approved client identities: {trustedDevice.activeDeviceCount ?? 1}/{trustedDevice.maxDevices ?? 1}
+              </p>
               <p className="text-[11px] text-muted/60 mt-0.5">
-                Signing in on a different device may require an email verification code and signs the old device out.
+                Browser profiles and official app installations count separately, even on the same physical hardware. A new approved identity signs out any identity it replaces; an admin override can retain more identities but only one live session remains active.
               </p>
             </div>
           </div>

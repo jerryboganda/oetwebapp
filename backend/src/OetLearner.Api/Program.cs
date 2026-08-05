@@ -626,7 +626,11 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             {
                 var settingsProvider = scope.ServiceProvider.GetRequiredService<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider>();
                 var effective = await settingsProvider.GetAsync(context.HttpContext.RequestAborted);
-                if (effective.Security.SingleActiveSessionEnabled)
+                // Trusted-device enforcement also implies single live-session
+                // liveness. Otherwise an old access token could continue to
+                // work until expiry after a newly approved device revoked its
+                // refresh-token family, undermining the anti-sharing rule.
+                if (effective.Security.SingleActiveSessionEnabled || effective.Security.TrustedDeviceRequired)
                 {
                     await securityEventLogger.TryLogAsync(
                         authAccountId,

@@ -600,9 +600,19 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       // now (e.g. the video player) can react immediately — pause, show a
       // "signed in elsewhere" overlay — before the hard navigation below
       // unmounts everything anyway.
-      connection.on('session_revoked', (payload?: { reason?: string }) => {
+      connection.on('session_revoked', (payload?: { reason?: string; message?: string }) => {
         window.dispatchEvent(new CustomEvent('oet:session-revoked', { detail: payload }));
-        forceSignOutAndRedirect('signed_out_elsewhere');
+        const reason: Parameters<typeof forceSignOutAndRedirect>[0] =
+          payload?.reason === 'device_replaced'
+            ? 'device_replaced'
+            : payload?.reason === 'device_limit_replaced'
+              ? 'device_limit_replaced'
+              : payload?.reason === 'device_limit_reduced'
+                ? 'device_limit_reduced'
+                : payload?.reason === 'admin_device_revoke'
+                  ? 'session_revoked'
+                  : 'signed_out_elsewhere';
+        forceSignOutAndRedirect(reason);
       });
       connection.onreconnecting(() => {
         setConnectionStatus('reconnecting');

@@ -35,7 +35,9 @@ public sealed class SessionRevocationService(
         {
             token.RevokedAt = now;
         }
-        await db.SaveChangesAsync(ct);
+        // A disconnect must not cancel the security boundary after the
+        // revocation decision has been made.
+        await db.SaveChangesAsync(CancellationToken.None);
 
         await RevokePlaybackAndNotifyAsync(authAccountId, familyIds, reason, ct);
         return familyIds.Count;
@@ -54,10 +56,36 @@ public sealed class SessionRevocationService(
         {
             token.RevokedAt = now;
         }
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(CancellationToken.None);
 
         await RevokePlaybackAndNotifyAsync(authAccountId, [familyId], reason, ct);
         return true;
+    }
+
+    public async Task<int> RevokeDeviceFamiliesAsync(
+        string authAccountId, string deviceId, string reason, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId)) return 0;
+
+        var familyIds = await db.RefreshTokenRecords
+            .AsNoTracking()
+            .Where(t => t.ApplicationUserAccountId == authAccountId
+                && t.DeviceId == deviceId
+                && t.RevokedAt == null)
+            .Select(t => t.FamilyId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var revoked = 0;
+        foreach (var familyId in familyIds)
+        {
+            if (await RevokeFamilyAsync(authAccountId, familyId, reason, ct))
+            {
+                revoked++;
+            }
+        }
+
+        return revoked;
     }
 
     private async Task RevokePlaybackAndNotifyAsync(
@@ -70,10 +98,19 @@ public sealed class SessionRevocationService(
         var learnerId = await db.Users.AsNoTracking()
             .Where(u => u.AuthAccountId == authAccountId)
             .Select(u => u.Id)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(CancellationToken.None);
         if (!string.IsNullOrWhiteSpace(learnerId))
         {
-            await playbackSessions.RevokeAllForUserAsync(learnerId, ct);
+            try
+            {
+                await playbackSessions.RevokeAllForUserAsync(learnerId, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // Token-family invalidation and audit evidence remain the hard
+                // boundary even if a playback store is temporarily unavailable.
+                logger.LogWarning(ex, "Failed to revoke playback sessions for account {AuthAccountId}", authAccountId);
+            }
         }
 
         foreach (var familyId in familyIds)
@@ -83,13 +120,16 @@ public sealed class SessionRevocationService(
                 SecurityEventKinds.SessionRevoked,
                 sessionFamilyId: familyId,
                 details: new { reason },
-                cancellationToken: ct);
+                cancellationToken: CancellationToken.None);
+
+            var message = RevocationMessage(reason);
+            await WriteSystemAuditAsync(authAccountId, familyId, reason, message, CancellationToken.None);
 
             try
             {
                 await notificationHub.Clients
                     .Group(NotificationHub.SessionFamilyGroup(familyId))
-                    .SendAsync("session_revoked", new { reason }, ct);
+                    .SendAsync("session_revoked", new { reason, message }, ct);
             }
             catch (Exception ex)
             {
@@ -101,4 +141,30 @@ public sealed class SessionRevocationService(
             }
         }
     }
+
+    private async Task WriteSystemAuditAsync(
+        string authAccountId, Guid familyId, string reason, string? message, CancellationToken ct)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = timeProvider.GetUtcNow(),
+            ActorId = "security-system",
+            ActorName = "Security System",
+            Action = message is null ? "Session Revoked" : "Device Session Revoked",
+            ResourceType = "AuthAccount",
+            ResourceId = authAccountId,
+            Details = $"Session family {familyId} was revoked automatically (reason: {reason}). {message}".Trim(),
+        });
+        await db.SaveChangesAsync(CancellationToken.None);
+    }
+
+    private static string? RevocationMessage(string reason) => reason switch
+    {
+        "device_replaced" => "This session was signed out because a new device was approved for this account under the one-device security rule.",
+        "device_limit_replaced" => "This session was signed out because the account's device limit was reached and a newer device was approved.",
+        "device_limit_reduced" => "This session was signed out because an administrator reduced the allowed device limit for this account.",
+        "admin_device_revoke" => "This session was signed out because an administrator revoked its device approval.",
+        _ => null,
+    };
 }

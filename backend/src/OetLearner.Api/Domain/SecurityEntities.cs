@@ -48,7 +48,7 @@ public class SecurityEvent
     public string? UserAgent { get; set; }
 
     /// <summary>web | desktop | capacitor-android | capacitor-ios, from X-OET-Client-Platform.</summary>
-    [MaxLength(16)]
+    [MaxLength(32)]
     public string? Platform { get; set; }
 
     /// <summary>Refresh-token family id (the identity that survives rotation —
@@ -90,6 +90,7 @@ public static class SecurityEventKinds
     public const string DeviceTrusted = "device.trusted";
     public const string DeviceRevoked = "device.revoked";
     public const string DeviceChangeBlockedCooldown = "device.change_blocked_cooldown";
+    public const string DeviceTrustRejected = "device.trust_rejected";
     public const string DeviceAdminReset = "device.admin_reset";
 
     public const string PlaybackSessionStarted = "playback.session_started";
@@ -102,6 +103,7 @@ public static class SecurityEventKinds
 
     public const string AdminSessionRevoked = "admin.session_revoked";
     public const string AdminDeviceReset = "admin.device_reset";
+    public const string AdminDeviceLimitOverride = "admin.device_limit_override";
     public const string AdminAccountSuspended = "admin.account_suspended";
     public const string AdminAccountReactivated = "admin.account_reactivated";
     public const string AdminPlaybackBlocked = "admin.playback_blocked";
@@ -126,10 +128,10 @@ public static class SecurityEventKinds
         AuthSignInSucceeded, AuthSignInFailed, AuthSignOut, AuthMfaFailed,
         AuthRefreshReuseDetected, AuthRefreshDeviceMismatch, AuthTokenRejected,
         SessionCreated, SessionRevoked, SessionRevokedAll,
-        DeviceTrustRequested, DeviceTrusted, DeviceRevoked, DeviceChangeBlockedCooldown, DeviceAdminReset,
+        DeviceTrustRequested, DeviceTrusted, DeviceRevoked, DeviceChangeBlockedCooldown, DeviceTrustRejected, DeviceAdminReset,
         PlaybackSessionStarted, PlaybackSessionsRevoked,
         RiskCountryChanged, RiskImpossibleTravel, RiskStepUpRequired, RiskSignInBlocked,
-        AdminSessionRevoked, AdminDeviceReset, AdminAccountSuspended, AdminAccountReactivated, AdminPlaybackBlocked,
+        AdminSessionRevoked, AdminDeviceReset, AdminDeviceLimitOverride, AdminAccountSuspended, AdminAccountReactivated, AdminPlaybackBlocked,
         VideoProtectionEngaged, VideoProtectionUnavailable, VideoCaptureDetected, VideoScreenshotDetected,
         VideoWatermarkTampered, VideoDevtoolsSuspected, VideoVisibilityHidden, VideoFocusLost, VideoIntegritySignal,
     };
@@ -142,7 +144,7 @@ public static class SecurityEventKinds
     /// <summary>Default severity per kind when the caller does not override one.</summary>
     public static string DefaultSeverity(string kind) => kind switch
     {
-        AuthSignInFailed or AuthMfaFailed or DeviceChangeBlockedCooldown or RiskCountryChanged
+        AuthSignInFailed or AuthMfaFailed or DeviceChangeBlockedCooldown or DeviceTrustRejected or RiskCountryChanged
             or RiskStepUpRequired => "warning",
         AuthRefreshReuseDetected or AuthRefreshDeviceMismatch or RiskImpossibleTravel or RiskSignInBlocked
             or AdminAccountSuspended or AdminPlaybackBlocked => "critical",
@@ -156,13 +158,13 @@ public static class SecurityEventKinds
 }
 
 /// <summary>
-/// One trusted device per account (Course Platform Security Requirements
-/// §3.2). Outlives sessions — a session (RefreshTokenRecord) rotates every
-/// ~15 minutes, but the device it belongs to persists until the account
-/// holder (or an admin) trusts a different one. Only one row per account
-/// should have <see cref="RevokedAt"/> null at a time; enforced in
-/// application code (<c>TrustedDeviceService</c>) rather than a DB
-/// constraint, for portability with the SQLite test provider.
+/// An approved client identity for an account (Course Platform Security
+/// Requirements §3.2). It outlives sessions — a session
+/// (RefreshTokenRecord) rotates every ~15 minutes, while this identity remains
+/// approved until the account policy replaces or revokes it. The enforced
+/// default is one active identity; a positive per-learner admin override may
+/// retain more. The server counts these stable identities consistently across
+/// web browser profiles and official app installations.
 /// </summary>
 [Index(nameof(ApplicationUserAccountId))]
 public class TrustedDevice

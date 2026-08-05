@@ -488,6 +488,10 @@ export async function getAdminUserDetailData(userId: string): Promise<AdminUserD
         lastSessionAt: toNullableString(securityRaw.lastSessionAt),
         lastSessionIp: toNullableString(securityRaw.lastSessionIp),
         lastSessionDevice: toNullableString(securityRaw.lastSessionDevice),
+        deviceVerificationExempt: toBooleanValue(securityRaw.deviceVerificationExempt),
+        maxDevicesOverride: securityRaw.maxDevicesOverride == null ? null : toNumberValue(securityRaw.maxDevicesOverride),
+        effectiveMaxDevices: toNumberValue(securityRaw.effectiveMaxDevices, 1),
+        activeDeviceCount: toNumberValue(securityRaw.activeDeviceCount),
       }
     : null;
   const subscription = raw.subscription

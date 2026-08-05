@@ -26,6 +26,24 @@ required.
 | `videoProtection.blockRootedDevices` / `videoProtection.blockEmulators` | `true` / `true` | Reject new playback sessions from clients reporting root/jailbreak or emulator integrity signals (`403 DEVICE_BLOCKED`). Clients that send no signal (old shells, desktop, web) fail open and are logged. | Flip off temporarily if the heuristics produce false positives on some handset population. |
 | `dataRetention.securityEventsDays` | `180` | How long `SecurityEvents` rows are kept. | Shorten if storage becomes a concern; this table is far higher volume than `AuditEvents` (every sign-in, refresh, playback start). |
 
+## 2. Exact anti-sharing device rule
+
+The default is one approved client identity per learner. Browser tabs and
+windows in the same browser profile count once. Each official Android, iOS,
+Windows, or macOS installation counts as one identity using its persisted
+secure storage. A browser profile and an official app on the same physical
+computer or phone count separately because the server cannot prove hardware
+equivalence. Clearing browser storage or reinstalling an app creates a new
+identity and may require email OTP approval.
+
+An admin can set a per-learner override from 1 through 5 approved identities;
+there is no unlimited value. Lowering the limit revokes the oldest identities
+and their sessions immediately. The override does not disable the global
+single-active-session rule, so it never permits simultaneous account sharing.
+The rolling device-change cooldown is separate from this limit. See
+`docs/SECURITY-DEVICE-POLICY.md` for the complete client matrix and recovery
+behavior.
+
 To change a toggle:
 
 ```bash
@@ -34,6 +52,12 @@ curl -X PUT https://api.oetwithdrhesham.co.uk/v1/admin/runtime-settings \
   -H "Content-Type: application/json" \
   -d '{"security": {"riskMode": "enforce"}}'
 ```
+
+The anti-sharing device policy is a hard invariant: while
+`security.trustedDeviceRequired` is enabled, the single-active-session
+boundary remains enforced even if the legacy single-session switch is turned
+off. This prevents an approved-device override from permitting simultaneous
+learner use.
 
 ## 2. Reading the security event feed
 
@@ -47,9 +71,11 @@ paginated via `page`/`pageSize`. Kinds you'll see:
   again; treat as a strong compromise signal, the whole session family was
   auto-revoked.
 - `session.created` / `session.revoked` / `session.revoked_all`
-- `device.trust_requested` / `device.trusted` / `device.revoked` /
-  `device.change_blocked_cooldown` / `device.admin_reset` — spec §3.2
-  trusted-device lifecycle.
+- `device.trust_requested` / `device.trusted` / `device.trust_rejected` /
+  `device.revoked` / `device.change_blocked_cooldown` / `device.admin_reset` —
+  trusted-device lifecycle. `admin.device_limit_override` records a bounded
+  per-learner override. Device approval, rejection, automatic replacement,
+  and session sign-out also create AuditEvent evidence.
 - `auth.refresh_device_mismatch` — a refresh token was presented from a
   device other than the one it was minted on; the family was revoked.
 - `playback.session_started`

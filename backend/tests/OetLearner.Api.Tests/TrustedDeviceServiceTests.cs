@@ -8,8 +8,8 @@ namespace OetLearner.Api.Tests;
 /// <summary>
 /// Direct unit coverage for <see cref="TrustedDeviceService"/> — the real
 /// bootstrap/trust/reset/resolve device logic backing the currently
-/// dark-launched "trusted device" feature (SecurityTrustedDeviceRequired
-/// defaults to false in production). <see cref="AuthFlowsTests"/> only ever
+/// enforced "trusted device" feature (SecurityTrustedDeviceRequired defaults
+/// to true in the mandatory production profile). <see cref="AuthFlowsTests"/> only ever
 /// exercises a hand-rolled no-op stub of this service, so none of the
 /// branches below previously had any automated coverage.
 /// </summary>
@@ -56,6 +56,24 @@ public class TrustedDeviceServiceTests
         return device;
     }
 
+    private static async Task SeedAccountAsync(
+        LearnerDbContext db,
+        string authAccountId,
+        int? maxDevicesOverride)
+    {
+        db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+        {
+            Id = authAccountId,
+            Email = $"{authAccountId}@example.test",
+            NormalizedEmail = $"{authAccountId}@EXAMPLE.TEST".ToUpperInvariant(),
+            PasswordHash = "test-hash",
+            MaxDevicesOverride = maxDevicesOverride,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
     // ---------------------------------------------------------------
     // ResolveForSignInAsync
     // ---------------------------------------------------------------
@@ -72,7 +90,8 @@ public class TrustedDeviceServiceTests
         var result = await service.ResolveForSignInAsync(AccountId, deviceId, changeWindowDays: 30, changeMaxPerWindow: 3, default);
 
         Assert.Equal(DeviceResolution.NoDeviceId, result.Resolution);
-        Assert.Empty(events.Calls);
+        Assert.Single(events.Calls);
+        Assert.Equal(SecurityEventKinds.DeviceTrustRejected, events.Calls[0].Kind);
         Assert.Empty(sessions.RevokeAllCalls);
 
         var reloaded = await db.TrustedDevices.AsNoTracking().SingleAsync(d => d.Id == seeded.Id);
@@ -153,10 +172,11 @@ public class TrustedDeviceServiceTests
         var result = await service.ResolveForSignInAsync(AccountId, "device-c", changeWindowDays: 30, changeMaxPerWindow: 2, default);
 
         Assert.Equal(DeviceResolution.CooldownBlocked, result.Resolution);
-        var logged = Assert.Single(events.Calls);
-        Assert.Equal(SecurityEventKinds.DeviceChangeBlockedCooldown, logged.Kind);
-        Assert.Equal(AccountId, logged.AuthAccountId);
-        Assert.Equal("device-c", logged.DeviceId);
+        Assert.Contains(events.Calls, logged =>
+            logged.Kind == SecurityEventKinds.DeviceChangeBlockedCooldown
+            && logged.AuthAccountId == AccountId
+            && logged.DeviceId == "device-c");
+        Assert.Contains(events.Calls, logged => logged.Kind == SecurityEventKinds.DeviceTrustRejected);
         Assert.Empty(sessions.RevokeAllCalls);
         Assert.Equal(2, await db.TrustedDevices.CountAsync(d => d.ApplicationUserAccountId == AccountId));
     }
@@ -174,6 +194,23 @@ public class TrustedDeviceServiceTests
         Assert.Equal(DeviceResolution.OtpRequired, result.Resolution);
         var logged = Assert.Single(events.Calls);
         Assert.Equal(SecurityEventKinds.DeviceTrustRequested, logged.Kind);
+        Assert.Empty(sessions.RevokeAllCalls);
+    }
+
+    [Fact]
+    public async Task ResolveForSignInAsync_PerLearnerDeviceSlotsDoNotChangeRollingCooldownBudget()
+    {
+        var (db, service, clock, sessions, events) = Build();
+        await SeedAccountAsync(db, AccountId, maxDevicesOverride: 5);
+        await SeedDeviceAsync(db, AccountId, "device-a", clock.GetUtcNow().AddDays(-5), revokedAt: clock.GetUtcNow().AddDays(-3));
+        await SeedDeviceAsync(db, AccountId, "device-b", clock.GetUtcNow().AddDays(-3));
+
+        var result = await service.ResolveForSignInAsync(
+            AccountId, "device-c", changeWindowDays: 30, changeMaxPerWindow: 2, default);
+
+        Assert.Equal(DeviceResolution.CooldownBlocked, result.Resolution);
+        Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceChangeBlockedCooldown);
+        Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceTrustRejected);
         Assert.Empty(sessions.RevokeAllCalls);
     }
 
@@ -238,7 +275,7 @@ public class TrustedDeviceServiceTests
         var revokeCall = Assert.Single(sessions.RevokeAllCalls);
         Assert.Equal(AccountId, revokeCall.AuthAccountId);
         Assert.Null(revokeCall.ExceptFamilyId);
-        Assert.Equal("device_trusted", revokeCall.Reason);
+        Assert.Equal("device_replaced", revokeCall.Reason);
 
         Assert.Equal(2, events.Calls.Count);
         Assert.Contains(events.Calls, c => c.Kind == SecurityEventKinds.DeviceTrusted && c.DeviceId == "device-new");
@@ -280,6 +317,68 @@ public class TrustedDeviceServiceTests
         Assert.Contains(revokedEvents, c => c.DeviceId == "device-b");
     }
 
+    [Fact]
+    public async Task TrustDeviceAsync_PositiveOverrideRetainsApprovedIdentitiesUntilTheOverrideIsFull()
+    {
+        var (db, service, clock, sessions, events) = Build();
+        await SeedAccountAsync(db, AccountId, maxDevicesOverride: 2);
+        await SeedDeviceAsync(db, AccountId, "device-old", clock.GetUtcNow());
+
+        await service.TrustDeviceAsync(AccountId, "device-new", "App", "capacitor-ios", "otp_verified", default);
+
+        var active = await db.TrustedDevices.AsNoTracking()
+            .Where(d => d.ApplicationUserAccountId == AccountId && d.RevokedAt == null)
+            .Select(d => d.DeviceId)
+            .ToListAsync();
+        Assert.Equal(2, active.Count);
+        Assert.Contains("device-old", active);
+        Assert.Contains("device-new", active);
+        Assert.Empty(sessions.RevokeAllCalls);
+        Assert.Empty(sessions.RevokeDeviceCalls);
+        Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceTrusted && call.DeviceId == "device-new");
+    }
+
+    [Fact]
+    public async Task TrustDeviceAsync_PositiveOverrideAtCapacityRevokesOldestIdentityAndItsSessions()
+    {
+        var (db, service, clock, sessions, events) = Build();
+        await SeedAccountAsync(db, AccountId, maxDevicesOverride: 2);
+        await SeedDeviceAsync(db, AccountId, "device-oldest", clock.GetUtcNow().AddMinutes(-20));
+        await SeedDeviceAsync(db, AccountId, "device-recent", clock.GetUtcNow().AddMinutes(-10));
+
+        await service.TrustDeviceAsync(AccountId, "device-new", null, "web", "otp_verified", default);
+
+        var active = await db.TrustedDevices.AsNoTracking()
+            .Where(d => d.ApplicationUserAccountId == AccountId && d.RevokedAt == null)
+            .Select(d => d.DeviceId)
+            .ToListAsync();
+        Assert.Equal(2, active.Count);
+        Assert.DoesNotContain("device-oldest", active);
+        Assert.Contains("device-recent", active);
+        Assert.Contains("device-new", active);
+        var revokeCall = Assert.Single(sessions.RevokeDeviceCalls);
+        Assert.Equal("device-oldest", revokeCall.DeviceId);
+        Assert.Equal("device_limit_replaced", revokeCall.Reason);
+        Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceRevoked && call.DeviceId == "device-oldest");
+    }
+
+    [Fact]
+    public async Task EnforceDeviceLimitAsync_LoweringLimitRevokesOldestIdentityAndItsSessions()
+    {
+        var (db, service, clock, sessions, events) = Build();
+        await SeedAccountAsync(db, AccountId, maxDevicesOverride: 3);
+        await SeedDeviceAsync(db, AccountId, "device-oldest", clock.GetUtcNow().AddMinutes(-20));
+        await SeedDeviceAsync(db, AccountId, "device-recent", clock.GetUtcNow().AddMinutes(-10));
+
+        var revoked = await service.EnforceDeviceLimitAsync(AccountId, 1, default);
+
+        Assert.Equal(1, revoked);
+        Assert.Single(sessions.RevokeDeviceCalls);
+        Assert.Equal("device-oldest", sessions.RevokeDeviceCalls[0].DeviceId);
+        Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceRevoked && call.DeviceId == "device-oldest");
+        Assert.Equal(1, await db.TrustedDevices.CountAsync(d => d.ApplicationUserAccountId == AccountId && d.RevokedAt == null));
+    }
+
     // ---------------------------------------------------------------
     // ResetDeviceAsync
     // ---------------------------------------------------------------
@@ -304,7 +403,7 @@ public class TrustedDeviceServiceTests
         var revokeCall = Assert.Single(sessions.RevokeAllCalls);
         Assert.Equal(AccountId, revokeCall.AuthAccountId);
         Assert.Null(revokeCall.ExceptFamilyId);
-        // Unlike TrustDeviceAsync's hardcoded "device_trusted" reason, the
+        // Unlike TrustDeviceAsync's replacement reason, the
         // admin-reset path passes the caller-supplied reason straight through.
         Assert.Equal("owner_requested_reset", revokeCall.Reason);
 
@@ -386,6 +485,7 @@ public class TrustedDeviceServiceTests
     private sealed class RecordingSessionRevocationService : ISessionRevocationService
     {
         public List<(string AuthAccountId, Guid? ExceptFamilyId, string Reason)> RevokeAllCalls { get; } = new();
+        public List<(string AuthAccountId, string DeviceId, string Reason)> RevokeDeviceCalls { get; } = new();
 
         public Task<int> RevokeAllFamiliesAsync(string authAccountId, Guid? exceptFamilyId, string reason, CancellationToken ct)
         {
@@ -394,7 +494,13 @@ public class TrustedDeviceServiceTests
         }
 
         public Task<bool> RevokeFamilyAsync(string authAccountId, Guid familyId, string reason, CancellationToken ct)
-            => throw new NotSupportedException("TrustedDeviceService only ever calls RevokeAllFamiliesAsync.");
+            => throw new NotSupportedException("TrustedDeviceService does not call single-family revocation directly.");
+
+        public Task<int> RevokeDeviceFamiliesAsync(string authAccountId, string deviceId, string reason, CancellationToken ct)
+        {
+            RevokeDeviceCalls.Add((authAccountId, deviceId, reason));
+            return Task.FromResult(0);
+        }
     }
 
     private sealed class RecordingSecurityEventLogger : ISecurityEventLogger

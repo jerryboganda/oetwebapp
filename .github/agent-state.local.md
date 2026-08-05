@@ -1,6 +1,6 @@
 # Agent State - Course platform security production completion
 
-Last updated: 2026-07-30
+Last updated: 2026-08-05
 
 ## Goal
 
@@ -9,6 +9,21 @@ Implement and production-verify the controls in
 evidence for platform limitations and external provider blockers.
 
 ## Implemented
+
+- Implemented the reference anti-sharing contract end to end: one approved
+  client identity by default, bounded admin override (1-5), OTP approval for
+  new identities, automatic replacement/revocation, family-wide sign-out,
+  refresh/access-token liveness enforcement, playback termination, clear
+  user-facing sign-out reasons, and SecurityEvent + AuditEvent evidence.
+- Defined the exact cross-platform count: browser profile tabs/windows count
+  once; each Android/iOS/Windows/macOS official app installation counts once;
+  a browser profile and app on the same hardware count separately because the
+  server cannot prove hardware equivalence. The exact policy is documented in
+  `docs/SECURITY-DEVICE-POLICY.md` and surfaced in admin and learner UI.
+- Added the learner limit migration and the SecurityEvents platform-width
+  migration required for canonical `capacitor-android`/`capacitor-ios` values.
+- Routed self-service family revocation through the central revocation service
+  and made device/session security decisions resilient to request disconnects.
 
 - Replaced learner-visible direct HLS URLs with 5-minute token-authenticated
   Bunny embed URLs, ready for MediaCage and never exposing the library key.
@@ -44,6 +59,12 @@ evidence for platform limitations and external provider blockers.
   stall and were terminated; the GitHub production build is the compile gate.
 - A focused ESLint retry also hit the host command timeout; no lint result was
   claimed.
+- Final targeted ESLint checks completed with 0 errors (existing React hook
+  warnings only) for the admin security/user pages, sessions page, auth and
+  notification paths, device-id client, and API type helpers.
+- `git diff --check` passed. The bounded API build emitted package/vulnerability
+  warnings and then produced no compiler output for over two minutes, so it
+  was stopped; no green backend build is claimed from this host.
 
 ## External Blockers / Residual Evidence
 
@@ -61,7 +82,7 @@ evidence for platform limitations and external provider blockers.
 
 ## Next Step
 
-Commit explicit security files, push `main`, wait for the exact production
-workflow to succeed, then publish corrected desktop/Android releases from that
-SHA and verify active image SHAs, migration, runtime settings, health, updater
-metadata, and the installed Windows capture behavior.
+Stage only the explicit implementation paths (preserving `.codex/config.toml`
+and `.superpowers/`), commit, push `main`, and verify the blue/green production
+workflow. The owner still needs real-device/manual acceptance for same-hardware
+browser/app counting and cross-platform sign-out behavior.

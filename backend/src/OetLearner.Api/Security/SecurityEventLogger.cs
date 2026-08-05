@@ -98,7 +98,7 @@ public sealed class SecurityEventLogger(
         return (
             Truncate(ip, 64),
             Truncate(string.IsNullOrWhiteSpace(userAgent) ? null : userAgent, 256),
-            Truncate(string.IsNullOrWhiteSpace(platform) ? null : platform, 16),
+            Truncate(string.IsNullOrWhiteSpace(platform) ? null : platform, 32),
             Truncate(string.IsNullOrWhiteSpace(country) ? null : country, 8));
     }
 

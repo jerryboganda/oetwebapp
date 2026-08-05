@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { AlertCircle, AlertTriangle, Info, ShieldAlert } from 'lucide-react';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
@@ -41,11 +42,15 @@ const KIND_OPTIONS = [
   'auth.sign_in_succeeded', 'auth.sign_in_failed', 'auth.sign_out', 'auth.mfa_failed',
   'auth.refresh_reuse_detected', 'auth.refresh_device_mismatch', 'auth.token_rejected',
   'session.created', 'session.revoked', 'session.revoked_all',
-  'device.trust_requested', 'device.trusted', 'device.revoked', 'device.change_blocked_cooldown', 'device.admin_reset',
+  'device.trust_requested', 'device.trusted', 'device.trust_rejected', 'device.revoked', 'device.change_blocked_cooldown', 'device.admin_reset',
   'playback.session_started', 'playback.sessions_revoked',
   'risk.country_changed', 'risk.impossible_travel', 'risk.step_up_required', 'risk.sign_in_blocked',
-  'admin.session_revoked', 'admin.device_reset', 'admin.account_suspended', 'admin.playback_blocked',
+  'admin.session_revoked', 'admin.device_reset', 'admin.device_limit_override', 'admin.account_suspended', 'admin.playback_blocked',
 ];
+
+function maskDeviceId(value: string): string {
+  return value.length <= 10 ? value : `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
 
 export default function AdminSecurityPage() {
   const { isAuthenticated, role } = useAdminAuth();
@@ -216,6 +221,38 @@ export default function AdminSecurityPage() {
         </CardContent>
       ) : null}
 
+      <CardContent className="pb-0">
+        <section
+          aria-labelledby="anti-sharing-policy-heading"
+          className="rounded-admin-lg border border-admin-border border-l-4 border-l-[var(--admin-primary)] bg-admin-bg-subtle p-4 sm:p-5"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-fg-muted">Account-sharing control</p>
+              <h2 id="anti-sharing-policy-heading" className="mt-1 text-base font-semibold text-admin-fg-strong">Required anti-sharing behaviour</h2>
+            </div>
+            <Badge variant="success">Enforced</Badge>
+          </div>
+          <ul className="mt-4 grid gap-2 text-sm text-admin-fg-muted md:grid-cols-2">
+            <li>One approved client identity per learner by default; a fresh identity must complete email OTP approval.</li>
+            <li>When a new identity is approved at capacity, the replaced identity is revoked and its live sessions are signed out.</li>
+            <li>The signed-out client receives a clear reason explaining that a newer device was approved.</li>
+            <li>Admins can set a positive per-learner override from 1 to 5 approved identities.</li>
+            <li>Approvals, rejections, revocations, automatic sign-outs, and overrides are recorded in Security Events and Audit Logs.</li>
+            <li>The same stable identity contract is used by browser, Android, iOS, Windows, and macOS clients.</li>
+          </ul>
+          <div className="mt-4 rounded-admin border border-[var(--admin-primary)]/30 bg-[var(--admin-primary)]/5 p-3 text-sm">
+            <p className="font-semibold text-admin-fg-strong">Exact rule used by the platform</p>
+            <p className="mt-1 text-admin-fg-muted">
+              A browser profile counts as one client identity and its tabs/windows count once. Each official app installation counts as one identity using its secure OS storage. A browser profile and an official app on the same physical computer or phone count separately because the server cannot prove hardware equivalence. Reinstalling an app or clearing browser storage creates a new identity and may require approval. Increasing the approved-identity limit does not disable the global single-active-session rule, so it does not permit simultaneous account use.
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-admin-fg-muted">
+            Review the corresponding system and admin actions in <Link className="font-medium text-[var(--admin-primary)] underline" href="/admin/audit-logs?search=Device">Audit Logs</Link>.
+          </p>
+        </section>
+      </CardContent>
+
       <CardHeader className="flex-col items-start gap-1">
         <CardTitle>Security Events</CardTitle>
         <CardDescription>Auth, session, device, risk, and admin-action events — filter by kind, severity, or account.</CardDescription>
@@ -300,7 +337,7 @@ export default function AdminSecurityPage() {
               <p className="text-xs text-admin-fg-muted">{selected.userAgent ?? 'no user agent'}</p>
               {selected.platform ? <p className="text-xs text-admin-fg-muted">Platform: {selected.platform}</p> : null}
               {selected.sessionFamilyId ? <p className="font-mono text-xs text-admin-fg-muted">Family: {selected.sessionFamilyId}</p> : null}
-              {selected.deviceId ? <p className="font-mono text-xs text-admin-fg-muted">Device: {selected.deviceId}</p> : null}
+              {selected.deviceId ? <p className="font-mono text-xs text-admin-fg-muted">Device: {maskDeviceId(selected.deviceId)}</p> : null}
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">Details</p>

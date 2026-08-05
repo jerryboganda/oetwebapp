@@ -38,34 +38,36 @@ async function initNativeDeviceId(): Promise<void> {
     cachedDeviceId = id;
   } catch {
     // Secure storage unavailable — leave cachedDeviceId null; the header is
-    // simply omitted and the backend fails open for this request.
+    // simply omitted; enforced sign-in fails closed for this request.
   }
 }
 
 /**
  * Best-effort synchronous read. On web this resolves (and persists) inline
  * on first call. On native, secure storage is async — the first call(s)
- * before initialization completes return null (header omitted, backend
- * fails open); once `initNativeDeviceId` resolves, subsequent calls return
- * the cached id.
+ * before initialization completes return null; request-safe callers await the
+ * initialization and enforced sign-in fails closed if storage cannot provide
+ * an identity.
  */
 export function getDeviceId(): string | null {
   if (cachedDeviceId) return cachedDeviceId;
   if (typeof window === 'undefined') return null;
 
   if (!Capacitor.isNativePlatform()) {
-    let id = window.localStorage.getItem(WEB_STORAGE_KEY);
-    if (!id) {
-      id = generateId();
-      try {
+    try {
+      let id = window.localStorage.getItem(WEB_STORAGE_KEY);
+      if (!id) {
+        id = generateId();
         window.localStorage.setItem(WEB_STORAGE_KEY, id);
-      } catch {
-        // Storage unavailable (private browsing quirks) — still usable for
-        // this page load, just not persisted across sessions.
       }
+      cachedDeviceId = id;
+      return cachedDeviceId;
+    } catch {
+      // Storage or entropy unavailable: return null so the enforced backend
+      // policy rejects the request instead of creating a fresh identity on
+      // every page load.
+      return null;
     }
-    cachedDeviceId = id;
-    return cachedDeviceId;
   }
 
   nativeInitPromise ??= initNativeDeviceId();

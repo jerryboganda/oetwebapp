@@ -1685,6 +1685,7 @@ export interface ActiveSession {
   isCurrent: boolean;
   countryCode?: string | null;
   platform?: string | null;
+  deviceId?: string | null;
 }
 
 /** The account's currently-trusted device (security spec §3.2) — null until
@@ -1695,6 +1696,8 @@ export interface TrustedDeviceSelf {
   trustedAt: string;
   lastSeenAt: string | null;
   isCurrentDevice: boolean;
+  activeDeviceCount?: number;
+  maxDevices?: number;
 }
 
 export async function fetchActiveSessions(): Promise<ActiveSession[]> {

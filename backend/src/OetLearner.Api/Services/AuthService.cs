@@ -868,7 +868,8 @@ public sealed class AuthService(
             t.CreatedAt,
             t.Id == currentSessionId,
             t.CountryCode,
-            t.Platform
+            t.Platform,
+            t.DeviceId
         )).ToList();
 
         return new ActiveSessionListResponse(sessions);
@@ -881,20 +882,27 @@ public sealed class AuthService(
         ClaimsPrincipal principal, CancellationToken cancellationToken = default)
     {
         var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
-        var device = await trustedDeviceService.GetActiveDeviceAsync(account.Id, cancellationToken);
+        var devices = await trustedDeviceService.GetActiveDevicesAsync(account.Id, cancellationToken);
+        var presentedDeviceId = httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString()?.Trim();
+        var device = devices.FirstOrDefault(candidate =>
+            !string.IsNullOrWhiteSpace(presentedDeviceId)
+            && string.Equals(candidate.DeviceId, presentedDeviceId, StringComparison.Ordinal))
+            ?? devices.FirstOrDefault();
         if (device is null)
         {
             return null;
         }
 
-        var presentedDeviceId = httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString();
+        var maxDevices = await trustedDeviceService.GetEffectiveMaxDevicesAsync(account.Id, cancellationToken);
         return new TrustedDeviceSelfResponse(
             device.DeviceName,
             device.Platform,
             device.TrustedAt,
             device.LastSeenAt,
             !string.IsNullOrWhiteSpace(presentedDeviceId)
-                && string.Equals(device.DeviceId, presentedDeviceId, StringComparison.Ordinal));
+                && string.Equals(device.DeviceId, presentedDeviceId.Trim(), StringComparison.Ordinal),
+            devices.Count,
+            maxDevices);
     }
 
     public async Task RevokeSessionAsync(ClaimsPrincipal principal, Guid sessionId, CancellationToken cancellationToken = default)
@@ -919,47 +927,45 @@ public sealed class AuthService(
             throw ApiException.NotFound("session_not_found", "Session not found or already revoked.");
         }
 
-        token.RevokedAt = timeProvider.GetUtcNow();
-        await db.SaveChangesAsync(cancellationToken);
-        await securityEventLogger.TryLogAsync(
-            account.Id,
-            SecurityEventKinds.SessionRevoked,
-            sessionFamilyId: token.FamilyId,
-            cancellationToken: cancellationToken);
+        // Revoke the whole refresh-token family, not just the currently listed
+        // row. Rotation leaves historical rows in the family; flipping one row
+        // would let a still-live rotated token continue the session.
+        await sessionRevocationService.RevokeFamilyAsync(
+            account.Id, token.FamilyId, "user_session_revoke", cancellationToken);
     }
 
     public async Task<int> RevokeAllOtherSessionsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
     {
         var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
-        var now = timeProvider.GetUtcNow();
-
         var currentSessionId = Guid.TryParse(
             principal.FindFirstValue(AuthTokenService.SessionIdClaimType), out var sid)
             ? sid
             : (Guid?)null;
 
-        var tokens = await db.RefreshTokenRecords
-            .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null && t.ExpiresAt > now)
-            .ToListAsync(cancellationToken);
-
-        var count = 0;
-        foreach (var token in tokens)
+        Guid? currentFamilyId = null;
+        if (currentSessionId is not null)
         {
-            if (token.Id == currentSessionId) continue;
-            token.RevokedAt = now;
-            count++;
+            currentFamilyId = await db.RefreshTokenRecords
+                .AsNoTracking()
+                .Where(t => t.ApplicationUserAccountId == account.Id && t.Id == currentSessionId.Value)
+                .Select(t => (Guid?)t.FamilyId)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-        if (count > 0)
+        // The revocation service handles family-wide invalidation, playback
+        // termination, push notification, and the corresponding audit rows.
+        var revokedFamilyCount = await sessionRevocationService.RevokeAllFamiliesAsync(
+            account.Id, currentFamilyId, "user_revoke_all", cancellationToken);
+        if (revokedFamilyCount > 0)
         {
             await securityEventLogger.TryLogAsync(
                 account.Id,
                 SecurityEventKinds.SessionRevokedAll,
-                details: new { revokedCount = count },
+                details: new { revokedFamilyCount },
                 cancellationToken: cancellationToken);
         }
-        return count;
+
+        return revokedFamilyCount;
     }
 
     private async Task<AuthSessionResponse> CreateSessionAsync(
@@ -1023,7 +1029,8 @@ public sealed class AuthService(
         }
 
         var platform = httpContext.Request.Headers[ClientPlatformHeader].ToString();
-        return platform.Equals("capacitor", StringComparison.OrdinalIgnoreCase)
+        return platform.StartsWith("capacitor-", StringComparison.OrdinalIgnoreCase)
+            || platform.Equals("capacitor", StringComparison.OrdinalIgnoreCase)
             || platform.Equals("desktop", StringComparison.OrdinalIgnoreCase)
             || platform.Equals("native", StringComparison.OrdinalIgnoreCase);
     }
@@ -1118,7 +1125,27 @@ public sealed class AuthService(
                 SecurityEventKinds.AuthSignOut,
                 sessionFamilyId: familyId,
                 cancellationToken: cancellationToken);
+            await LogAccountSignOutAuditAsync(
+                activeFamilyTokens[0].ApplicationUserAccountId,
+                familyId);
         }
+    }
+
+    private async Task LogAccountSignOutAuditAsync(string authAccountId, Guid familyId)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = timeProvider.GetUtcNow(),
+            ActorId = authAccountId,
+            ActorAuthAccountId = authAccountId,
+            ActorName = "Account Holder",
+            Action = "Signed Out",
+            ResourceType = "AuthAccount",
+            ResourceId = authAccountId,
+            Details = $"Refresh-token session family {familyId} was signed out by the account holder.",
+        });
+        await db.SaveChangesAsync(CancellationToken.None);
     }
 
     private string? ReadRefreshCookie()
@@ -1160,6 +1187,7 @@ public sealed class AuthService(
             if (string.IsNullOrWhiteSpace(countryCode) || countryCode.Length > 8) countryCode = null;
             deviceId = httpContext.Request.Headers["X-OET-Device-Id"].ToString();
             if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128) deviceId = null;
+            else deviceId = deviceId.Trim();
         }
         var platform = httpContext?.Request.Headers["X-OET-Client-Platform"].ToString();
         if (string.IsNullOrWhiteSpace(platform) || platform.Length > 32) platform = null;
@@ -1195,11 +1223,11 @@ public sealed class AuthService(
             // still blocks outright regardless of device trust, since a
             // replayed/stolen session can present the same device id from a
             // different place.
-            var trustedDevice = deviceId is not null
-                ? await trustedDeviceService.GetActiveDeviceAsync(account.Id, cancellationToken)
-                : null;
-            var deviceAlreadyTrusted = trustedDevice is not null
-                && string.Equals(trustedDevice.DeviceId, deviceId, StringComparison.Ordinal);
+            var trustedDevices = deviceId is not null
+                ? await trustedDeviceService.GetActiveDevicesAsync(account.Id, cancellationToken)
+                : Array.Empty<TrustedDevice>();
+            var deviceAlreadyTrusted = trustedDevices.Any(trustedDevice =>
+                string.Equals(trustedDevice.DeviceId, deviceId, StringComparison.Ordinal));
 
             // §3.3 country allow-list — an independent control that works even
             // with the risk engine off. Sign-ins with no CF-IPCountry (local
@@ -1323,6 +1351,10 @@ public sealed class AuthService(
                         throw ApiException.Forbidden(
                             "device_id_required",
                             "This app must identify the device before signing in. Update the app and try again.");
+                    case DeviceResolution.InvalidDeviceId:
+                        throw ApiException.Forbidden(
+                            "device_id_invalid",
+                            "This app sent an invalid device identity. Update the app and try again.");
                     default:
                         break;
                 }
@@ -1338,7 +1370,11 @@ public sealed class AuthService(
         if (familyId is null)
         {
             var securitySettings = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
-            if (securitySettings.SingleActiveSessionEnabled)
+            // The anti-sharing device policy is a hard invariant: an
+            // emergency toggle cannot turn a per-learner device override into
+            // simultaneous account access. The legacy switch still controls
+            // accounts that have device enforcement disabled.
+            if (securitySettings.SingleActiveSessionEnabled || securitySettings.TrustedDeviceRequired)
             {
                 await sessionRevocationService.RevokeAllFamiliesAsync(
                     account.Id, exceptFamilyId: resolvedFamilyId, reason: "new_sign_in", cancellationToken);

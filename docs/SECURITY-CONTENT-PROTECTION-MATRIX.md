@@ -112,17 +112,23 @@ Bunny library setting and a real playback/network test are recorded.
 
 ## 6. Device binding (spec §3.2) — shipped and enforced
 
-A `TrustedDevice` row per account; a client-generated device id
+A `TrustedDevice` row per approved client identity; a client-generated device id
 (`lib/device-id.ts`) sent as the `X-OET-Device-Id` header on every auth
-request; first sign-in from a device auto-trusts silently; a sign-in from a
-*different* device triggers an email one-time-code challenge (reusing the
+request; the default is one active identity per account; a sign-in from a
+*different* identity triggers an email one-time-code challenge (reusing the
 existing OTP infrastructure) — the learner completes it at
 `app/(auth)/device/verify`, mirroring the MFA-challenge flow exactly.
-Approving a new device revokes the previous device's sessions (via the same
+Approving a new identity at capacity revokes the replaced identity's sessions (via the same
 `SessionRevocationService` from §5) and logs the change; a cooldown blocks
 more than a handful of device changes in a rolling week. An admin can also
 reset an account's trusted device from `/admin/security` or the user detail
 page, which revokes its sessions the same way.
+
+An admin may set a positive per-learner approved-identity override from 1
+through 5. It retains more approved identities but does not disable the
+global single-active-session rule. Browser profiles, app installations, and
+same-hardware browser/app pairs are counted exactly as documented in
+`docs/SECURITY-DEVICE-POLICY.md`.
 
 `SecurityTrustedDeviceRequired` defaults on in the mandatory production
 profile. Before activation, the production OTP ledger showed successful
@@ -130,7 +136,8 @@ profile. Before activation, the production OTP ledger showed successful
 legacy active refresh tokens that have no device id so they cannot bypass
 the binding rule. Web/desktop device ids initialize synchronously; native
 auth requests await keychain/keystore initialization. A fresh enforced
-sign-in with no device id is rejected with `device_id_required`.
+sign-in with no device id is rejected with `device_id_required`; malformed
+identities use `device_id_invalid`, and both are recorded as device rejections.
 
 ## 7. IP / location risk signals (spec §3.3) — shipped and enforced
 

@@ -78,3 +78,14 @@ filter for.
    required. Also confirm an IPinfo outage does not prevent an otherwise
    low-risk learner sign-in.
 6. Re-run this whole report whenever a deferred item's status changes.
+
+## Device identity acceptance tests
+
+The exact counting rule is documented in `docs/SECURITY-DEVICE-POLICY.md`.
+
+| ID | Test | Expected result | Evidence |
+|---|---|---|---|
+| D1 | Use one browser profile with multiple tabs and windows. | One stable client identity and one approved-device slot. | `/admin/security` device events and the learner Sessions screen. |
+| D2 | Use a second browser profile and an official app on the same physical hardware. | Each profile/install is a separate identity; each new identity follows OTP and device-slot policy. | Device IDs/platforms in admin security detail, with masked values in the UI. |
+| D3 | Set an admin override from 1 to 2, approve two identities, then sign in on both sequentially. | Both identities may remain approved, but the earlier live session is still revoked by the global single-active-session rule. | `admin.device_limit_override`, `device.trusted`, and `session.revoked` events plus Audit Logs. |
+| D4 | Reduce the override while two identities are active. | The oldest identities over the new limit are revoked, associated sessions are signed out, and the client receives the reduction message. | `device.revoked`, `session.revoked`, and AuditEvent records. |

@@ -203,8 +203,13 @@ public static class AdminSecurityEndpoints
         userSecurity.MapPost("/device-limit", async (
                 string userId, SetCandidateDeviceLimitRequest request, HttpContext http, AdminSecurityService service, CancellationToken ct) =>
         {
-            var maxDevices = await service.SetCandidateDeviceLimitAsync(http.AdminId(), http.AdminName(), userId, request.MaxDevices, ct);
-            return Results.Ok(new { maxDevices });
+            var result = await service.SetCandidateDeviceLimitAsync(http.AdminId(), http.AdminName(), userId, request.MaxDevices, ct);
+            return Results.Ok(new
+            {
+                maxDevices = result.MaxDevices,
+                effectiveMaxDevices = result.EffectiveMaxDevices,
+                revokedDevices = result.RevokedDevices,
+            });
         })
             .WithAdminWrite("AdminSecurityWrite");
 

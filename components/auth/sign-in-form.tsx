@@ -65,7 +65,12 @@ function resolveSignOutReasonMessage(reason?: string | null): string | null {
     case 'signed_out_elsewhere':
       return 'You were signed out because this account signed in on another device.';
     case 'session_revoked':
-      return 'You were signed out because this session was revoked. Sign in again to continue.';
+      return 'You were signed out because account or device security revoked this session (for example, after a newer device was approved). Sign in again to continue.';
+    case 'device_replaced':
+    case 'device_limit_replaced':
+      return 'You were signed out because a new device was approved for this account under its device-sharing security rule. If this was not you, reset your password and contact support.';
+    case 'device_limit_reduced':
+      return 'You were signed out because an administrator reduced the allowed device limit for this account.';
     default:
       return null;
   }

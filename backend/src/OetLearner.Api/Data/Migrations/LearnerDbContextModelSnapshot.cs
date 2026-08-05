@@ -1923,6 +1923,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("LockoutUntil")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("MaxDevicesOverride")
+                        .HasColumnType("integer");
+
                     b.Property<string>("NormalizedEmail")
                         .IsRequired()
                         .HasMaxLength(256)

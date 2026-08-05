@@ -91,13 +91,13 @@ function withAuthHeader(headers: Headers, accessToken?: string | null): Headers 
   return headers;
 }
 
-function resolveClientPlatform(): 'web' | 'desktop' | 'capacitor' {
+function resolveClientPlatform(): 'web' | 'desktop' | 'capacitor-android' | 'capacitor-ios' {
   if (typeof window === 'undefined') {
     return 'web';
   }
 
   const w = window as unknown as Record<string, unknown> & {
-    Capacitor?: { isNativePlatform?: () => boolean };
+    Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
     desktopBridge?: unknown;
   };
 
@@ -106,7 +106,7 @@ function resolveClientPlatform(): 'web' | 'desktop' | 'capacitor' {
   }
 
   if (typeof w.Capacitor?.isNativePlatform === 'function' && w.Capacitor.isNativePlatform()) {
-    return 'capacitor';
+    return w.Capacitor.getPlatform?.() === 'ios' ? 'capacitor-ios' : 'capacitor-android';
   }
 
   return 'web';
@@ -142,7 +142,7 @@ function readCookie(name: string): string | null {
 
 function canSendBodyRefreshToken(): boolean {
   const platform = resolveClientPlatform();
-  return platform === 'capacitor' || platform === 'desktop';
+  return platform.startsWith('capacitor-') || platform === 'desktop';
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -285,7 +285,9 @@ function redirectToSignInAfterSessionLoss(reason?: string): void {
  * Clears local session state and hard-navigates to /sign-in with a reason
  * code the form renders as a banner (`signed_out_elsewhere` | `session_revoked`).
  */
-export function forceSignOutAndRedirect(reason: 'signed_out_elsewhere' | 'session_revoked'): void {
+export function forceSignOutAndRedirect(
+  reason: 'signed_out_elsewhere' | 'session_revoked' | 'device_replaced' | 'device_limit_replaced' | 'device_limit_reduced',
+): void {
   clearStoredSession();
   redirectToSignInAfterSessionLoss(reason);
 }
@@ -478,12 +480,8 @@ export async function fetchSignupCatalog(): Promise<SignupCatalog> {
 export function buildExternalAuthStartHref(provider: ExternalAuthProvider, nextPath?: string | null): string {
   let platform: string | undefined;
   if (typeof window !== 'undefined') {
-    const w = window as unknown as Record<string, unknown>;
-    if (w.desktopBridge) {
-      platform = 'desktop';
-    } else if (w.Capacitor && typeof (w as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === 'function' && (w as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor!.isNativePlatform!()) {
-      platform = 'capacitor';
-    }
+    const resolved = resolveClientPlatform();
+    platform = resolved === 'web' ? undefined : resolved;
   }
   return resolveUrl(
     buildPathWithQuery(`/v1/auth/external/${provider}/start`, {

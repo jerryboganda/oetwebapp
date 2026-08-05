@@ -270,6 +270,9 @@ export interface AdminUserSecuritySnapshot {
   lastSessionIp: string | null;
   lastSessionDevice: string | null;
   deviceVerificationExempt?: boolean;
+  maxDevicesOverride?: number | null;
+  effectiveMaxDevices?: number;
+  activeDeviceCount?: number;
 }
 
 export interface AdminUserSubscriptionSnapshot {
