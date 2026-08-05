@@ -83,8 +83,9 @@ export default function AndroidInstallPage() {
         <section className="mt-6 flex items-start gap-3 rounded-2xl border border-dashed border-border bg-surface p-5">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
           <p className="text-xs leading-5 text-muted">
+            {/* eslint-disable-next-line react/no-unescaped-entities -- legacy instructional quote */}
             The download alone will not update the app — Android always requires the manual "tap
-            the file, then Install" step above. If your download appears to finish but nothing
+            the file, then Install&quot; step above. If your download appears to finish but nothing
             happens next, that step is what&apos;s missing; it never happens automatically.
           </p>
         </section>
