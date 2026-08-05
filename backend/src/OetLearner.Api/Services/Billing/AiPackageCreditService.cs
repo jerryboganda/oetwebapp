@@ -619,6 +619,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             join subscription in db.Subscriptions.AsNoTracking()
                 on item.SubscriptionId equals subscription.Id
             where subscription.UserId == userId
+                  && (subscription.Status == SubscriptionStatus.Active
+                      || subscription.Status == SubscriptionStatus.Trial
+                      || subscription.Status == SubscriptionStatus.FreezeRequested)
                   && item.ItemCode == "pkg_oet_mastery"
                   && item.Status == SubscriptionItemStatus.Active
                   && item.StartsAt <= now

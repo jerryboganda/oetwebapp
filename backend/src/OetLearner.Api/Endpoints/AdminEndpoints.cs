@@ -296,6 +296,12 @@ public static class AdminEndpoints
             => Results.Ok(await svc.RemovePackageAsync(http.AdminId(), http.AdminName(), userId, subscriptionId, ct)))
             .WithAdminWrite("AdminBillingSubscriptionWrite");
 
+        admin.MapPost("/users/{userId}/access/packages/{subscriptionId}/primary", async (string userId, string subscriptionId,
+            HttpContext http,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.SetPrimaryPackageAsync(http.AdminId(), http.AdminName(), userId, subscriptionId, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
         admin.MapPost("/users/{userId}/access/packages/{subscriptionId}/suspend", async (string userId, string subscriptionId,
             HttpContext http,
             OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)

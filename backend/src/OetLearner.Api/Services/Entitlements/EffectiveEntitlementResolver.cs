@@ -241,6 +241,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         var overlays = await LoadResolverOverlaysAsync(userId, ct);
         var isFrozen = ResolveIsFrozen(overlays, now);
         var professionId = await LoadActiveProfessionIdAsync(userId, ct);
+        var currentPlanId = await LoadCurrentPlanIdAsync(userId, ct);
 
         if (subscription is null)
         {
@@ -480,9 +481,13 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
 
         if (effectivePackages.Count > 0)
         {
-            // subscriptions is ordered latest-first, so effectivePackages inherits
-            // that order — the first entry is the newest effective course sub.
-            var primaryPkg = effectivePackages[0];
+            // CurrentPlanId is the representative package for summary/default
+            // metadata. Entitlements remain additive across every effective package.
+            var primaryPkg = effectivePackages.FirstOrDefault(pkg =>
+                    string.Equals(pkg.Plan.Code, currentPlanId, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(pkg.Sub.PlanId, currentPlanId, StringComparison.OrdinalIgnoreCase))
+                ?? effectivePackages[0];
+            if (primaryPkg != effectivePackages[0]) trace.Add("primary.current_plan");
             var primarySub = primaryPkg.Sub;
             var aggAddOns = new List<string>();
             foreach (var pkg in effectivePackages)
@@ -819,6 +824,12 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         return string.IsNullOrWhiteSpace(profession) ? null : profession.Trim().ToLowerInvariant();
     }
 
+    private Task<string?> LoadCurrentPlanIdAsync(string userId, CancellationToken ct)
+        => db.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.CurrentPlanId)
+            .FirstOrDefaultAsync(ct);
+
     private static bool IsValidJsonObject(string json)
     {
         try
@@ -957,6 +968,9 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         CancellationToken ct)
     {
         var subscriptionIds = subscriptions
+            .Where(subscription => subscription.Status == SubscriptionStatus.Active
+                || subscription.Status == SubscriptionStatus.Trial
+                || subscription.Status == SubscriptionStatus.FreezeRequested)
             .Select(subscription => subscription.Id)
             .Distinct(StringComparer.Ordinal)
             .ToArray();

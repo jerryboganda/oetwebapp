@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
+import { PauseCircle, PlayCircle, Star, Trash2 } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -22,6 +22,7 @@ interface PackageListProps {
   learnerProfessionId?: string | null;
   onSuspend?: (subscriptionId: string) => void | Promise<void>;
   onRestore?: (subscriptionId: string) => void | Promise<void>;
+  onSetPrimary?: (subscriptionId: string) => void | Promise<void>;
   busySubscriptionId?: string | null;
   disabled?: boolean;
 }
@@ -67,6 +68,7 @@ export function PackageList({
   learnerProfessionId,
   onSuspend,
   onRestore,
+  onSetPrimary,
   busySubscriptionId,
   disabled,
 }: PackageListProps) {
@@ -255,16 +257,23 @@ export function PackageList({
         ) : null}
 
         <div className="flex flex-wrap gap-4">
-          <Checkbox
-            label="Make primary"
-            checked={makePrimary}
-            onChange={(event) => {
-              const val = event.target.checked;
-              setMakePrimary(val);
-              syncDraft(planCode, startsAt, expiryOverride, val, grantIncludedCredits, overrideProfession);
-            }}
-            disabled={disabled}
-          />
+          <div className="space-y-1">
+            <Checkbox
+              label="Make primary"
+              title="Primary controls the learner's summary and default plan metadata only; other active packages still contribute access."
+              checked={makePrimary}
+              onChange={(event) => {
+                const val = event.target.checked;
+                setMakePrimary(val);
+                syncDraft(planCode, startsAt, expiryOverride, val, grantIncludedCredits, overrideProfession);
+              }}
+              disabled={disabled}
+            />
+            <p className="px-4 text-xs leading-5 text-muted">
+              Primary controls the learner&apos;s summary/default plan. Other active packages still add access,
+              credits, and expiry.
+            </p>
+          </div>
           <Checkbox
             label="Grant included credits"
             checked={grantIncludedCredits}
@@ -294,6 +303,10 @@ export function PackageList({
         <ul className="divide-y divide-border rounded-2xl border border-border">
           {subscriptions.map((sub) => {
             const isSuspended = sub.status.toLowerCase() === 'suspended';
+            const canSetPrimary = !sub.isPending
+              && !sub.isPrimary
+              && !isSuspended
+              && ['active', 'trial', 'freezerequested'].includes(sub.status.toLowerCase());
             const awaitingFulfilment = sub.fulfilmentStatus === 'pending_manual';
             const isBusy = busySubscriptionId === sub.id;
             const startedLabel = formatDate(sub.startsAt ?? sub.startedAt);
@@ -320,6 +333,20 @@ export function PackageList({
                   ) : null}
                 </div>
                 <div className="flex items-center gap-1">
+                  {canSetPrimary && onSetPrimary ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void onSetPrimary(sub.id)}
+                      disabled={disabled || isBusy}
+                      loading={isBusy}
+                      title="Use this package for the learner's summary and default plan metadata"
+                    >
+                      <Star className="h-4 w-4" />
+                      Set primary
+                    </Button>
+                  ) : null}
                   {!sub.isPending && isSuspended && onRestore ? (
                     <Button
                       type="button"

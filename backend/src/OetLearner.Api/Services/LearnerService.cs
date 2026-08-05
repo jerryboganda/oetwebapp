@@ -4817,7 +4817,23 @@ public partial class LearnerService(
         var hasInvoices = await db.Invoices.AnyAsync(x => x.UserId == userId, cancellationToken);
         // Fresh accounts have no Subscription/Wallet rows until their first purchase —
         // the summary must degrade to a well-formed "no subscription" payload, not 500.
-        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        // Historical cancelled rows must never become the learner's visible summary.
+        var currentPlanId = await db.Users.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.CurrentPlanId)
+            .FirstOrDefaultAsync(cancellationToken);
+        var currentSubscriptions = await db.Subscriptions.AsNoTracking()
+            .Where(x => x.UserId == userId
+                && (x.Status == SubscriptionStatus.Active
+                    || x.Status == SubscriptionStatus.Trial
+                    || x.Status == SubscriptionStatus.FreezeRequested))
+            .OrderByDescending(x => x.ChangedAt)
+            .ThenByDescending(x => x.StartedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+        var subscription = currentSubscriptions.FirstOrDefault(x =>
+            string.Equals(x.PlanId, currentPlanId, StringComparison.OrdinalIgnoreCase))
+            ?? currentSubscriptions.FirstOrDefault();
         var wallet = await db.Wallets.AsNoTracking()
             .Where(x => x.UserId == userId)
             .OrderBy(x => x.Id)
@@ -4856,9 +4872,13 @@ public partial class LearnerService(
                 plan = (object?)null
             };
         }
+        var now = DateTimeOffset.UtcNow;
         var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
         var activeAddOns = await db.SubscriptionItems.AsNoTracking()
-            .Where(x => x.SubscriptionId == subscription.Id && x.Status == SubscriptionItemStatus.Active)
+            .Where(x => x.SubscriptionId == subscription.Id
+                && x.Status == SubscriptionItemStatus.Active
+                && x.StartsAt <= now
+                && (x.EndsAt == null || x.EndsAt > now))
             .ToListAsync(cancellationToken);
         var addOnCodes = activeAddOns.Select(x => x.ItemCode).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var addOnCatalog = addOnCodes.Count == 0

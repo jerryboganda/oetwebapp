@@ -44,7 +44,7 @@ public sealed class UserAccessAllocationService(
             ?? throw ApiException.NotFound("user_not_found", "User not found.");
 
         var subs = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId)
+            .Where(s => s.UserId == userId && s.Status != SubscriptionStatus.Cancelled)
             .OrderByDescending(s => s.ChangedAt)
             .ToListAsync(ct);
 
@@ -58,6 +58,8 @@ public sealed class UserAccessAllocationService(
             planMap.TryAdd(p.Code, p);
             planMap.TryAdd(p.Id, p);
         }
+
+        var primarySubscription = ResolvePrimarySubscription(subs, learner.CurrentPlanId, planMap);
 
         var subIds = subs.Select(s => s.Id).ToList();
         var now = timeProvider.GetUtcNow();
@@ -86,13 +88,7 @@ public sealed class UserAccessAllocationService(
         var subscriptionDtos = subs.Select(s => {
             var planObj = planMap.TryGetValue(s.PlanId, out var p) ? p : null;
             var planName = planObj?.Name ?? s.PlanId;
-            var isPrimary = !string.IsNullOrWhiteSpace(learner.CurrentPlanId) && (
-                string.Equals(s.PlanId, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase) ||
-                (planObj is not null && (
-                    string.Equals(planObj.Code, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(planObj.Id, learner.CurrentPlanId, StringComparison.OrdinalIgnoreCase)
-                ))
-            );
+            var isPrimary = primarySubscription?.Id == s.Id;
             return new UserAccessSubscriptionDto(
                 s.Id,
                 s.PlanId,
@@ -221,18 +217,47 @@ public sealed class UserAccessAllocationService(
     {
         var (learner, sub) = await LoadPackageAsync(userId, subscriptionId, ct);
 
+        // Reverse package-scoped admin credits before changing the subscription. This
+        // keeps removal atomic when a shared wallet no longer has enough balance to
+        // safely reverse the exact package grant.
+        var reversedCredits = await ReverseAdminGrantedCreditsAsync(adminId, sub, ct);
+
         // Expired/Cancelled already grant nothing, and the state machine keeps Expired
         // terminal — removing one of those again is a no-op rather than a 409.
+        var statusChanged = false;
         if (sub.Status is not (SubscriptionStatus.Expired or SubscriptionStatus.Cancelled))
         {
             SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Cancelled, "admin_remove_package");
+            statusChanged = true;
         }
 
         await RepointPrimaryAwayFromAsync(learner, sub, ct);
         await db.SaveChangesAsync(ct);
         await SyncAccessExpiryAsync(learner, ct);
-        await AuditAsync(adminId, adminName, "Package Removed", sub.Id,
-            $"Cancelled package {sub.PlanId} for {userId}", ct);
+        if (statusChanged || reversedCredits > 0)
+        {
+            await AuditAsync(adminId, adminName, "Package Removed", sub.Id,
+                $"Cancelled package {sub.PlanId} for {userId}; reversed {reversedCredits} included credits", ct);
+        }
+        return await GetAccessAsync(userId, ct);
+    }
+
+    public async Task<UserAccessDto> SetPrimaryPackageAsync(
+        string adminId, string adminName, string userId, string subscriptionId, CancellationToken ct)
+    {
+        var (learner, sub) = await LoadPackageAsync(userId, subscriptionId, ct);
+        if (!AccessGrantingStatuses.Contains(sub.Status))
+        {
+            throw ApiException.Conflict(
+                "package_not_current",
+                "Only an active package can be selected as the learner's primary package.");
+        }
+
+        var previousPlanId = learner.CurrentPlanId;
+        learner.CurrentPlanId = sub.PlanId;
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(adminId, adminName, "Primary Package Changed", sub.Id,
+            $"Changed primary package for {userId} from {previousPlanId ?? "none"} to {sub.PlanId}", ct);
         return await GetAccessAsync(userId, ct);
     }
 
@@ -292,14 +317,18 @@ public sealed class UserAccessAllocationService(
         if (!string.IsNullOrWhiteSpace(request.SubscriptionId))
         {
             targetSubId = request.SubscriptionId.Trim();
-            var owned = await db.Subscriptions.AsNoTracking()
-                .AnyAsync(s => s.Id == targetSubId && s.UserId == userId, ct);
-            if (!owned) throw ApiException.Validation("subscription_not_found", "Target subscription not found for this user.");
+            var target = await db.Subscriptions.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == targetSubId && s.UserId == userId, ct);
+            if (target is null) throw ApiException.Validation("subscription_not_found", "Target subscription not found for this user.");
+            if (!AccessGrantingStatuses.Contains(target.Status))
+            {
+                throw ApiException.Conflict("subscription_not_current", "Add-ons can only be attached to a current active package.");
+            }
         }
         else
         {
             var primary = await db.Subscriptions.AsNoTracking()
-                .Where(s => s.UserId == userId && AllocatedStatuses.Contains(s.Status))
+                .Where(s => s.UserId == userId && AccessGrantingStatuses.Contains(s.Status))
                 .OrderByDescending(s => s.ChangedAt)
                 .FirstOrDefaultAsync(ct)
                 ?? throw ApiException.Validation("no_subscription", "The user has no active subscription to attach the add-on to.");
@@ -430,17 +459,101 @@ public sealed class UserAccessAllocationService(
         return (learner, sub);
     }
 
-    /// <summary>If <paramref name="sub"/> was the primary plan, repoint CurrentPlanId at any
-    /// other package the learner still holds.</summary>
+    /// <summary>If <paramref name="sub"/> was the primary plan, repoint CurrentPlanId at the
+    /// newest other package that still grants access.</summary>
     private async Task RepointPrimaryAwayFromAsync(LearnerUser learner, Subscription sub, CancellationToken ct)
     {
         if (!string.Equals(learner.CurrentPlanId, sub.PlanId, StringComparison.OrdinalIgnoreCase)) return;
 
         var replacement = await db.Subscriptions
-            .Where(s => s.UserId == learner.Id && s.Id != sub.Id && AllocatedStatuses.Contains(s.Status))
+            .Where(s => s.UserId == learner.Id && s.Id != sub.Id && AccessGrantingStatuses.Contains(s.Status))
             .OrderByDescending(s => s.ChangedAt)
+            .ThenByDescending(s => s.StartedAt)
+            .ThenByDescending(s => s.Id)
             .FirstOrDefaultAsync(ct);
         learner.CurrentPlanId = replacement?.PlanId;
+    }
+
+    private async Task<int> ReverseAdminGrantedCreditsAsync(string adminId, Subscription subscription, CancellationToken ct)
+    {
+        var sourceCredits = await db.WalletTransactions.AsNoTracking()
+            .Where(tx => tx.ReferenceType == "subscription"
+                && tx.ReferenceId == subscription.Id
+                && tx.Amount > 0
+                && tx.TransactionType == "admin_grant")
+            .SumAsync(tx => (int?)tx.Amount, ct) ?? 0;
+        if (sourceCredits <= 0) return 0;
+
+        var idempotencyKey = $"admin_package_revoke:{subscription.Id}";
+        var alreadyReversed = await db.WalletTransactions.AsNoTracking()
+            .Where(tx => tx.IdempotencyKey == idempotencyKey && tx.Amount < 0)
+            .SumAsync(tx => (int?)-tx.Amount, ct) ?? 0;
+        var remaining = sourceCredits - alreadyReversed;
+        if (remaining <= 0) return 0;
+
+        var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == subscription.UserId, ct)
+            ?? throw ApiException.Conflict(
+                "package_credit_reconciliation_required",
+                "The package has included credits but the learner wallet could not be found.");
+        if (wallet.CreditBalance < remaining)
+        {
+            throw ApiException.Conflict(
+                "package_credit_reconciliation_required",
+                $"Cannot remove this package until {remaining - wallet.CreditBalance} consumed included credits are reconciled.");
+        }
+
+        wallet.CreditBalance -= remaining;
+        wallet.LastUpdatedAt = timeProvider.GetUtcNow();
+        db.WalletTransactions.Add(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            WalletId = wallet.Id,
+            TransactionType = "package_revoke",
+            Amount = -remaining,
+            BalanceAfter = wallet.CreditBalance,
+            ReferenceType = "subscription",
+            ReferenceId = subscription.Id,
+            IdempotencyKey = idempotencyKey,
+            Description = $"Revoked included credits for removed package {subscription.PlanId}",
+            CreatedBy = adminId,
+            CreatedAt = wallet.LastUpdatedAt,
+        });
+        return remaining;
+    }
+
+    private static Subscription? ResolvePrimarySubscription(
+        IReadOnlyList<Subscription> subscriptions,
+        string? currentPlanId,
+        IReadOnlyDictionary<string, BillingPlan> planMap)
+    {
+        var eligible = subscriptions
+            .Where(s => AccessGrantingStatuses.Contains(s.Status))
+            .ToList();
+
+        var selected = eligible
+            .Where(s => PlanMatches(s, currentPlanId, planMap))
+            .OrderByDescending(s => s.ChangedAt)
+            .ThenByDescending(s => s.StartedAt)
+            .ThenByDescending(s => s.Id)
+            .FirstOrDefault();
+
+        return selected ?? eligible
+            .OrderByDescending(s => s.ChangedAt)
+            .ThenByDescending(s => s.StartedAt)
+            .ThenByDescending(s => s.Id)
+            .FirstOrDefault();
+    }
+
+    private static bool PlanMatches(
+        Subscription subscription,
+        string? currentPlanId,
+        IReadOnlyDictionary<string, BillingPlan> planMap)
+    {
+        if (string.IsNullOrWhiteSpace(currentPlanId)) return false;
+        if (string.Equals(subscription.PlanId, currentPlanId, StringComparison.OrdinalIgnoreCase)) return true;
+        return planMap.TryGetValue(subscription.PlanId, out var plan)
+            && (string.Equals(plan.Code, currentPlanId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(plan.Id, currentPlanId, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Mirror the master login gate (<see cref="LearnerUser.AccessExpiresAt"/>) onto the

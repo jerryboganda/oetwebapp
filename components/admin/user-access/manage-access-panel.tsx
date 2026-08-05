@@ -10,6 +10,7 @@ import { readErrorMessage } from '@/lib/read-error-message';
 import type { AdminBillingAddOn, AdminBillingPlan } from '@/lib/types/admin';
 import {
   restoreUserPackage,
+  setPrimaryUserPackage,
   suspendUserPackage,
   type UserAccessSubscriptionRow,
 } from '@/lib/api/user-access-packages';
@@ -32,7 +33,7 @@ import { VideoScopePicker } from './video-scope-picker';
 import { RecallSetPicker } from './recall-set-picker';
 
 interface ManageAccessPanelProps {
-  /** Required for suspend/restore, which act on already-persisted packages. */
+  /** Required for package state/primary actions, which act on persisted packages. */
   userId?: string;
   value: UserAccess;
   onChange: (next: UserAccess) => void;
@@ -205,6 +206,7 @@ export function ManageAccessPanel({
           learnerProfessionId={learnerProfessionId}
           onSuspend={userId ? (id) => applyPackageTransition(id, suspendUserPackage) : undefined}
           onRestore={userId ? (id) => applyPackageTransition(id, restoreUserPackage) : undefined}
+          onSetPrimary={userId ? (id) => applyPackageTransition(id, setPrimaryUserPackage) : undefined}
           busySubscriptionId={busySubscriptionId}
           disabled={disabled || isLoadingOptions}
         />

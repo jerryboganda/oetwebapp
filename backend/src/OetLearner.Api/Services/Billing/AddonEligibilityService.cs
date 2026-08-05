@@ -115,7 +115,12 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
                     || db.SubscriptionItems.Any(item =>
                         item.SubscriptionId == s.Id
                         && item.ItemCode == "tutor-book-addon"
-                        && item.Status == SubscriptionItemStatus.Active), ct);
+                        && item.Status == SubscriptionItemStatus.Active
+                        && item.StartsAt <= DateTimeOffset.UtcNow
+                        && (item.EndsAt == null || item.EndsAt > DateTimeOffset.UtcNow)
+                        && (s.Status == SubscriptionStatus.Active
+                            || s.Status == SubscriptionStatus.Trial
+                            || s.Status == SubscriptionStatus.FreezeRequested)), ct);
             if (alreadyOwnsPlatformTutorBook || alreadyPurchasedTutorBook)
             {
                 return Fail(

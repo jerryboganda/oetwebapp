@@ -56,6 +56,13 @@ export function restoreUserPackage(userId: string, subscriptionId: string): Prom
   );
 }
 
+export function setPrimaryUserPackage(userId: string, subscriptionId: string): Promise<UserAccess> {
+  return apiClient.post<UserAccess>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/access/packages/${encodeURIComponent(subscriptionId)}/primary`,
+    {},
+  );
+}
+
 // ── Allocation rules (mirrored from the backend so the form can pre-empt them) ──
 
 export function planAccessDurationDays(plan: AdminBillingPlan | undefined): number {

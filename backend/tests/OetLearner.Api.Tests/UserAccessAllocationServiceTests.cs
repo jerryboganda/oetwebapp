@@ -96,6 +96,140 @@ public class UserAccessAllocationServiceTests
     }
 
     [Fact]
+    public async Task RemovePackage_HidesCancelledRow_RevokesLinkedAddon_AndIsIdempotent()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-remove");
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "med",
+            Name = "Medicine",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var granted = await service.GrantPackageAsync(
+            "admin", "Admin", "learner-remove",
+            new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+        var now = DateTimeOffset.UtcNow;
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = "subitem-remove",
+            SubscriptionId = subscriptionId,
+            ItemCode = "tutor-book-addon",
+            ItemType = "addon",
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now.AddMinutes(-1),
+            CreatedAt = now.AddMinutes(-1),
+            UpdatedAt = now.AddMinutes(-1),
+        });
+        await db.SaveChangesAsync();
+
+        var removed = await service.RemovePackageAsync("admin", "Admin", "learner-remove", subscriptionId, default);
+        Assert.Empty(removed.Subscriptions);
+        Assert.Empty(removed.AddOns);
+        Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync()).Status);
+        Assert.Contains(await db.AuditEvents.ToListAsync(),
+            audit => audit.Action == "Package Removed" && audit.ResourceId == subscriptionId);
+
+        var auditCount = await db.AuditEvents.CountAsync(a => a.Action == "Package Removed");
+        var repeated = await service.RemovePackageAsync("admin", "Admin", "learner-remove", subscriptionId, default);
+        Assert.Empty(repeated.Subscriptions);
+        Assert.Equal(auditCount, await db.AuditEvents.CountAsync(a => a.Action == "Package Removed"));
+    }
+
+    [Fact]
+    public async Task SetPrimaryPackage_ChangesOnlyRepresentative_AndRemovalRepointsPrimary()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-primary");
+        db.BillingPlans.AddRange(
+            new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 },
+            new BillingPlan { Id = "plan-physio", Code = "physio", Name = "Physio", DurationMonths = 6, AccessDurationDays = 180 });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var medicine = await service.GrantPackageAsync(
+            "admin", "Admin", "learner-primary",
+            new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+        var physio = await service.GrantPackageAsync(
+            "admin", "Admin", "learner-primary",
+            new AdminUserAccessPackageRequest("physio", null, null, false, false, false), default);
+
+        var promoted = await service.SetPrimaryPackageAsync(
+            "admin", "Admin", "learner-primary", physio.Subscriptions.Single(s => s.PlanCode == "physio").Id, default);
+        Assert.Single(promoted.Subscriptions, s => s.IsPrimary);
+        Assert.Equal("physio", promoted.Subscriptions.Single(s => s.IsPrimary).PlanCode);
+        Assert.Equal(2, promoted.Subscriptions.Count);
+
+        var removed = await service.RemovePackageAsync(
+            "admin", "Admin", "learner-primary", physio.Subscriptions.Single(s => s.PlanCode == "physio").Id, default);
+        Assert.Single(removed.Subscriptions);
+        Assert.True(removed.Subscriptions.Single().IsPrimary);
+        Assert.Equal("med", removed.Subscriptions.Single().PlanCode);
+        Assert.Equal(medicine.Subscriptions.Single().Id, removed.Subscriptions.Single().Id);
+    }
+
+    [Fact]
+    public async Task RemovePackage_ReversesIncludedCreditsOnce_WithoutNegativeBalance()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-credits");
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-credits",
+            Code = "credits",
+            Name = "Credits",
+            DurationMonths = 1,
+            AccessDurationDays = 30,
+            IncludedCredits = 10,
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var granted = await service.GrantPackageAsync(
+            "admin", "Admin", "learner-credits",
+            new AdminUserAccessPackageRequest("credits", null, null, true, true, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+
+        await service.RemovePackageAsync("admin", "Admin", "learner-credits", subscriptionId, default);
+        await service.RemovePackageAsync("admin", "Admin", "learner-credits", subscriptionId, default);
+
+        var wallet = await db.Wallets.SingleAsync(w => w.UserId == "learner-credits");
+        Assert.Equal(0, wallet.CreditBalance);
+        Assert.Single(await db.WalletTransactions.Where(tx => tx.IdempotencyKey == $"admin_package_revoke:{subscriptionId}").ToListAsync());
+        Assert.DoesNotContain(await db.WalletTransactions.ToListAsync(), tx => tx.BalanceAfter < 0);
+    }
+
+    [Fact]
+    public async Task RegrantAfterRemoval_CreatesOneCurrentRow_AndKeepsHistory()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-regrant");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var first = await service.GrantPackageAsync(
+            "admin", "Admin", "learner-regrant",
+            new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+        await service.RemovePackageAsync("admin", "Admin", "learner-regrant", first.Subscriptions.Single().Id, default);
+        var current = await service.GrantPackageAsync(
+            "admin", "Admin", "learner-regrant",
+            new AdminUserAccessPackageRequest("med", null, null, false, false, false), default);
+
+        Assert.Single(current.Subscriptions);
+        Assert.Equal("Active", current.Subscriptions.Single().Status);
+        Assert.Equal(2, await db.Subscriptions.CountAsync(s => s.UserId == "learner-regrant"));
+        Assert.Equal(SubscriptionStatus.Cancelled,
+            (await db.Subscriptions.SingleAsync(s => s.Id == first.Subscriptions.Single().Id)).Status);
+    }
+
+    [Fact]
     public async Task PutScope_ReplacesModuleOverrides_AndSetsMasterExpiry()
     {
         await using var db = CreateDb();

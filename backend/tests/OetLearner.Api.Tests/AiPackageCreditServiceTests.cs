@@ -202,6 +202,15 @@ public sealed class AiPackageCreditServiceTests
             .Where(row => row.Reason == AiPackageCreditReason.GradingDeduct)
             .ToListAsync());
 
+        var parent = await db.Subscriptions.SingleAsync(row => row.Id == "sub-mastery");
+        parent.Status = SubscriptionStatus.Cancelled;
+        await db.SaveChangesAsync();
+        var parentRevoked = await service.CheckGradingCreditAsync(
+            "learner-1", "writing", 2, CancellationToken.None);
+        Assert.False(parentRevoked.Debited);
+        Assert.Equal("no_ai_package_credits", parentRevoked.ErrorCode);
+
+        parent.Status = SubscriptionStatus.Active;
         item.Status = SubscriptionItemStatus.Cancelled;
         item.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();

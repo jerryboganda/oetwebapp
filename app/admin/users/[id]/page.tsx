@@ -442,7 +442,18 @@ export default function UserDetailPage() {
     try {
       let currentAccess = access;
 
-      // Persist any locally drafted packages, updating currentAccess with the response
+      // Remove packages first. This is important when a package is replaced by
+      // another row with the same plan code: grant-first would update the old
+      // subscription and then remove it again.
+      const remainingIds = new Set(access.subscriptions.filter((sub) => !sub.isPending).map((sub) => sub.id));
+      for (const originalSub of originalAccess?.subscriptions ?? []) {
+        if (!remainingIds.has(originalSub.id)) {
+          currentAccess = await removeUserPackage(user.id, originalSub.id);
+        }
+      }
+
+      // Persist locally drafted packages after removals, updating currentAccess
+      // with each response so subsequent add-ons target surviving packages.
       for (const sub of access.subscriptions as UserAccessSubscriptionRow[]) {
         if (sub.isPending) {
           const payload: GrantUserPackageInput = {
@@ -456,16 +467,15 @@ export default function UserDetailPage() {
           currentAccess = await grantUserPackage(user.id, payload);
         }
       }
-      const remainingIds = new Set(access.subscriptions.filter((sub) => !sub.isPending).map((sub) => sub.id));
-      for (const originalSub of originalAccess?.subscriptions ?? []) {
-        if (!remainingIds.has(originalSub.id)) {
-          currentAccess = await removeUserPackage(user.id, originalSub.id);
-        }
-      }
 
-      // Add-ons have no removal endpoint — only newly drafted ones are sent.
+      // Add-ons have no removal endpoint. Never submit a pending add-on whose
+      // explicit target package was removed during this save.
+      const survivingSubscriptionIds = new Set(currentAccess.subscriptions.map((sub) => sub.id));
       for (const addOn of access.addOns) {
-        if (addOn.isPending) {
+        if (
+          addOn.isPending
+          && (!addOn.subscriptionId || survivingSubscriptionIds.has(addOn.subscriptionId))
+        ) {
           currentAccess = await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
         }
       }

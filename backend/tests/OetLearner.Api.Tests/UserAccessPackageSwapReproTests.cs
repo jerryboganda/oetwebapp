@@ -11,9 +11,8 @@ namespace OetLearner.Api.Tests;
 /// <summary>
 /// Scratch reproduction for the reported "Advanced (full manual control)" bug:
 /// admin swaps a learner's package (grants a new one, removes the old one) and the
-/// override does not take effect correctly. Mirrors the EXACT client call order in
-/// handleSaveAccess (app/admin/users/[id]/page.tsx): pending packages are granted
-/// FIRST, then packages dropped from the original list are removed SECOND.
+/// override does not take effect correctly. Mirrors the package transition sequence
+/// used by the admin access editor.
 /// </summary>
 public class UserAccessPackageSwapReproTests
 {
@@ -72,21 +71,32 @@ public class UserAccessPackageSwapReproTests
 
         // Admin "changes the subscription package" via the Advanced panel: picks a new
         // plan B ("physio") and deletes the old row A in the UI, then clicks Save.
-        // handleSaveAccess grants pending packages FIRST, then removes dropped ones SECOND.
+        // The service remains safe even when callers grant the replacement before removing
+        // the old package.
         await svc.GrantPackageAsync("admin", "Admin", "learner-swap",
             new AdminUserAccessPackageRequest("physio", null, null, MakePrimary: false, GrantIncludedCredits: false, OverrideProfessionMismatch: false),
             default);
+        var beforePrimaryChange = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-swap", default);
+        Assert.Equal("med", beforePrimaryChange.PlanCode);
+        var physioId = (await svc.GetAccessAsync("learner-swap", default)).Subscriptions.Single(s => s.PlanCode == "physio").Id;
+        await svc.SetPrimaryPackageAsync("admin", "Admin", "learner-swap", physioId, default);
+        var afterPrimaryChange = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-swap", default);
+        Assert.Equal("physio", afterPrimaryChange.PlanCode);
+        Assert.True(afterPrimaryChange.HasEligibleSubscription);
         await svc.RemovePackageAsync("admin", "Admin", "learner-swap", packageAId, default);
 
         var afterSwap = await svc.GetAccessAsync("learner-swap", default);
         var learner = await db.Users.AsNoTracking().FirstAsync(u => u.Id == "learner-swap");
 
         // ── What the admin sees when the panel re-fetches after Save ──
-        Assert.Equal(2, afterSwap.Subscriptions.Count);
+        Assert.Single(afterSwap.Subscriptions);
         var physio = afterSwap.Subscriptions.Single(s => s.PlanCode == "physio");
-        var med = afterSwap.Subscriptions.Single(s => s.PlanCode == "med");
         Assert.Equal("Active", physio.Status);
-        Assert.Equal("Cancelled", med.Status);
+        Assert.DoesNotContain(afterSwap.Subscriptions, s => s.PlanCode == "med");
+        Assert.Equal(SubscriptionStatus.Cancelled,
+            (await db.Subscriptions.SingleAsync(s => s.Id == packageAId)).Status);
+        Assert.Contains(await db.AuditEvents.ToListAsync(),
+            audit => audit.Action == "Package Removed" && audit.ResourceId == packageAId);
 
         // ── What actually gates the learner's platform access ──
         var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-swap", default);

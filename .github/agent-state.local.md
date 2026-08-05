@@ -2,6 +2,21 @@
 
 Last updated: 2026-08-05
 
+## Current Task - Admin package removal and primary package
+
+- Implemented soft-revocation: cancelled packages are hidden from current
+  Access & Allocation responses while subscription/audit history remains.
+- Added primary-package API/UI behavior using `CurrentPlanId`; primary metadata
+  is representative only and active package entitlements remain additive.
+- Added parent-status checks for linked add-ons/AI access, idempotent admin
+  included-credit reversal, save-order reconciliation, and focused regressions.
+- Validation: focused PackageList Vitest 2/2 passed; targeted ESLint had 0
+  errors with only existing React hook warnings; TypeScript and diff-check
+  passed. Backend MSBuild stalled before compiler/test output and was stopped.
+- Next step: inspect final diff, stage only implementation paths, commit/push
+  `main`, and verify the GitHub blue/green deployment and live access/audit
+  behavior.
+
 ## Goal
 
 Implement and production-verify the controls in
