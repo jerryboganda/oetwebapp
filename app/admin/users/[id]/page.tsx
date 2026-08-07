@@ -731,9 +731,7 @@ export default function UserDetailPage() {
       closeLifecycleModal();
       setToast({
         variant: 'success',
-        message: lifecycleAction === 'delete'
-          ? 'Account deleted successfully.'
-          : 'Account restored successfully.',
+        message: 'Account restored successfully.',
       });
     } catch (error) {
       console.error(error);
