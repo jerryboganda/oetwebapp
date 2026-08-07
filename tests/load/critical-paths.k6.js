@@ -47,7 +47,7 @@ function adminHeaders() {
   };
 }
 
-export default function (data) {
+function criticalPathLoad(data) {
   const headers = authHeaders(data?.token);
   const reads = [
     ['bootstrap', '/v1/me/bootstrap'],
@@ -74,3 +74,5 @@ export default function (data) {
 
   sleep(0.2);
 }
+
+export default criticalPathLoad;

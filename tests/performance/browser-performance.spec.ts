@@ -132,13 +132,14 @@ async function collectBrowserPerformance(
   page.on('requestfailed', (request) => {
     requestFailures += 1;
     let pathname = request.resourceType();
+    const errorText = request.failure()?.errorText;
     try {
       pathname = new URL(request.url()).pathname;
     } catch {
       // Keep the resource type when the browser does not expose a valid URL.
     }
 
-    messages.push(`requestfailed: ${request.method()} ${pathname}`);
+    messages.push(`requestfailed: ${request.method()} ${pathname}${errorText ? ` (${sanitizeErrorMessage(errorText)})` : ''}`);
   });
 
   await installObservers(page);
@@ -155,6 +156,7 @@ async function collectBrowserPerformance(
   const browserData = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
     const paintEntries = performance.getEntriesByType('paint') as PerformancePaintTiming[];
+    const lcpEntries = performance.getEntriesByType('largest-contentful-paint');
     const snapshot = (window as PerformanceWindow).__oetPerformance ?? {
       lcpMs: null,
       cls: 0,
@@ -178,7 +180,7 @@ async function collectBrowserPerformance(
         loadEventMs: navigation ? navigation.loadEventEnd : null,
       },
       webVitals: {
-        lcpMs: snapshot.lcpMs,
+        lcpMs: snapshot.lcpMs ?? lcpEntries.at(-1)?.startTime ?? null,
         fcpMs: paintEntries.find((entry) => entry.name === 'first-contentful-paint')?.startTime ?? null,
         inpMs: snapshot.inpMs,
         cls: snapshot.cls,

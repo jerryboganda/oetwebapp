@@ -20,6 +20,10 @@ export default defineConfig({
   expect: { timeout: 30_000 },
   use: {
     baseURL,
+    extraHTTPHeaders: {
+      'X-OET-Device-Id': performanceDeviceId,
+    },
+    ignoreHTTPSErrors: baseURL.startsWith('https:'),
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

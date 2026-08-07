@@ -100,6 +100,32 @@ jobs:
           PLAYWRIGHT_READY_TIMEOUT_MS: '900000'
         run: node ./scripts/qa/assert-local-stack.mjs
 
+      - name: Start isolated HTTPS browser proxy
+        if: env.PERF_MODE == 'ephemeral'
+        run: |
+          mkdir -p output/performance/stack
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$RUNNER_TEMP/oet-performance-proxy.key" \
+            -out "$RUNNER_TEMP/oet-performance-proxy.crt" \
+            -subj '/CN=127.0.0.1' \
+            -days 1
+          nohup node scripts/perf/https-proxy.mjs \
+            --listen 3443 \
+            --target http://127.0.0.1:3000 \
+            --cert "$RUNNER_TEMP/oet-performance-proxy.crt" \
+            --key "$RUNNER_TEMP/oet-performance-proxy.key" \
+            > output/performance/stack/https-proxy.log 2>&1 < /dev/null &
+          echo $! > "$RUNNER_TEMP/oet-performance-proxy.pid"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --insecure https://127.0.0.1:3443/ > /dev/null; then
+              echo 'PERF_TARGET_URL=https://127.0.0.1:3443' >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat output/performance/stack/https-proxy.log
+          exit 1
+
       - name: Run browser performance measurements
         id: browser
         continue-on-error: true
@@ -137,7 +163,7 @@ jobs:
           OET_TEST_LEARNER_EMAIL="$learner_email" \
           OET_TEST_LEARNER_PASSWORD="$learner_password" \
           OET_TEST_ADMIN_ACCESS_TOKEN="$OET_PERF_ADMIN_ACCESS_TOKEN" \
-          OET_TEST_DEVICE_ID="perf-k6-${GITHUB_RUN_ID}" \
+          OET_TEST_DEVICE_ID="perf-playwright-${GITHUB_RUN_ID}" \
           k6 run --summary-export output/performance/k6/critical-paths.json tests/load/critical-paths.k6.js
 
       - name: Capture isolated stack logs
@@ -148,7 +174,11 @@ jobs:
 
       - name: Shut down isolated stack
         if: always() && env.PERF_MODE == 'ephemeral'
-        run: docker compose -f docker-compose.desktop.yml down --remove-orphans
+        run: |
+          if [ -f "$RUNNER_TEMP/oet-performance-proxy.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/oet-performance-proxy.pid")" 2>/dev/null || true
+          fi
+          docker compose -f docker-compose.desktop.yml down --remove-orphans
 
       - name: Summarize browser reports
         id: summary

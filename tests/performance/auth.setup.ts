@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test as setup } from '@playwright/test';
 import {
   bootstrapSessionForRole,
@@ -39,7 +39,12 @@ for (const target of authTargets) {
       cookies: Array<{ name?: string }>;
       origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
     };
+    const deviceId = process.env.PERF_DEVICE_ID ?? 'perf-playwright-local';
     const originState = rawState.origins.find((origin) => origin.origin.startsWith('http'));
+    if (originState && !originState.localStorage.some((entry) => entry.name === 'oet_device_id')) {
+      originState.localStorage.push({ name: 'oet_device_id', value: deviceId });
+      await writeFile(target.path, JSON.stringify(rawState, null, 2), 'utf8');
+    }
 
     expect(originState, `Expected persisted origin storage for ${target.projectName}`).toBeTruthy();
     expect(
