@@ -1,3 +1,31 @@
+# Current Task - Device exemption policy mismatch and admin list management
+
+Last updated: 2026-08-07
+
+## Outcome
+
+- Auth sign-in, risk step-up, trusted-device checks, and stale device-OTP
+  resend/verify now share the persisted exemption list and match the linked
+  learner/expert profile email as well as the auth-account aliases.
+- The prior hidden hard-coded exemption defaults were removed so deleting an
+  address in the admin list genuinely revokes its exemption.
+- The fourth supplied Gmail address is included in the seed and additive
+  backfill migration; the admin runtime-settings field is now a searchable,
+  add/delete table with staged Save All behavior.
+
+## Validation
+
+- `pnpm exec vitest run app/admin/settings/RuntimeSettingsClient.test.tsx --reporter=dot`: 11/11 passed.
+- The focused backend test was added but could not complete locally because
+  another agent's `CrashCourseVideoAccessRuleTests` process held shared .NET
+  build artifacts; CI remains the backend compile/test gate.
+
+## Next step
+
+Run the final scoped verification, stage only the implementation/tests,
+migration, and this state file, then commit and push `main`. Preserve the
+unrelated `.codex/config.toml`, `.superpowers/`, and concurrent work.
+
 # Current Task - Trusted-device cooldown false-positive incident
 
 Last updated: 2026-08-07

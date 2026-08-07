@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { Toast } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
@@ -642,13 +642,6 @@ const SECURITY_FIELDS: FieldDef<SecuritySettings>[] = [
       { value: 'block', label: 'Block — reject sign-ins outside the list' },
     ],
     hint: 'What happens to a sign-in from outside the allow-list.',
-  },
-  {
-    key: 'deviceVerificationExemptEmails',
-    label: 'Device Verification Exemption List',
-    type: 'text',
-    placeholder: 'e.g. owner@example.com,support@example.com',
-    hint: 'Comma-separated emails fully exempt from BOTH the trusted-device OTP challenge and the risk-based step-up above — never asked to verify, on any device, from any location. Reserve for owner/staff accounts that must never be locked out.',
   },
   {
     key: 'ipIntelligenceProvider',
@@ -1742,6 +1735,167 @@ function PlainField({ label, hint, type = 'text', options, value, onChange }: Pl
 }
 
 /* ───────────────────────── Section ───────────────────────── */
+
+const DEVICE_EXEMPTION_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parseDeviceExemptionEmails(value: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  return (value ?? '')
+    .split(/[,;\r\n]+/)
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => {
+      if (!email || seen.has(email)) return false;
+      seen.add(email);
+      return true;
+    });
+}
+
+interface DeviceExemptionEmailTableProps {
+  value: string | null;
+  onChange: (next: string) => void;
+}
+
+function DeviceExemptionEmailTable({ value, onChange }: DeviceExemptionEmailTableProps) {
+  const reactId = useId();
+  const searchId = `device-exemption-search-${reactId}`;
+  const addId = `device-exemption-add-${reactId}`;
+  const [search, setSearch] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const emails = useMemo(() => parseDeviceExemptionEmails(value), [value]);
+  const visibleEmails = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return query ? emails.filter((email) => email.includes(query)) : emails;
+  }, [emails, search]);
+
+  function replaceEmails(next: string[]) {
+    onChange(next.join(','));
+  }
+
+  function addEmail() {
+    const email = newEmail.trim().toLowerCase();
+    if (!DEVICE_EXEMPTION_EMAIL_PATTERN.test(email)) {
+      setAddError('Enter a valid email address.');
+      return;
+    }
+    if (emails.includes(email)) {
+      setAddError('That email is already on the exemption list.');
+      return;
+    }
+
+    replaceEmails([...emails, email]);
+    setNewEmail('');
+    setAddError(null);
+  }
+
+  return (
+    <div className="md:col-span-2 flex flex-col gap-4 rounded-admin border border-admin-border bg-admin-bg-subtle p-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight text-admin-fg-strong">Device Verification Exemption List</h3>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-admin-fg-muted">
+            These addresses skip trusted-device OTP and risk step-up checks on every device and location. Changes are staged until you click Save all runtime settings.
+          </p>
+        </div>
+        <Badge variant="default">{emails.length} email{emails.length === 1 ? '' : 's'}</Badge>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={searchId} className="text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+            Search list
+          </label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" aria-hidden="true" />
+            <input
+              id={searchId}
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by email"
+              aria-label="Search exempt email addresses"
+              spellCheck={false}
+              className="w-full rounded-admin border border-admin-border bg-admin-bg-surface py-3 pl-10 pr-4 text-sm text-admin-fg-default shadow-sm transition-[border-color,box-shadow] focus:border-[var(--admin-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
+            />
+          </div>
+        </div>
+
+        <form
+          className="flex flex-col gap-1.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            addEmail();
+          }}
+        >
+          <label htmlFor={addId} className="text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+            Add email address
+          </label>
+          <div className="flex items-stretch gap-2">
+            <input
+              id={addId}
+              type="email"
+              value={newEmail}
+              onChange={(event) => {
+                setNewEmail(event.target.value);
+                if (addError) setAddError(null);
+              }}
+              placeholder="owner@example.com"
+              aria-label="Add exempt email address"
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-3 text-sm text-admin-fg-default shadow-sm transition-[border-color,box-shadow] focus:border-[var(--admin-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
+            />
+            <Button type="submit" variant="outline" size="sm" startIcon={<Plus className="h-4 w-4" />}>
+              Add
+            </Button>
+          </div>
+          {addError ? <p className="text-xs text-admin-danger" role="alert">{addError}</p> : null}
+        </form>
+      </div>
+
+      <div className="overflow-x-auto rounded-admin border border-admin-border bg-admin-bg-surface">
+        <table className="min-w-full text-left text-sm" aria-label="Device Verification Exemption List">
+          <caption className="sr-only">Device Verification Exemption List</caption>
+          <thead className="border-b border-admin-border bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
+            <tr>
+              <th scope="col" className="w-16 px-4 py-3">#</th>
+              <th scope="col" className="px-4 py-3">Email address</th>
+              <th scope="col" className="w-32 px-4 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-admin-border">
+            {visibleEmails.length > 0 ? (
+              visibleEmails.map((email, index) => (
+                <tr key={email} className="align-middle">
+                  <td className="px-4 py-3 tabular-nums text-admin-fg-muted">{index + 1}</td>
+                  <td className="px-4 py-3 font-medium text-admin-fg-strong">{email}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      startIcon={<Trash2 className="h-3.5 w-3.5" />}
+                      aria-label={`Delete ${email}`}
+                      onClick={() => replaceEmails(emails.filter((candidate) => candidate !== email))}
+                    >
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="px-4 py-8 text-center text-sm text-admin-fg-muted">
+                  {emails.length === 0 ? 'No exempt email addresses configured.' : 'No addresses match this search.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 interface SectionProps {
   id: SectionId;
@@ -3084,6 +3238,13 @@ export function RuntimeSettingsClient() {
                     }
                   />
                 ))}
+
+              {section.id === 'security' && (
+                <DeviceExemptionEmailTable
+                  value={draft.security.deviceVerificationExemptEmails}
+                  onChange={(next) => updateField('security', 'deviceVerificationExemptEmails', next)}
+                />
+              )}
 
               {section.id === 'security' &&
                 SECURITY_FIELDS.map((field) => (

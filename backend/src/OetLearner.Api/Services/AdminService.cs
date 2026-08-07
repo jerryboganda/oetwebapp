@@ -4632,9 +4632,9 @@ public partial class AdminService(
         if (runtimeSettingsProvider is not null)
         {
             var securitySettings = (await runtimeSettingsProvider.GetAsync(ct)).Security;
-            deviceVerificationExempt = AuthService.IsDeviceVerificationExempt(authAccount.Email, securitySettings.DeviceVerificationExemptEmails)
-                || AuthService.IsDeviceVerificationExempt(authAccount.NormalizedEmail, securitySettings.DeviceVerificationExemptEmails)
-                || AuthService.IsDeviceVerificationExempt(learnerEmail, securitySettings.DeviceVerificationExemptEmails);
+            deviceVerificationExempt = AuthService.AreAnyDeviceVerificationExempt(
+                [authAccount.Email, authAccount.NormalizedEmail, learnerEmail],
+                securitySettings.DeviceVerificationExemptEmails);
         }
 
         return new AdminUserSecuritySnapshot(

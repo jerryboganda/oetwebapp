@@ -597,4 +597,39 @@ describe('RuntimeSettingsClient', () => {
     expect(input).toHaveValue('');
     expect(screen.queryByDisplayValue('raw-brevo-secret')).not.toBeInTheDocument();
   });
+
+  it('renders searchable exemption rows and excludes a deleted address from the saved list', async () => {
+    const response = makeResponse();
+    mockGet.mockResolvedValue({
+      ...response,
+      security: {
+        ...response.security,
+        deviceVerificationExemptEmails: 'first@example.com,second@example.com,third@example.com',
+      },
+    });
+    mockPut.mockResolvedValue(response);
+    const user = userEvent.setup();
+
+    render(<RuntimeSettingsClient />);
+
+    await screen.findByRole('region', { name: 'Security' });
+    await expandSection('Security');
+
+    const table = screen.getByRole('table', { name: 'Device Verification Exemption List' });
+    expect(within(table).getByText('first@example.com')).toBeInTheDocument();
+    expect(within(table).getByText('second@example.com')).toBeInTheDocument();
+    expect(within(table).getByText('third@example.com')).toBeInTheDocument();
+
+    const search = screen.getByRole('searchbox', { name: 'Search exempt email addresses' });
+    await user.type(search, 'second');
+    expect(within(table).getByText('second@example.com')).toBeInTheDocument();
+    expect(within(table).queryByText('first@example.com')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete second@example.com' }));
+    await user.click(getPrimarySaveButton());
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    const payload = mockPut.mock.calls[0][1] as RuntimeSettingsResponse;
+    expect(payload.security.deviceVerificationExemptEmails).toBe('first@example.com,third@example.com');
+  });
 });

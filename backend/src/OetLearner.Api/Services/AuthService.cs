@@ -686,6 +686,7 @@ public sealed class AuthService(
             .SingleOrDefaultAsync(x => x.Id == challenge.AccountId, cancellationToken)
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
+        await EnsureDeviceVerificationIsRequiredAsync(account, cancellationToken);
         return await emailOtpService.RequestDeviceTrustOtpAsync(account, cancellationToken);
     }
 
@@ -700,6 +701,7 @@ public sealed class AuthService(
             .SingleOrDefaultAsync(x => x.Id == challenge.AccountId, cancellationToken)
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
+        await EnsureDeviceVerificationIsRequiredAsync(account, cancellationToken);
         await emailOtpService.VerifyDeviceTrustOtpAsync(account, code ?? string.Empty, cancellationToken);
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
@@ -1194,6 +1196,8 @@ public sealed class AuthService(
         var appVersion = httpContext?.Request.Headers["X-App-Version"].ToString();
         if (string.IsNullOrWhiteSpace(appVersion) || appVersion.Length > 64) appVersion = null;
 
+        var deviceVerificationExempt = false;
+
         // Security spec §3.3: risk-score a genuinely fresh sign-in BEFORE
         // touching any existing session — a blocked high-risk attempt must
         // never cost the account its already-legitimate session(s). Never
@@ -1210,8 +1214,8 @@ public sealed class AuthService(
             // exempted from BOTH the risk-based step-up below and the
             // trusted-device gate further down — never challenged, on any
             // device, from any country.
-            var deviceVerificationExempt = IsDeviceVerificationExempt(account.Email, security.DeviceVerificationExemptEmails)
-                || IsDeviceVerificationExempt(account.NormalizedEmail, security.DeviceVerificationExemptEmails);
+            deviceVerificationExempt = await IsDeviceVerificationExemptAsync(
+                account, security.DeviceVerificationExemptEmails, cancellationToken);
 
             // A device that already completed the persistent §3.2 trusted-device
             // check is a stronger identity signal than the heuristic §3.3 risk
@@ -1325,8 +1329,6 @@ public sealed class AuthService(
         if (familyId is null)
         {
             var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
-            var deviceVerificationExempt = IsDeviceVerificationExempt(account.Email, security.DeviceVerificationExemptEmails)
-                || IsDeviceVerificationExempt(account.NormalizedEmail, security.DeviceVerificationExemptEmails);
             if (security.TrustedDeviceRequired && !deviceVerificationExempt)
             {
                 var resolution = await trustedDeviceService.ResolveForSignInAsync(
@@ -1449,49 +1451,72 @@ public sealed class AuthService(
         return true;
     }
 
-    private static readonly HashSet<string> DefaultExemptEmails = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "DRAHMEDHESHAM9595@GMAIL.COM",
-        "DRAHMEDHESHAM19951995@GMAIL.COM",
-        "AHMEDIBRAHIMABDRABUIBRAHIM@GMAIL.COM",
-        "DRHAGERMURAD@OETWITHDRHESHAM.CO.UK",
-        "TUTORCOMMERCEACADEMY2026@GMAIL.COM",
-        "HAGER111118@GMAIL.COM",
-        "SUPPORT@OETWITHDRHESHAM.CO.UK",
-    };
-
     /// <summary>RuntimeSettings.Security.DeviceVerificationExemptEmails safety
     /// valve: owner/staff accounts fully exempt from device-verification OTP
-    /// and risk step-up. Compares against both the database CSV configuration
-    /// and built-in owner safety defaults.</summary>
+    /// and risk step-up. The persisted admin list is the single source of
+    /// truth so removing an address in the admin UI revokes the exemption.</summary>
     internal static bool IsDeviceVerificationExempt(string? email, string? exemptEmailsCsv)
+        => AreAnyDeviceVerificationExempt([email], exemptEmailsCsv);
+
+    internal static bool AreAnyDeviceVerificationExempt(
+        IEnumerable<string?> emails,
+        string? exemptEmailsCsv)
     {
-        if (string.IsNullOrWhiteSpace(email))
+        var normalizedEmails = emails
+            .Where(email => !string.IsNullOrWhiteSpace(email))
+            .Select(email => email!.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (normalizedEmails.Count == 0)
         {
             return false;
         }
 
-        var normalizedEmail = email.Trim().ToUpperInvariant();
+        return !string.IsNullOrWhiteSpace(exemptEmailsCsv)
+            && exemptEmailsCsv
+                .Split([',', ';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(candidate => candidate.ToUpperInvariant())
+                .Any(normalizedEmails.Contains);
+    }
 
-        if (DefaultExemptEmails.Contains(normalizedEmail))
+    private async Task<bool> IsDeviceVerificationExemptAsync(
+        ApplicationUserAccount account,
+        string? exemptEmailsCsv,
+        CancellationToken cancellationToken)
+    {
+        string? profileEmail = null;
+        if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
         {
-            return true;
+            profileEmail = await db.Users
+                .AsNoTracking()
+                .Where(user => user.AuthAccountId == account.Id)
+                .Select(user => user.Email)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+        else if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+        {
+            profileEmail = await db.ExpertUsers
+                .AsNoTracking()
+                .Where(user => user.AuthAccountId == account.Id)
+                .Select(user => user.Email)
+                .SingleOrDefaultAsync(cancellationToken);
         }
 
-        if (string.IsNullOrWhiteSpace(exemptEmailsCsv))
-        {
-            return false;
-        }
+        return AreAnyDeviceVerificationExempt(
+            [account.Email, account.NormalizedEmail, profileEmail],
+            exemptEmailsCsv);
+    }
 
-        foreach (var candidate in exemptEmailsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    private async Task EnsureDeviceVerificationIsRequiredAsync(
+        ApplicationUserAccount account,
+        CancellationToken cancellationToken)
+    {
+        var security = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security;
+        if (await IsDeviceVerificationExemptAsync(account, security.DeviceVerificationExemptEmails, cancellationToken))
         {
-            if (string.Equals(candidate.Trim(), normalizedEmail, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            throw ApiException.Forbidden(
+                "device_verification_not_required",
+                "This account is exempt from device verification. Return to sign in and continue.");
         }
-
-        return false;
     }
 
     /// <summary>Spec §3.3 enforce-mode side channel: a blocked high-risk
