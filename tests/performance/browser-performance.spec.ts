@@ -16,6 +16,7 @@ type RouteDefinition = {
 
 type ObserverSnapshot = {
   lcpMs: number | null;
+  fcpMs: number | null;
   cls: number;
   inpMs: number | null;
   longTaskMs: number;
@@ -48,6 +49,7 @@ async function installObservers(page: Page) {
   await page.addInitScript(() => {
     const snapshot: ObserverSnapshot = {
       lcpMs: null,
+      fcpMs: null,
       cls: 0,
       inpMs: null,
       longTaskMs: 0,
@@ -74,6 +76,12 @@ async function installObservers(page: Page) {
 
     observe('largest-contentful-paint', (entry) => {
       snapshot.lcpMs = entry.startTime;
+    });
+
+    observe('paint', (entry) => {
+      if (entry.name === 'first-contentful-paint') {
+        snapshot.fcpMs = entry.startTime;
+      }
     });
 
     observe('layout-shift', (entry) => {
@@ -124,13 +132,16 @@ async function collectBrowserPerformance(
   let pageErrors = 0;
   let requestFailures = 0;
 
+  const isExpectedRequestCancellation = (errorText: string | undefined) => (
+    Boolean(errorText && /ERR_ABORTED|NS_BINDING_ABORTED|CANCELLED|CANCELED/iu.test(errorText))
+  );
+
   page.on('pageerror', (error) => {
     pageErrors += 1;
     messages.push(`pageerror: ${sanitizeErrorMessage(error.message)}`);
   });
 
   page.on('requestfailed', (request) => {
-    requestFailures += 1;
     let pathname = request.resourceType();
     const errorText = request.failure()?.errorText;
     try {
@@ -139,11 +150,19 @@ async function collectBrowserPerformance(
       // Keep the resource type when the browser does not expose a valid URL.
     }
 
-    messages.push(`requestfailed: ${request.method()} ${pathname}${errorText ? ` (${sanitizeErrorMessage(errorText)})` : ''}`);
+    const message = `${request.method()} ${pathname}${errorText ? ` (${sanitizeErrorMessage(errorText)})` : ''}`;
+    if (isExpectedRequestCancellation(errorText)) {
+      messages.push(`requestcancelled: ${message}`);
+      return;
+    }
+
+    requestFailures += 1;
+    messages.push(`requestfailed: ${message}`);
   });
 
   await installObservers(page);
   await page.goto(route.route, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => undefined);
 
   let primaryContentVisible = false;
   try {
@@ -159,6 +178,7 @@ async function collectBrowserPerformance(
     const lcpEntries = performance.getEntriesByType('largest-contentful-paint');
     const snapshot = (window as PerformanceWindow).__oetPerformance ?? {
       lcpMs: null,
+      fcpMs: null,
       cls: 0,
       inpMs: null,
       longTaskMs: 0,
@@ -181,7 +201,9 @@ async function collectBrowserPerformance(
       },
       webVitals: {
         lcpMs: snapshot.lcpMs ?? lcpEntries.at(-1)?.startTime ?? null,
-        fcpMs: paintEntries.find((entry) => entry.name === 'first-contentful-paint')?.startTime ?? null,
+        fcpMs: snapshot.fcpMs
+          ?? paintEntries.find((entry) => entry.name === 'first-contentful-paint')?.startTime
+          ?? null,
         inpMs: snapshot.inpMs,
         cls: snapshot.cls,
         longTaskMs: snapshot.longTaskMs,
