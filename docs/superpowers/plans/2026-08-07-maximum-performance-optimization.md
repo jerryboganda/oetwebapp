@@ -62,7 +62,7 @@ it('keeps encoded and decoded JavaScript/CSS totals distinct', () => {
 
 - [ ] **Step 2: Run the focused test and verify it fails**
 
-Run: `pnpm exec vitest run tests/performance/metrics.test.ts --reporter=dot`  
+Run: `pnpm exec vitest run tests/performance/metrics.test.ts --reporter=dot`
 Expected: FAIL because the metric model and budget functions do not exist.
 
 - [ ] **Step 3: Implement the typed model and pure functions**
@@ -71,7 +71,7 @@ Use nullable numeric fields for unavailable browser metrics. Treat missing INP a
 
 - [ ] **Step 4: Run the focused test and verify it passes**
 
-Run: `pnpm exec vitest run tests/performance/metrics.test.ts --reporter=dot`  
+Run: `pnpm exec vitest run tests/performance/metrics.test.ts --reporter=dot`
 Expected: PASS with no secret or customer-data output.
 
 - [ ] **Step 5: Commit the self-contained model**
@@ -102,7 +102,7 @@ Set `testDir: '.'`, `testMatch: /tests\\/performance\\/.*\\.spec\\.ts/`, `fullyP
 
 - [ ] **Step 3: Run config discovery**
 
-Run: `pnpm exec playwright test -c playwright.performance.config.ts --list`  
+Run: `pnpm exec playwright test -c playwright.performance.config.ts --list`
 Expected: the setup plus five performance projects are listed without starting a browser or exposing credentials.
 
 - [ ] **Step 4: Commit the isolated runner**
@@ -137,7 +137,7 @@ Use `PERF_ENFORCE_BUDGETS=1` for CI gates. Always write the report; when enforce
 
 - [ ] **Step 4: Run the focused performance spec against an available local target**
 
-Run: `PERF_ENFORCE_BUDGETS=0 pnpm exec playwright test -c playwright.performance.config.ts --project=perf-unauth-chromium tests/performance/browser-performance.spec.ts`  
+Run: `PERF_ENFORCE_BUDGETS=0 pnpm exec playwright test -c playwright.performance.config.ts --project=perf-unauth-chromium tests/performance/browser-performance.spec.ts`
 Expected: a sanitized JSON report is produced when the local app is available; if no local stack is running, the command must fail with the normal readiness/navigation error rather than claiming a baseline.
 
 - [ ] **Step 5: Commit the browser harness**
@@ -168,7 +168,7 @@ Call `getToken()` once per VU, then issue the following authenticated GET reques
 
 - [ ] **Step 3: Run the static safety test**
 
-Run: `node --test tests/load/critical-paths.k6.test.js`  
+Run: `node --test tests/load/critical-paths.k6.test.js`
 Expected: PASS without contacting any target URL.
 
 - [ ] **Step 4: Commit the load scenario**
@@ -208,7 +208,7 @@ Fail before test execution when `target_url` or `api_url` contains `app.oetwithd
 
 - [ ] **Step 5: Run workflow YAML and script syntax checks**
 
-Run: `node --check scripts/perf/summarize-browser-reports.mjs` and `git diff --check -- .github/workflows/performance.yml scripts/perf/summarize-browser-reports.mjs`  
+Run: `node --check scripts/perf/summarize-browser-reports.mjs` and `git diff --check -- .github/workflows/performance.yml scripts/perf/summarize-browser-reports.mjs`
 Expected: both pass.
 
 - [ ] **Step 6: Commit the performance workflow**
@@ -239,7 +239,7 @@ Keep the Rust and bridge conformance jobs unchanged. Add `workflow_dispatch` so 
 
 - [ ] **Step 3: Validate YAML path and trigger changes**
 
-Run: `git diff --check -- .github/workflows/mobile-ci.yml .github/workflows/tauri-ci.yml` and `rg -n 'app/providers|components/shell|components/mobile|workflow_dispatch' .github/workflows/mobile-ci.yml .github/workflows/tauri-ci.yml`  
+Run: `git diff --check -- .github/workflows/mobile-ci.yml .github/workflows/tauri-ci.yml` and `rg -n 'app/providers|components/shell|components/mobile|workflow_dispatch' .github/workflows/mobile-ci.yml .github/workflows/tauri-ci.yml`
 Expected: the intended paths and manual Tauri trigger are present with no whitespace errors.
 
 - [ ] **Step 4: Commit native trigger coverage**
@@ -261,17 +261,17 @@ git commit -m "ci: gate shared runtime changes on native builds"
 
 - [ ] **Step 1: Run the smallest local TypeScript and test checks**
 
-Run: `pnpm exec vitest run tests/performance/metrics.test.ts tests/static/frontend-heavy-imports.test.ts --reporter=dot` and `pnpm exec tsc --noEmit --pretty false`  
+Run: `pnpm exec vitest run tests/performance/metrics.test.ts tests/static/frontend-heavy-imports.test.ts --reporter=dot` and `pnpm exec tsc --noEmit --pretty false`
 Expected: focused tests pass; typecheck either passes or reports only an explicitly documented pre-existing failure.
 
 - [ ] **Step 2: Run scoped lint and diff checks**
 
-Run: `pnpm exec eslint tests/performance/metrics.ts tests/performance/metrics.test.ts tests/performance/auth.setup.ts tests/performance/browser-performance.spec.ts playwright.performance.config.ts scripts/perf/summarize-browser-reports.mjs` and `git diff --check`  
+Run: `pnpm exec eslint tests/performance/metrics.ts tests/performance/metrics.test.ts tests/performance/auth.setup.ts tests/performance/browser-performance.spec.ts playwright.performance.config.ts scripts/perf/summarize-browser-reports.mjs` and `git diff --check`
 Expected: no new errors and no whitespace errors.
 
 - [ ] **Step 3: Run the browser baseline locally when the stack is available**
 
-Run: `PERF_ENFORCE_BUDGETS=0 pnpm exec playwright test -c playwright.performance.config.ts --project=perf-unauth-chromium --project=perf-learner-chromium tests/performance/browser-performance.spec.ts`  
+Run: `PERF_ENFORCE_BUDGETS=0 pnpm exec playwright test -c playwright.performance.config.ts --project=perf-unauth-chromium --project=perf-learner-chromium tests/performance/browser-performance.spec.ts`
 Expected: reports are generated; unavailable local infrastructure is recorded as unverified rather than fabricated as a pass.
 
 - [ ] **Step 4: Commit the complete implementation**
