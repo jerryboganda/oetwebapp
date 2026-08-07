@@ -15,7 +15,10 @@ export function LearnerWorkspaceContainer({ className, children, initial = false
     <motion.div
       data-testid="learner-workspace-container"
       className={cn('w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-4 lg:py-6', className)}
-      layout={!reducedMotion}
+      // Layout projection during the loading-skeleton -> dashboard swap can
+      // apply large transforms on WebKit and delay the real LCP candidate.
+      // Route/state entrance motion remains active through workspaceMotion.
+      layout={initial !== false && !reducedMotion}
       {...workspaceMotion}
       initial={initial}
       {...props}

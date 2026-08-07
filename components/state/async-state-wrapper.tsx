@@ -85,8 +85,10 @@ export function AsyncStateWrapper({
     }
   })();
 
+  // Avoid layout projection on the initial data swap; it can hold mobile
+  // content in a transformed state long enough to distort LCP.
   return (
-    <motion.div layout aria-live="polite" aria-busy={status === 'loading'} className="w-full min-w-0">
+    <motion.div aria-live="polite" aria-busy={status === 'loading'} className="w-full min-w-0">
       {content}
     </motion.div>
   );
