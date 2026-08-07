@@ -26,7 +26,8 @@ public enum DeviceResolution
     /// can occupy a device slot.</summary>
     OtpRequired,
 
-    /// <summary>Too many device changes in the configured rolling window.</summary>
+    /// <summary>Too many OTP-approved device replacements in the configured
+    /// rolling window.</summary>
     CooldownBlocked,
 }
 
@@ -106,12 +107,16 @@ public sealed class TrustedDeviceService(
         }
 
         // This is deliberately separate from the per-learner number of active
-        // device slots. The rolling cooldown limits churn; an admin override
-        // changes how many identities may remain approved, not how many times
-        // a learner may rotate devices in a short period.
+        // device slots. The rolling cooldown limits OTP-approved replacements;
+        // the initial bootstrap is not a device change and must not consume a
+        // legitimate learner's replacement budget. An admin override changes
+        // how many identities may remain approved, not how many times a learner
+        // may rotate devices in a short period.
         var windowStart = timeProvider.GetUtcNow().AddDays(-Math.Max(1, changeWindowDays));
         var recentChanges = await db.TrustedDevices
-            .CountAsync(d => d.ApplicationUserAccountId == authAccountId && d.TrustedAt > windowStart, ct);
+            .CountAsync(d => d.ApplicationUserAccountId == authAccountId
+                && d.TrustedAt > windowStart
+                && d.TrustGrantedVia == "otp_verified", ct);
         var effectiveChangeLimit = Math.Max(1, changeMaxPerWindow);
         if (recentChanges >= effectiveChangeLimit)
         {

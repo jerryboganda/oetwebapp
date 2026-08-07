@@ -8,7 +8,10 @@ and the web, Android, iOS, Windows, and macOS clients.
 
 - A learner has one approved client identity by default.
 - A client identity is the stable value sent in `X-OET-Device-Id` and stored
-  in `TrustedDevice.DeviceId`.
+  in `TrustedDevice.DeviceId`. Web clients persist it in both first-party
+  `localStorage` and an opaque first-party cookie so privacy-oriented
+  in-app-browser localStorage resets do not silently mint a new identity on
+  every launch; native clients use OS secure storage.
 - The first enforced sign-in bootstraps one identity. A different identity must
   complete the existing email-OTP device challenge before it is approved.
 - When a new identity is approved while the default one-identity limit is
@@ -22,7 +25,7 @@ and the web, Android, iOS, Windows, and macOS clients.
 
 | Client surface | Counting rule |
 |---|---|
-| Web browser | One browser profile and its tabs/windows count as one. Clearing site storage or using another browser profile creates a new identity. |
+| Web browser | One browser profile and its tabs/windows count as one. Clearing all site data or using another browser profile creates a new identity. The web identity is backed by localStorage plus a first-party cookie. |
 | Android/iOS official app | One app installation and its OS secure-storage record count as one. Uninstalling/reinstalling creates a new identity. |
 | Windows/macOS official desktop app | One app installation and its persisted desktop identity count as one. |
 | Same physical computer/phone | A browser profile and an official app count separately. The server intentionally does not infer hardware equivalence from user-agent, IP, or platform headers. |
@@ -46,8 +49,9 @@ one may avoid re-approving retained identities, but it still cannot be used
 simultaneously in two live sessions.
 
 The rolling `DeviceChangeWindowDays` / `DeviceChangeMaxPerWindow` cooldown is
-separate from the approved-identity limit. An override does not make unlimited
-rapid device churn possible.
+separate from the approved-identity limit and counts OTP-approved replacement
+identities only; the initial bootstrap does not consume the change budget. An
+override does not make unlimited rapid device churn possible.
 
 ## Audit and user-visible evidence
 

@@ -1,31 +1,36 @@
-# Current Task - Maximum performance optimisation across all runtimes
+# Current Task - Trusted-device cooldown false-positive incident
 
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
 ## Outcome
 
-- Deferred Capacitor/desktop updater, forced-update, and settings-only API code
-  behind runtime/query boundaries so web and auth startup do not download native
-  or learner-only code.
-- Reused the dashboard profile React Query cache in the onboarding checklist,
-  bounded the promotional carousel to the active slide plus adjacent banners,
-  and changed admin/dashboard and learner Zoom retries to in-place refetches.
-- Converted ordinary admin retry paths and the admin shell error fallback away
-  from browser reloads; existing form/session state now remains in memory.
+- Web device identity now persists in both localStorage and an opaque
+  first-party cookie, allowing privacy-oriented in-app-browser launches to
+  recover the same identity instead of minting a new UUID each time.
+- Device-change cooldown now counts only OTP-approved replacement identities;
+  the initial bootstrap no longer consumes the learner's change budget.
+- Added focused browser and backend regression coverage plus policy/runbook
+  documentation for the corrected semantics.
 
 ## Validation
 
-- `pnpm exec tsc --noEmit --pretty false` passed.
-- Focused Vitest passed: 23 tests in the static import and admin non-editor
-  suites. The fixture emits only its existing jsdom navigation notice.
-- Scoped ESLint with `--quiet` passed with 0 errors.
+- `pnpm exec vitest run lib/device-id.test.ts lib/auth-storage.test.ts --reporter=dot`: 8/8 passed.
+- `pnpm exec eslint lib/device-id.ts lib/device-id.test.ts --quiet`: passed.
+- `cmd /c "pnpm exec tsc --noEmit --pretty false"`: passed.
+- `git diff --check`: passed.
+- Local `dotnet test ...TrustedDeviceServiceTests...` stalled before compiler/test
+  output twice; no local backend pass is claimed. GitHub Actions remains the
+  backend compile/test gate.
+- Public production health was read-only checked: web `/api/health`, API
+  `/health/live`, and `/health/ready` returned 200 before deployment.
 
 ## Next step
 
-Inspect the final diff, stage explicit implementation/test/state paths, commit
-and push `main`, then watch the GitHub production deployment and report live
-health evidence. Device-specific Android/iOS/Windows/macOS hardware coverage
-remains an external validation boundary.
+Review the scoped diff, stage only the incident implementation/tests/docs and
+this state file, commit and push `main`, then watch Build & Deploy plus backend
+CI and re-check production health. Existing unrelated working-tree files
+(`.codex/config.toml`, `.superpowers/`, performance/test changes) must remain
+unstaged.
 
 # Agent State - Course platform security production completion
 

@@ -162,12 +162,22 @@ public class TrustedDeviceServiceTests
     public async Task ResolveForSignInAsync_DeviceChangesAtConfiguredMaxWithinWindow_BlocksWithCooldownAndLogsBlockedEvent()
     {
         var (db, service, clock, sessions, events) = Build();
-        // Two trust events within the last 30 days: one superseded, one
-        // currently active. Cooldown counts ALL TrustedDevices rows with
-        // TrustedAt inside the window (no RevokedAt filter), not just the
-        // active one — see TrustedDeviceService.ResolveForSignInAsync.
-        await SeedDeviceAsync(db, AccountId, "device-a", clock.GetUtcNow().AddDays(-5), revokedAt: clock.GetUtcNow().AddDays(-3));
-        await SeedDeviceAsync(db, AccountId, "device-b", clock.GetUtcNow().AddDays(-3));
+        // Two OTP-approved replacement events within the last 30 days: one
+        // superseded, one currently active. Cooldown counts replacement rows
+        // with TrustedAt inside the window, not just the active one.
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-a",
+            clock.GetUtcNow().AddDays(-5),
+            revokedAt: clock.GetUtcNow().AddDays(-3),
+            trustGrantedVia: "otp_verified");
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-b",
+            clock.GetUtcNow().AddDays(-3),
+            trustGrantedVia: "otp_verified");
 
         var result = await service.ResolveForSignInAsync(AccountId, "device-c", changeWindowDays: 30, changeMaxPerWindow: 2, default);
 
@@ -179,6 +189,43 @@ public class TrustedDeviceServiceTests
         Assert.Contains(events.Calls, logged => logged.Kind == SecurityEventKinds.DeviceTrustRejected);
         Assert.Empty(sessions.RevokeAllCalls);
         Assert.Equal(2, await db.TrustedDevices.CountAsync(d => d.ApplicationUserAccountId == AccountId));
+    }
+
+    [Fact]
+    public async Task ResolveForSignInAsync_InitialBootstrapDoesNotConsumeDeviceChangeBudget()
+    {
+        var (db, service, clock, sessions, events) = Build();
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-bootstrap",
+            clock.GetUtcNow().AddDays(-5),
+            trustGrantedVia: "bootstrap");
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-otp-1",
+            clock.GetUtcNow().AddDays(-4),
+            revokedAt: clock.GetUtcNow().AddDays(-3),
+            trustGrantedVia: "otp_verified");
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-otp-2",
+            clock.GetUtcNow().AddDays(-2),
+            trustGrantedVia: "otp_verified");
+
+        var result = await service.ResolveForSignInAsync(
+            AccountId,
+            "device-new",
+            changeWindowDays: 30,
+            changeMaxPerWindow: 3,
+            default);
+
+        Assert.Equal(DeviceResolution.OtpRequired, result.Resolution);
+        Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceTrustRequested);
+        Assert.DoesNotContain(events.Calls, call => call.Kind == SecurityEventKinds.DeviceChangeBlockedCooldown);
+        Assert.Empty(sessions.RevokeAllCalls);
     }
 
     [Fact]
@@ -202,8 +249,19 @@ public class TrustedDeviceServiceTests
     {
         var (db, service, clock, sessions, events) = Build();
         await SeedAccountAsync(db, AccountId, maxDevicesOverride: 5);
-        await SeedDeviceAsync(db, AccountId, "device-a", clock.GetUtcNow().AddDays(-5), revokedAt: clock.GetUtcNow().AddDays(-3));
-        await SeedDeviceAsync(db, AccountId, "device-b", clock.GetUtcNow().AddDays(-3));
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-a",
+            clock.GetUtcNow().AddDays(-5),
+            revokedAt: clock.GetUtcNow().AddDays(-3),
+            trustGrantedVia: "otp_verified");
+        await SeedDeviceAsync(
+            db,
+            AccountId,
+            "device-b",
+            clock.GetUtcNow().AddDays(-3),
+            trustGrantedVia: "otp_verified");
 
         var result = await service.ResolveForSignInAsync(
             AccountId, "device-c", changeWindowDays: 30, changeMaxPerWindow: 2, default);
