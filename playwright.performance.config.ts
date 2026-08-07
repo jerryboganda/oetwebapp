@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+const performanceDeviceId = process.env.PERF_DEVICE_ID
+  ?? `perf-playwright-${process.env.GITHUB_RUN_ID ?? 'local'}`;
 
 export default defineConfig({
   testDir: '.',
@@ -26,6 +28,11 @@ export default defineConfig({
     {
       name: 'perf-setup',
       testMatch: /tests\/performance\/auth\.setup\.ts/,
+      use: {
+        extraHTTPHeaders: {
+          'X-OET-Device-Id': performanceDeviceId,
+        },
+      },
     },
     {
       name: 'perf-unauth-chromium',

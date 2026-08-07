@@ -31,9 +31,8 @@ public static partial class SeedData
             hasChanges = true;
         }
 
-        if (!await db.SignupExamTypeCatalog.AnyAsync(cancellationToken))
+        if (await EnsureSignupCatalogAsync(db, cancellationToken))
         {
-            SeedSignupCatalog(db);
             hasChanges = true;
         }
 
@@ -2121,9 +2120,63 @@ public static partial class SeedData
 
     }
 
-    private static void SeedSignupCatalog(LearnerDbContext db)
+    private static async Task<bool> EnsureSignupCatalogAsync(
+        LearnerDbContext db,
+        CancellationToken cancellationToken)
     {
-        db.SignupExamTypeCatalog.AddRange(
+        var existingExamTypeIds = (await db.SignupExamTypeCatalog
+            .AsNoTracking()
+            .Select(row => row.Id)
+            .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+        var existingProfessionIds = (await db.SignupProfessionCatalog
+            .AsNoTracking()
+            .Select(row => row.Id)
+            .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+        var existingSessionIds = (await db.SignupSessionCatalog
+            .AsNoTracking()
+            .Select(row => row.Id)
+            .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+
+        return SeedSignupCatalog(db, existingExamTypeIds, existingProfessionIds, existingSessionIds);
+    }
+
+    private static bool AddMissingSignupRows<T>(
+        DbSet<T> set,
+        IEnumerable<T> rows,
+        HashSet<string> existingIds,
+        Func<T, string> idSelector)
+        where T : class
+    {
+        var changed = false;
+        foreach (var row in rows)
+        {
+            if (!existingIds.Add(idSelector(row)))
+            {
+                continue;
+            }
+
+            set.Add(row);
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static bool SeedSignupCatalog(
+        LearnerDbContext db,
+        HashSet<string> existingExamTypeIds,
+        HashSet<string> existingProfessionIds,
+        HashSet<string> existingSessionIds)
+    {
+        var changed = false;
+
+        changed |= AddMissingSignupRows(
+            db.SignupExamTypeCatalog,
+            new[]
+            {
             new SignupExamTypeCatalog
             {
                 Id = "oet",
@@ -2141,9 +2194,15 @@ public static partial class SeedData
                 Description = "IELTS preparation and session enrollment.",
                 SortOrder = 2,
                 IsActive = true
-            });
+            }
+            },
+            existingExamTypeIds,
+            static row => row.Id);
 
-        db.SignupProfessionCatalog.AddRange(
+        changed |= AddMissingSignupRows(
+            db.SignupProfessionCatalog,
+            new[]
+            {
             new SignupProfessionCatalog
             {
                 Id = "nursing",
@@ -2223,9 +2282,15 @@ public static partial class SeedData
                 Description = "General academic and migration IELTS candidates.",
                 SortOrder = 8,
                 IsActive = true
-            });
+            }
+            },
+            existingProfessionIds,
+            static row => row.Id);
 
-        db.SignupSessionCatalog.AddRange(
+        changed |= AddMissingSignupRows(
+            db.SignupSessionCatalog,
+            new[]
+            {
             new SignupSessionCatalog
             {
                 Id = "session-oet-nursing-apr",
@@ -2285,7 +2350,12 @@ public static partial class SeedData
                 SeatsRemaining = 0,
                 SortOrder = 4,
                 IsActive = true
-            });
+            }
+            },
+            existingSessionIds,
+            static row => row.Id);
+
+        return changed;
     }
 
     private static void SeedExamFamilies(LearnerDbContext db)

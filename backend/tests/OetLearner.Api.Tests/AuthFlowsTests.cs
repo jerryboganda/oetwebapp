@@ -1192,6 +1192,31 @@ public class AuthFlowsTests
         Assert.NotNull(adminAccount.EmailVerifiedAt);
     }
 
+    [Fact]
+    public async Task SeedData_EnsureReferenceData_AddsMissingSignupRowsWithoutDuplicatingExistingRows()
+    {
+        var dbOptions = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+
+        await using (var partialDb = new LearnerDbContext(dbOptions))
+        {
+            partialDb.SignupProfessionCatalog.Add(new SignupProfessionCatalog { Id = "radiography" });
+            await partialDb.SaveChangesAsync();
+        }
+
+        await using (var db = new LearnerDbContext(dbOptions))
+        {
+            await SeedData.EnsureReferenceDataAsync(db);
+            await SeedData.EnsureReferenceDataAsync(db);
+
+            Assert.Equal(8, await db.SignupProfessionCatalog.CountAsync());
+            Assert.Equal(2, await db.SignupExamTypeCatalog.CountAsync());
+            Assert.Equal(4, await db.SignupSessionCatalog.CountAsync());
+            Assert.Equal(1, await db.SignupProfessionCatalog.CountAsync(row => row.Id == "radiography"));
+        }
+    }
+
     public static IEnumerable<object[]> AuthRequestContractSamples()
     {
         yield return new object[]

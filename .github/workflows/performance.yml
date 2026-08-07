@@ -1,17 +1,25 @@
-name: Performance Gates (staging)
+name: Performance Gates (staging + isolated)
 
 on:
   schedule:
     - cron: '0 5 * * 1'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Use the disposable GitHub-hosted stack, or an explicitly configured non-production staging target'
+        required: false
+        default: ephemeral
+        type: choice
+        options:
+          - ephemeral
+          - external
       target_url:
-        description: 'HTTPS staging web URL; production hosts are rejected'
-        required: true
+        description: 'HTTPS non-production web URL; required only when mode=external'
+        required: false
         type: string
       api_url:
-        description: 'HTTPS staging API URL; production hosts are rejected'
-        required: true
+        description: 'HTTPS non-production API URL; required only when mode=external'
+        required: false
         type: string
       include_admin:
         description: 'Run the optional admin k6 read path using the injected staging token'
@@ -29,6 +37,7 @@ concurrency:
 env:
   NODE_VERSION: '22'
   PNPM_VERSION: '10.33.0'
+  PERF_MODE: ${{ inputs.mode || ((vars.PERF_TARGET_URL != '' && vars.PERF_API_URL != '') && 'external' || 'ephemeral') }}
   PERF_TARGET_URL: ${{ inputs.target_url || vars.PERF_TARGET_URL }}
   PERF_API_URL: ${{ inputs.api_url || vars.PERF_API_URL }}
   K6_INCLUDE_ADMIN: ${{ inputs.include_admin == true && '1' || '0' }}
@@ -37,7 +46,7 @@ jobs:
   performance:
     name: Browser and API performance gates
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -53,15 +62,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate explicit staging targets
-        env:
-          TARGET_URL: ${{ env.PERF_TARGET_URL }}
-          API_URL: ${{ env.PERF_API_URL }}
+      - name: Resolve isolated performance targets
+        if: env.PERF_MODE == 'ephemeral'
+        run: |
+          echo 'PERF_TARGET_URL=http://127.0.0.1:3000' >> "$GITHUB_ENV"
+          echo 'PERF_API_URL=http://127.0.0.1:5198' >> "$GITHUB_ENV"
+
+      - name: Validate explicit non-production targets
+        if: env.PERF_MODE == 'external'
         run: |
           node --input-type=module <<'NODE'
           const values = [
-            ['PERF_TARGET_URL', process.env.TARGET_URL],
-            ['PERF_API_URL', process.env.API_URL],
+            ['PERF_TARGET_URL', process.env.PERF_TARGET_URL],
+            ['PERF_API_URL', process.env.PERF_API_URL],
           ];
           const blocked = ['app.oetwithdrhesham.co.uk', 'api.oetwithdrhesham.co.uk', '185.252.233.186'];
           for (const [name, value] of values) {
@@ -74,17 +87,27 @@ jobs:
           }
           NODE
 
+      - name: Build isolated staging-like stack
+        if: env.PERF_MODE == 'ephemeral'
+        run: docker compose -f docker-compose.desktop.yml up -d --build
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Verify isolated stack readiness
+        if: env.PERF_MODE == 'ephemeral'
+        env:
+          PLAYWRIGHT_READY_TIMEOUT_MS: '900000'
+        run: node ./scripts/qa/assert-local-stack.mjs
 
       - name: Run browser performance measurements
         id: browser
         continue-on-error: true
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ env.PERF_TARGET_URL }}
-          NEXT_PUBLIC_API_BASE_URL: ${{ env.PERF_API_URL }}
-          PERF_ENFORCE_BUDGETS: '1'
         run: |
+          PLAYWRIGHT_BASE_URL="$PERF_TARGET_URL" \
+          NEXT_PUBLIC_API_BASE_URL="$PERF_API_URL" \
+          PERF_DEVICE_ID="perf-playwright-${GITHUB_RUN_ID}" \
+          PERF_ENFORCE_BUDGETS=1 \
           pnpm exec playwright test -c playwright.performance.config.ts
 
       - name: Install k6
@@ -99,15 +122,36 @@ jobs:
         id: k6
         continue-on-error: true
         env:
-          K6_TARGET_URL: ${{ env.PERF_API_URL }}
-          OET_TEST_LEARNER_EMAIL: ${{ secrets.OET_PERF_LEARNER_EMAIL }}
-          OET_TEST_LEARNER_PASSWORD: ${{ secrets.OET_PERF_LEARNER_PASSWORD }}
-          OET_TEST_ADMIN_ACCESS_TOKEN: ${{ secrets.OET_PERF_ADMIN_ACCESS_TOKEN }}
+          OET_PERF_LEARNER_EMAIL: ${{ secrets.OET_PERF_LEARNER_EMAIL }}
+          OET_PERF_LEARNER_PASSWORD: ${{ secrets.OET_PERF_LEARNER_PASSWORD }}
+          OET_PERF_ADMIN_ACCESS_TOKEN: ${{ secrets.OET_PERF_ADMIN_ACCESS_TOKEN }}
         run: |
+          learner_email="$OET_PERF_LEARNER_EMAIL"
+          learner_password="$OET_PERF_LEARNER_PASSWORD"
+          if [ "$PERF_MODE" = 'ephemeral' ]; then
+            learner_email='learner@oet-prep.dev'
+            learner_password='Password123!'
+          fi
           mkdir -p output/performance/k6
+          K6_TARGET_URL="$PERF_API_URL" \
+          OET_TEST_LEARNER_EMAIL="$learner_email" \
+          OET_TEST_LEARNER_PASSWORD="$learner_password" \
+          OET_TEST_ADMIN_ACCESS_TOKEN="$OET_PERF_ADMIN_ACCESS_TOKEN" \
+          OET_TEST_DEVICE_ID="perf-k6-${GITHUB_RUN_ID}" \
           k6 run --summary-export output/performance/k6/critical-paths.json tests/load/critical-paths.k6.js
 
+      - name: Capture isolated stack logs
+        if: always() && env.PERF_MODE == 'ephemeral'
+        run: |
+          mkdir -p output/performance/stack
+          docker compose -f docker-compose.desktop.yml logs --no-color > output/performance/stack/docker-compose.log
+
+      - name: Shut down isolated stack
+        if: always() && env.PERF_MODE == 'ephemeral'
+        run: docker compose -f docker-compose.desktop.yml down --remove-orphans
+
       - name: Summarize browser reports
+        id: summary
         if: always()
         env:
           PERF_ENFORCE_BUDGETS: '1'
@@ -129,8 +173,9 @@ jobs:
         env:
           BROWSER_RESULT: ${{ steps.browser.outcome }}
           K6_RESULT: ${{ steps.k6.outcome }}
+          SUMMARY_RESULT: ${{ steps.summary.outcome }}
         run: |
-          if [ "$BROWSER_RESULT" != "success" ] || [ "$K6_RESULT" != "success" ]; then
-            echo "Performance gate failed: browser=$BROWSER_RESULT k6=$K6_RESULT"
+          if [ "$BROWSER_RESULT" != "success" ] || [ "$K6_RESULT" != "success" ] || [ "$SUMMARY_RESULT" != "success" ]; then
+            echo "Performance gate failed: browser=$BROWSER_RESULT k6=$K6_RESULT summary=$SUMMARY_RESULT"
             exit 1
           fi

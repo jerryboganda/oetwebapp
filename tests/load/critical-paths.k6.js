@@ -18,6 +18,15 @@ export const options = {
   },
 };
 
+export function setup() {
+  const token = getToken();
+  if (!token) {
+    fail('Learner sign-in did not return an access token during k6 setup.');
+  }
+
+  return { token };
+}
+
 const includeAdmin = __ENV.K6_INCLUDE_ADMIN === '1';
 const adminAccessToken = __ENV.OET_TEST_ADMIN_ACCESS_TOKEN || '';
 
@@ -38,12 +47,8 @@ function adminHeaders() {
   };
 }
 
-export default function () {
-  if (!getToken()) {
-    fail('Learner sign-in did not return an access token.');
-  }
-
-  const headers = authHeaders();
+export default function (data) {
+  const headers = authHeaders(data?.token);
   const reads = [
     ['bootstrap', '/v1/me/bootstrap'],
     ['dashboard', '/v1/learner/dashboard'],
