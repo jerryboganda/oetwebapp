@@ -370,7 +370,6 @@ export default function Dashboard() {
         >
         <div className="space-y-6">
           <PostLoginAppModal />
-          <AppDownloadPromo variant="banner" />
           {purchaseSuccess ? (
             <InlineAlert variant="success">
               AI package purchase received. Current balances: {aiPackageCredits
@@ -396,6 +395,10 @@ export default function Dashboard() {
           />
 
           <OnboardingChecklist />
+
+          {/* Keep the optional app promotion below the dashboard's critical
+              focus and subscription content so it cannot become mobile LCP. */}
+          <AppDownloadPromo variant="banner" />
 
           {freeze ? (
             <Card className="border-amber-200 bg-amber-50/70 shadow-sm">
