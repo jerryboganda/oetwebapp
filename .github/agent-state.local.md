@@ -1,3 +1,36 @@
+# Current Task - Maximum Performance Optimisation
+
+Last updated: 2026-08-08
+
+## Outcome
+
+- Shipped the performance implementation on `main` at `117a1fbfe`, including
+  browser budgets/diagnostics, disposable HTTPS performance infrastructure,
+  corrected k6 critical-read tags, auth/startup motion reductions, and a
+  code-split learner dashboard details tree.
+- Performance run `31224597913` passed all browser, k6, and summary gates on
+  the exact SHA. Mobile `31224597896`, Tauri `31224598260`, Build & Deploy
+  `31224563676`, and SBOM `31224563636` also passed.
+- Live web, API health, and API readiness checks returned HTTP 200 after the
+  deployment; production readiness reported database, migrations, stuck jobs,
+  and storage as ok.
+
+## Validation
+
+- Local TypeScript, scoped ESLint, focused Vitest (10/10), k6 regression (2/2),
+  and `git diff --check` passed.
+- Local Docker was unavailable and the bounded local AuthFlows test exceeded
+  its 120-second window; CI is the authoritative build/deploy boundary.
+- External non-production staging credentials/URL and physical devices remain
+  owner-side acceptance boundaries. QA Smoke and Speaking CI are separate
+  broad workflows and are not performance gates.
+
+## Next step
+
+Commit and push the scoped performance evidence/state documentation, allow the
+documentation-triggered deploy to complete, recheck main parity and live health,
+then hand off the final metrics and remaining boundaries.
+
 # Current Task - Production compute offload to GitHub Actions
 
 Last updated: 2026-08-08
