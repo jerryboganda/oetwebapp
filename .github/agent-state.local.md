@@ -24,15 +24,20 @@ Last updated: 2026-08-08
 - The focused .NET migration-policy test was attempted but stalled locally
   before useful test output; no local backend pass is claimed. GitHub Actions
   remains authoritative for compilation and full backend/image gates.
-- The workflow has not yet been pushed or live-verified in this checkpoint.
+- GitHub Actions run `31216996359` for commit `1df02d008817e2ee7b418d95e8b4044fe60a0080`
+  passed all three image builds, off-box EF restore/build/idempotent SQL
+  generation, migration application, and the artifact-only blue/green deploy.
+- Post-deploy read-only checks returned `app_api_health_http=200` and
+  `api_ready_http=200`; green API/web/backup containers are healthy and use
+  the `1df02d008...` GHCR artifacts. No source checkout/sync occurred on the
+  VPS rollout path.
 
 ## Next step
 
-Review and stage only the explicit compute-offload paths, commit and push
-`main`, watch the exact Build & Deploy run through migration/application and
-health gates, then record public health and GHCR image evidence. Preserve the
-unrelated `.codex/config.toml`, `.superpowers/`, and concurrent product/UI/API
-changes. Backup restore parity and authenticated learner acceptance remain
+Preserve the unrelated `.codex/config.toml`, `.superpowers/`, and concurrent
+product/UI/API changes. Backup restore parity/drill and authenticated learner
+acceptance remain manual follow-ups; production runtime OCR/PDF/TTS/AI and
+queue workloads remain data-local by design.
 owner-side boundaries.
 
 # Current Task - Critical Course Video Access Rule
