@@ -27,9 +27,10 @@ Last updated: 2026-08-08
 
 ## Next step
 
-Commit and push the scoped performance evidence/state documentation, allow the
-documentation-triggered deploy to complete, recheck main parity and live health,
-then hand off the final metrics and remaining boundaries.
+No further in-scope performance implementation remains. Main parity, the
+documentation rollout, live health, browser/k6/native gates, and the explicit
+external-staging/physical-device boundaries are recorded; owner-side manual
+device and external-staging acceptance can proceed when those resources exist.
 
 # Current Task - Production compute offload to GitHub Actions
 
