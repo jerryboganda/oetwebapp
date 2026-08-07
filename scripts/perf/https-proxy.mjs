@@ -21,6 +21,7 @@ if (target.protocol !== 'http:') {
 }
 
 function proxyRequest(request, response) {
+  const externalHost = request.headers.host ?? `127.0.0.1:${listenPort}`;
   const upstream = http.request({
     hostname: target.hostname,
     port: target.port || 80,
@@ -28,8 +29,14 @@ function proxyRequest(request, response) {
     path: new URL(request.url ?? '/', target).pathname + new URL(request.url ?? '/', target).search,
     headers: {
       ...request.headers,
-      host: target.host,
+      // Next's request-origin CSRF guard must see the browser-facing HTTPS
+      // origin, even though this process forwards to the local HTTP server.
+      // Keep the upstream host usable while forwarding the public host/proto
+      // explicitly for frameworks that reconstruct request.url from them.
+      host: externalHost,
+      'x-forwarded-host': externalHost,
       'x-forwarded-proto': 'https',
+      'x-forwarded-port': String(listenPort),
     },
   }, (upstreamResponse) => {
     response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);

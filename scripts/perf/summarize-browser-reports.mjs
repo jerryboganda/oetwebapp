@@ -31,19 +31,21 @@ export function buildBrowserPerformanceSummary(reports) {
   const lines = [
     '# Browser performance summary',
     '',
-    '| Project | Route | LCP | FCP | INP | CLS | JS encoded | JS decoded | CSS encoded | CSS decoded | Errors | Violations |',
-    '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+    '| Project | Route | Final route | LCP | FCP | INP | CLS | JS encoded | JS decoded | CSS encoded | CSS decoded | Errors | Violations |',
+    '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
   ];
 
   for (const report of sortedReports) {
     const js = report.resources?.totals?.javascript ?? {};
     const css = report.resources?.totals?.css ?? {};
-    const errorCount = (report.errors?.pageErrors ?? 0) + (report.errors?.requestFailures ?? 0);
+    const errorCount = (report.errors?.pageErrors ?? 0)
+      + (report.errors?.requestFailures ?? 0)
+      + (report.errors?.responseErrors ?? 0);
     const violations = Array.isArray(report.violations) && report.violations.length > 0
       ? report.violations.join('; ')
       : 'none';
 
-    lines.push(`| ${sanitizeCell(report.project)} | ${sanitizeCell(sanitizeRoute(report.route))} | ${formatMetric(report.webVitals?.lcpMs, 'ms')} | ${formatMetric(report.webVitals?.fcpMs, 'ms')} | ${formatMetric(report.webVitals?.inpMs, 'ms')} | ${formatMetric(report.webVitals?.cls)} | ${formatBytes(js.encodedBytes)} | ${formatBytes(js.decodedBytes)} | ${formatBytes(css.encodedBytes)} | ${formatBytes(css.decodedBytes)} | ${errorCount} | ${sanitizeCell(violations)} |`);
+    lines.push(`| ${sanitizeCell(report.project)} | ${sanitizeCell(sanitizeRoute(report.route))} | ${sanitizeCell(sanitizeRoute(report.finalUrl ?? report.route))} | ${formatMetric(report.webVitals?.lcpMs, 'ms')} | ${formatMetric(report.webVitals?.fcpMs, 'ms')} | ${formatMetric(report.webVitals?.inpMs, 'ms')} | ${formatMetric(report.webVitals?.cls)} | ${formatBytes(js.encodedBytes)} | ${formatBytes(js.decodedBytes)} | ${formatBytes(css.encodedBytes)} | ${formatBytes(css.decodedBytes)} | ${errorCount} | ${sanitizeCell(violations)} |`);
   }
 
   return `${lines.join('\n')}\n`;

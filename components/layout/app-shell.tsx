@@ -101,7 +101,7 @@ export function AppShell({
         userSummary={userSummary}
         workspaceRole={workspaceRole}
       />
-      <AnimatePresence initial={!reducedMotion} mode="popLayout">
+      <AnimatePresence initial={false} mode="popLayout">
         <motion.main
           id="main-content"
           tabIndex={-1}
@@ -147,7 +147,7 @@ export function AppShell({
           workspaceRole={workspaceRole}
         />
         <div className="flex min-w-0 flex-1 min-h-0 flex-col">
-          <AnimatePresence initial={!reducedMotion} mode="popLayout">
+          <AnimatePresence initial={false} mode="popLayout">
             <motion.main
               id="main-content"
               tabIndex={-1}
@@ -193,7 +193,7 @@ export function AppShell({
           userSummary={userSummary}
           workspaceRole={workspaceRole}
         />
-        <AnimatePresence initial={!reducedMotion} mode="popLayout">
+        <AnimatePresence initial={false} mode="popLayout">
           <motion.main
             id="main-content"
             tabIndex={-1}

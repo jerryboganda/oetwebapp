@@ -1183,6 +1183,7 @@ public class AuthFlowsTests
         var adminAccount = await db.ApplicationUserAccounts.SingleAsync(x => x.Id == SeedData.AdminAuthAccountId);
         var learner = await db.Users.SingleAsync(x => x.Id == "mock-user-001");
         var expert = await db.ExpertUsers.SingleAsync(x => x.Id == "expert-001");
+        var learnerGoal = await db.Goals.SingleAsync(x => x.UserId == "mock-user-001");
 
         Assert.Equal(learnerAccount.Id, learner.AuthAccountId);
         Assert.Equal(expertAccount.Id, expert.AuthAccountId);
@@ -1190,6 +1191,7 @@ public class AuthFlowsTests
         Assert.NotNull(learnerAccount.EmailVerifiedAt);
         Assert.NotNull(expertAccount.EmailVerifiedAt);
         Assert.NotNull(adminAccount.EmailVerifiedAt);
+        Assert.True(learnerGoal.TargetExamDateSetByUser);
     }
 
     [Fact]

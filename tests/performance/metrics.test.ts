@@ -8,6 +8,7 @@ import {
 function makeReport(overrides: Partial<BrowserPerformanceReport['webVitals']> = {}): BrowserPerformanceReport {
   return {
     route: '/sign-in',
+    finalUrl: '/sign-in',
     project: 'perf-unauth-chromium',
     capturedAt: '2026-08-07T00:00:00.000Z',
     navigation: {
@@ -17,6 +18,7 @@ function makeReport(overrides: Partial<BrowserPerformanceReport['webVitals']> = 
     },
     webVitals: {
       lcpMs: 2_000,
+      lcpElement: 'h1',
       fcpMs: 1_200,
       inpMs: null,
       cls: 0.02,
@@ -33,6 +35,7 @@ function makeReport(overrides: Partial<BrowserPerformanceReport['webVitals']> = 
     errors: {
       pageErrors: 0,
       requestFailures: 0,
+      responseErrors: 0,
       messages: [],
     },
     layout: {
@@ -69,11 +72,12 @@ describe('browser performance metrics', () => {
   it('flags runtime errors, overflow, and invisible primary content', () => {
     expect(evaluatePerformanceBudget({
       ...makeReport(),
-      errors: { pageErrors: 1, requestFailures: 2, messages: ['failed request'] },
+      errors: { pageErrors: 1, requestFailures: 2, responseErrors: 1, messages: ['failed request'] },
       layout: { horizontalOverflow: true, primaryContentVisible: false, clientWidth: 390, scrollWidth: 412 },
     })).toEqual([
       'page errors 1 exceeds 0',
       'request failures 2 exceeds 0',
+      'HTTP response errors 1 exceeds 0',
       'horizontal overflow detected',
       'primary content is not visible',
     ]);

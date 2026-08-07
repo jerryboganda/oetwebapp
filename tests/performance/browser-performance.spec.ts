@@ -11,11 +11,12 @@ import {
 
 type RouteDefinition = {
   route: string;
-  readiness: 'auth' | 'main';
+  readiness: 'auth' | 'learner' | 'admin';
 };
 
 type ObserverSnapshot = {
   lcpMs: number | null;
+  lcpElement: string | null;
   fcpMs: number | null;
   cls: number;
   inpMs: number | null;
@@ -28,10 +29,10 @@ type PerformanceWindow = Window & {
 
 const routeByProject: Record<string, RouteDefinition> = {
   'perf-unauth-chromium': { route: '/sign-in', readiness: 'auth' },
-  'perf-learner-chromium': { route: '/', readiness: 'main' },
-  'perf-learner-pixel': { route: '/', readiness: 'main' },
-  'perf-learner-iphone': { route: '/', readiness: 'main' },
-  'perf-admin-chromium': { route: '/admin', readiness: 'main' },
+  'perf-learner-chromium': { route: '/', readiness: 'learner' },
+  'perf-learner-pixel': { route: '/', readiness: 'learner' },
+  'perf-learner-iphone': { route: '/', readiness: 'learner' },
+  'perf-admin-chromium': { route: '/admin', readiness: 'admin' },
 };
 
 function sanitizeErrorMessage(message: string) {
@@ -47,8 +48,19 @@ function safeFileName(project: string, route: string) {
 
 async function installObservers(page: Page) {
   await page.addInitScript(() => {
+    const describeElement = (element: Element | null | undefined) => {
+      if (!element) return null;
+      const tag = element.tagName.toLowerCase();
+      const id = element.id ? `#${element.id}` : '';
+      const className = typeof element.className === 'string'
+        ? element.className.split(/\s+/u).filter(Boolean).slice(0, 2).map((name) => `.${name}`).join('')
+        : '';
+      return `${tag}${id}${className}`;
+    };
+
     const snapshot: ObserverSnapshot = {
       lcpMs: null,
+      lcpElement: null,
       fcpMs: null,
       cls: 0,
       inpMs: null,
@@ -76,6 +88,7 @@ async function installObservers(page: Page) {
 
     observe('largest-contentful-paint', (entry) => {
       snapshot.lcpMs = entry.startTime;
+      snapshot.lcpElement = describeElement((entry as PerformanceEntry & { element?: Element }).element);
     });
 
     observe('paint', (entry) => {
@@ -105,10 +118,16 @@ async function installObservers(page: Page) {
 }
 
 async function waitForRouteReadiness(page: Page, route: RouteDefinition) {
-  await page.locator('main, [role="main"]').first().waitFor({ state: 'visible', timeout: 30_000 });
-
   if (route.readiness === 'auth') {
+    await page.locator('main, [role="main"]').first().waitFor({ state: 'visible', timeout: 30_000 });
     await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
+  } else if (route.readiness === 'learner') {
+    // AuthGuard initially renders a visible session-checking main element.
+    // Wait for the actual workspace marker so redirects and auth hydration do
+    // not contaminate the learner route measurement.
+    await page.locator('[data-testid="learner-workspace-container"]').waitFor({ state: 'visible', timeout: 30_000 });
+  } else {
+    await page.locator('[data-testid="admin-workspace-container"]').waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   await page.evaluate(async () => {
@@ -131,6 +150,7 @@ async function collectBrowserPerformance(
   const messages: string[] = [];
   let pageErrors = 0;
   let requestFailures = 0;
+  let responseErrors = 0;
 
   const isExpectedRequestCancellation = (errorText: string | undefined) => (
     Boolean(errorText && /ERR_ABORTED|NS_BINDING_ABORTED|CANCELLED|CANCELED/iu.test(errorText))
@@ -160,6 +180,20 @@ async function collectBrowserPerformance(
     messages.push(`requestfailed: ${message}`);
   });
 
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+
+    let pathname = response.url();
+    try {
+      pathname = new URL(response.url()).pathname;
+    } catch {
+      // Keep the full URL when the browser exposes an invalid URL.
+    }
+
+    responseErrors += 1;
+    messages.push(`responseerror: ${response.request().method()} ${pathname} (${response.status()})`);
+  });
+
   await installObservers(page);
   await page.goto(route.route, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => undefined);
@@ -178,6 +212,7 @@ async function collectBrowserPerformance(
     const lcpEntries = performance.getEntriesByType('largest-contentful-paint');
     const snapshot = (window as PerformanceWindow).__oetPerformance ?? {
       lcpMs: null,
+      lcpElement: null,
       fcpMs: null,
       cls: 0,
       inpMs: null,
@@ -194,6 +229,7 @@ async function collectBrowserPerformance(
     });
 
     return {
+      finalUrl: window.location.href,
       navigation: {
         ttfbMs: navigation ? navigation.responseStart : null,
         domContentLoadedMs: navigation ? navigation.domContentLoadedEventEnd : null,
@@ -201,6 +237,7 @@ async function collectBrowserPerformance(
       },
       webVitals: {
         lcpMs: snapshot.lcpMs ?? lcpEntries.at(-1)?.startTime ?? null,
+        lcpElement: snapshot.lcpElement,
         fcpMs: snapshot.fcpMs
           ?? paintEntries.find((entry) => entry.name === 'first-contentful-paint')?.startTime
           ?? null,
@@ -219,6 +256,7 @@ async function collectBrowserPerformance(
 
   const report: BrowserPerformanceReport = {
     route: route.route,
+    finalUrl: browserData.finalUrl,
     project: projectName,
     capturedAt: new Date().toISOString(),
     navigation: browserData.navigation,
@@ -230,6 +268,7 @@ async function collectBrowserPerformance(
     errors: {
       pageErrors,
       requestFailures,
+      responseErrors,
       messages,
     },
     layout: {

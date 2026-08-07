@@ -19,6 +19,7 @@ export type ResourceTotals = {
 
 export type BrowserPerformanceReport = {
   route: string;
+  finalUrl?: string;
   project: string;
   capturedAt: string;
   navigation: {
@@ -28,6 +29,7 @@ export type BrowserPerformanceReport = {
   };
   webVitals: {
     lcpMs: number | null;
+    lcpElement?: string | null;
     fcpMs: number | null;
     inpMs: number | null;
     cls: number | null;
@@ -40,6 +42,7 @@ export type BrowserPerformanceReport = {
   errors: {
     pageErrors: number;
     requestFailures: number;
+    responseErrors?: number;
     messages: string[];
   };
   layout: {
@@ -58,6 +61,7 @@ export type PerformanceBudgets = {
   cls: number;
   maxPageErrors: number;
   maxRequestFailures: number;
+  maxResponseErrors: number;
   allowMissingInp: boolean;
 };
 
@@ -68,6 +72,7 @@ export const DEFAULT_PERFORMANCE_BUDGETS: PerformanceBudgets = {
   cls: 0.1,
   maxPageErrors: 0,
   maxRequestFailures: 0,
+  maxResponseErrors: 0,
   allowMissingInp: true,
 };
 
@@ -144,6 +149,11 @@ export function evaluatePerformanceBudget(
 
   if (report.errors.requestFailures > budgets.maxRequestFailures) {
     violations.push(`request failures ${report.errors.requestFailures} exceeds ${budgets.maxRequestFailures}`);
+  }
+
+  const responseErrors = report.errors.responseErrors ?? 0;
+  if (responseErrors > budgets.maxResponseErrors) {
+    violations.push(`HTTP response errors ${responseErrors} exceeds ${budgets.maxResponseErrors}`);
   }
 
   if (report.layout.horizontalOverflow) {

@@ -14,7 +14,7 @@ export function AdminDashboardShell({
 }: AdminDashboardShellProps) {
   return (
     <AppShell requiredRole="admin" className="!p-0" {...shellProps} workspaceRole="admin">
-      <div className={cn('w-full px-3 py-3 sm:px-4 sm:py-4', workspaceClassName)}>
+      <div data-testid="admin-workspace-container" className={cn('w-full px-3 py-3 sm:px-4 sm:py-4', workspaceClassName)}>
         {children}
       </div>
     </AppShell>

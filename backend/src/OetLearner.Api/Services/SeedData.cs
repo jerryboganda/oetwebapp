@@ -339,6 +339,19 @@ public static partial class SeedData
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        // The demo goal already contains a real target date. Keep the new
+        // confirmation marker aligned on existing development databases so the
+        // authenticated dashboard does not get redirected into first-run goal
+        // setup during browser and native performance checks.
+        var demoGoal = await db.Goals.SingleOrDefaultAsync(
+            goal => goal.UserId == "mock-user-001",
+            cancellationToken);
+        if (demoGoal?.TargetExamDate is not null && !demoGoal.TargetExamDateSetByUser)
+        {
+            demoGoal.TargetExamDateSetByUser = true;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         EnsureLocalAuthAccounts(db);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -870,6 +883,7 @@ public static partial class SeedData
             UserId = userId,
             ProfessionId = "nursing",
             TargetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(3)),
+            TargetExamDateSetByUser = true,
             OverallGoal = "Reach a B grade equivalent across all sub-tests before migration to Australia.",
             TargetWritingScore = 350,
             TargetSpeakingScore = 350,

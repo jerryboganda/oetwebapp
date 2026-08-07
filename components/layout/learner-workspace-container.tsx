@@ -7,7 +7,7 @@ import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 
 type LearnerWorkspaceContainerProps = ComponentPropsWithoutRef<typeof motion.div>;
 
-export function LearnerWorkspaceContainer({ className, children, ...props }: LearnerWorkspaceContainerProps) {
+export function LearnerWorkspaceContainer({ className, children, initial = false, ...props }: LearnerWorkspaceContainerProps) {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const workspaceMotion = getSurfaceMotion('section', reducedMotion);
 
@@ -17,6 +17,7 @@ export function LearnerWorkspaceContainer({ className, children, ...props }: Lea
       className={cn('w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-4 lg:py-6', className)}
       layout={!reducedMotion}
       {...workspaceMotion}
+      initial={initial}
       {...props}
     >
       {children}
