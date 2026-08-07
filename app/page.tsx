@@ -396,10 +396,6 @@ export default function Dashboard() {
 
           <OnboardingChecklist />
 
-          {/* Keep the optional app promotion below the dashboard's critical
-              focus and subscription content so it cannot become mobile LCP. */}
-          <AppDownloadPromo variant="banner" />
-
           {freeze ? (
             <Card className="border-amber-200 bg-amber-50/70 shadow-sm">
               <CardHeader className="pb-3">
@@ -751,6 +747,11 @@ export default function Dashboard() {
               ) : null}
             </MotionList>
           </div>
+
+          {/* Keep this optional marketing promotion below the complete
+              dashboard content so it cannot compete with the first viewport
+              for LCP or introduce a visible mobile layout shift. */}
+          <AppDownloadPromo variant="banner" />
         </div>
       </AsyncStateWrapper>
     </LearnerDashboardShell>
