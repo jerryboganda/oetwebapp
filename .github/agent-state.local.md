@@ -298,3 +298,32 @@ Stage only the explicit implementation/tests/workflow/deploy paths, commit and
 push `main`, then verify the GitHub blue/green deployment and production health.
 The two already-soft-deleted accounts must be purged once from the deployed
 admin UI; no direct production database deletion was performed here.
+
+# Current Task - Forward-compatible per-user video access
+
+Last updated: 2026-08-08
+
+## Outcome
+
+- Preserved explicit per-user video allocations for existing content while
+  automatically including videos first published after the initial video scope.
+- Applied the same rule to learner catalog/detail visibility and the playback
+  entitlement gate, so a newly uploaded and published video does not require
+  ticking every registered learner.
+- Preserved the original scope timestamp when an admin later edits the user's
+  selected video ids, preventing unrelated saves from hiding new content.
+
+## Validation
+
+- Targeted ESLint passed for `components/admin/user-access/video-scope-picker.tsx`
+  and `lib/user-access.ts`.
+- `git diff --check` passed.
+- Focused `dotnet test` and direct API `dotnet build` both stalled on the shared
+  Windows MSBuild host before compiler/test output; no local backend pass is
+  claimed. GitHub Actions remains the backend compile/test gate.
+
+## Next step
+
+Stage only the explicit video-access implementation, tests, docs, and this
+state file; commit and push `main`, then verify the GitHub production workflow
+and health gates. Preserve unrelated `.codex/config.toml` and `.superpowers/`.

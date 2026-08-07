@@ -61,7 +61,8 @@ export interface UserAccess {
   addOns: UserAccessAddOn[];
   moduleOverrides: UserAccessModuleOverride[];
   materialFolderIds: string[];
-  /** Per-user Video Library allow-list (video ids). Empty = inherit the module's full grant. */
+  /** Explicit per-user Video Library ids. Empty = inherit; new videos published after the
+   * initial scope are automatically included even when this list is non-empty. */
   videoIds: string[];
   recallSetCodes: string[];
   accessExpiresAt: string | null;

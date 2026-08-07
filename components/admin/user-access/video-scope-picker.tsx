@@ -122,7 +122,8 @@ function TriStateCheckbox({
  * Speaking/…) → Language (English/Arabic/Unspecified) → individual videos.
  * Tick a whole group to grant it, or drill down to single videos. Stores the
  * selected video ids (empty = no restriction — the learner gets everything the
- * Videos module grants).
+ * Videos module grants). New videos published after the first allocation are
+ * automatically included and do not need to be ticked here.
  */
 export function VideoScopePicker({
   videos,
@@ -306,7 +307,7 @@ export function VideoScopePicker({
       <p className="text-xs text-muted">
         {selectedIds.length === 0
           ? (emptyHint ?? 'Nothing selected — the learner gets every video their plan grants (for their profession).')
-          : (selectedHint ?? ((count) => `${count} video${count === 1 ? '' : 's'} allocated — the learner sees only these.`))(
+          : (selectedHint ?? ((count) => `${count} video${count === 1 ? '' : 's'} explicitly allocated — new videos published after this scope are included automatically.`))(
               selectedIds.length,
             )}
       </p>

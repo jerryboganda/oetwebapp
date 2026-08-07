@@ -8,8 +8,9 @@ namespace OetLearner.Api.Services.Billing;
 /// <summary>
 /// Admin per-user access allocation for the manual "Add User" feature: grant/remove
 /// packages (multiple subscriptions per user), grant add-ons, and declaratively set the
-/// per-user scope (module overrides, Materials-folder + Recall-set allow-lists, and the
-/// master login-expiry gate). Grants reuse <see cref="SubscriptionBundleInitializer"/> and
+/// per-user scope (module overrides, Materials-folder + Recall-set allow-lists, explicit video
+/// allocations with automatic inclusion of newly published videos, and the master login-expiry
+/// gate). Grants reuse <see cref="SubscriptionBundleInitializer"/> and
 /// <see cref="IAddonGrantProcessor"/> so entitlements/AI credits stay consistent and idempotent.
 /// </summary>
 public sealed class UserAccessAllocationService(
@@ -393,6 +394,12 @@ public sealed class UserAccessAllocationService(
         if (request.VideoIds is not null)
         {
             var existing = await db.UserVideoAccesses.Where(x => x.UserId == userId).ToListAsync(ct);
+            // The first video-scope timestamp is the boundary for automatic inclusion of
+            // newly published videos. Preserve it when the explicit selection is edited so
+            // an unrelated admin save cannot hide videos that were added since the first grant.
+            var videoScopeCreatedAt = existing.Count > 0
+                ? existing.Min(x => x.CreatedAt)
+                : now;
             db.UserVideoAccesses.RemoveRange(existing);
             foreach (var videoId in request.VideoIds.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct())
             {
@@ -401,7 +408,7 @@ public sealed class UserAccessAllocationService(
                     Id = $"uva_{Guid.NewGuid():N}",
                     UserId = userId,
                     VideoId = videoId.Trim(),
-                    CreatedAt = now,
+                    CreatedAt = videoScopeCreatedAt,
                 });
             }
         }

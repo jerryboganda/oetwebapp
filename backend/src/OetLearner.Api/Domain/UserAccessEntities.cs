@@ -64,10 +64,10 @@ public class UserMaterialFolderAccess
 }
 
 /// <summary>
-/// Per-user allow-list of Video Library videos. When a learner has ANY rows, the
-/// Video Library home/detail and the playback entitlement gate are RESTRICTED to
-/// those video ids — a restriction WITHIN what the module + profession + plan
-/// already grant. No rows == inherit (all videos the module grants) unchanged.
+/// Per-user Video Library scope. Explicit rows remain allocated, while videos
+/// first published after the initial scope timestamp are automatically included
+/// so the library can grow without editing every learner. No rows == inherit
+/// all videos the module grants, unchanged.
 /// Enforced in <see cref="Services.VideoLibrary.VideoLibraryLearnerService"/>
 /// (listing) and <see cref="Services.VideoLibrary.VideoEntitlementService"/> (gate).
 /// </summary>

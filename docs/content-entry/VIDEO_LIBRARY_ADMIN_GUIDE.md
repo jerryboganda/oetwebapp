@@ -60,3 +60,8 @@ For several videos, tick them and use the bulk move action. Videos can also be d
 6. Continue to upload and publish.
 
 The profession/language/subtest/course-folder fields control where candidates see a video. The Bunny collection controls physical storage organisation. Changing one does not silently change the other.
+
+Learner access is also forward-compatible: a learner's explicitly allocated video scope keeps
+older selections intact, while every video published after that scope was first created is
+automatically included for learners whose package grants the Video Library. Newly uploaded
+videos therefore do not require opening each learner and ticking the new row.

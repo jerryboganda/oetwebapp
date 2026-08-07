@@ -7,11 +7,12 @@ using OetLearner.Api.Services.VideoLibrary;
 namespace OetLearner.Api.Tests;
 
 /// <summary>
-/// Covers the per-user Video Library allow-list (<see cref="UserVideoAccess"/>): a learner
-/// with ANY rows is RESTRICTED to those video ids (fail-open when no rows). Enforced in both
+/// Covers the per-user Video Library scope (<see cref="UserVideoAccess"/>): explicit rows keep
+/// older selections restricted, while videos first published after the initial scope are
+/// automatically included. No rows remains fail-open. Enforced consistently in both
 /// the playback gate (<see cref="VideoEntitlementService"/> → reason "not_in_user_allocation")
 /// and the listing/detail path (<see cref="VideoLibraryLearnerService.FindVisibleVideoAsync"/>).
-/// Admins bypass. Owner directive 2026-07-18.
+/// Admins bypass. Owner directive 2026-07-18, forward-compatible content behavior 2026-08-08.
 /// </summary>
 public class UserVideoAccessTests
 {
@@ -26,21 +27,29 @@ public class UserVideoAccessTests
     private static VideoEntitlementService CreateGate(LearnerDbContext db)
         => new(db, new EffectiveEntitlementResolver(db));
 
-    private static LibraryVideo Video(string id) => new()
+    private static LibraryVideo Video(
+        string id,
+        DateTimeOffset? createdAt = null,
+        DateTimeOffset? publishedAt = null)
     {
-        Id = id,
-        Title = $"Video {id}",
-        AccessTier = "premium",
-        Status = ContentStatus.Published,
-        DurationSeconds = 600,
-        ProfessionIdsJson = "[]",
-        CreatedAt = DateTimeOffset.UtcNow,
-        UpdatedAt = DateTimeOffset.UtcNow,
-    };
+        var created = createdAt ?? DateTimeOffset.UtcNow;
+        return new LibraryVideo
+        {
+            Id = id,
+            Title = $"Video {id}",
+            AccessTier = "premium",
+            Status = ContentStatus.Published,
+            DurationSeconds = 600,
+            ProfessionIdsJson = "[]",
+            CreatedAt = created,
+            PublishedAt = publishedAt,
+            UpdatedAt = created,
+        };
+    }
 
     /// <summary>Grants the learner the Video Library via the admin "Videos" module toggle
-    /// (DashboardModulesJson) so premium videos unlock — the allocation is then the ONLY
-    /// thing that can withhold a video.</summary>
+    /// (DashboardModulesJson) so premium videos unlock — the allocation is then the only
+    /// additional restriction for existing content.</summary>
     private static void SeedVideoModuleSubscription(LearnerDbContext db, string userId)
     {
         var now = DateTimeOffset.UtcNow;
@@ -64,13 +73,17 @@ public class UserVideoAccessTests
         });
     }
 
-    private static void Allow(LearnerDbContext db, string userId, string videoId)
+    private static void Allow(
+        LearnerDbContext db,
+        string userId,
+        string videoId,
+        DateTimeOffset? createdAt = null)
         => db.UserVideoAccesses.Add(new UserVideoAccess
         {
             Id = $"uva-{Guid.NewGuid():N}",
             UserId = userId,
             VideoId = videoId,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = createdAt ?? DateTimeOffset.UtcNow,
         });
 
     // ── Playback gate ───────────────────────────────────────────────────────
@@ -80,14 +93,51 @@ public class UserVideoAccessTests
     {
         await using var db = CreateDb();
         SeedVideoModuleSubscription(db, "learner-1");
-        db.LibraryVideos.AddRange(Video("vid-a"), Video("vid-b"));
-        Allow(db, "learner-1", "vid-a"); // only vid-a is allocated
+        var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        var allocated = Video("vid-a", scopeCreatedAt.AddHours(-2));
+        var excluded = Video("vid-b", scopeCreatedAt.AddHours(-1));
+        db.LibraryVideos.AddRange(allocated, excluded);
+        Allow(db, "learner-1", "vid-a", scopeCreatedAt); // only vid-a is allocated
         await db.SaveChangesAsync();
 
-        var result = await CreateGate(db).AllowAccessAsync("learner-1", Video("vid-b"), default);
+        var result = await CreateGate(db).AllowAccessAsync("learner-1", excluded, default);
 
         Assert.False(result.Allowed);
         Assert.Equal("not_in_user_allocation", result.Reason);
+    }
+
+    [Fact]
+    public async Task Allocation_AutomaticallyIncludesVideosPublishedAfterTheScopeWasCreated()
+    {
+        await using var db = CreateDb();
+        var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        var existing = Video("vid-a", scopeCreatedAt.AddHours(-1), scopeCreatedAt.AddHours(-1));
+        var newlyPublished = Video("vid-new", scopeCreatedAt.AddHours(1), scopeCreatedAt.AddHours(1));
+        db.LibraryVideos.AddRange(existing, newlyPublished);
+        Allow(db, "learner-1", existing.Id, scopeCreatedAt);
+        await db.SaveChangesAsync();
+
+        var service = new VideoLibraryLearnerService(db, entitlements: null!, settingsProvider: null!);
+
+        Assert.NotNull(await service.FindVisibleVideoAsync("learner-1", newlyPublished.Id, scopeCreatedAt.AddDays(1), default));
+    }
+
+    [Fact]
+    public async Task Allocation_AutomaticallyIncludesNewVideoInPlaybackGate()
+    {
+        await using var db = CreateDb();
+        var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        SeedVideoModuleSubscription(db, "learner-1");
+        var existing = Video("vid-a", scopeCreatedAt.AddHours(-1), scopeCreatedAt.AddHours(-1));
+        var newlyPublished = Video("vid-new", scopeCreatedAt.AddHours(1), scopeCreatedAt.AddHours(1));
+        db.LibraryVideos.AddRange(existing, newlyPublished);
+        Allow(db, "learner-1", existing.Id, scopeCreatedAt);
+        await db.SaveChangesAsync();
+
+        var result = await CreateGate(db).AllowAccessAsync("learner-1", newlyPublished, default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
     }
 
     [Fact]
@@ -95,11 +145,13 @@ public class UserVideoAccessTests
     {
         await using var db = CreateDb();
         SeedVideoModuleSubscription(db, "learner-1");
-        db.LibraryVideos.AddRange(Video("vid-a"), Video("vid-b"));
-        Allow(db, "learner-1", "vid-a");
+        var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        var allocated = Video("vid-a", scopeCreatedAt.AddHours(-2));
+        db.LibraryVideos.AddRange(allocated, Video("vid-b", scopeCreatedAt.AddHours(-1)));
+        Allow(db, "learner-1", "vid-a", scopeCreatedAt);
         await db.SaveChangesAsync();
 
-        var result = await CreateGate(db).AllowAccessAsync("learner-1", Video("vid-a"), default);
+        var result = await CreateGate(db).AllowAccessAsync("learner-1", allocated, default);
 
         Assert.True(result.Allowed);
         Assert.Equal("plan_grants_video_library", result.Reason);
@@ -141,17 +193,20 @@ public class UserVideoAccessTests
     public async Task FindVisibleVideo_WithAllocation_HidesNonAllocated()
     {
         await using var db = CreateDb();
-        db.LibraryVideos.AddRange(Video("vid-a"), Video("vid-b"));
-        Allow(db, "learner-1", "vid-a");
+        var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        var allocated = Video("vid-a", scopeCreatedAt.AddHours(-2));
+        var excluded = Video("vid-b", scopeCreatedAt.AddHours(-1));
+        db.LibraryVideos.AddRange(allocated, excluded);
+        Allow(db, "learner-1", "vid-a", scopeCreatedAt);
         await db.SaveChangesAsync();
 
-        // FindVisibleVideoAsync only touches the db (profession + allow-list); the
+        // FindVisibleVideoAsync only touches the db (profession + video scope); the
         // entitlement/settings deps are never dereferenced on this path.
         var service = new VideoLibraryLearnerService(db, entitlements: null!, settingsProvider: null!);
         var now = DateTimeOffset.UtcNow;
 
-        Assert.NotNull(await service.FindVisibleVideoAsync("learner-1", "vid-a", now, default));
-        Assert.Null(await service.FindVisibleVideoAsync("learner-1", "vid-b", now, default));
+        Assert.NotNull(await service.FindVisibleVideoAsync("learner-1", allocated.Id, now, default));
+        Assert.Null(await service.FindVisibleVideoAsync("learner-1", excluded.Id, now, default));
     }
 
     [Fact]

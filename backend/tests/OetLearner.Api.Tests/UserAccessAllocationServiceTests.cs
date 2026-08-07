@@ -252,6 +252,37 @@ public class UserAccessAllocationServiceTests
     }
 
     [Fact]
+    public async Task PutScope_PreservesInitialVideoScopeDate_WhenUpdatingVideoSelection()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-video-scope");
+        var initialScopeAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        db.UserVideoAccesses.Add(new UserVideoAccess
+        {
+            Id = "uva-initial",
+            UserId = "learner-video-scope",
+            VideoId = "vid-initial",
+            CreatedAt = initialScopeAt,
+        });
+        await db.SaveChangesAsync();
+
+        await CreateService(db).PutScopeAsync(
+            "admin", "Admin", "learner-video-scope",
+            new AdminUserAccessScopeRequest(
+                Modules: null,
+                MaterialFolderIds: null,
+                RecallSetCodes: null,
+                AccessExpiresAt: null,
+                ClearAccessExpiry: false,
+                VideoIds: ["vid-updated"]),
+            default);
+
+        var updated = await db.UserVideoAccesses.SingleAsync();
+        Assert.Equal("vid-updated", updated.VideoId);
+        Assert.Equal(initialScopeAt, updated.CreatedAt);
+    }
+
+    [Fact]
     public async Task PutScope_PastExpiry_RevokesActiveRefreshTokens()
     {
         await using var db = CreateDb();
