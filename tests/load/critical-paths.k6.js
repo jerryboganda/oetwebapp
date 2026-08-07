@@ -14,7 +14,7 @@ export const options = {
   ],
   thresholds: {
     'http_req_failed': ['rate<0.01'],
-    'http_req_duration{endpoint:critical-read}': ['p(95)<1000', 'p(99)<2000'],
+    'http_req_duration{endpoint-class:critical-read}': ['p(95)<1000', 'p(99)<2000'],
   },
 };
 

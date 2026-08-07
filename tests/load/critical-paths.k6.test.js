@@ -6,6 +6,8 @@ const source = readFileSync(new URL('./critical-paths.k6.js', import.meta.url), 
 
 test('critical k6 load test declares the staging performance thresholds', () => {
   assert.match(source, /http_req_failed/);
+  assert.match(source, /http_req_duration\{endpoint-class:critical-read\}/);
+  assert.doesNotMatch(source, /http_req_duration\{endpoint:critical-read\}/);
   assert.match(source, /p\(95\)<1000/);
   assert.match(source, /p\(99\)<2000/);
   assert.match(source, /K6_INCLUDE_ADMIN/);
