@@ -89,6 +89,8 @@ jobs:
 
       - name: Windows desktop launch smoke
         shell: pwsh
+        env:
+          OET_DESKTOP_SKIP_TRAY: '1'
         run: |
           $binary = Join-Path (Get-Location) 'target\debug\oet-desktop.exe'
           $desktopProcess = Start-Process -FilePath $binary -WorkingDirectory (Get-Location) -PassThru

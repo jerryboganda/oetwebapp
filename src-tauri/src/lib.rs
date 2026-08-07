@@ -353,7 +353,12 @@ pub fn run() {
                 }
             }
 
-            setup_tray(&handle)?;
+            // Hosted Windows CI runners do not expose an interactive shell tray.
+            // The launch smoke opts out of tray registration only for that
+            // headless probe; production builds retain the native tray menu.
+            if std::env::var_os("OET_DESKTOP_SKIP_TRAY").is_none() {
+                setup_tray(&handle)?;
+            }
 
             // macOS: install the native app menu (Edit shortcuts, About, Reload).
             // Windows/Linux keep the chromeless UX (no app menu).
