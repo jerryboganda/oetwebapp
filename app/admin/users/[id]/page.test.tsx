@@ -9,23 +9,29 @@ const {
   mockFetchAdminSignupCatalog,
   mockUpdateAdminUserProfile,
   mockSetAdminUserPassword,
+  mockDeleteAdminUser,
+  mockRouterReplace,
 } = vi.hoisted(() => ({
   mockUseAdminAuth: vi.fn(),
   mockGetAdminUserDetailData: vi.fn(),
   mockFetchAdminSignupCatalog: vi.fn(),
   mockUpdateAdminUserProfile: vi.fn(),
   mockSetAdminUserPassword: vi.fn(),
+  mockDeleteAdminUser: vi.fn(),
+  mockRouterReplace: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'learner-1' }),
+  useRouter: () => ({ replace: mockRouterReplace }),
 }));
 
 vi.mock('@/lib/hooks/use-admin-auth', () => ({ useAdminAuth: () => mockUseAdminAuth() }));
 vi.mock('@/lib/admin', () => ({ getAdminUserDetailData: (...args: unknown[]) => mockGetAdminUserDetailData(...args) }));
 vi.mock('@/lib/api', () => ({
   adjustAdminUserCredits: vi.fn(),
-  deleteAdminUser: vi.fn(),
+  deleteAdminUser: (...args: unknown[]) => mockDeleteAdminUser(...args),
+  hardDeleteAdminUser: vi.fn(),
   fetchAdminPermissions: vi.fn(),
   fetchAdminSignupCatalog: (...args: unknown[]) => mockFetchAdminSignupCatalog(...args),
   resendAdminUserInvite: vi.fn(),
@@ -244,5 +250,33 @@ describe('UserDetailPage profile catalog fields', () => {
     await user.click(screen.getByRole('button', { name: /^save password$/i }));
 
     expect(await screen.findAllByText(/known public data breach/i)).not.toHaveLength(0);
+  });
+
+  it('requires the user email before permanently purging an account', async () => {
+    const user = userEvent.setup();
+    mockGetAdminUserDetailData.mockResolvedValue(buildUser({
+      availableActions: {
+        ...buildUser().availableActions,
+        canDelete: true,
+      },
+    }));
+    mockDeleteAdminUser.mockResolvedValue({ id: 'learner-1', status: 'deleted', purgedRows: 8, tables: 4, detail: {} });
+
+    renderWithRouter(<UserDetailPage />);
+
+    await user.click(await screen.findByRole('button', { name: /permanently delete/i }));
+    expect(await screen.findByText(/cannot be undone/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/type the user's email/i), 'wrong@example.test');
+    await user.click(screen.getByRole('button', { name: /permanently delete account/i }));
+    expect(mockDeleteAdminUser).not.toHaveBeenCalled();
+    expect(await screen.findByText(/confirmation did not match/i)).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/type the user's email/i));
+    await user.type(screen.getByLabelText(/type the user's email/i), 'learner@example.test');
+    await user.click(screen.getByRole('button', { name: /permanently delete account/i }));
+
+    await waitFor(() => expect(mockDeleteAdminUser).toHaveBeenCalledWith('learner-1', undefined));
+    expect(mockRouterReplace).toHaveBeenCalledWith('/admin/users');
   });
 });

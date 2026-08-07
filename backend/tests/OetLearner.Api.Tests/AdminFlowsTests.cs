@@ -721,20 +721,35 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
-    public async Task AdminUsers_SetPassword_RejectsDeletedAndAuthlessAccounts()
+    public async Task AdminUsers_SetPassword_RejectsPurgedAndAuthlessAccounts()
     {
-        var deleteResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/delete", new
+        var email = $"admin-password-purge-{Guid.NewGuid():N}@example.test";
+        var createResponse = await _client.PostAsJsonAsync("/v1/admin/users", new
         {
-            reason = "testing password set guard"
+            name = "Password Purge Candidate",
+            email,
+            role = "learner",
+            professionId = "nursing",
+            targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
+            sendInvite = false,
+        });
+        createResponse.EnsureSuccessStatusCode();
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var purgedUserId = createJson.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(purgedUserId));
+
+        var deleteResponse = await _client.PostAsJsonAsync($"/v1/admin/users/{purgedUserId}/delete", new
+        {
+            reason = "testing permanent password-set guard"
         });
         deleteResponse.EnsureSuccessStatusCode();
 
-        var deletedPasswordResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/password", new
+        var deletedPasswordResponse = await _client.PostAsJsonAsync($"/v1/admin/users/{purgedUserId}/password", new
         {
             password = "BetterPassword123!"
         });
-        Assert.Equal(HttpStatusCode.BadRequest, deletedPasswordResponse.StatusCode);
-        Assert.Equal("account_deleted", await ReadErrorCodeAsync(deletedPasswordResponse));
+        Assert.Equal(HttpStatusCode.NotFound, deletedPasswordResponse.StatusCode);
+        Assert.Equal("user_not_found", await ReadErrorCodeAsync(deletedPasswordResponse));
 
         var authlessUserId = $"authless-{Guid.NewGuid():N}";
         await using (var scope = _factory.Services.CreateAsyncScope())
@@ -770,12 +785,6 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             db.Users.Remove(authlessUser);
             await db.SaveChangesAsync();
         }
-
-        var restoreResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/restore", new
-        {
-            reason = "restore seeded learner after password-set guard test"
-        });
-        restoreResponse.EnsureSuccessStatusCode();
     }
 
     [Fact]
@@ -791,34 +800,104 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
-    public async Task AdminUsers_DeleteAndRestoreLearnerAccount()
+    public async Task AdminUsers_DeletePermanentlyRemovesLearnerAccount()
     {
-        var deleteResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/delete", new
+        var email = $"admin-lifecycle-purge-{Guid.NewGuid():N}@example.test";
+        var createResponse = await _client.PostAsJsonAsync("/v1/admin/users", new
         {
-            reason = "testing delete lifecycle"
+            name = "Lifecycle Purge Candidate",
+            email,
+            role = "learner",
+            professionId = "nursing",
+            targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
+            sendInvite = false,
+        });
+        createResponse.EnsureSuccessStatusCode();
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var userId = createJson.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(userId));
+
+        var deleteResponse = await _client.PostAsJsonAsync($"/v1/admin/users/{userId}/delete", new
+        {
+            reason = "testing permanent delete lifecycle"
         });
         deleteResponse.EnsureSuccessStatusCode();
 
         using var deleteJson = JsonDocument.Parse(await deleteResponse.Content.ReadAsStringAsync());
         Assert.Equal("deleted", deleteJson.RootElement.GetProperty("status").GetString());
+        Assert.True(deleteJson.RootElement.GetProperty("purgedRows").GetInt32() > 0);
 
-        var deletedDetailResponse = await _client.GetAsync("/v1/admin/users/mock-user-001");
-        deletedDetailResponse.EnsureSuccessStatusCode();
-        using var deletedDetailJson = JsonDocument.Parse(await deletedDetailResponse.Content.ReadAsStringAsync());
-        Assert.Equal("deleted", deletedDetailJson.RootElement.GetProperty("status").GetString());
-        Assert.True(deletedDetailJson.RootElement.GetProperty("availableActions").GetProperty("canRestore").GetBoolean());
+        var deletedDetailResponse = await _client.GetAsync($"/v1/admin/users/{userId}");
+        Assert.Equal(HttpStatusCode.NotFound, deletedDetailResponse.StatusCode);
+    }
 
-        var restoreResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/restore", new
+    [Fact]
+    public async Task AdminUsers_DeletePermanentlyPurgesAccountAndAllowsSameEmailToRegister()
+    {
+        var email = $"admin-delete-reuse-{Guid.NewGuid():N}@example.test";
+        var createResponse = await _client.PostAsJsonAsync("/v1/admin/users", new
         {
-            reason = "testing restore lifecycle"
+            name = "Purge Candidate",
+            email,
+            role = "learner",
+            professionId = "nursing",
+            targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
+            sendInvite = false,
         });
-        restoreResponse.EnsureSuccessStatusCode();
+        createResponse.EnsureSuccessStatusCode();
 
-        using var restoreJson = JsonDocument.Parse(await restoreResponse.Content.ReadAsStringAsync());
-        Assert.Equal("active", restoreJson.RootElement.GetProperty("status").GetString());
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var userId = createJson.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(userId));
 
-        var listResponse = await _client.GetAsync("/v1/admin/users?status=active");
-        listResponse.EnsureSuccessStatusCode();
+        // Reproduce the legacy behavior that caused the production conflict:
+        // the profile and auth row were marked deleted but retained.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var learner = await db.Users.SingleAsync(user => user.Id == userId);
+            learner.AccountStatus = "deleted";
+            var account = await db.ApplicationUserAccounts.SingleAsync(auth => auth.Id == learner.AuthAccountId);
+            account.DeletedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var deleteResponse = await _client.PostAsJsonAsync($"/v1/admin/users/{userId}/delete", new
+        {
+            reason = "verify permanent admin deletion",
+        });
+        deleteResponse.EnsureSuccessStatusCode();
+
+        using var deleteJson = JsonDocument.Parse(await deleteResponse.Content.ReadAsStringAsync());
+        Assert.Equal("deleted", deleteJson.RootElement.GetProperty("status").GetString());
+        Assert.True(deleteJson.RootElement.GetProperty("purgedRows").GetInt32() > 0);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            Assert.False(await db.Users.AnyAsync(user => user.Id == userId));
+            Assert.False(await db.ApplicationUserAccounts.AnyAsync(account => account.NormalizedEmail == email.ToUpperInvariant()));
+        }
+
+        var recreateResponse = await _client.PostAsJsonAsync("/v1/auth/register", new
+        {
+            email,
+            password = "Password123!",
+            role = "learner",
+            displayName = "Recreated Learner",
+            firstName = "Recreated",
+            lastName = "Learner",
+            mobileNumber = "+923001234567",
+            examTypeId = "oet",
+            professionId = "nursing",
+            countryTarget = "Australia",
+            targetExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
+            agreeToTerms = true,
+            agreeToPrivacy = true,
+            marketingOptIn = false,
+        });
+
+        recreateResponse.EnsureSuccessStatusCode();
     }
 
     [Fact]

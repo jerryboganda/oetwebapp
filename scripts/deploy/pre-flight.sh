@@ -26,7 +26,7 @@ POSTGRES_DB=$(read_env_value POSTGRES_DB)
 export POSTGRES_USER POSTGRES_DB
 
 echo "--- Running encrypted backup sidecar snapshot..."
-docker compose --env-file .env.production -f docker-compose.production.yml run --rm -e RUN_ONCE_NOW=YES db-backup
+docker compose --env-file .env.production -f docker-compose.production.yml run --rm --no-build -e RUN_ONCE_NOW=YES db-backup
 
 echo "--- Migration count BEFORE ---"
 docker exec oet-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At \

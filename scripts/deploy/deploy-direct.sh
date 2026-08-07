@@ -14,6 +14,12 @@
 #   DEPLOY_REF=<branch-or-sha> bash scripts/deploy/deploy-direct.sh
 set -euo pipefail
 
+if [ "${ALLOW_VPS_SOURCE_BUILD:-}" != "owner-approved-emergency" ]; then
+  echo "Refusing source-build deployment on the VPS. Use .github/workflows/deploy.yml so GitHub Actions performs the build." >&2
+  echo "For a specifically approved emergency exception, set ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency." >&2
+  exit 78
+fi
+
 APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
 DEPLOY_REF="${DEPLOY_REF:-main}"
 APP_PUBLIC_URL="${APP_PUBLIC_URL:-https://app.oetwithdrhesham.co.uk}"

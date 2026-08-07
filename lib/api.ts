@@ -5522,7 +5522,10 @@ export async function updateAdminUserProfile(userId: string, payload: AdminUserP
 }
 
 export async function deleteAdminUser(userId: string, payload?: { reason?: string }) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/delete`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
+  return apiRequest<{ id: string; userId: string; status: string; purgedRows: number; tables: number; detail: Record<string, number> }>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/delete`,
+    { method: 'POST', body: JSON.stringify(payload ?? {}) },
+  );
 }
 
 export async function restoreAdminUser(userId: string, payload?: { reason?: string }) {
@@ -5533,8 +5536,14 @@ export async function restoreAdminUser(userId: string, payload?: { reason?: stri
  * IRREVERSIBLE: permanently purges the user and every row referencing them across
  * the whole schema — including invoices, payments and audit records. system_admin only.
  */
-export async function hardDeleteAdminUser(userId: string): Promise<{ userId: string; purgedRows: number; tables: number }> {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/hard-delete`, { method: 'POST' });
+export async function hardDeleteAdminUser(
+  userId: string,
+  payload?: { reason?: string },
+): Promise<{ id: string; userId: string; status: string; purgedRows: number; tables: number; detail: Record<string, number> }> {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/hard-delete`, {
+    method: 'POST',
+    body: JSON.stringify(payload ?? {}),
+  });
 }
 
 export async function adjustAdminUserCredits(userId: string, payload: { amount: number; reason?: string }) {

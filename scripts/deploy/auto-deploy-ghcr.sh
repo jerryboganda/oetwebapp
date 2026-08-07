@@ -18,6 +18,7 @@ APP_PUBLIC_URL="${APP_PUBLIC_URL:-https://app.oetwithdrhesham.co.uk}"
 API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.oetwithdrhesham.co.uk}"
 : "${WEB_IMAGE:?Set WEB_IMAGE to the GHCR web image ref}"
 : "${API_IMAGE:?Set API_IMAGE to the GHCR api image ref}"
+: "${DB_BACKUP_IMAGE:?Set DB_BACKUP_IMAGE to the GHCR backup image ref}"
 cd "$APP_DIR"
 
 echo "=== AUTO_DEPLOY_START $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
@@ -41,7 +42,7 @@ echo "active slot: ${prev_slot:-none} -> deploying to: $target_slot"
 
 # --- persist image refs so any future manual compose op uses them too ---
 mkdir -p .deploy
-for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE"; do
+for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE"; do
   key="${kv%%=*}"
   if grep -q "^${key}=" .env.production 2>/dev/null; then
     sed -i "s#^${key}=.*#${kv}#" .env.production
@@ -50,7 +51,7 @@ for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE"; do
   fi
 done
 
-export WEB_IMAGE API_IMAGE
+export WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE
 compose() { ACTIVE_SLOT="$1" docker compose --env-file .env.production -f docker-compose.production.yml "${@:2}"; }
 
 # --- pull the freshly-built images (no build here) ---
@@ -78,6 +79,7 @@ pull_with_retry() {
 echo "--- pulling images ---"
 pull_with_retry "$WEB_IMAGE"
 pull_with_retry "$API_IMAGE"
+pull_with_retry "$DB_BACKUP_IMAGE"
 
 # --- start the target slot from the new images ---
 echo "--- starting target slot ($target_slot) ---"

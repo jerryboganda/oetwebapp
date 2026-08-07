@@ -28,7 +28,7 @@ public static class DatabaseBootstrapper
         {
             await db.Database.EnsureCreatedAsync(cancellationToken);
         }
-        else if (autoMigrate)
+        else if (autoMigrate && !environment.IsProduction())
         {
             await db.Database.MigrateAsync(cancellationToken);
         }

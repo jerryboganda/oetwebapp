@@ -30,7 +30,8 @@ public partial class AdminService(
     OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService? voiceDesignRegeneration = null,
     OetLearner.Api.Services.Professions.IProfessionCatalogService? professionCatalog = null,
     ISecurityEventLogger? securityEventLogger = null,
-    OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettingsProvider = null)
+    OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettingsProvider = null,
+    OetLearner.Api.Services.Admin.UserHardDeleteService? userHardDeleteService = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -2990,7 +2991,7 @@ public partial class AdminService(
                 availableActions = new
                 {
                     canSuspend = status is not DeletedUserStatus,
-                    canDelete = status is not DeletedUserStatus,
+                    canDelete = !string.Equals(learner.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canRestore = status is DeletedUserStatus && !string.Equals(learner.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canAdjustCredits = status is not DeletedUserStatus,
                     canTriggerPasswordReset = learner.AuthAccountId is not null && status is not DeletedUserStatus,
@@ -3032,7 +3033,7 @@ public partial class AdminService(
                 availableActions = new
                 {
                     canSuspend = status is not DeletedUserStatus,
-                    canDelete = status is not DeletedUserStatus,
+                    canDelete = !string.Equals(expert.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canRestore = status is DeletedUserStatus && !string.Equals(expert.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canAdjustCredits = false,
                     canTriggerPasswordReset = expert.AuthAccountId is not null && status is not DeletedUserStatus,
@@ -4239,54 +4240,47 @@ public partial class AdminService(
         AdminUserLifecycleRequest request,
         CancellationToken ct)
     {
-        var target = await ResolveUserTargetAsync(userId, ct);
-        if (target.Status == DeletedUserStatus)
-        {
-            throw ApiException.Validation("account_deleted", "This account is already deleted.");
-        }
+        return await PermanentlyDeleteUserAsync(adminId, adminName, userId, request, ct);
+    }
 
+    public async Task<object> PermanentlyDeleteUserAsync(
+        string adminId,
+        string adminName,
+        string userId,
+        AdminUserLifecycleRequest request,
+        CancellationToken ct)
+    {
+        var target = await ResolveUserTargetAsync(userId, ct);
         if (target.Role == ApplicationUserRoles.Admin)
         {
             throw ApiException.Validation("admin_lifecycle_immutable", "Admin account deletion is not supported by the current account model.");
         }
 
-        var now = timeProvider.GetUtcNow();
-        if (target.Role == ApplicationUserRoles.Learner)
+        if (userHardDeleteService is null)
         {
-            var learner = await db.Users.SingleAsync(u => u.Id == userId, ct);
-            learner.AccountStatus = DeletedUserStatus;
-            if (learner.AuthAccountId is not null)
-            {
-                var authAccount = await db.ApplicationUserAccounts.SingleAsync(a => a.Id == learner.AuthAccountId, ct);
-                authAccount.DeletedAt = now;
-                authAccount.UpdatedAt = now;
-                await RevokeRefreshTokensAsync(authAccount.Id, ct);
-            }
-        }
-        else if (target.Role == ApplicationUserRoles.Expert)
-        {
-            var expert = await db.ExpertUsers.SingleAsync(e => e.Id == userId, ct);
-            expert.IsActive = false;
-            if (expert.AuthAccountId is not null)
-            {
-                var authAccount = await db.ApplicationUserAccounts.SingleAsync(a => a.Id == expert.AuthAccountId, ct);
-                authAccount.DeletedAt = now;
-                authAccount.UpdatedAt = now;
-                await RevokeRefreshTokensAsync(authAccount.Id, ct);
-            }
+            throw new InvalidOperationException("User hard-delete service is not configured.");
         }
 
-        await db.SaveChangesAsync(ct);
+        var report = await userHardDeleteService.PurgeAsync(userId, ct);
         await LogAuditAsync(
             adminId,
             adminName,
-            "Deleted User",
+            "UserHardDeleted",
             "User",
-            userId,
-            $"Deleted {target.Role} account{(string.IsNullOrWhiteSpace(request.Reason) ? string.Empty : $": {request.Reason}")}",
-            ct);
+            resourceId: null,
+            details: $"Permanently deleted {target.Role} account; purged {report.Values.Sum()} rows across {report.Count} tables."
+                + (string.IsNullOrWhiteSpace(request.Reason) ? string.Empty : $" Reason: {request.Reason}"),
+            ct: ct);
 
-        return new { id = userId, status = DeletedUserStatus };
+        return new
+        {
+            id = userId,
+            userId,
+            status = DeletedUserStatus,
+            purgedRows = report.Values.Sum(),
+            tables = report.Count,
+            detail = report,
+        };
     }
 
     public async Task<object> RestoreUserAsync(

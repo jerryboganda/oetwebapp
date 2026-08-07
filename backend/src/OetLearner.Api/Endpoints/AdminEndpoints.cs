@@ -347,27 +347,13 @@ public static class AdminEndpoints
             => Results.Ok(await service.RestoreUserAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
             .WithAdminWrite("AdminUsersWrite");
 
-        // Irreversible: purges the user + EVERY row referencing them across the whole
-        // schema (incl. financial + audit records). system_admin only.
+        // Compatibility endpoint for system_admin callers. The normal admin Delete
+        // endpoint uses the same permanent purge service; keeping this route avoids
+        // breaking existing automation while preserving its stricter permission.
         admin.MapPost("/users/{userId}/hard-delete", async (
-            string userId, HttpContext http,
-            OetLearner.Api.Services.Admin.UserHardDeleteService purge, LearnerDbContext db, CancellationToken ct) =>
-        {
-            var report = await purge.PurgeAsync(userId, ct);
-            db.AuditEvents.Add(new AuditEvent
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                OccurredAt = DateTimeOffset.UtcNow,
-                ActorId = http.AdminId(),
-                ActorName = http.AdminName(),
-                Action = "UserHardDeleted",
-                ResourceType = "User",
-                ResourceId = userId,
-                Details = $"Purged {report.Values.Sum()} rows across {report.Count} tables.",
-            });
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(new { userId, purgedRows = report.Values.Sum(), tables = report.Count, detail = report });
-        })
+            string userId, HttpContext http, AdminUserLifecycleRequest request,
+            AdminService service, CancellationToken ct)
+            => Results.Ok(await service.PermanentlyDeleteUserAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
         .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapPost("/users/{userId}/credits", async (string userId, HttpContext http, AdminUserCreditsRequest request, AdminService service, CancellationToken ct)

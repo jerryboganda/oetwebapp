@@ -76,4 +76,91 @@ public sealed class UserHardDeleteServiceTests
             conn.Dispose();
         }
     }
+
+    [Fact]
+    public async Task PurgeAsync_removes_expert_profile_and_linked_account()
+    {
+        var (db, conn) = NewDb();
+        try
+        {
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+            {
+                Id = "expert-account-1",
+                Email = "expert@x.com",
+                NormalizedEmail = "EXPERT@X.COM",
+                PasswordHash = "h",
+                Role = ApplicationUserRoles.Expert,
+            });
+            db.ExpertUsers.Add(new ExpertUser
+            {
+                Id = "expert-1",
+                AuthAccountId = "expert-account-1",
+                DisplayName = "Expert One",
+                Email = "expert@x.com",
+            });
+            await db.SaveChangesAsync();
+
+            var report = await new UserHardDeleteService(db, NullLogger<UserHardDeleteService>.Instance)
+                .PurgeAsync("expert-1", default);
+
+            Assert.False(await db.ExpertUsers.AsNoTracking().AnyAsync(expert => expert.Id == "expert-1"));
+            Assert.False(await db.ApplicationUserAccounts.AsNoTracking().AnyAsync(account => account.Id == "expert-account-1"));
+            Assert.Contains("ExpertUser", report.Keys);
+            Assert.Contains("ApplicationUserAccount", report.Keys);
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            conn.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task PurgeAsync_removes_user_owned_media_and_storage_objects()
+    {
+        var (db, conn) = NewDb();
+        var storage = new InMemoryFileStorage();
+        try
+        {
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+            {
+                Id = "media-account-1",
+                Email = "media@x.com",
+                NormalizedEmail = "MEDIA@X.COM",
+                PasswordHash = "h",
+            });
+            db.Users.Add(new LearnerUser
+            {
+                Id = "media-user-1",
+                AuthAccountId = "media-account-1",
+                DisplayName = "Media Owner",
+                Email = "media@x.com",
+            });
+            await storage.WriteAsync("media/user-owned.mp3", new MemoryStream([1, 2, 3]), default);
+            db.MediaAssets.Add(new MediaAsset
+            {
+                Id = "media-owned-1",
+                OriginalFilename = "recording.mp3",
+                MimeType = "audio/mpeg",
+                Format = "mp3",
+                StoragePath = "media/user-owned.mp3",
+                UploadedBy = "media-user-1",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+
+            var report = await new UserHardDeleteService(db, NullLogger<UserHardDeleteService>.Instance, storage)
+                .PurgeAsync("media-user-1", default);
+
+            Assert.False(await db.MediaAssets.AsNoTracking().AnyAsync(asset => asset.Id == "media-owned-1"));
+            Assert.False(await storage.ExistsAsync("media/user-owned.mp3", default));
+            Assert.Contains("StorageObject", report.Keys);
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            conn.Dispose();
+        }
+    }
 }

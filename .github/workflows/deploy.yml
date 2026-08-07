@@ -1,8 +1,9 @@
 name: Build & Deploy (web + API)
 
-# Fresh deploy on every push to main: build the web (Next.js/Turbopack) and
-# API (.NET) images OFF-BOX on GitHub's 16 GB runners, push to GHCR, then SSH
-# to the prod VPS which PULLS the images and blue/green-redeploys (health-gated
+# Fresh deploy on every push to main: build the web (Next.js/Turbopack),
+# API (.NET), and backup-sidecar images OFF-BOX on GitHub's 16 GB runners,
+# push to GHCR, then SSH to the prod VPS which PULLS the images and
+# blue/green-redeploys (health-gated
 # — a broken commit fails the gate and is NOT promoted, so prod stays up).
 #
 # Why not build on the VPS: it is a shared host with 60+ co-tenant containers;
@@ -28,12 +29,17 @@ concurrency:
 env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}-web:${{ github.sha }}
   API_IMAGE: ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+  DB_BACKUP_IMAGE: ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
 
 jobs:
   build-web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Assert production rollout is image-only
+        run: |
+          bash scripts/deploy/verify-image-only-rollout.sh
+          bash scripts/deploy/verify-compute-offload.sh
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -80,8 +86,96 @@ jobs:
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
+  build-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push backup sidecar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./scripts/backup/Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-db-backup:latest
+          cache-from: type=gha,scope=db-backup
+          cache-to: type=gha,mode=max,scope=db-backup
+
+  migrate-production:
+    needs: [build-api]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install EF command-line tools
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.5
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      - name: Restore API project
+        run: dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
+      - name: Build migration generator on GitHub Actions
+        run: dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --no-restore --nologo
+      - name: Generate idempotent production migration SQL off-box
+        run: |
+          mkdir -p output
+          dotnet ef migrations script --idempotent --no-build --configuration Release \
+            --project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --output output/oet-production-migrations.sql
+          test -s output/oet-production-migrations.sql
+          sha256sum output/oet-production-migrations.sql
+      - name: Retain migration artifact for deployment audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: oet-production-migrations-${{ github.sha }}
+          path: output/oet-production-migrations.sql
+          if-no-files-found: error
+          retention-days: 3
+      - name: Apply migration SQL through the production PostgreSQL container
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: "185.252.233.186"
+          VPS_USER: "root"
+          VPS_PORT: "22"
+          APP_DIR: "/opt/oetwebapp"
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          REMOTE_WRAPPER="/tmp/oet-apply-migrations-${GITHUB_RUN_ID}.sh"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+          )
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "rm -f '$REMOTE_WRAPPER'" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_WRAPPER'; chmod 700 '$REMOTE_WRAPPER'" \
+            < scripts/deploy/apply-migrations-from-ci.sh
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "set -e; VPS_APP_DIR='$APP_DIR' bash '$REMOTE_WRAPPER'" \
+            < output/oet-production-migrations.sql
+
   deploy:
-    needs: [build-web, build-api]
+    needs: [build-web, build-api, build-backup, migrate-production]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to VPS over SSH (pull + blue/green redeploy)
@@ -121,7 +215,7 @@ jobs:
              git config --global --add safe.directory '$APP_DIR' 2>/dev/null || true; \
              echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
              git fetch 'https://x-access-token:$GHCR_TOKEN@github.com/jerryboganda/oetwebapp.git' main --quiet; git reset --hard '$SHA'; \
-             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' VPS_APP_DIR='$APP_DIR' \
+             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' VPS_APP_DIR='$APP_DIR' \
                bash scripts/deploy/auto-deploy-ghcr.sh; \
              docker logout ghcr.io >/dev/null 2>&1 || true"
       - name: Summary
@@ -130,4 +224,5 @@ jobs:
           echo "### Deploy" >> "$GITHUB_STEP_SUMMARY"
           echo "- web: \`$WEB_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- api: \`$API_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- backup: \`$DB_BACKUP_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

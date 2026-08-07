@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   ChevronDown,
   ChevronUp,
@@ -41,7 +41,6 @@ import type { GrantUserPackageInput, UserAccessSubscriptionRow } from '@/lib/api
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
-  hardDeleteAdminUser,
   fetchAdminPermissions,
   fetchAdminSignupCatalog,
   resendAdminUserInvite,
@@ -201,6 +200,7 @@ function ProfileField({
 
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const userId = params?.id ?? '';
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
@@ -210,6 +210,7 @@ export default function UserDetailPage() {
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [isLifecycleModalOpen, setIsLifecycleModalOpen] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<'delete' | 'restore' | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [creditAmount, setCreditAmount] = useState('0');
   const [creditReason, setCreditReason] = useState('');
   const [lifecycleReason, setLifecycleReason] = useState('');
@@ -687,6 +688,7 @@ export default function UserDetailPage() {
   function openLifecycleModal(action: 'delete' | 'restore') {
     setLifecycleAction(action);
     setLifecycleReason('');
+    setDeleteConfirmation('');
     setIsLifecycleModalOpen(true);
   }
 
@@ -694,16 +696,33 @@ export default function UserDetailPage() {
     setIsLifecycleModalOpen(false);
     setLifecycleAction(null);
     setLifecycleReason('');
+    setDeleteConfirmation('');
   }
 
   async function handleLifecycleAction() {
     if (!user || !lifecycleAction) return;
 
+    if (lifecycleAction === 'delete') {
+      const expectedEmail = (user.email ?? '').trim().toLowerCase();
+      const typedEmail = deleteConfirmation.trim().toLowerCase();
+      if (!expectedEmail || typedEmail !== expectedEmail) {
+        setToast({ variant: 'error', message: 'Confirmation did not match — permanent deletion cancelled.' });
+        return;
+      }
+    }
+
     setIsMutating(true);
     try {
       const payload = lifecycleReason.trim().length > 0 ? { reason: lifecycleReason.trim() } : undefined;
       if (lifecycleAction === 'delete') {
-        await deleteAdminUser(user.id, payload);
+        const result = await deleteAdminUser(user.id, payload);
+        closeLifecycleModal();
+        setToast({
+          variant: 'success',
+          message: `Account permanently deleted (${result.purgedRows} rows across ${result.tables} tables).`,
+        });
+        router.replace('/admin/users');
+        return;
       } else {
         await restoreAdminUser(user.id, payload);
       }
@@ -719,26 +738,6 @@ export default function UserDetailPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: lifecycleAction === 'delete' ? 'Unable to delete this account.' : 'Unable to restore this account.' });
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  async function handleHardDelete() {
-    if (!user) return;
-    if (!window.confirm('PERMANENTLY DELETE this user and EVERYTHING tied to them — attempts, results, AND invoices/payments/audit records — across the entire system? This is irreversible.')) return;
-    const typed = window.prompt('This cannot be undone. Type the user\'s email to confirm permanent purge:');
-    if (typed == null || typed.trim().toLowerCase() !== (user.email ?? '').trim().toLowerCase()) {
-      setToast({ variant: 'error', message: 'Confirmation did not match — purge cancelled.' });
-      return;
-    }
-    setIsMutating(true);
-    try {
-      const res = await hardDeleteAdminUser(user.id);
-      setToast({ variant: 'success', message: `Permanently purged user (${res.purgedRows} rows across ${res.tables} tables).` });
-    } catch (error) {
-      console.error(error);
-      setToast({ variant: 'error', message: (error as Error).message || 'Unable to permanently purge this account.' });
     } finally {
       setIsMutating(false);
     }
@@ -1051,10 +1050,14 @@ export default function UserDetailPage() {
                   className="w-auto"
                 />
                 {user.availableActions.canDelete ? (
-                  <Button variant="destructive" onClick={() => openLifecycleModal('delete')} loading={isMutating}>Delete</Button>
-                ) : null}
-                {user.availableActions.canDelete ? (
-                  <Button variant="destructive" className="border-2 border-red-700" onClick={handleHardDelete} loading={isMutating} title="Irreversibly purge this user and ALL their data, including invoices/payments/audit. system_admin only.">Permanently purge</Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => openLifecycleModal('delete')}
+                    loading={isMutating}
+                    title="Permanently delete this user and all linked data."
+                  >
+                    {user.status === 'deleted' ? 'Permanently purge' : 'Permanently delete'}
+                  </Button>
                 ) : null}
                 {user.availableActions.canRestore ? (
                   <Button onClick={() => openLifecycleModal('restore')} loading={isMutating}>Restore</Button>
@@ -1619,14 +1622,24 @@ export default function UserDetailPage() {
       <Modal
         open={isLifecycleModalOpen}
         onClose={closeLifecycleModal}
-        title={lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
+        title={lifecycleAction === 'delete' ? 'Permanently Delete Account' : 'Restore Account'}
       >
         <div className="space-y-4 py-2">
           <div className="rounded-[20px] border border-border bg-admin-bg-subtle p-3 text-sm text-muted">
             {lifecycleAction === 'delete'
-              ? 'Deleting the account removes it from active operation, blocks sign-in, and can be reversed later from this screen.'
+              ? 'This permanently removes the authentication account, profile, sessions, attempts, results, purchases, and other user-linked data. It cannot be undone. The email can be registered again after deletion.'
               : 'Restoring the account removes the deleted marker and returns it to active operation.'}
           </div>
+          {lifecycleAction === 'delete' ? (
+            <Input
+              label="Type the user's email to confirm"
+              type="email"
+              autoComplete="off"
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              hint={`Enter exactly ${user?.email ?? 'the account email'}.`}
+            />
+          ) : null}
           <Input
             label="Reason"
             value={lifecycleReason}
@@ -1638,7 +1651,7 @@ export default function UserDetailPage() {
               Cancel
             </Button>
             <Button variant={lifecycleAction === 'delete' ? 'destructive' : 'primary'} onClick={handleLifecycleAction} loading={isMutating}>
-              {lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
+              {lifecycleAction === 'delete' ? 'Permanently Delete Account' : 'Restore Account'}
             </Button>
           </div>
         </div>

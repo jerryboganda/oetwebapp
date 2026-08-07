@@ -1884,34 +1884,39 @@ if (args.Contains("--emit-create-script"))
     return;
 }
 
-// Runtime settings are read by production startup guards below. Apply pending
-// migrations first so a newly deployed image can safely read columns added by
-// the same release before the full bootstrap/seeding phase runs later.
+// Runtime settings are read by production startup guards below. Development
+// may opt into startup migrations; production schema changes are generated and
+// applied by the GitHub Actions deployment gate before the image is started.
 await using (var migrationScope = app.Services.CreateAsyncScope())
 {
     var db = migrationScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-    // Production PostgreSQL only: the in-memory provider builds its schema from
-    // the model, and SQLite desktop/test runtimes use the compatibility
-    // bootstrapper because the production migration chain contains
-    // PostgreSQL-specific DDL.
+    // The in-memory provider builds its schema from the model, and SQLite
+    // desktop/test runtimes use the compatibility bootstrapper because the
+    // production migration chain contains PostgreSQL-specific DDL. Production
+    // migrations are generated/applied by the GitHub Actions deployment gate.
     if (db.Database.IsNpgsql())
     {
-        await db.Database.MigrateAsync();
-
-        // Idempotent schema self-heal for the RuntimeSettings override columns
-        // that the singleton settings provider reads during this very startup.
-        // These are all nullable additive columns; running the guarded DDL is a
-        // no-op once the column exists. This guarantees a freshly deployed image
-        // can read the row even if its migration has not been recorded yet on
-        // this database, closing the gap that would otherwise crash startup with
-        // "column does not exist".
-        try
+        if (DatabaseMigrationExecutionPolicy.ShouldApplyAtStartup(
+                app.Environment.EnvironmentName,
+                isPostgreSql: true,
+                autoMigrate: bootstrapOptions.AutoMigrate == true))
         {
-            await db.Database.ExecuteSqlRawAsync(OetLearner.Api.Services.Settings.RuntimeSettingsSchemaSelfHeal.Sql);
+            await db.Database.MigrateAsync();
         }
-        catch (Exception ex)
+
+        if (app.Environment.IsDevelopment())
         {
-            app.Logger.LogWarning(ex, "RuntimeSettings schema self-heal skipped (non-fatal).");
+            // Development-only self-heal for the RuntimeSettings override
+            // columns. Production receives these columns through the Actions
+            // migration gate before the API image is started.
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(OetLearner.Api.Services.Settings.RuntimeSettingsSchemaSelfHeal.Sql);
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "RuntimeSettings schema self-heal skipped (non-fatal).");
+            }
         }
     }
 }
