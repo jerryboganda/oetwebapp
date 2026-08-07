@@ -103,7 +103,21 @@ healthcheck "oet-web-$target_slot" "wget -qO- http://127.0.0.1:3000/api/health" 
 
 # --- flip routers to the target slot ---
 echo "--- switching routers to $target_slot ---"
-compose "$target_slot" up -d --no-build --force-recreate web learner-api
+router_switch_with_retry() {
+  local attempts=3 delay=10 attempt
+  for attempt in $(seq 1 "$attempts"); do
+    if compose "$target_slot" up -d --no-build --force-recreate web learner-api; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$attempts" ]; then
+      echo "  [router] attempt $attempt/$attempts failed; retrying in ${delay}s..." >&2
+      sleep "$delay"
+    fi
+  done
+  echo "  [router] failed to switch routers after $attempts attempts" >&2
+  return 1
+}
+router_switch_with_retry
 healthcheck "oet-web" "wget -qO- http://127.0.0.1:3000/api/health" "web router"
 healthcheck "oet-api" "wget -qO- http://127.0.0.1:8080/health/ready" "api router"
 echo "ACTIVE_SLOT=$target_slot" > .deploy/active-slot.env
