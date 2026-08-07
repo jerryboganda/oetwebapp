@@ -26,6 +26,7 @@ on:
       - 'lib/query/**'
       - 'tests/performance/**'
       - 'playwright.performance.config.ts'
+      - '.github/workflows/mobile-ci.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
   pull_request:
@@ -52,6 +53,7 @@ on:
       - 'lib/query/**'
       - 'tests/performance/**'
       - 'playwright.performance.config.ts'
+      - '.github/workflows/mobile-ci.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
   workflow_dispatch:
@@ -159,6 +161,57 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
+  android-runtime-smoke:
+    name: Android Emulator Runtime Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: android-build
+    steps:
+      - name: Download debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-debug-apk
+          path: output/native/android
+
+      - name: Launch app on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p "$GITHUB_WORKSPACE/output/native/android"
+            adb install -r "$GITHUB_WORKSPACE/output/native/android/app-debug.apk"
+            adb shell am force-stop com.oetprep.learner
+            adb shell monkey -p com.oetprep.learner 1
+            for attempt in $(seq 1 20); do
+              if adb shell pidof com.oetprep.learner | grep -q '[0-9]'; then
+                break
+              fi
+              sleep 1
+            done
+            adb shell pidof com.oetprep.learner
+            adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/output/native/android/activity.txt"
+            grep -q 'com.oetprep.learner/.MainActivity' "$GITHUB_WORKSPACE/output/native/android/activity.txt"
+            adb logcat -d -t 1000 -s AndroidRuntime:E > "$GITHUB_WORKSPACE/output/native/android/logcat.txt" || true
+            if grep -Eq 'FATAL EXCEPTION|Process: com.oetprep.learner' "$GITHUB_WORKSPACE/output/native/android/logcat.txt"; then
+              echo 'Android app crash signature detected.' >&2
+              exit 1
+            fi
+
+      - name: Upload Android runtime smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-runtime-smoke-${{ github.run_id }}
+          path: output/native/android
+          if-no-files-found: warn
+          retention-days: 14
+
   # ── iOS Build Check ────────────────────────────────────────────
   ios-build:
     name: iOS Build Check
@@ -193,12 +246,49 @@ jobs:
       - name: Build iOS (no code sign)
         working-directory: ios/App
         run: |
+          set -o pipefail
           xcodebuild build \
             -workspace App.xcworkspace \
             -scheme App \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/AppDerivedData" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             | xcpretty
+
+      - name: Launch app on iOS simulator
+        id: ios_simulator
+        working-directory: ios/App
+        run: |
+          set -euo pipefail
+          device_udid=$(node - <<'NODE'
+          const { execFileSync } = require('node:child_process');
+          const devices = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], { encoding: 'utf8' })).devices;
+          const device = Object.values(devices).flat().find((candidate) => candidate.isAvailable && /^iPhone\b/.test(candidate.name));
+          if (!device) throw new Error('No available iPhone simulator was found on the runner.');
+          process.stdout.write(device.udid);
+          NODE
+          )
+          echo "device_udid=$device_udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device_udid" 2>/dev/null || true
+          xcrun simctl bootstatus "$device_udid" -b
+          xcrun simctl install "$device_udid" "$RUNNER_TEMP/AppDerivedData/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl launch "$device_udid" com.oetprep.learner
+          sleep 10
+          xcrun simctl listapps "$device_udid" | grep -q 'com.oetprep.learner'
+          xcrun simctl io "$device_udid" screenshot "$RUNNER_TEMP/oet-ios-simulator.png"
+
+      - name: Upload iOS simulator smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-runtime-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/oet-ios-simulator.png
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Shut down iOS simulator
+        if: always() && steps.ios_simulator.outputs.device_udid != ''
+        run: xcrun simctl shutdown "${{ steps.ios_simulator.outputs.device_udid }}" || true

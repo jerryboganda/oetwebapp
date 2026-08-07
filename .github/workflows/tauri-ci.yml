@@ -87,6 +87,58 @@ jobs:
       - name: cargo build (compile smoke)
         run: cargo build
 
+      - name: Windows desktop launch smoke
+        shell: pwsh
+        run: |
+          $binary = Join-Path (Get-Location) 'target\debug\oet-desktop.exe'
+          $desktopProcess = Start-Process -FilePath $binary -WorkingDirectory (Get-Location) -PassThru
+          try {
+            Start-Sleep -Seconds 15
+            $desktopProcess.Refresh()
+            if ($desktopProcess.HasExited) {
+              throw "Tauri desktop process exited during launch smoke (code $($desktopProcess.ExitCode))."
+            }
+            Write-Host "Tauri desktop process stayed alive for the Windows launch smoke."
+          } finally {
+            $desktopProcess.Refresh()
+            if (-not $desktopProcess.HasExited) {
+              Stop-Process -Id $desktopProcess.Id -Force
+            }
+          }
+
+  runtime-macos:
+    name: macOS desktop launch smoke
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: cargo build (macOS compile smoke)
+        working-directory: src-tauri
+        run: cargo build
+      - name: macOS desktop launch smoke
+        working-directory: src-tauri
+        run: |
+          set -euo pipefail
+          ./target/debug/oet-desktop > "$RUNNER_TEMP/oet-desktop.log" 2>&1 &
+          desktop_pid=$!
+          cleanup() {
+            kill "$desktop_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 15); do
+            if ! kill -0 "$desktop_pid" 2>/dev/null; then
+              echo 'Tauri desktop process exited during the macOS launch smoke.' >&2
+              cat "$RUNNER_TEMP/oet-desktop.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo 'Tauri desktop process stayed alive for the macOS launch smoke.'
+
   conformance:
     name: desktopBridge contract conformance
     runs-on: ubuntu-latest

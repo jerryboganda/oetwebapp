@@ -44,11 +44,39 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      name: 'perf-public-chromium',
+      testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'perf-public-pixel',
+      testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
+      use: { ...devices['Pixel 7'] },
+    },
+    {
       name: 'perf-learner-chromium',
       dependencies: ['perf-setup'],
       testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/perf-learner.json',
+      },
+    },
+    {
+      name: 'perf-learner-firefox',
+      dependencies: ['perf-setup'],
+      testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
+      use: {
+        ...devices['Desktop Firefox'],
+        storageState: 'playwright/.auth/perf-learner.json',
+      },
+    },
+    {
+      name: 'perf-learner-webkit',
+      dependencies: ['perf-setup'],
+      testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
+      use: {
+        ...devices['Desktop Safari'],
         storageState: 'playwright/.auth/perf-learner.json',
       },
     },
@@ -76,6 +104,15 @@ export default defineConfig({
       testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/perf-admin.json',
+      },
+    },
+    {
+      name: 'perf-admin-pixel',
+      dependencies: ['perf-setup'],
+      testMatch: /tests\/performance\/browser-performance\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
         storageState: 'playwright/.auth/perf-admin.json',
       },
     },

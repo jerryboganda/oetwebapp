@@ -94,7 +94,7 @@ jobs:
             docker compose -f docker-compose.desktop.yml up -d --build
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Verify isolated stack readiness
         if: env.PERF_MODE == 'ephemeral'

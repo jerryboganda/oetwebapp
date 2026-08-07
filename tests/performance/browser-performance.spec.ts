@@ -11,7 +11,7 @@ import {
 
 type RouteDefinition = {
   route: string;
-  readiness: 'auth' | 'learner' | 'admin';
+  readiness: 'public' | 'auth' | 'learner' | 'admin';
 };
 
 type ObserverSnapshot = {
@@ -29,10 +29,15 @@ type PerformanceWindow = Window & {
 
 const routeByProject: Record<string, RouteDefinition> = {
   'perf-unauth-chromium': { route: '/sign-in', readiness: 'auth' },
+  'perf-public-chromium': { route: '/get-app', readiness: 'public' },
+  'perf-public-pixel': { route: '/get-app', readiness: 'public' },
   'perf-learner-chromium': { route: '/', readiness: 'learner' },
+  'perf-learner-firefox': { route: '/', readiness: 'learner' },
+  'perf-learner-webkit': { route: '/', readiness: 'learner' },
   'perf-learner-pixel': { route: '/', readiness: 'learner' },
   'perf-learner-iphone': { route: '/', readiness: 'learner' },
   'perf-admin-chromium': { route: '/admin', readiness: 'admin' },
+  'perf-admin-pixel': { route: '/admin', readiness: 'admin' },
 };
 
 function sanitizeErrorMessage(message: string) {
@@ -124,7 +129,10 @@ async function installObservers(page: Page) {
 }
 
 async function waitForRouteReadiness(page: Page, route: RouteDefinition) {
-  if (route.readiness === 'auth') {
+  if (route.readiness === 'public') {
+    await page.locator('main').first().waitFor({ state: 'visible', timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: /get the oet prep app/i })).toBeVisible();
+  } else if (route.readiness === 'auth') {
     await page.locator('main, [role="main"]').first().waitFor({ state: 'visible', timeout: 30_000 });
     await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
   } else if (route.readiness === 'learner') {
