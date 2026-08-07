@@ -120,6 +120,8 @@ jobs:
       - name: Install EF command-line tools
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.5
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          dotnet ef --version
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
       - name: Restore API project
         run: dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
@@ -127,6 +129,7 @@ jobs:
         run: dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --no-restore --nologo
       - name: Generate idempotent production migration SQL off-box
         run: |
+          export PATH="$HOME/.dotnet/tools:$PATH"
           mkdir -p output
           dotnet ef migrations script --idempotent --no-build --configuration Release \
             --project backend/src/OetLearner.Api/OetLearner.Api.csproj \
