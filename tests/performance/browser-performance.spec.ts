@@ -48,6 +48,12 @@ function safeFileName(project: string, route: string) {
 
 async function installObservers(page: Page) {
   await page.addInitScript(() => {
+    // Measure the steady-state authenticated workspace, not first-session
+    // promotional overlays that intentionally appear above the dashboard.
+    window.sessionStorage.setItem('oet_app_promo_dismissed', 'true');
+  });
+
+  await page.addInitScript(() => {
     const describeElement = (element: Element | null | undefined) => {
       if (!element) return null;
       const tag = element.tagName.toLowerCase();

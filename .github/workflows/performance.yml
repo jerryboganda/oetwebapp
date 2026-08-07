@@ -89,7 +89,9 @@ jobs:
 
       - name: Build isolated staging-like stack
         if: env.PERF_MODE == 'ephemeral'
-        run: docker compose -f docker-compose.desktop.yml up -d --build
+        run: |
+          OET_PERF_APP_URL=https://127.0.0.1:3443 \
+            docker compose -f docker-compose.desktop.yml up -d --build
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit

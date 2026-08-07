@@ -12,6 +12,34 @@ type PerformanceAuthTarget = {
   path: string;
 };
 
+const performanceAppOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000').origin;
+
+async function markPerformanceTourComplete(
+  request: Parameters<typeof bootstrapSessionForRole>[0],
+  session: Awaited<ReturnType<typeof bootstrapSessionForRole>>,
+  role: Extract<SeededRole, 'learner' | 'admin'>,
+) {
+  const storageState = await request.storageState();
+  const csrfCookie = storageState.cookies.find((cookie) => cookie.name === 'oet_csrf');
+  const response = await request.patch(`${performanceAppOrigin}/api/backend/v1/onboarding/tours`, {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      Origin: performanceAppOrigin,
+      ...(csrfCookie?.value ? { 'x-csrf-token': csrfCookie.value } : {}),
+    },
+    data: {
+      tourId: role === 'learner' ? 'learner-dashboard' : 'admin',
+      status: 'completed',
+      role,
+    },
+    timeout: 30_000,
+  });
+
+  if (!response.ok()) {
+    throw new Error(`Could not prepare ${role} performance account: ${response.status()}`);
+  }
+}
+
 const authTargets: readonly PerformanceAuthTarget[] = [
   {
     projectName: 'perf-learner-chromium',
@@ -34,6 +62,7 @@ for (const target of authTargets) {
       isolateSession: true,
     });
     await persistSessionToStorageState(session, target.path, request, target.role);
+    await markPerformanceTourComplete(request, session, target.role);
 
     const rawState = JSON.parse(await readFile(target.path, 'utf8')) as {
       cookies: Array<{ name?: string }>;
