@@ -16,8 +16,9 @@ The browser budgets are LCP <= 2.5 s, FCP <= 1.8 s, INP <= 200 ms, and CLS <= 0.
 ## Release evidence
 
 - Performance implementation commits are in `main`, including `573dfd305` (`test: isolate playwright performance specs from vitest`).
-- The latest concurrent `main` release is `31bd84b61`, which contains the performance implementation and is the live release.
+- Performance runtime release `31bd84b61` contains the implementation and was deployed successfully. The later documentation-only release `ece0c9c0d` was also deployed successfully without changing runtime behavior.
 - Build & Deploy run `31192330082` completed successfully: web build, API build, blue/green health gates, router switch, and public verification all passed.
+- Final documentation-release Build & Deploy run `31195289547` completed successfully with the same blue/green and public verification gates.
 - Live images were deployed from `31bd84b61aab1e4e100b6c210a507a0deac65642`.
 - Direct post-deploy checks returned HTTP 200:
   - `https://app.oetwithdrhesham.co.uk/api/health` — `{"status":"ok","service":"oet-web"}`
