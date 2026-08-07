@@ -1,0 +1,136 @@
+name: Performance Gates (staging)
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'HTTPS staging web URL; production hosts are rejected'
+        required: true
+        type: string
+      api_url:
+        description: 'HTTPS staging API URL; production hosts are rejected'
+        required: true
+        type: string
+      include_admin:
+        description: 'Run the optional admin k6 read path using the injected staging token'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-staging
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.33.0'
+  PERF_TARGET_URL: ${{ inputs.target_url || vars.PERF_TARGET_URL }}
+  PERF_API_URL: ${{ inputs.api_url || vars.PERF_API_URL }}
+  K6_INCLUDE_ADMIN: ${{ inputs.include_admin == true && '1' || '0' }}
+
+jobs:
+  performance:
+    name: Browser and API performance gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate explicit staging targets
+        env:
+          TARGET_URL: ${{ env.PERF_TARGET_URL }}
+          API_URL: ${{ env.PERF_API_URL }}
+        run: |
+          node --input-type=module <<'NODE'
+          const values = [
+            ['PERF_TARGET_URL', process.env.TARGET_URL],
+            ['PERF_API_URL', process.env.API_URL],
+          ];
+          const blocked = ['app.oetwithdrhesham.co.uk', 'api.oetwithdrhesham.co.uk', '185.252.233.186'];
+          for (const [name, value] of values) {
+            if (!value) throw new Error(`${name} is not configured.`);
+            const url = new URL(value);
+            if (!['http:', 'https:'].includes(url.protocol)) throw new Error(`${name} must use HTTP or HTTPS.`);
+            if (blocked.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) {
+              throw new Error(`${name} points at a production host; staging performance workflow refused it.`);
+            }
+          }
+          NODE
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Run browser performance measurements
+        id: browser
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.PERF_TARGET_URL }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ env.PERF_API_URL }}
+          PERF_ENFORCE_BUDGETS: '1'
+        run: |
+          pnpm exec playwright test -c playwright.performance.config.ts
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run critical API load test
+        id: k6
+        continue-on-error: true
+        env:
+          K6_TARGET_URL: ${{ env.PERF_API_URL }}
+          OET_TEST_LEARNER_EMAIL: ${{ secrets.OET_PERF_LEARNER_EMAIL }}
+          OET_TEST_LEARNER_PASSWORD: ${{ secrets.OET_PERF_LEARNER_PASSWORD }}
+          OET_TEST_ADMIN_ACCESS_TOKEN: ${{ secrets.OET_PERF_ADMIN_ACCESS_TOKEN }}
+        run: |
+          mkdir -p output/performance/k6
+          k6 run --summary-export output/performance/k6/critical-paths.json tests/load/critical-paths.k6.js
+
+      - name: Summarize browser reports
+        if: always()
+        env:
+          PERF_ENFORCE_BUDGETS: '1'
+        run: |
+          pnpm exec node scripts/perf/summarize-browser-reports.mjs output/performance/browser | tee output/performance/browser-summary.md
+          cat output/performance/browser-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload performance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-${{ github.run_id }}
+          path: output/performance
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail if a performance gate failed
+        if: always()
+        env:
+          BROWSER_RESULT: ${{ steps.browser.outcome }}
+          K6_RESULT: ${{ steps.k6.outcome }}
+        run: |
+          if [ "$BROWSER_RESULT" != "success" ] || [ "$K6_RESULT" != "success" ]; then
+            echo "Performance gate failed: browser=$BROWSER_RESULT k6=$K6_RESULT"
+            exit 1
+          fi
