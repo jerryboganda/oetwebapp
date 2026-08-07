@@ -207,7 +207,13 @@ export function clearPendingDeviceChallenge(): void {
 }
 
 export async function hydrateAuthStorage(): Promise<void> {
-  await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY, DEVICE_CHALLENGE_KEY]);
+  // Web storage is already the authoritative browser copy. Avoid four
+  // needless async native-storage probes during web startup; they add work
+  // before AuthProvider can release the authenticated workspace. Native
+  // platforms still hydrate the web mirror from secure Preferences first.
+  if (isNativeMobilePlatform()) {
+    await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY, DEVICE_CHALLENGE_KEY]);
+  }
 
   const record = loadStoredSessionRecord();
   if (!record || !isNativeMobilePlatform()) {

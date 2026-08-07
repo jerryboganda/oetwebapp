@@ -185,6 +185,7 @@ function NavRail({
           <li key={`rail:${index}:${item.href}`}>
             <Link
               href={item.href}
+              prefetch={false}
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               aria-current={active ? 'page' : undefined}
               className={cn(
@@ -236,6 +237,7 @@ function NavSection({
             <motion.li key={`${label}:${index}:${item.href}`} layout={!reducedMotion}>
               <Link
                 href={item.href}
+                prefetch={false}
                 onClick={() => {
                   void triggerImpactHaptic('LIGHT');
                 }}
@@ -350,6 +352,7 @@ export function Sidebar({
         <div className="border-b border-border/60 px-2 py-2">
           <Link
             href="/"
+            prefetch={false}
             className="pressable flex items-center justify-center text-navy transition-opacity hover:opacity-90"
             aria-label="OET with Dr Ahmed Hesham home"
             onClick={() => { void triggerImpactHaptic('LIGHT'); }}
@@ -420,6 +423,7 @@ export function Sidebar({
           <li>
             <Link
               href={getWorkspaceSettingsHref(activeWorkspaceRole)}
+              prefetch={false}
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
             >
@@ -498,6 +502,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
             <li key={`${index}:${item.href}`}>
               <Link
                 href={item.href}
+                prefetch={false}
                 onClick={() => {
                   void triggerImpactHaptic('LIGHT');
                 }}

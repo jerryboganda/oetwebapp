@@ -138,6 +138,7 @@ function ProfileMenu({
           </div>
           <Link
             href={settingsHref}
+            prefetch={false}
             role="menuitem"
             onClick={() => setOpen(false)}
             className="mt-1 flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-navy transition-colors hover:bg-background-light"
@@ -346,6 +347,7 @@ export function TopNav({
           {showBrand ? (
             <Link
               href="/"
+              prefetch={false}
               className="pressable flex items-center transition-opacity hover:opacity-90"
               aria-label="OET with Dr Ahmed Hesham home"
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
@@ -461,6 +463,7 @@ export function TopNav({
                                 >
                                   <Link
                                     href={item.href}
+                                    prefetch={false}
                                     onClick={handleMobileItemClick}
                                     className={cn(
                                       'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-semibold',
@@ -483,6 +486,7 @@ export function TopNav({
                         <div className="grid grid-cols-2 gap-2">
                           <Link
                             href={getWorkspaceSettingsHref(workspaceRole)}
+                            prefetch={false}
                             onClick={handleMobileItemClick}
                             className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >
@@ -515,6 +519,7 @@ export function TopNav({
                           >
                             <Link
                               href={item.href}
+                              prefetch={false}
                               onClick={handleMobileItemClick}
                               className={cn(
                                 'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-semibold',
