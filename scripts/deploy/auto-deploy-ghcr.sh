@@ -14,19 +14,22 @@
 set -euo pipefail
 
 APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
+COMPOSE_FILE="${VPS_COMPOSE_FILE:-$APP_DIR/docker-compose.production.yml}"
+VALIDATE_ENV_SCRIPT="${VPS_VALIDATE_ENV_SCRIPT:-$APP_DIR/scripts/deploy/validate-production-env.sh}"
 APP_PUBLIC_URL="${APP_PUBLIC_URL:-https://app.oetwithdrhesham.co.uk}"
 API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.oetwithdrhesham.co.uk}"
 : "${WEB_IMAGE:?Set WEB_IMAGE to the GHCR web image ref}"
 : "${API_IMAGE:?Set API_IMAGE to the GHCR api image ref}"
 : "${DB_BACKUP_IMAGE:?Set DB_BACKUP_IMAGE to the GHCR backup image ref}"
 cd "$APP_DIR"
+export VPS_APP_DIR
 
 echo "=== AUTO_DEPLOY_START $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 echo "WEB_IMAGE=$WEB_IMAGE"
 echo "API_IMAGE=$API_IMAGE"
 
 echo "--- validating production env ---"
-bash scripts/deploy/validate-production-env.sh .env.production
+bash "$VALIDATE_ENV_SCRIPT" .env.production
 
 # --- pick the inactive (target) slot ---
 prev_slot="green"
@@ -52,7 +55,7 @@ for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BAC
 done
 
 export WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE
-compose() { ACTIVE_SLOT="$1" docker compose --env-file .env.production -f docker-compose.production.yml "${@:2}"; }
+compose() { ACTIVE_SLOT="$1" docker compose --env-file "$APP_DIR/.env.production" -f "$COMPOSE_FILE" "${@:2}"; }
 
 # --- pull the freshly-built images (no build here) ---
 # ghcr.io pulls over the shared VPS link intermittently drop mid-transfer with

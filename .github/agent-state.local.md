@@ -1,3 +1,76 @@
+# Current Task - Production compute offload to GitHub Actions
+
+Last updated: 2026-08-08
+
+## Outcome
+
+- Audited the OET release path and a read-only VPS snapshot. Web/API/backup
+  image builds, CI validation, and EF migration-script generation are now
+  explicitly owned by GitHub Actions; the VPS retains only data-local and
+  runtime work.
+- Added the Actions migration gate, a stdin-only PostgreSQL applicator,
+  production startup-migration policy, image-only rollout guards, and the
+  operator audit/limits document. The deploy job now streams only the small
+  rollout/Compose/env-validator bundle and never syncs the source repository
+  to the VPS.
+
+## Validation
+
+- `bash -n` passed for the new and touched deployment scripts.
+- `bash scripts/deploy/verify-image-only-rollout.sh` passed.
+- `bash scripts/deploy/verify-compute-offload.sh` passed, including the
+  no-source-sync assertion.
+- `git diff --check` passed for the implementation paths.
+- The focused .NET migration-policy test was attempted but stalled locally
+  before useful test output; no local backend pass is claimed. GitHub Actions
+  remains authoritative for compilation and full backend/image gates.
+- The workflow has not yet been pushed or live-verified in this checkpoint.
+
+## Next step
+
+Review and stage only the explicit compute-offload paths, commit and push
+`main`, watch the exact Build & Deploy run through migration/application and
+health gates, then record public health and GHCR image evidence. Preserve the
+unrelated `.codex/config.toml`, `.superpowers/`, and concurrent product/UI/API
+changes. Backup restore parity and authenticated learner acceptance remain
+owner-side boundaries.
+
+# Current Task - Critical Course Video Access Rule
+
+Last updated: 2026-08-07
+
+## Outcome
+
+- Added a PostgreSQL-only corrective migration that applies the 18 canonical
+  New/Old Crash Course Arabic Writing exclusions to every `full-%` plan and
+  immutable plan-version mapping, while removing those IDs from explicit
+  includes and preserving unrelated overrides.
+- Added focused entitlement and migration-shape regression coverage plus the
+  approved Superpowers design and execution plan.
+
+## Validation
+
+- Migration static check passed: 18 canonical IDs match the existing rule,
+  both plan tables are targeted, and JSONB include/exclude merge operations are
+  present.
+- Focused entitlement tests passed 4/4; the migration-shape test compiled but
+  needed a provider-guard correction, then the local clean rebuild stalled.
+  CI run 31192330082 passed both API/web image builds and the deploy job.
+- VPS is at `31bd84b61`; migration history contains
+  `20260831090000_ApplyCrashCourseVideoExclusionsToFullCourses`.
+  Read-only SQL confirms every full-course plan/version has 0 blocked includes
+  and 18 blocked excludes, all six Crash Course plan/version rows retain 18
+  includes plus Listening/Reading/Speaking scope, all 18 videos remain tagged,
+  and December/February writing content remains present outside the exclusion.
+- API and web public health endpoints both returned HTTP 200; the repository
+  helper's internal `oet-web:3000` probe is stale for the nginx proxy container.
+
+## Next step
+
+No further in-scope deployment action remains. Manual learner login/browser
+acceptance with supplied test accounts remains an owner-side boundary; no
+credentials or customer data were accessed.
+
 # Current Task - Device exemption policy mismatch and admin list management
 
 Last updated: 2026-08-07
@@ -189,3 +262,39 @@ Stage only the explicit implementation paths (preserving `.codex/config.toml`
 and `.superpowers/`), commit, push `main`, and verify the blue/green production
 workflow. The owner still needs real-device/manual acceptance for same-hardware
 browser/app counting and cross-platform sign-out behavior.
+
+# Current Task - Permanent admin user purge and Actions-only production compute
+
+Last updated: 2026-08-08
+
+## Outcome
+
+- Admin Delete now permanently purges learner/expert profiles, auth accounts,
+  sessions, attempts, billing rows, audit references, and other model-discovered
+  user-linked rows; the normalized email row is removed so the address can be
+  registered again. Legacy soft-deleted profiles remain purgeable from the
+  detail page.
+- The admin UI uses one explicit permanent-delete action with an accessible
+  exact-email confirmation modal and returns to the user list after success.
+- The system-admin hard-delete compatibility route delegates to the same purge
+  service without retaining the target user id in the new audit ResourceId.
+- Production deploys now build web, API, and backup-sidecar images in GitHub
+  Actions; the active VPS rollout pulls per-commit image tags and starts
+  containers with `--no-build`. Legacy source-build scripts refuse to run
+  unless an owner-approved emergency override is explicitly supplied.
+
+## Validation
+
+- `vitest run app/admin/users/[id]/page.test.tsx --reporter=dot`: 1 file,
+  8/8 tests passed, including exact-email purge confirmation.
+- `git diff --check`: passed.
+- Backend filtered build/test commands stalled on the shared Windows host
+  before compiler/test output; no local backend pass is claimed. GitHub Actions
+  remains the backend compile/test and production image gate.
+
+## Next step
+
+Stage only the explicit implementation/tests/workflow/deploy paths, commit and
+push `main`, then verify the GitHub blue/green deployment and production health.
+The two already-soft-deleted accounts must be purged once from the deployed
+admin UI; no direct production database deletion was performed here.

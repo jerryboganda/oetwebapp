@@ -242,7 +242,7 @@ services:
       ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
       NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
     volumes:
-      - ./scripts/deploy/nginx/api-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${VPS_APP_DIR:-.}/scripts/deploy/nginx/api-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
     expose:
       - "8080"
     networks:
@@ -274,7 +274,7 @@ services:
       ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
       NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
     volumes:
-      - ./scripts/deploy/nginx/web-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${VPS_APP_DIR:-.}/scripts/deploy/nginx/web-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
     expose:
       - "3000"
     networks:

@@ -35,8 +35,9 @@ not resource limits or capacity guarantees.
 
 `.github/workflows/deploy.yml` now gates deployment on `build-web`, `build-api`,
 `build-backup`, and `migrate-production`. Only after all four succeed does the
-deploy job SSH to production, pull commit-scoped GHCR images, and run the
-blue/green rollout.
+deploy job SSH to production, stream a small deployment bundle, pull
+commit-scoped GHCR images, and run the blue/green rollout. It does not fetch or
+reset the source repository on the VPS.
 
 The rollout requires `WEB_IMAGE`, `API_IMAGE`, and `DB_BACKUP_IMAGE`, persists
 their references, pulls them with retry, and passes `--no-build` to every

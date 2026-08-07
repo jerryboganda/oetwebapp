@@ -4,7 +4,7 @@
 
 **Goal:** Move eligible OET build, test, image-packaging, and migration-generation work from the production VPS to GitHub Actions, leaving the VPS with image pulls, database execution, backups, runtime services, and health gates only.
 
-**Architecture:** Extend the existing '.github/workflows/deploy.yml' with a cached backup-image build and a production migration job. The migration job builds an idempotent EF PostgreSQL script on 'ubuntu-latest', then streams it through SSH to a small VPS-side 'psql' wrapper; the deploy job runs only after all image and migration gates pass and uses '--no-build' blue/green rollout.
+**Architecture:** Extend the existing '.github/workflows/deploy.yml' with a cached backup-image build and a production migration job. The migration job waits for all pre-built images, builds an idempotent EF PostgreSQL script on 'ubuntu-latest', then streams it through SSH to a small VPS-side 'psql' wrapper; the deploy job runs only after all image and migration gates pass and uses '--no-build' blue/green rollout.
 
 **Tech Stack:** GitHub Actions YAML, Docker Buildx/GHCR, Bash, .NET 10/EF Core 10, PostgreSQL 'psql', ASP.NET Core Minimal API, existing blue/green Docker Compose deployment.
 
@@ -50,11 +50,11 @@
 - Consumes: SQL on standard input; '.env.production' keys 'POSTGRES_USER' and 'POSTGRES_DB'; the running 'oet-postgres' container.
 - Produces: exit code 0 only when 'psql -v ON_ERROR_STOP=1' applies the complete stream; no secret values in stdout/stderr.
 
-- [ ] Step 1: Write the stdin wrapper.
+- [x] Step 1: Write the stdin wrapper.
 
 Implement strict Bash mode and a 'read_env_value' helper matching the existing deploy scripts. Require the app directory, verify that the SQL stream is non-empty, resolve only the database user/name, and invoke 'docker exec -i oet-postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'. Do not echo the connection string or any environment value. Preserve the production database volume and do not run Compose build/down commands.
 
-- [ ] Step 2: Add the static offload guard.
+- [x] Step 2: Add the static offload guard.
 
 Make 'verify-compute-offload.sh' assert that:
 
@@ -66,7 +66,7 @@ Make 'verify-compute-offload.sh' assert that:
 
 Use 'grep' only against tracked source paths and fail with an actionable message.
 
-- [ ] Step 3: Run shell syntax checks.
+- [x] Step 3: Run shell syntax checks.
 
 Run 'bash -n scripts/deploy/apply-migrations-from-ci.sh scripts/deploy/verify-compute-offload.sh scripts/deploy/verify-image-only-rollout.sh scripts/deploy/auto-deploy-ghcr.sh'. Expected: exit 0 with no syntax errors.
 
@@ -82,17 +82,17 @@ Run 'bash -n scripts/deploy/apply-migrations-from-ci.sh scripts/deploy/verify-co
 - Consumes: 'BootstrapOptions.AutoMigrate', 'IHostEnvironment', and the existing EF database provider.
 - Produces: development/test compatibility with existing auto-migration behavior; production startup never calls 'Database.MigrateAsync()' as a deployment mechanism and fails readiness when pending migrations exist.
 
-- [ ] Step 1: Add a focused policy seam or deterministic production assertion.
+- [x] Step 1: Add a focused policy seam or deterministic production assertion.
 
 Use the smallest testable seam consistent with the current top-level 'Program.cs' style. The test must distinguish Production plus PostgreSQL plus AutoMigrate=false from Development plus AutoMigrate=true, and must not require a production database or credentials.
 
-- [ ] Step 2: Remove only the production 'MigrateAsync()' path.
+- [x] Step 2: Remove only the production 'MigrateAsync()' path.
 
 Change the unconditional Npgsql startup block so production does not apply migrations. Keep the existing development auto-migration path through 'DatabaseBootstrapper.InitializeAsync', keep the bounded runtime-settings self-heal only if required for development compatibility, and retain the production pending-migration readiness check. Do not weaken fail-closed 'health/ready' behavior.
 
-- [ ] Step 3: Run the focused backend test.
+- [x] Step 3: Run the focused backend test.
 
-Run 'dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~ProductionReadinessTests" --nologo'. Expected: focused production-readiness tests pass, or any pre-existing host stall is reported without claiming a pass.
+Run 'dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~DatabaseMigrationExecutionPolicyTests" --nologo'. Expected: focused migration-policy tests pass, or any pre-existing host stall is reported without claiming a pass.
 
 ## Task 3: Add the Actions migration gate
 
@@ -107,19 +107,19 @@ Run 'dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj 
 - Consumes: exact checked-out commit, .NET 10, EF design-time context, existing PROD_SSH_KEY, VPS host/path, and target commit SHA.
 - Produces: a non-empty idempotent SQL script generated off-server; a failed migration blocks deploy; no database secret enters GitHub logs or workflow variables.
 
-- [ ] Step 1: Add the migration job after the API image job.
+- [x] Step 1: Add the migration job after the API image job.
 
-Add 'migrate-production' with 'needs: [build-api]' and 'runs-on: ubuntu-latest'. Check out the exact commit, install .NET '10.0.x', install 'dotnet-ef' '10.0.5', restore and build 'backend/src/OetLearner.Api/OetLearner.Api.csproj', then run one-line 'dotnet ef migrations script --idempotent --no-build --configuration Release --project backend/src/OetLearner.Api/OetLearner.Api.csproj --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj --output output/oet-production-migrations.sql'. Assert the file is non-empty, print only its SHA-256, and upload it as a short-retention workflow artifact without production data.
+Add 'migrate-production' with 'needs: [build-web, build-api, build-backup]' and 'runs-on: ubuntu-latest'. Check out the exact commit, install .NET '10.0.x', install 'dotnet-ef' '10.0.5', restore and build 'backend/src/OetLearner.Api/OetLearner.Api.csproj', then run one-line 'dotnet ef migrations script --idempotent --no-build --configuration Release --project backend/src/OetLearner.Api/OetLearner.Api.csproj --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj --output output/oet-production-migrations.sql'. Assert the file is non-empty, print only its SHA-256, and upload it as a short-retention workflow artifact without production data.
 
-- [ ] Step 2: Apply the generated SQL through the existing SSH path.
+- [x] Step 2: Apply the generated SQL through the existing SSH path.
 
 Use the same key creation, host-key handling, and SSH options as the existing deploy job. Because the wrapper is new and the VPS still has the previous commit, first stream 'scripts/deploy/apply-migrations-from-ci.sh' to a mode-700 file under '/tmp' on the VPS, then run that temporary wrapper with the generated SQL on standard input using 'ssh ... root@host "bash /tmp/oet-apply-migrations-from-ci.sh" < output/oet-production-migrations.sql'. Remove the temporary file after a successful or failed attempt. Keep the remote command free of dotnet, pnpm, npm, Docker build, and test operations. If the pre-flight safety gate requires explicit destructive-migration approval, fail before psql and do not deploy.
 
-- [ ] Step 3: Make deployment depend on migration success.
+- [x] Step 3: Make deployment depend on migration success.
 
 Set 'deploy.needs' to '[build-web, build-api, build-backup, migrate-production]'. Keep the existing serialized concurrency group. Add migration output and status to the job summary without printing secrets or SQL contents.
 
-- [ ] Step 4: Run the static workflow guard.
+- [x] Step 4: Run the static workflow guard.
 
 Run 'bash scripts/deploy/verify-compute-offload.sh'. Expected: all offload assertions pass.
 
@@ -138,19 +138,19 @@ Run 'bash scripts/deploy/verify-compute-offload.sh'. Expected: all offload asser
 - Consumes: commit-scoped 'DB_BACKUP_IMAGE' GHCR reference.
 - Produces: GHCR web/API/backup images and a VPS rollout that only pulls and starts them with '--no-build'.
 
-- [ ] Step 1: Verify the backup image job.
+- [x] Step 1: Verify the backup image job.
 
 Keep the existing Buildx cache scope 'db-backup', push commit-scoped and convenience tags, and include 'build-backup' in the deploy 'needs' list.
 
-- [ ] Step 2: Wire the backup image into the remote rollout.
+- [x] Step 2: Wire the backup image into the remote rollout.
 
 Require 'DB_BACKUP_IMAGE', persist it in '.env.production' alongside web/API refs without printing secrets, call 'pull_with_retry' for it, and include 'db-backup' in the target-slot 'up -d --no-build --force-recreate' call.
 
-- [ ] Step 3: Prove the active rollout is image-only.
+- [x] Step 3: Prove the active rollout is image-only.
 
 Run the guard against the checked-out scripts and ensure legacy source-build helpers exit 78 unless 'ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency' is explicitly supplied. Do not run those helpers on production.
 
-- [ ] Step 4: Run static Compose and shell checks.
+- [x] Step 4: Run static Compose and shell checks.
 
 Run 'bash -n scripts/deploy/auto-deploy-ghcr.sh scripts/deploy/verify-image-only-rollout.sh'. Use a non-secret Compose config inspection only if required; never substitute production '.env' values into logs.
 
@@ -166,15 +166,15 @@ Run 'bash -n scripts/deploy/auto-deploy-ghcr.sh scripts/deploy/verify-image-only
 - Consumes: repository workflow inventory and the dated read-only VPS snapshot already collected.
 - Produces: an operator-readable record of what moved, what remains on-host, why backups are excluded, runner limitations/workarounds, and exact evidence boundaries.
 
-- [ ] Step 1: Write the workload table.
+- [x] Step 1: Write the workload table.
 
 Document web/API/backup image builds, lint/tests/E2E/mobile builds, EF migration generation, API startup migration removal, backup sidecar, root-cron Google Drive backup, ClamAV/PostgreSQL/runtime workers, and unrelated tenant containers.
 
-- [ ] Step 2: Document Actions limits and mitigations.
+- [x] Step 2: Document Actions limits and mitigations.
 
 Link the current GitHub primary documentation and record standard runner CPU/RAM/disk, hosted job and workflow time limits, matrix limit, BuildKit caches, test sharding, larger runners, and the separate self-hosted-runner/managed-backup recommendation.
 
-- [ ] Step 3: Update the handoff.
+- [x] Step 3: Update the handoff.
 
 Prepend a concise checkpoint to '.github/agent-state.local.md' naming changed files, focused validation, CI/deploy evidence, and the remaining backup restore-drill boundary. Preserve all existing entries below it.
 
@@ -184,7 +184,7 @@ Prepend a concise checkpoint to '.github/agent-state.local.md' naming changed fi
 
 - Test: '.github/workflows/deploy.yml', 'scripts/deploy/*.sh', 'backend/src/OetLearner.Api/Program.cs', focused backend tests, and the operator doc.
 
-- [ ] Step 1: Run one lightweight local validation set.
+- [x] Step 1: Run one lightweight local validation set.
 
 Run the static guards, shell syntax checks, 'git diff --check', and the focused production-readiness test. Do not run a full local build/test marathon; GitHub Actions remains authoritative for full image and CI gates.
 

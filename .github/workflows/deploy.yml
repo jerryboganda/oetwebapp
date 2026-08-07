@@ -110,7 +110,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=db-backup
 
   migrate-production:
-    needs: [build-api]
+    needs: [build-web, build-api, build-backup]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -178,6 +178,7 @@ jobs:
     needs: [build-web, build-api, build-backup, migrate-production]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Deploy to VPS over SSH (pull + blue/green redeploy)
         env:
           # Dedicated CI deploy key (authorized on the real prod box's root).
@@ -190,33 +191,45 @@ jobs:
           VPS_PORT: "22"
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
-          # git checkout + live `oetwebsite` compose project run from here.
           APP_DIR="/opt/oetwebapp"
+          REMOTE_DIR="/tmp/oet-image-rollout-${GITHUB_RUN_ID}"
+          REMOTE_SCRIPT="$REMOTE_DIR/auto-deploy-ghcr.sh"
+          REMOTE_COMPOSE="$REMOTE_DIR/docker-compose.production.yml"
+          REMOTE_VALIDATE="$REMOTE_DIR/validate-production-env.sh"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          # Single remote command string. Runner vars expand here; remote-only
-          # subshells use \$( ) so they evaluate on the VPS. Diagnostics print
-          # who/where the deploy lands; safe.directory guards root-on-uid1500 git.
-          # The repo is private, so the VPS `git fetch` authenticates with the
-          # workflow's ephemeral GITHUB_TOKEN (passed as GHCR_TOKEN; has contents:read)
-          # rather than relying on anonymous public-repo fetch (the prior behaviour).
-          ssh -i ~/.ssh/deploy_key -p "$PORT" \
-            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o BatchMode=yes \
-            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
-            "$VPS_USER@$VPS_HOST" \
-            "set -e; echo \"[deploy] whoami=\$(whoami) pwd0=\$(pwd)\"; \
-             cd '$APP_DIR'; echo \"[deploy] cwd=\$(pwd)\"; (ls -ld .git || echo '[deploy] no .git'); \
-             git config --global --add safe.directory '$APP_DIR' 2>/dev/null || true; \
-             echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
-             git fetch 'https://x-access-token:$GHCR_TOKEN@github.com/jerryboganda/oetwebapp.git' main --quiet; git reset --hard '$SHA'; \
-             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' VPS_APP_DIR='$APP_DIR' \
-               bash scripts/deploy/auto-deploy-ghcr.sh; \
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+          )
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+              "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE'; rmdir '$REMOTE_DIR' 2>/dev/null || true" \
+              >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; mkdir -p '$REMOTE_DIR'; cat > '$REMOTE_SCRIPT'; chmod 700 '$REMOTE_SCRIPT'" \
+            < scripts/deploy/auto-deploy-ghcr.sh
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_COMPOSE'; chmod 600 '$REMOTE_COMPOSE'" \
+            < docker-compose.production.yml
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_VALIDATE'; chmod 700 '$REMOTE_VALIDATE'" \
+            < scripts/deploy/validate-production-env.sh
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "set -e; echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
+             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
+             VPS_APP_DIR='$APP_DIR' VPS_COMPOSE_FILE='$REMOTE_COMPOSE' VPS_VALIDATE_ENV_SCRIPT='$REMOTE_VALIDATE' \
+               bash '$REMOTE_SCRIPT'; \
              docker logout ghcr.io >/dev/null 2>&1 || true"
       - name: Summary
         if: always()
