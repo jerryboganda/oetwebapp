@@ -732,9 +732,18 @@ export default function AdminVideoCollectionsPage() {
       </Modal>
 
       {/* ── Rename collection ── */}
-      <Modal open={Boolean(renaming)} onClose={() => setRenaming(null)} title="Rename collection" size="sm">
+      <Modal open={Boolean(renaming)} onClose={() => setRenaming(null)} title="Rename Bunny collection" size="sm">
         {renaming ? (
           <form className="space-y-4" onSubmit={handleRename}>
+            <p className="rounded-admin border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              This only renames the internal Bunny storage folder — it is <strong>not</strong> what
+              candidates see. To change the folder name shown on the candidate video library, edit it on
+              the{' '}
+              <Link href="/admin/content/videos/categories" className="font-semibold underline">
+                Video Categories
+              </Link>{' '}
+              page instead.
+            </p>
             <Input label="Name" value={renameName} onChange={(e) => setRenameName(e.target.value)} autoFocus />
             <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
               <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>
