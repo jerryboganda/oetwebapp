@@ -435,14 +435,14 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {nextActionCard ? (
-              <MotionItem delayIndex={0}>
+              <MotionItem initial={false} layout={false}>
                 <div data-tour="learner-dashboard-next-action">
                   <LearnerSurfaceCard card={nextActionCard} />
                 </div>
               </MotionItem>
             ) : null}
             {nextMockCard ? (
-              <MotionItem delayIndex={1}>
+              <MotionItem initial={false} layout={false}>
                 <LearnerSurfaceCard card={nextMockCard} />
               </MotionItem>
             ) : null}
