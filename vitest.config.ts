@@ -19,6 +19,9 @@ export default defineConfig({
       '**/node_modules/**',
       'tests/e2e/**',
       'tests/a11y/**',
+      // Playwright performance specs are collected by their isolated config,
+      // not by the jsdom unit-test runner.
+      'tests/performance/**/*.spec.ts',
       '.kilo/**',
       '.claude/**',
       'OET Web App Login only screens take from here/**',
