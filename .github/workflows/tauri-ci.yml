@@ -1,6 +1,6 @@
 name: Tauri Desktop CI
 
-# PR + push gate for the Tauri 2 desktop shell (src-tauri/) and its bridge contract.
+# PR + push gate for the Tauri 2 desktop shell (src-tauri/) and shared runtime contract.
 # Closes the gap left by tauri-desktop-release.yml (which only builds on tags): this
 # runs the Rust toolchain gates that were previously ungated — fmt, clippy (-D warnings),
 # cargo test — plus a compile smoke and the desktopBridge conformance test.
@@ -17,12 +17,35 @@ on:
       - 'inject/**'
       - 'types/desktop.d.ts'
       - '.github/workflows/tauri-ci.yml'
+      - 'app/providers.tsx'
+      - 'app/providers/**'
+      - 'components/shell/**'
+      - 'components/mobile/**'
+      - 'components/videos/**'
+      - 'components/domain/catalog/promo-hero-slider.tsx'
+      - 'contexts/accessibility-context.tsx'
+      - 'hooks/use-media-preferences.ts'
+      - 'lib/query/**'
+      - 'tests/performance/**'
+      - 'playwright.performance.config.ts'
   pull_request:
     paths:
       - 'src-tauri/**'
       - 'inject/**'
       - 'types/desktop.d.ts'
       - '.github/workflows/tauri-ci.yml'
+      - 'app/providers.tsx'
+      - 'app/providers/**'
+      - 'components/shell/**'
+      - 'components/mobile/**'
+      - 'components/videos/**'
+      - 'components/domain/catalog/promo-hero-slider.tsx'
+      - 'contexts/accessibility-context.tsx'
+      - 'hooks/use-media-preferences.ts'
+      - 'lib/query/**'
+      - 'tests/performance/**'
+      - 'playwright.performance.config.ts'
+  workflow_dispatch:
 
 concurrency:
   group: tauri-ci-${{ github.ref }}
