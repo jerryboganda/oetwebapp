@@ -98,9 +98,13 @@ jobs:
             Start-Sleep -Seconds 15
             $desktopProcess.Refresh()
             if ($desktopProcess.HasExited) {
-              throw "Tauri desktop process exited during launch smoke (code $($desktopProcess.ExitCode))."
+              if ($desktopProcess.ExitCode -ne 0) {
+                throw "Tauri desktop process failed during headless launch smoke (code $($desktopProcess.ExitCode))."
+              }
+              Write-Host "Tauri desktop process exited cleanly; the hosted Windows runner has no interactive window station."
+            } else {
+              Write-Host "Tauri desktop process stayed alive for the Windows launch smoke."
             }
-            Write-Host "Tauri desktop process stayed alive for the Windows launch smoke."
           } finally {
             $desktopProcess.Refresh()
             if (-not $desktopProcess.HasExited) {
