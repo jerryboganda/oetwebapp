@@ -113,7 +113,7 @@ Add 'migrate-production' with 'needs: [build-api]' and 'runs-on: ubuntu-latest'.
 
 - [ ] Step 2: Apply the generated SQL through the existing SSH path.
 
-Use the same key creation, host-key handling, and SSH options as the existing deploy job. On the remote host, run only validation/pre-flight and the stdin wrapper; pipe the generated file to the remote command using 'ssh ... root@host "cd /opt/oetwebapp && bash scripts/deploy/apply-migrations-from-ci.sh" < output/oet-production-migrations.sql'. Keep the remote command free of dotnet, pnpm, npm, Docker build, and test operations. If the pre-flight safety gate requires explicit destructive-migration approval, fail before psql and do not deploy.
+Use the same key creation, host-key handling, and SSH options as the existing deploy job. Because the wrapper is new and the VPS still has the previous commit, first stream 'scripts/deploy/apply-migrations-from-ci.sh' to a mode-700 file under '/tmp' on the VPS, then run that temporary wrapper with the generated SQL on standard input using 'ssh ... root@host "bash /tmp/oet-apply-migrations-from-ci.sh" < output/oet-production-migrations.sql'. Remove the temporary file after a successful or failed attempt. Keep the remote command free of dotnet, pnpm, npm, Docker build, and test operations. If the pre-flight safety gate requires explicit destructive-migration approval, fail before psql and do not deploy.
 
 - [ ] Step 3: Make deployment depend on migration success.
 
@@ -203,4 +203,3 @@ Push 'main', identify the Build & Deploy run for the exact SHA, and wait for ima
 - [ ] Step 5: Verify production boundaries.
 
 Confirm production web '/api/health' and API '/health/ready', confirm API logs no longer show startup-applied migrations, and confirm deployed containers carry the GHCR image refs. Do not claim backup restore or authenticated learner/device acceptance without owner-side evidence.
-
