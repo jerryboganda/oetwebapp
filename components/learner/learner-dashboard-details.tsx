@@ -205,7 +205,7 @@ export function LearnerDashboardDetails({
         />
       </div>
 
-      <MotionList className="space-y-5 lg:col-span-4">
+      <MotionList initial={false} layout={false} className="space-y-5 lg:col-span-4">
         {liveReadiness ? (
           <Card data-tour="learner-dashboard-readiness">
             <CardHeader>

@@ -24,6 +24,8 @@ interface AsyncStateWrapperProps {
   loadingContent?: ReactNode;
   /** Partial data warning message */
   partialMessage?: string;
+  /** Disable the first state entrance animation when the content is a critical paint surface. */
+  initial?: boolean;
   className?: string;
 }
 
@@ -35,6 +37,7 @@ export function AsyncStateWrapper({
   emptyContent,
   loadingContent,
   partialMessage = 'Some data may be incomplete or still loading.',
+  initial = true,
   className,
 }: AsyncStateWrapperProps) {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
@@ -44,7 +47,7 @@ export function AsyncStateWrapper({
     switch (status) {
       case 'loading':
         return loadingContent ? (
-          <motion.div key="loading" {...motionProps} className={cn('w-full min-w-0', className)}>
+          <motion.div key="loading" {...motionProps} initial={initial ? motionProps.initial : false} className={cn('w-full min-w-0', className)}>
             {loadingContent}
           </motion.div>
         ) : (
@@ -53,21 +56,21 @@ export function AsyncStateWrapper({
 
       case 'error':
         return (
-          <motion.div key="error" {...motionProps} className={cn('w-full min-w-0', className)}>
+          <motion.div key="error" {...motionProps} initial={initial ? motionProps.initial : false} className={cn('w-full min-w-0', className)}>
             <ErrorState message={errorMessage} onRetry={onRetry} />
           </motion.div>
         );
 
       case 'empty':
         return (
-          <motion.div key="empty" {...motionProps} className={cn('w-full min-w-0', className)}>
+          <motion.div key="empty" {...motionProps} initial={initial ? motionProps.initial : false} className={cn('w-full min-w-0', className)}>
             {emptyContent ?? <div className="py-12 text-center text-sm text-muted">No data available.</div>}
           </motion.div>
         );
 
       case 'partial':
         return (
-          <motion.div key="partial" {...motionProps} className={cn('w-full min-w-0', className)}>
+          <motion.div key="partial" {...motionProps} initial={initial ? motionProps.initial : false} className={cn('w-full min-w-0', className)}>
             <InlineAlert variant="warning" className="mb-4" dismissible>
               {partialMessage}
             </InlineAlert>
@@ -78,7 +81,7 @@ export function AsyncStateWrapper({
       case 'success':
       default:
         return (
-          <motion.div key="success" {...motionProps} className={cn('w-full min-w-0', className)}>
+          <motion.div key="success" {...motionProps} initial={initial ? motionProps.initial : false} className={cn('w-full min-w-0', className)}>
             {children}
           </motion.div>
         );

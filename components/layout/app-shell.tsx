@@ -102,6 +102,9 @@ export function AppShell({
         workspaceRole={workspaceRole}
       />
       <AnimatePresence initial={false} mode="popLayout">
+        {/* Keep the first meaningful dashboard paint free of an entrance
+            transform on mobile WebKit. Exits and navigation motion remain
+            active after the initial render. */}
         <motion.main
           id="main-content"
           tabIndex={-1}
@@ -109,6 +112,7 @@ export function AppShell({
           layout="position"
           className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
           {...routeMotionProps}
+          initial={false}
         >
           <ScrollReset />
           {children}
@@ -155,6 +159,7 @@ export function AppShell({
               layout="position"
               className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
               {...routeMotionProps}
+              initial={false}
             >
               <ScrollReset />
               <EmailVerificationBanner />
@@ -201,6 +206,7 @@ export function AppShell({
             layout="position"
             className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
             {...routeMotionProps}
+            initial={false}
           >
             <ScrollReset />
             <EmailVerificationBanner />

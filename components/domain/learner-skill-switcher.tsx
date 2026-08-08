@@ -55,6 +55,7 @@ export function LearnerSkillSwitcher({
             <Link
               key={module.href}
               href={module.href}
+              prefetch={false}
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'pressable group flex min-h-11 items-center gap-2 rounded-2xl border px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',

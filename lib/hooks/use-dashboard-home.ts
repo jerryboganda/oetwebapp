@@ -96,6 +96,13 @@ export function useDashboardHome() {
     });
   }, [hasAuthFailure, signOut, userId]);
 
+  // The hero, next action, and study-plan surfaces only need these three
+  // responses. Readiness and engagement are below the fold and can hydrate
+  // independently so a slow supplemental endpoint cannot hold the first
+  // meaningful dashboard paint behind the full five-request fan-out.
+  const criticalQueries = [tasksQuery, profileQuery, homeQuery];
+  const criticalPending = enabled && criticalQueries.some((query) => query.isPending);
+  const criticalError = criticalQueries.find((query) => query.error)?.error ?? null;
   const allSuccessful = enabled && queries.every((query) => query.isSuccess);
   useEffect(() => {
     if (!allSuccessful || trackedReadinessFor.current === userId) return;
@@ -126,9 +133,9 @@ export function useDashboardHome() {
         engagement,
         loadedAt: latestUpdate > 0 ? new Date(latestUpdate).toISOString() : null,
       };
-  const status = authLoading || hasAuthFailure || (enabled && queries.some((query) => query.isPending))
+  const status = authLoading || hasAuthFailure || criticalPending
     ? 'loading'
-    : firstError
+    : criticalError
       ? 'partial'
       : 'success';
   const reload = async () => {

@@ -356,6 +356,7 @@ export default function Dashboard() {
         status={asyncStatus}
         onRetry={reload}
         errorMessage={error ?? undefined}
+        initial={false}
           partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
           loadingContent={<LearnerSkeleton variant="dashboard" />}
           emptyContent={
