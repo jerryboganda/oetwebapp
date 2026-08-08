@@ -4,33 +4,41 @@ Last updated: 2026-08-08
 
 ## Outcome
 
-- Shipped the performance implementation on `main` at `117a1fbfe`, including
-  browser budgets/diagnostics, disposable HTTPS performance infrastructure,
-  corrected k6 critical-read tags, auth/startup motion reductions, and a
-  code-split learner dashboard details tree.
-- Performance run `31224597913` passed all browser, k6, and summary gates on
-  the exact SHA. Mobile `31224597896`, Tauri `31224598260`, Build & Deploy
-  `31224563676`, and SBOM `31224563636` also passed.
-- Live web, API health, and API readiness checks returned HTTP 200 after the
-  deployment; production readiness reported database, migrations, stuck jobs,
-  and storage as ok.
+- Performance implementation source revision is `0caccbabe3d5622cc56d5ebd601fe2d30f5e896f`;
+  Android runtime workflow corrections are `60e9a60a0` and `584177a75`.
+- Performance run `31234134695` passed the 10-project browser matrix, k6, and
+  summary gates; final learner Pixel CLS was `0`.
+- Mobile CI `31236473393` passed lint/typecheck, unit tests, iOS simulator
+  launch, Android debug build, and Android emulator runtime assertions.
+- Tauri Desktop CI `31234597842` passed Windows Rust gates, macOS launch smoke,
+  and `desktopBridge` conformance.
+- Final Build & Deploy run `31236473400` passed web/API/backup builds,
+  migration, and deploy. Live web, API health, and API readiness checks
+  returned HTTP 200 with database, migrations, stuck jobs, and storage ok.
 
 ## Validation
 
-- Local TypeScript, scoped ESLint, focused Vitest (10/10), k6 regression (2/2),
-  and `git diff --check` passed.
-- Local Docker was unavailable and the bounded local AuthFlows test exceeded
-  its 120-second window; CI is the authoritative build/deploy boundary.
-- External non-production staging credentials/URL and physical devices remain
-  owner-side acceptance boundaries. QA Smoke and Speaking CI are separate
-  broad workflows and are not performance gates.
+- Local TypeScript, scoped ESLint, focused Vitest (9/9), and `git diff --check`
+  passed.
+- k6 completed 89,933 requests with 89,932 checks succeeded and 1 failed;
+  critical-read P95/P99 were 216.51/280.8 ms. The one dashboard failure was
+  the isolated PostgreSQL `too many clients already` capacity observation;
+  the configured load gate still passed.
+- Android smoke recorded a 915,883 ms hosted-emulator boot and a successful
+  process/activity assertion with no crash signature. Its `am start -W`
+  command timed out; this is not claimed as native launch-LCP evidence.
+- Local Docker was unavailable; CI is authoritative for the isolated stack,
+  native builds, and deployment.
+- External non-production staging credentials/URL, physical devices, and
+  manual low-bandwidth interaction remain owner-side acceptance boundaries.
+  QA Smoke and Speaking CI are separate broad workflows and are not
+  performance gates.
 
 ## Next step
 
-No further in-scope performance implementation remains. Main parity, the
-documentation rollout, live health, browser/k6/native gates, and the explicit
-external-staging/physical-device boundaries are recorded; owner-side manual
-device and external-staging acceptance can proceed when those resources exist.
+No further in-scope performance implementation remains. The finalized evidence
+is ready for `main` parity; only owner-side physical-device, external-staging,
+and manual low-bandwidth acceptance boundaries remain.
 
 # Current Task - Production compute offload to GitHub Actions
 

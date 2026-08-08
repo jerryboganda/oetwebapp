@@ -1,72 +1,132 @@
-# Maximum Performance Optimisation — Evidence
+# Maximum Performance Optimisation - Evidence
 
 Date: 2026-08-08
 
 ## Delivered
 
-- Added browser performance budgets and authoritative timing/resource collection for unauthenticated, learner, admin, Pixel, and iPhone routes.
-- Added an isolated disposable staging-like GitHub Actions stack with HTTPS proxying, readiness gates, browser budgets, k6 critical-read load, artifact upload, and production-host refusal for external mode.
-- Preserved auth/CSP/native bridges while reducing startup work: web auth-storage hydration no longer probes native Preferences, navigation prefetch is disabled for the primary shell links, initial state/layout projection was removed from the critical loading-to-dashboard swap, and the optional app promotion is below dashboard content.
-- Code-split the learner dashboard's lower readiness, pronunciation, scoring, streak, and add-on widget tree so mobile hydration can paint the primary dashboard/action surface without parsing the complete secondary dashboard.
-- Corrected the k6 critical-read threshold selector to match the emitted `endpoint-class` tag and added a regression test for that contract.
-- Kept native Mobile and Tauri CI coverage available for shared runtime/provider/performance changes.
+- Added measurement-gated browser performance budgets and authoritative timing,
+  Web Vitals, resource-size, error, and overflow collection for public,
+  unauthenticated, learner, and admin routes.
+- Added an isolated disposable staging-like GitHub Actions stack with HTTPS
+  proxying, readiness gates, browser budgets, k6 critical-read load, artifact
+  upload, and production-host refusal for external mode.
+- Stabilised the learner first paint: critical dashboard queries are limited to
+  auth/profile/home data, lower dashboard details hydrate below the fold,
+  navigation prefetch is disabled for primary shell links, and initial route/
+  state layout projection is disabled during the loading-to-dashboard swap.
+- Aligned the auth-loading learner shell with the real learner shell, including
+  fixed viewport geometry, branded header controls, sidebar width, and mobile
+  bottom navigation. This removed the remaining Pixel CLS regression without
+  weakening auth, CSP, storage, or native bridge contracts.
+- Added responsive browser coverage for Chromium, Firefox, WebKit, Pixel,
+  iPhone, public routes, and admin routes, plus Android/iOS and Windows/macOS
+  native CI gates.
 
-The enforced browser budgets are LCP <= 2.5 s, FCP <= 1.8 s, INP <= 200 ms when a qualifying interaction exists, CLS <= 0.1, zero page/request/HTTP response errors, and no horizontal overflow. The k6 gate enforces HTTP failure rate < 1%, critical-read P95 < 1 s, and P99 < 2 s. JavaScript/CSS encoded transfer size is reported separately from decoded size.
+The enforced browser budgets are LCP <= 2.5 s, FCP <= 1.8 s, INP <= 200 ms
+when a qualifying interaction exists, CLS <= 0.1, zero page/request/HTTP
+response errors, and no horizontal overflow. The k6 gate enforces HTTP failure
+rate < 1%, critical-read P95 < 1 s, and P99 < 2 s. JavaScript/CSS encoded
+transfer size is reported separately from decoded size.
 
 ## Shipped revision and deployment
 
-- Runtime commit: `117a1fbfe` — `perf: code split learner dashboard details`.
-- Main was pushed successfully; the working checkout remains on `main`.
-- Build & Deploy run [31224563676](https://github.com/jerryboganda/oetwebapp/actions/runs/31224563676) completed successfully: web, API, and backup images; production migration; deploy.
-- SBOM/SCA run [31224563636](https://github.com/jerryboganda/oetwebapp/actions/runs/31224563636) completed successfully.
-- Direct post-deploy checks returned HTTP 200:
-  - `https://app.oetwithdrhesham.co.uk/` — web document served successfully.
-  - `https://api.oetwithdrhesham.co.uk/health` — API/database status `ok`.
-  - `https://api.oetwithdrhesham.co.uk/health/ready` — database, migrations, stuck jobs, and storage all `ok`.
+- Runtime implementation revision: `0caccbabe3d5622cc56d5ebd601fe2d30f5e896f`
+  (`perf: align learner loading shell geometry`).
+- The Android runtime smoke harness was then corrected on
+  `60e9a60a0` (direct activity launch and portable process loop) and
+  `584177a75` (portable crash-signature assertion).
+- Build & Deploy run [31234129215](https://github.com/jerryboganda/oetwebapp/actions/runs/31234129215)
+  completed successfully for the implementation revision: web, API, and
+  backup images, production migration, and deploy.
+- Follow-up Build & Deploy run [31236473400](https://github.com/jerryboganda/oetwebapp/actions/runs/31236473400)
+  completed successfully after the native smoke harness corrections.
+- SBOM/SCA run [31234129218](https://github.com/jerryboganda/oetwebapp/actions/runs/31234129218)
+  completed successfully.
+- Direct post-deploy checks after the final deployment returned HTTP 200:
+  - `https://app.oetwithdrhesham.co.uk/` - web document served successfully.
+  - `https://api.oetwithdrhesham.co.uk/health` - API/database status `ok`.
+  - `https://api.oetwithdrhesham.co.uk/health/ready` - database, migrations,
+    stuck jobs, and storage all `ok`.
 
 ## Authoritative browser gate
 
-Performance run [31224597913](https://github.com/jerryboganda/oetwebapp/actions/runs/31224597913) passed on `117a1fbfe`. It built the isolated stack, verified readiness, ran through the HTTPS proxy, and completed the browser, k6, and summary gates. All five projects had zero page/request/HTTP response errors and no budget violations.
+Performance run [31234134695](https://github.com/jerryboganda/oetwebapp/actions/runs/31234134695)
+passed on the runtime revision. It built the isolated stack, verified
+readiness, ran through the HTTPS proxy, and completed the browser, k6, and
+summary gates. All 10 projects had zero browser page/request/HTTP response
+errors, zero horizontal overflow, and zero budget violations.
 
 | Project | Route | LCP | FCP | CLS | JS encoded / decoded | CSS encoded / decoded |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Admin Chromium | `/admin` | 956 ms | 320 ms | 0 | 696,403 / 2,415,624 B | 58,263 / 424,974 B |
-| Learner Chromium | `/` | 980 ms | 376 ms | 0.009958 | 660,924 / 2,300,862 B | 58,263 / 424,974 B |
-| Learner iPhone | `/` | 1,224 ms | 1,224 ms | 0 | 675,494 / 2,343,286 B | 58,353 / 424,974 B |
-| Learner Pixel | `/` | 748 ms | 356 ms | 0 | 674,570 / 2,343,286 B | 58,263 / 424,974 B |
-| Unauthenticated Chromium | `/sign-in` | 548 ms | 548 ms | 0 | 473,529 / 1,619,499 B | 61,784 / 449,757 B |
+| Admin Chromium | `/admin` | 980 ms | 336 ms | 0 | 710,716 / 2,472,639 B | 58,276 / 425,042 B |
+| Admin Pixel | `/admin` | 900 ms | 324 ms | 0 | 710,716 / 2,472,639 B | 58,276 / 425,042 B |
+| Learner Chromium | `/` | 548 ms | 548 ms | 0 | 674,303 / 2,352,138 B | 58,276 / 425,042 B |
+| Learner Firefox | `/` | 353 ms | 353 ms | 0 | 674,303 / 2,352,138 B | 58,276 / 425,042 B |
+| Learner iPhone | `/` | 1,852 ms | 232 ms | 0 | 688,913 / 2,394,583 B | 58,366 / 425,042 B |
+| Learner Pixel | `/` | 324 ms | 324 ms | 0 | 687,964 / 2,394,583 B | 58,276 / 425,042 B |
+| Learner WebKit | `/` | 1,185 ms | 1,185 ms | 0 | 690,015 / 2,395,948 B | 58,366 / 425,042 B |
+| Public Chromium | `/get-app` | 328 ms | 328 ms | 0.0228 | 415,853 / 1,419,019 B | 56,287 / 418,413 B |
+| Public Pixel | `/get-app` | 324 ms | 324 ms | 0 | 415,853 / 1,419,019 B | 56,287 / 418,413 B |
+| Unauthenticated Chromium | `/sign-in` | 484 ms | 456 ms | 0.0244 | 475,049 / 1,627,830 B | 61,797 / 449,825 B |
 
-INP was `n/a` because the measurement flow produced no qualifying interaction; the configured missing-INP policy explicitly permits that. No browser project reported overflow or violations.
+INP was `n/a` because the measurement flow produced no qualifying interaction;
+the configured missing-INP policy permits that. The previous learner Pixel
+failure (CLS `0.14749`) was reproduced from trace evidence and fixed by making
+the auth-loading shell geometry match the hydrated learner shell; the final
+Pixel run recorded CLS `0`.
 
 ## Authoritative k6 gate
 
 The same performance run completed k6 successfully:
 
-- 88,857 HTTP requests; HTTP failure rate 0.00% (0 failures).
-- 88,857 checks passed; 0 checks failed.
-- Critical-read aggregate P95: 221.68 ms.
-- Critical-read maximum: 769.38 ms.
-- The script enforced critical-read P95 < 1,000 ms and P99 < 2,000 ms; the k6 process and workflow gate passed. The default k6 console/summary export did not emit an exact P99 value, so no invented percentile is reported; the observed maximum is already below the P99 ceiling.
-- The run used the disposable isolated stack. No production load was generated.
+- 89,933 HTTP requests; 89,932 checks succeeded and 1 check failed.
+- HTTP failure rate was 1/89,933 (0.0011%, displayed as `0.00%`), below the
+  enforced `<1%` threshold.
+- Critical-read P95 was 216.51 ms and P99 was 280.8 ms; both stayed below the
+  1,000 ms / 2,000 ms thresholds.
+- The single failed check was one dashboard response under the 100-VU load.
+  The isolated stack log attributes it to PostgreSQL reaching its connection
+  cap (`too many clients already`), not a browser error or a sustained HTTP
+  failure. This is recorded as the remaining server-capacity observation; no
+  production load was generated.
 
 ## Native CI
 
-- Mobile CI [31224597896](https://github.com/jerryboganda/oetwebapp/actions/runs/31224597896) passed: unit tests, lint/typecheck, Android debug build, and iOS build check.
-- Tauri Desktop CI [31224598260](https://github.com/jerryboganda/oetwebapp/actions/runs/31224598260) passed: desktop bridge conformance plus Windows Rust format, clippy, tests, and build.
+- Mobile CI [31236473393](https://github.com/jerryboganda/oetwebapp/actions/runs/31236473393)
+  passed lint/typecheck, mobile unit tests, iOS build and simulator launch,
+  Android debug build, and the Android emulator runtime smoke. The Android
+  artifact records a 915,883 ms hosted-emulator boot, successful APK install,
+  live process `3250`, the expected `MainActivity`, and no AndroidRuntime crash
+  signature. `adb shell am start -W` reported `Status: timeout` with
+  `LaunchState: UNKNOWN` after 42.75 s, while the subsequent process/activity
+  assertions passed; this is retained as a hosted-emulator launcher timing
+  observation, not a native LCP measurement.
+- Tauri Desktop CI [31234597842](https://github.com/jerryboganda/oetwebapp/actions/runs/31234597842)
+  passed Windows Rust format/clippy/tests/build, macOS desktop launch smoke,
+  and `desktopBridge` contract conformance.
 
-These are CI build/contract gates, not physical-device measurements.
+These are CI build/simulator/emulator/contract gates, not physical-device
+measurements.
 
 ## Local focused validation
 
-- `pnpm exec tsc --noEmit --pretty false` — passed.
-- `pnpm exec eslint app/page.tsx components/learner/learner-dashboard-details.tsx` — passed.
-- `pnpm exec vitest run tests/performance/metrics.test.ts lib/auth-storage.test.ts --reporter=dot` — 10/10 passed.
-- `node --test tests/load/critical-paths.k6.test.js` — 2/2 passed.
-- `git diff --check` — passed before commit.
-- Local Docker was unavailable, so the isolated stack ran in CI. The targeted local .NET AuthFlows test exceeded the local 120-second command window and was not claimed as passed; CI deployment/backend gates remained the authoritative host build boundary.
+- `pnpm exec tsc --noEmit --pretty false` - passed.
+- `pnpm exec eslint components/auth/auth-guard.tsx` - passed.
+- `pnpm exec vitest run app/page.test.tsx components/layout/__tests__/app-shell.test.tsx --reporter=dot` - 9/9 passed.
+- `git diff --check` - passed.
+- Local Docker was unavailable, so the isolated performance stack ran in CI.
 
 ## Remaining boundaries
 
-- No external non-production staging URL or `OET_PERF_*` credentials were configured, so the validated staging-like target was the disposable isolated CI stack. The workflow refuses production hosts in external mode.
-- Physical Android, iOS, Windows, and macOS device/browser measurements remain manual acceptance work; native CI proves build and bridge compatibility.
-- QA Smoke [31224563639](https://github.com/jerryboganda/oetwebapp/actions/runs/31224563639) and Speaking Module CI [31224563634](https://github.com/jerryboganda/oetwebapp/actions/runs/31224563634) are separate broad repository workflows and were not performance acceptance gates. The focused performance gate, native gates, production deploy, and live health checks above are green.
+- No external non-production staging URL or `OET_PERF_*` credentials were
+  configured; the validated staging-like target was the disposable isolated CI
+  stack. The workflow refuses production hosts in external mode.
+- Physical Android, iOS, Windows, and macOS device measurements and manual
+  low-bandwidth interaction acceptance remain owner-side boundaries. Native CI
+  proves hosted emulator/simulator build, process/activity launch assertions,
+  and bridge compatibility; it does not replace physical-device measurements
+  or native LCP profiling.
+- QA Smoke [31234129214](https://github.com/jerryboganda/oetwebapp/actions/runs/31234129214)
+  and Speaking Module CI [31234129174](https://github.com/jerryboganda/oetwebapp/actions/runs/31234129174)
+  are separate broad repository workflows, not performance acceptance gates;
+  their failing unrelated suites remain visible and were not hidden.
