@@ -34,7 +34,6 @@ import {
 } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
-import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { AsyncStateWrapper } from '@/components/state';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { AppDownloadPromo, PostLoginAppModal } from '@/components/marketing/app-download-promo';
@@ -169,7 +168,12 @@ function DashboardSubscriptionStrip({
   ].filter(Boolean) as { icon: typeof Timer; label: string }[];
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div
+      // The loaded facts row is taller than the initial subscription label.
+      // Reserve the common mobile footprint so live entitlement data cannot
+      // push the action surface down and accumulate CLS during hydration.
+      className="flex min-h-[104px] flex-col gap-2.5"
+    >
       <div className="flex items-center gap-2">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <CreditCard className="h-4 w-4" aria-hidden="true" />
@@ -205,6 +209,36 @@ function DashboardSubscriptionStrip({
         See all catalog <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
     </div>
+  );
+}
+
+function LearnerDashboardLoadingCard() {
+  return (
+    <Card
+      className="min-h-[260px]"
+      role="status"
+      aria-busy="true"
+      aria-label="Preparing your next study step"
+    >
+      <div className="flex h-full flex-col justify-between gap-4 sm:gap-6">
+        <div>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary sm:text-xs">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            Next action
+          </div>
+          <h3 className="mt-2.5 text-base font-bold text-navy sm:mt-4 sm:text-xl">
+            Preparing your next study step
+          </h3>
+          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-muted sm:mt-2 sm:text-sm">
+            We&apos;re loading your live study plan so you can start the right practice without losing your place.
+          </p>
+        </div>
+        <div aria-hidden="true" className="space-y-2">
+          <div className="h-10 w-full rounded-lg bg-border/60 motion-safe:animate-pulse" />
+          <div className="h-10 w-full rounded-lg bg-border/60 motion-safe:animate-pulse" />
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -383,7 +417,11 @@ export default function Dashboard() {
           errorMessage={error ?? undefined}
           initial={false}
           partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
-          loadingContent={<LearnerSkeleton variant="card-grid" />}
+          loadingContent={(
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <LearnerDashboardLoadingCard />
+            </div>
+          )}
           emptyContent={
             <LearnerEmptyState
               icon={Sparkles}
@@ -446,13 +484,13 @@ export default function Dashboard() {
             {nextActionCard ? (
               <MotionItem initial={false} layout={false}>
                 <div data-tour="learner-dashboard-next-action">
-                  <LearnerSurfaceCard card={nextActionCard} />
+                  <LearnerSurfaceCard card={nextActionCard} className="min-h-[260px]" />
                 </div>
               </MotionItem>
             ) : null}
             {nextMockCard ? (
               <MotionItem initial={false} layout={false}>
-                <LearnerSurfaceCard card={nextMockCard} />
+                <LearnerSurfaceCard card={nextMockCard} className="min-h-[260px]" />
               </MotionItem>
             ) : null}
             {!nextActionCard && !nextMockCard ? (
