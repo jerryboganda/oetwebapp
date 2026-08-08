@@ -352,38 +352,19 @@ export default function Dashboard() {
 
   return (
     <LearnerDashboardShell pageTitle="Dashboard">
-      <AsyncStateWrapper
-        status={asyncStatus}
-        onRetry={reload}
-        errorMessage={error ?? undefined}
-        initial={false}
-          partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
-          loadingContent={<LearnerSkeleton variant="dashboard" />}
-          emptyContent={
-            <LearnerEmptyState
-              icon={Sparkles}
-              title="Welcome to your OET workspace"
-              description="Complete onboarding to personalize your dashboard, or set goals first if you already know your exam target."
-              primaryAction={{ label: 'Start Onboarding', href: '/onboarding' }}
-              secondaryAction={{ label: 'Set Goals', href: '/goals' }}
-            />
-          }
-        >
-        <div className="space-y-6">
-          <PostLoginAppModal />
-          {purchaseSuccess ? (
-            <InlineAlert variant="success">
-              AI package purchase received. Current balances: {aiPackageCredits
-                ? `${aiPackageCredits.flexibleCredits} flexible, ${aiPackageCredits.writingOnlyCredits} writing, ${aiPackageCredits.speakingOnlyCredits} speaking, ${aiPackageCredits.mockExamsRemaining} mocks.`
-                : 'refreshing your package balance.'}
-            </InlineAlert>
-          ) : null}
+      <div className="space-y-6">
+        <PostLoginAppModal />
+        {/* Keep the stable, useful dashboard context outside the authenticated
+            data boundary. Slow critical API responses can fill the action
+            cards below without leaving a learner staring at a full-page
+            skeleton on mobile WebKit or a slower connection. */}
+        <div data-testid="learner-dashboard-hero">
           <LearnerPageHero
             eyebrow="Current Focus"
             icon={Sparkles}
             accent="primary"
             title="Keep today's priorities and exam signals in view"
-              description="Decide your next action, check your readiness, and move forward with confidence."
+            description="Decide your next action, check your readiness, and move forward with confidence."
             highlights={dashboardHeroHighlights}
             footer={(
               <DashboardSubscriptionStrip
@@ -394,6 +375,33 @@ export default function Dashboard() {
               />
             )}
           />
+        </div>
+
+        <AsyncStateWrapper
+          status={asyncStatus}
+          onRetry={reload}
+          errorMessage={error ?? undefined}
+          initial={false}
+          partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
+          loadingContent={<LearnerSkeleton variant="card-grid" />}
+          emptyContent={
+            <LearnerEmptyState
+              icon={Sparkles}
+              title="Welcome to your OET workspace"
+              description="Complete onboarding to personalize your dashboard, or set goals first if you already know your exam target."
+              primaryAction={{ label: 'Start Onboarding', href: '/onboarding' }}
+              secondaryAction={{ label: 'Set Goals', href: '/goals' }}
+            />
+          }
+        >
+          <div className="space-y-6">
+          {purchaseSuccess ? (
+            <InlineAlert variant="success">
+              AI package purchase received. Current balances: {aiPackageCredits
+                ? `${aiPackageCredits.flexibleCredits} flexible, ${aiPackageCredits.writingOnlyCredits} writing, ${aiPackageCredits.speakingOnlyCredits} speaking, ${aiPackageCredits.mockExamsRemaining} mocks.`
+                : 'refreshing your package balance.'}
+            </InlineAlert>
+          ) : null}
 
           <OnboardingChecklist />
 
@@ -481,7 +489,8 @@ export default function Dashboard() {
               for LCP or introduce a visible mobile layout shift. */}
           <AppDownloadPromo variant="banner" />
         </div>
-      </AsyncStateWrapper>
+        </AsyncStateWrapper>
+      </div>
     </LearnerDashboardShell>
   );
 }
