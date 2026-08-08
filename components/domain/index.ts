@@ -16,6 +16,7 @@ export { ReviewRequestDrawer } from './review-request-drawer';
 export { AudioPlayerWaveform } from './audio-player-waveform';
 export { RulebookFindingsPanel } from './rulebook-findings-panel';
 export { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from './learner-surface';
+export { LearnerDashboardLoadingCard } from './learner-dashboard-loading';
 export { CreditUsageInfoCard } from './credit-usage-info-card';
 export { CreditsGuideButton } from './credits-guide-dialog';
 export { AchievementToast } from './achievement-toast';
