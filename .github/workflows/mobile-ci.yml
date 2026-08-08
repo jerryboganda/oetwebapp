@@ -183,7 +183,10 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            set -euo pipefail
+            # android-emulator-runner invokes this block with POSIX sh, not
+            # Bash. Keep strict mode portable so the runtime smoke reaches
+            # the install/launch assertions on every hosted runner.
+            set -eu
             mkdir -p "$GITHUB_WORKSPACE/output/native/android"
             adb install -r "$GITHUB_WORKSPACE/output/native/android/app-debug.apk"
             adb shell am force-stop com.oetprep.learner
