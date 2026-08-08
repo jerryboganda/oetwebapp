@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Lock, Sparkles } from 'lucide-react';
+import { Calendar, CheckCircle2, Lock, Sparkles, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UserRole } from '@/lib/types/auth';
 import { useAuth } from '@/contexts/auth-context';
@@ -49,9 +49,9 @@ function LearnerSessionLoadingState() {
                 title="Keep today&apos;s priorities and exam signals in view"
                 description="Decide your next action, check your readiness, and move forward with confidence."
                 highlights={[
-                  { label: 'Exam target', value: 'Loading' },
-                  { label: 'Pending reviews', value: 'Loading' },
-                  { label: "Today's plan", value: 'Loading' },
+                  { icon: Calendar, label: 'Exam target', value: 'Set your exam date' },
+                  { icon: Star, label: 'Pending reviews', value: '0 in progress' },
+                  { icon: CheckCircle2, label: "Today's plan", value: 'No tasks scheduled' },
                 ]}
                 footer={<div aria-hidden="true" className="min-h-[104px]" />}
               />
