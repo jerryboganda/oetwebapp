@@ -103,7 +103,7 @@ export default function GetAppPage() {
               <h2 className="text-sm font-bold text-navy">Windows</h2>
               <p className="mt-1 text-xs text-muted">Installer (.exe) — auto-updates</p>
             </div>
-            <DesktopAppBadge href={WINDOWS_DOWNLOAD_URL} label="Windows" compact />
+            <DesktopAppBadge href={WINDOWS_DOWNLOAD_URL} label="Windows" className="w-full max-w-[220px] justify-center" />
           </div>
 
           <div
@@ -114,7 +114,7 @@ export default function GetAppPage() {
               <h2 className="text-sm font-bold text-navy">macOS</h2>
               <p className="mt-1 text-xs text-muted">Disk image (.dmg) — auto-updates</p>
             </div>
-            <DesktopAppBadge href={MAC_DOWNLOAD_URL} label="Mac" compact />
+            <DesktopAppBadge href={MAC_DOWNLOAD_URL} label="Mac" className="w-full max-w-[220px] justify-center" />
           </div>
 
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary">
@@ -123,7 +123,7 @@ export default function GetAppPage() {
               <h2 className="text-sm font-bold text-navy">Android</h2>
               <p className="mt-1 text-xs text-muted">Signed APK (.apk) — latest release</p>
             </div>
-            <GooglePlayBadge href={ANDROID_INSTALL_URL} />
+            <GooglePlayBadge href={ANDROID_INSTALL_URL} className="w-full max-w-[220px] justify-center" />
           </div>
 
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
@@ -131,10 +131,14 @@ export default function GetAppPage() {
             <div>
               <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
               <p className="mt-1 text-xs text-muted">
-                {IOS_STORE_URL ? 'Official App Store download' : 'Open the current iOS download page'}
+                {IOS_STORE_URL ? 'Official App Store download' : 'Temporary direct IPA download'}
               </p>
             </div>
-            <AppStoreBadge href={IOS_DOWNLOAD_URL} />
+            <AppStoreBadge
+              href={IOS_DOWNLOAD_URL}
+              directDownload={!IOS_STORE_URL}
+              className="w-full max-w-[220px] justify-center"
+            />
           </div>
         </section>
 

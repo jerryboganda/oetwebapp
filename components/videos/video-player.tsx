@@ -12,11 +12,13 @@ import {
 import {
   Captions,
   Loader2,
+  Minimize2,
   Maximize,
   Minimize,
   Pause,
   Play,
   RotateCcw,
+  StretchHorizontal,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -43,6 +45,72 @@ import {
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const HEARTBEAT_INTERVAL_MS = 60_000;
 const RENEW_LEEWAY_MS = 120_000;
+
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  mozFullScreenElement?: Element | null;
+  msFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => void | Promise<void>;
+  mozCancelFullScreen?: () => void | Promise<void>;
+  msExitFullscreen?: () => void | Promise<void>;
+};
+
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => void | Promise<void>;
+  mozRequestFullScreen?: () => void | Promise<void>;
+  msRequestFullscreen?: () => void | Promise<void>;
+};
+
+type FullscreenMethodTarget = FullscreenElement | FullscreenDocument;
+type FullscreenMethod = () => void | Promise<void>;
+
+function getFullscreenElement(documentRef: Document): Element | null {
+  const candidate = documentRef as FullscreenDocument;
+  return documentRef.fullscreenElement
+    ?? candidate.webkitFullscreenElement
+    ?? candidate.mozFullScreenElement
+    ?? candidate.msFullscreenElement
+    ?? null;
+}
+
+function invokeFullscreenMethod(target: FullscreenMethodTarget, method: FullscreenMethod | undefined): Promise<void> {
+  if (!method) return Promise.reject(new Error('Fullscreen API is unavailable.'));
+  try {
+    return Promise.resolve(method.call(target));
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+function requestFullscreen(element: HTMLElement): Promise<void> {
+  const candidate = element as FullscreenElement;
+  if (typeof element.requestFullscreen === 'function') return element.requestFullscreen();
+  if (typeof candidate.webkitRequestFullscreen === 'function') {
+    return invokeFullscreenMethod(candidate, candidate.webkitRequestFullscreen);
+  }
+  if (typeof candidate.mozRequestFullScreen === 'function') {
+    return invokeFullscreenMethod(candidate, candidate.mozRequestFullScreen);
+  }
+  if (typeof candidate.msRequestFullscreen === 'function') {
+    return invokeFullscreenMethod(candidate, candidate.msRequestFullscreen);
+  }
+  return Promise.reject(new Error('Fullscreen API is unavailable.'));
+}
+
+function exitFullscreen(documentRef: Document): Promise<void> {
+  const candidate = documentRef as FullscreenDocument;
+  if (typeof documentRef.exitFullscreen === 'function') return documentRef.exitFullscreen();
+  if (typeof candidate.webkitExitFullscreen === 'function') {
+    return invokeFullscreenMethod(candidate, candidate.webkitExitFullscreen);
+  }
+  if (typeof candidate.mozCancelFullScreen === 'function') {
+    return invokeFullscreenMethod(candidate, candidate.mozCancelFullScreen);
+  }
+  if (typeof candidate.msExitFullscreen === 'function') {
+    return invokeFullscreenMethod(candidate, candidate.msExitFullscreen);
+  }
+  return Promise.reject(new Error('Fullscreen API is unavailable.'));
+}
 
 export interface VideoPlayerHandle {
   seekTo(seconds: number): void;
@@ -135,6 +203,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [captionsOn, setCaptionsOn] = useState(false);
   const [hasCaptionTracks, setHasCaptionTracks] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isStretched, setIsStretched] = useState(false);
   const [watermarkKey, setWatermarkKey] = useState(0);
   const [captureWarning, setCaptureWarning] = useState<'screenshot' | 'recording' | null>(null);
 
@@ -436,9 +505,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   }, [isPlaying, phase.kind, videoId]);
 
   useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    const onFullscreenChange = () => {
+      setIsFullscreen(getFullscreenElement(document) === containerRef.current);
+    };
+    const events = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+    for (const eventName of events) document.addEventListener(eventName, onFullscreenChange);
+    return () => {
+      for (const eventName of events) document.removeEventListener(eventName, onFullscreenChange);
+    };
   }, []);
 
   // Security spec §3.1: "the previous device must lose playback access even
@@ -594,12 +668,18 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => undefined);
+    if (getFullscreenElement(document)) {
+      void exitFullscreen(document)
+        .then(() => setIsFullscreen(false))
+        .catch(() => undefined);
     } else {
-      void container.requestFullscreen().catch(() => undefined);
+      void requestFullscreen(container)
+        .then(() => setIsFullscreen(true))
+        .catch(() => undefined);
     }
   }, []);
+
+  const toggleStretch = useCallback(() => setIsStretched((current) => !current), []);
 
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;
@@ -685,7 +765,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   return (
     <div
       ref={containerRef}
-      className="group relative h-full w-full bg-black outline-none"
+      className="oet-video-player group relative h-full w-full overflow-hidden bg-black outline-none"
       tabIndex={0}
       role="application"
       aria-label="Video player"
@@ -696,6 +776,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           ref={embedPlayerRef}
           src={phase.session.playbackUrl}
           title="Protected course video"
+          fit={isStretched ? 'cover' : 'contain'}
           initialPositionSeconds={initialProgress?.completed ? 0 : initialProgress?.positionSeconds ?? 0}
           onPlay={handleEmbedPlay}
           onPause={handleEmbedPause}
@@ -706,7 +787,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       ) : (
         <video
         ref={videoRef}
-        className="h-full w-full"
+        className={`h-full w-full ${isStretched ? 'object-cover' : 'object-contain'}`}
         playsInline
         preload={lowBandwidth ? 'none' : 'metadata'}
         controls={false}
@@ -796,6 +877,19 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
               : 'Screen recording detected — this activity is logged.'}
           </div>
         </div>
+      )}
+
+      {isSecureEmbedPlayback && (
+        <button
+          type="button"
+          onClick={toggleStretch}
+          aria-label={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
+          aria-pressed={isStretched}
+          title={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
+          className="absolute bottom-3 right-3 z-50 rounded-lg bg-black/65 p-2 text-white shadow-lg hover:bg-black/80"
+        >
+          {isStretched ? <Minimize2 className="h-5 w-5" /> : <StretchHorizontal className="h-5 w-5" />}
+        </button>
       )}
 
       {isSecureEmbedPlayback && (
@@ -909,6 +1003,16 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 <Captions className="h-5 w-5" />
               </button>
             )}
+            <button
+              type="button"
+              onClick={toggleStretch}
+              aria-label={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
+              aria-pressed={isStretched}
+              title={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
+              className={`rounded p-1.5 hover:bg-white/15 ${isStretched ? 'text-primary' : ''}`}
+            >
+              {isStretched ? <Minimize2 className="h-5 w-5" /> : <StretchHorizontal className="h-5 w-5" />}
+            </button>
             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} className="rounded p-1.5 hover:bg-white/15">
               {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             </button>

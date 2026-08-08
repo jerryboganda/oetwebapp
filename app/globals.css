@@ -22,12 +22,25 @@
     }
   }
 }
+
 @custom-variant group-hoverable {
   @media (hover: hover) and (pointer: fine) {
     &:is(:where(.group):hover *) {
       @slot;
     }
   }
+}
+
+/* Protected video fullscreen must escape the detail page's aspect-ratio wrapper
+   on mobile. The player container remains the fullscreen element so its
+   first-party watermark stays above the provider iframe. */
+.oet-video-player:fullscreen,
+.oet-video-player:-webkit-full-screen {
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  border-radius: 0;
 }
 
 @theme {
@@ -820,4 +833,3 @@ html[data-keyboard-hints='true'] [data-kbd-hint] {
   color: var(--color-primary);
   user-select: none;
 }
-

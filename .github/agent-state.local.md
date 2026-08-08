@@ -374,3 +374,41 @@ Last updated: 2026-08-08
 Stage only the explicit video-access implementation, tests, docs, and this
 state file; commit and push `main`, then verify the GitHub production workflow
 and health gates. Preserve unrelated `.codex/config.toml` and `.superpowers/`.
+
+# Current Task - OET prep quick fixes v2
+
+Last updated: 2026-08-08
+
+## Outcome
+
+- Added mobile-safe first-party video fullscreen sizing using `100dvh`/
+  `100vw`, vendor fullscreen API fallbacks, and a bottom-right stretch/fit
+  control for both secure embeds and legacy direct-HLS playback.
+- Kept the protected player container as the fullscreen element so the
+  first-party watermark remains above the provider iframe.
+- Unified the public/banner download badge geometry and added explicit temporary
+  direct-iOS copy and links.
+- Added `/api/download/ios`, which only redirects to a published `.ipa` from a
+  trusted `jerryboganda/oetwebapp` `v*-mobile-ios` release; otherwise it falls
+  back to the GitHub releases page. `NEXT_PUBLIC_IOS_APP_STORE_URL` remains the
+  preferred destination when configured.
+
+## Validation
+
+- Focused Vitest: 6 files, 13/13 tests passed, covering secure/legacy video
+  controls, banner and `/get-app` badge links, auth-strip links, and native
+  release/download resolvers.
+- Scoped ESLint: 0 errors; existing React effect warnings only.
+- `pnpm exec tsc --noEmit`: passed.
+- `git diff --check`: passed.
+
+## External Boundary / Next Step
+
+- No future `v*-mobile-ios` IPA is currently published in the public release
+  inventory, so the direct endpoint is wired and fail-safe but cannot produce
+  an IPA download until Apple signs and publishes that release asset.
+- Stage only the explicit implementation, test, plan/spec, and state paths;
+  preserve unrelated `.codex/config.toml` and `.superpowers/`, then commit and
+  push `main`. Pushing `main` is the production deployment trigger; owner
+  verification of real mobile fullscreen behavior and the eventual IPA remains
+  the external acceptance boundary.

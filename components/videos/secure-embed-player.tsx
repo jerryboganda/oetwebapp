@@ -7,6 +7,7 @@ import {
   useRef,
 } from 'react';
 import { BunnyEmbedController } from '@/lib/video/bunny-embed-controller';
+import { cn } from '@/lib/utils';
 
 export interface SecureEmbedPlayerHandle {
   pause(): void;
@@ -19,6 +20,7 @@ interface SecureEmbedPlayerProps {
   src: string;
   title: string;
   initialPositionSeconds: number;
+  fit?: 'contain' | 'cover';
   onReady?: () => void;
   onPlay?: () => void;
   onPause?: () => void;
@@ -38,6 +40,7 @@ export const SecureEmbedPlayer = forwardRef<SecureEmbedPlayerHandle, SecureEmbed
       src,
       title,
       initialPositionSeconds,
+      fit = 'contain',
       onReady,
       onPlay,
       onPause,
@@ -102,8 +105,9 @@ export const SecureEmbedPlayer = forwardRef<SecureEmbedPlayerHandle, SecureEmbed
         ref={iframeRef}
         src={src}
         title={title}
-        className="h-full w-full border-0"
-        allow="autoplay; encrypted-media; picture-in-picture"
+        className={cn('h-full w-full border-0', fit === 'cover' ? 'object-cover' : 'object-contain')}
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
         sandbox="allow-scripts allow-same-origin allow-presentation"
       />

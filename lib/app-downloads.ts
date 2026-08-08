@@ -26,9 +26,12 @@ export const ANDROID_STORE_URL =
 
 export const IOS_STORE_URL = process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
 
-/** The current iOS destination, falling back to the public app-download page
- * until the App Store listing is configured. */
-export const IOS_DOWNLOAD_URL = IOS_STORE_URL || GET_APP_PATH;
+/** Temporary direct IPA resolver used until the App Store listing is configured. */
+export const IOS_DIRECT_DOWNLOAD_URL = '/api/download/ios';
+
+/** The current iOS destination: the official store when configured, otherwise
+ * the trusted direct-release resolver. */
+export const IOS_DOWNLOAD_URL = IOS_STORE_URL || IOS_DIRECT_DOWNLOAD_URL;
 
 /**
  * Android ships as a direct APK (no Play Store listing yet), so app-download

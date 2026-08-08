@@ -59,11 +59,21 @@ interface AppStoreBadgeProps {
   compact?: boolean;
   href?: string | null;
   tooltip?: string;
+  directDownload?: boolean;
 }
 
-export function AppStoreBadge({ className, compact = false, href, tooltip = 'Coming soon to the App Store' }: AppStoreBadgeProps) {
+export function AppStoreBadge({
+  className,
+  compact = false,
+  href,
+  tooltip = 'The temporary iOS download is not published yet',
+  directDownload = false,
+}: AppStoreBadgeProps) {
   const [showTip, setShowTip] = useState(false);
   const badgeClassName = cn(badgeShellClasses(!href, compact), className);
+  const accessibleLabel = directDownload
+    ? 'Download the OET iOS app for iPhone and iPad'
+    : 'Download the OET app for iPhone and iPad';
   const updateTooltip = (visible: boolean) => {
     if (!href) setShowTip(visible);
   };
@@ -71,8 +81,12 @@ export function AppStoreBadge({ className, compact = false, href, tooltip = 'Com
     <>
       <Apple className={cn('shrink-0 fill-current', compact ? 'h-5 w-5' : 'h-6 w-6')} aria-hidden="true" />
       <span className="flex flex-col items-start leading-none">
-        <span className={cn('font-medium uppercase tracking-wider text-white/75', compact ? 'text-[8px]' : 'text-[10px]')}>Download on the</span>
-        <span className={cn('font-semibold leading-tight', compact ? 'text-sm' : 'mt-0.5 text-lg')}>App Store</span>
+        <span className={cn('font-medium uppercase tracking-wider text-white/75', compact ? 'text-[8px]' : 'text-[10px]')}>
+          {directDownload ? 'Download directly' : 'Download on the'}
+        </span>
+        <span className={cn('font-semibold leading-tight', compact ? 'text-sm' : 'mt-0.5 text-lg')}>
+          {directDownload ? 'iOS app' : 'App Store'}
+        </span>
       </span>
     </>
   );
@@ -82,7 +96,7 @@ export function AppStoreBadge({ className, compact = false, href, tooltip = 'Com
       {href ? (
         <a
           href={href}
-          aria-label="Download the OET app for iPhone and iPad"
+          aria-label={accessibleLabel}
           onMouseEnter={() => updateTooltip(true)}
           onMouseLeave={() => updateTooltip(false)}
           onFocus={() => updateTooltip(true)}

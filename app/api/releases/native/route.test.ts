@@ -42,4 +42,28 @@ describe('native release discovery', () => {
     const response = await GET(new NextRequest('https://app.example/api/releases/native?platform=android'));
     expect(response.status).toBe(404);
   });
+
+  it('returns the newest trusted iOS IPA release', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify([
+      {
+        tag_name: 'v1.0.0-mobile-ios',
+        draft: false,
+        prerelease: false,
+        published_at: '2026-08-08T00:25:05Z',
+        assets: [{
+          name: 'OET-with-Dr-Hesham.ipa',
+          browser_download_url: 'https://github.com/jerryboganda/oetwebapp/releases/download/v1.0.0-mobile-ios/OET-with-Dr-Hesham.ipa',
+          digest: 'sha256:ios',
+        }],
+      },
+    ]), { status: 200 }));
+
+    const response = await GET(new NextRequest('https://app.example/api/releases/native?platform=ios'));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      platform: 'ios',
+      version: '1.0.0',
+      digest: 'sha256:ios',
+    });
+  });
 });

@@ -10,7 +10,11 @@ describe('AppDownloadPromo', () => {
     expect(screen.getByText(/Keep your account in sync/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Windows & Mac/i })).toHaveAttribute('href', '/get-app');
     expect(screen.getByRole('link', { name: /Google Play/i })).toHaveAttribute('href', '/get-app/android-install');
-    expect(screen.getByRole('link', { name: /iPhone and iPad/i })).toHaveAttribute('href', '/get-app');
+    const iosLink = screen.getByRole('link', { name: /iPhone and iPad/i });
+    expect(iosLink).toHaveAttribute('href', '/api/download/ios');
+    expect(iosLink).toHaveClass('sm:w-[176px]');
+    expect(screen.getByRole('link', { name: /Windows & Mac/i })).toHaveClass('sm:w-[176px]');
+    expect(screen.getByRole('link', { name: /Google Play/i })).toHaveClass('sm:w-[176px]');
     expect(screen.queryByText(/Download Official Apps for Video Access/i)).not.toBeInTheDocument();
   });
 });

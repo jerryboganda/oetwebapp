@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Monitor, Smartphone, Download, ShieldCheck, X } from 'lucide-react';
 import { AppStoreBadge, DesktopAppBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
-import { ANDROID_INSTALL_URL, GET_APP_PATH, IOS_DOWNLOAD_URL } from '@/lib/app-downloads';
+import { ANDROID_INSTALL_URL, GET_APP_PATH, IOS_DOWNLOAD_URL, IOS_STORE_URL } from '@/lib/app-downloads';
 
 interface AppDownloadPromoProps {
   variant?: 'banner' | 'card' | 'modal';
@@ -34,9 +34,14 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
           </div>
 
           <div className="grid w-full grid-cols-1 gap-2 min-[380px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center">
-            <DesktopAppBadge href={GET_APP_PATH} compact className="w-full justify-center sm:w-auto" />
-            <GooglePlayBadge href={ANDROID_INSTALL_URL} compact className="w-full justify-center sm:w-auto" />
-            <AppStoreBadge href={IOS_DOWNLOAD_URL} compact className="w-full justify-center sm:w-auto" />
+            <DesktopAppBadge href={GET_APP_PATH} compact className="w-full justify-center sm:w-[176px]" />
+            <GooglePlayBadge href={ANDROID_INSTALL_URL} compact className="w-full justify-center sm:w-[176px]" />
+            <AppStoreBadge
+              href={IOS_DOWNLOAD_URL}
+              compact
+              directDownload={!IOS_STORE_URL}
+              className="w-full justify-center sm:w-[176px]"
+            />
           </div>
         </div>
       </section>
