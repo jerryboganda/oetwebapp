@@ -196,10 +196,7 @@ jobs:
             adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/output/native/android/activity.txt"
             grep -q 'com.oetprep.learner/.MainActivity' "$GITHUB_WORKSPACE/output/native/android/activity.txt"
             adb logcat -d -t 1000 -s AndroidRuntime:E > "$GITHUB_WORKSPACE/output/native/android/logcat.txt" || true
-            if grep -Eq 'FATAL EXCEPTION|Process: com.oetprep.learner' "$GITHUB_WORKSPACE/output/native/android/logcat.txt"; then
-              echo 'Android app crash signature detected.' >&2
-              exit 1
-            fi
+            if grep -Eq 'FATAL EXCEPTION|Process: com.oetprep.learner' "$GITHUB_WORKSPACE/output/native/android/logcat.txt"; then echo 'Android app crash signature detected.' >&2; exit 1; fi
 
       - name: Upload Android runtime smoke evidence
         if: always()
