@@ -190,13 +190,8 @@ jobs:
             mkdir -p "$GITHUB_WORKSPACE/output/native/android"
             adb install -r "$GITHUB_WORKSPACE/output/native/android/app-debug.apk"
             adb shell am force-stop com.oetprep.learner
-            adb shell monkey -p com.oetprep.learner 1
-            for attempt in $(seq 1 20); do
-              if adb shell pidof com.oetprep.learner | grep -q '[0-9]'; then
-                break
-              fi
-              sleep 1
-            done
+            adb shell am start -W -n com.oetprep.learner/.MainActivity
+            attempt=1; while [ "$attempt" -le 20 ]; do if adb shell pidof com.oetprep.learner | grep -q '[0-9]'; then break; fi; [ "$attempt" -eq 20 ] && { echo 'Android app did not stay alive after launch.' >&2; exit 1; }; attempt=$((attempt + 1)); sleep 1; done
             adb shell pidof com.oetprep.learner
             adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/output/native/android/activity.txt"
             grep -q 'com.oetprep.learner/.MainActivity' "$GITHUB_WORKSPACE/output/native/android/activity.txt"
