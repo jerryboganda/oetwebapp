@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace OetLearner.Api.Data.Migrations;
 
+[Migration("20260811120000_AddWritingAssessmentV11")]
 public partial class AddWritingAssessmentV11 : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
