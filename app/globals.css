@@ -41,6 +41,20 @@
   max-width: 100vw;
   max-height: 100dvh;
   border-radius: 0;
+  background: #000;
+}
+
+.oet-video-player:fullscreen > iframe,
+.oet-video-player:-webkit-full-screen > iframe,
+.oet-video-player:fullscreen > video,
+.oet-video-player:-webkit-full-screen > video {
+  width: 100%;
+  height: 100%;
+}
+
+.oet-video-player:fullscreen > video,
+.oet-video-player:-webkit-full-screen > video {
+  object-fit: cover;
 }
 
 @theme {

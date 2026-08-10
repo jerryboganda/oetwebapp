@@ -1,6 +1,6 @@
 'use client';
 
-import { RefreshCcw, Smartphone } from 'lucide-react';
+import { Download, RefreshCcw } from 'lucide-react';
 import { openAppStore } from '@/lib/mobile/forced-update';
 
 /**
@@ -30,7 +30,7 @@ export function UpdateAppNotice({ platform }: { platform: 'desktop' | 'capacitor
           }}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
         >
-          <Smartphone className="h-4 w-4" aria-hidden="true" />
+          <Download className="h-4 w-4" aria-hidden="true" />
           Open store to update
         </button>
       )}

@@ -12,13 +12,11 @@ import {
 import {
   Captions,
   Loader2,
-  Minimize2,
   Maximize,
   Minimize,
   Pause,
   Play,
   RotateCcw,
-  StretchHorizontal,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -203,7 +201,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [captionsOn, setCaptionsOn] = useState(false);
   const [hasCaptionTracks, setHasCaptionTracks] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isStretched, setIsStretched] = useState(false);
   const [watermarkKey, setWatermarkKey] = useState(0);
   const [captureWarning, setCaptureWarning] = useState<'screenshot' | 'recording' | null>(null);
 
@@ -679,8 +676,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     }
   }, []);
 
-  const toggleStretch = useCallback(() => setIsStretched((current) => !current), []);
-
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;
     if (!video) return;
@@ -776,7 +771,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           ref={embedPlayerRef}
           src={phase.session.playbackUrl}
           title="Protected course video"
-          fit={isStretched ? 'cover' : 'contain'}
           initialPositionSeconds={initialProgress?.completed ? 0 : initialProgress?.positionSeconds ?? 0}
           onPlay={handleEmbedPlay}
           onPause={handleEmbedPause}
@@ -787,7 +781,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       ) : (
         <video
         ref={videoRef}
-        className={`h-full w-full ${isStretched ? 'object-cover' : 'object-contain'}`}
+        className="h-full w-full object-contain"
         playsInline
         preload={lowBandwidth ? 'none' : 'metadata'}
         controls={false}
@@ -877,19 +871,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
               : 'Screen recording detected — this activity is logged.'}
           </div>
         </div>
-      )}
-
-      {isSecureEmbedPlayback && (
-        <button
-          type="button"
-          onClick={toggleStretch}
-          aria-label={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
-          aria-pressed={isStretched}
-          title={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
-          className="absolute bottom-3 right-3 z-50 rounded-lg bg-black/65 p-2 text-white shadow-lg hover:bg-black/80"
-        >
-          {isStretched ? <Minimize2 className="h-5 w-5" /> : <StretchHorizontal className="h-5 w-5" />}
-        </button>
       )}
 
       {isSecureEmbedPlayback && (
@@ -1003,16 +984,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 <Captions className="h-5 w-5" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={toggleStretch}
-              aria-label={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
-              aria-pressed={isStretched}
-              title={isStretched ? 'Fit video to player' : 'Stretch video to fill player'}
-              className={`rounded p-1.5 hover:bg-white/15 ${isStretched ? 'text-primary' : ''}`}
-            >
-              {isStretched ? <Minimize2 className="h-5 w-5" /> : <StretchHorizontal className="h-5 w-5" />}
-            </button>
             <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} className="rounded p-1.5 hover:bg-white/15">
               {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             </button>

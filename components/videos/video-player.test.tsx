@@ -45,7 +45,7 @@ const secureSession = {
   deliveryMode: 'secure_embed' as const,
   expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   sessionExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-  watermarkText: 'Learner Â· session',
+  watermarkText: 'Learner · session',
   watermark: null,
   captions: [],
 };
@@ -94,16 +94,12 @@ describe('VideoPlayer presentation controls', () => {
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
   });
 
-  it('stretches a secure embed and uses the container fullscreen API', async () => {
+  it('keeps accessible container fullscreen and removes stretch/fit controls from secure playback', async () => {
     renderPlayer();
 
-    await screen.findByRole('button', { name: 'Stretch video to fill player' });
-    const iframe = screen.getByTitle('Protected course video');
-    expect(iframe).toHaveClass('object-contain');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Stretch video to fill player' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Fit video to player' })).toHaveAttribute('aria-pressed', 'true'));
-    await waitFor(() => expect(iframe).toHaveClass('object-cover'));
+    await screen.findByRole('button', { name: 'Fullscreen' });
+    expect(screen.queryByRole('button', { name: /stretch|fit/i })).not.toBeInTheDocument();
+    expect(screen.getByTitle('Protected course video')).toHaveClass('h-full', 'w-full');
 
     const player = screen.getByRole('application', { name: 'Video player' });
     const requestFullscreen = vi.fn(() => {
@@ -118,6 +114,10 @@ describe('VideoPlayer presentation controls', () => {
     });
     Object.defineProperty(player, 'requestFullscreen', { configurable: true, value: requestFullscreen });
     Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+    Object.defineProperty(document, 'webkitFullscreenElement', { configurable: true, value: null });
+    Object.defineProperty(document, 'mozFullScreenElement', { configurable: true, value: null });
+    Object.defineProperty(document, 'msFullscreenElement', { configurable: true, value: null });
 
     fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
     await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
@@ -128,16 +128,12 @@ describe('VideoPlayer presentation controls', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeInTheDocument());
   });
 
-  it('applies the same stretch toggle to legacy direct-HLS playback', async () => {
+  it('keeps legacy direct-HLS playback free of stretch/fit controls', async () => {
     mocks.requestPlaybackSession.mockResolvedValue(directSession);
     renderPlayer();
 
-    const stretchButton = await screen.findByRole('button', { name: 'Stretch video to fill player' });
-    const video = document.querySelector('video');
-    expect(video).toHaveClass('object-contain');
-
-    fireEvent.click(stretchButton);
-    await waitFor(() => expect(video).toHaveClass('object-cover'));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Fit video to player' })).toHaveAttribute('aria-pressed', 'true'));
+    await screen.findByRole('button', { name: 'Fullscreen' });
+    expect(document.querySelector('video')).toHaveClass('object-contain');
+    expect(screen.queryByRole('button', { name: /stretch|fit/i })).not.toBeInTheDocument();
   });
 });

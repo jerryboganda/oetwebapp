@@ -1,7 +1,20 @@
 'use client';
 
-import Link from 'next/link';
-import { Laptop, MonitorSmartphone, ShieldAlert, Smartphone } from 'lucide-react';
+import { MonitorSmartphone, ShieldAlert } from 'lucide-react';
+import { AppDownloadGrid, type AppDownloadLinks } from '@/components/marketing/store-badges';
+import {
+  ANDROID_INSTALL_URL,
+  IOS_DOWNLOAD_URL,
+  MAC_DOWNLOAD_URL,
+  WINDOWS_DOWNLOAD_URL,
+} from '@/lib/app-downloads';
+
+const APP_DOWNLOAD_LINKS: AppDownloadLinks = {
+  windows: WINDOWS_DOWNLOAD_URL,
+  mac: MAC_DOWNLOAD_URL,
+  android: ANDROID_INSTALL_URL,
+  ios: IOS_DOWNLOAD_URL,
+};
 
 export function WebNotAllowedNotice() {
   return (
@@ -22,22 +35,7 @@ export function WebNotAllowedNotice() {
         </p>
       </div>
 
-      <div className="mt-2 flex w-full max-w-md flex-col items-center justify-center gap-3 sm:flex-row">
-        <Link
-          href="/get-app"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:from-violet-500 hover:to-indigo-500 hover:scale-[1.02] active:scale-[0.98] sm:w-auto"
-        >
-          <Laptop className="h-4 w-4" aria-hidden="true" />
-          Download Desktop App (Windows / Mac)
-        </Link>
-        <Link
-          href="/get-app"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-700 hover:text-white hover:scale-[1.02] active:scale-[0.98] sm:w-auto"
-        >
-          <Smartphone className="h-4 w-4" aria-hidden="true" />
-          Download Mobile App (Android / iOS)
-        </Link>
-      </div>
+      <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-2 max-w-2xl" />
     </div>
   );
 }

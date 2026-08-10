@@ -442,3 +442,33 @@ Last updated: 2026-08-10
 Stage only the explicit four-platform implementation, tests, plan, and this
 state file; preserve unrelated existing changes plus `.codex/config.toml` and
 `.superpowers/`, then commit and push `main`.
+
+# Current Task - Strict acceptance compliance: video player and public downloads
+
+Last updated: 2026-08-10
+
+## Outcome
+
+- Removed the stretch/fit presentation control from secure and legacy video
+  playback; retained the accessible fullscreen control.
+- Made fullscreen direct playback occupy the viewport with `100vw`/`100dvh`
+  sizing and a black background; secure embeds and direct video both fill the
+  fullscreen element.
+- Added the same four-platform download section to the separate public
+  pricing-site checkout (`pricing.html`) with an Apps navigation route.
+
+## Validation
+
+- Focused Vitest: 4 files, 8/8 tests passed.
+- Scoped ESLint: passed for the touched video files and stylesheet.
+- Public pricing static gate: one `#apps` section, four approved badges, and
+  the exact Windows, Mac, Google Play, and App Store labels.
+- `git diff --check`: passed; the public checkout reports only its normal
+  LF-to-CRLF working-copy warning.
+
+## External Boundary / Next Step
+
+- Commit and push the explicit video files and state update on `main`, commit
+  and push the explicit `pricing.html` change in `D:\Projects\oetwebsite`,
+  then verify the production workflow, VPS image/health gates, and public
+  pricing URL. Preserve unrelated in-progress backend/mock changes.
