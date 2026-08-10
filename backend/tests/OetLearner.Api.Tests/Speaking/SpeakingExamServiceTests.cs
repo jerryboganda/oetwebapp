@@ -391,6 +391,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     public async Task CreateExam_WithMockSetId_InLiveTutorMode_Succeeds_AsHumanMarked()
     {
         var setId = await SeedPublishedMockSetAsync();
+        await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)));
 
         var exam = await _exams.CreateExamAsync(UserId,
             new CreateSpeakingExamRequest("live_tutor", MockSetId: setId, BookingId: "psb-mock-1"), default);
@@ -405,6 +406,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     public async Task FinishIntro_OnMockSetExam_PropagatesMockSetId_AndLiveTutorMode_ToChildSession()
     {
         var setId = await SeedPublishedMockSetAsync();
+        await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)));
         var exam = await _exams.CreateExamAsync(UserId,
             new CreateSpeakingExamRequest("live_tutor", MockSetId: setId, BookingId: "psb-mock-2"), default);
 

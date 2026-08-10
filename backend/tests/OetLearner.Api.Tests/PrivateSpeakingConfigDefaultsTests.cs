@@ -17,7 +17,7 @@ public sealed class PrivateSpeakingConfigDefaultsTests
         var config = await service.GetConfigAsync(CancellationToken.None);
 
         Assert.Equal("GBP", config.Currency);
-        Assert.Equal(48, config.CancellationWindowHours);
+        Assert.Equal(24, config.CancellationWindowHours);
         Assert.Equal(24, config.RescheduleFreeWindowHours);
         Assert.Equal(0, config.RescheduleSameDayPenaltyPercent);
         Assert.Equal("[1440, 60, 15]", config.ReminderOffsetsMinutesJson);

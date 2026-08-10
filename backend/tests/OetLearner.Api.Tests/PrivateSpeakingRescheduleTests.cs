@@ -25,8 +25,6 @@ public sealed class PrivateSpeakingRescheduleTests
     private static readonly DateTimeOffset NewSlotUtc = new(2026, 06, 08, 09, 0, 0, TimeSpan.Zero);
 
     private const int TutorPriceMinorUnits = 5000;
-    private const int ExpectedPenaltyMinorUnits = 2500; // ceil(5000 * 50 / 100)
-
     // ── FREE tier ───────────────────────────────────────────────────────
 
     [Fact]
@@ -122,9 +120,9 @@ public sealed class PrivateSpeakingRescheduleTests
         Assert.Equal(original.Id, replacement.RescheduledFromBookingId);
         Assert.Null(replacement.StripeCheckoutSessionId);
 
-        // Original still holds the slot (Confirmed) but is linked to the replacement.
+        // The original is cancelled and linked to the replacement.
         var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedOriginal!.Status);
+        Assert.Equal(PrivateSpeakingBookingStatus.Cancelled, savedOriginal!.Status);
         Assert.Equal(replacement.Id, savedOriginal.RescheduledToBookingId);
 
         Assert.Equal(0, stripe.EnsureCustomerCallCount);
