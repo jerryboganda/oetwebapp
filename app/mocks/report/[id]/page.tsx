@@ -321,7 +321,7 @@ function MockReportContent() {
           <ResultsScorePanel
             eyebrow="Mock report"
             icon={ShieldCheck}
-            title="Overall performance"
+            title="Overall Performance"
             subtitle={report.summary}
             gaugeValue={overallGaugePct}
             gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{report.overallGrade ?? report.overallScore}</span>}
@@ -339,6 +339,7 @@ function MockReportContent() {
             })}
             aside={(
               <div className="rounded-2xl border border-border bg-background-light p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Estimated academy report</p>
                 <p className="text-sm leading-6 text-muted">{readiness.description}</p>
                 <p className="mt-2 text-xs leading-5 text-muted">
                   Do not treat mock results as a guaranteed pass. Use repeated green mock evidence and tutor feedback before booking the official OET.

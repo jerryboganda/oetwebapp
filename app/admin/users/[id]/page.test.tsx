@@ -29,6 +29,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/hooks/use-admin-auth', () => ({ useAdminAuth: () => mockUseAdminAuth() }));
 vi.mock('@/lib/admin', () => ({ getAdminUserDetailData: (...args: unknown[]) => mockGetAdminUserDetailData(...args) }));
 vi.mock('@/lib/api', () => ({
+  apiClient: {
+    get: vi.fn().mockResolvedValue({}),
+  },
   adjustAdminUserCredits: vi.fn(),
   deleteAdminUser: (...args: unknown[]) => mockDeleteAdminUser(...args),
   hardDeleteAdminUser: vi.fn(),

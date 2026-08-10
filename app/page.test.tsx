@@ -213,7 +213,8 @@ describe('Dashboard page', () => {
 
     renderDashboard();
 
-    expect(await screen.findByText('Trend data will appear after more practice.')).toBeInTheDocument();
+    expect(await screen.findByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
+    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('hides dashboard tasks outside the purchased module set', async () => {

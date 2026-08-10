@@ -124,7 +124,7 @@ describe('Mock player page', () => {
     const launchButton = await screen.findByRole('button', { name: /launch section workspace/i });
     await user.click(launchButton);
 
-    expect(mockStartMockSection).toHaveBeenCalledWith('mock-1', 'section-reading');
+    expect(mockStartMockSection).toHaveBeenCalledWith('mock-1', 'section-reading', { preflight: 'passed' });
     expect(mockPush).toHaveBeenCalledWith('/reading/paper/paper-reading?mockAttemptId=mock-1&mockSectionId=section-reading');
   });
 

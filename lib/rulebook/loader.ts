@@ -30,6 +30,7 @@ import speakingDentistryV1 from '../../rulebooks/speaking/dentistry/rulebook.v1.
 import speakingPharmacyV1 from '../../rulebooks/speaking/pharmacy/rulebook.v1.json';
 import speakingPhysiotherapyV1 from '../../rulebooks/speaking/physiotherapy/rulebook.v1.json';
 import speakingOtherAlliedHealthV1 from '../../rulebooks/speaking/other-allied-health/rulebook.v1.json';
+import speakingRadiographyV1 from '../../rulebooks/speaking/radiography/rulebook.v1.json';
 
 // --- Listening rulebooks (4 professions: authoring-shape rules) ---------
 import listeningMedicineV1 from '../../rulebooks/listening/medicine/rulebook.v1.json';
@@ -50,6 +51,7 @@ import grammarDentistryV1 from '../../rulebooks/grammar/dentistry/rulebook.v1.js
 import grammarPharmacyV1 from '../../rulebooks/grammar/pharmacy/rulebook.v1.json';
 import grammarPhysiotherapyV1 from '../../rulebooks/grammar/physiotherapy/rulebook.v1.json';
 import grammarOtherAlliedHealthV1 from '../../rulebooks/grammar/other-allied-health/rulebook.v1.json';
+import grammarRadiographyV1 from '../../rulebooks/grammar/radiography/rulebook.v1.json';
 
 // --- Vocabulary rulebooks (6 UI professions) ----------------------------
 import vocabularyMedicineV1 from '../../rulebooks/vocabulary/medicine/rulebook.v1.json';
@@ -58,6 +60,7 @@ import vocabularyDentistryV1 from '../../rulebooks/vocabulary/dentistry/rulebook
 import vocabularyPharmacyV1 from '../../rulebooks/vocabulary/pharmacy/rulebook.v1.json';
 import vocabularyPhysiotherapyV1 from '../../rulebooks/vocabulary/physiotherapy/rulebook.v1.json';
 import vocabularyOtherAlliedHealthV1 from '../../rulebooks/vocabulary/other-allied-health/rulebook.v1.json';
+import vocabularyRadiographyV1 from '../../rulebooks/vocabulary/radiography/rulebook.v1.json';
 
 // --- Pronunciation rulebooks (8 professions) ----------------------------
 import pronunciationMedicineV1 from '../../rulebooks/pronunciation/medicine/rulebook.v1.json';
@@ -68,6 +71,7 @@ import pronunciationPhysiotherapyV1 from '../../rulebooks/pronunciation/physioth
 import pronunciationOccupationalTherapyV1 from '../../rulebooks/pronunciation/occupational-therapy/rulebook.v1.json';
 import pronunciationOtherAlliedHealthV1 from '../../rulebooks/pronunciation/other-allied-health/rulebook.v1.json';
 import pronunciationSpeechPathologyV1 from '../../rulebooks/pronunciation/speech-pathology/rulebook.v1.json';
+import pronunciationRadiographyV1 from '../../rulebooks/pronunciation/radiography/rulebook.v1.json';
 
 // --- Conversation rulebooks (6 professions) -----------------------------
 import conversationMedicineV1 from '../../rulebooks/conversation/medicine/rulebook.v1.json';
@@ -76,6 +80,7 @@ import conversationDentistryV1 from '../../rulebooks/conversation/dentistry/rule
 import conversationPharmacyV1 from '../../rulebooks/conversation/pharmacy/rulebook.v1.json';
 import conversationPhysiotherapyV1 from '../../rulebooks/conversation/physiotherapy/rulebook.v1.json';
 import conversationOtherAlliedHealthV1 from '../../rulebooks/conversation/other-allied-health/rulebook.v1.json';
+import conversationRadiographyV1 from '../../rulebooks/conversation/radiography/rulebook.v1.json';
 
 // --- Remediation rulebooks (6 UI professions) ---------------------------
 import remediationMedicineV1 from '../../rulebooks/remediation/medicine/rulebook.v1.json';
@@ -84,6 +89,7 @@ import remediationDentistryV1 from '../../rulebooks/remediation/dentistry/rulebo
 import remediationPharmacyV1 from '../../rulebooks/remediation/pharmacy/rulebook.v1.json';
 import remediationPhysiotherapyV1 from '../../rulebooks/remediation/physiotherapy/rulebook.v1.json';
 import remediationOtherAlliedHealthV1 from '../../rulebooks/remediation/other-allied-health/rulebook.v1.json';
+import remediationRadiographyV1 from '../../rulebooks/remediation/radiography/rulebook.v1.json';
 
 // --- Assessment criteria (cross-domain rubric definitions) --------------
 import writingAssessment from '../../rulebooks/writing/common/assessment-criteria.json';
@@ -127,6 +133,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'speaking:pharmacy': speakingPharmacyV1 as unknown as Rulebook,
   'speaking:physiotherapy': speakingPhysiotherapyV1 as unknown as Rulebook,
   'speaking:other-allied-health': speakingOtherAlliedHealthV1 as unknown as Rulebook,
+  'speaking:radiography': speakingRadiographyV1 as unknown as Rulebook,
   // Listening (4 professions + exam-mode UX rulebook)
   'listening:medicine': listeningMedicineV1 as unknown as Rulebook,
   'listening:nursing': listeningNursingV1 as unknown as Rulebook,
@@ -147,6 +154,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'grammar:pharmacy': grammarPharmacyV1 as unknown as Rulebook,
   'grammar:physiotherapy': grammarPhysiotherapyV1 as unknown as Rulebook,
   'grammar:other-allied-health': grammarOtherAlliedHealthV1 as unknown as Rulebook,
+  'grammar:radiography': grammarRadiographyV1 as unknown as Rulebook,
   // Vocabulary (6 UI professions)
   'vocabulary:medicine': vocabularyMedicineV1 as unknown as Rulebook,
   'vocabulary:nursing': vocabularyNursingV1 as unknown as Rulebook,
@@ -154,6 +162,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'vocabulary:pharmacy': vocabularyPharmacyV1 as unknown as Rulebook,
   'vocabulary:physiotherapy': vocabularyPhysiotherapyV1 as unknown as Rulebook,
   'vocabulary:other-allied-health': vocabularyOtherAlliedHealthV1 as unknown as Rulebook,
+  'vocabulary:radiography': vocabularyRadiographyV1 as unknown as Rulebook,
   // Pronunciation (8 professions)
   'pronunciation:medicine': pronunciationMedicineV1 as unknown as Rulebook,
   'pronunciation:nursing': pronunciationNursingV1 as unknown as Rulebook,
@@ -163,6 +172,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'pronunciation:occupational-therapy': pronunciationOccupationalTherapyV1 as unknown as Rulebook,
   'pronunciation:other-allied-health': pronunciationOtherAlliedHealthV1 as unknown as Rulebook,
   'pronunciation:speech-pathology': pronunciationSpeechPathologyV1 as unknown as Rulebook,
+  'pronunciation:radiography': pronunciationRadiographyV1 as unknown as Rulebook,
   // Conversation (6 professions)
   'conversation:medicine': conversationMedicineV1 as unknown as Rulebook,
   'conversation:nursing': conversationNursingV1 as unknown as Rulebook,
@@ -170,6 +180,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'conversation:pharmacy': conversationPharmacyV1 as unknown as Rulebook,
   'conversation:physiotherapy': conversationPhysiotherapyV1 as unknown as Rulebook,
   'conversation:other-allied-health': conversationOtherAlliedHealthV1 as unknown as Rulebook,
+  'conversation:radiography': conversationRadiographyV1 as unknown as Rulebook,
   // Remediation (6 UI professions)
   'remediation:medicine': remediationMedicineV1 as unknown as Rulebook,
   'remediation:nursing': remediationNursingV1 as unknown as Rulebook,
@@ -177,6 +188,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'remediation:pharmacy': remediationPharmacyV1 as unknown as Rulebook,
   'remediation:physiotherapy': remediationPhysiotherapyV1 as unknown as Rulebook,
   'remediation:other-allied-health': remediationOtherAlliedHealthV1 as unknown as Rulebook,
+  'remediation:radiography': remediationRadiographyV1 as unknown as Rulebook,
 };
 
 const ASSESSMENT_CRITERIA: Partial<Record<RuleKind, unknown>> = {

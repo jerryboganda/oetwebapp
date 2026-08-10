@@ -16,6 +16,9 @@ const {
 }));
 
 vi.mock('@/lib/api', () => ({
+  apiClient: {
+    get: vi.fn().mockResolvedValue({ whatsAppNumber: null, whatsAppProofTemplate: null }),
+  },
   listOwnManualPayments: mockListOwnManualPayments,
   submitManualPayment: mockSubmitManualPayment,
   listPublicPaymentMethods: mockListPublicPaymentMethods,
@@ -40,7 +43,7 @@ import { renderWithRouter } from '@/tests/test-utils';
 
 const linkedParams = new URLSearchParams('quoteId=q1&course=Nursing Complete&amount=199&currency=GBP');
 
-describe('Manual payment page (inside Egypt)', () => {
+describe('Manual payment page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockListOwnManualPayments.mockResolvedValue([]);
@@ -53,13 +56,13 @@ describe('Manual payment page (inside Egypt)', () => {
     (window as any).open = vi.fn();
   });
 
-  it('shows only the Egyptian methods — no International / Worldwide section', async () => {
+  it('shows the configured Egyptian and international payment methods', async () => {
     renderWithRouter(<ManualPaymentPage />, { searchParams: linkedParams });
 
     expect((await screen.findAllByText('InstaPay QR / link')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('QNB Egypt bank transfer').length).toBeGreaterThan(0);
-    expect(screen.queryByText('International / Worldwide Payment')).not.toBeInTheDocument();
-    expect(screen.queryByText('PayPal Business')).not.toBeInTheDocument();
+    expect(screen.getByText('International payment')).toBeInTheDocument();
+    expect(screen.getByText('PayPal Business')).toBeInTheDocument();
   });
 
   it('submits an auto-derived payload and opens the WhatsApp confirmation', async () => {
@@ -71,6 +74,7 @@ describe('Manual payment page (inside Egypt)', () => {
     expect(email.readOnly).toBe(true);
 
     await user.type(screen.getByLabelText('Transaction ID'), 'TXN-123');
+    await user.type(screen.getByLabelText('Your WhatsApp number'), '+201001234567');
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['proof-bytes'], 'proof.png', { type: 'image/png' }));
 
@@ -85,7 +89,7 @@ describe('Manual payment page (inside Egypt)', () => {
         courseName: 'Nursing Complete',
         candidateEmail: 'learner@example.com',
         candidateFullName: 'Jane Learner',
-        candidateWhatsApp: '',
+        candidateWhatsApp: '+201001234567',
         paymentCategory: 'inside_egypt',
         reference: 'TXN-123',
       }),

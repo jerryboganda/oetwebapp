@@ -15,7 +15,18 @@ vi.mock('@/components/layout', () => ({
 }));
 
 vi.mock('@/hooks/use-analytics', () => ({ useAnalytics: () => ({ track: mockTrack }) }));
-vi.mock('@/lib/api', () => ({ fetchExamFamilies: mockFetchExamFamilies, fetchUserProfile: mockFetchUserProfile, updateUserProfile: mockUpdateUserProfile }));
+vi.mock('@/lib/api', () => ({
+  fetchExamFamilies: mockFetchExamFamilies,
+  fetchUserProfile: mockFetchUserProfile,
+  updateUserProfile: mockUpdateUserProfile,
+  fetchMyEntitlementSnapshot: vi.fn().mockResolvedValue({ enabledModules: [] }),
+}));
+
+vi.mock('@/components/domain', () => ({
+  LearnerPageHero: ({ title }: { title?: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title, description }: { title: string; description?: string }) => <div><h2>{title}</h2><p>{description}</p></div>,
+  ProfessionSelector: () => <div />,
+}));
 
 import GoalsPage from './page';
 

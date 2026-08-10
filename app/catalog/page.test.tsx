@@ -2,10 +2,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CatalogPage from './page';
 import { fetchPublicCatalog } from '@/lib/api';
+import { renderWithRouter } from '@/tests/test-utils';
 
 vi.mock('@/lib/api', () => ({
   fetchPublicCatalog: vi.fn(),
   fetchMyEntitlementSnapshot: vi.fn(),
+}));
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: null, isAuthenticated: false, loading: false }),
 }));
 
 const mockFetchPublicCatalog = vi.mocked(fetchPublicCatalog);
@@ -60,7 +65,7 @@ describe('CatalogPage', () => {
       ],
     });
 
-    const { container } = render(<CatalogPage />);
+    const { container } = renderWithRouter(<CatalogPage />);
 
     await waitFor(() => expect(mockFetchPublicCatalog).toHaveBeenCalledTimes(1));
     expect((await screen.findAllByText('Full Condensed Recorded OET Course - Medicine')).length).toBeGreaterThan(0);

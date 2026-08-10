@@ -175,7 +175,10 @@ async function attemptSession(
   let signed: NativeSignature;
   try {
     signed = await attestor.sign(challenge.nonce, videoId, userId);
-  } catch {
+  } catch (error) {
+    if (error instanceof PlaybackGateError) {
+      throw error;
+    }
     // Native command exists but failed (e.g. release build without an embedded
     // secret, or plugin-level rejection). Treat as an update/config problem
     // rather than a web denial so the message stays actionable.

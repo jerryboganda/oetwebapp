@@ -673,3 +673,24 @@ Last updated: 2026-08-10
 ## Next step
 
 - Stage only the explicit v1.1 implementation files, commit and push main, then verify the GitHub Actions production release and both live health endpoints. Owner-supplied conversion tables, normalization profile, and live production acceptance remain required boundaries.
+# Current Task - OET Speaking booking workflow PDF completion audit
+
+Last updated: 2026-08-11
+
+## Latest validation checkpoint
+
+- Repaired the remaining frontend CI contracts without weakening the Speaking
+  booking enforcement: strict web playback rejection is preserved, radiography
+  rulebook coverage is registered, and admin notification permissions match the
+  sidebar map.
+- Full isolated frontend Vitest suite: 324 test files passed, 2,230 tests
+  passed. TypeScript `--noEmit` passed. Expected negative-path test logging
+  remains (breach-password and simulated network/provider failures); no
+  unhandled Vitest errors remain.
+
+## Next step
+
+Commit only the explicit frontend/rulebook paths, push the exact revision to
+`main`, wait for Build & Deploy, then verify the deployed SHA, health/readiness,
+and blue/green container images on the production VPS. Preserve unrelated
+dirty work in the main checkout.

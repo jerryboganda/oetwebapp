@@ -8,6 +8,9 @@ const { mockFetchBillingQuote, mockCreateBillingCheckoutSession, mockOpenCheckou
 }));
 
 vi.mock('@/lib/api', () => ({
+  apiClient: {
+    get: vi.fn().mockResolvedValue({ whatsAppNumber: null, whatsAppProofTemplate: null }),
+  },
   fetchBillingQuote: mockFetchBillingQuote,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
 }));
@@ -110,7 +113,7 @@ describe('Checkout review page', () => {
 
     // Choosing Egypt reveals the manual-payment CTA, focused on the Egypt section.
     await user.click(screen.getByRole('button', { name: /pay inside egypt/i }));
-    const cta = await screen.findByRole('link', { name: /continue to egyptian payment/i });
+    const cta = await screen.findByRole('link', { name: /i['’]ve paid.*upload proof.*activate/i });
     expect(cta.getAttribute('href')).toContain('/billing/manual-payment');
     expect(cta.getAttribute('href')).toContain('region=egypt');
   });

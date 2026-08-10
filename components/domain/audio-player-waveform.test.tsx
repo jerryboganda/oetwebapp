@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AudioPlayerWaveform } from './audio-player-waveform';
 
 // Capture the latest mocked WaveSurfer instance so tests can drive its events.
@@ -57,6 +58,17 @@ vi.mock('@/lib/api', () => ({
     'userMessage' in error,
 }));
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: null, isAuthenticated: false, loading: false }),
+}));
+
+function renderAudioPlayer(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(ui, {
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+}
+
 describe('AudioPlayerWaveform', () => {
   afterEach(() => {
     createdInstances.length = 0;
@@ -64,7 +76,7 @@ describe('AudioPlayerWaveform', () => {
   });
 
   it('renders the loading indicator and audio-player region before WaveSurfer is ready', () => {
-    render(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
+    renderAudioPlayer(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
     expect(
       screen.getByRole('region', { name: /audio player/i }),
     ).toBeInTheDocument();
@@ -72,7 +84,7 @@ describe('AudioPlayerWaveform', () => {
   });
 
   it('exposes transport controls (play/pause button and playback-rate select)', () => {
-    render(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
+    renderAudioPlayer(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
     // Button starts in "Play" state because isReady is false until WaveSurfer emits 'ready'.
     expect(
       screen.getByRole('button', { name: /play audio/i }),
@@ -86,12 +98,12 @@ describe('AudioPlayerWaveform', () => {
     // If the useEffectEvent wrapper did not null-check onTimeUpdate, rendering
     // without the prop would throw on first timeupdate emission.
     expect(() =>
-      render(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />),
+      renderAudioPlayer(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />),
     ).not.toThrow();
   });
 
   it('destroys the asynchronously loaded WaveSurfer instance on unmount', async () => {
-    const { unmount } = render(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
+    const { unmount } = renderAudioPlayer(<AudioPlayerWaveform audioUrl="/audio/test.mp3" />);
 
     await waitFor(() => expect(createdInstances).toHaveLength(1));
     const instance = createdInstances[0];

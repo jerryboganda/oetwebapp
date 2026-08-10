@@ -51,6 +51,8 @@ vi.mock('@/components/domain/learner-skeletons', () => ({
 }));
 
 vi.mock('@/components/domain', () => ({
+  CreditsGuideButton: () => <button type="button">How credits work</button>,
+  CreditUsageInfoCard: () => <div data-testid="credit-usage-info" />,
   LearnerPageHero: ({ title, description }: { title: string; description: string }) => (
     <div data-testid="learner-page-hero">
       <h1>{title}</h1>

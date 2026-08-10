@@ -38,6 +38,8 @@ vi.mock('@/components/layout', () => ({
 }));
 
 vi.mock('@/components/domain', () => ({
+  CreditsGuideButton: () => <button type="button">How credits work</button>,
+  CreditUsageInfoCard: () => <div data-testid="credit-usage-info" />,
   LearnerPageHero: ({ highlights }: { highlights?: Array<{ label: string; value: string }> }) => (
     <header>
       {(highlights ?? []).map((h) => (

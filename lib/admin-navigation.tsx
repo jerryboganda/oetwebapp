@@ -294,7 +294,7 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: 'Notifications',
         icon: <Bell className={iconClassName} />,
         matchPrefix: '/admin/notifications',
-        requiredPermissions: [AdminPermission.SystemAdmin],
+        requiredPermissions: [AdminPermission.Notifications],
       },
       {
         href: '/admin/webhooks',

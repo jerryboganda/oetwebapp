@@ -100,7 +100,7 @@ describe('profession-first admin course maps', () => {
     expect(screen.getByRole('link', { name: 'Edit / Move' })).toHaveAttribute('href', '/admin/content/videos/video-shared-1/details');
     expect(screen.getAllByText('Sessions').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Workshops').length).toBeGreaterThan(0);
-    await user.click(within(root).getByRole('button', { name: 'Open Nursing' }));
+    await user.click(screen.getByRole('button', { name: 'Open Nursing' }));
     expect(screen.getAllByRole('link', { name: 'New' })[0]).toHaveAttribute(
       'href', '/admin/content/videos/new?profession=nursing&language=en&subtest=listening',
     );
@@ -118,13 +118,16 @@ describe('profession-first admin course maps', () => {
     expect(within(root).getAllByRole('listitem')).toHaveLength(7);
     expect(within(root).queryByText('Listening')).not.toBeInTheDocument();
 
-    await user.click(screen.getAllByRole('button', { name: 'New folder' })[0]);
-    expect(onCreateFolder).toHaveBeenCalledWith('medicine', 'Medicine', 'listening');
+    await user.click(screen.getAllByRole('button', { name: 'Add folder' })[0]);
+    expect(onCreateFolder).toHaveBeenCalledWith('medicine', 'Medicine', 'listening', 'folder-shared-1');
     await user.click(screen.getAllByRole('button', { name: 'Add file' })[0]);
     expect(onAddFile).toHaveBeenCalledWith('folder-shared-1', 'listening');
+    await user.click(screen.getByRole('button', { name: 'Open listening' }));
     await user.click(screen.getByRole('button', { name: 'Edit Shared listening PDF' }));
     expect(onEditFile).toHaveBeenLastCalledWith('file-shared-1');
+    await user.click(screen.getByRole('button', { name: 'Back to Course Materials' }));
     await user.click(within(root).getByRole('button', { name: 'Open Nursing' }));
+    await user.click(screen.getByRole('button', { name: 'Open listening' }));
     await user.click(screen.getByRole('button', { name: 'Edit Shared listening PDF' }));
     expect(onEditFile).toHaveBeenNthCalledWith(2, 'file-shared-1');
   });

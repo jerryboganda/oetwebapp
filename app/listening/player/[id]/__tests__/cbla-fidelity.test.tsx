@@ -429,9 +429,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     });
     expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a1_preview', null);
     expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a1_preview', 'confirm-1');
-    await waitFor(() => {
-      expect(screen.getByTestId('listening-preview-banner')).toBeInTheDocument();
-    });
+    expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
     expect(container.querySelector('audio')).not.toBeNull();
   });
 

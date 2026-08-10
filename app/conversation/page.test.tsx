@@ -27,12 +27,19 @@ vi.mock('@/components/layout', () => ({
   ),
 }));
 
+vi.mock('@/components/domain', () => ({
+  LearnerPageHero: ({ title, children }: { title?: string; children?: React.ReactNode }) => <div><h1>{title}</h1>{children}</div>,
+  LearnerSurfaceSectionHeader: ({ title, description }: { title: string; description?: string }) => <div><h2>{title}</h2><p>{description}</p></div>,
+  ExamTypeBadge: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+}));
+
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 vi.mock('@/lib/api', () => ({
   getConversationHistory: mockGetConversationHistory,
   getConversationTaskTypes: mockGetConversationTaskTypes,
   getConversationEntitlement: mockGetConversationEntitlement,
   createConversation: mockCreateConversation,
+  fetchMyEntitlementSnapshot: vi.fn().mockResolvedValue({ enabledModules: [] }),
 }));
 
 import ConversationPage from './page';

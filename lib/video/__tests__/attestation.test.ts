@@ -67,16 +67,12 @@ afterEach(() => {
 });
 
 describe('getPlaybackAttestor', () => {
-  it('uses the authenticated browser-session proof on web runtimes', async () => {
+  it('strictly rejects browser playback on web runtimes', async () => {
     mockGetAppRuntimeKind.mockReturnValue('web');
     const attestor = getPlaybackAttestor();
     expect(attestor.available).toBe(true);
     if (attestor.available) {
-      await expect(attestor.sign('nonce', 'video', 'user')).resolves.toMatchObject({
-        signature: '',
-        platform: 'web',
-        keyId: 'browser-session',
-      });
+      await expect(attestor.sign('nonce', 'video', 'user')).rejects.toMatchObject({ code: 'WEB_NOT_ALLOWED' });
     }
   });
 
@@ -105,16 +101,11 @@ describe('requestPlaybackSession', () => {
     return sign;
   }
 
-  it('uses a one-time authenticated nonce on web', async () => {
+  it('does not mint a playback session on web', async () => {
     mockGetAppRuntimeKind.mockReturnValue('web');
-    await expect(requestPlaybackSession('video-1', 'user-1')).resolves.toEqual(SESSION);
+    await expect(requestPlaybackSession('video-1', 'user-1')).rejects.toMatchObject({ code: 'WEB_NOT_ALLOWED' });
     expect(mockFetchChallenge).toHaveBeenCalledTimes(1);
-    expect(mockCreateSession).toHaveBeenCalledWith('video-1', {
-      nonce: 'nonce-1',
-      platform: 'web',
-      keyId: 'browser-session',
-      signature: '',
-    });
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
   it('runs challenge → native sign → session on desktop', async () => {
