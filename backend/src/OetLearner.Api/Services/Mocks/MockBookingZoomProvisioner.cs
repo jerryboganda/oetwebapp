@@ -106,12 +106,13 @@ public sealed class MockBookingZoomProvisioner(
         if (!await zoomService.IsEnabledAsync(ct))
         {
             // New bookings are rejected by the canonical endpoint when Zoom is
-            // unavailable. This fallback is for legacy rows: still deliver the
-            // automated confirmation with the in-app room instead of silently
-            // dropping the notification.
-            QueueConfirmationJob(db, booking.Id);
+            // unavailable. Legacy rows fail closed too: do not deliver an
+            // automated confirmation without the required Zoom URL.
+            booking.ZoomStatus = MockBookingZoomStatuses.Failed;
+            booking.ZoomError = "Zoom integration is unavailable; confirmation was not sent.";
+            booking.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
-            logger.LogWarning("Zoom integration disabled for legacy mock booking {BookingId}; confirmation queued without Zoom URL", bookingId);
+            logger.LogWarning("Zoom integration disabled for mock booking {BookingId}; confirmation was not sent", bookingId);
             return;
         }
 
@@ -172,11 +173,9 @@ public sealed class MockBookingZoomProvisioner(
                 throw; // Let the background job processor retry.
             }
 
-            // Do not leave a legacy booking without an automated confirmation
-            // after the final retry. The in-app room remains the fallback join
-            // route, and the Zoom error remains visible/auditable.
-            QueueConfirmationJob(db, booking.Id);
-            await db.SaveChangesAsync(CancellationToken.None);
+            // Do not send a confirmation after the final retry: without a
+            // real Zoom URL, doing so would violate the mandatory Zoom-link
+            // delivery contract.
         }
     }
 

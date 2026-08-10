@@ -79,7 +79,7 @@ public sealed class MockBookingZoomProvisionerTests
     }
 
     [Fact]
-    public async Task SkipsQuietlyWhenZoomDisabled()
+    public async Task FailsClosedWhenZoomDisabled()
     {
         await using var db = NewDb();
         SeedBooking(db);
@@ -97,7 +97,8 @@ public sealed class MockBookingZoomProvisionerTests
         await provisioner.CreateZoomMeetingForMockBookingAsync(BookingId, CancellationToken.None);
 
         var booking = await db.MockBookings.SingleAsync(b => b.Id == BookingId);
-        Assert.Equal(MockBookingZoomStatuses.Pending, booking.ZoomStatus);
+        Assert.Equal(MockBookingZoomStatuses.Failed, booking.ZoomStatus);
+        Assert.Equal("Zoom integration is unavailable; confirmation was not sent.", booking.ZoomError);
         Assert.Empty(handler.Requests);
     }
 
