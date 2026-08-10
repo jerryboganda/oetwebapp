@@ -274,6 +274,23 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         var now = DateTimeOffset.UtcNow;
         var normalizedEmail = email.ToUpperInvariant();
 
+        // The application defaults security gates on when RuntimeSettings has
+        // no row. These fixture clients intentionally exercise password sign-in
+        // without the production device-challenge round-trip, so seed the
+        // explicit test profile rather than relying on nullable production
+        // defaults. Production hosts never use this factory.
+        var runtimeSettings = db.RuntimeSettings.SingleOrDefault(x => x.Id == "default");
+        if (runtimeSettings is null)
+        {
+            db.RuntimeSettings.Add(new RuntimeSettingsRow
+            {
+                Id = "default",
+                SecurityRiskMode = OetLearner.Api.Services.Settings.SecurityRiskModes.Off,
+                SecurityTrustedDeviceRequired = false,
+                SecurityRequireVerifiedEmailForLearners = false
+            });
+        }
+
         var account = db.ApplicationUserAccounts.SingleOrDefault(x => x.Id == accountId || x.NormalizedEmail == normalizedEmail);
         if (account is null)
         {
