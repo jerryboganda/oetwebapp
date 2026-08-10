@@ -36,9 +36,9 @@ an owner-controlled value that must not be invented in code.
 
 ## Deployment evidence
 
-- Commit `250ae361211a997f592b8edd1eebbd7b5d452bdc` is on `main` and
+- Commit `5cea31bfa5f0700579cd91950e36d6a61c46cc2a` is on `main` and
   `origin/main`.
-- Actions run `31439538561` completed successfully for that exact SHA,
+- Actions run `31441030497` completed successfully for that exact SHA,
   including API/web/backup images, production migration, and blue/green
   deployment.
 - Post-deploy public checks returned HTTP 200 for API live/readiness and the

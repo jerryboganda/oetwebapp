@@ -4,9 +4,9 @@ Last updated: 2026-08-11
 
 ## Current checkpoint
 
-- Conformance implementation is on `250ae3612` (`250ae361211a997f592b8edd1eebbd7b5d452bdc`) on both `main` and `origin/main`.
-- Build & Deploy run `31439538561` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
-- Public post-deploy checks returned HTTP 200 for API live/readiness and the app, Listening, and Reading routes through their sign-in redirects. API readiness reported database, migrations, stuck jobs, and storage all `ok`.
+- Conformance implementation plus LR-05 regression evidence is on `5cea31bfa` (`5cea31bfa5f0700579cd91950e36d6a61c46cc2a`) on both `main` and `origin/main`.
+- Build & Deploy run `31441030497` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
+- Public post-deploy checks for the exact SHA returned HTTP 200 for API live/readiness and the app, Listening, and Reading routes through their sign-in redirects. API readiness reported database, migrations, stuck jobs, and storage all `ok`.
 - Tightened deterministic boundaries: published Listening/Reading content is immutable, relational attempt question/key revisions are captured and checked fail-closed, controlled re-marking is audited, and Listening Part A AI is post-submit tutor advisory only with approved rationale evidence and no lenient `acceptable` verdict.
 
 ## Validation and remaining boundary
