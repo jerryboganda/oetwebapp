@@ -72,6 +72,22 @@ describe('BCQuestionRenderer', () => {
     expect(screen.getByText('Check the medication chart')).toHaveClass('line-through');
   });
 
+  it('does not treat an option strikethrough as an MCQ selection', async () => {
+    const user = userEvent.setup();
+    render(<BCHarness />);
+
+    const optionA = screen.getByRole('radio', { name: /ask the nurse/i });
+    expect(optionA).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(screen.getByRole('button', { name: /strike out option a/i }));
+
+    expect(screen.getByRole('button', { name: /remove strikethrough from option a/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(optionA).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(optionA);
+    expect(optionA).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('supports arrow-key navigation within the radio group', async () => {
     const user = userEvent.setup();
     render(<BCHarness />);

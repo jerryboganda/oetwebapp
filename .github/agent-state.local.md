@@ -1,33 +1,20 @@
-# Current Task - OET Writing AI Assessment Specification v1.1
-
 # Current Task - OET Listening and Reading AI System v1.1
 
 Last updated: 2026-08-11
 
 ## Current checkpoint
 
-- The governed Listening/Reading implementation is on `c0f8402ac`; the
-  concurrent Writing compile-fix is `5141eac3d` on `main` and `origin/main`.
-- Build/web/API/backup jobs for Actions run `31437434454` passed; production
-  migration/application was still running at the last checkpoint.
-- Tightened the remaining deterministic boundary: Listening authoring edits
-  are blocked on published papers, relational attempt question versions are
-  captured and checked fail-closed, Reading grading checks the published paper
-  revision, and Part A AI is post-submit tutor advisory only with approved
-  rationale evidence and no lenient `acceptable` verdict.
+- Conformance implementation is on `250ae3612` (`250ae361211a997f592b8edd1eebbd7b5d452bdc`) on both `main` and `origin/main`.
+- Build & Deploy run `31439538561` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
+- Public post-deploy checks returned HTTP 200 for API live/readiness and the app, Listening, and Reading routes through their sign-in redirects. API readiness reported database, migrations, stuck jobs, and storage all `ok`.
+- Tightened deterministic boundaries: published Listening/Reading content is immutable, relational attempt question/key revisions are captured and checked fail-closed, controlled re-marking is audited, and Listening Part A AI is post-submit tutor advisory only with approved rationale evidence and no lenient `acceptable` verdict.
 
 ## Validation and remaining boundary
 
-- Targeted backend compile and the deployment run must be rechecked after the
-  current edits. Do not claim the new edits are deployed until a new SHA's
-  build, migration, rollout, and live health/routes are verified.
-- Owner-controlled release data remains required: complete approved Listening
-  and Reading score tables, marking-policy/rationale approvals, pathway/pass
-  thresholds, graph legal/style sign-off, and timed-attempt concurrency target.
-- Preserve untracked `.codex/config.toml`, `.superpowers/`,
-  `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
-
-Last updated: 2026-08-11
+- `git diff --check` passed before the final commits. Focused frontend ESLint and Reading results tests passed previously; the focused LR-05 Vitest run (`tests/unit/listening/BCQuestionRenderer.test.tsx` plus `app/reading/paper/[paperId]/page.test.tsx`) passed 58/58. Local full TypeScript validation is blocked by duplicate globals in unrelated untracked `pdf-policy-release` and `pdf-policy-release2`; local backend build timed out without diagnostics. GitHub Actions is the authoritative compile/deploy gate and passed.
+- Owner-controlled release data remains required: complete approved Listening and Reading score tables, normalization profile, practice/mock lock mode, approved rationale/evidence content, pathway/pass thresholds, graph legal/style sign-off, and peak timed-attempt concurrency target.
+- LR-05 now has explicit Listening and Reading selection-preservation assertions. Acceptance evidence still needs authenticated end-to-end/mobile evidence. Do not claim complete PDF acceptance until that boundary and owner approvals are supplied.
+- Preserve untracked `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
 
 ## Outcome
 

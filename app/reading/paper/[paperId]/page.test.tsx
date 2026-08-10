@@ -249,6 +249,9 @@ describe('Reading paper player page', () => {
     await renderPlayer();
     await user.click(await screen.findByRole('button', { name: /start attempt/i }));
 
+    const optionA = screen.getByRole('radio', { name: /aspirin/i });
+    expect(optionA).not.toBeChecked();
+
     // Rule out option A via the visible strike button (parity with Listening).
     await user.click(await screen.findByRole('button', { name: /rule out option a/i }));
 
@@ -256,6 +259,7 @@ describe('Reading paper player page', () => {
     // "restore" (pressed) and the row renders struck-through.
     const restore = await screen.findByRole('button', { name: /restore option a/i });
     expect(restore).toHaveAttribute('aria-pressed', 'true');
+    expect(optionA).not.toBeChecked();
     expect(screen.getByText('Aspirin').closest('label')).toHaveClass('line-through');
 
     // The debounced autosave PUTs the rule-out payload to the attempt.

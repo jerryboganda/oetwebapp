@@ -13,7 +13,7 @@ an owner-controlled value that must not be invented in code.
 | LR-02 | Section boundary confirmation is irreversible and locks prior answers | `backend/src/OetLearner.Api/Endpoints/ListeningV2Endpoints.cs`, `backend/tests/OetLearner.Api.Tests/Listening/ListeningV2AdvanceEndpointTests.cs`, `tests/e2e/listening/exam-mode-locks.spec.ts` | Implemented; deployed browser verification pending |
 | LR-03 | Misspelled Part A answer receives zero with no fuzzy/AI override | `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs`, `backend/tests/OetLearner.Api.Tests/Listening/ListeningPartASpellingTests.cs`; deterministic `IsCorrect` remains authoritative over AI metadata | Implemented; focused backend run pending |
 | LR-04 | Explicit accepted variant receives credit and is named in audit | `ListeningGradingService` writes `listening.marking.accepted_variant_used` with the matched variant; `AssessmentGovernanceEndpoints` preserves key snapshots | Implemented; focused audit test pending |
-| LR-05 | Strikethrough is not a selected MCQ answer | Candidate selection remains a server-validated option key and annotation metadata is separate in `ListeningLearnerService`; no dedicated strikethrough regression is currently evidenced | Pending dedicated acceptance test |
+| LR-05 | Strikethrough is not a selected MCQ answer | Candidate selection remains a server-validated option key and annotation metadata is separate in `ListeningLearnerService`; `tests/unit/listening/BCQuestionRenderer.test.tsx` and `app/reading/paper/[paperId]/page.test.tsx` assert rule-out leaves the radio answer unchecked | Implemented; focused UI regression passed |
 | LR-06 | Reading Part A locks at the authoritative 15-minute deadline | `backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
 | LR-07 | Reading B+C share one authoritative 45-minute timer | `ReadingAttemptService`, `ReadingLearnerEndpoints`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
 | LR-08 | Raw score is reproducible from stored response/key version | `ListeningAttempt.LastQuestionVersionMapJson`, `ListeningAnswer.QuestionVersionSnapshot`, `ReadingAttempt.PaperRevisionId`, `backend/tests/OetLearner.Api.Tests/Assessment/AssessmentScoreConversionServiceTests.cs` | Implemented fail-closed revision guard; focused reproducibility test pending |
@@ -36,7 +36,11 @@ an owner-controlled value that must not be invented in code.
 
 ## Deployment evidence
 
-- Previous release `5141eac3d` completed Actions run `31437434454`, including
-  API/web/backup images, production migration, and blue/green deployment.
-- The changes represented by this document require a new commit SHA and a new
-  completed build/migration/deploy run before they can be called live.
+- Commit `250ae361211a997f592b8edd1eebbd7b5d452bdc` is on `main` and
+  `origin/main`.
+- Actions run `31439538561` completed successfully for that exact SHA,
+  including API/web/backup images, production migration, and blue/green
+  deployment.
+- Post-deploy public checks returned HTTP 200 for API live/readiness and the
+  app, Listening, and Reading routes through their sign-in redirects. API
+  readiness reported database, migrations, stuck jobs, and storage all `ok`.
