@@ -7,8 +7,9 @@
  * reference grades, then run the V2 grading pipeline against every row
  * and inspect AI-vs-reference agreement.
  *
- * §33 release-gate: ≥90% of letters must score within ±2 raw points of
- * Dr Ahmed's grade.
+ * The historical harness remains useful for benchmark inspection, but it is
+ * not the candidate release gate. Candidate-facing v1.1 output is governed by
+ * the separately versioned pack and calibration release gate shown below.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -62,6 +63,34 @@ interface CalibrationRunDto {
   results: CalibrationResultDto[];
 }
 
+interface WritingAssessmentPackV11Dto {
+  id: string;
+  profession: string;
+  letterType: string;
+  versionKey: string;
+  status: string;
+  candidateFacing: boolean;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+}
+
+interface WritingAssessmentReleaseGateV11Dto {
+  id: string;
+  modelVersion: string;
+  calibrationSetVersion: string;
+  status: string;
+  candidateNumericScoreEnabled: boolean;
+  meanAbsoluteError: number | null;
+  contentConcisenessCorrelation: number | null;
+  languageCorrelation: number | null;
+  inventedClaimRate: number | null;
+  ownerApprovedTolerance: number | null;
+  qualifiedReviewerCount: number;
+  humanRatingsPerBenchmark: number;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+}
+
 interface NewLetterForm {
   scenarioId: string;
   letterContent: string;
@@ -97,6 +126,8 @@ function rawTotal(g: { c1: number; c2: number; c3: number; c4: number; c5: numbe
 export default function AdminWritingCalibrationPage() {
   const [letters, setLetters] = useState<CalibrationLetterDto[]>([]);
   const [latestRun, setLatestRun] = useState<CalibrationRunDto | null>(null);
+  const [v11Packs, setV11Packs] = useState<WritingAssessmentPackV11Dto[]>([]);
+  const [v11Gates, setV11Gates] = useState<WritingAssessmentReleaseGateV11Dto[]>([]);
   const [form, setForm] = useState<NewLetterForm>(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,12 +137,16 @@ export default function AdminWritingCalibrationPage() {
     setBusy('load');
     setError(null);
     try {
-      const [ls, run] = await Promise.all([
+      const [ls, run, packs, gates] = await Promise.all([
         apiClient.get<CalibrationLetterDto[]>('/v1/admin/writing/calibration/letters'),
         apiClient.get<CalibrationRunDto | undefined>('/v1/admin/writing/calibration/runs/latest'),
+        apiClient.get<WritingAssessmentPackV11Dto[]>('/v1/admin/writing/assessment-v11/packs'),
+        apiClient.get<WritingAssessmentReleaseGateV11Dto[]>('/v1/admin/writing/assessment-v11/release-gates'),
       ]);
       setLetters(ls);
       setLatestRun(run ?? null);
+      setV11Packs(packs);
+      setV11Gates(gates);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calibration data.');
     } finally {
@@ -175,7 +210,7 @@ export default function AdminWritingCalibrationPage() {
     if (!latestRun || latestRun.totalLetters === 0) return 0;
     return Math.round((latestRun.within2PointsCount / latestRun.totalLetters) * 100);
   }, [latestRun]);
-  const gatePassed = within2Pct >= 90;
+  const benchmarkPassed = within2Pct >= 90;
 
   return (
     <div className="space-y-6 p-6">
@@ -185,8 +220,8 @@ export default function AdminWritingCalibrationPage() {
           <div>
             <h1 className="text-2xl font-bold">Writing calibration harness</h1>
             <p className="text-sm text-muted">
-              50-letter corpus with Dr Ahmed&apos;s reference grades. Release gate (spec §33):
-              ≥90% within ±2 raw points.
+              Benchmark evidence and the governed v1.1 candidate-release controls. The historical
+              raw-38 harness below never enables candidate scores by itself.
             </p>
           </div>
         </div>
@@ -208,6 +243,90 @@ export default function AdminWritingCalibrationPage() {
           {error}
         </div>
       ) : null}
+
+      <Card>
+        <CardContent className="p-6">
+          <header className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">v1.1 candidate release control</h2>
+              <p className="mt-1 max-w-3xl text-sm text-muted">
+                Candidate numeric output is fail-closed until an owner-approved profession/letter
+                pack and a calibration gate meet the reviewer, human-rating, error, grounding, and
+                criterion-priority requirements. No legacy raw-38 result can bypass this gate.
+              </p>
+            </div>
+            <Badge variant="warning">Owner approval required</Badge>
+          </header>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section aria-labelledby="v11-packs-heading">
+              <h3 id="v11-packs-heading" className="mb-2 text-sm font-bold">Profession and letter packs</h3>
+              {v11Packs.length === 0 ? (
+                <p className="text-sm text-muted">No approved v1.1 packs. Candidate scoring remains blocked.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-surface text-left text-xs uppercase tracking-wider text-muted">
+                      <tr>
+                        <th scope="col" className="px-3 py-2">Pack</th>
+                        <th scope="col" className="px-3 py-2">Status</th>
+                        <th scope="col" className="px-3 py-2">Candidate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {v11Packs.map((pack) => (
+                        <tr key={pack.id} className="border-t border-border">
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{pack.profession} · {pack.letterType}</div>
+                            <div className="font-mono text-xs text-muted">{pack.versionKey}</div>
+                          </td>
+                          <td className="px-3 py-2">{pack.status}</td>
+                          <td className="px-3 py-2">{pack.candidateFacing ? 'Enabled' : 'Blocked'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section aria-labelledby="v11-gates-heading">
+              <h3 id="v11-gates-heading" className="mb-2 text-sm font-bold">Model calibration gates</h3>
+              {v11Gates.length === 0 ? (
+                <p className="text-sm text-muted">No approved calibration gate. Candidate scores are not released.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-surface text-left text-xs uppercase tracking-wider text-muted">
+                      <tr>
+                        <th scope="col" className="px-3 py-2">Version</th>
+                        <th scope="col" className="px-3 py-2">Status</th>
+                        <th scope="col" className="px-3 py-2">Metrics</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {v11Gates.map((gate) => (
+                        <tr key={gate.id} className="border-t border-border">
+                          <td className="px-3 py-2">
+                            <div className="font-mono text-xs">{gate.modelVersion}</div>
+                            <div className="font-mono text-xs text-muted">{gate.calibrationSetVersion}</div>
+                          </td>
+                          <td className="px-3 py-2">
+                            {gate.status}{gate.candidateNumericScoreEnabled ? ' · candidate enabled' : ' · blocked'}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-muted">
+                            MAE {gate.meanAbsoluteError ?? '—'} · reviewers {gate.qualifiedReviewerCount} · ratings {gate.humanRatingsPerBenchmark}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Add form */}
       {showForm ? (
@@ -338,9 +457,9 @@ export default function AdminWritingCalibrationPage() {
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-bold">Latest run</h2>
             {latestRun ? (
-              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${gatePassed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                {gatePassed ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
-                Gate: {within2Pct}% within ±2 raw
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${benchmarkPassed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                {benchmarkPassed ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+                Historical benchmark: {within2Pct}% within ±2 raw
               </span>
             ) : null}
           </header>

@@ -198,6 +198,71 @@ public sealed record WritingGradeResponseV2(
     WritingRevisionInviteResponse RevisionInvite,
     DateTimeOffset GradedAt);
 
+public sealed record WritingAssessmentV11CriterionResponse(
+    string CriterionCode,
+    int Score,
+    int MaximumScore,
+    string StrengthObservation,
+    string LimitationObservation,
+    IReadOnlyList<string> Evidence,
+    string ImprovementAction);
+
+public sealed record WritingAssessmentV11ErrorResponse(
+    string Id,
+    string? Location,
+    string? CandidateWording,
+    string? Correction,
+    string Category,
+    string? RuleSource,
+    string? WhyItMatters,
+    string Severity,
+    string Confidence,
+    string PrimaryCriterionCode,
+    IReadOnlyList<string> SecondaryCriterionCodes,
+    int? StartOffset,
+    int? EndOffset);
+
+public sealed record WritingAssessmentV11FactResponse(
+    string FactText,
+    string SourceReference,
+    string Classification,
+    string CandidateStatus,
+    string? CandidateExcerpt,
+    string? Explanation);
+
+public sealed record WritingAssessmentV11ModelAnswerResponse(
+    string Status,
+    string? ModelAnswerText,
+    string? CorrectedCandidateLetter,
+    IReadOnlyList<string> WhyThisWorks,
+    IReadOnlyList<string> GroundedFactReferences,
+    bool IsCandidateVisible);
+
+public sealed record WritingAssessmentV11ReportResponse(
+    string Id,
+    string SubmissionId,
+    string Status,
+    string Profession,
+    string LetterType,
+    string RulePackVersion,
+    string ModelVersion,
+    string CalibrationSetVersion,
+    int? EstimatedPracticeScore,
+    string ScoreLabel,
+    string? ScoreRange,
+    string? ConfidenceLabel,
+    string? ConfidenceRange,
+    bool CandidateNumericScoreEnabled,
+    bool CandidateReportVisible,
+    IReadOnlyList<string> BlockingCodes,
+    IReadOnlyList<string> TopPriorities,
+    IReadOnlyList<string> Strengths,
+    IReadOnlyList<string> StudyPlan,
+    IReadOnlyList<WritingAssessmentV11CriterionResponse> Criteria,
+    IReadOnlyList<WritingAssessmentV11ErrorResponse> Errors,
+    IReadOnlyList<WritingAssessmentV11FactResponse> Facts,
+    WritingAssessmentV11ModelAnswerResponse? ModelAnswer);
+
 public sealed record WritingScoreAppealResponse(
     Guid Id,
     Guid SubmissionId,

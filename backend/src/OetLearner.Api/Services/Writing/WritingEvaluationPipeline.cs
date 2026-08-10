@@ -14,9 +14,9 @@ namespace OetLearner.Api.Services.Writing;
 /// Mission-critical (per AGENTS.md): every Writing AI call MUST go through
 /// <see cref="IAiGatewayService"/> with a grounded prompt built via
 /// <see cref="IAiGatewayService.BuildGroundedPrompt"/>. The gateway physically
-/// refuses ungrounded prompts. This pipeline is the single owner of the
-/// Writing grading flow — invoked by <c>BackgroundJobProcessor</c> when a
-/// <see cref="JobType.WritingEvaluation"/> job runs.
+/// refuses ungrounded prompts. Historical attempt-based jobs are retained only
+/// for safe failure handling; candidate AI scoring is owned by the governed
+/// v1.1 submission pipeline.
 ///
 /// Architecture mirrors <c>SpeakingEvaluationPipeline</c>:
 /// <list type="number">
@@ -58,6 +58,24 @@ public sealed class WritingEvaluationPipeline(
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
         var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var user = await db.Users.FirstOrDefaultAsync(x => x.Id == attempt.UserId, cancellationToken);
+
+        // Historical queued jobs may still exist after the route was migrated.
+        // Fail closed before any deterministic or AI score is produced.
+        MarkFailed(
+            db,
+            attempt,
+            evaluation,
+            "medicine",
+            "routine_referral",
+            Array.Empty<LintFinding>(),
+            "writing_v11_required",
+            "Legacy attempt-based AI Writing grading is disabled. Submit through the governed v1.1 Writing assessment flow.",
+            retryable: false,
+            retryAfterMs: null);
+        attempt.State = AttemptState.Submitted;
+        await RefundAiPackageCreditAsync(attempt, evaluation, "writing_v11_required", cancellationToken);
+        logger.LogWarning("Legacy Writing AI job {AttemptId} blocked; v1.1 assessment is required.", attempt.Id);
+        return;
 
         // Profession: prefer content authoring metadata, then learner active
         // profession. Falls back to medicine for backward compatibility with

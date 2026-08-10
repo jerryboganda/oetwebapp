@@ -1402,6 +1402,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Materials library — nestable folders, files, and per-folder audience
         // assignment. Partial class in LearnerDbContext.Materials.cs.
         OnModelCreatingMaterials(modelBuilder);
+        OnModelCreatingWritingAssessmentV11(modelBuilder);
 
         // Video Library — Bunny Stream backed videos, categories, learner
         // progress/bookmarks, attested playback sessions, and telemetry.
@@ -1556,6 +1557,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.VideoLibrary.cs (partial).
     /// </summary>
+    partial void OnModelCreatingWritingAssessmentV11(ModelBuilder modelBuilder);
     partial void OnModelCreatingVideoLibrary(ModelBuilder modelBuilder);
 
     /// <summary>

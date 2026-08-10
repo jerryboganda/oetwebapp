@@ -967,6 +967,77 @@ export interface WritingSubmissionFeedbackDto {
   tutorReview: WritingTutorReviewDto | null;
   annotations: WritingFeedbackAnnotationDto[];
   nextSteps: string[];
+  assessmentV11: WritingAssessmentV11ReportDto | null;
+}
+
+export interface WritingAssessmentV11CriterionDto {
+  criterionCode: string;
+  score: number;
+  maximumScore: number;
+  strengthObservation: string;
+  limitationObservation: string;
+  evidence: string[];
+  improvementAction: string;
+}
+
+export interface WritingAssessmentV11ErrorDto {
+  id: string;
+  location: string | null;
+  candidateWording: string | null;
+  correction: string | null;
+  category: string;
+  ruleSource: string | null;
+  whyItMatters: string | null;
+  severity: string;
+  confidence: string;
+  primaryCriterionCode: string;
+  secondaryCriterionCodes: string[];
+  startOffset: number | null;
+  endOffset: number | null;
+}
+
+export interface WritingAssessmentV11FactDto {
+  factText: string;
+  sourceReference: string;
+  classification: string;
+  candidateStatus: string;
+  candidateExcerpt: string | null;
+  explanation: string | null;
+}
+
+export interface WritingAssessmentV11ModelAnswerDto {
+  status: string;
+  modelAnswerText: string | null;
+  correctedCandidateLetter: string | null;
+  whyThisWorks: string[];
+  groundedFactReferences: string[];
+  isCandidateVisible: boolean;
+}
+
+export interface WritingAssessmentV11ReportDto {
+  id: string;
+  submissionId: string;
+  status: string;
+  profession: string;
+  letterType: string;
+  rulePackVersion: string;
+  modelVersion: string;
+  calibrationSetVersion: string;
+  estimatedPracticeScore: number | null;
+  scoreLabel: string;
+  scoreRange: string | null;
+  confidenceLabel: string | null;
+  confidenceRange: string | null;
+  candidateNumericScoreEnabled: boolean;
+  candidateReportVisible: boolean;
+  blockingCodes: string[];
+  topPriorities: string[];
+  strengths: string[];
+  studyPlan: string[];
+  criteria: WritingAssessmentV11CriterionDto[];
+  errors: WritingAssessmentV11ErrorDto[];
+  facts: WritingAssessmentV11FactDto[];
+  modelAnswer: WritingAssessmentV11ModelAnswerDto | null;
 }
 
 export interface WritingRewriteComparisonDto {

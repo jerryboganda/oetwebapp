@@ -168,6 +168,17 @@ public sealed class WritingSubmissionService(
     {
         var s = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
         if (s is null) return null;
+        var candidateRelease = await db.WritingAssessmentReportsV11.AsNoTracking()
+            .AnyAsync(x => x.SubmissionId == submissionId
+                && x.Status == WritingAssessmentV11Status.CandidateReady
+                && x.CandidateNumericScoreEnabled
+                && x.CandidateReportVisible, ct);
+        if (!candidateRelease)
+        {
+            // The legacy grade shape contains raw totals and band labels. It is
+            // never a fallback for the governed v1.1 candidate result route.
+            return null;
+        }
         var grade = await db.WritingGrades.AsNoTracking()
             .Where(g => g.SubmissionId == submissionId)
             .OrderByDescending(g => g.AppealedByGradeId != null || g.TutorReviewId != null)

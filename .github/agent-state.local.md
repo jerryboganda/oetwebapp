@@ -1,3 +1,39 @@
+# Current Task - OET Writing AI Assessment Specification v1.1
+
+Last updated: 2026-08-11
+
+## Outcome
+
+- Implemented the governed v1.1 Writing assessment slice: immutable report
+  snapshots, fail-closed task/case-note/profession/letter-type preflight,
+  v1.1 deterministic rules and six-criterion evidence, fact-map grounding,
+  calibration release gates, grounded model-answer holding, candidate result
+  projection, learner report UI, and admin pack/gate/report governance APIs.
+- Removed legacy AI-score escape paths: legacy attempt submissions/revisions
+  reject with `writing_v11_required`; historical queued jobs fail before
+  scoring; learner home/summary no longer expose legacy raw-38 output.
+- Candidate numeric output remains disabled until owner-approved profession /
+  letter-type packs and a calibration gate satisfy the explicit release rules.
+
+## Validation
+
+- `git diff --check`: passed.
+- Targeted ESLint on the touched Writing result/admin pages and `lib/writing`:
+  no errors; one pre-existing `setState`-in-effect warning remains on the
+  calibration page.
+- `pnpm exec tsc --noEmit`: blocked by duplicate test files in the unrelated
+  untracked `pdf-policy-release` and `pdf-policy-release2` catalogs.
+- Targeted local backend build/test attempts stalled on the Windows host before
+  compiler output; no local backend green claim. GitHub Actions is the compile,
+  migration, and image-deploy gate.
+
+## Next step
+
+Run the v1.1 focused CI/build and migration/deploy workflow after explicit-path
+staging, then verify production health, migration presence, and deployed SHA on
+the VPS. Preserve unrelated dirty work and do not approve a candidate release
+gate without owner calibration evidence.
+
 # Current Task - OET Speaking booking workflow PDF implementation
 
 Last updated: 2026-08-10
@@ -48,19 +84,26 @@ Last updated: 2026-08-10
   one-hour reminders, and strict greater-than-24-hour refund eligibility.
 - Closed legacy direct-bundle and arbitrary-reschedule bypasses, and made
   failed Zoom provisioning fail closed for confirmation/reminders.
+- Hardened the remaining policy surfaces: private-speaking configuration now
+  normalizes the PDF's 24-hour refund boundary, always-on rescheduling,
+  canonical 24h/1h/15m reminders, and policy copy; required learner/tutor
+  booking and reminder notifications are protected from preference/admin
+  disablement and frequency caps.
 - Implementation commit `f3c06a3ba339f8720d4385980688510f26619c4e` and test-policy
   alignment commit `1423ff45b2f332595f49bbb656cb9df9499c8599` are on `main`.
-- Build & Deploy run `31404507080` passed web/API/backup images, off-box
+- Policy hardening commit `3abbd1f46e173a9059d1588be76cd8f15ea88fd2` was pushed
+  to `main`. Build & Deploy run `31409233754` passed web/API/backup images, off-box
   migration generation/application, and blue/green VPS deployment. The deploy
   reported live blue-slot health/public verification and image tags for
-  `1423ff45b...`; public checks returned app/API HTTP 200.
+  `3abbd1f46...`; public checks returned app/API HTTP 200.
 
 ## Validation
 
-- Targeted ESLint and `git diff --check` passed. Local TypeScript checking
-  timed out without diagnostics; local .NET validation was not usable, so the
-  GitHub Actions image build is authoritative for compilation.
-- Speaking CI run `31404514288` still has unrelated baseline frontend Vitest,
+- Targeted policy tests were added, and `git diff --check` passed. Local .NET
+  compilation/test attempts were blocked by the Windows compiler hanging and
+  timing out without diagnostics; the successful GitHub Actions API image build
+  is authoritative for compilation of the deployed revision.
+- Speaking CI run `31409233189` still has unrelated baseline frontend Vitest,
   backend 403 test-fixture, and one speaking-upload timeout failures. The
   PDF-policy tests/fixtures corrected in `1423ff45b` are not among its
   failures; the three legacy penalty tests remain intentionally skipped because
@@ -70,9 +113,9 @@ Last updated: 2026-08-10
 ## Next step
 
 No further source implementation remains in scope. Authenticated learner/tutor/
-admin browser acceptance, real Zoom meeting creation, provider email delivery,
-and Stripe refund/inbox verification remain owner-side acceptance boundaries;
-no credentials or customer data were accessed.
+admin browser acceptance with test accounts, real Zoom meeting creation,
+provider email delivery, and Stripe refund/inbox verification remain owner-side
+acceptance boundaries; no credentials or customer data were accessed.
 
 # Current Task - Maximum Performance Optimisation
 

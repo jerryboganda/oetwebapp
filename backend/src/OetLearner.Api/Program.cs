@@ -1821,6 +1821,13 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEva
     OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
     OetLearner.Api.Services.Writing.WritingSubmissionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAssessmentPreflightService,
+    OetLearner.Api.Services.Writing.WritingAssessmentPreflightService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAssessmentV11ResultService,
+    OetLearner.Api.Services.Writing.WritingAssessmentV11ResultService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingAssessmentV11RuleEngine>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingCalibrationReleaseService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingModelAnswerService>();
 // Result-visibility config + learner-facing gated feedback (spec §15.2/§15.3, WS-B4 Section D/E).
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingResultVisibilityService,
     OetLearner.Api.Services.Writing.WritingResultVisibilityService>();
@@ -2375,6 +2382,7 @@ app.MapWritingPathwayEndpoints();
 // drafts V2, scenarios, exemplars, drills V2, lessons V2, mocks, coach,
 // stats, canon library, mistakes, tutor review, OCR, showcase, AI tools,
 // admin content, tutor portal + native WebSocket coach fallback (~60+
+app.MapWritingAssessmentGovernanceEndpoints();
 // routes across 20 endpoint files). See WritingRouteBuilderExtensions.cs.
 app.MapWritingV2Endpoints();
 app.MapListeningAuthoringAdminEndpoints();

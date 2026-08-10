@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Endpoints;
@@ -48,6 +49,20 @@ public sealed class WritingResultFeedbackService(
         var vis = await visibility.ResolveAsync(submission.ScenarioId, ct);
         var visDto = ToVisibilityDto(vis);
 
+        var assessment = await db.WritingAssessmentReportsV11.AsNoTracking()
+            .Include(x => x.Facts)
+            .Include(x => x.Errors)
+            .Include(x => x.Criteria)
+            .SingleOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
+        var modelAnswer = assessment is null
+            ? null
+            : await db.WritingAssessmentModelAnswers.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.ReportId == assessment.Id, ct);
+        var assessmentCandidateVisible = assessment is not null
+            && assessment.Status == WritingAssessmentV11Status.CandidateReady
+            && assessment.CandidateNumericScoreEnabled
+            && assessment.CandidateReportVisible;
+
         // Authoritative grade for the submission (latest tutor-attached, else latest AI).
         var grade = await db.WritingGrades
             .AsNoTracking()
@@ -76,7 +91,7 @@ public sealed class WritingResultFeedbackService(
         {
             status = "tutor_reviewed";
         }
-        else if (grade is not null && vis.ShowAiEstimate)
+        else if (grade is not null && vis.ShowAiEstimate && assessmentCandidateVisible)
         {
             status = "ai_estimated";
         }
@@ -91,7 +106,9 @@ public sealed class WritingResultFeedbackService(
         if (grade is not null)
         {
             var isTutorGrade = grade.TutorReviewId is not null || tutorFinalised;
-            var gradeVisible = isTutorGrade ? vis.ShowTutorScore : vis.ShowAiEstimate;
+            var gradeVisible = isTutorGrade
+                ? vis.ShowTutorScore
+                : vis.ShowAiEstimate && assessmentCandidateVisible;
             if (gradeVisible)
             {
                 gradeDto = MapGrade(grade, vis.ShowFullCriteria);
@@ -119,7 +136,17 @@ public sealed class WritingResultFeedbackService(
         }
 
         // ── Next steps (weakest criteria → short prompts) ─────────────────────────
-        var nextSteps = BuildNextSteps(grade, vis);
+        var nextSteps = BuildNextSteps(gradeDto is null ? null : grade, vis);
+
+        WritingAssessmentV11ReportResponse? assessmentDto = assessment is null
+            ? null
+            : WritingAssessmentV11ResultService.Map(assessment, modelAnswer);
+        if (assessmentDto is not null)
+        {
+            if (!vis.ShowFullCriteria) assessmentDto = assessmentDto with { Criteria = [] };
+            if (!vis.ShowMissingContent) assessmentDto = assessmentDto with { Facts = [] };
+            if (!vis.ShowModelAnswer) assessmentDto = assessmentDto with { ModelAnswer = null };
+        }
 
         return new WritingSubmissionFeedbackDto(
             MapSubmission(submission),
@@ -128,7 +155,8 @@ public sealed class WritingResultFeedbackService(
             gradeDto,
             reviewDto,
             annotations,
-            nextSteps);
+            nextSteps,
+            assessmentDto);
     }
 
     public async Task<WritingRewriteComparisonDto> GetRewriteComparisonAsync(string userId, Guid rewriteSubmissionId, CancellationToken ct)
@@ -376,7 +404,8 @@ public sealed record WritingSubmissionFeedbackDto(
     WritingGradeDto? Grade,
     WritingTutorReviewDto? TutorReview,
     IReadOnlyList<WritingFeedbackAnnotationDto> Annotations,
-    IReadOnlyList<string> NextSteps);
+    IReadOnlyList<string> NextSteps,
+    WritingAssessmentV11ReportResponse? AssessmentV11);
 
 public sealed record WritingRewriteSideDto(
     string SubmissionId,

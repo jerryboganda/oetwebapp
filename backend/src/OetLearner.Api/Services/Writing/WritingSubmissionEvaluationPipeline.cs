@@ -57,7 +57,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingEventBus events,
     TimeProvider clock,
     IRuntimeSettingsProvider settingsProvider,
-    ILogger<WritingSubmissionEvaluationPipeline> logger) : IWritingSubmissionEvaluationPipeline
+    ILogger<WritingSubmissionEvaluationPipeline> logger,
+    IWritingAssessmentPreflightService? assessmentPreflight = null,
+    WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
+    WritingCalibrationReleaseService? calibrationReleaseService = null,
+    WritingModelAnswerService? modelAnswerService = null) : IWritingSubmissionEvaluationPipeline
 {
     public async Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct)
     {
@@ -126,24 +130,55 @@ public sealed class WritingSubmissionEvaluationPipeline(
             return new WritingSubmissionGradeOutcome(submission.Id, Guid.Empty, 0, "pending", false);
         }
 
-        var idempotency = await TryReuseExistingGradeAsync(submission, ct);
-        if (idempotency is not null) return idempotency;
+        if (assessmentPreflight is null)
+        {
+            throw ApiException.ServiceUnavailable(
+                "writing_assessment_preflight_unavailable",
+                "Writing assessment preflight is not configured.",
+                retryable: false);
+        }
+
+        var assessmentPreflightResult = await assessmentPreflight.ValidateAsync(submission, ct);
+        if (!assessmentPreflightResult.CanScore)
+        {
+            await PersistBlockedAssessmentReportAsync(submission, assessmentPreflightResult, ct);
+            submission.Status = "failed";
+            await db.SaveChangesAsync(ct);
+
+            if (assessmentPreflightResult.Status == WritingAssessmentV11Status.BlockedMissingInput)
+            {
+                throw ApiException.Validation(
+                    "writing_assessment_missing_input",
+                    $"Writing assessment is blocked because required input is missing: {string.Join(", ", assessmentPreflightResult.MissingInputCodes)}.");
+            }
+
+            if (assessmentPreflightResult.Status == WritingAssessmentV11Status.RequiresReview)
+            {
+                throw ApiException.Conflict(
+                    "writing_assessment_requires_review",
+                    $"Writing assessment requires human review before scoring: {string.Join(", ", assessmentPreflightResult.ReleaseBlockCodes)}.");
+            }
+
+            throw ApiException.Conflict(
+                "writing_assessment_release_blocked",
+                $"Writing assessment is not released for this profession and letter type: {string.Join(", ", assessmentPreflightResult.ReleaseBlockCodes)}.");
+        }
 
         submission.Status = "preflight";
         await db.SaveChangesAsync(ct);
-        var preflight = PreflightChecks(submission);
-        if (!preflight.Passed)
+        var quickChecks = PreflightChecks(submission);
+        if (!quickChecks.Passed)
         {
             submission.Status = "failed";
             await db.SaveChangesAsync(ct);
-            throw ApiException.Validation(preflight.Reason!, preflight.Message!);
+            throw ApiException.Validation(quickChecks.Reason!, quickChecks.Message!);
         }
 
         submission.Status = "grading";
         await db.SaveChangesAsync(ct);
 
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
-        var rubric = await CallRubricAsync(submission, scenario, ct);
+        var rubric = await CallRubricAsync(submission, scenario, assessmentPreflightResult.CaseNotesSnapshot, ct);
 
         var canon = await canonEngine.DetectViolationsAsync(
             new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
@@ -173,6 +208,44 @@ public sealed class WritingSubmissionEvaluationPipeline(
             CreatedAt = clock.GetUtcNow(),
         };
         db.WritingGrades.Add(grade);
+
+        if (assessmentRuleEngine is null)
+        {
+            throw ApiException.ServiceUnavailable(
+                "writing_assessment_rule_engine_unavailable",
+                "Writing assessment rule checks are not configured.",
+                retryable: false);
+        }
+        var assessmentReport = BuildAssessmentReport(
+            submission,
+            assessmentPreflightResult,
+            grade,
+            assessmentRuleEngine,
+            rubric.EstimatedScaledScore);
+        if (calibrationReleaseService is not null)
+        {
+            var release = await calibrationReleaseService.ResolveAsync(
+                grade.ModelUsed,
+                "unreleased",
+                ct);
+            var modelAnswerReady = modelAnswerService is not null
+                && (await modelAnswerService.PopulateAsync(
+                    assessmentReport.Report,
+                    assessmentReport.ModelAnswer,
+                    submission.UserId,
+                    ct)).IsReady;
+            if (release.CandidateNumericScoreEnabled && modelAnswerReady)
+            {
+                assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;
+                assessmentReport.Report.CandidateNumericScoreEnabled = true;
+                assessmentReport.Report.CandidateReportVisible = true;
+                assessmentReport.ModelAnswer.IsCandidateVisible = true;
+                assessmentReport.Report.ConfidenceLabel = "medium";
+                assessmentReport.Report.ConfidenceRange = "calibration-approved range";
+            }
+        }
+        db.WritingAssessmentReportsV11.Add(assessmentReport.Report);
+        db.WritingAssessmentModelAnswers.Add(assessmentReport.ModelAnswer);
         submission.Status = "graded";
         await db.SaveChangesAsync(ct);
 
@@ -195,6 +268,98 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
 
         return new WritingSubmissionGradeOutcome(submission.Id, grade.Id, grade.RawTotal, grade.BandLabel, false);
+    }
+
+    private static WritingAssessmentReportBuildResult BuildAssessmentReport(
+        WritingSubmission submission,
+        WritingAssessmentPreflightResult preflight,
+        WritingGrade grade,
+        WritingAssessmentV11RuleEngine ruleEngine,
+        int estimatedPracticeScore)
+    {
+        if (!RulebookProfessionParser.TryParse(preflight.Profession, out var profession))
+            throw ApiException.Conflict(
+                "writing_assessment_profession_unsupported",
+                $"No supported Writing profession pack is available for '{preflight.Profession}'.");
+        var ruleFindings = ruleEngine.Evaluate(new WritingLintInput(
+            LetterText: submission.LetterContent,
+            LetterType: preflight.LetterType,
+            RecipientSpecialty: preflight.TaskUnderstanding?.RecipientCategory,
+            PatientAge: ExtractPatientAge(preflight.CaseNotesSnapshot),
+            PatientIsMinor: ExtractPatientAge(preflight.CaseNotesSnapshot) is < 18,
+            CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(preflight.CaseNotesSnapshot),
+            Profession: profession),
+            preflight.CaseNotesSnapshot);
+        var factMap = WritingFactMapService.Build(
+            preflight.CaseNotesSnapshot,
+            submission.LetterContent,
+            preflight.TaskUnderstanding?.RecipientCategory ?? "unknown",
+            preflight.LetterType);
+        return WritingAssessmentReportBuilder.Build(new WritingAssessmentReportBuildInput(
+            submission.Id,
+            submission.LetterContentHash,
+            submission.LetterContent,
+            preflight,
+            ruleFindings,
+            factMap,
+            WritingAssessmentReportBuilder.DefaultCriteria(
+                grade.C1Purpose,
+                grade.C2Content,
+                grade.C3Conciseness,
+                grade.C4Genre,
+                grade.C5Organisation,
+                grade.C6Language),
+            estimatedPracticeScore,
+            grade.ModelUsed,
+            "unreleased"));
+    }
+
+    private static int? ExtractPatientAge(string caseNotes)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            caseNotes ?? string.Empty,
+            @"\b(?:age|aged)\s*:?\s*(?<age>\d{1,3})\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success && int.TryParse(match.Groups["age"].Value, out var age)
+            ? age
+            : null;
+    }
+
+    private async Task PersistBlockedAssessmentReportAsync(
+        WritingSubmission submission,
+        WritingAssessmentPreflightResult preflight,
+        CancellationToken ct)
+    {
+        var existing = await db.WritingAssessmentReportsV11
+            .FirstOrDefaultAsync(x => x.SubmissionId == submission.Id, ct);
+        if (existing is not null)
+        {
+            existing.Status = preflight.Status;
+            existing.UpdatedAt = clock.GetUtcNow();
+            return;
+        }
+
+        db.WritingAssessmentReportsV11.Add(new WritingAssessmentReportV11
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submission.Id,
+            Status = preflight.Status,
+            Profession = preflight.Profession,
+            LetterType = preflight.LetterType,
+            RulePackVersion = preflight.RulePackVersion,
+            OriginalLetterHash = submission.LetterContentHash,
+            OriginalLetterSnapshot = submission.LetterContent,
+            TaskSnapshot = preflight.TaskSnapshot,
+            CaseNotesSnapshot = preflight.CaseNotesSnapshot,
+            ClassificationJson = JsonSerializer.Serialize(new
+            {
+                missingInputCodes = preflight.MissingInputCodes,
+                releaseBlockCodes = preflight.ReleaseBlockCodes,
+                appliedRulePacks = preflight.AppliedRulePacks,
+            }),
+            CreatedAt = clock.GetUtcNow(),
+            UpdatedAt = clock.GetUtcNow(),
+        });
     }
 
     private async Task<WritingSubmissionGradeOutcome?> TryReuseExistingGradeAsync(WritingSubmission submission, CancellationToken ct)
@@ -274,7 +439,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
         return (true, null, null);
     }
 
-    private async Task<RubricResult> CallRubricAsync(WritingSubmission submission, WritingScenario? scenario, CancellationToken ct)
+    private async Task<RubricResult> CallRubricAsync(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        string caseNotesSnapshot,
+        CancellationToken ct)
     {
         var letterType = scenario?.LetterType ?? "routine_referral";
         var profession = scenario?.Profession ?? "medicine";
@@ -301,7 +470,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             result = await aiGateway.CompleteAsync(new AiGatewayRequest
             {
                 Prompt = prompt,
-                UserInput = BuildRubricInput(submission, scenario),
+                UserInput = BuildRubricInput(submission, scenario, caseNotesSnapshot),
                 Temperature = 0.2,
                 FeatureCode = AiFeatureCodes.WritingGrade,
                 PromptTemplateId = "writing.score.v1",
@@ -355,7 +524,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
         return rubric;
     }
 
-    private static string BuildRubricInput(WritingSubmission submission, WritingScenario? scenario)
+    private static string BuildRubricInput(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        string caseNotesSnapshot)
     {
         var sb = new StringBuilder();
         if (scenario is not null)
@@ -372,6 +544,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 sb.AppendLine("---");
             }
         }
+        sb.AppendLine();
+        sb.AppendLine("Case notes (source of truth; do not invent facts):");
+        sb.AppendLine("---");
+        sb.AppendLine(caseNotesSnapshot);
+        sb.AppendLine("---");
         sb.AppendLine();
         sb.AppendLine($"Word count: {submission.WordCount}");
         sb.AppendLine("Candidate letter:");
@@ -427,7 +604,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         // EstimatedBand is stored in raw-total units (0–38) to match OetBandLabel
         // and the seed data; a complete contract is high confidence.
-        return new RubricResult(c1, c2, c3, c4, c5, c6, rawTotal, perCriterion, topThree, "high", model);
+        return new RubricResult(c1, c2, c3, c4, c5, c6, rawTotal, ai.EstimatedScaledScore!.Value, perCriterion, topThree, "high", model);
     }
 
     private static bool TryParseRubric(string? completion, IReadOnlyList<string> allowedRuleIds, out RubricAiResponse response)
@@ -695,5 +872,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
         };
 
     private sealed record RubricResult(int C1, int C2, int C3, int C4, int C5, int C6, int EstimatedBand,
+        int EstimatedScaledScore,
         string PerCriterionFeedbackJson, string TopThreePrioritiesJson, string ConfidenceFlag, string ModelUsed);
 }

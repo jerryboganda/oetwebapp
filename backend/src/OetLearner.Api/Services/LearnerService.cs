@@ -1050,11 +1050,14 @@ public partial class LearnerService(
                 FROM ""Evaluations"" AS evaluation
                 INNER JOIN ""Attempts"" AS attempt ON attempt.""Id"" = evaluation.""AttemptId""
                 WHERE attempt.""UserId"" = {userId}
+                  AND evaluation.""SubtestCode"" <> 'writing'
                 ORDER BY evaluation.""GeneratedAt"" DESC
                 LIMIT 1")
             : db.Evaluations
                 .Where(evaluation => db.Attempts.Any(attempt =>
-                    attempt.Id == evaluation.AttemptId && attempt.UserId == userId))
+                    attempt.Id == evaluation.AttemptId
+                    && attempt.UserId == userId
+                    && evaluation.SubtestCode != "writing"))
                 .OrderByDescending(evaluation => evaluation.GeneratedAt)
                 .Take(1);
 
@@ -1808,6 +1811,8 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingHomeAsync(string userId, CancellationToken cancellationToken)
     {
+        // The historical attempt/evaluation surface has no v1.1 report link.
+        // Do not expose its raw-total or band fields through learner home.
         var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
         var examFamilyLabel = FormatExamFamilyLabel(profile.Goal.ExamFamilyCode);
         var tasks = await GetTasksBySubtestAsync("writing", cancellationToken);
@@ -1824,13 +1829,7 @@ public partial class LearnerService(
             .FirstOrDefaultAsync(cancellationToken);
         var recentAttemptIds = attempts.Select(attempt => attempt.Id).ToArray();
         var latestEvaluationIdQuery = db.Evaluations
-            .Where(evaluation =>
-                evaluation.SubtestCode == "writing"
-                && db.Attempts.Any(attempt =>
-                    attempt.Id == evaluation.AttemptId
-                    && attempt.UserId == userId
-                    && attempt.SubtestCode == "writing"))
-            .OrderByDescending(evaluation => evaluation.GeneratedAt)
+            .Where(_ => false)
             .Select(evaluation => evaluation.Id)
             .Take(1);
         var evaluationRows = await (
@@ -1841,6 +1840,7 @@ public partial class LearnerService(
                     on attempt.ContentId equals content.Id
                 where attempt.UserId == userId
                       && attempt.SubtestCode == "writing"
+                      && false
                       && (recentAttemptIds.Contains(evaluation.AttemptId)
                           || latestEvaluationIdQuery.Contains(evaluation.Id))
                 select new WritingHomeEvaluationRow(
@@ -2160,6 +2160,13 @@ public partial class LearnerService(
         var attempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var examMode = NormalizeWritingExamMode(request.ExamMode);
         var assessorType = NormalizeWritingAssessorType(request.AssessorType);
+        if (assessorType == "ai")
+        {
+            throw ApiException.Conflict(
+                "writing_v11_required",
+                "Legacy attempt-based AI Writing grading is disabled. Submit through the governed v1.1 Writing assessment flow.",
+                [new ApiFieldError("assessorType", "v11_required", "Use the Writing v1.1 assessment route; unapproved legacy AI scoring is not available.")]);
+        }
         var idempotencyScope = $"writing-submit:{userId}:{attempt.Id}";
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
@@ -2665,6 +2672,13 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingEvaluationSummaryAsync(string userId, string evaluationId, CancellationToken cancellationToken)
     {
+        if (evaluationId is not null)
+        {
+            throw ApiException.Conflict(
+                "writing_v11_required",
+                "The legacy Writing evaluation surface is disabled. Use the governed v1.1 assessment result.",
+                [new ApiFieldError("evaluationId", "v11_required", "Legacy raw-total and band output is not candidate-visible.")]);
+        }
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
@@ -2741,6 +2755,13 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingRevisionAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
+        if (attemptId is not null)
+        {
+            throw ApiException.Conflict(
+                "writing_v11_required",
+                "The legacy Writing revision surface is disabled until a governed v1.1 assessment report is available.",
+                [new ApiFieldError("attemptId", "v11_required", "Legacy AI revision scoring is not candidate-visible.")]);
+        }
         var requestedAttempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var attempt = requestedAttempt.ParentAttemptId is null
             ? requestedAttempt
@@ -2793,6 +2814,10 @@ public partial class LearnerService(
     public async Task<object> SubmitWritingRevisionAsync(string userId, string attemptId, RevisionSubmitRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        throw ApiException.Conflict(
+            "writing_v11_required",
+            "Legacy attempt-based AI Writing revisions are disabled. Use the governed v1.1 Writing assessment flow.",
+            [new ApiFieldError("attemptId", "v11_required", "Unapproved legacy AI scoring cannot be used for revisions.")]);
         var idempotencyKey = NormalizeWritingRevisionIdempotencyKey(request.IdempotencyKey);
         var idempotencyScope = $"writing-revision-submit:{userId}:{attemptId}";
         if (idempotencyKey is not null)

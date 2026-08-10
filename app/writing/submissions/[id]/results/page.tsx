@@ -20,6 +20,7 @@ import {
   disputeWritingCanonViolation,
   getTutorReview,
   getWritingAnswerSheet,
+  getWritingAssessmentV11,
   getWritingSubmission,
   getWritingSubmissionCaseNotes,
   getWritingSubmissionGrade,
@@ -34,6 +35,7 @@ import type {
   WritingCriteriaScoresDto,
   WritingCriterionCode,
   WritingGradeDto,
+  WritingAssessmentV11ReportDto,
   WritingSubmissionDto,
   WritingTutorReviewDto,
 } from '@/lib/writing/types';
@@ -63,6 +65,23 @@ function gradeToScores(g: WritingGradeDto): WritingCriteriaScoresDto {
   };
 }
 
+function assessmentToScores(report: WritingAssessmentV11ReportDto): WritingCriteriaScoresDto {
+  const scores: WritingCriteriaScoresDto = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 };
+  const map: Record<string, keyof WritingCriteriaScoresDto> = {
+    purpose: 'c1',
+    content: 'c2',
+    conciseness_clarity: 'c3',
+    genre_style: 'c4',
+    organisation_layout: 'c5',
+    language: 'c6',
+  };
+  for (const criterion of report.criteria) {
+    const key = map[criterion.criterionCode];
+    if (key) scores[key] = criterion.score;
+  }
+  return scores;
+}
+
 export default function WritingSubmissionResultsPage() {
   const t = useTranslations();
   const params = useParams<{ id: string }>();
@@ -70,6 +89,7 @@ export default function WritingSubmissionResultsPage() {
 
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
+  const [assessment, setAssessment] = useState<WritingAssessmentV11ReportDto | null>(null);
   const [tutorReview, setTutorReview] = useState<WritingTutorReviewDto | null>(null);
   const [answerSheetPath, setAnswerSheetPath] = useState<string | null>(null);
   const [caseNotes, setCaseNotes] = useState<WritingCaseNotesDto | null>(null);
@@ -80,7 +100,8 @@ export default function WritingSubmissionResultsPage() {
     if (!submissionId) return;
     void Promise.all([
       getWritingSubmission(submissionId),
-      getWritingSubmissionGrade(submissionId),
+      getWritingSubmissionGrade(submissionId).catch(() => null),
+      getWritingAssessmentV11(submissionId).catch(() => null),
       // Tutor's review. Per-criterion comments render for mocks only; the
       // optional overall text note renders in BOTH modes when present.
       getTutorReview(submissionId).catch(() => null),
@@ -88,10 +109,11 @@ export default function WritingSubmissionResultsPage() {
       getWritingAnswerSheet(submissionId).catch(() => ({ answerSheetPdfDownloadPath: null })),
       // Case Notes PDF + the learner's highlight snapshot (read-only review).
       getWritingSubmissionCaseNotes(submissionId).catch(() => null),
-    ])
-      .then(([sub, g, review, answerSheet, notes]) => {
+      ])
+      .then(([sub, g, report, review, answerSheet, notes]) => {
         setSubmission(sub);
         setGrade(g);
+        setAssessment(report);
         setTutorReview(review);
         setAnswerSheetPath(answerSheet?.answerSheetPdfDownloadPath ?? null);
         setCaseNotes(notes ?? null);
@@ -150,7 +172,11 @@ export default function WritingSubmissionResultsPage() {
     }
   }, [submissionId, t]);
 
+  const assessmentVisible = assessment?.status === 'CandidateReady'
+    && assessment.candidateReportVisible
+    && assessment.candidateNumericScoreEnabled;
   const scores = grade ? gradeToScores(grade) : null;
+  const assessmentScores = assessmentVisible && assessment ? assessmentToScores(assessment) : null;
   const isA = grade?.bandLabel?.startsWith('A');
   const offerRevision = grade?.revisionInvite?.shouldOffer ?? false;
   // Mock writing is human-marked with zero AI: show the tutor's WRITTEN feedback and
@@ -177,6 +203,22 @@ export default function WritingSubmissionResultsPage() {
               ...(isMock ? [] : [{ label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag, tone: 'default' as const, icon: <Sparkles /> }]),
             ]}
           />
+        ) : assessmentVisible && assessment?.estimatedPracticeScore != null ? (
+          <ResultsScorePanel
+            eyebrow="Writing assessment v1.1"
+            icon={Award}
+            title={assessment.scoreLabel}
+            subtitle="This practice estimate is governed by the released v1.1 calibration gate."
+            gaugeValue={(assessment.estimatedPracticeScore / 500) * 100}
+            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{assessment.estimatedPracticeScore}</span>}
+            gaugeLabel={assessment.scoreRange ?? 'calibration-approved range'}
+            gaugeColor={assessment.estimatedPracticeScore >= 350 ? 'var(--color-success)' : assessment.estimatedPracticeScore >= 300 ? 'var(--color-warning)' : 'var(--color-danger)'}
+            stats={[
+              { label: 'Score', value: `${assessment.estimatedPracticeScore}/500`, tone: 'info', icon: <Award /> },
+              { label: 'Confidence', value: assessment.confidenceLabel ?? 'restricted', tone: 'default', icon: <Sparkles /> },
+              { label: 'Version', value: assessment.calibrationSetVersion, tone: 'default', icon: <FileText /> },
+            ]}
+          />
         ) : (
           <LearnerPageHero
             eyebrow={t('writing.submissions.results.eyebrow')}
@@ -189,6 +231,12 @@ export default function WritingSubmissionResultsPage() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {actionStatus ? <InlineAlert variant="info">{actionStatus}</InlineAlert> : null}
+        {assessment && !assessmentVisible ? (
+          <InlineAlert variant="info">
+            This submission is not yet candidate-visible under the v1.1 release gate.
+            {assessment.blockingCodes.length ? ` Blocked by: ${assessment.blockingCodes.join(', ')}.` : ''}
+          </InlineAlert>
+        ) : null}
 
         {scores ? (
           <section aria-labelledby="criteria-heading" className="grid gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm lg:grid-cols-2">
@@ -232,6 +280,55 @@ export default function WritingSubmissionResultsPage() {
                     ))}
               </ul>
             </details>
+          </section>
+        ) : null}
+
+        {assessmentVisible && assessmentScores && assessment ? (
+          <section aria-labelledby="assessment-v11-heading" className="space-y-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <div>
+              <h2 id="assessment-v11-heading" className="text-lg font-bold text-navy">Assessment v1.1 criteria and evidence</h2>
+              <p className="mt-1 text-sm text-muted">Every finding is assigned to one primary criterion; secondary references are shown only as supporting context.</p>
+            </div>
+            <CriteriaRadar scores={assessmentScores} targetScores={{ c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 }} />
+            <div className="grid gap-3 md:grid-cols-2">
+              {assessment.criteria.map((criterion) => (
+                <article key={criterion.criterionCode} className="rounded-xl border border-border bg-background p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-navy">{criterion.criterionCode}</h3>
+                    <Badge variant="info" size="sm">{criterion.score}/{criterion.maximumScore}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-navy">{criterion.strengthObservation}</p>
+                  <p className="mt-1 text-sm text-muted">{criterion.limitationObservation}</p>
+                  <p className="mt-2 text-sm text-primary">{criterion.improvementAction}</p>
+                </article>
+              ))}
+            </div>
+            {assessment.errors.length ? (
+              <div>
+                <h3 className="font-bold text-navy">Complete corrections</h3>
+                <ul className="mt-2 space-y-2">
+                  {assessment.errors.map((item) => (
+                    <li key={item.id} className="rounded-xl border border-border bg-background p-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="warning" size="sm">{item.severity}</Badge>
+                        <span className="font-semibold text-navy">{item.primaryCriterionCode}</span>
+                        <span className="text-muted">{item.ruleSource ?? item.category}</span>
+                      </div>
+                      {item.candidateWording ? <p className="mt-1 text-navy" dir="ltr">“{item.candidateWording}”</p> : null}
+                      {item.correction ? <p className="mt-1 text-primary" dir="ltr">{item.correction}</p> : null}
+                      {item.whyItMatters ? <p className="mt-1 text-muted">{item.whyItMatters}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {assessment.modelAnswer?.modelAnswerText ? (
+              <article className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                <h3 className="font-bold text-navy">Grounded model answer</h3>
+                <p className="mt-2 whitespace-pre-line text-sm text-navy" dir="ltr">{assessment.modelAnswer.modelAnswerText}</p>
+                {assessment.modelAnswer.whyThisWorks.length ? <p className="mt-2 text-sm text-muted">{assessment.modelAnswer.whyThisWorks.join(' ')}</p> : null}
+              </article>
+            ) : null}
           </section>
         ) : null}
 

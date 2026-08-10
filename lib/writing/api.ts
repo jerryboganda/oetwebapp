@@ -123,6 +123,7 @@ import type {
   WritingScenarioDto,
   WritingSubmissionDto,
   WritingGradeDto,
+  WritingAssessmentV11ReportDto,
   WritingScoreAppealDto,
   WritingDisputeViolationDto,
   WritingCaseNotesDto,
@@ -325,6 +326,11 @@ export const getWritingSubmission = (submissionId: string) =>
 export const getWritingSubmissionGrade = (submissionId: string) =>
   apiClient.get<WritingGradeDto>(
     path('/v1/writing/submissions/{id}/grade', { id: submissionId }),
+  );
+
+export const getWritingAssessmentV11 = (submissionId: string) =>
+  apiClient.get<WritingAssessmentV11ReportDto>(
+    path('/v1/writing/submissions/{id}/assessment-v11', { id: submissionId }),
   );
 
 /**
