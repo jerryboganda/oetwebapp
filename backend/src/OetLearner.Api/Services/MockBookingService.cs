@@ -73,6 +73,10 @@ public sealed class MockBookingService
             ?? throw ApiException.NotFound("bundle_not_found", "Mock bundle not found.");
         if (bundle.Status != ContentStatus.Published)
             throw ApiException.Validation("bundle_not_published", "Bundle must be published before booking.");
+        if (await IsSpeakingBundleAsync(bundle.Id, ct))
+            throw ApiException.Conflict(
+                "canonical_speaking_booking_required",
+                "Speaking bookings must use the tutor-calendar booking workflow.");
 
         var deliveryMode = string.IsNullOrWhiteSpace(request.DeliveryMode)
             ? MockDeliveryModes.Computer
@@ -107,6 +111,10 @@ public sealed class MockBookingService
             .Include(x => x.MockBundle)
             .FirstOrDefaultAsync(x => x.Id == bookingId && x.UserId == userId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
+        if (await IsSpeakingBundleAsync(booking.MockBundleId, ct))
+            throw ApiException.Conflict(
+                "canonical_speaking_booking_required",
+                "Speaking rescheduling must use the tutor-calendar booking workflow.");
         if (IsTerminal(booking.Status))
             throw ApiException.Validation("booking_finalized", "This booking can no longer be rescheduled.");
         if (booking.RescheduleCount >= MaxReschedulesPerBooking)
@@ -136,6 +144,10 @@ public sealed class MockBookingService
             .Include(x => x.MockBundle)
             .FirstOrDefaultAsync(x => x.Id == bookingId && x.UserId == userId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
+        if (await IsSpeakingBundleAsync(booking.MockBundleId, ct))
+            throw ApiException.Conflict(
+                "canonical_speaking_booking_required",
+                "Speaking cancellation must use the canonical booking workflow.");
         if (booking.Status == MockBookingStatuses.Completed || booking.Status == MockBookingStatuses.Cancelled)
         {
             return Project(booking, isAdmin: false);
@@ -406,6 +418,11 @@ public sealed class MockBookingService
         }
         projection["speakingContent"] = speakingContent;
     }
+
+    private Task<bool> IsSpeakingBundleAsync(string bundleId, CancellationToken ct)
+        => _db.MockBundleSections.AsNoTracking().AnyAsync(section =>
+            section.MockBundleId == bundleId
+            && section.SubtestCode == "speaking", ct);
 
     private static bool IsTerminal(string status) => status == MockBookingStatuses.Completed
         || status == MockBookingStatuses.Cancelled

@@ -26,6 +26,7 @@ public interface IMockEntitlementService
 {
     Task<MockEntitlementCheck> CheckAsync(string userId, string mockType, CancellationToken ct);
     Task<MockEntitlementDebit> DebitAsync(string userId, string mockType, string mockAttemptId, CancellationToken ct);
+    Task<bool> RefundAsync(string userId, string mockType, string referenceId, string refundReferenceId, CancellationToken ct);
     Task<MockEntitlementSummary> SummariseAsync(string userId, CancellationToken ct);
 }
 
@@ -70,7 +71,7 @@ public sealed class MockEntitlementService(
 
         var (granted, _) = await SumGrantedAsync(userId, normalised, ct);
         var consumed = await db.MockEntitlementLedgers.AsNoTracking()
-            .CountAsync(r => r.UserId == userId && r.MockType == normalised, ct);
+            .CountAsync(r => r.UserId == userId && r.MockType == normalised && r.ReversedAt == null, ct);
         var remaining = Math.Max(0, granted - consumed);
 
         if (remaining <= 0)
@@ -109,7 +110,7 @@ public sealed class MockEntitlementService(
 
         var (granted, sourceAddOnId) = await SumGrantedAsync(userId, normalised, ct);
         var consumed = await db.MockEntitlementLedgers
-            .CountAsync(r => r.UserId == userId && r.MockType == normalised, ct);
+            .CountAsync(r => r.UserId == userId && r.MockType == normalised && r.ReversedAt == null, ct);
         var remaining = Math.Max(0, granted - consumed);
         if (remaining <= 0)
         {
@@ -145,6 +146,39 @@ public sealed class MockEntitlementService(
             ReasonAllowedCredits, $"{nowRemaining} of {granted} mock credits remaining after this attempt.");
     }
 
+    public async Task<bool> RefundAsync(
+        string userId,
+        string mockType,
+        string referenceId,
+        string refundReferenceId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId)
+            || string.IsNullOrWhiteSpace(referenceId)
+            || string.IsNullOrWhiteSpace(refundReferenceId))
+        {
+            return false;
+        }
+
+        var normalised = MockEntitlementKeys.NormaliseLedgerType(mockType);
+        if (string.IsNullOrWhiteSpace(normalised)) return false;
+
+        var existing = await db.MockEntitlementLedgers
+            .FirstOrDefaultAsync(row => row.UserId == userId
+                && row.MockType == normalised
+                && row.MockAttemptId == referenceId, ct);
+        if (existing is null) return false;
+        if (existing.ReversedAt is not null)
+        {
+            return string.Equals(existing.ReversalReferenceId, refundReferenceId, StringComparison.Ordinal);
+        }
+
+        existing.ReversedAt = DateTimeOffset.UtcNow;
+        existing.ReversalReferenceId = refundReferenceId;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<MockEntitlementSummary> SummariseAsync(string userId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId))
@@ -164,7 +198,7 @@ public sealed class MockEntitlementService(
 
         // Aggregate consumed credits from the ledger.
         var consumedRows = await db.MockEntitlementLedgers.AsNoTracking()
-            .Where(r => r.UserId == userId)
+            .Where(r => r.UserId == userId && r.ReversedAt == null)
             .GroupBy(r => r.MockType)
             .Select(g => new { MockType = g.Key, Consumed = g.Count() })
             .ToListAsync(ct);

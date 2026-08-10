@@ -112,6 +112,7 @@ export default function NewMockBookingPage() {
   const [slots, setSlots] = useState<MockAvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedTutorProfileId, setSelectedTutorProfileId] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,9 +127,7 @@ export default function NewMockBookingPage() {
         if (cancelled) return;
         setOptions(result);
         const speaking = result.availableBundles.find(isSpeakingBundle);
-        const fallback = result.availableBundles[0] ?? null;
-        const chosen = speaking ?? fallback;
-        if (chosen) setBundleId(chosen.bundleId);
+        if (speaking) setBundleId(speaking.bundleId);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -152,10 +151,15 @@ export default function NewMockBookingPage() {
       setSlots(nextSlots);
       setSelectedSlot((current) => {
         if (!current) return null;
-        const stillAvailable = nextSlots.some(
+        const stillAvailable = nextSlots.find(
           (slot) => slot.startAt === current && slot.isAvailable,
         );
-        return stillAvailable ? current : null;
+        if (!stillAvailable) {
+          setSelectedTutorProfileId(null);
+          return null;
+        }
+        setSelectedTutorProfileId(stillAvailable.tutorProfileId);
+        return current;
       });
     } catch (err) {
       setSlots([]);
@@ -174,18 +178,13 @@ export default function NewMockBookingPage() {
     return options.availableBundles.filter(isSpeakingBundle);
   }, [options]);
 
-  const otherBundles = useMemo(() => {
-    if (!options) return [];
-    return options.availableBundles.filter((bundle) => !isSpeakingBundle(bundle));
-  }, [options]);
-
   const selectedBundle = useMemo(() => {
     if (!options || !bundleId) return null;
     return options.availableBundles.find((bundle) => bundle.bundleId === bundleId) ?? null;
   }, [bundleId, options]);
 
   const handleSubmit = useCallback(async () => {
-    if (!selectedBundle || !selectedSlot) {
+    if (!selectedBundle || !selectedSlot || !selectedTutorProfileId) {
       setError('Pick a bundle and an available slot before booking.');
       return;
     }
@@ -203,6 +202,7 @@ export default function NewMockBookingPage() {
         consentToRecording: true,
         mockAttemptId,
         mockSectionId,
+        tutorProfileId: selectedTutorProfileId!,
       });
       analytics.track('mock_booking_created', {
         bundleId: selectedBundle.bundleId,
@@ -223,7 +223,7 @@ export default function NewMockBookingPage() {
       }
       setSubmitting(false);
     }
-  }, [consent, loadAvailability, router, selectedBundle, selectedSlot, timezone, mockAttemptId, mockSectionId]);
+  }, [consent, loadAvailability, router, selectedBundle, selectedSlot, selectedTutorProfileId, timezone, mockAttemptId, mockSectionId]);
 
   const dateIndex = dateRange.findIndex((day) => toDateInputValue(day) === date);
   const canShiftBackward = dateIndex > 0;
@@ -235,6 +235,7 @@ export default function NewMockBookingPage() {
     if (next) {
       setDate(toDateInputValue(next));
       setSelectedSlot(null);
+      setSelectedTutorProfileId(null);
     }
   };
 
@@ -248,10 +249,10 @@ export default function NewMockBookingPage() {
           icon={CalendarDays}
           accent="navy"
           title="Book a live mock with a tutor"
-          description="Pick a date in the next two weeks and choose an available slot. Speaking and final-readiness mocks are conducted live with a recorded session for tutor review."
+          description="Pick a date in the next two weeks and choose an available Speaking tutor slot. The session is recorded for tutor review."
           highlights={[
             { icon: Clock, label: 'Timezone', value: timezone },
-            { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
+            { icon: Layers, label: 'Bundles', value: `${speakingBundles.length} published` },
             { icon: Mic, label: 'Mode', value: 'Live + recorded' },
           ]}
         />
@@ -262,7 +263,7 @@ export default function NewMockBookingPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="1. Bundle"
             title="Choose the mock you'd like to book"
-            description="Speaking mocks default first. Final-readiness and other live bundles are also bookable."
+            description="Only published bundles containing the Speaking section can use this tutor calendar."
             icon={Layers}
             className="mb-4"
           />
@@ -310,39 +311,6 @@ export default function NewMockBookingPage() {
                           {bundle.releasePolicy ? (
                             <Badge variant="warning">{bundle.releasePolicy.replace(/_/g, ' ')}</Badge>
                           ) : null}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {otherBundles.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">Other bookable bundles</p>
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    {otherBundles.map((bundle) => (
-                      <button
-                        key={bundle.bundleId}
-                        type="button"
-                        onClick={() => {
-                          setBundleId(bundle.bundleId);
-                          setSelectedSlot(null);
-                        }}
-                        className={`rounded-2xl border p-4 text-left transition-colors ${
-                          bundleId === bundle.bundleId
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border bg-surface hover:border-border-hover'
-                        }`}
-                        aria-pressed={bundleId === bundle.bundleId}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-base font-black text-navy">{bundle.title}</p>
-                            <p className="mt-1 text-xs text-muted">
-                              {bundle.mockType.replace(/_/g, ' ')} / {bundle.estimatedDurationMinutes} min
-                            </p>
-                          </div>
-                          {bundleId === bundle.bundleId ? <CheckCircle2 className="h-5 w-5 text-primary" /> : null}
                         </div>
                       </button>
                     ))}
@@ -421,16 +389,20 @@ export default function NewMockBookingPage() {
               aria-label="Available time slots"
             >
               {slots.map((slot) => {
-                const isSelected = selectedSlot === slot.startAt;
+                const isSelected = selectedSlot === slot.startAt && selectedTutorProfileId === slot.tutorProfileId;
                 const disabled = !slot.isAvailable;
-                const label = formatTimeSlot(slot.startAt, timezone);
+                const label = formatTimeSlot(slot.startAt, slot.tutorTimezone || timezone);
                 return (
                   <button
-                    key={slot.startAt}
+                    key={`${slot.tutorProfileId}:${slot.startAt}`}
                     type="button"
                     role="radio"
                     aria-checked={isSelected}
-                    onClick={() => slot.isAvailable && setSelectedSlot(slot.startAt)}
+                    onClick={() => {
+                      if (!slot.isAvailable) return;
+                      setSelectedSlot(slot.startAt);
+                      setSelectedTutorProfileId(slot.tutorProfileId);
+                    }}
                     disabled={disabled}
                     title={disabled ? slot.blockedReason ?? 'Not available' : undefined}
                     className={`rounded-xl border px-3 py-2 text-sm font-bold transition-colors ${
@@ -441,7 +413,7 @@ export default function NewMockBookingPage() {
                           : 'border-border bg-surface text-navy hover:border-border-hover hover:bg-background-light'
                     }`}
                   >
-                    {label}
+                    {label} · {slot.tutorDisplayName}
                   </button>
                 );
               })}
@@ -453,7 +425,7 @@ export default function NewMockBookingPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="4. Confirm"
             title="Confirm and book"
-            description="Live mocks are recorded so your tutor can review your performance. Reschedule limits are admin-configurable and default to two changes per booking."
+            description="Live mocks are recorded so your tutor can review your performance. You may reschedule before the session starts to another slot currently open in the tutor calendar."
             icon={CheckCircle2}
             className="mb-4"
           />
@@ -475,7 +447,7 @@ export default function NewMockBookingPage() {
         <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
           <Button
             onClick={handleSubmit}
-            disabled={submitting || !selectedBundle || !selectedSlot || !consent}
+            disabled={submitting || !selectedBundle || !selectedSlot || !selectedTutorProfileId || !consent}
             loading={submitting}
             size="lg"
             className="w-full gap-2 py-5 text-base font-black"

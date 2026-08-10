@@ -13,6 +13,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Speaking;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
@@ -42,8 +43,8 @@ public sealed class PrivateSpeakingService(
         config = new PrivateSpeakingConfig
         {
             UpdatedAt = timeProvider.GetUtcNow(),
-            CancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 48 hours before the scheduled start time. If you cancel less than 48 hours before the session, the booking will be cancelled without refund.",
-            BookingPolicyText = "You may reschedule your Speaking session before the session starts, subject to available tutor slots. Same-day rescheduling is allowed; however, 50% of the session fee will be lost according to the platform policy.",
+            CancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 24 hours before the scheduled start time. If you cancel 24 hours or less before the session, a full refund is not available.",
+            BookingPolicyText = "You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.",
         };
         db.PrivateSpeakingConfigs.Add(config);
         await db.SaveChangesAsync(ct);
@@ -1430,7 +1431,6 @@ public sealed class PrivateSpeakingService(
 
         var config = await GetConfigAsync(ct);
         var now = timeProvider.GetUtcNow();
-        var hoursUntil = (booking.SessionStartUtc - now).TotalHours;
 
         // PDF §2.2 / §8 refund tiers. Learners forfeit refund inside the 48h
         // window and cannot cancel after the session has started; admin/expert
@@ -1446,7 +1446,9 @@ public sealed class PrivateSpeakingService(
             if (now >= booking.SessionStartUtc)
                 return (false, "This session has already started and can no longer be cancelled. It will be handled as a no-show if you do not attend.");
 
-            fullRefund = hoursUntil > config.CancellationWindowHours;
+            fullRefund = SpeakingBookingPolicy.FullRefundEligible(
+                booking.SessionStartUtc,
+                now);
         }
         else
         {
@@ -1492,8 +1494,9 @@ public sealed class PrivateSpeakingService(
                     // Do not fail the cancellation — leave StripeRefundId null so
                     // an admin can retry the refund out of band.
                     logger.LogWarning(ex,
-                        "Stripe refund failed for cancelled booking {BookingId}; cancellation still completed",
+                        "Stripe refund failed for cancelled booking {BookingId}; cancellation remains uncommitted",
                         booking.Id);
+                    return (false, "The full refund could not be completed, so the booking remains active. Please retry.");
                 }
             }
 
@@ -1527,7 +1530,7 @@ public sealed class PrivateSpeakingService(
         var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
         var cancellationMessage = fullRefund
             ? "Your private speaking session has been cancelled and a full refund/credit has been issued."
-            : "Your private speaking session has been cancelled. As this was within 48 hours of the start time, no refund or credit applies per the cancellation policy.";
+            : "Your private speaking session has been cancelled. As this was 24 hours or less before the start time, a full refund is not available under the cancellation policy.";
 
         await notificationService.CreateForLearnerAsync(
             NotificationEventKey.LearnerPrivateSpeakingCancelled,
@@ -1629,24 +1632,10 @@ public sealed class PrivateSpeakingService(
         if (now >= original.SessionStartUtc)
             return BookingCheckoutResult.Fail("This session has already started and can no longer be rescheduled.");
 
-        var hoursUntilOriginal = (original.SessionStartUtc - now).TotalHours;
-        var sameCalendarDay = AreSameCalendarDayInTimezone(now, original.SessionStartUtc, original.LearnerTimezone);
-
         var profile = original.TutorProfile
             ?? await db.PrivateSpeakingTutorProfiles.FindAsync([original.TutorProfileId], ct);
         if (profile is null || !profile.IsActive)
             return BookingCheckoutResult.Fail("Tutor is not available.");
-
-        // Penalty base = the tutor's catalog price (NOT original.PriceMinorUnits,
-        // which is 0 for entitlement-funded bookings).
-        var sessionPriceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
-
-        var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
-        if (newSessionStartUtc <= minBookingTime)
-            return BookingCheckoutResult.Fail($"Sessions must be booked at least {config.MinBookingLeadTimeHours} hours in advance.");
-        var maxBookingTime = now.AddDays(config.MaxBookingAdvanceDays);
-        if (newSessionStartUtc > maxBookingTime)
-            return BookingCheckoutResult.Fail($"Sessions cannot be booked more than {config.MaxBookingAdvanceDays} days in advance.");
 
         var durationMinutes = original.DurationMinutes;
         if (!await IsRequestedSlotAvailableAsync(profile, newSessionStartUtc, durationMinutes, ct))
@@ -1688,14 +1677,10 @@ public sealed class PrivateSpeakingService(
                 return BookingCheckoutResult.Fail("Tutor calendar shows this slot is no longer available. Please select another slot.");
         }
 
-        // FREE tier: outside the free window, OR inside the window but a different
-        // calendar day in the learner's timezone.
-        var isFreeTier = hoursUntilOriginal > config.RescheduleFreeWindowHours
-            || (hoursUntilOriginal <= config.RescheduleFreeWindowHours && !sameCalendarDay);
-
-        if (isFreeTier)
-        {
-            var freeReplacement = new PrivateSpeakingBooking
+        // The replacement is always free. The only eligibility condition is
+        // that the original session has not started and the target slot is
+        // currently available in the tutor calendar.
+        var freeReplacement = new PrivateSpeakingBooking
             {
                 Id = $"psb-{Guid.NewGuid():N}",
                 LearnerUserId = learnerUserId,
@@ -1745,87 +1730,14 @@ public sealed class PrivateSpeakingService(
             // PDF §10 reschedule confirmation (free tier → no penalty token).
             await SendRescheduleConfirmationNotificationsAsync(freeReplacement.Id, ct);
 
-            return new BookingCheckoutResult(
-                true,
-                null,
-                freeReplacement.Id,
-                null,
-                null,
-                freeReplacement.EntitlementConsumed,
-                null);
-        }
-
-        // SAME-DAY PENALTY tier: 50% of the session price via an ad-hoc Stripe
-        // checkout. The original booking holds the slot (stays Confirmed/ZoomCreated)
-        // until the penalty is paid; payment confirmation flips it to Cancelled.
-        var penalty = (long)Math.Ceiling(sessionPriceMinorUnits * config.RescheduleSameDayPenaltyPercent / 100.0);
-
-        var penaltyReplacement = new PrivateSpeakingBooking
-        {
-            Id = $"psb-{Guid.NewGuid():N}",
-            LearnerUserId = learnerUserId,
-            TutorProfileId = original.TutorProfileId,
-            Status = PrivateSpeakingBookingStatus.PendingPayment,
-            SessionStartUtc = newSessionStartUtc,
-            DurationMinutes = durationMinutes,
-            TutorTimezone = profile.Timezone,
-            LearnerTimezone = learnerTimezone,
-            PriceMinorUnits = original.PriceMinorUnits,
-            Currency = config.Currency,
-            PaymentStatus = PrivateSpeakingPaymentStatus.Pending,
-            EntitlementSubscriptionId = original.EntitlementSubscriptionId,
-            EntitlementConsumed = original.EntitlementConsumed,
-            EntitlementConsumedAt = original.EntitlementConsumedAt,
-            PenaltyAmountMinorUnits = (int)penalty,
-            RescheduledFromBookingId = original.Id,
-            ReservationExpiresAt = now.AddMinutes(config.ReservationTimeoutMinutes),
-            StripeCheckoutSessionId = null,
-            LearnerNotes = learnerNotes ?? original.LearnerNotes,
-            IdempotencyKey = scopedIdempotencyKey,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-
-        var learner = await db.Users.FirstOrDefaultAsync(user => user.Id == learnerUserId, ct);
-        if (learner is null)
-            return BookingCheckoutResult.Fail("Learner profile not found.");
-
-        var customerId = await stripeService.EnsureCustomerAsync(learnerUserId, learner.Email, ct);
-        var (penaltySessionId, penaltyUrl) = await stripeService.CreateAdHocPaymentCheckoutSessionAsync(
-            customerId,
-            learnerUserId,
-            learner.Email,
-            config.Currency.ToLowerInvariant(),
-            penalty,
-            "OET same-day reschedule penalty (50%)",
-            platformLinks.BuildWebUrl("/private-speaking?reschedule=success"),
-            platformLinks.BuildWebUrl("/private-speaking?reschedule=cancelled"),
-            idempotencyKey: $"{scopedIdempotencyKey}-penalty",
-            metadata: new Dictionary<string, string> { ["privateSpeakingBookingId"] = penaltyReplacement.Id },
-            ct);
-        penaltyReplacement.StripeCheckoutSessionId = penaltySessionId;
-
-        db.PrivateSpeakingBookings.Add(penaltyReplacement);
-
-        // Mark the link so entitlement is not double-restored, but keep the
-        // original live (slot held) until the penalty payment confirms.
-        original.RescheduledToBookingId = penaltyReplacement.Id;
-        original.UpdatedAt = now;
-
-        await db.SaveChangesAsync(ct);
-        await AuditAsync(penaltyReplacement.Id, learnerUserId, "learner", "booking_reschedule_pending_payment",
-            $"Original: {original.Id}, Penalty minor units: {penalty}, Stripe session: {penaltySessionId}", ct);
-        await db.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
-
         return new BookingCheckoutResult(
-            Success: true,
-            Error: null,
-            BookingId: penaltyReplacement.Id,
-            CheckoutSessionId: penaltySessionId,
-            CheckoutUrl: penaltyUrl,
-            EntitlementUsed: true,
-            SpeakingSessionsRemaining: null);
+            true,
+            null,
+            freeReplacement.Id,
+            null,
+            null,
+            freeReplacement.EntitlementConsumed,
+            null);
     }
 
     // ── Learner Queries ─────────────────────────────────────────────────

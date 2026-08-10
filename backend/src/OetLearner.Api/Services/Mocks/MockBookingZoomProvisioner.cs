@@ -105,7 +105,13 @@ public sealed class MockBookingZoomProvisioner(
 
         if (!await zoomService.IsEnabledAsync(ct))
         {
-            logger.LogInformation("Zoom integration disabled; skipping meeting provisioning for mock booking {BookingId}", bookingId);
+            // New bookings are rejected by the canonical endpoint when Zoom is
+            // unavailable. This fallback is for legacy rows: still deliver the
+            // automated confirmation with the in-app room instead of silently
+            // dropping the notification.
+            QueueConfirmationJob(db, booking.Id);
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning("Zoom integration disabled for legacy mock booking {BookingId}; confirmation queued without Zoom URL", bookingId);
             return;
         }
 
@@ -147,6 +153,7 @@ public sealed class MockBookingZoomProvisioner(
                 ResourceId = booking.Id,
                 Details = JsonSupport.Serialize(new { meetingId = booking.ZoomMeetingId }),
             });
+            QueueConfirmationJob(db, booking.Id);
             await db.SaveChangesAsync(ct);
         }
         catch (Exception ex)
@@ -164,7 +171,28 @@ public sealed class MockBookingZoomProvisioner(
             {
                 throw; // Let the background job processor retry.
             }
+
+            // Do not leave a legacy booking without an automated confirmation
+            // after the final retry. The in-app room remains the fallback join
+            // route, and the Zoom error remains visible/auditable.
+            QueueConfirmationJob(db, booking.Id);
+            await db.SaveChangesAsync(CancellationToken.None);
         }
+    }
+
+    public static void QueueConfirmationJob(LearnerDbContext db, string bookingId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"bgj-{Guid.NewGuid():N}",
+            Type = JobType.MockBookingConfirmation,
+            ResourceId = bookingId,
+            State = AsyncState.Queued,
+            AvailableAt = now,
+            CreatedAt = now,
+            LastTransitionAt = now
+        });
     }
 
     /// <summary>

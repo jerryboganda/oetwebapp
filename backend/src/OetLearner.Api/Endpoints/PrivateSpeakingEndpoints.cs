@@ -493,7 +493,9 @@ public static class PrivateSpeakingEndpoints
                 if (req.ReminderOffsetsHoursJson is not null) c.ReminderOffsetsHoursJson = req.ReminderOffsetsHoursJson;
                 if (req.ReminderOffsetsMinutesJson is not null) c.ReminderOffsetsMinutesJson = req.ReminderOffsetsMinutesJson;
                 if (req.RescheduleFreeWindowHours.HasValue) c.RescheduleFreeWindowHours = req.RescheduleFreeWindowHours.Value;
-                if (req.RescheduleSameDayPenaltyPercent.HasValue) c.RescheduleSameDayPenaltyPercent = req.RescheduleSameDayPenaltyPercent.Value;
+                // The booking workflow has no same-day penalty tier. Keep the
+                // persisted value at zero even if an old admin client submits it.
+                c.RescheduleSameDayPenaltyPercent = 0;
             }, http.UserId(), ct);
             return Results.Ok(config);
         }).WithAdminWrite("AdminReviewOps");

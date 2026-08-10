@@ -472,3 +472,36 @@ Last updated: 2026-08-10
   and push the explicit `pricing.html` change in `D:\Projects\oetwebsite`,
   then verify the production workflow, VPS image/health gates, and public
   pricing URL. Preserve unrelated in-progress backend/mock changes.
+
+# Current Task - OET Speaking booking workflow implementation
+
+Last updated: 2026-08-10
+
+## Implementation checkpoint
+
+- Enforced the 7-day Speaking tutor gate fail-closed for missing exam dates,
+  including gateway, direct Speaking launch, availability, and booking POST.
+- Made Full Mock Speaking availability and rescheduling use the active tutor
+  calendar; legacy Speaking mutations reject with the canonical-workflow error.
+- Enforced the strict refund boundary: strictly more than 24 hours is eligible,
+  exactly 24 hours is not; rescheduling remains available before session start.
+- Added idempotent AI-package/mock-credit debit and entitlement reversal for
+  standalone Full Mock bookings, plus auditable cancellation refund state.
+- Added Zoom-required booking creation, automated booking confirmation jobs,
+  learner/expert notification payloads, and 24h/1h/15m reminders.
+- Added migration `20260810090000_AddSpeakingMockTutorAndRefundPolicy` and shared
+  `SpeakingBookingPolicy` regression tests.
+
+## Validation
+
+- `pnpm exec tsc --noEmit --pretty false`: passed.
+- `dotnet msbuild backend/src/OetLearner.Api/OetLearner.Api.csproj /t:CoreCompile ... /p:RunAnalyzers=false`: passed; only existing package vulnerability warnings.
+- `git diff --check`: passed.
+- Test-project build remains blocked by missing local NuGet analyzer/runtime files (`microsoft.extensions.options`, `xunit.analyzers`, `system.diagnostics.eventlog`); CI must provide the complete restore cache.
+
+## Next step
+
+- Review/stage only the explicit Speaking workflow implementation, migration,
+  tests, and state file; preserve `.codex/config.toml`, `.superpowers/`, and
+  unrelated user files. Commit/push `main`, monitor deployment, then verify
+  production health and protected endpoint boundaries without using credentials.

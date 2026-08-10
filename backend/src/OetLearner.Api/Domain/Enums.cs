@@ -184,7 +184,8 @@ public enum JobType
 
     // NOTE: keep this value LAST. JobType is persisted as an int ordinal, so any new value
     // MUST be appended at the very end to avoid renumbering existing BackgroundJobs rows.
-    MockBookingZoomCreate                // Create the real Zoom meeting for a Full Mock speaking booking
+    MockBookingZoomCreate,               // Create the real Zoom meeting for a Full Mock speaking booking
+    MockBookingConfirmation              // Send the booking confirmation after Zoom provisioning
 }
 
 public enum ConfidenceBand

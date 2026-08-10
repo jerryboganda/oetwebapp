@@ -35,8 +35,8 @@ public class PrivateSpeakingConfig
     [MaxLength(8)]
     public string Currency { get; set; } = "GBP";
 
-    /// <summary>Cancellation window in hours before session start. PDF mandates a 48h full-refund window.</summary>
-    public int CancellationWindowHours { get; set; } = 48;
+    /// <summary>Full-refund window in hours before session start. The workflow requires a full refund only when cancellation is strictly more than 24 hours before start.</summary>
+    public int CancellationWindowHours { get; set; } = 24;
 
     /// <summary>Whether learners can reschedule confirmed bookings.</summary>
     public bool AllowReschedule { get; set; } = true;
@@ -47,8 +47,8 @@ public class PrivateSpeakingConfig
     /// <summary>Free reschedule window in hours before session start (no penalty applied).</summary>
     public int RescheduleFreeWindowHours { get; set; } = 24;
 
-    /// <summary>Penalty percent (of session fee) for same-day reschedules inside the free window.</summary>
-    public int RescheduleSameDayPenaltyPercent { get; set; } = 50;
+    /// <summary>Legacy compatibility field. The workflow does not charge a reschedule penalty.</summary>
+    public int RescheduleSameDayPenaltyPercent { get; set; }
 
     /// <summary>JSON array of reminder offsets in hours before session, e.g. [24, 1].</summary>
     [MaxLength(256)]

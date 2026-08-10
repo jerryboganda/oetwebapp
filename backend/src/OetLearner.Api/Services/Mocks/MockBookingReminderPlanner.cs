@@ -21,8 +21,8 @@ public static class MockBookingReminderPlanner
     public static readonly ReminderOffset[] Offsets =
     [
         new(TimeSpan.FromHours(24), NotificationEventKey.LearnerMockReminder24h, NotificationEventKey.ExpertMockReminder24h, "reminder-24h"),
-        new(TimeSpan.FromHours(2), NotificationEventKey.LearnerMockReminder2h, NotificationEventKey.ExpertMockReminder2h, "reminder-2h"),
-        new(TimeSpan.FromMinutes(30), NotificationEventKey.LearnerMockReminder30m, NotificationEventKey.ExpertMockReminder30m, "reminder-30m"),
+        new(TimeSpan.FromHours(1), NotificationEventKey.LearnerMockReminder1h, NotificationEventKey.ExpertMockReminder1h, "reminder-1h"),
+        new(TimeSpan.FromMinutes(15), NotificationEventKey.LearnerMockReminder15m, NotificationEventKey.ExpertMockReminder15m, "reminder-15m"),
     ];
 
     /// <summary>

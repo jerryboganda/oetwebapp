@@ -45,6 +45,12 @@ public class MockEntitlementLedger
 
     public DateTimeOffset ConsumedAt { get; set; }
 
+    /// <summary>When set, this consumption no longer counts against the user's balance.</summary>
+    public DateTimeOffset? ReversedAt { get; set; }
+
+    [MaxLength(128)]
+    public string? ReversalReferenceId { get; set; }
+
     /// <summary>The <see cref="MockAttempt.Id"/> that consumed the credit, if known.</summary>
     [MaxLength(64)]
     public string? MockAttemptId { get; set; }

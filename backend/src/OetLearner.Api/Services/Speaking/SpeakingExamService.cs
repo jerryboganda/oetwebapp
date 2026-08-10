@@ -79,7 +79,10 @@ public sealed class SpeakingExamService(
                 ? (int?)null
                 : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
 
-            if (daysUntilExam is not null && daysUntilExam.Value < 7 && mode != SpeakingExamMode.Ai)
+            if (SpeakingBookingPolicy.TutorWindowClosed(
+                    targetExamDate,
+                    DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime))
+                && mode != SpeakingExamMode.Ai)
             {
                 throw ApiException.Validation("SPEAKING_MOCK_REQUIRES_AI",
                     "Your exam is less than 7 days away — this mock's Speaking section must be completed as an AI exam.");

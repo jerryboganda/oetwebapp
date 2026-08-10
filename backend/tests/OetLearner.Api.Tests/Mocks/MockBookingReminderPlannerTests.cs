@@ -37,19 +37,19 @@ public class MockBookingReminderPlannerTests
         // Locking the order so worker iteration "larger first" is stable.
         Assert.Equal(3, MockBookingReminderPlanner.Offsets.Length);
         Assert.Equal(TimeSpan.FromHours(24), MockBookingReminderPlanner.Offsets[0].Offset);
-        Assert.Equal(TimeSpan.FromHours(2), MockBookingReminderPlanner.Offsets[1].Offset);
-        Assert.Equal(TimeSpan.FromMinutes(30), MockBookingReminderPlanner.Offsets[2].Offset);
+        Assert.Equal(TimeSpan.FromHours(1), MockBookingReminderPlanner.Offsets[1].Offset);
+        Assert.Equal(TimeSpan.FromMinutes(15), MockBookingReminderPlanner.Offsets[2].Offset);
 
         Assert.Equal(NotificationEventKey.LearnerMockReminder24h, MockBookingReminderPlanner.Offsets[0].LearnerEventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder2h, MockBookingReminderPlanner.Offsets[1].LearnerEventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder30m, MockBookingReminderPlanner.Offsets[2].LearnerEventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder1h, MockBookingReminderPlanner.Offsets[1].LearnerEventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder15m, MockBookingReminderPlanner.Offsets[2].LearnerEventKey);
         Assert.Equal(NotificationEventKey.ExpertMockReminder24h, MockBookingReminderPlanner.Offsets[0].ExpertEventKey);
-        Assert.Equal(NotificationEventKey.ExpertMockReminder2h, MockBookingReminderPlanner.Offsets[1].ExpertEventKey);
-        Assert.Equal(NotificationEventKey.ExpertMockReminder30m, MockBookingReminderPlanner.Offsets[2].ExpertEventKey);
+        Assert.Equal(NotificationEventKey.ExpertMockReminder1h, MockBookingReminderPlanner.Offsets[1].ExpertEventKey);
+        Assert.Equal(NotificationEventKey.ExpertMockReminder15m, MockBookingReminderPlanner.Offsets[2].ExpertEventKey);
 
         Assert.Equal("reminder-24h", MockBookingReminderPlanner.Offsets[0].Bucket);
-        Assert.Equal("reminder-2h", MockBookingReminderPlanner.Offsets[1].Bucket);
-        Assert.Equal("reminder-30m", MockBookingReminderPlanner.Offsets[2].Bucket);
+        Assert.Equal("reminder-1h", MockBookingReminderPlanner.Offsets[1].Bucket);
+        Assert.Equal("reminder-15m", MockBookingReminderPlanner.Offsets[2].Bucket);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class MockBookingReminderPlannerTests
         var plan = MockBookingReminderPlanner.Plan(booking, Now).ToArray();
         Assert.Equal(2, plan.Length);
         Assert.Equal(NotificationEventKey.LearnerMockReminder24h, plan[0].EventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder2h, plan[1].EventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder1h, plan[1].EventKey);
     }
 
     [Fact]
@@ -122,8 +122,8 @@ public class MockBookingReminderPlannerTests
         var plan = MockBookingReminderPlanner.Plan(booking, Now).ToArray();
         Assert.Equal(3, plan.Length);
         Assert.Equal(NotificationEventKey.LearnerMockReminder24h, plan[0].EventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder2h, plan[1].EventKey);
-        Assert.Equal(NotificationEventKey.LearnerMockReminder30m, plan[2].EventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder1h, plan[1].EventKey);
+        Assert.Equal(NotificationEventKey.LearnerMockReminder15m, plan[2].EventKey);
     }
 
     [Fact]
@@ -210,8 +210,8 @@ public class MockBookingReminderPlannerTests
                 Assert.StartsWith("expert-reminder-", p.Bucket, StringComparison.Ordinal);
             });
             Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder24h);
-            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder2h);
-            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder30m);
+            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder1h);
+            Assert.Contains(plan, p => p.EventKey == NotificationEventKey.ExpertMockReminder15m);
         }
 
         [Fact]

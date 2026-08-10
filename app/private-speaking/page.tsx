@@ -86,9 +86,9 @@ function formatSlotPrice(slot: Slot): string {
 
 // PDF §12 — verbatim cancellation / reschedule policy text.
 const CANCELLATION_POLICY_TEXT =
-  'You may cancel your Speaking session with a full refund if the cancellation is made more than 48 hours before the scheduled start time. If you cancel less than 48 hours before the session, the booking will be cancelled without refund.';
+  'You may cancel your Speaking session with a full refund if the cancellation is made more than 24 hours before the scheduled start time. If you cancel 24 hours or less before the session, a full refund is not available.';
 const RESCHEDULE_POLICY_TEXT =
-  'You may reschedule your Speaking session before the session starts, subject to available tutor slots. Same-day rescheduling is allowed; however, 50% of the session fee will be lost according to the platform policy.';
+  'You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.';
 
 // Statuses that count as an upcoming/active booking (PDF §11).
 const UPCOMING_STATUSES = new Set(['Confirmed', 'ZoomCreated', 'PendingPayment', 'InProgress', 'Reserved']);
@@ -164,9 +164,6 @@ function refundOutcome(booking: Booking): { label: string; tone: 'success' | 'da
       ? ` (${formatPrice(booking.refundAmountMinorUnits, booking.currency)})`
       : '';
     return { label: `Refunded${amount}`, tone: 'success' };
-  }
-  if (booking.penaltyAmountMinorUnits && booking.penaltyAmountMinorUnits > 0) {
-    return { label: `Penalty: ${formatPrice(booking.penaltyAmountMinorUnits, booking.currency)}`, tone: 'danger' };
   }
   if (booking.status === 'Cancelled') {
     return { label: 'Cancelled (no refund)', tone: 'muted' };
@@ -382,12 +379,8 @@ export default function PrivateSpeakingPage() {
       setRescheduleConfirmOpen(false);
 
       // Same-day reschedule incurs a 50% Stripe penalty — redirect to pay it.
-      if (result.checkoutUrl) {
-        window.location.href = result.checkoutUrl;
-        return;
-      }
-
-      // Free reschedule completed.
+      // Rescheduling is always free before the session starts; the server
+      // enforces the current tutor-calendar availability.
       setSelectedSlot(null);
       setRescheduleTarget(null);
       setBookingNotes('');

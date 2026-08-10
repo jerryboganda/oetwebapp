@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, MapPin, Plus, RefreshCw, X } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -10,9 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import {
-  cancelMockBooking,
+  cancelMockBookingV2,
   fetchMockBookingList,
-  rescheduleMockBooking,
+  rescheduleMockBookingV2,
 } from '@/lib/api';
 import type { MockBooking } from '@/lib/mock-data';
 
@@ -45,14 +45,6 @@ export default function MockBookingsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rescheduleDraft, setRescheduleDraft] = useState<Record<string, string>>({});
 
-  const localTz = useMemo(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    } catch {
-      return 'UTC';
-    }
-  }, []);
-
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -73,7 +65,7 @@ export default function MockBookingsPage() {
   const handleCancel = useCallback(async (id: string) => {
     setBusyId(id);
     try {
-      await cancelMockBooking(id);
+      await cancelMockBookingV2(id);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not cancel booking.');
@@ -87,7 +79,7 @@ export default function MockBookingsPage() {
     if (!next) return;
     setBusyId(id);
     try {
-      await rescheduleMockBooking(id, new Date(next).toISOString(), localTz);
+      await rescheduleMockBookingV2(id, new Date(next).toISOString());
       setRescheduleDraft((prev) => {
         const out = { ...prev };
         delete out[id];
@@ -99,14 +91,14 @@ export default function MockBookingsPage() {
     } finally {
       setBusyId(null);
     }
-  }, [rescheduleDraft, localTz, reload]);
+  }, [rescheduleDraft, reload]);
 
   return (
     <LearnerDashboardShell>
       <LearnerPageHero
         eyebrow="Mocks"
         title="Your booked mocks"
-        description="Speaking and final-readiness mocks are scheduled with a tutor. Reschedule up to 3 times, at least 12 hours before the slot."
+        description="Speaking mocks use live tutor-calendar availability. You may reschedule before the session starts only to another currently available tutor slot."
         icon={CalendarClock}
       />
 
@@ -151,7 +143,7 @@ export default function MockBookingsPage() {
                       <span>·</span>
                       <span>{b.deliveryMode}</span>
                       <span>·</span>
-                      <span>Reschedules used: {b.rescheduleCount}/3</span>
+                      <span>Reschedules used: {b.rescheduleCount ?? 0}</span>
                     </div>
                   </div>
                   <Badge variant={variant}>{b.status.replace(/_/g, ' ')}</Badge>
@@ -173,10 +165,13 @@ export default function MockBookingsPage() {
                     <Button
                       variant="primary"
                       onClick={() => void handleReschedule(b.id)}
-                      disabled={!draft || busyId === b.id || (b.rescheduleCount ?? 0) >= 3}
+                      disabled={!draft || busyId === b.id}
                     >
                       Reschedule
                     </Button>
+                    <span className="basis-full text-xs text-muted">
+                      Cancellation more than 24 hours before start: full refund eligible. At 24 hours or less: full refund unavailable.
+                    </span>
                     <Button
                       variant="ghost"
                       onClick={() => void handleCancel(b.id)}

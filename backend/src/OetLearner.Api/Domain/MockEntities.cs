@@ -247,6 +247,17 @@ public class MockBooking
     [MaxLength(64)]
     public string? MockSectionId { get; set; }
 
+    /// <summary>Canonical private-speaking tutor profile selected from live tutor availability.</summary>
+    [MaxLength(64)]
+    public string? TutorProfileId { get; set; }
+
+    /// <summary>Reference used to debit and, when policy permits, restore the mock entitlement.</summary>
+    [MaxLength(128)]
+    public string? EntitlementReferenceId { get; set; }
+
+    [MaxLength(32)]
+    public string? EntitlementSource { get; set; }
+
     public DateTimeOffset ScheduledStartAt { get; set; }
 
     [MaxLength(80)]
@@ -322,6 +333,12 @@ public class MockBooking
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>Auditable cancellation refund decision: full_refund_eligible or full_refund_unavailable.</summary>
+    [MaxLength(32)]
+    public string? RefundDecision { get; set; }
+
+    public bool RefundIssued { get; set; }
 
     public MockBundle? MockBundle { get; set; }
     public MockAttempt? MockAttempt { get; set; }

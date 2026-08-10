@@ -1263,6 +1263,12 @@ public sealed class MockService(
         var bundle = await db.MockBundles.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == request.MockBundleId && x.Status == ContentStatus.Published, ct)
             ?? throw ApiException.NotFound("mock_bundle_not_found", "Choose a published mock bundle before booking.");
+        if (await IsSpeakingBundleAsync(bundle.Id, ct))
+        {
+            throw ApiException.Conflict(
+                "canonical_speaking_booking_required",
+                "Speaking bookings must use the tutor-calendar booking workflow.");
+        }
 
         if (request.ScheduledStartAt < DateTimeOffset.UtcNow.AddMinutes(15))
         {
@@ -1303,6 +1309,13 @@ public sealed class MockService(
             .Include(x => x.MockBundle)
             .FirstOrDefaultAsync(x => x.Id == bookingId && x.UserId == userId, ct)
             ?? throw ApiException.NotFound("mock_booking_not_found", "Mock booking not found.");
+
+        if (await IsSpeakingBundleAsync(booking.MockBundleId, ct))
+        {
+            throw ApiException.Conflict(
+                "canonical_speaking_booking_required",
+                "Speaking booking changes must use the canonical tutor-calendar workflow.");
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
@@ -2720,6 +2733,11 @@ public sealed class MockService(
         reservedAt = reservation.ReservedAt,
         expiresAt = reservation.ExpiresAt
     };
+
+    private Task<bool> IsSpeakingBundleAsync(string bundleId, CancellationToken ct)
+        => db.MockBundleSections.AsNoTracking().AnyAsync(section =>
+            section.MockBundleId == bundleId
+            && section.SubtestCode == "speaking", ct);
 
     private static object ProjectBookingLearner(MockBooking booking)
         => ProjectBookingLearner(booking, booking.MockBundle);

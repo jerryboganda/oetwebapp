@@ -668,6 +668,8 @@ export interface MockBooking {
   liveRoomTransitionVersion?: number;
   consentToRecording?: boolean;
   rescheduleCount?: number;
+  refundDecision?: 'full_refund_eligible' | 'full_refund_unavailable' | string | null;
+  refundIssued?: boolean;
   joinUrl?: string | null;
   zoomJoinUrl?: string | null;
   learnerNotes?: string | null;

@@ -796,6 +796,12 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await provisioner.CreateZoomMeetingForMockBookingAsync(job.ResourceId!, cancellationToken);
                 break;
             }
+            case JobType.MockBookingConfirmation:
+            {
+                var notificationService = services.GetRequiredService<Mocks.MockBookingNotificationService>();
+                await notificationService.SendConfirmationAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
             case JobType.SubscriptionLifecycleCheck:
                 await RunSubscriptionLifecycleCheckAsync(db, notifications, cancellationToken);
                 break;

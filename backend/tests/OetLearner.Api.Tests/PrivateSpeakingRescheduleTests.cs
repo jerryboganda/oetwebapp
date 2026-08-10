@@ -97,7 +97,7 @@ public sealed class PrivateSpeakingRescheduleTests
     // ── SAME-DAY penalty tier ───────────────────────────────────────────
 
     [Fact]
-    public async Task Reschedule_SameCalendarDay_RequiresPenaltyCheckout()
+    public async Task Reschedule_SameCalendarDay_IsFreeAndConfirmed()
     {
         await using var db = CreateDb();
         var stripe = new FakeStripeService();
@@ -114,24 +114,23 @@ public sealed class PrivateSpeakingRescheduleTests
             original.Id, "learner-1", NewSlotUtc, "UTC", null, NewKey(), CancellationToken.None);
 
         Assert.True(result.Success, result.Error);
-        Assert.Equal("https://stripe.test/x", result.CheckoutUrl);
-        Assert.Equal("cs_test", result.CheckoutSessionId);
+        Assert.Null(result.CheckoutUrl);
+        Assert.Null(result.CheckoutSessionId);
 
         var replacement = await db.PrivateSpeakingBookings.FindAsync(result.BookingId);
         Assert.NotNull(replacement);
-        Assert.Equal(PrivateSpeakingBookingStatus.PendingPayment, replacement!.Status);
-        Assert.Equal(ExpectedPenaltyMinorUnits, replacement.PenaltyAmountMinorUnits);
+        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, replacement!.Status);
+        Assert.Null(replacement.PenaltyAmountMinorUnits);
         Assert.Equal(original.Id, replacement.RescheduledFromBookingId);
-        Assert.Equal("cs_test", replacement.StripeCheckoutSessionId);
+        Assert.Null(replacement.StripeCheckoutSessionId);
 
         // Original still holds the slot (Confirmed) but is linked to the replacement.
         var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
         Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedOriginal!.Status);
         Assert.Equal(replacement.Id, savedOriginal.RescheduledToBookingId);
 
-        Assert.Equal(1, stripe.EnsureCustomerCallCount);
-        Assert.Equal(1, stripe.AdHocCallCount);
-        Assert.Equal(ExpectedPenaltyMinorUnits, stripe.LastAdHocAmount);
+        Assert.Equal(0, stripe.EnsureCustomerCallCount);
+        Assert.Equal(0, stripe.AdHocCallCount);
 
         // Entitlement carried over, NOT double-consumed.
         var savedSub = await db.Subscriptions.FindAsync(subscription.Id);
@@ -167,7 +166,7 @@ public sealed class PrivateSpeakingRescheduleTests
 
     // ── Webhook: penalty paid → finalize reschedule ─────────────────────
 
-    [Fact]
+    [Fact(Skip = "The PDF policy removed the legacy same-day penalty payment workflow.")]
     public async Task ConfirmBookingPayment_PenaltyReplacement_CancelsOriginal()
     {
         await using var db = CreateDb();
@@ -202,7 +201,7 @@ public sealed class PrivateSpeakingRescheduleTests
 
     // ── Webhook: checkout expired → abort reschedule ────────────────────
 
-    [Fact]
+    [Fact(Skip = "The PDF policy removed the legacy same-day penalty payment workflow.")]
     public async Task CheckoutExpired_PenaltyReplacement_RevertsReschedule()
     {
         await using var db = CreateDb();
@@ -234,7 +233,7 @@ public sealed class PrivateSpeakingRescheduleTests
 
     // ── Background sweep safety net: expired penalty reservation reverts too ──
 
-    [Fact]
+    [Fact(Skip = "The PDF policy removed the legacy same-day penalty payment workflow.")]
     public async Task ExpireStaleReservations_PenaltyReplacement_RevertsAndNeutralizesEntitlement()
     {
         await using var db = CreateDb();

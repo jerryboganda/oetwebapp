@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -33,7 +34,11 @@ public static class MockSpeakingGatewayEndpoints
                 ? null
                 : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
 
-            var requiresAiOnly = daysUntilExam is not null && daysUntilExam.Value < 7;
+            // Fail closed when no target exam date exists: without a known
+            // date the platform cannot prove the required seven-day window.
+            var requiresAiOnly = SpeakingBookingPolicy.TutorWindowClosed(
+                targetExamDate,
+                DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime));
 
             return Results.Ok(new { requiresAiOnly, daysUntilExam });
         });

@@ -3281,6 +3281,8 @@ function mapMockBooking(item: ApiRecord): MockBooking {
     liveRoomTransitionVersion: typeof item.liveRoomTransitionVersion === 'number' ? item.liveRoomTransitionVersion : undefined,
     consentToRecording: Boolean(item.consentToRecording),
     rescheduleCount: Number(item.rescheduleCount ?? 0),
+    refundDecision: item.refundDecision ? String(item.refundDecision) : null,
+    refundIssued: Boolean(item.refundIssued),
     joinUrl: item.joinUrl ? String(item.joinUrl) : null,
     zoomJoinUrl: item.zoomJoinUrl ? String(item.zoomJoinUrl) : null,
     learnerNotes: item.learnerNotes ? String(item.learnerNotes) : null,
@@ -3361,6 +3363,9 @@ export async function createMockBooking(payload: {
 // returns `{ slots: { startAt, endAt, isAvailable, blockedReason? }[] }`.
 
 export interface MockAvailabilitySlot {
+  tutorProfileId: string;
+  tutorDisplayName: string;
+  tutorTimezone: string;
   startAt: string;
   endAt: string;
   isAvailable: boolean;
@@ -3376,6 +3381,9 @@ export async function fetchMockAvailability(
   if (bundleId) params.set('bundleId', bundleId);
   const response = await apiRequest<ApiRecord>(`/v1/mocks/availability?${params.toString()}`);
   const slots = asArray(response.slots).map((item): MockAvailabilitySlot => ({
+    tutorProfileId: String(item.tutorProfileId ?? ''),
+    tutorDisplayName: String(item.tutorDisplayName ?? 'Tutor'),
+    tutorTimezone: String(item.tutorTimezone ?? timezone),
     startAt: String(item.startAt ?? ''),
     endAt: String(item.endAt ?? ''),
     isAvailable: Boolean(item.isAvailable),
@@ -3394,6 +3402,7 @@ export async function createMockBookingV2(payload: {
   consentToRecording: boolean;
   mockAttemptId?: string;
   mockSectionId?: string;
+  tutorProfileId: string;
 }): Promise<MockBooking> {
   const response = await apiRequest<ApiRecord>('/v1/mocks/bookings', {
     method: 'POST',
@@ -3561,7 +3570,7 @@ export interface MockBookingListResponse {
 }
 
 export async function fetchMockBookingList(): Promise<MockBookingListResponse> {
-  const response = await apiRequest<ApiRecord>('/v1/mock-bookings');
+  const response = await apiRequest<ApiRecord>('/v1/mocks/bookings');
   return {
     items: asArray(response.items).map(mapMockBooking),
     now: typeof response.now === 'string' ? response.now : new Date().toISOString(),

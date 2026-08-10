@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Mocks;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -24,24 +26,11 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 public static class MockBookingEndpoints
 {
-    /// <summary>Working-hour bounds for available slots, in the booking's local timezone.</summary>
-    private const int WorkingHourStart = 8;
-    private const int WorkingHourEndExclusive = 22;
-
-    /// <summary>Fixed 30-minute slot grid.</summary>
+    /// <summary>Fallback duration for bundles without a configured duration.</summary>
     private const int SlotMinutes = 30;
 
     /// <summary>Rolling availability window from the supplied <c>date</c>.</summary>
     private const int AvailabilityWindowDays = 14;
-
-    /// <summary>Per-booking reschedule cap (Phase 5).</summary>
-    private const int MaxReschedulesPerBooking = 2;
-
-    /// <summary>Cut-off below which reschedules are refused.</summary>
-    private static readonly TimeSpan RescheduleCutoff = TimeSpan.FromHours(24);
-
-    /// <summary>Cut-off below which cancellations are refused.</summary>
-    private static readonly TimeSpan CancellationCutoff = TimeSpan.FromHours(6);
 
     public static IEndpointRouteBuilder MapMockBookingEndpoints(this IEndpointRouteBuilder app)
     {
@@ -49,12 +38,32 @@ public static class MockBookingEndpoints
             .RequireAuthorization("LearnerOnly")
             .WithTags("Learner Mock Bookings");
 
+        group.MapGet("/bookings", async (
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var userId = UserId(http);
+            var bookings = await db.MockBookings.AsNoTracking()
+                .Include(booking => booking.MockBundle)
+                .Where(booking => booking.UserId == userId)
+                .OrderByDescending(booking => booking.ScheduledStartAt)
+                .ToListAsync(ct);
+
+            return Results.Ok(new
+            {
+                items = bookings.Select(booking => ProjectBooking(booking, booking.MockBundle)).ToArray(),
+                now = DateTimeOffset.UtcNow,
+            });
+        });
+
         group.MapGet("/availability", async (
             HttpContext http,
             string? date,
             string? timezone,
             string? bundleId,
             LearnerDbContext db,
+            PrivateSpeakingService speakingService,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(date) || !DateOnly.TryParse(date, out var startDate))
@@ -92,6 +101,83 @@ public static class MockBookingEndpoints
                 ? requestedBundle.EstimatedDurationMinutes
                 : SlotMinutes;
 
+            var isSpeakingBundle = requestedBundle is not null
+                && (string.Equals(requestedBundle.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+                    || await db.MockBundleSections.AsNoTracking().AnyAsync(section =>
+                        section.MockBundleId == requestedBundle.Id
+                        && section.SubtestCode == "speaking", ct));
+            var enforcedTargetExamDate = await db.Goals.AsNoTracking()
+                .Where(goal => goal.UserId == UserId(http))
+                .Select(goal => (DateOnly?)goal.TargetExamDate)
+                .SingleOrDefaultAsync(ct);
+            var speakingTutorClosed = isSpeakingBundle
+                && SpeakingBookingPolicy.TutorWindowClosed(
+                    enforcedTargetExamDate,
+                    DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime));
+
+            // Full Mock Speaking availability is a projection of the canonical
+            // private-speaking tutor calendar. No synthetic fallback slots are
+            // returned.
+            var canonicalCalendarSlots = await speakingService.GetAllAvailableSlotsAsync(
+                startDate, startDate.AddDays(AvailabilityWindowDays - 1), ct);
+            var canonicalWindowStart = canonicalCalendarSlots.Count == 0
+                ? DateTimeOffset.UtcNow.AddDays(-1)
+                : canonicalCalendarSlots.Min(slot => slot.StartTimeUtc).AddMinutes(-requestedMinutes);
+            var canonicalWindowEnd = canonicalCalendarSlots.Count == 0
+                ? DateTimeOffset.UtcNow.AddDays(AvailabilityWindowDays + 1)
+                : canonicalCalendarSlots.Max(slot => slot.EndTimeUtc).AddMinutes(requestedMinutes);
+            var longestCanonicalMinutes = await db.MockBundles.AsNoTracking()
+                .Select(bundle => (int?)bundle.EstimatedDurationMinutes)
+                .MaxAsync(ct) ?? SlotMinutes;
+            var canonicalCollisionLookback = TimeSpan.FromMinutes(
+                Math.Max(longestCanonicalMinutes, SlotMinutes));
+            var canonicalBusy = await db.MockBookings.AsNoTracking()
+                .Where(booking => booking.Status != MockBookingStatuses.Cancelled
+                    && booking.ScheduledStartAt < canonicalWindowEnd
+                    && booking.ScheduledStartAt >= canonicalWindowStart - canonicalCollisionLookback)
+                .Select(booking => new { booking.ScheduledStartAt, booking.MockBundleId })
+                .ToListAsync(ct);
+            var canonicalBundleIds = canonicalBusy.Select(item => item.MockBundleId).Distinct().ToArray();
+            var canonicalDurations = await db.MockBundles.AsNoTracking()
+                .Where(bundle => canonicalBundleIds.Contains(bundle.Id))
+                .ToDictionaryAsync(
+                    bundle => bundle.Id,
+                    bundle => bundle.EstimatedDurationMinutes > 0 ? bundle.EstimatedDurationMinutes : SlotMinutes,
+                    ct);
+            var canonicalSlots = canonicalCalendarSlots
+                .Where(slot => slot.DurationMinutes >= requestedMinutes)
+                .Select(slot =>
+                {
+                    var endAt = slot.StartTimeUtc.AddMinutes(requestedMinutes);
+                    var taken = canonicalBusy.Any(existing =>
+                        existing.ScheduledStartAt < endAt
+                        && existing.ScheduledStartAt.AddMinutes(canonicalDurations.GetValueOrDefault(existing.MockBundleId, requestedMinutes)) > slot.StartTimeUtc);
+                    return new
+                    {
+                        tutorProfileId = slot.TutorProfileId,
+                        tutorDisplayName = slot.TutorDisplayName,
+                        tutorTimezone = slot.TutorTimezone,
+                        startAt = slot.StartTimeUtc,
+                        endAt,
+                        isAvailable = !taken,
+                        blockedReason = taken ? "slot_taken" : null,
+                    };
+                })
+                .ToArray();
+
+            return Results.Ok(new
+            {
+                date = startDate.ToString("yyyy-MM-dd"),
+                timezone = tzId,
+                bundleId,
+                requiresAiOnly = speakingTutorClosed,
+                slots = speakingTutorClosed ? canonicalSlots.Take(0).ToArray() : canonicalSlots,
+            });
+        });
+
+            // Historical fixed-grid implementation retained behind a disabled
+            // preprocessor block for source archaeology only.
+#if false
             // Compute window bounds in UTC so we can fetch any colliding bookings in one query.
             var windowStartLocal = new DateTime(startDate.Year, startDate.Month, startDate.Day, 0, 0, 0, DateTimeKind.Unspecified);
             var windowStartUtc = TimeZoneInfo.ConvertTimeToUtc(windowStartLocal, tz);
@@ -179,10 +265,15 @@ public static class MockBookingEndpoints
             });
         });
 
+#endif
         group.MapPost("/bookings", async (
             HttpContext http,
             MockBookingCreateBody body,
             LearnerDbContext db,
+            PrivateSpeakingService speakingService,
+            IAiPackageCreditService aiPackageCreditService,
+            IMockEntitlementService mockEntitlementService,
+            ZoomMeetingService zoomService,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -202,6 +293,50 @@ public static class MockBookingEndpoints
             var bundle = await db.MockBundles.AsNoTracking()
                 .FirstOrDefaultAsync(b => b.Id == body.BundleId, ct)
                 ?? throw ApiException.NotFound("bundle_not_found", "Mock bundle not found.");
+
+            var isSpeakingBundle = string.Equals(bundle.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+                || await db.MockBundleSections.AsNoTracking().AnyAsync(section =>
+                    section.MockBundleId == bundle.Id
+                    && section.SubtestCode == "speaking", ct);
+            if (!isSpeakingBundle)
+            {
+                throw ApiException.Validation("speaking_bundle_required", "Only Full Mock Speaking bookings use this tutor workflow.");
+            }
+            if (string.IsNullOrWhiteSpace(body.TutorProfileId))
+            {
+                throw ApiException.Validation("tutor_required", "Select an available tutor slot before booking.");
+            }
+
+            var tutor = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
+                .FirstOrDefaultAsync(profile => profile.Id == body.TutorProfileId && profile.IsActive, ct)
+                ?? throw ApiException.Conflict("tutor_unavailable", "The selected tutor is no longer available.");
+            var enforcedTargetExamDate = await db.Goals.AsNoTracking()
+                .Where(goal => goal.UserId == userId)
+                .Select(goal => (DateOnly?)goal.TargetExamDate)
+                .SingleOrDefaultAsync(ct);
+            if (SpeakingBookingPolicy.TutorWindowClosed(
+                    enforcedTargetExamDate,
+                    DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime))
+                )
+            {
+                throw ApiException.Conflict(
+                    "speaking_tutor_window_closed",
+                    "A Full Mock Speaking tutor session is available only when the exam is at least 7 days away.");
+            }
+
+            var tutorTimeZone = TimeZoneInfo.FindSystemTimeZoneById(tutor.Timezone);
+            var tutorLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(scheduledStartAt, tutorTimeZone).DateTime);
+            var tutorSlots = await speakingService.GetAvailableSlotsAsync(
+                tutor.Id, tutorLocalDate, tutorLocalDate, ct);
+            var requestedDuration = bundle.EstimatedDurationMinutes > 0 ? bundle.EstimatedDurationMinutes : SlotMinutes;
+            if (!tutorSlots.Any(slot =>
+                    slot.StartTimeUtc == scheduledStartAt
+                    && slot.DurationMinutes >= requestedDuration))
+            {
+                throw ApiException.Conflict(
+                    "tutor_slot_unavailable",
+                    "The selected time is not currently available in the tutor calendar.");
+            }
 
             if (!string.IsNullOrWhiteSpace(body.MockAttemptId))
             {
@@ -224,7 +359,9 @@ public static class MockBookingEndpoints
                 var daysUntilExam = targetExamDate is null
                     ? (int?)null
                     : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
-                if (daysUntilExam is < 7)
+                if (SpeakingBookingPolicy.TutorWindowClosed(
+                        targetExamDate,
+                        DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime)))
                 {
                     throw ApiException.Conflict(
                         "speaking_tutor_window_closed",
@@ -235,7 +372,7 @@ public static class MockBookingEndpoints
             // Idempotency guard — same user + same exact slot must not create duplicate rows
             // even under double-submit. Scope/Key form mirrors LearnerService usage.
             var scope = "mock_booking_create";
-            var key = $"{userId}:{scheduledStartAt:o}";
+            var key = $"{userId}:{body.TutorProfileId}:{scheduledStartAt:o}";
             var existingIdem = await db.IdempotencyRecords.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Scope == scope && x.Key == key, ct);
             if (existingIdem is not null)
@@ -249,6 +386,13 @@ public static class MockBookingEndpoints
             // Slot collision check — any non-cancelled booking whose span overlaps
             // this mock's span blocks creation. Matches /availability exactly, so
             // a slot shown as free cannot be rejected here (and vice versa).
+            if (!await zoomService.IsEnabledAsync(ct))
+            {
+                throw ApiException.Conflict(
+                    "zoom_unavailable",
+                    "Live tutor bookings are temporarily unavailable until the required Zoom integration is configured.");
+            }
+
             var slotTaken = await HasOverlappingBookingAsync(
                 db, scheduledStartAt, bundle.EstimatedDurationMinutes, excludeBookingId: null, ct);
             if (slotTaken)
@@ -257,9 +401,50 @@ public static class MockBookingEndpoints
             }
 
             var now = DateTimeOffset.UtcNow;
+            var bookingId = $"mb-{Guid.NewGuid():N}";
+            var entitlementReferenceId = string.IsNullOrWhiteSpace(body.MockAttemptId)
+                ? bookingId
+                : body.MockAttemptId!;
+            var entitlementSource = string.IsNullOrWhiteSpace(body.MockAttemptId)
+                ? "none"
+                : "attempt_prepaid";
+
+            // A standalone Full Mock booking reserves one mock entitlement. A
+            // booking reached from an existing mock attempt is already paid for
+            // by that attempt and must not be double-debited.
+            if (string.IsNullOrWhiteSpace(body.MockAttemptId))
+            {
+                var packageDebit = await aiPackageCreditService.DeductMockAsync(
+                    userId, entitlementReferenceId, ct);
+                if (!packageDebit.Debited)
+                {
+                    throw ApiException.PaymentRequired(
+                        packageDebit.ErrorCode ?? "no_mock_exams",
+                        packageDebit.ErrorMessage ?? "You have no mock exams remaining. Purchase a package to continue.");
+                }
+
+                if (packageDebit.Bypassed)
+                {
+                    var creditDebit = await mockEntitlementService.DebitAsync(
+                        userId, bundle.MockType, entitlementReferenceId, ct);
+                    if (!creditDebit.Success)
+                    {
+                        throw ApiException.PaymentRequired(creditDebit.Reason, creditDebit.Message);
+                    }
+
+                    entitlementSource = creditDebit.LedgerEntryId is null
+                        ? "subscription"
+                        : "mock_credit";
+                }
+                else
+                {
+                    entitlementSource = "ai_package";
+                }
+            }
+
             var booking = new MockBooking
             {
-                Id = $"mb-{Guid.NewGuid():N}",
+                Id = bookingId,
                 UserId = userId,
                 MockBundleId = bundle.Id,
                 // Set when booking was reached from an in-progress mock attempt's
@@ -269,6 +454,10 @@ public static class MockBookingEndpoints
                 // ahead-of-time booking made outside any active mock.
                 MockAttemptId = string.IsNullOrWhiteSpace(body.MockAttemptId) ? null : body.MockAttemptId,
                 MockSectionId = string.IsNullOrWhiteSpace(body.MockSectionId) ? null : body.MockSectionId,
+                TutorProfileId = body.TutorProfileId,
+                AssignedTutorId = tutor.ExpertUserId,
+                EntitlementReferenceId = entitlementReferenceId,
+                EntitlementSource = entitlementSource,
                 ScheduledStartAt = scheduledStartAt,
                 TimezoneIana = timezoneIana,
                 Status = MockBookingStatuses.Scheduled,
@@ -343,6 +532,7 @@ public static class MockBookingEndpoints
             string bookingId,
             MockBookingRescheduleBody body,
             LearnerDbContext db,
+            PrivateSpeakingService speakingService,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -364,15 +554,6 @@ public static class MockBookingEndpoints
             }
 
             var now = DateTimeOffset.UtcNow;
-            if (booking.ScheduledStartAt - now < RescheduleCutoff)
-            {
-                throw ApiException.Conflict("reschedule_window_closed", "Bookings cannot be rescheduled within 24 hours.");
-            }
-            if (booking.RescheduleCount >= MaxReschedulesPerBooking)
-            {
-                throw ApiException.Conflict("reschedule_cap_reached", $"Bookings can be rescheduled at most {MaxReschedulesPerBooking} times.");
-            }
-
             var newStart = body.ScheduledStartAt.Value.ToUniversalTime();
             if (newStart <= now)
             {
@@ -385,6 +566,24 @@ public static class MockBookingEndpoints
                 .Where(b => b.Id == booking.MockBundleId)
                 .Select(b => (int?)b.EstimatedDurationMinutes)
                 .FirstOrDefaultAsync(ct) ?? 0;
+            if (string.IsNullOrWhiteSpace(booking.TutorProfileId))
+            {
+                throw ApiException.Conflict("tutor_unavailable", "This booking has no canonical tutor calendar assignment.");
+            }
+            var tutor = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
+                .FirstOrDefaultAsync(profile => profile.Id == booking.TutorProfileId && profile.IsActive, ct)
+                ?? throw ApiException.Conflict("tutor_unavailable", "The assigned tutor is no longer available.");
+            var tutorTimeZone = TimeZoneInfo.FindSystemTimeZoneById(tutor.Timezone);
+            var tutorLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(newStart, tutorTimeZone).DateTime);
+            var tutorSlots = await speakingService.GetAvailableSlotsAsync(
+                tutor.Id, tutorLocalDate, tutorLocalDate, ct);
+            var requestedMinutes = bookingMinutes > 0 ? bookingMinutes : SlotMinutes;
+            if (!tutorSlots.Any(slot => slot.StartTimeUtc == newStart && slot.DurationMinutes >= requestedMinutes))
+            {
+                throw ApiException.Conflict(
+                    "tutor_slot_unavailable",
+                    "Rescheduling is available only to a slot currently open in the tutor calendar.");
+            }
             var slotTaken = await HasOverlappingBookingAsync(
                 db, newStart, bookingMinutes, booking.Id, ct);
             if (slotTaken)
@@ -444,6 +643,8 @@ public static class MockBookingEndpoints
             string bookingId,
             LearnerDbContext db,
             MockBookingZoomProvisioner zoomProvisioner,
+            IAiPackageCreditService aiPackageCreditService,
+            IMockEntitlementService mockEntitlementService,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -466,9 +667,56 @@ public static class MockBookingEndpoints
             }
 
             var now = DateTimeOffset.UtcNow;
-            if (booking.ScheduledStartAt - now < CancellationCutoff)
+            if (booking.ScheduledStartAt <= now)
             {
-                throw ApiException.Conflict("cancellation_window_closed", "Bookings cannot be cancelled within 6 hours of the scheduled time.");
+                throw ApiException.Conflict("booking_started", "Bookings cannot be cancelled after the session has started.");
+            }
+            var fullRefundEligible = SpeakingBookingPolicy.FullRefundEligible(booking.ScheduledStartAt, now);
+            booking.RefundDecision = fullRefundEligible
+                ? "full_refund_eligible"
+                : "full_refund_unavailable";
+            booking.RefundIssued = false;
+
+            if (fullRefundEligible)
+            {
+                var entitlementReferenceId = booking.EntitlementReferenceId;
+                var noChargeToRestore = string.IsNullOrWhiteSpace(booking.EntitlementSource)
+                    || string.Equals(booking.EntitlementSource, "none", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(booking.EntitlementSource, "subscription", StringComparison.OrdinalIgnoreCase);
+                var aiRefunded = false;
+                var creditRefunded = false;
+                if (!string.IsNullOrWhiteSpace(entitlementReferenceId))
+                {
+                    aiRefunded = await aiPackageCreditService.RefundAsync(
+                        userId,
+                        entitlementReferenceId,
+                        $"mock-booking-refund:{booking.Id}",
+                        "Full Mock booking cancelled more than 24 hours before start",
+                        ct);
+
+                    var bundleMockType = await db.MockBundles.AsNoTracking()
+                        .Where(bundle => bundle.Id == booking.MockBundleId)
+                        .Select(bundle => bundle.MockType)
+                        .FirstOrDefaultAsync(ct) ?? "full";
+                    creditRefunded = await mockEntitlementService.RefundAsync(
+                        userId,
+                        bundleMockType,
+                        entitlementReferenceId,
+                        $"mock-booking-refund:{booking.Id}",
+                        ct);
+                }
+
+                if (!aiRefunded && !creditRefunded && !noChargeToRestore)
+                {
+                    throw ApiException.Conflict(
+                        "refund_unavailable",
+                        "The booking entitlement could not be located, so the booking was not cancelled. Please retry while billing is available.");
+                }
+
+                booking.RefundIssued = true;
+                booking.RefundDecision = aiRefunded || creditRefunded
+                    ? "full_refund_issued"
+                    : "full_refund_not_charged";
             }
 
             var before = new
@@ -593,6 +841,8 @@ public static class MockBookingEndpoints
             ["zoomJoinUrl"] = MockBookingPresentation.LearnerZoomJoinUrl(b),
             ["createdAt"] = b.CreatedAt,
             ["updatedAt"] = b.UpdatedAt,
+            ["refundDecision"] = b.RefundDecision,
+            ["refundIssued"] = b.RefundIssued,
             ["cancelledAt"] = b.CancelledAt,
             ["completedAt"] = b.CompletedAt,
         };
@@ -606,7 +856,8 @@ public sealed record MockBookingCreateBody(
     string? Timezone,
     bool? ConsentToRecording,
     string? MockAttemptId = null,
-    string? MockSectionId = null);
+    string? MockSectionId = null,
+    string? TutorProfileId = null);
 
 /// <summary>Request body for <c>PATCH /v1/mocks/bookings/{bookingId}/reschedule</c>.</summary>
 public sealed record MockBookingRescheduleBody(DateTimeOffset? ScheduledStartAt);
