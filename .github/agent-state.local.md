@@ -9,6 +9,13 @@ Last updated: 2026-08-10
   Speaking rows; admin booking moves validate active tutor-calendar slots and
   recreate Zoom/calendar state; admin refunds enforce strictly more than 24
   hours and full-refund-only semantics.
+- Commit 7e7d88fd7e95ca24d41bfca9c8d35a69e3cf4ded makes admin refunds fail
+  closed when the payment provider fails, with a focused regression test.
+- Build & Deploy run 31421541015 passed all image builds, production migration,
+  and blue/green deployment; the VPS reported live on green with the exact
+  7e7d88fd7 images.
+- Final public checks returned HTTP 200 for web health, API live, and API
+  readiness; database, migrations, stuck_jobs, and storage were all ok.
 - Commit `1e3ceeae745b2a8fff2038c78e5aafe1e2c70b2c` is on `main`.
 - Build & Deploy run `31411775123` passed web/API/backup builds, production
   migration, and blue/green deployment. The VPS reported
