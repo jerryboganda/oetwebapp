@@ -519,7 +519,18 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync(cancellationToken);
-        if (await db.AiQuotaPlans.AnyAsync(p => p.Code == "free", cancellationToken)) return;
+        var existingPlan = await db.AiQuotaPlans.FirstOrDefaultAsync(p => p.Code == "free", cancellationToken);
+        if (existingPlan is not null)
+        {
+            // The test contract is intentionally permissive: existing host startup
+            // seed data must not make a focused feature test fail closed.
+            existingPlan.MonthlyTokenCap = 0;
+            existingPlan.DailyTokenCap = 0;
+            existingPlan.AllowedFeaturesCsv = string.Empty;
+            existingPlan.IsActive = true;
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
         var now = DateTimeOffset.UtcNow;
         db.AiQuotaPlans.Add(new AiQuotaPlan
