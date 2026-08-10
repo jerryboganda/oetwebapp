@@ -264,7 +264,17 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                 var state = json.RootElement.GetProperty("state").GetString();
                 if (string.Equals(state, "failed", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Speaking evaluation failed: {json.RootElement.GetProperty("statusReasonCode").GetString()}");
+                {
+                    await using var scope = _factory.Services.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+                    var evaluation = await db.Evaluations.AsNoTracking().SingleAsync(x => x.Id == evaluationId);
+                    var attempt = await db.Attempts.AsNoTracking().SingleAsync(x => x.Id == evaluation.AttemptId);
+                    var balance = await scope.ServiceProvider
+                        .GetRequiredService<OetLearner.Api.Services.AiManagement.IAiCreditService>()
+                        .GetBalanceAsync(attempt.UserId, CancellationToken.None);
+                    throw new InvalidOperationException(
+                        $"Speaking evaluation failed: {json.RootElement.GetProperty("statusReasonCode").GetString()} user={attempt.UserId} availableCredits={balance.TokensAvailable}");
+                }
 
                 return string.Equals(state, "completed", StringComparison.OrdinalIgnoreCase);
             },
