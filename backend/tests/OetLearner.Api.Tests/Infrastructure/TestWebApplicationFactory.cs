@@ -220,7 +220,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 new PasswordSignInRequest(email, password, RememberMe: true))
             .GetAwaiter()
             .GetResult();
-        signInResponse.EnsureSuccessStatusCode();
+        if (!signInResponse.IsSuccessStatusCode)
+        {
+            var signInError = signInResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new HttpRequestException(
+                $"Seeded sign-in for {email} failed with {(int)signInResponse.StatusCode}: {signInError}");
+        }
 
         var session = signInResponse.Content
             .ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options)
