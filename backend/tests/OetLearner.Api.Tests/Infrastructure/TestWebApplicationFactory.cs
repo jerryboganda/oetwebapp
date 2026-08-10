@@ -215,6 +215,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         var testDeviceId = "test-device-" + email.Trim().ToLowerInvariant()
             .Replace("@", "-at-", StringComparison.Ordinal)
             .Replace(".", "-dot-", StringComparison.Ordinal);
+        client.DefaultRequestHeaders.Add("X-OET-Device-Id", testDeviceId);
         var signInResponse = client.PostAsJsonAsync(
                 "/v1/auth/sign-in",
                 new PasswordSignInRequest(email, password, RememberMe: true))
