@@ -272,6 +272,11 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
                     var balance = await scope.ServiceProvider
                         .GetRequiredService<OetLearner.Api.Services.AiManagement.IAiCreditService>()
                         .GetBalanceAsync(attempt.UserId, CancellationToken.None);
+                    var usage = await db.AiUsageRecords.AsNoTracking()
+                        .Where(x => x.UserId == attempt.UserId)
+                        .OrderByDescending(x => x.CreatedAt)
+                        .Select(x => new { x.FeatureCode, x.ErrorCode, x.PolicyTrace })
+                        .FirstOrDefaultAsync();
                     throw new InvalidOperationException(
                         $"Speaking evaluation failed: {json.RootElement.GetProperty("statusReasonCode").GetString()} user={attempt.UserId} availableCredits={balance.TokensAvailable}");
                 }
