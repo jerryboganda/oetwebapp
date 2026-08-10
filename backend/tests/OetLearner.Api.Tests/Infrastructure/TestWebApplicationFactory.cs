@@ -282,14 +282,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         var runtimeSettings = db.RuntimeSettings.SingleOrDefault(x => x.Id == "default");
         if (runtimeSettings is null)
         {
-            db.RuntimeSettings.Add(new RuntimeSettingsRow
-            {
-                Id = "default",
-                SecurityRiskMode = OetLearner.Api.Services.Settings.SecurityRiskModes.Off,
-                SecurityTrustedDeviceRequired = false,
-                SecurityRequireVerifiedEmailForLearners = false
-            });
+            runtimeSettings = new RuntimeSettingsRow { Id = "default" };
+            db.RuntimeSettings.Add(runtimeSettings);
         }
+        runtimeSettings.SecurityRiskMode = OetLearner.Api.Services.Settings.SecurityRiskModes.Off;
+        runtimeSettings.SecurityTrustedDeviceRequired = false;
+        runtimeSettings.SecurityRequireVerifiedEmailForLearners = false;
 
         var account = db.ApplicationUserAccounts.SingleOrDefault(x => x.Id == accountId || x.NormalizedEmail == normalizedEmail);
         if (account is null)
