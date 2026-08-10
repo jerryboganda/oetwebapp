@@ -11,7 +11,7 @@ using OetLearner.Api.Services.Rulebook;
 namespace OetLearner.Api.Services.Listening;
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Listening Part A — AI marking (Claude Sonnet 4.6).
+// Listening Part A — post-submit AI advisory review (Claude Sonnet 4.6).
 //
 // ADDITIVE + NON-BLOCKING. The deterministic grader (ListeningGradingService)
 // stays the score of record. This service adds a SEPARATE per-gap AI judgement
@@ -19,6 +19,8 @@ namespace OetLearner.Api.Services.Listening;
 // onto each Part A fill-in-the-blank answer, surfaced to the learner review and
 // the tutor checking flow. It runs after submit (via the background worker), is
 // idempotent (only touches answers where AiScoredAt is null), and NEVER throws
+// into the candidate submission path. The deterministic server mark remains
+// authoritative; these fields are tutor-only advisory metadata.
 // into the submit/grade path — a provider failure just leaves the answer
 // unscored for the next worker pass.
 // ═════════════════════════════════════════════════════════════════════════════
@@ -136,7 +138,7 @@ public sealed class ListeningPartAAiScoringService(
             scored++;
         }
         if (scored > 0) await db.SaveChangesAsync(ct);
-        logger.LogInformation("Part A AI scoring: stamped {Scored}/{Total} answers on attempt {AttemptId}.", scored, partAAnswers.Count, attemptId);
+        logger.LogInformation("Part A AI advisory review: stamped {Scored}/{Total} answers on attempt {AttemptId}.", scored, partAAnswers.Count, attemptId);
     }
 
     // ── Claude call (forced tool) ───────────────────────────────────────────────
@@ -171,6 +173,7 @@ public sealed class ListeningPartAAiScoringService(
             {
                 var accepted = it.Accepted.Count > 0 ? " | also accepted: " + string.Join(", ", it.Accepted) : string.Empty;
                 sb.AppendLine($"({it.Number}) candidate: \"{it.UserAnswer}\" | official answer: \"{it.Canonical}\"{accepted}");
+                sb.AppendLine($"    approved rationale: {it.ApprovedRationale}");
             }
         }
         var userText = sb.ToString();
@@ -210,7 +213,7 @@ public sealed class ListeningPartAAiScoringService(
                 new Dictionary<string, object?>
                 {
                     ["name"] = ToolName,
-                    ["description"] = "Emit one verdict per provided gap number.",
+                    ["description"] = "Emit one post-submit advisory review per provided gap number; never change the deterministic mark.",
                     ["input_schema"] = JsonSerializer.Deserialize<JsonElement>(ToolSchemaJson),
                 },
             },
@@ -339,7 +342,6 @@ public sealed class ListeningPartAAiScoringService(
         return v switch
         {
             "correct" => "correct",
-            "acceptable" => "acceptable",
             _ => "incorrect",
         };
     }
@@ -355,21 +357,23 @@ public sealed class ListeningPartAAiScoringService(
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 
     private const string SystemPrompt = """
-You are a fair, experienced OET (Occupational English Test) Listening examiner marking Part A
-note-completion gaps. For each numbered gap you receive: the consultation note for context, the
-candidate's typed answer, the official answer, and any officially accepted variants.
+You provide a post-submit advisory review of OET (Occupational English Test) Listening Part A
+note-completion answers. The server's deterministic mark is authoritative and is never changed by
+this call. You must not award partial credit, approve a synonym, excuse a misspelling, or infer an
+accepted variant. Do not claim to provide an official OET result.
 
-Mark each gap with one verdict by calling the emit_part_a_verdicts tool:
-  - "correct": matches the official answer (or an accepted variant) exactly or trivially
-    (case, surrounding whitespace).
-  - "acceptable": a human OET marker would award the mark — minor misspelling that is
-    unambiguous, a clear word-form/plural/tense variant, a synonym or short paraphrase that
-    carries the same required meaning, or correct content with harmless extra words.
-  - "incorrect": wrong meaning, the wrong piece of information, blank, or unintelligible.
+For each numbered gap you receive: the consultation note for context, the candidate's typed answer,
+the canonical answer, explicitly authorised variants, and the author-approved rationale. Use only
+that stored evidence. If the evidence is incomplete, say so in the rationale and mark the advisory
+verdict "incorrect"; do not invent an explanation.
 
-Be reasonably lenient on spelling/word-form (OET awards the mark when the answer is
-recognisable and unambiguous) but strict on meaning. Give a one-line rationale per gap.
-Return EXACTLY one verdict object per gap number you were given.
+Call the emit_part_a_verdicts tool exactly once with one advisory verdict per gap:
+  - "correct": only when the stored deterministic answer/variant evidence shows an exact match.
+  - "incorrect": when it does not show an exact match, the answer is blank, or evidence is missing.
+  - "acceptable" is forbidden and must never be emitted.
+
+Give a concise evidence-based rationale per gap and return EXACTLY one verdict object per gap number
+you were given. This advisory output is tutor-facing only and must not be presented as a score.
 """;
 
     private const string ToolSchemaJson = """
@@ -382,7 +386,7 @@ Return EXACTLY one verdict object per gap number you were given.
         "type": "object",
         "properties": {
           "number": { "type": "integer" },
-          "verdict": { "type": "string", "enum": ["correct", "acceptable", "incorrect"] },
+          "verdict": { "type": "string", "enum": ["correct", "incorrect"] },
           "rationale": { "type": "string" }
         },
         "required": ["number", "verdict"]

@@ -659,6 +659,7 @@ export interface ListeningExpertAnswerItem {
   speakerAttitude?: string | null; // Part C only: concerned | optimistic | doubtful | critical | neutral | other
   optionAnalysis?: ListeningExpertOptionAnalysisItem[] | null;
   // Part A AI marking (Claude Sonnet 4.6) — advisory. 'correct'|'acceptable'|'incorrect'.
+  /** Post-submit advisory only; deterministic IsCorrect remains authoritative. */
   aiVerdict?: string | null;
   aiRationale?: string | null;
 }

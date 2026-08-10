@@ -214,8 +214,13 @@ public sealed class ReadingAttemptService(
         var policy = await policyService.ResolveForUserAsync(userId, ct);
         var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
         var markingPolicy = await markingPolicyResolver.ResolveAsync("reading", "default", cancellationToken: ct);
-        if (markingPolicy.PolicyId is not null && markingPolicy.ErrorCode is null)
-            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId, ct);
+        if (!markingPolicy.IsAvailable || markingPolicy.ErrorCode is not null)
+        {
+            throw new ReadingAttemptException(
+                "reading_marking_policy_unavailable",
+                "Reading attempts are unavailable until an owner-approved marking policy is effective.");
+        }
+        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
 
         // Gate 1: archived paper
         if (paper.Status == ContentStatus.Archived && !globalPolicy.AllowAttemptOnArchivedPaper)

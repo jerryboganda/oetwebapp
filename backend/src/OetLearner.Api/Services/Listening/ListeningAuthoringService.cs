@@ -525,6 +525,12 @@ public sealed class ListeningAuthoringService(
         // may not have set it yet — stamp a default so slot creation isn't blocked.
         var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
             ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+        if (paper.Status == ContentStatus.Published)
+        {
+            throw ApiException.Conflict(
+                "listening_published_revision_immutable",
+                "Published Listening content is immutable. Create and approve a new content revision before changing an answer key or variant.");
+        }
         if (string.IsNullOrWhiteSpace(paper.SourceProvenance))
         {
             paper.SourceProvenance = "Manual Part A authoring";
@@ -1450,6 +1456,12 @@ public sealed class ListeningAuthoringService(
         {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
             ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+        if (paper.Status == ContentStatus.Published)
+        {
+            throw ApiException.Conflict(
+                "listening_published_revision_immutable",
+                "Published Listening content is immutable. Create and approve a new content revision before changing an answer key or variant.");
+        }
 
         // Load the full authored list so we can locate by id, mutate one
         // entry, and re-serialise the whole array (preserves stable ordering
@@ -1491,6 +1503,7 @@ public sealed class ListeningAuthoringService(
         if (relational is not null)
         {
             ApplyPatchToRelational(relational, normalized);
+            relational.Version++;
             relational.UpdatedAt = paper.UpdatedAt;
         }
 

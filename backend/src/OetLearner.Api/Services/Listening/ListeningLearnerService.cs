@@ -530,8 +530,13 @@ public sealed class ListeningLearnerService(
 
         var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
         var markingPolicy = await markingPolicyResolver.ResolveAsync("listening", "default", cancellationToken: ct);
-        if (markingPolicy.PolicyId is not null && markingPolicy.ErrorCode is null)
-            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId, ct);
+        if (!markingPolicy.IsAvailable || markingPolicy.ErrorCode is not null)
+        {
+            throw ApiException.Conflict(
+                "listening_marking_policy_unavailable",
+                "Listening attempts are unavailable until an owner-approved marking policy is effective.");
+        }
+        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         var attempt = new Attempt
         {
             Id = genericAttemptId,
@@ -1172,8 +1177,16 @@ public sealed class ListeningLearnerService(
 
         var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
         var markingPolicy = await markingPolicyResolver.ResolveAsync("listening", "default", cancellationToken: ct);
-        if (markingPolicy.PolicyId is not null && markingPolicy.ErrorCode is null)
-            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId, ct);
+        if (!markingPolicy.IsAvailable || markingPolicy.ErrorCode is not null)
+        {
+            throw ApiException.Conflict(
+                "listening_marking_policy_unavailable",
+                "Listening attempts are unavailable until an owner-approved marking policy is effective.");
+        }
+        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
+        var questionVersionMap = await db.ListeningQuestions.AsNoTracking()
+            .Where(q => q.PaperId == source.Id)
+            .ToDictionaryAsync(q => q.Id, q => q.Version, StringComparer.Ordinal, ct);
         var attempt = new ListeningAttempt
         {
             Id = relationalAttemptId,
@@ -1186,6 +1199,11 @@ public sealed class ListeningLearnerService(
             Status = ListeningAttemptStatus.InProgress,
             Mode = relationalMode,
             MaxRawScore = Math.Clamp(source.Questions.Sum(q => q.Points), 1, CanonicalRawMax),
+            // The published question revision is immutable for the lifetime of
+            // an attempt. Keep the exact version map so a concurrent authoring
+            // edit is rejected during grading instead of silently grading a
+            // response against a different key.
+            LastQuestionVersionMapJson = JsonSerializer.Serialize(questionVersionMap),
             PolicySnapshotJson = JsonSupport.Serialize(new
             {
                 markingPolicy = markingPolicy.Document,
@@ -1231,7 +1249,7 @@ public sealed class ListeningLearnerService(
         await EnsureRelationalAttemptCanMutateAsync(attempt, ct);
         var question = await db.ListeningQuestions.AsNoTracking()
             .Where(q => q.Id == questionId && q.PaperId == attempt.PaperId)
-            .Select(q => new { q.Id, q.Part!.PartCode })
+            .Select(q => new { q.Id, q.Version, q.Part!.PartCode })
             .FirstOrDefaultAsync(ct)
             ?? throw ApiException.Validation("listening_question_not_found", "This question does not belong to the Listening attempt.");
 
@@ -1263,6 +1281,7 @@ public sealed class ListeningLearnerService(
                 ListeningAttemptId = attempt.Id,
                 ListeningQuestionId = question.Id,
                 UserAnswerJson = JsonSerializer.Serialize(userAnswer ?? string.Empty),
+                QuestionVersionSnapshot = question.Version,
                 AnsweredAt = now,
             };
             db.ListeningAnswers.Add(row);
@@ -1426,6 +1445,10 @@ public sealed class ListeningLearnerService(
             .ToDictionaryAsync(answer => answer.ListeningQuestionId, StringComparer.Ordinal, ct);
         foreach (var (questionId, answer) in finalAnswers)
         {
+            var questionVersion = await db.ListeningQuestions.AsNoTracking()
+                .Where(q => q.Id == questionId && q.PaperId == attempt.PaperId)
+                .Select(q => q.Version)
+                .SingleAsync(ct);
             if (!rows.TryGetValue(questionId, out var row))
             {
                 row = new ListeningAnswer
@@ -1434,6 +1457,7 @@ public sealed class ListeningLearnerService(
                     ListeningAttemptId = attempt.Id,
                     ListeningQuestionId = questionId,
                     UserAnswerJson = JsonSerializer.Serialize(answer ?? string.Empty),
+                    QuestionVersionSnapshot = questionVersion,
                     AnsweredAt = now,
                 };
                 db.ListeningAnswers.Add(row);
@@ -1441,6 +1465,7 @@ public sealed class ListeningLearnerService(
             else
             {
                 row.UserAnswerJson = JsonSerializer.Serialize(answer ?? string.Empty);
+                row.QuestionVersionSnapshot = questionVersion;
                 row.AnsweredAt = now;
                 row.IsCorrect = null;
                 row.PointsEarned = 0;

@@ -9,10 +9,10 @@ using OetLearner.Api.Services.Assessment;
 namespace OetLearner.Api.Services.Listening;
 
 /// <summary>
-/// Listening V2 — version-pinned grading. Re-reads each question at the
-/// version snapshotted on <see cref="ListeningAnswer.QuestionVersionSnapshot"/>
-/// (or <see cref="ListeningAttempt.LastQuestionVersionMapJson"/> as a
-/// fallback) so admin edits in flight never silently invalidate scoring.
+/// Listening V2 — version-pinned grading. A submitted attempt is graded only
+/// while the published question versions captured at start still match the
+/// authored rows. If an authoring edit races an attempt, grading fails closed
+/// for controlled re-marking rather than silently using a different key.
 /// Raw→scaled conversion routes ONLY through
 /// versioned score-conversion table is the sole scaled-score source (the
 /// <c>ListeningScoringPathAuditTest</c> source-scan fails CI on inline math).
@@ -52,6 +52,31 @@ public sealed class ListeningGradingService
         var result = await GradeAttemptAsync(attempt, refreshSubmittedAt: true, ct);
         await _db.SaveChangesAsync(ct);
 
+        return result;
+    }
+
+    /// <summary>Execute an approved single-question answer-key correction
+    /// without mutating the published Listening question row.</summary>
+    public async Task<ListeningGradingResult> RegradeWithKeyAsync(
+        string attemptId,
+        string questionRevisionId,
+        string newKeySnapshotJson,
+        CancellationToken ct)
+    {
+        var attempt = await _db.ListeningAttempts
+            .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
+            ?? throw ApiException.NotFound("listening_attempt_not_found", "Listening attempt not found.");
+        if (attempt.Status != ListeningAttemptStatus.Submitted)
+            throw ApiException.Conflict("listening_remark_requires_submitted", "Controlled re-mark requires a submitted attempt.");
+        if (string.IsNullOrWhiteSpace(questionRevisionId))
+            throw ApiException.Validation("remark_question_revision_required", "A question revision is required.");
+
+        var result = await GradeAttemptAsync(
+            attempt,
+            refreshSubmittedAt: false,
+            ct,
+            new KeyCorrection(questionRevisionId.Trim(), newKeySnapshotJson));
+        await _db.SaveChangesAsync(ct);
         return result;
     }
 
@@ -181,7 +206,8 @@ public sealed class ListeningGradingService
     private async Task<ListeningGradingResult> GradeAttemptAsync(
         ListeningAttempt attempt,
         bool refreshSubmittedAt,
-        CancellationToken ct)
+        CancellationToken ct,
+        KeyCorrection? keyCorrection = null)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -206,10 +232,38 @@ public sealed class ListeningGradingService
         // WrongSection heuristic — if a learner's answer matches another
         // question's canonical/variant on the same paper, the miss class
         // becomes WrongSection rather than Paraphrase.
-        var paperAnswerMap = BuildPaperAnswerMap(questions, normalisation);
+        var gradingQuestions = questions
+            .Select(q => keyCorrection?.QuestionRevisionId == q.Id
+                ? ApplyKeyCorrection(q, keyCorrection.NewKeySnapshotJson)
+                : q)
+            .ToList();
+        if (keyCorrection is not null && !questions.Any(q => q.Id == keyCorrection.QuestionRevisionId))
+            throw ApiException.NotFound("remark_question_revision_not_found", "The re-mark question is not on this Listening paper.");
+        var paperAnswerMap = BuildPaperAnswerMap(gradingQuestions, normalisation);
 
-        // Version-pin map: prefer the per-attempt snapshot; fall back to per-row.
+        // Version-pin map: the relational start path captures every question
+        // version. Refuse to grade against a changed or missing live row: the
+        // candidate must never receive a result produced from a key different
+        // from the one captured at attempt start.
         var versionMap = ParseVersionMap(attempt.LastQuestionVersionMapJson);
+        if (versionMap.Count > 0)
+        {
+            var currentQuestionIds = questions.Select(q => q.Id).ToHashSet(StringComparer.Ordinal);
+            var missing = versionMap.Keys.Where(id => !currentQuestionIds.Contains(id)).ToArray();
+            var changed = questions
+                .Where(q => versionMap.TryGetValue(q.Id, out var version) && version != q.Version)
+                .Select(q => q.Id)
+                .ToArray();
+            var unauthorisedChanged = keyCorrection is null
+                ? changed
+                : changed.Where(id => !string.Equals(id, keyCorrection.QuestionRevisionId, StringComparison.Ordinal)).ToArray();
+            if (missing.Length > 0 || unauthorisedChanged.Length > 0 || currentQuestionIds.Count != versionMap.Count)
+            {
+                throw ApiException.Conflict(
+                    "listening_question_revision_changed",
+                    "The published Listening question revision changed after this attempt started. The attempt is held for controlled re-marking.");
+            }
+        }
         var overrides = ParseOverrides(attempt.HumanScoreOverridesJson);
         var answerByQuestionId = answers
             .GroupBy(a => a.ListeningQuestionId)
@@ -235,20 +289,21 @@ public sealed class ListeningGradingService
 
             var pinnedVersion = ans.QuestionVersionSnapshot
                 ?? (versionMap.TryGetValue(q.Id, out var v) ? v : q.Version);
+            if (pinnedVersion != q.Version
+                && !string.Equals(q.Id, keyCorrection?.QuestionRevisionId, StringComparison.Ordinal))
+            {
+                throw ApiException.Conflict(
+                    "listening_question_revision_changed",
+                    "The published Listening question revision changed after this attempt started. The attempt is held for controlled re-marking.");
+            }
 
-            // Drift guard: if the live row is newer than the pinned snapshot,
-            // we re-grade against the snapshotted answer when possible. For
-            // the V2 schema we only carry the version int, not the historical
-            // payload — the authoring service is responsible for refusing
-            // edits that change the correct answer once the snapshot is in
-            // flight (planner Wave 2 §2 — version increment guarded edits).
-            // Here we grade against the live row but flag drift on the
-            // result so analytics can split it out.
-            var drifted = pinnedVersion != q.Version;
-
-            var (isCorrect, distractor, missReason) = Evaluate(q, ans, paperAnswerMap, normalisation, q.CaseSensitive && markingPolicy.CaseSensitive);
+            var gradingQuestion = gradingQuestions.First(candidate => candidate.Id == q.Id);
+            var evaluation = Evaluate(gradingQuestion, ans, paperAnswerMap, normalisation, gradingQuestion.CaseSensitive && markingPolicy.CaseSensitive);
+            var isCorrect = evaluation.IsCorrect;
+            var distractor = evaluation.Distractor;
+            var missReason = evaluation.MissReason;
             ans.IsCorrect = isCorrect;
-            ans.PointsEarned = isCorrect ? q.Points : 0;
+            ans.PointsEarned = isCorrect ? gradingQuestion.Points : 0;
             ans.SelectedDistractorCategory = distractor;
             ans.MissReason = missReason;
 
@@ -258,17 +313,38 @@ public sealed class ListeningGradingService
             if (overrides.TryGetValue(q.Id, out var ovr))
             {
                 ans.IsCorrect = ovr.Override == 1;
-                ans.PointsEarned = ovr.Override == 1 ? q.Points : 0;
+                ans.PointsEarned = ovr.Override == 1 ? gradingQuestion.Points : 0;
             }
 
-            if (ans.IsCorrect == true) rawCorrect += q.Points;
+            if (ans.IsCorrect == true) rawCorrect += gradingQuestion.Points;
 
-            // H9: Track drifted questions for audit rather than discarding.
-            // Currently we grade against the live row because the V2 schema
-            // only carries the version int, not historical payload. A future
-            // ListeningQuestionRevision table would allow re-grading against
-            // the exact version the candidate saw.
-            if (drifted) driftedQuestionIds.Add(q.Id);
+            var acceptedVariant = isCorrect
+                ? FindAcceptedVariant(gradingQuestion, ans, normalisation, gradingQuestion.CaseSensitive && markingPolicy.CaseSensitive)
+                : null;
+            if (acceptedVariant is not null)
+            {
+                _db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    OccurredAt = now,
+                    ActorId = attempt.UserId,
+                    ActorName = "ListeningGradingService",
+                    Action = "listening.marking.accepted_variant_used",
+                    ResourceType = "ListeningAttemptAnswer",
+                    ResourceId = $"{attempt.Id}:{q.Id}",
+                    Details = JsonSerializer.Serialize(new
+                    {
+                        attemptId = attempt.Id,
+                        questionId = q.Id,
+                        questionNumber = q.QuestionNumber,
+                        acceptedVariant,
+                        policyNormalisation = normalisation,
+                        caseSensitive = q.CaseSensitive && markingPolicy.CaseSensitive,
+                    }),
+                });
+            }
+
+            if (pinnedVersion != q.Version) driftedQuestionIds.Add(q.Id);
         }
 
         // H9: Emit audit event when version drift is detected so the
@@ -722,6 +798,75 @@ public sealed class ListeningGradingService
         if (parsed is null) yield break;
         foreach (var s in parsed) if (!string.IsNullOrWhiteSpace(s)) yield return s;
     }
+
+    private static string? FindAcceptedVariant(
+        ListeningQuestion question,
+        ListeningAnswer answer,
+        string normalisation,
+        bool caseSensitive)
+    {
+        if (question.QuestionType is not (ListeningQuestionType.ShortAnswer or ListeningQuestionType.FillInBlank))
+            return null;
+
+        var user = TryReadString(answer.UserAnswerJson) ?? string.Empty;
+        var canonical = TryReadString(question.CorrectAnswerJson);
+        foreach (var variant in ParseAccepted(question.AcceptedSynonymsJson))
+        {
+            if (StringsMatch(user, variant, caseSensitive, normalisation)
+                && (canonical is null || !StringsMatch(user, canonical, caseSensitive, normalisation)))
+                return variant;
+        }
+        return null;
+    }
+
+    private static ListeningQuestion ApplyKeyCorrection(ListeningQuestion question, string snapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotJson))
+            throw ApiException.Validation("remark_key_snapshot_required", "A new answer-key snapshot is required.");
+
+        using var document = JsonDocument.Parse(snapshotJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw ApiException.Validation("remark_key_snapshot_invalid_json", "The new answer-key snapshot must be a JSON object.");
+        var root = document.RootElement;
+        var hasCorrect = root.TryGetProperty("correctAnswerJson", out var correctJson)
+            || root.TryGetProperty("correctAnswer", out correctJson);
+        var hasAccepted = root.TryGetProperty("acceptedSynonymsJson", out var acceptedJson)
+            || root.TryGetProperty("acceptedVariants", out acceptedJson);
+        if (!hasCorrect && !hasAccepted)
+            throw ApiException.Validation("remark_key_snapshot_missing_key", "The new answer-key snapshot contains no key or explicit variant.");
+
+        var correctedAnswer = hasCorrect
+            ? correctJson.NameEquals("correctAnswerJson") && correctJson.ValueKind == JsonValueKind.String
+                ? correctJson.GetString() ?? "null"
+                : correctJson.ValueKind == JsonValueKind.String
+                    ? JsonSerializer.Serialize(correctJson.GetString())
+                    : correctJson.GetRawText()
+            : question.CorrectAnswerJson;
+        var correctedVariants = hasAccepted
+            ? acceptedJson.NameEquals("acceptedSynonymsJson") && acceptedJson.ValueKind == JsonValueKind.String
+                ? acceptedJson.GetString()
+                : acceptedJson.ValueKind == JsonValueKind.Null ? null : acceptedJson.GetRawText()
+            : question.AcceptedSynonymsJson;
+
+        return new ListeningQuestion
+        {
+            Id = question.Id,
+            ListeningPartId = question.ListeningPartId,
+            ListeningExtractId = question.ListeningExtractId,
+            QuestionNumber = question.QuestionNumber,
+            DisplayOrder = question.DisplayOrder,
+            Points = question.Points,
+            QuestionType = question.QuestionType,
+            Stem = question.Stem,
+            CorrectAnswerJson = correctedAnswer,
+            AcceptedSynonymsJson = correctedVariants,
+            CaseSensitive = question.CaseSensitive,
+            Options = question.Options,
+            Version = question.Version,
+        };
+    }
+
+    private sealed record KeyCorrection(string QuestionRevisionId, string NewKeySnapshotJson);
 
     private static Dictionary<string, int> ParseVersionMap(string? json)
     {

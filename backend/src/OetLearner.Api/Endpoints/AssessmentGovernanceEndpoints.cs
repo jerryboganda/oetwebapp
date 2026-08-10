@@ -453,22 +453,60 @@ public static class AssessmentGovernanceEndpoints
             if (job.Status != AssessmentGovernanceStatus.Approved)
                 return Results.Conflict(new { error = "remark_job_not_approved" });
 
+            object originalResult;
             object result;
             if (job.Assessment == "reading")
             {
-                var graded = await readingGrader.RegradeSubmittedAsync(job.AttemptId, ct)
+                var original = await db.ReadingAttempts.AsNoTracking()
+                    .Where(x => x.Id == job.AttemptId)
+                    .Select(x => new
+                    {
+                        x.RawScore,
+                        x.MaxRawScore,
+                        x.ScaledScore,
+                        x.ScoreConversionGrade,
+                        x.ScoreConversionTableVersionKey,
+                    })
+                    .SingleAsync(ct);
+                originalResult = original;
+                var graded = await readingGrader.RegradeSubmittedAsync(
+                        job.AttemptId,
+                        job.QuestionRevisionId,
+                        job.NewKeySnapshotJson,
+                        ct)
                     ?? throw new InvalidOperationException("submitted_attempt_not_found");
                 result = new { graded.RawScore, graded.MaxRawScore, graded.ScaledScore, graded.GradeLetter };
             }
             else
             {
-                var graded = await listeningGrader.GradeAsync(job.AttemptId, ct);
+                var original = await db.ListeningAttempts.AsNoTracking()
+                    .Where(x => x.Id == job.AttemptId)
+                    .Select(x => new
+                    {
+                        x.RawScore,
+                        x.MaxRawScore,
+                        x.ScaledScore,
+                        x.ScoreConversionGrade,
+                        x.ScoreConversionTableVersionKey,
+                    })
+                    .SingleAsync(ct);
+                originalResult = original;
+                var graded = await listeningGrader.RegradeWithKeyAsync(
+                    job.AttemptId,
+                    job.QuestionRevisionId,
+                    job.NewKeySnapshotJson,
+                    ct);
                 result = new { graded.RawScore, graded.MaxRawScore, graded.ScaledScore, grade = graded.ScoreConversionGrade };
             }
 
             job.Status = AssessmentGovernanceStatus.Completed;
             job.CompletedAt = DateTimeOffset.UtcNow;
-            job.AffectedAttemptIdsJson = JsonSerializer.Serialize(new[] { job.AttemptId });
+            job.AffectedAttemptIdsJson = JsonSerializer.Serialize(new
+            {
+                attemptId = job.AttemptId,
+                original = originalResult,
+                updated = result,
+            });
             AddAudit(db, http, "assessment.remark.completed", job.Id,
                 $"assessment={job.Assessment}; attemptId={job.AttemptId}; questionRevisionId={job.QuestionRevisionId}");
             await db.SaveChangesAsync(ct);

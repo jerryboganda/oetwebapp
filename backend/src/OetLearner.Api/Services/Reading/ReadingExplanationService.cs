@@ -86,17 +86,35 @@ public sealed class ReadingExplanationService(
 
         // 2. AI-generate the explanation.
         var correctAnswer = ResolveCorrectAnswer(question);
-        var hasApprovedRationale = await db.AssessmentRationales.AsNoTracking()
-            .AnyAsync(r => r.Assessment == "reading"
+        var approvedRationale = await db.AssessmentRationales.AsNoTracking()
+            .Where(r => r.Assessment == "reading"
                 && r.QuestionRevisionId == question.Id
-                && r.Status == AssessmentGovernanceStatus.Effective, ct);
-        if (!hasApprovedRationale)
+                && r.Status == AssessmentGovernanceStatus.Effective)
+            .OrderByDescending(r => r.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+        var sourcePassage = question.ReadingTextId is null
+            ? null
+            : await db.ReadingTexts.AsNoTracking()
+                .Where(t => t.Id == question.ReadingTextId)
+                .Select(t => t.BodyHtml)
+                .SingleOrDefaultAsync(ct);
+        if (approvedRationale is null
+            || string.IsNullOrWhiteSpace(approvedRationale.RationaleText)
+            || string.IsNullOrWhiteSpace(approvedRationale.SourceSentence))
         {
             // AI advisory output is unavailable until an author-approved
             // rationale exists; deterministic review remains available.
             return BuildFallbackExplanation(question, correctAnswer, wrongOption, lang);
         }
-        var generated = await GenerateExplanationAsync(question, correctAnswer, wrongOption, lang, ct);
+        var generated = await GenerateExplanationAsync(
+            question,
+            correctAnswer,
+            wrongOption,
+            lang,
+            approvedRationale.RationaleText,
+            approvedRationale.SourceSentence,
+            sourcePassage,
+            ct);
 
         // 3. Cache back onto the entity (append to existing cache blob).
         await PersistCacheAsync(question, wrongOption, lang, generated, ct);
@@ -111,6 +129,9 @@ public sealed class ReadingExplanationService(
         string correctAnswer,
         string wrongOption,
         string language,
+        string approvedRationale,
+        string sourceSentence,
+        string? sourcePassage,
         CancellationToken ct)
     {
         OetRulebook rulebook;
@@ -130,7 +151,14 @@ public sealed class ReadingExplanationService(
             Task = AiTaskMode.GenerateReadingExplanation,
         });
 
-        var userMessage = BuildExplanationPrompt(question, correctAnswer, wrongOption, language);
+        var userMessage = BuildExplanationPrompt(
+            question,
+            correctAnswer,
+            wrongOption,
+            language,
+            approvedRationale,
+            sourceSentence,
+            sourcePassage);
 
         ExplanationDto? parsed = null;
         try
@@ -163,7 +191,10 @@ public sealed class ReadingExplanationService(
         ReadingQuestion question,
         string correctAnswer,
         string wrongOption,
-        string language)
+        string language,
+        string approvedRationale,
+        string sourceSentence,
+        string? sourcePassage)
     {
         var sb = new StringBuilder();
         sb.AppendLine("For an OET Reading question:");
@@ -171,6 +202,10 @@ public sealed class ReadingExplanationService(
         sb.AppendLine($"Question: {question.Stem}");
         sb.AppendLine($"Correct answer: {correctAnswer}");
         sb.AppendLine($"Student selected: {wrongOption}");
+        sb.AppendLine($"Author-approved rationale: {TruncatePromptEvidence(approvedRationale)}");
+        sb.AppendLine($"Author-approved source sentence: {TruncatePromptEvidence(sourceSentence)}");
+        if (!string.IsNullOrWhiteSpace(sourcePassage))
+            sb.AppendLine($"Stored passage evidence: {TruncatePromptEvidence(sourcePassage)}");
 
         if (language == "ar")
         {
@@ -188,6 +223,9 @@ public sealed class ReadingExplanationService(
         sb.AppendLine("}");
         return sb.ToString();
     }
+
+    private static string TruncatePromptEvidence(string value)
+        => value.Length <= 8_000 ? value : value[..8_000];
 
     // ── JSON parsing ────────────────────────────────────────────────────────
 

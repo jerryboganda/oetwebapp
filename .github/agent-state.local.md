@@ -1,5 +1,32 @@
 # Current Task - OET Writing AI Assessment Specification v1.1
 
+# Current Task - OET Listening and Reading AI System v1.1
+
+Last updated: 2026-08-11
+
+## Current checkpoint
+
+- The governed Listening/Reading implementation is on `c0f8402ac`; the
+  concurrent Writing compile-fix is `5141eac3d` on `main` and `origin/main`.
+- Build/web/API/backup jobs for Actions run `31437434454` passed; production
+  migration/application was still running at the last checkpoint.
+- Tightened the remaining deterministic boundary: Listening authoring edits
+  are blocked on published papers, relational attempt question versions are
+  captured and checked fail-closed, Reading grading checks the published paper
+  revision, and Part A AI is post-submit tutor advisory only with approved
+  rationale evidence and no lenient `acceptable` verdict.
+
+## Validation and remaining boundary
+
+- Targeted backend compile and the deployment run must be rechecked after the
+  current edits. Do not claim the new edits are deployed until a new SHA's
+  build, migration, rollout, and live health/routes are verified.
+- Owner-controlled release data remains required: complete approved Listening
+  and Reading score tables, marking-policy/rationale approvals, pathway/pass
+  thresholds, graph legal/style sign-off, and timed-attempt concurrency target.
+- Preserve untracked `.codex/config.toml`, `.superpowers/`,
+  `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
+
 Last updated: 2026-08-11
 
 ## Outcome

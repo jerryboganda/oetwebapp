@@ -617,13 +617,13 @@ public class ListeningAnswer
 
     // ── Part A AI scoring (Claude Sonnet 4.6) ───────────────────────────────────
     // ADDITIVE + ADVISORY: the deterministic grade (IsCorrect / PointsEarned)
-    // remains the score of record. These columns hold a separate AI judgement of
-    // a Part A fill-in-the-blank answer (lenient on paraphrase / word-form), shown
-    // to the learner review + tutor flow. Populated asynchronously after submit by
-    // ListeningPartAAiScoringService; null until scored or for MCQ items.
+    // remains the score of record. These columns hold evidence-bound tutor
+    // metadata only; they can never award credit or alter the learner result.
+    // Populated asynchronously after submit by ListeningPartAAiScoringService;
+    // null until reviewed or for MCQ items.
 
-    /// <summary>AI verdict for a Part A gap: "correct" | "acceptable" |
-    /// "incorrect". Null until scored / not applicable.</summary>
+    /// <summary>AI advisory verdict for a Part A gap: "correct" | "incorrect".
+    /// Null until reviewed / not applicable.</summary>
     [MaxLength(16)]
     public string? AiVerdict { get; set; }
 

@@ -35,6 +35,14 @@ public interface IReadingGradingService
     /// Returns null when the attempt is missing or not Submitted.
     /// </summary>
     Task<ReadingGradingResult?> RegradeSubmittedAsync(string attemptId, CancellationToken ct);
+
+    /// <summary>Execute an approved single-question key correction without
+    /// mutating the published question row.</summary>
+    Task<ReadingGradingResult?> RegradeSubmittedAsync(
+        string attemptId,
+        string questionRevisionId,
+        string newKeySnapshotJson,
+        CancellationToken ct);
 }
 
 public sealed record ReadingGradingResult(
@@ -86,7 +94,7 @@ public sealed class ReadingGradingService(
             }
         }
 
-        return await GradeAndPersistAsync(attempt, "ReadingAttemptGraded", ct);
+        return await GradeAndPersistAsync(attempt, "ReadingAttemptGraded", ct, keyCorrection: null);
     }
 
     /// <summary>
@@ -104,12 +112,47 @@ public sealed class ReadingGradingService(
             .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
         if (attempt is null || attempt.Status != ReadingAttemptStatus.Submitted)
             return null;
-        return await GradeAndPersistAsync(attempt, auditAction: null, ct);
+        return await GradeAndPersistAsync(attempt, auditAction: null, ct, keyCorrection: null);
+    }
+
+    public async Task<ReadingGradingResult?> RegradeSubmittedAsync(
+        string attemptId,
+        string questionRevisionId,
+        string newKeySnapshotJson,
+        CancellationToken ct)
+    {
+        var attempt = await db.ReadingAttempts
+            .Include(a => a.Answers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
+        if (attempt is null || attempt.Status != ReadingAttemptStatus.Submitted)
+            return null;
+        if (string.IsNullOrWhiteSpace(questionRevisionId))
+            throw new InvalidOperationException("remark_question_revision_required");
+        return await GradeAndPersistAsync(
+            attempt,
+            auditAction: null,
+            ct,
+            new KeyCorrection(questionRevisionId.Trim(), newKeySnapshotJson));
     }
 
     private async Task<ReadingGradingResult> GradeAndPersistAsync(
-        ReadingAttempt attempt, string? auditAction, CancellationToken ct)
+        ReadingAttempt attempt,
+        string? auditAction,
+        CancellationToken ct,
+        KeyCorrection? keyCorrection)
     {
+        var currentPaperRevision = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.Id == attempt.PaperId)
+            .Select(p => p.PublishedRevisionId)
+            .SingleOrDefaultAsync(ct);
+        if (keyCorrection is null
+            && attempt.PaperRevisionId is not null
+            && !string.Equals(attempt.PaperRevisionId, currentPaperRevision, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The published Reading question revision changed after this attempt started. The attempt is held for controlled re-marking.");
+        }
+
         // Load all questions for the paper (single round-trip)
         var partIds = await db.ReadingParts
             .Where(p => p.PaperId == attempt.PaperId)
@@ -123,6 +166,8 @@ public sealed class ReadingGradingService(
             .ToListAsync(ct);
 
         var questionById = questions.ToDictionary(q => q.Id);
+        if (keyCorrection is not null && !questionById.ContainsKey(keyCorrection.QuestionRevisionId))
+            throw new InvalidOperationException("remark_question_revision_not_found");
         var answersByQuestionId = attempt.Answers.ToDictionary(a => a.ReadingQuestionId);
 
         // Phase 3b: subset modes (Drill / MiniTest / ErrorBank) only score
@@ -149,14 +194,17 @@ public sealed class ReadingGradingService(
                 continue;
             }
 
+            var gradingQuestion = keyCorrection?.QuestionRevisionId == q.Id
+                ? ApplyKeyCorrection(q, keyCorrection.NewKeySnapshotJson)
+                : q;
             var partCode = partCodeByPartId.GetValueOrDefault(q.ReadingPartId, ReadingPartCode.A);
-            var (isCorrect, pts) = GradeOne(q, answer, policy, attempt.Mode, partCode);
+            var (isCorrect, pts) = GradeOne(gradingQuestion, answer, policy, attempt.Mode, partCode);
             answer.IsCorrect = isCorrect;
             answer.PointsEarned = pts;
             answer.SelectedDistractorCategory = isCorrect
                 ? null
-                : ResolveSelectedDistractor(q, answer);
-            answer.MissReason = ClassifyMiss(q, answer, policy, partCode, isCorrect);
+                : ResolveSelectedDistractor(gradingQuestion, answer);
+            answer.MissReason = ClassifyMiss(gradingQuestion, answer, policy, partCode, isCorrect);
             raw += pts;
             if (isCorrect) correctCount++; else incorrectCount++;
             details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points, answer.MissReason));
@@ -1004,6 +1052,67 @@ public sealed class ReadingGradingService(
 
         return await policyService.ResolveForUserAsync(attempt.UserId, ct);
     }
+
+    private static ReadingQuestion ApplyKeyCorrection(ReadingQuestion question, string snapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotJson))
+            throw new InvalidOperationException("remark_key_snapshot_required");
+
+        using var document = JsonDocument.Parse(snapshotJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("remark_key_snapshot_invalid_json");
+        var root = document.RootElement;
+        var hasCorrect = root.TryGetProperty("correctAnswerJson", out var correctJson)
+            || root.TryGetProperty("correctAnswer", out correctJson);
+        var hasAccepted = root.TryGetProperty("acceptedSynonymsJson", out var acceptedJson)
+            || root.TryGetProperty("acceptedVariants", out acceptedJson);
+        if (!hasCorrect && !hasAccepted)
+            throw new InvalidOperationException("remark_key_snapshot_missing_key");
+
+        var correctedAnswer = hasCorrect
+            ? correctJson.NameEquals("correctAnswerJson") && correctJson.ValueKind == JsonValueKind.String
+                ? correctJson.GetString() ?? "null"
+                : correctJson.ValueKind == JsonValueKind.String
+                    ? JsonSerializer.Serialize(correctJson.GetString())
+                    : correctJson.GetRawText()
+            : question.CorrectAnswerJson;
+        var correctedVariants = hasAccepted
+            ? acceptedJson.NameEquals("acceptedSynonymsJson") && acceptedJson.ValueKind == JsonValueKind.String
+                ? acceptedJson.GetString()
+                : acceptedJson.ValueKind == JsonValueKind.Null ? null : acceptedJson.GetRawText()
+            : question.AcceptedSynonymsJson;
+
+        return new ReadingQuestion
+        {
+            Id = question.Id,
+            ReadingPartId = question.ReadingPartId,
+            ReadingSectionId = question.ReadingSectionId,
+            ReadingTextId = question.ReadingTextId,
+            DisplayOrder = question.DisplayOrder,
+            Points = question.Points,
+            QuestionType = question.QuestionType,
+            Stem = question.Stem,
+            OptionsJson = question.OptionsJson,
+            ParagraphIndex = question.ParagraphIndex,
+            CorrectAnswerJson = correctedAnswer,
+            AcceptedSynonymsJson = correctedVariants,
+            CaseSensitive = question.CaseSensitive,
+            ExplanationMarkdown = question.ExplanationMarkdown,
+            SkillTag = question.SkillTag,
+            Difficulty = question.Difficulty,
+            EvidenceSentence = question.EvidenceSentence,
+            DistractorRationaleJson = question.DistractorRationaleJson,
+            OptionDistractorsJson = question.OptionDistractorsJson,
+            BoxExplanationsJson = question.BoxExplanationsJson,
+            ReviewState = question.ReviewState,
+            LatestReviewNote = question.LatestReviewNote,
+            CreatedAt = question.CreatedAt,
+            UpdatedAt = question.UpdatedAt,
+        };
+    }
+
+    private sealed record KeyCorrection(string QuestionRevisionId, string NewKeySnapshotJson);
+
     private static ReadingResolvedPolicy ApplyGovernedMarkingPolicy(
         ReadingResolvedPolicy policy,
         string snapshotJson)

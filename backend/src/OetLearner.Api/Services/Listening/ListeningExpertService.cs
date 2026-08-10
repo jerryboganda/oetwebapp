@@ -65,8 +65,8 @@ public sealed record ListeningExpertAnswerItem(
     string? SpeakerAttitude,
     IReadOnlyList<ListeningExpertOptionAnalysisItem>? OptionAnalysis,
     // Part A AI marking (Claude Sonnet 4.6) — advisory only. The tutor remains the
-    // human authority; these surface the AI's per-gap judgement alongside the
-    // deterministic IsCorrect. Null for MCQ items or not-yet-scored answers.
+    // human authority; these surface evidence-bound metadata alongside the
+    // deterministic IsCorrect. Null for MCQ items or not-yet-reviewed answers.
     string? AiVerdict = null,
     string? AiRationale = null);
 

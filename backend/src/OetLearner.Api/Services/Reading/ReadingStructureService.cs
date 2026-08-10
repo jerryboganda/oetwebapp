@@ -438,6 +438,18 @@ public sealed class ReadingStructureService : IReadingStructureService
             row = await db.ReadingQuestions.FirstOrDefaultAsync(q => q.Id == args.Id, ct);
         if (row is not null && !string.Equals(row.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
             throw new InvalidOperationException("Existing Reading question belongs to a different part.");
+        if (row is not null)
+        {
+            var paperStatus = await db.ReadingParts.AsNoTracking()
+                .Where(part => part.Id == row.ReadingPartId)
+                .Select(part => part.Paper!.Status)
+                .SingleAsync(ct);
+            if (paperStatus == ContentStatus.Published)
+            {
+                throw new InvalidOperationException(
+                    "Published Reading content is immutable. Create and approve a new content revision before changing an answer key or variant.");
+            }
+        }
         var now = DateTimeOffset.UtcNow;
         if (row is null)
         {
