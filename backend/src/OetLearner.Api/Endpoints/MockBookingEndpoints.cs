@@ -569,6 +569,19 @@ public static class MockBookingEndpoints
                 throw ApiException.Conflict("booking_started", "Bookings cannot be rescheduled after the session has started.");
             }
 
+            var targetExamDate = await db.Goals.AsNoTracking()
+                .Where(goal => goal.UserId == userId)
+                .Select(goal => (DateOnly?)goal.TargetExamDate)
+                .SingleOrDefaultAsync(ct);
+            if (SpeakingBookingPolicy.TutorWindowClosed(
+                    targetExamDate,
+                    DateOnly.FromDateTime(now.UtcDateTime)))
+            {
+                throw ApiException.Conflict(
+                    "speaking_tutor_window_closed",
+                    "A Full Mock Speaking tutor session is available only when the exam is at least 7 days away.");
+            }
+
             // Slot collision check on the new target, span-aware and excluding
             // the booking being moved.
             var bookingMinutes = await db.MockBundles.AsNoTracking()

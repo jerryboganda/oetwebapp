@@ -77,7 +77,7 @@ public sealed class PrivateSpeakingAdminActionsTests
 
         var subscription = SeedSubscription(db, "sub-1", "learner-1", speakingRemaining: 0);
         // Inside the cancellation window (only 2h out) — override bypasses the window.
-        var booking = SeedConfirmedBooking(db, Now.AddHours(2), b =>
+        var booking = SeedConfirmedBooking(db, Now.AddHours(48), b =>
         {
             b.EntitlementConsumed = true;
             b.EntitlementSubscriptionId = subscription.Id;
@@ -110,7 +110,7 @@ public sealed class PrivateSpeakingAdminActionsTests
         var stripe = new FakeStripeService { RefundIdToReturn = "re_override_1" };
         var service = CreateService(db, stripe);
 
-        var booking = SeedConfirmedBooking(db, Now.AddHours(2), b =>
+        var booking = SeedConfirmedBooking(db, Now.AddHours(48), b =>
         {
             b.StripePaymentIntentId = "pi_paid_1";
             b.PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded;
@@ -119,19 +119,19 @@ public sealed class PrivateSpeakingAdminActionsTests
         await db.SaveChangesAsync();
 
         var (success, error) = await service.OverrideRefundAsync(
-            booking.Id, "admin-1", amountMinorUnits: 2500, reason: "partial", CancellationToken.None);
+            booking.Id, "admin-1", amountMinorUnits: 5000, reason: "full", CancellationToken.None);
 
         Assert.True(success, error);
 
         Assert.Equal(1, stripe.RefundCallCount);
         Assert.Equal("pi_paid_1", stripe.LastPaymentIntentId);
-        Assert.Equal(2500, stripe.LastAmountCents);
+        Assert.Equal(5000, stripe.LastAmountCents);
 
         var saved = await db.PrivateSpeakingBookings.FindAsync(booking.Id);
         Assert.Equal(PrivateSpeakingBookingStatus.Refunded, saved!.Status);
         Assert.True(saved.RefundIssued);
         Assert.Equal("re_override_1", saved.StripeRefundId);
-        Assert.Equal(2500, saved.RefundAmountMinorUnits);
+        Assert.Equal(5000, saved.RefundAmountMinorUnits);
         Assert.Equal(PrivateSpeakingPaymentStatus.Refunded, saved.PaymentStatus);
     }
 
@@ -157,6 +157,21 @@ public sealed class PrivateSpeakingAdminActionsTests
     // ── AdminManualRescheduleAsync ──────────────────────────────────────
 
     [Fact]
+    public async Task OverrideRefund_Inside24HourWindow_IsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, new FakeStripeService());
+        var booking = SeedConfirmedBooking(db, Now.AddHours(24), b => b.PriceMinorUnits = 5000);
+        await db.SaveChangesAsync();
+
+        var (success, error) = await service.OverrideRefundAsync(
+            booking.Id, "admin-1", null, "requested", CancellationToken.None);
+
+        Assert.False(success);
+        Assert.Contains("more than 24 hours", error);
+    }
+
+    [Fact]
     public async Task AdminManualReschedule_MovesSessionAndResetsZoomForRecreation()
     {
         await using var db = CreateDb();
@@ -173,7 +188,9 @@ public sealed class PrivateSpeakingAdminActionsTests
         });
         await db.SaveChangesAsync();
 
-        var newStart = Now.AddHours(72);
+        SeedTutorWithMondayAvailability(db);
+        await db.SaveChangesAsync();
+        var newStart = MondaySlotUtc;
         var (success, error) = await service.AdminManualRescheduleAsync(
             booking.Id, "admin-1", newStart, "tutor sick", CancellationToken.None);
 

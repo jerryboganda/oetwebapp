@@ -344,7 +344,8 @@ public sealed class PrivateSpeakingService(
     /// Combines weekly rules, overrides, and existing bookings to produce real-time availability.
     /// </summary>
     public async Task<List<AvailableSlot>> GetAvailableSlotsAsync(
-        string tutorProfileId, DateOnly fromDate, DateOnly toDate, CancellationToken ct)
+        string tutorProfileId, DateOnly fromDate, DateOnly toDate, CancellationToken ct,
+        string? excludeBookingId = null)
     {
         var config = await GetConfigAsync(ct);
         var profile = await db.PrivateSpeakingTutorProfiles.FindAsync([tutorProfileId], ct);
@@ -381,6 +382,7 @@ public sealed class PrivateSpeakingService(
             .Where(b => b.TutorProfileId == tutorProfileId
                 && b.SessionStartUtc < queryEndUtc
                 && b.SessionStartUtc.AddMinutes(b.DurationMinutes) > queryStartUtc
+                && (excludeBookingId == null || b.Id != excludeBookingId)
                 && b.Status != PrivateSpeakingBookingStatus.Cancelled
                 && b.Status != PrivateSpeakingBookingStatus.Expired
                 && b.Status != PrivateSpeakingBookingStatus.Failed
@@ -1716,7 +1718,10 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("Tutor is not available.");
 
         var durationMinutes = original.DurationMinutes;
-        if (!await IsRequestedSlotAvailableAsync(profile, newSessionStartUtc, durationMinutes, ct))
+        if (newSessionStartUtc > now.AddDays(config.MaxBookingAdvanceDays))
+            return BookingCheckoutResult.Fail($"Sessions cannot be rescheduled more than {config.MaxBookingAdvanceDays} days in advance.");
+
+        if (!await IsRequestedSlotAvailableAsync(profile, newSessionStartUtc, durationMinutes, ct, original.Id))
             return BookingCheckoutResult.Fail("This time slot is no longer available. Please select another slot.");
 
         var newSessionEndUtc = newSessionStartUtc.AddMinutes(durationMinutes);
@@ -2063,13 +2068,42 @@ public sealed class PrivateSpeakingService(
             .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
         if (booking is null) return null;
 
+        var now = timeProvider.GetUtcNow();
+        var scheduleChanged = sessionStartUtc.HasValue && sessionStartUtc.Value != booking.SessionStartUtc;
+        var durationChanged = durationMinutes.HasValue && durationMinutes.Value != booking.DurationMinutes;
+        if (scheduleChanged || durationChanged)
+        {
+            if (booking.Status is PrivateSpeakingBookingStatus.Cancelled
+                or PrivateSpeakingBookingStatus.Refunded
+                or PrivateSpeakingBookingStatus.Completed
+                or PrivateSpeakingBookingStatus.NoShow)
+                throw ApiException.Conflict("booking_finalized", "This booking cannot be rescheduled in its current state.");
+            if (!SpeakingBookingPolicy.RescheduleAllowed(booking.SessionStartUtc, now))
+                throw ApiException.Conflict("booking_started", "Bookings cannot be rescheduled after the session has started.");
+            if (booking.TutorProfile is null || !booking.TutorProfile.IsActive)
+                throw ApiException.Conflict("tutor_unavailable", "The assigned tutor is no longer available.");
+
+            var targetStart = sessionStartUtc ?? booking.SessionStartUtc;
+            var targetDuration = durationMinutes ?? booking.DurationMinutes;
+            if (targetDuration <= 0)
+                throw ApiException.Validation("invalid_duration", "durationMinutes must be positive.");
+            var config = await GetConfigAsync(ct);
+            if (targetStart > now.AddDays(config.MaxBookingAdvanceDays))
+                throw ApiException.Validation("advance_window_exceeded", "The booking is too far in advance.");
+            if (!await IsRequestedSlotAvailableAsync(
+                    booking.TutorProfile, targetStart, targetDuration, ct, booking.Id))
+                throw ApiException.Conflict(
+                    "tutor_slot_unavailable",
+                    "Scheduling changes are allowed only on a currently available tutor-calendar slot.");
+        }
+
         var changes = new List<string>();
-        if (sessionStartUtc.HasValue)
+        if (scheduleChanged)
         {
             booking.SessionStartUtc = sessionStartUtc.Value;
             changes.Add($"sessionStartUtc={sessionStartUtc.Value:O}");
         }
-        if (durationMinutes.HasValue)
+        if (durationChanged)
         {
             booking.DurationMinutes = durationMinutes.Value;
             changes.Add($"durationMinutes={durationMinutes.Value}");
@@ -2085,16 +2119,36 @@ public sealed class PrivateSpeakingService(
             changes.Add("tutorNotes=updated");
         }
 
-        booking.UpdatedAt = timeProvider.GetUtcNow();
+        booking.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
         await AuditAsync(booking.Id, adminId, "admin", "admin_booking_edited",
             changes.Count == 0 ? "no_changes" : string.Join(", ", changes), ct);
+
+        if (scheduleChanged || durationChanged)
+        {
+            if (booking.ZoomMeetingId.HasValue)
+            {
+                try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for admin booking edit", booking.ZoomMeetingId); }
+            }
+            booking.ZoomMeetingId = null;
+            booking.ZoomJoinUrl = null;
+            booking.ZoomStartUrl = null;
+            booking.ZoomMeetingPassword = null;
+            booking.ZoomStatus = PrivateSpeakingZoomStatus.Pending;
+            booking.ZoomError = null;
+            booking.Status = PrivateSpeakingBookingStatus.Confirmed;
+            QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
+            QueueCalendarSyncJob(booking.Id);
+            await db.SaveChangesAsync(ct);
+        }
+
         return booking;
     }
 
     /// <summary>
-    /// Admin forces a refund and/or entitlement return regardless of the
-    /// cancellation window. Restores an unconsumed-and-not-rescheduled entitlement,
+    /// Admin performs the same strict full-refund eligibility check as the learner.
+    /// Restores an unconsumed-and-not-rescheduled entitlement,
     /// issues a Stripe refund for direct-paid bookings, and flips the booking to
     /// Refunded. Rejects bookings already in the Refunded state.
     /// </summary>
@@ -2108,6 +2162,10 @@ public sealed class PrivateSpeakingService(
             return (false, "Booking has already been refunded.");
 
         var now = timeProvider.GetUtcNow();
+        if (!SpeakingBookingPolicy.FullRefundEligible(booking.SessionStartUtc, now))
+            return (false, "A full refund is available only when cancellation is made more than 24 hours before the scheduled start time.");
+        if (amountMinorUnits.HasValue && amountMinorUnits.Value != booking.PriceMinorUnits)
+            return (false, "Only a full refund is permitted by the Speaking booking policy.");
         booking.RefundIssued = true;
 
         if (booking.EntitlementConsumed
@@ -2150,8 +2208,8 @@ public sealed class PrivateSpeakingService(
     }
 
     /// <summary>
-    /// Admin moves a booking to a new time IN-PLACE, bypassing window/penalty/
-    /// availability checks. Any existing Zoom meeting is deleted, then the booking
+    /// Admin moves a booking to a new time IN-PLACE, subject to future,
+    /// advance-window, and canonical tutor-calendar availability checks. Any existing Zoom meeting is deleted, then the booking
     /// is reset to Confirmed/ZoomStatus=Pending and a Zoom-create job is re-queued
     /// so a fresh room is provisioned at the new time. Rejects terminal-state
     /// bookings. zoomService is only invoked when an old <see cref="PrivateSpeakingBooking.ZoomMeetingId"/>
@@ -2161,7 +2219,9 @@ public sealed class PrivateSpeakingService(
         string bookingId, string adminId,
         DateTimeOffset newSessionStartUtc, string? reason, CancellationToken ct)
     {
-        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
         if (booking is null) return (false, "Booking not found.");
 
         if (booking.Status is PrivateSpeakingBookingStatus.Cancelled
@@ -2171,6 +2231,16 @@ public sealed class PrivateSpeakingService(
             return (false, "Booking cannot be rescheduled in its current state.");
 
         var now = timeProvider.GetUtcNow();
+        if (!SpeakingBookingPolicy.RescheduleAllowed(booking.SessionStartUtc, now))
+            return (false, "This session has already started and can no longer be rescheduled.");
+        var config = await GetConfigAsync(ct);
+        if (newSessionStartUtc > now.AddDays(config.MaxBookingAdvanceDays))
+            return (false, $"Sessions cannot be rescheduled more than {config.MaxBookingAdvanceDays} days in advance.");
+        if (booking.TutorProfile is null || !booking.TutorProfile.IsActive)
+            return (false, "The assigned tutor is no longer available.");
+        if (!await IsRequestedSlotAvailableAsync(
+                booking.TutorProfile, newSessionStartUtc, booking.DurationMinutes, ct, booking.Id))
+            return (false, "Rescheduling is available only to a slot currently open in the tutor calendar.");
         booking.SessionStartUtc = newSessionStartUtc;
         booking.UpdatedAt = now;
 
@@ -2447,7 +2517,8 @@ public sealed class PrivateSpeakingService(
         PrivateSpeakingTutorProfile profile,
         DateTimeOffset sessionStartUtc,
         int durationMinutes,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? excludeBookingId = null)
     {
         TimeZoneInfo tutorTimeZone;
         try
@@ -2465,7 +2536,7 @@ public sealed class PrivateSpeakingService(
 
         var tutorLocalStart = TimeZoneInfo.ConvertTime(sessionStartUtc, tutorTimeZone);
         var tutorLocalDate = DateOnly.FromDateTime(tutorLocalStart.DateTime);
-        var slots = await GetAvailableSlotsAsync(profile.Id, tutorLocalDate, tutorLocalDate, ct);
+        var slots = await GetAvailableSlotsAsync(profile.Id, tutorLocalDate, tutorLocalDate, ct, excludeBookingId);
         return slots.Any(slot => slot.StartTimeUtc == sessionStartUtc && slot.DurationMinutes == durationMinutes);
     }
 

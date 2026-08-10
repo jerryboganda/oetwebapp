@@ -165,6 +165,10 @@ public sealed class MockBookingService
     {
         var booking = await _db.MockBookings.FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
+        if (await IsSpeakingBundleAsync(booking.MockBundleId, ct))
+            throw ApiException.Conflict(
+                "canonical_speaking_booking_required",
+                "Speaking tutor assignment must use the canonical private-speaking tutor calendar.");
         if (request.AssignedTutorId is not null) booking.AssignedTutorId = request.AssignedTutorId;
         if (request.AssignedInterlocutorId is not null) booking.AssignedInterlocutorId = request.AssignedInterlocutorId;
         if (!string.IsNullOrWhiteSpace(request.Status) && MockBookingStatuses.IsValid(request.Status))
