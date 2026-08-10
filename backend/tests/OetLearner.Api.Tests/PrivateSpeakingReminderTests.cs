@@ -147,6 +147,9 @@ public sealed class PrivateSpeakingReminderTests
             Currency = "GBP",
             PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded,
             PaymentConfirmedAt = Now.AddDays(-1),
+            ZoomStatus = PrivateSpeakingZoomStatus.Created,
+            ZoomJoinUrl = "https://zoom.test/j/123",
+            ZoomStartUrl = "https://zoom.test/s/123",
             RemindersSentJson = "[]",
             CreatedAt = Now.AddDays(-2),
             UpdatedAt = Now.AddDays(-2)

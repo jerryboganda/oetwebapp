@@ -3272,6 +3272,7 @@ function mapMockBooking(item: ApiRecord): MockBooking {
     bookingId: String(item.bookingId ?? item.id ?? ''),
     mockBundleId: String(item.mockBundleId ?? ''),
     mockAttemptId: item.mockAttemptId ? String(item.mockAttemptId) : null,
+    tutorProfileId: item.tutorProfileId ? String(item.tutorProfileId) : null,
     title: item.title ? String(item.title) : item.mockBundleTitle ? String(item.mockBundleTitle) : undefined,
     scheduledStartAt: String(item.scheduledStartAt ?? ''),
     timezoneIana: String(item.timezoneIana ?? 'UTC'),

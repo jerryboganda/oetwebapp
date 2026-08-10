@@ -16,10 +16,8 @@ namespace OetLearner.Api.Endpoints;
 ///
 /// The existing <c>/v1/mock-bookings</c> learner endpoints (registered by
 /// <c>LearnerEndpoints</c>) are intentionally left untouched — this group adds
-/// the Phase 5 calendar-style flow with 30-minute slot semantics, a 14-day
-/// availability window, idempotent creates, and stricter reschedule / cancel
-/// guardrails (24h reschedule cut-off, 6h cancellation cut-off, max 2
-/// reschedules per booking).
+/// the Phase 5 calendar-style flow with canonical tutor-calendar slots,
+/// idempotent creates, and strict reschedule / cancel guardrails.
 ///
 /// The reminder worker (<c>MockBookingReminderWorker</c>) automatically picks
 /// up newly-created bookings — no manual trigger is needed here.
@@ -28,9 +26,6 @@ public static class MockBookingEndpoints
 {
     /// <summary>Fallback duration for bundles without a configured duration.</summary>
     private const int SlotMinutes = 30;
-
-    /// <summary>Rolling availability window from the supplied <c>date</c>.</summary>
-    private const int AvailabilityWindowDays = 14;
 
     public static IEndpointRouteBuilder MapMockBookingEndpoints(this IEndpointRouteBuilder app)
     {
@@ -116,15 +111,19 @@ public static class MockBookingEndpoints
                     DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime));
 
             // Full Mock Speaking availability is a projection of the canonical
-            // private-speaking tutor calendar. No synthetic fallback slots are
-            // returned.
+            // private-speaking tutor calendar. Query surrounding days so a
+            // candidate timezone boundary is covered, then return only slots
+            // whose instant falls on the requested candidate-local date.
             var canonicalCalendarSlots = await speakingService.GetAllAvailableSlotsAsync(
-                startDate, startDate.AddDays(AvailabilityWindowDays - 1), ct);
+                startDate.AddDays(-1), startDate.AddDays(1), ct);
+            canonicalCalendarSlots = canonicalCalendarSlots
+                .Where(slot => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(slot.StartTimeUtc, tz).DateTime) == startDate)
+                .ToList();
             var canonicalWindowStart = canonicalCalendarSlots.Count == 0
                 ? DateTimeOffset.UtcNow.AddDays(-1)
                 : canonicalCalendarSlots.Min(slot => slot.StartTimeUtc).AddMinutes(-requestedMinutes);
             var canonicalWindowEnd = canonicalCalendarSlots.Count == 0
-                ? DateTimeOffset.UtcNow.AddDays(AvailabilityWindowDays + 1)
+                ? DateTimeOffset.UtcNow.AddDays(1)
                 : canonicalCalendarSlots.Max(slot => slot.EndTimeUtc).AddMinutes(requestedMinutes);
             var longestCanonicalMinutes = await db.MockBundles.AsNoTracking()
                 .Select(bundle => (int?)bundle.EstimatedDurationMinutes)
@@ -548,7 +547,13 @@ public static class MockBookingEndpoints
             {
                 throw ApiException.NotFound("mock_booking_not_found", "Mock booking not found.");
             }
-            if (booking.Status == MockBookingStatuses.Cancelled || booking.Status == MockBookingStatuses.Completed)
+            if (!await IsSpeakingBundleAsync(db, booking.MockBundleId, ct))
+            {
+                throw ApiException.Conflict(
+                    "canonical_speaking_booking_required",
+                    "Speaking rescheduling must use the canonical tutor-calendar workflow.");
+            }
+            if (booking.Status is not (MockBookingStatuses.Scheduled or MockBookingStatuses.Confirmed))
             {
                 throw ApiException.Conflict("booking_finalized", "This booking can no longer be rescheduled.");
             }
@@ -558,6 +563,10 @@ public static class MockBookingEndpoints
             if (newStart <= now)
             {
                 throw ApiException.Validation("invalid_request", "scheduledStartAt must be in the future.");
+            }
+            if (booking.ScheduledStartAt <= now)
+            {
+                throw ApiException.Conflict("booking_started", "Bookings cannot be rescheduled after the session has started.");
             }
 
             // Slot collision check on the new target, span-aware and excluding
@@ -654,6 +663,12 @@ public static class MockBookingEndpoints
             if (booking is null || booking.UserId != userId)
             {
                 throw ApiException.NotFound("mock_booking_not_found", "Mock booking not found.");
+            }
+            if (!await IsSpeakingBundleAsync(db, booking.MockBundleId, ct))
+            {
+                throw ApiException.Conflict(
+                    "canonical_speaking_booking_required",
+                    "Speaking cancellation must use the canonical tutor-calendar workflow.");
             }
 
             // Idempotent: cancelling an already-cancelled booking is a no-op.
@@ -766,6 +781,21 @@ public static class MockBookingEndpoints
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 
+    private static async Task<bool> IsSpeakingBundleAsync(
+        LearnerDbContext db,
+        string bundleId,
+        CancellationToken ct)
+    {
+        if (await db.MockBundles.AsNoTracking()
+                .AnyAsync(bundle => bundle.Id == bundleId && bundle.SubtestCode == "speaking", ct))
+        {
+            return true;
+        }
+
+        return await db.MockBundleSections.AsNoTracking()
+            .AnyAsync(section => section.MockBundleId == bundleId && section.SubtestCode == "speaking", ct);
+    }
+
     /// <summary>
     /// True when a mock of <paramref name="minutes"/> starting at
     /// <paramref name="startAt"/> would overlap a live booking.
@@ -830,6 +860,7 @@ public static class MockBookingEndpoints
             ["mockBundleTitle"] = bundle?.Title,
             ["mockAttemptId"] = b.MockAttemptId,
             ["mockSectionId"] = b.MockSectionId,
+            ["tutorProfileId"] = b.TutorProfileId,
             ["scheduledStartAt"] = b.ScheduledStartAt,
             ["timezoneIana"] = b.TimezoneIana,
             ["status"] = b.Status,

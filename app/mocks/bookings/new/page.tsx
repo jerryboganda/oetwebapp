@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   CalendarDays,
   CheckCircle2,
@@ -26,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/form-controls';
 import {
   createMockBookingV2,
+  fetchMockSpeakingAccess,
   fetchMockAvailability,
   fetchMockOptions,
   isApiError,
@@ -117,6 +119,8 @@ export default function NewMockBookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [speakingAccess, setSpeakingAccess] = useState<{ requiresAiOnly: boolean; daysUntilExam: number | null } | null>(null);
+  const [speakingAccessError, setSpeakingAccessError] = useState<string | null>(null);
 
   // Load bundles once, then auto-select a Speaking bundle (the main booking case).
   useEffect(() => {
@@ -135,6 +139,22 @@ export default function NewMockBookingPage() {
       })
       .finally(() => {
         if (!cancelled) setOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMockSpeakingAccess()
+      .then((result) => {
+        if (!cancelled) setSpeakingAccess(result);
+      })
+      .catch(() => {
+        // Fail closed: do not offer a tutor booking until the authoritative
+        // server decision is available.
+        if (!cancelled) setSpeakingAccessError('Could not verify whether tutor booking is available. Please try again.');
       });
     return () => {
       cancelled = true;
@@ -240,6 +260,32 @@ export default function NewMockBookingPage() {
   };
 
   const noSlotsBecauseOfDate = !slotsLoading && slots.length === 0 && !error;
+
+  if (!speakingAccess) {
+    return (
+      <LearnerDashboardShell pageTitle="Book a Mock" backHref="/mocks">
+        <InlineAlert variant={speakingAccessError ? 'error' : 'info'}>
+          {speakingAccessError ?? 'Checking whether tutor booking is available...'}
+        </InlineAlert>
+      </LearnerDashboardShell>
+    );
+  }
+
+  if (speakingAccess.requiresAiOnly) {
+    const aiHref = `/speaking/exam?${searchParams?.toString() ?? ''}`;
+    return (
+      <LearnerDashboardShell pageTitle="Book a Mock" backHref="/mocks">
+        <InlineAlert variant="warning">
+          Your exam is less than 7 days away, so this Full Mock Speaking section is AI-only. Tutor booking is not available.
+        </InlineAlert>
+        <div className="mt-4">
+          <Link href={aiHref} className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white">
+            Start AI Speaking Exam
+          </Link>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
 
   return (
     <LearnerDashboardShell pageTitle="Book a Mock" subtitle="Pick a slot for your live Speaking or final-readiness mock" backHref="/mocks/bookings">

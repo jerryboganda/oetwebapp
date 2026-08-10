@@ -43,6 +43,7 @@ public sealed class PrivateSpeakingService(
         config = new PrivateSpeakingConfig
         {
             UpdatedAt = timeProvider.GetUtcNow(),
+            RescheduleSameDayPenaltyPercent = 0,
             CancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 24 hours before the scheduled start time. If you cancel 24 hours or less before the session, a full refund is not available.",
             BookingPolicyText = "You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.",
         };
@@ -56,6 +57,9 @@ public sealed class PrivateSpeakingService(
     {
         var config = await GetConfigAsync(ct);
         mutate(config);
+        // The workflow has no same-day penalty tier. Enforce this invariant
+        // even if an old caller bypasses the current admin endpoint.
+        config.RescheduleSameDayPenaltyPercent = 0;
         config.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
         await AuditAsync(null, adminId, "admin", "config_updated", null, ct);
@@ -756,9 +760,8 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(booking.Id, "system", "system", "payment_confirmed",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
 
-        // Same-day reschedule penalty paid → finalize the reschedule by cancelling
-        // the original (which has been holding the slot). Entitlement is NOT restored:
-        // RescheduledToBookingId is set, so it carried to this replacement.
+        // A replacement booking carries the original entitlement and finalizes
+        // the original booking after successful payment.
         if (booking.RescheduledFromBookingId is not null)
         {
             var original = await db.PrivateSpeakingBookings
@@ -782,10 +785,6 @@ public sealed class PrivateSpeakingService(
                 await db.SaveChangesAsync(ct);
             }
 
-            // PDF §10 reschedule confirmation for the same-day penalty path. The
-            // confirmed replacement carries PenaltyAmountMinorUnits, so the learner
-            // message surfaces the penalty amount.
-            await SendRescheduleConfirmationNotificationsAsync(booking.Id, ct);
         }
 
         QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
@@ -837,7 +836,7 @@ public sealed class PrivateSpeakingService(
     }
 
     /// <summary>
-    /// When a same-day reschedule penalty checkout expires or fails, abort the
+    /// When a legacy replacement checkout expires or fails, abort the
     /// reschedule: clear the original's <see cref="PrivateSpeakingBooking.RescheduledToBookingId"/>
     /// link so the original booking stays intact/Confirmed and the learner keeps
     /// their slot. No penalty is applied.
@@ -907,6 +906,7 @@ public sealed class PrivateSpeakingService(
             await AuditAsync(booking.Id, "system", "system", "zoom_created",
                 $"Meeting ID: {result.MeetingId}", ct);
 
+            QueueBookingConfirmationJob(booking.Id);
             QueueCalendarSyncJob(booking.Id);
             await db.SaveChangesAsync(ct);
         }
@@ -940,7 +940,14 @@ public sealed class PrivateSpeakingService(
             .Include(b => b.TutorProfile)
             .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
 
-        if (booking is null) return;
+        if (booking is null
+            || booking.Status != PrivateSpeakingBookingStatus.ZoomCreated
+            || booking.ZoomStatus != PrivateSpeakingZoomStatus.Created
+            || string.IsNullOrWhiteSpace(booking.ZoomJoinUrl))
+        {
+            // A confirmation is valid only after Zoom provisioning succeeds.
+            return;
+        }
 
         var tutorName = booking.TutorProfile?.DisplayName ?? "Tutor";
         var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
@@ -957,7 +964,8 @@ public sealed class PrivateSpeakingService(
                 ["tutorName"] = tutorName,
                 ["sessionTime"] = sessionTime,
                 ["duration"] = booking.DurationMinutes.ToString(),
-                ["bookingId"] = booking.Id
+                ["bookingId"] = booking.Id,
+                ["zoomJoinUrl"] = booking.ZoomJoinUrl
             },
             ct);
 
@@ -974,7 +982,8 @@ public sealed class PrivateSpeakingService(
                 {
                     ["sessionTime"] = sessionTime,
                     ["duration"] = booking.DurationMinutes.ToString(),
-                    ["bookingId"] = booking.Id
+                    ["bookingId"] = booking.Id,
+                    ["zoomStartUrl"] = booking.ZoomStartUrl
                 },
                 ct);
         }
@@ -992,6 +1001,11 @@ public sealed class PrivateSpeakingService(
                 ["bookingId"] = booking.Id
             },
             ct);
+
+        if (booking.RescheduledFromBookingId is not null)
+        {
+            await SendRescheduleConfirmationNotificationsAsync(booking.Id, ct);
+        }
     }
 
     /// <summary>
@@ -1005,15 +1019,18 @@ public sealed class PrivateSpeakingService(
             .Include(b => b.TutorProfile)
             .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
 
-        if (booking is null) return;
+        if (booking is null
+            || booking.Status != PrivateSpeakingBookingStatus.ZoomCreated
+            || booking.ZoomStatus != PrivateSpeakingZoomStatus.Created
+            || string.IsNullOrWhiteSpace(booking.ZoomJoinUrl))
+        {
+            // Never send a reschedule confirmation before the replacement Zoom
+            // room and learner join URL are ready.
+            return;
+        }
 
         var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
         var dedupeBucket = booking.UpdatedAt.ToString("yyyyMMddHHmm");
-
-        // Penalty phrase appended to the learner body (empty when no penalty applies).
-        var penaltyText = booking.PenaltyAmountMinorUnits is int penaltyMinor && penaltyMinor > 0
-            ? $" A reschedule penalty of {FormatCurrency(penaltyMinor, booking.Currency)} was applied."
-            : string.Empty;
 
         // Notify learner
         await notificationService.CreateForLearnerAsync(
@@ -1026,7 +1043,11 @@ public sealed class PrivateSpeakingService(
             {
                 ["sessionTime"] = sessionTime,
                 ["bookingId"] = booking.Id,
-                ["penalty"] = penaltyText
+                // The current workflow has no reschedule penalty. Keep the
+                // contract stable for older notification templates without
+                // exposing a legacy penalty amount.
+                ["penalty"] = string.Empty,
+                ["zoomJoinUrl"] = booking.ZoomJoinUrl
             },
             ct);
 
@@ -1042,15 +1063,12 @@ public sealed class PrivateSpeakingService(
                 new Dictionary<string, object?>
                 {
                     ["sessionTime"] = sessionTime,
-                    ["bookingId"] = booking.Id
+                    ["bookingId"] = booking.Id,
+                    ["zoomStartUrl"] = booking.ZoomStartUrl
                 },
                 ct);
         }
     }
-
-    /// <summary>Format a minor-units amount as "{CURRENCY} {amount:0.00}" (e.g. "GBP 25.00").</summary>
-    private static string FormatCurrency(int minorUnits, string currency)
-        => $"{currency} {(minorUnits / 100.0).ToString("0.00", CultureInfo.InvariantCulture)}";
 
     // ── Reminder Processing ─────────────────────────────────────────────
 
@@ -1082,6 +1100,8 @@ public sealed class PrivateSpeakingService(
             .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
                 || b.Status == PrivateSpeakingBookingStatus.ZoomCreated)
                 && b.SessionStartUtc > now
+                && b.ZoomStatus == PrivateSpeakingZoomStatus.Created
+                && b.ZoomJoinUrl != null
                 && b.SessionStartUtc <= now.AddMinutes(maxOffset + 5))
             .ToListAsync(ct);
 
@@ -1123,7 +1143,8 @@ public sealed class PrivateSpeakingService(
                         ["tutorName"] = tutorName,
                         ["sessionTime"] = sessionTime,
                         ["timeUntil"] = timeUntil,
-                        ["bookingId"] = booking.Id
+                        ["bookingId"] = booking.Id,
+                        ["zoomJoinUrl"] = booking.ZoomJoinUrl
                     },
                     ct);
 
@@ -1206,9 +1227,9 @@ public sealed class PrivateSpeakingService(
         if (staleBookings.Count > 0)
             await db.SaveChangesAsync(ct);
 
-        // A same-day reschedule penalty replacement is a PendingPayment row with a reservation
-        // timeout. If its Stripe checkout never resolves and this sweep (the safety net) expires
-        // it, mirror the webhook revert so the original booking is freed and no credit is stranded.
+        // A legacy reschedule replacement is a PendingPayment row with a reservation timeout.
+        // If its Stripe checkout never resolves and this sweep expires it, mirror the webhook
+        // revert so the original booking is freed and no credit is stranded.
         // RevertRescheduleIfPendingAsync is a no-op for normal (non-reschedule) reservations.
         foreach (var booking in staleBookings)
         {
@@ -1432,7 +1453,7 @@ public sealed class PrivateSpeakingService(
         var config = await GetConfigAsync(ct);
         var now = timeProvider.GetUtcNow();
 
-        // PDF §2.2 / §8 refund tiers. Learners forfeit refund inside the 48h
+        // PDF §2.2 / §8 refund tiers. Learners forfeit refund inside the 24h
         // window and cannot cancel after the session has started; admin/expert
         // (PDF edge case #7) always get a full refund and may cancel even after
         // the start time.
@@ -1623,12 +1644,8 @@ public sealed class PrivateSpeakingService(
 
         var now = timeProvider.GetUtcNow();
 
-        // PDF §2.3 / §9 reschedule tiers:
-        //  • After the session has started → rejected.
-        //  • >24h before start, OR <24h but a DIFFERENT calendar day (learner tz)
-        //    → FREE reschedule (entitlement carries, no payment).
-        //  • SAME calendar day (learner tz), before start → 50% Stripe penalty
-        //    (entitlement carries; learner pays the penalty to confirm the slot).
+        // PDF §2.3 / §9: any time before the session starts, the learner may
+        // reschedule only to a currently available tutor-calendar slot.
         if (now >= original.SessionStartUtc)
             return BookingCheckoutResult.Fail("This session has already started and can no longer be rescheduled.");
 
@@ -1726,9 +1743,6 @@ public sealed class PrivateSpeakingService(
                 try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
                 catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
             }
-
-            // PDF §10 reschedule confirmation (free tier → no penalty token).
-            await SendRescheduleConfirmationNotificationsAsync(freeReplacement.Id, ct);
 
         return new BookingCheckoutResult(
             true,
@@ -2439,6 +2453,15 @@ public sealed class PrivateSpeakingService(
             LastTransitionAt = now
         });
 
+        if (includeCalendarSync)
+        {
+            QueueCalendarSyncJob(bookingId);
+        }
+    }
+
+    private void QueueBookingConfirmationJob(string bookingId)
+    {
+        var now = timeProvider.GetUtcNow();
         db.BackgroundJobs.Add(new BackgroundJobItem
         {
             Id = $"bgj-{Guid.NewGuid():N}",
@@ -2449,11 +2472,6 @@ public sealed class PrivateSpeakingService(
             CreatedAt = now,
             LastTransitionAt = now
         });
-
-        if (includeCalendarSync)
-        {
-            QueueCalendarSyncJob(bookingId);
-        }
     }
 
     private void QueueCalendarSyncJob(string bookingId)

@@ -2734,10 +2734,17 @@ public sealed class MockService(
         expiresAt = reservation.ExpiresAt
     };
 
-    private Task<bool> IsSpeakingBundleAsync(string bundleId, CancellationToken ct)
-        => db.MockBundleSections.AsNoTracking().AnyAsync(section =>
-            section.MockBundleId == bundleId
-            && section.SubtestCode == "speaking", ct);
+    private async Task<bool> IsSpeakingBundleAsync(string bundleId, CancellationToken ct)
+    {
+        if (await db.MockBundles.AsNoTracking()
+                .AnyAsync(bundle => bundle.Id == bundleId && bundle.SubtestCode == "speaking", ct))
+        {
+            return true;
+        }
+
+        return await db.MockBundleSections.AsNoTracking()
+            .AnyAsync(section => section.MockBundleId == bundleId && section.SubtestCode == "speaking", ct);
+    }
 
     private static object ProjectBookingLearner(MockBooking booking)
         => ProjectBookingLearner(booking, booking.MockBundle);

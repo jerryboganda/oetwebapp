@@ -19,17 +19,17 @@ public sealed class PrivateSpeakingConfigDefaultsTests
         Assert.Equal("GBP", config.Currency);
         Assert.Equal(48, config.CancellationWindowHours);
         Assert.Equal(24, config.RescheduleFreeWindowHours);
-        Assert.Equal(50, config.RescheduleSameDayPenaltyPercent);
+        Assert.Equal(0, config.RescheduleSameDayPenaltyPercent);
         Assert.Equal("[1440, 60, 15]", config.ReminderOffsetsMinutesJson);
 
         Assert.False(string.IsNullOrWhiteSpace(config.CancellationPolicyText));
         Assert.False(string.IsNullOrWhiteSpace(config.BookingPolicyText));
-        Assert.Contains("48 hours", config.CancellationPolicyText!);
-        Assert.Contains("50%", config.BookingPolicyText!);
+        Assert.Contains("24 hours", config.CancellationPolicyText!);
+        Assert.DoesNotContain("50%", config.BookingPolicyText!);
     }
 
     [Fact]
-    public async Task UpdateConfigAsync_PersistsReminderOffsetsAndSameDayPenalty()
+    public async Task UpdateConfigAsync_RejectsLegacySameDayPenalty()
     {
         await using var db = CreateDb();
         var service = CreateService(db);
@@ -41,12 +41,12 @@ public sealed class PrivateSpeakingConfigDefaultsTests
         }, adminId: "adm-1", CancellationToken.None);
 
         Assert.Equal("[2880, 120, 30]", updated.ReminderOffsetsMinutesJson);
-        Assert.Equal(25, updated.RescheduleSameDayPenaltyPercent);
+        Assert.Equal(0, updated.RescheduleSameDayPenaltyPercent);
 
         // Re-read from the store to confirm the mutation was actually persisted.
         var reloaded = await service.GetConfigAsync(CancellationToken.None);
         Assert.Equal("[2880, 120, 30]", reloaded.ReminderOffsetsMinutesJson);
-        Assert.Equal(25, reloaded.RescheduleSameDayPenaltyPercent);
+        Assert.Equal(0, reloaded.RescheduleSameDayPenaltyPercent);
     }
 
     private static LearnerDbContext CreateDb()

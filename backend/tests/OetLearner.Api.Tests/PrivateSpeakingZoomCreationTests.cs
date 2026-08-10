@@ -22,7 +22,7 @@ public sealed class PrivateSpeakingZoomCreationTests
     private const string BookingId = "ps-zoom-create-booking";
 
     [Fact]
-    public async Task CreateZoomMeeting_StampsBookingAndQueuesCalendarSync()
+    public async Task CreateZoomMeeting_StampsBookingAndQueuesFollowUpJobs()
     {
         await using var db = NewDb();
         SeedConfirmedBooking(db);
@@ -44,6 +44,8 @@ public sealed class PrivateSpeakingZoomCreationTests
             a.BookingId == BookingId && a.Action == "zoom_created"));
         Assert.True(await db.BackgroundJobs.AnyAsync(j =>
             j.Type == JobType.PrivateSpeakingCalendarSync && j.ResourceId == BookingId));
+        Assert.True(await db.BackgroundJobs.AnyAsync(j =>
+            j.Type == JobType.PrivateSpeakingBookingConfirmation && j.ResourceId == BookingId));
     }
 
     [Fact]

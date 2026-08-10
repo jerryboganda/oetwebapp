@@ -11,11 +11,9 @@ using OetLearner.Api.Services.Billing;
 namespace OetLearner.Api.Tests;
 
 /// <summary>
-/// T2b — PDF §2.3/§9 reschedule tiers:
-///   • >24h before, OR &lt;24h but a different calendar day → FREE (entitlement carries).
-///   • same calendar day (learner tz) before start → 50% Stripe penalty.
+/// T2b — PDF §2.3/§9 reschedule rule:
+///   • any time before start → FREE, subject to a currently available tutor slot.
 ///   • after start → rejected.
-/// Plus the Stripe webhook hooks that finalize / abort a same-day reschedule.
 /// </summary>
 public sealed class PrivateSpeakingRescheduleTests
 {

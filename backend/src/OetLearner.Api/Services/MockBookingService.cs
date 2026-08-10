@@ -419,10 +419,17 @@ public sealed class MockBookingService
         projection["speakingContent"] = speakingContent;
     }
 
-    private Task<bool> IsSpeakingBundleAsync(string bundleId, CancellationToken ct)
-        => _db.MockBundleSections.AsNoTracking().AnyAsync(section =>
-            section.MockBundleId == bundleId
-            && section.SubtestCode == "speaking", ct);
+    private async Task<bool> IsSpeakingBundleAsync(string bundleId, CancellationToken ct)
+    {
+        if (await _db.MockBundles.AsNoTracking()
+                .AnyAsync(bundle => bundle.Id == bundleId && bundle.SubtestCode == "speaking", ct))
+        {
+            return true;
+        }
+
+        return await _db.MockBundleSections.AsNoTracking()
+            .AnyAsync(section => section.MockBundleId == bundleId && section.SubtestCode == "speaking", ct);
+    }
 
     private static bool IsTerminal(string status) => status == MockBookingStatuses.Completed
         || status == MockBookingStatuses.Cancelled

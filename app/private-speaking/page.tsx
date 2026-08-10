@@ -378,7 +378,6 @@ export default function PrivateSpeakingPage() {
       analytics.track('private_speaking_booking_rescheduled', { bookingId: rescheduleTarget.id, newBookingId: result.bookingId });
       setRescheduleConfirmOpen(false);
 
-      // Same-day reschedule incurs a 50% Stripe penalty — redirect to pay it.
       // Rescheduling is always free before the session starts; the server
       // enforces the current tutor-calendar availability.
       setSelectedSlot(null);
@@ -645,6 +644,16 @@ export default function PrivateSpeakingPage() {
           description="Use your included private speaking sessions for 1-on-1 Zoom practice with expert OET tutors"
           icon={Mic}
         />
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-info/20 bg-info/5 p-4">
+        <p className="text-sm text-navy">Prefer an AI speaking practice session?</p>
+        <Link
+          href="/speaking/selection"
+          className="inline-flex items-center rounded-lg border border-info/30 bg-surface px-3 py-1.5 text-sm font-semibold text-info transition-colors hover:bg-info/10"
+        >
+          Practice with AI
+        </Link>
       </div>
 
       <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4">

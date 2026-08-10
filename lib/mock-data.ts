@@ -659,6 +659,7 @@ export interface MockBooking {
   bookingId: string;
   mockBundleId: string;
   mockAttemptId?: string | null;
+  tutorProfileId?: string | null;
   title?: string;
   scheduledStartAt: string;
   timezoneIana: string;

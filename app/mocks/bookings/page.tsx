@@ -11,9 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   cancelMockBookingV2,
+  fetchMockAvailability,
   fetchMockBookingList,
   rescheduleMockBookingV2,
 } from '@/lib/api';
+import type { MockAvailabilitySlot } from '@/lib/api';
 import type { MockBooking } from '@/lib/mock-data';
 
 const STATUS_VARIANT: Record<string, 'success' | 'info' | 'warning' | 'danger' | 'default'> = {
@@ -38,12 +40,34 @@ function formatScheduled(iso: string, tz: string): string {
   }
 }
 
+function defaultRescheduleDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatSlot(iso: string, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: timezone || 'UTC',
+    }).format(new Date(iso));
+  } catch {
+    return new Date(iso).toLocaleString();
+  }
+}
+
 export default function MockBookingsPage() {
   const [items, setItems] = useState<MockBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rescheduleDraft, setRescheduleDraft] = useState<Record<string, string>>({});
+  const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const [availableSlots, setAvailableSlots] = useState<Record<string, MockAvailabilitySlot[]>>({});
+  const [slotsLoadingId, setSlotsLoadingId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -79,12 +103,13 @@ export default function MockBookingsPage() {
     if (!next) return;
     setBusyId(id);
     try {
-      await rescheduleMockBookingV2(id, new Date(next).toISOString());
+      await rescheduleMockBookingV2(id, next);
       setRescheduleDraft((prev) => {
         const out = { ...prev };
         delete out[id];
         return out;
       });
+      setAvailableSlots((prev) => ({ ...prev, [id]: [] }));
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not reschedule booking.');
@@ -92,6 +117,30 @@ export default function MockBookingsPage() {
       setBusyId(null);
     }
   }, [rescheduleDraft, reload]);
+
+  const findAvailableSlots = useCallback(async (booking: MockBooking) => {
+    if (!booking.tutorProfileId) {
+      setError('This booking has no assigned tutor calendar. Please contact support.');
+      return;
+    }
+    const date = rescheduleDates[booking.id] ?? defaultRescheduleDate();
+    setSlotsLoadingId(booking.id);
+    setError(null);
+    try {
+      const result = await fetchMockAvailability(date, booking.timezoneIana, booking.mockBundleId);
+      setAvailableSlots((prev) => ({
+        ...prev,
+        [booking.id]: result.slots.filter(
+          (slot) => slot.isAvailable && slot.tutorProfileId === booking.tutorProfileId,
+        ),
+      }));
+      setRescheduleDraft((prev) => ({ ...prev, [booking.id]: '' }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load available tutor slots.');
+    } finally {
+      setSlotsLoadingId(null);
+    }
+  }, [rescheduleDates]);
 
   return (
     <LearnerDashboardShell>
@@ -130,6 +179,8 @@ export default function MockBookingsPage() {
           {items.map((b) => {
             const variant = STATUS_VARIANT[b.status] ?? 'default';
             const draft = rescheduleDraft[b.id] ?? '';
+            const rescheduleDate = rescheduleDates[b.id] ?? defaultRescheduleDate();
+            const slots = availableSlots[b.id] ?? [];
             const isTerminal = b.status === 'completed' || b.status === 'cancelled' || b.status === 'tutor_no_show' || b.status === 'learner_no_show';
             return (
               <li key={b.id} className="rounded-2xl border border-border bg-surface p-5">
@@ -153,15 +204,47 @@ export default function MockBookingsPage() {
                   <div className="mt-4 flex flex-wrap items-end gap-2">
                     <div>
                       <label className="block text-xs font-medium text-muted mb-1">
-                        Reschedule to
+                        Find another tutor slot
                       </label>
                       <input
-                        type="datetime-local"
+                        type="date"
                         className="rounded-md border border-border px-3 py-2 text-sm"
-                        value={draft}
-                        onChange={(e) => setRescheduleDraft((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                        value={rescheduleDate}
+                        min={defaultRescheduleDate()}
+                        onChange={(e) => {
+                          setRescheduleDates((prev) => ({ ...prev, [b.id]: e.target.value }));
+                          setAvailableSlots((prev) => ({ ...prev, [b.id]: [] }));
+                          setRescheduleDraft((prev) => ({ ...prev, [b.id]: '' }));
+                        }}
                       />
                     </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => void findAvailableSlots(b)}
+                      disabled={busyId === b.id || slotsLoadingId === b.id}
+                    >
+                      {slotsLoadingId === b.id ? 'Loading slots...' : 'Show available slots'}
+                    </Button>
+                    {slots.length > 0 ? (
+                      <div className="basis-full grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {slots.map((slot) => (
+                          <button
+                            key={slot.startAt}
+                            type="button"
+                            onClick={() => setRescheduleDraft((prev) => ({ ...prev, [b.id]: slot.startAt }))}
+                            className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                              draft === slot.startAt
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border bg-surface text-foreground hover:border-border-hover'
+                            }`}
+                            aria-pressed={draft === slot.startAt}
+                          >
+                            <span className="block font-semibold">{formatSlot(slot.startAt, b.timezoneIana)}</span>
+                            <span className="block text-xs text-muted">{slot.tutorDisplayName}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     <Button
                       variant="primary"
                       onClick={() => void handleReschedule(b.id)}

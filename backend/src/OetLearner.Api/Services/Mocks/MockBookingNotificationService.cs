@@ -14,8 +14,12 @@ public sealed class MockBookingNotificationService(
         var booking = await db.MockBookings
             .Include(item => item.MockBundle)
             .FirstOrDefaultAsync(item => item.Id == bookingId, ct);
-        if (booking is null || booking.Status == MockBookingStatuses.Cancelled)
+        if (booking is null
+            || booking.Status == MockBookingStatuses.Cancelled
+            || MockBookingPresentation.LearnerZoomJoinUrl(booking) is null)
         {
+            // A confirmation is valid only after the real Zoom meeting and
+            // learner join URL exist. Never emit a fallback confirmation.
             return;
         }
 

@@ -46,6 +46,7 @@ public static class MockBookingReminderPlanner
     public static bool IsInHorizon(MockBooking booking, DateTimeOffset now)
     {
         if (!EligibleStatuses.Contains(booking.Status)) return false;
+        if (MockBookingPresentation.LearnerZoomJoinUrl(booking) is null) return false;
         if (booking.ScheduledStartAt <= now) return false;
         var horizon = now + Offsets[0].Offset + TimeSpan.FromHours(1);
         return booking.ScheduledStartAt <= horizon;

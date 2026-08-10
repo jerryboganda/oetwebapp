@@ -48,7 +48,9 @@ public sealed class StripeWebhookPrivateSpeakingTests
             .Select(job => job.Type)
             .ToArrayAsync();
         Assert.Contains(JobType.PrivateSpeakingZoomCreate, jobTypes);
-        Assert.Contains(JobType.PrivateSpeakingBookingConfirmation, jobTypes);
+        // Confirmation is intentionally deferred until the Zoom-create job has
+        // successfully stamped the booking with a real learner join URL.
+        Assert.DoesNotContain(JobType.PrivateSpeakingBookingConfirmation, jobTypes);
     }
 
     [Fact]

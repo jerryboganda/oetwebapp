@@ -92,6 +92,8 @@ public sealed class MockBookingReminderWorker(
             .Include(b => b.MockBundle)
             .Where(b =>
                 (b.Status == MockBookingStatuses.Scheduled || b.Status == MockBookingStatuses.Confirmed) &&
+                b.ZoomStatus == MockBookingZoomStatuses.Created &&
+                b.ZoomJoinUrl != null &&
                 b.ScheduledStartAt > now &&
                 b.ScheduledStartAt <= horizon)
             .OrderBy(b => b.ScheduledStartAt)
@@ -111,7 +113,7 @@ public sealed class MockBookingReminderWorker(
                     ["scheduledStartAt"] = booking.ScheduledStartAt.ToString("O"),
                     ["timezoneIana"] = booking.TimezoneIana,
                     ["deliveryMode"] = booking.DeliveryMode,
-                    ["zoomJoinUrl"] = booking.ZoomJoinUrl,
+                    ["zoomJoinUrl"] = MockBookingPresentation.LearnerZoomJoinUrl(booking),
                     ["minutesUntilStart"] = (int)Math.Ceiling(planned.TimeUntilStart.TotalMinutes),
                 };
 

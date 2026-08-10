@@ -27,6 +27,8 @@ public class MockBookingReminderPlannerTests
         TimezoneIana = "UTC",
         DeliveryMode = MockDeliveryModes.Computer,
         LiveRoomState = MockLiveRoomStates.Waiting,
+        ZoomStatus = MockBookingZoomStatuses.Created,
+        ZoomJoinUrl = "https://zoom.test/j/123",
     };
 
     private static readonly DateTimeOffset Now = new(2026, 5, 12, 10, 0, 0, TimeSpan.Zero);
@@ -190,6 +192,16 @@ public class MockBookingReminderPlannerTests
             Assert.Equal("user-xyz", entry.RecipientId);
             Assert.Equal(ApplicationUserRoles.Learner, entry.AudienceRole);
         }
+    }
+
+    [Fact]
+    public void Plan_FailedZoomBooking_Yields_NoReminders()
+    {
+        var booking = BookingAt(Now.AddMinutes(20));
+        booking.ZoomStatus = MockBookingZoomStatuses.Failed;
+        booking.ZoomJoinUrl = null;
+
+        Assert.Empty(MockBookingReminderPlanner.Plan(booking, Now));
     }
 
         [Fact]

@@ -16,7 +16,7 @@ public sealed class PrivateSpeakingCancellationTests
     // ── Learner cancellation refund tiers ───────────────────────────────
 
     [Fact]
-    public async Task LearnerCancel_MoreThan48hBefore_EntitlementBased_RefundsAndRestores()
+    public async Task LearnerCancel_MoreThan24hBefore_EntitlementBased_RefundsAndRestores()
     {
         await using var db = CreateDb();
         var stripe = new FakeStripeService();
@@ -49,7 +49,7 @@ public sealed class PrivateSpeakingCancellationTests
     }
 
     [Fact]
-    public async Task LearnerCancel_LessThan48hBefore_NoRefund_NoRestore()
+    public async Task LearnerCancel_AtOrBelow24hBefore_NoRefund_NoRestore()
     {
         await using var db = CreateDb();
         var stripe = new FakeStripeService();
@@ -105,7 +105,7 @@ public sealed class PrivateSpeakingCancellationTests
     // ── Tutor / admin cancellation (edge case #7: always full refund) ───
 
     [Fact]
-    public async Task ExpertCancel_LessThan48hBefore_StillFullRefundAndRestore()
+    public async Task ExpertCancel_AtOrBelow24hBefore_StillFullRefundAndRestore()
     {
         await using var db = CreateDb();
         var stripe = new FakeStripeService();
@@ -138,7 +138,7 @@ public sealed class PrivateSpeakingCancellationTests
     // ── Direct-paid (Stripe) refund path ────────────────────────────────
 
     [Fact]
-    public async Task LearnerCancel_DirectPaid_MoreThan48h_InvokesStripeRefund()
+    public async Task LearnerCancel_DirectPaid_MoreThan24h_InvokesStripeRefund()
     {
         await using var db = CreateDb();
         var stripe = new FakeStripeService { RefundIdToReturn = "re_test_123" };
