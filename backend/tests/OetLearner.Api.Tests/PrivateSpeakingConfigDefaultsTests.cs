@@ -37,16 +37,56 @@ public sealed class PrivateSpeakingConfigDefaultsTests
         var updated = await service.UpdateConfigAsync(c =>
         {
             c.ReminderOffsetsMinutesJson = "[2880, 120, 30]";
+            c.CancellationWindowHours = 1;
+            c.AllowReschedule = false;
             c.RescheduleSameDayPenaltyPercent = 25;
         }, adminId: "adm-1", CancellationToken.None);
 
-        Assert.Equal("[2880, 120, 30]", updated.ReminderOffsetsMinutesJson);
+        Assert.Equal("[1440, 60, 15]", updated.ReminderOffsetsMinutesJson);
+        Assert.Equal(24, updated.CancellationWindowHours);
+        Assert.True(updated.AllowReschedule);
         Assert.Equal(0, updated.RescheduleSameDayPenaltyPercent);
 
         // Re-read from the store to confirm the mutation was actually persisted.
         var reloaded = await service.GetConfigAsync(CancellationToken.None);
-        Assert.Equal("[2880, 120, 30]", reloaded.ReminderOffsetsMinutesJson);
+        Assert.Equal("[1440, 60, 15]", reloaded.ReminderOffsetsMinutesJson);
+        Assert.Equal(24, reloaded.CancellationWindowHours);
+        Assert.True(reloaded.AllowReschedule);
         Assert.Equal(0, reloaded.RescheduleSameDayPenaltyPercent);
+    }
+
+    [Fact]
+    public async Task GetConfigAsync_NormalizesExistingStoredPolicyOverrides()
+    {
+        await using var db = CreateDb();
+        db.PrivateSpeakingConfigs.Add(new PrivateSpeakingConfig
+        {
+            CancellationWindowHours = 1,
+            AllowReschedule = false,
+            ReminderOffsetsHoursJson = "[]",
+            ReminderOffsetsMinutesJson = "[30]",
+            RescheduleSameDayPenaltyPercent = 50,
+            CancellationPolicyText = "legacy",
+            BookingPolicyText = "legacy",
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var config = await service.GetConfigAsync(CancellationToken.None);
+
+        Assert.Equal(24, config.CancellationWindowHours);
+        Assert.True(config.AllowReschedule);
+        Assert.Equal("[24, 1, 0.25]", config.ReminderOffsetsHoursJson);
+        Assert.Equal("[1440, 60, 15]", config.ReminderOffsetsMinutesJson);
+        Assert.Equal(0, config.RescheduleSameDayPenaltyPercent);
+        Assert.Contains("more than 24 hours", config.CancellationPolicyText);
+        Assert.Contains("any time before it starts", config.BookingPolicyText);
+
+        var persisted = await db.PrivateSpeakingConfigs.AsNoTracking().SingleAsync();
+        Assert.Equal(24, persisted.CancellationWindowHours);
+        Assert.True(persisted.AllowReschedule);
+        Assert.Equal("[1440, 60, 15]", persisted.ReminderOffsetsMinutesJson);
     }
 
     private static LearnerDbContext CreateDb()

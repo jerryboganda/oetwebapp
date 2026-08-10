@@ -32,21 +32,32 @@ public sealed class PrivateSpeakingService(
 {
     private const double CalibrationRedDriftThreshold100 = 40.0;
     private const string CalibrationOverrideAction = "tutor_calibration_override";
+    private const int PdfCancellationWindowHours = 24;
+    private const string PdfReminderOffsetsHoursJson = "[24, 1, 0.25]";
+    private const string PdfReminderOffsetsMinutesJson = "[1440, 60, 15]";
+    private const string PdfCancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 24 hours before the scheduled start time. If you cancel 24 hours or less before the session, a full refund is not available.";
+    private const string PdfBookingPolicyText = "You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.";
 
     // ── Config ──────────────────────────────────────────────────────────
 
     public async Task<PrivateSpeakingConfig> GetConfigAsync(CancellationToken ct)
     {
         var config = await db.PrivateSpeakingConfigs.FirstOrDefaultAsync(ct);
-        if (config is not null) return config;
+        if (config is not null)
+        {
+            if (NormalizePdfWorkflowPolicy(config))
+            {
+                await db.SaveChangesAsync(ct);
+            }
+
+            return config;
+        }
 
         config = new PrivateSpeakingConfig
         {
             UpdatedAt = timeProvider.GetUtcNow(),
-            RescheduleSameDayPenaltyPercent = 0,
-            CancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 24 hours before the scheduled start time. If you cancel 24 hours or less before the session, a full refund is not available.",
-            BookingPolicyText = "You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.",
         };
+        NormalizePdfWorkflowPolicy(config);
         db.PrivateSpeakingConfigs.Add(config);
         await db.SaveChangesAsync(ct);
         return config;
@@ -57,13 +68,63 @@ public sealed class PrivateSpeakingService(
     {
         var config = await GetConfigAsync(ct);
         mutate(config);
-        // The workflow has no same-day penalty tier. Enforce this invariant
-        // even if an old caller bypasses the current admin endpoint.
-        config.RescheduleSameDayPenaltyPercent = 0;
+        // The PDF workflow is policy, not an admin-configurable variation. Keep
+        // the mandated refund, reschedule, reminder, and copy invariants here
+        // as well as in the endpoint so every caller is fail-closed.
+        NormalizePdfWorkflowPolicy(config);
         config.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
         await AuditAsync(null, adminId, "admin", "config_updated", null, ct);
         return config;
+    }
+
+    private static bool NormalizePdfWorkflowPolicy(PrivateSpeakingConfig config)
+    {
+        var changed = false;
+
+        if (config.CancellationWindowHours != PdfCancellationWindowHours)
+        {
+            config.CancellationWindowHours = PdfCancellationWindowHours;
+            changed = true;
+        }
+
+        if (!config.AllowReschedule)
+        {
+            config.AllowReschedule = true;
+            changed = true;
+        }
+
+        if (!string.Equals(config.ReminderOffsetsHoursJson, PdfReminderOffsetsHoursJson, StringComparison.Ordinal))
+        {
+            config.ReminderOffsetsHoursJson = PdfReminderOffsetsHoursJson;
+            changed = true;
+        }
+
+        if (!string.Equals(config.ReminderOffsetsMinutesJson, PdfReminderOffsetsMinutesJson, StringComparison.Ordinal))
+        {
+            config.ReminderOffsetsMinutesJson = PdfReminderOffsetsMinutesJson;
+            changed = true;
+        }
+
+        if (config.RescheduleSameDayPenaltyPercent != 0)
+        {
+            config.RescheduleSameDayPenaltyPercent = 0;
+            changed = true;
+        }
+
+        if (!string.Equals(config.CancellationPolicyText, PdfCancellationPolicyText, StringComparison.Ordinal))
+        {
+            config.CancellationPolicyText = PdfCancellationPolicyText;
+            changed = true;
+        }
+
+        if (!string.Equals(config.BookingPolicyText, PdfBookingPolicyText, StringComparison.Ordinal))
+        {
+            config.BookingPolicyText = PdfBookingPolicyText;
+            changed = true;
+        }
+
+        return changed;
     }
 
     // ── Tutor Profile Management ────────────────────────────────────────

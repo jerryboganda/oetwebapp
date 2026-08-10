@@ -89,7 +89,21 @@ public static class NotificationCatalog
         NotificationEventKey.LearnerPasswordResetRequested,
         NotificationEventKey.LearnerInvoiceGenerated,
         NotificationEventKey.LearnerPaymentSucceeded,
-        NotificationEventKey.LearnerRefundProcessed
+        NotificationEventKey.LearnerRefundProcessed,
+
+        // Speaking booking workflow contract: confirmation, access/reminder,
+        // and the tutor-side assignment/reminder cannot be disabled or
+        // frequency-capped by a preference or admin policy override.
+        NotificationEventKey.LearnerPrivateSpeakingBooked,
+        NotificationEventKey.LearnerPrivateSpeakingReminder,
+        NotificationEventKey.LearnerPrivateSpeakingRescheduled,
+        NotificationEventKey.ExpertPrivateSpeakingAssigned,
+        NotificationEventKey.ExpertPrivateSpeakingReminder,
+        NotificationEventKey.ExpertPrivateSpeakingRescheduled,
+        NotificationEventKey.LearnerMockScheduled,
+        NotificationEventKey.LearnerMockReminder1h,
+        NotificationEventKey.ExpertSpeakingSessionAssigned,
+        NotificationEventKey.ExpertMockReminder1h
     };
 
     public static string BuildTitle(NotificationEventKey key, IReadOnlyDictionary<string, string?> tokens)

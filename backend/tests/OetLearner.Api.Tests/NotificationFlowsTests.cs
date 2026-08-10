@@ -479,6 +479,11 @@ public class NotificationFlowsTests
         Assert.Contains(catalog, entry => entry.EventKey == "LearnerEmailVerificationRequested" && entry.IsPolicyProtected);
         Assert.Contains(catalog, entry => entry.EventKey == "LearnerInvoiceGenerated" && entry.IsPolicyProtected);
         Assert.Contains(catalog, entry => entry.EventKey == "LearnerPaymentSucceeded" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerPrivateSpeakingBooked" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerPrivateSpeakingReminder" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerPrivateSpeakingRescheduled" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerMockScheduled" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerMockReminder1h" && entry.IsPolicyProtected);
 
         Assert.Equal("Mock Reminder 24h", NotificationCatalog.BuildTitle(NotificationEventKey.LearnerMockReminder24h, new Dictionary<string, string?>()));
         Assert.Equal("/mocks", NotificationCatalog.BuildActionUrl(NotificationEventKey.LearnerMockReminder24h, new Dictionary<string, string?>()));
