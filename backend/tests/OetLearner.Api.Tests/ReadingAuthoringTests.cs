@@ -1360,7 +1360,7 @@ public class ReadingAuthoringTests
         Assert.Empty(result.Errors);
         Assert.False(policy.IsActive);
         Assert.Null(ScoringPolicyValidation.ValidateCanonicalPolicyJson(policy.PolicyJson));
-        Assert.Contains("rawToScaled", policy.PolicyJson);
+        Assert.Contains("owner-managed", policy.PolicyJson);
     }
 
     [Fact]

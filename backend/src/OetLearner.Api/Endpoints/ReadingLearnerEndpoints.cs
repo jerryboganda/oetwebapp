@@ -723,8 +723,8 @@ public static class ReadingLearnerEndpoints
                 .ThenBy(x => x.label)
                 .ToList();
 
-            var gradeLetter = attempt.ScaledScore is int scaledScore
-                ? OetScoring.OetGradeLetterFromScaled(scaledScore)
+            var gradeLetter = attempt.ScaledScore is not null
+                ? attempt.ScoreConversionGrade ?? "—"
                 : "—";
 
             // Wave 2 — tutor feedback is read-only here and always safe to
@@ -759,6 +759,9 @@ public static class ReadingLearnerEndpoints
                     attempt.MaxRawScore,
                     attempt.ScaledScore,
                     gradeLetter,
+                    passed = attempt.ScaledScore is null ? null : attempt.ScoreConversionPassed,
+                    scoreConversionTableVersionKey = attempt.ScoreConversionTableVersionKey,
+                    scoreConversionErrorCode = attempt.ScaledScore is null ? "score_conversion_unavailable" : null,
                     partADeadlineAt = partADeadline,
                     partBCDeadlineAt = partBCDeadline,
                     partABreakAvailable = attempt.Mode == ReadingAttemptMode.Exam,

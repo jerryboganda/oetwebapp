@@ -1027,6 +1027,10 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Listening.ListeningConfirm
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningSequenceService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningSessionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningGradingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Assessment.IAssessmentScoreConversionService,
+    OetLearner.Api.Services.Assessment.AssessmentScoreConversionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Assessment.IAssessmentMarkingPolicyService,
+    OetLearner.Api.Services.Assessment.AssessmentMarkingPolicyService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayProgressService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.TeacherClassService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExpertService, OetLearner.Api.Services.Listening.ListeningExpertService>();
@@ -1817,10 +1821,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftServiceV
     OetLearner.Api.Services.Writing.WritingDraftServiceV2>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCaseNoteHighlightService,
     OetLearner.Api.Services.Writing.WritingCaseNoteHighlightService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEvaluationPipeline,
-    OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
-    OetLearner.Api.Services.Writing.WritingSubmissionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAssessmentPreflightService,
     OetLearner.Api.Services.Writing.WritingAssessmentPreflightService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAssessmentV11ResultService,
@@ -1828,6 +1828,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAssessmentV11
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingAssessmentV11RuleEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingCalibrationReleaseService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingModelAnswerService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEvaluationPipeline,
+    OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
+    OetLearner.Api.Services.Writing.WritingSubmissionService>();
 // Result-visibility config + learner-facing gated feedback (spec §15.2/§15.3, WS-B4 Section D/E).
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingResultVisibilityService,
     OetLearner.Api.Services.Writing.WritingResultVisibilityService>();
@@ -2378,11 +2382,11 @@ app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingAnalyticsAdminEndpoints();
 app.MapWritingAnalyticsAdminEndpoints();
 app.MapWritingPathwayEndpoints();
+app.MapWritingAssessmentGovernanceEndpoints();
 // Writing Module V2 — onboarding, diagnostic, pathway V2, submissions,
 // drafts V2, scenarios, exemplars, drills V2, lessons V2, mocks, coach,
 // stats, canon library, mistakes, tutor review, OCR, showcase, AI tools,
 // admin content, tutor portal + native WebSocket coach fallback (~60+
-app.MapWritingAssessmentGovernanceEndpoints();
 // routes across 20 endpoint files). See WritingRouteBuilderExtensions.cs.
 app.MapWritingV2Endpoints();
 app.MapListeningAuthoringAdminEndpoints();
@@ -2400,6 +2404,7 @@ app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 app.MapRecallsEndpoints();
 app.MapScoringPolicyEndpoints();
+app.MapAssessmentGovernanceEndpoints();
 app.MapRulebookReferencePdfEndpoints();
 app.MapResultTemplatesEndpoints();
 app.MapSpeakingSharedResourcesEndpoints();

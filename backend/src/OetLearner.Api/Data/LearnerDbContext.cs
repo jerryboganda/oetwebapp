@@ -1323,6 +1323,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Scoring Policy table (partial; see LearnerDbContext.ScoringPolicy.cs).
         OnModelCreatingScoringPolicy(modelBuilder);
 
+        // Listening/Reading v1.1 assessment governance: versioned score tables,
+        // marking policies, rationales, and controlled re-mark jobs.
+        OnModelCreatingAssessmentGovernance(modelBuilder);
+
         // Result Template Assets table (partial; see LearnerDbContext.ResultTemplates.cs).
         OnModelCreatingResultTemplates(modelBuilder);
 
@@ -1398,11 +1402,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // checklists, attempt events, span annotations, double-marking/moderation,
         // result-visibility. Partial class in LearnerDbContext.WritingExam.cs.
         OnModelCreatingWritingExam(modelBuilder);
+        OnModelCreatingWritingAssessmentV11(modelBuilder);
 
         // Materials library — nestable folders, files, and per-folder audience
         // assignment. Partial class in LearnerDbContext.Materials.cs.
         OnModelCreatingMaterials(modelBuilder);
-        OnModelCreatingWritingAssessmentV11(modelBuilder);
 
         // Video Library — Bunny Stream backed videos, categories, learner
         // progress/bookmarks, attested playback sessions, and telemetry.
@@ -1447,6 +1451,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.ScoringPolicy.cs (partial).
     /// </summary>
     partial void OnModelCreatingScoringPolicy(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AssessmentGovernance.cs.
+    /// </summary>
+    partial void OnModelCreatingAssessmentGovernance(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.ResultTemplates.cs (partial).
@@ -1548,6 +1557,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     partial void OnModelCreatingWritingBuddy(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingCalibration(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingExam(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingAssessmentV11(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.Materials.cs (partial).
@@ -1557,7 +1567,6 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.VideoLibrary.cs (partial).
     /// </summary>
-    partial void OnModelCreatingWritingAssessmentV11(ModelBuilder modelBuilder);
     partial void OnModelCreatingVideoLibrary(ModelBuilder modelBuilder);
 
     /// <summary>

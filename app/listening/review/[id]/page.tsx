@@ -228,6 +228,10 @@ export default function ListeningReviewPage() {
 
         {!loading && review ? (
           <>
+            {(() => {
+              const hasApprovedConversion = review.scaledScore != null && review.passed != null;
+              return (
+                <>
             <ResultsScorePanel
               eyebrow="Listening review"
               icon={Headphones}
@@ -236,8 +240,8 @@ export default function ListeningReviewPage() {
                 ?? `${review.rawScore}/${review.maxRawScore} raw${typeof review.scaledScore === 'number' ? ` · ${review.scaledScore}/500 scaled` : ''}`}
               gaugeValue={review.maxRawScore > 0 ? (review.rawScore / review.maxRawScore) * 100 : 0}
               gaugeLabel="Accuracy"
-              gaugeColor={review.passed ? 'var(--color-success)' : 'var(--color-warning)'}
-              grade={review.grade ? { label: `Grade ${review.grade}`, tone: review.passed ? 'success' : 'warning' } : null}
+              gaugeColor={hasApprovedConversion ? (review.passed ? 'var(--color-success)' : 'var(--color-warning)') : 'var(--color-primary)'}
+              grade={hasApprovedConversion ? { label: `Grade ${review.grade}`, tone: review.passed ? 'success' : 'warning' } : null}
               stats={[
                 { label: 'Correct', value: review.correctCount, tone: 'success', icon: <CheckCircle2 /> },
                 { label: 'Incorrect', value: review.incorrectCount, tone: 'danger', icon: <XCircle /> },
@@ -250,6 +254,16 @@ export default function ListeningReviewPage() {
                 },
               ]}
             />
+
+            <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
+              AI Practice Score — not an official OET result.
+            </p>
+            <p className="mt-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
+              This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
+            </p>
+                </>
+              );
+            })()}
 
             <LearnerPageHero
               eyebrow="Transcript-backed Review"

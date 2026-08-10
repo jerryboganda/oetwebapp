@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Reading;
@@ -85,6 +86,16 @@ public sealed class ReadingExplanationService(
 
         // 2. AI-generate the explanation.
         var correctAnswer = ResolveCorrectAnswer(question);
+        var hasApprovedRationale = await db.AssessmentRationales.AsNoTracking()
+            .AnyAsync(r => r.Assessment == "reading"
+                && r.QuestionRevisionId == question.Id
+                && r.Status == AssessmentGovernanceStatus.Effective, ct);
+        if (!hasApprovedRationale)
+        {
+            // AI advisory output is unavailable until an author-approved
+            // rationale exists; deterministic review remains available.
+            return BuildFallbackExplanation(question, correctAnswer, wrongOption, lang);
+        }
         var generated = await GenerateExplanationAsync(question, correctAnswer, wrongOption, lang, ct);
 
         // 3. Cache back onto the entity (append to existing cache blob).

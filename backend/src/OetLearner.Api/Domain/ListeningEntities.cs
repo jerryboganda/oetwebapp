@@ -487,6 +487,22 @@ public class ListeningAttempt
     public int? ScaledScore { get; set; }
     public int MaxRawScore { get; set; }
 
+    /// <summary>Exact score-conversion table used for this submitted result.</summary>
+    [MaxLength(64)]
+    public string? ScoreConversionTableId { get; set; }
+
+    [MaxLength(64)]
+    public string? ScoreConversionTableVersionKey { get; set; }
+
+    [MaxLength(16)]
+    public string? ScoreConversionGrade { get; set; }
+
+    public bool? ScoreConversionPassed { get; set; }
+
+    /// <summary>Exact marking-policy version captured for this attempt.</summary>
+    [MaxLength(64)]
+    public string? MarkingPolicyVersionId { get; set; }
+
     /// <summary>Snapshot of the listening policy in effect at attempt start
     /// — protects in-flight attempts from policy edits.</summary>
     public string PolicySnapshotJson { get; set; } = "{}";

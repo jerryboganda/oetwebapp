@@ -6,6 +6,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Recalls;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -13,7 +14,10 @@ public sealed class ListeningLearnerService(
     LearnerDbContext db,
     IContentEntitlementService entitlements,
     IRecallsAutoSeed? autoSeed = null,
-    IAiPackageCreditService? aiPackageCreditService = null)
+    IAiPackageCreditService? aiPackageCreditService = null,
+    ListeningGradingService? gradingService = null,
+    IAssessmentScoreConversionService? scoreConversionService = null,
+    IAssessmentMarkingPolicyService? markingPolicyService = null)
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
@@ -440,8 +444,11 @@ public sealed class ListeningLearnerService(
             scoring = new
             {
                 maxRawScore = CanonicalRawMax,
-                passRawScore = OetScoring.ListeningReadingRawPass,
-                passScaledScore = OetScoring.ScaledPassGradeB
+                // Pass thresholds are intentionally absent until an approved
+                // owner conversion table is published for this subtest.
+                passRawScore = (int?)null,
+                passScaledScore = (int?)null,
+                conversionPolicy = "owner_managed_exact_table"
             },
             readiness = new
             {
@@ -521,6 +528,10 @@ public sealed class ListeningLearnerService(
             creditResult.EnsureDebited();
         }
 
+        var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
+        var markingPolicy = await markingPolicyResolver.ResolveAsync("listening", "default", cancellationToken: ct);
+        if (markingPolicy.PolicyId is not null && markingPolicy.ErrorCode is null)
+            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId, ct);
         var attempt = new Attempt
         {
             Id = genericAttemptId,
@@ -533,7 +544,14 @@ public sealed class ListeningLearnerService(
             StartedAt = DateTimeOffset.UtcNow,
             DeviceType = "web",
             ComparisonGroupId = $"listening-{source.Id}",
-            AnswersJson = "{}"
+            AnswersJson = "{}",
+            MarkingPolicyVersionId = markingPolicy.PolicyId,
+            PolicySnapshotJson = JsonSupport.Serialize(new
+            {
+                markingPolicy = markingPolicy.Document,
+                markingPolicyVersionKey = markingPolicy.PolicyVersionKey,
+                markingPolicyErrorCode = markingPolicy.ErrorCode,
+            })
         };
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(ct);
@@ -794,12 +812,21 @@ public sealed class ListeningLearnerService(
         }
 
         var review = BuildReview(attempt, source);
+        var conversion = await (scoreConversionService ?? new AssessmentScoreConversionService(db)).ResolveAsync(
+            Subtest,
+            review.RawScore,
+            scopeKey: "default",
+            cancellationToken: ct);
+        if (conversion.TableId is not null && conversion.IsAvailable)
+        {
+            await (scoreConversionService ?? new AssessmentScoreConversionService(db)).MarkUsedAsync(conversion.TableId, ct);
+        }
         var score = new ListeningScoreDto(
             review.RawScore,
             review.MaxRawScore,
-            review.ScaledScore,
-            review.Grade,
-            review.Passed);
+            conversion.ConvertedScore,
+            conversion.Grade ?? "—",
+            conversion.Passed);
 
         attempt.State = AttemptState.Completed;
         attempt.SubmittedAt = DateTimeOffset.UtcNow;
@@ -811,6 +838,12 @@ public sealed class ListeningLearnerService(
             Id = $"le-{Guid.NewGuid():N}",
             AttemptId = attempt.Id,
             SubtestCode = Subtest,
+            RawScore = score.RawScore,
+            MaxRawScore = score.MaxRawScore,
+            ScaledScore = score.ScaledScore,
+            ScoreConversionTableVersionKey = conversion.TableVersionKey,
+            ScoreConversionGrade = conversion.Grade,
+            ScoreConversionPassed = conversion.Passed,
             State = AsyncState.Completed,
             ScoreRange = FormatScoreDisplay(score),
             GradeRange = $"Grade {score.Grade}",
@@ -897,7 +930,15 @@ public sealed class ListeningLearnerService(
                 .OrderByDescending(e => e.GeneratedAt)
                 .FirstOrDefaultAsync(ct);
             var answers = await LoadRelationalAnswersAsync(relationalAttempt.Id, ct);
-            return BuildReview(relationalAttempt, relationalSource, answers, relationalEvaluation);
+            var answerRows = await db.ListeningAnswers.AsNoTracking()
+                .Where(answer => answer.ListeningAttemptId == relationalAttempt.Id)
+                .ToDictionaryAsync(answer => answer.ListeningQuestionId, StringComparer.Ordinal, ct);
+            return BuildReview(
+                relationalAttempt,
+                relationalSource,
+                answers,
+                relationalEvaluation,
+                answerRows);
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
@@ -1129,9 +1170,14 @@ public sealed class ListeningLearnerService(
             creditResult.EnsureDebited();
         }
 
+        var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
+        var markingPolicy = await markingPolicyResolver.ResolveAsync("listening", "default", cancellationToken: ct);
+        if (markingPolicy.PolicyId is not null && markingPolicy.ErrorCode is null)
+            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId, ct);
         var attempt = new ListeningAttempt
         {
             Id = relationalAttemptId,
+            MarkingPolicyVersionId = markingPolicy.PolicyId,
             UserId = userId,
             PaperId = source.Id,
             StartedAt = now,
@@ -1142,6 +1188,9 @@ public sealed class ListeningLearnerService(
             MaxRawScore = Math.Clamp(source.Questions.Sum(q => q.Points), 1, CanonicalRawMax),
             PolicySnapshotJson = JsonSupport.Serialize(new
             {
+                markingPolicy = markingPolicy.Document,
+                markingPolicyVersionKey = markingPolicy.PolicyVersionKey,
+                markingPolicyErrorCode = markingPolicy.ErrorCode,
                 policy.Id,
                 policy.FullPaperTimerMinutes,
                 policy.GracePeriodSeconds,
@@ -1287,34 +1336,34 @@ public sealed class ListeningLearnerService(
             await ApplyFinalRelationalAnswersAsync(attempt, source, finalAnswers, ct);
         }
 
+        // The relational submit endpoint is the user-visible grading path.
+        // Delegate the authoritative score and per-answer state to the same
+        // deterministic grader used by the explicit V2 grade endpoint. This
+        // prevents the legacy review projection from applying looser matching
+        // or an independent scaled-score calculation.
+        var grading = gradingService ?? new ListeningGradingService(db);
+        var gradingResult = await grading.GradeAsync(attempt.Id, userId, ct);
         var answers = await LoadRelationalAnswersAsync(attempt.Id, ct);
-        var review = BuildReview(attempt, source, answers);
-        var itemByQuestionId = review.ItemReview.ToDictionary(item => item.QuestionId, StringComparer.Ordinal);
         var answerRows = await db.ListeningAnswers
             .Where(answer => answer.ListeningAttemptId == attempt.Id)
             .ToListAsync(ct);
-        foreach (var row in answerRows)
-        {
-            if (!itemByQuestionId.TryGetValue(row.ListeningQuestionId, out var item)) continue;
-            row.IsCorrect = item.IsCorrect;
-            row.PointsEarned = item.PointsEarned;
-            row.SelectedDistractorCategory = ResolveSelectedDistractorCategory(item);
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        attempt.Status = ListeningAttemptStatus.Submitted;
-        attempt.SubmittedAt = now;
-        attempt.LastActivityAt = now;
-        attempt.RawScore = review.RawScore;
-        attempt.ScaledScore = review.ScaledScore;
-        attempt.RowVersion++;
+        var answerByQuestionId = answerRows
+            .GroupBy(answer => answer.ListeningQuestionId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
+        var review = BuildReview(
+            attempt,
+            source,
+            answers,
+            evaluation: null,
+            deterministicAnswers: answerByQuestionId,
+            persistedConversionErrorCode: gradingResult.ScoreConversionErrorCode);
 
         var score = new ListeningScoreDto(
-            review.RawScore,
-            review.MaxRawScore,
-            review.ScaledScore,
-            review.Grade,
-            review.Passed);
+            gradingResult.RawScore,
+            gradingResult.MaxRawScore,
+            gradingResult.ScaledScore,
+            gradingResult.ScoreConversionGrade ?? "—",
+            gradingResult.ScoreConversionPassed);
         var evaluation = CreateEvaluation(attempt.Id, score, review);
         db.Evaluations.Add(evaluation);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
@@ -1324,7 +1373,13 @@ public sealed class ListeningLearnerService(
             throw ApiException.Conflict("listening_attempt_concurrent_update",
                 "This attempt was modified by another process. Please retry.");
         }
-        return BuildReview(attempt, source, answers, evaluation);
+        return BuildReview(
+            attempt,
+            source,
+            answers,
+            evaluation,
+            answerByQuestionId,
+            gradingResult.ScoreConversionErrorCode);
     }
 
     private static void ApplyFinalLegacyAnswers(
@@ -1532,6 +1587,12 @@ public sealed class ListeningLearnerService(
             Id = $"le-{Guid.NewGuid():N}",
             AttemptId = attemptId,
             SubtestCode = Subtest,
+            RawScore = score.RawScore,
+            MaxRawScore = score.MaxRawScore,
+            ScaledScore = score.ScaledScore,
+            ScoreConversionTableVersionKey = review.ScoreConversionTableVersionKey,
+            ScoreConversionGrade = score.Grade == "—" ? null : score.Grade,
+            ScoreConversionPassed = score.Passed,
             State = AsyncState.Completed,
             ScoreRange = FormatScoreDisplay(score),
             GradeRange = $"Grade {score.Grade}",
@@ -2290,20 +2351,38 @@ public sealed class ListeningLearnerService(
             Answers: DeserializeAnswers(attempt.AnswersJson),
             Source: source,
             Evaluation: evaluation,
-            ScoreOverrides: new Dictionary<string, ListeningHumanScoreOverride>());
+            ScoreOverrides: new Dictionary<string, ListeningHumanScoreOverride>(),
+            PersistedRawScore: evaluation?.RawScore,
+            PersistedScaledScore: evaluation?.ScaledScore,
+            PersistedMaxRawScore: evaluation?.MaxRawScore,
+            ScoreConversionTableVersionKey: evaluation?.ScoreConversionTableVersionKey,
+            ScoreConversionErrorCode: evaluation?.ScaledScore is null ? "score_conversion_unavailable" : null,
+            PersistedScoreConversionGrade: evaluation?.ScoreConversionGrade,
+            PersistedScoreConversionPassed: evaluation?.ScoreConversionPassed);
 
     private ListeningReviewDto BuildReview(
         ListeningAttempt attempt,
         ListeningSource source,
         IReadOnlyDictionary<string, string?> answers,
-        Evaluation? evaluation = null)
+        Evaluation? evaluation = null,
+        IReadOnlyDictionary<string, ListeningAnswer>? deterministicAnswers = null,
+        string? persistedConversionErrorCode = null)
         => BuildReviewCore(
             AttemptId: attempt.Id,
             CompletedAt: attempt.SubmittedAt,
             Answers: answers,
             Source: source,
             Evaluation: evaluation,
-            ScoreOverrides: ParseHumanScoreOverrides(attempt.HumanScoreOverridesJson));
+            ScoreOverrides: ParseHumanScoreOverrides(attempt.HumanScoreOverridesJson),
+            PersistedRawScore: attempt.RawScore,
+            PersistedScaledScore: attempt.ScaledScore,
+            PersistedMaxRawScore: attempt.MaxRawScore,
+            ScoreConversionTableVersionKey: attempt.ScoreConversionTableVersionKey,
+            ScoreConversionErrorCode: persistedConversionErrorCode
+                ?? (attempt.ScaledScore is null ? "score_conversion_unavailable" : null),
+            PersistedScoreConversionGrade: attempt.ScoreConversionGrade,
+            PersistedScoreConversionPassed: attempt.ScoreConversionPassed,
+            DeterministicAnswers: deterministicAnswers);
 
     private ListeningReviewDto BuildReviewCore(
         string AttemptId,
@@ -2311,22 +2390,40 @@ public sealed class ListeningLearnerService(
         IReadOnlyDictionary<string, string?> Answers,
         ListeningSource Source,
         Evaluation? Evaluation,
-        IReadOnlyDictionary<string, ListeningHumanScoreOverride> ScoreOverrides)
+        IReadOnlyDictionary<string, ListeningHumanScoreOverride> ScoreOverrides,
+        int? PersistedRawScore = null,
+        int? PersistedScaledScore = null,
+        int? PersistedMaxRawScore = null,
+        string? ScoreConversionTableVersionKey = null,
+        string? ScoreConversionErrorCode = null,
+        string? PersistedScoreConversionGrade = null,
+        bool? PersistedScoreConversionPassed = null,
+        IReadOnlyDictionary<string, ListeningAnswer>? DeterministicAnswers = null)
     {
         var orderedQuestions = Source.Questions.OrderBy(q => q.Number).ToList();
         var items = orderedQuestions
-            .Select(q => ReviewItemDto(q, Answers.GetValueOrDefault(q.Id), orderedQuestions))
+            .Select(q => ReviewItemDto(
+                q,
+                Answers.GetValueOrDefault(q.Id),
+                orderedQuestions,
+                DeterministicAnswers?.GetValueOrDefault(q.Id)))
             .Select(item => ApplyHumanScoreOverride(item, ScoreOverrides))
             .ToList();
-        var maxRaw = Math.Clamp(items.Sum(i => i.MaxPoints), 1, CanonicalRawMax);
-        var raw = Math.Clamp(items.Sum(i => i.PointsEarned), 0, maxRaw);
-        var canonicalScore = OetScoring.GradeListeningReading(Subtest, raw);
+        var maxRaw = PersistedMaxRawScore is int persistedMax
+            ? Math.Clamp(persistedMax, 1, CanonicalRawMax)
+            : Math.Clamp(items.Sum(i => i.MaxPoints), 1, CanonicalRawMax);
+        var raw = PersistedRawScore is int persistedRaw
+            ? Math.Clamp(persistedRaw, 0, maxRaw)
+            : Math.Clamp(items.Sum(i => i.PointsEarned), 0, maxRaw);
+        var scaled = PersistedScaledScore;
+        var grade = scaled is null ? "—" : PersistedScoreConversionGrade ?? "—";
+        var passed = scaled is null ? null : PersistedScoreConversionPassed;
         var score = new ListeningScoreDto(
-            canonicalScore.RawCorrect,
+            raw,
             maxRaw,
-            canonicalScore.ScaledScore,
-            canonicalScore.Grade,
-            canonicalScore.Passed);
+            scaled,
+            grade,
+            passed);
         var clusters = BuildErrorClusters(items);
         var recommended = clusters.Count > 0
             ? BuildDrill(clusters[0].ErrorType, Source.Id, AttemptId)
@@ -2345,6 +2442,8 @@ public sealed class ListeningLearnerService(
             ScaledScore: score.ScaledScore,
             Grade: score.Grade,
             Passed: score.Passed,
+            ScoreConversionTableVersionKey: ScoreConversionTableVersionKey,
+            ScoreConversionErrorCode: ScoreConversionErrorCode,
             ScoreDisplay: FormatScoreDisplay(score),
             CorrectCount: items.Count(i => i.IsCorrect),
             IncorrectCount: items.Count(i => !i.IsCorrect && !string.IsNullOrWhiteSpace(i.LearnerAnswer)),
@@ -2358,15 +2457,27 @@ public sealed class ListeningLearnerService(
                 AllowedQuestionIds: allowedTranscriptIds,
                 Reason: "Transcript snippets and answer evidence are revealed only after submit and only for items whose authored policy allows it."),
             TranscriptSegments: Source.TranscriptSegments,
-            Strengths: BuildStrengths(score.RawScore, items),
+            Strengths: BuildStrengths(score.Passed, items),
             Issues: BuildIssues(items),
             GeneratedAt: Evaluation?.GeneratedAt ?? CompletedAt);
     }
 
-    private static ListeningReviewItemDto ReviewItemDto(ListeningQuestion q, string? learnerAnswer, IReadOnlyList<ListeningQuestion> allQuestions)
+    private static ListeningReviewItemDto ReviewItemDto(
+        ListeningQuestion q,
+        string? learnerAnswer,
+        IReadOnlyList<ListeningQuestion> allQuestions,
+        ListeningAnswer? deterministicAnswer = null)
     {
-        var isCorrect = q.AcceptedAnswers.Any(answer => MatchesObjectiveAnswer(learnerAnswer, answer));
-        var errorType = isCorrect ? null : ObjectiveErrorType(q, learnerAnswer, allQuestions);
+        var authoredMatch = q.AcceptedAnswers.Any(answer => MatchesObjectiveAnswer(learnerAnswer, answer));
+        var isCorrect = deterministicAnswer?.IsCorrect ?? authoredMatch;
+        var errorType = isCorrect
+            ? null
+            : deterministicAnswer?.MissReason is ListeningMissReason miss
+                ? MissReasonErrorType(miss)
+                : ObjectiveErrorType(q, learnerAnswer, allQuestions);
+        var pointsEarned = deterministicAnswer is null
+            ? isCorrect ? q.Points : 0
+            : Math.Clamp(deterministicAnswer.PointsEarned, 0, Math.Max(0, q.Points));
         var transcript = q.AllowTranscriptReveal
             ? new ListeningTranscriptSnippetDto(
                 Allowed: true,
@@ -2383,7 +2494,7 @@ public sealed class ListeningLearnerService(
             LearnerAnswer: learnerAnswer ?? string.Empty,
             CorrectAnswer: q.CorrectAnswer,
             IsCorrect: isCorrect,
-            PointsEarned: isCorrect ? q.Points : 0,
+            PointsEarned: pointsEarned,
             MaxPoints: q.Points,
             Explanation: q.Explanation ?? (isCorrect ? "Correct." : "Review the transcript clue and answer key."),
             ErrorType: errorType,
@@ -2394,8 +2505,20 @@ public sealed class ListeningLearnerService(
             SpeakerAttitude: q.SpeakerAttitude,
             TranscriptEvidenceStartMs: q.TranscriptEvidenceStartMs,
             TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs,
-            ScoreOverride: null);
+            ScoreOverride: null,
+            MissReason: deterministicAnswer?.MissReason);
     }
+
+    private static string MissReasonErrorType(ListeningMissReason missReason) => missReason switch
+    {
+        ListeningMissReason.Empty => "empty",
+        ListeningMissReason.SpellingError => "spelling",
+        ListeningMissReason.WrongNumber => "wrong_number",
+        ListeningMissReason.ExtraInfo => "extra_info",
+        ListeningMissReason.WrongSection => "wrong_section",
+        ListeningMissReason.Paraphrase => "paraphrase",
+        _ => "detail_capture",
+    };
 
     private static ListeningReviewItemDto ApplyHumanScoreOverride(
         ListeningReviewItemDto item,
@@ -2463,12 +2586,12 @@ public sealed class ListeningLearnerService(
             .ThenBy(cluster => cluster.Label, StringComparer.Ordinal)
             .ToList();
 
-    private static List<string> BuildStrengths(int rawScore, IReadOnlyCollection<ListeningReviewItemDto> items)
+    private static List<string> BuildStrengths(bool? passed, IReadOnlyCollection<ListeningReviewItemDto> items)
     {
         if (items.Count == 0) return ["No graded Listening items were available."];
-        if (rawScore >= OetScoring.ListeningReadingRawPass)
+        if (passed == true)
         {
-            return ["Your raw Listening score is at or above the OET Grade B practice threshold."];
+            return ["The approved owner conversion table marks this practice score as passed."];
         }
 
         var correct = items.Count(i => i.IsCorrect);
@@ -2957,6 +3080,16 @@ public sealed class ListeningLearnerService(
     {
         if (evaluation is not null)
         {
+            if (evaluation.RawScore is int persistedRaw)
+            {
+                var persistedMax = Math.Clamp(evaluation.MaxRawScore ?? CanonicalRawMax, 1, CanonicalRawMax);
+                return new ListeningScoreDto(
+                    Math.Clamp(persistedRaw, 0, persistedMax),
+                    persistedMax,
+                    evaluation.ScaledScore,
+                    evaluation.ScaledScore is null ? "—" : evaluation.ScoreConversionGrade ?? "—",
+                    evaluation.ScaledScore is null ? null : evaluation.ScoreConversionPassed);
+            }
             var rows = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, []);
             var row = rows.FirstOrDefault();
             var raw = ReadInt(row?.GetValueOrDefault("rawScore"));
@@ -2966,18 +3099,18 @@ public sealed class ListeningLearnerService(
             {
                 var maxRawValue = Math.Clamp(maxRaw ?? CanonicalRawMax, 1, CanonicalRawMax);
                 var rawValue = Math.Clamp(raw ?? 0, 0, maxRawValue);
-                var scaledValue = scaled ?? OetScoring.OetRawToScaled(rawValue);
+                var grade = scaled is not null ? evaluation.ScoreConversionGrade ?? "—" : "—";
+                var passed = scaled is not null ? evaluation.ScoreConversionPassed : null;
                 return new ListeningScoreDto(
                     rawValue,
                     maxRawValue,
-                    scaledValue,
-                    OetScoring.OetGradeLetterFromScaled(scaledValue),
-                    OetScoring.IsListeningReadingPassByScaled(scaledValue));
+                    scaled,
+                    grade,
+                    passed);
             }
         }
 
-        var defaultScore = OetScoring.GradeListeningReading(Subtest, 0);
-        return new ListeningScoreDto(defaultScore.RawCorrect, defaultScore.RawMax, defaultScore.ScaledScore, defaultScore.Grade, defaultScore.Passed);
+        return new ListeningScoreDto(0, CanonicalRawMax, null, "—", null);
     }
 
     private static ListeningScoreDto ResolveScoreFromRelationalAttempt(ListeningAttempt attempt, Evaluation? evaluation)
@@ -2988,13 +3121,15 @@ public sealed class ListeningLearnerService(
         }
 
         var rawValue = Math.Clamp(attempt.RawScore ?? 0, 0, CanonicalRawMax);
-        var scaledValue = attempt.ScaledScore ?? OetScoring.OetRawToScaled(rawValue);
+        var scaledValue = attempt.ScaledScore;
+        var grade = scaledValue is not null ? attempt.ScoreConversionGrade ?? "—" : "—";
+        var passed = scaledValue is not null ? attempt.ScoreConversionPassed : null;
         return new ListeningScoreDto(
             rawValue,
             attempt.MaxRawScore > 0 ? attempt.MaxRawScore : CanonicalRawMax,
             scaledValue,
-            OetScoring.OetGradeLetterFromScaled(scaledValue),
-            OetScoring.IsListeningReadingPassByScaled(scaledValue));
+            grade,
+            passed);
     }
 
     private async Task<Attempt> GetAttemptOwnedByUserAsync(string userId, string attemptId, CancellationToken ct)
@@ -3137,7 +3272,11 @@ public sealed class ListeningLearnerService(
         => asset?.MediaAsset is null ? null : $"/v1/media/{asset.MediaAsset.Id}/content";
 
     private static bool MatchesObjectiveAnswer(string? learnerAnswer, string? correctAnswer)
-        => string.Equals(NormalizeObjectiveAnswer(learnerAnswer), NormalizeObjectiveAnswer(correctAnswer), StringComparison.OrdinalIgnoreCase);
+        => ListeningGradingService.StringsMatch(
+            learnerAnswer ?? string.Empty,
+            correctAnswer ?? string.Empty,
+            caseSensitive: true,
+            normalisation: ListeningGradingService.DefaultNormalisation);
 
     private static string NormalizeObjectiveAnswer(string? value)
     {
@@ -3279,7 +3418,9 @@ public sealed class ListeningLearnerService(
     };
 
     private static string FormatScoreDisplay(ListeningScoreDto score)
-        => $"{score.RawScore} / {score.MaxRawScore} \u2022 {score.ScaledScore} / 500 \u2022 Grade {score.Grade}";
+        => score.ScaledScore is int scaled
+            ? $"{score.RawScore} / {score.MaxRawScore} \u2022 {scaled} / 500 \u2022 Grade {score.Grade}"
+            : $"{score.RawScore} / {score.MaxRawScore} \u2022 scaled score unavailable";
 
     private static string ToApiState(AttemptState state) => state switch
     {
@@ -3505,7 +3646,7 @@ public sealed class ListeningLearnerService(
 
     private sealed record ListeningAssetReadiness(bool Audio, bool QuestionPaper, bool AnswerKey, bool AudioScript);
 
-    private sealed record ListeningScoreDto(int RawScore, int MaxRawScore, int ScaledScore, string Grade, bool Passed);
+    private sealed record ListeningScoreDto(int RawScore, int MaxRawScore, int? ScaledScore, string Grade, bool? Passed);
 
     private sealed record ListeningTranscriptSnippetDto(bool Allowed, string? Excerpt, string? DistractorExplanation);
 
@@ -3532,7 +3673,8 @@ public sealed class ListeningLearnerService(
         // jump directly to the proof segment in the section audio.
         int? TranscriptEvidenceStartMs,
         int? TranscriptEvidenceEndMs,
-        ListeningHumanScoreOverrideDto? ScoreOverride);
+        ListeningHumanScoreOverrideDto? ScoreOverride,
+        ListeningMissReason? MissReason = null);
 
     private sealed record ListeningHumanScoreOverride(string QuestionId, int Override, string? By, string? Reason);
 
@@ -3566,9 +3708,9 @@ public sealed class ListeningLearnerService(
         object Paper,
         int RawScore,
         int MaxRawScore,
-        int ScaledScore,
+        int? ScaledScore,
         string Grade,
-        bool Passed,
+        bool? Passed,
         string ScoreDisplay,
         int CorrectCount,
         int IncorrectCount,
@@ -3582,7 +3724,9 @@ public sealed class ListeningLearnerService(
         IReadOnlyList<ListeningTranscriptSegmentDto> TranscriptSegments,
         IReadOnlyList<string> Strengths,
         IReadOnlyList<string> Issues,
-        DateTimeOffset? GeneratedAt);
+        DateTimeOffset? GeneratedAt,
+        string? ScoreConversionTableVersionKey = null,
+        string? ScoreConversionErrorCode = null);
 }
 
 public sealed record ListeningAnswerSaveRequest(string? UserAnswer);

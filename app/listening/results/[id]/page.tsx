@@ -9,6 +9,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { getListeningResult, type ListeningReviewDto } from '@/lib/listening-api';
@@ -120,11 +121,12 @@ function ListeningResultsContent() {
 
   // A full OET Listening paper has 42 items (24 A + 6 B + 12 C). Anything
   // smaller is a drill / mini-test / starter — applying the official OET
-  // grade + 350-pass threshold to those produces a misleading "Grade E ·
+  // grade + owner-table pass label to those produces a misleading "Grade E ·
   // Below Threshold" because the 42-item scaling is hardwired. For non-full
   // papers show a practice-score frame (percent correct, no OET grade letter,
   // no pass/fail badge).
   const isFullOetPaper = result.maxRawScore >= 42;
+  const hasApprovedConversion = result.scaledScore != null && result.passed != null;
   const percentCorrect = result.maxRawScore > 0
     ? Math.round((result.rawScore / result.maxRawScore) * 100)
     : 0;
@@ -142,35 +144,56 @@ function ListeningResultsContent() {
               : `${result.rawScore}/${result.maxRawScore} correct · practice paper`}
             gaugeValue={percentCorrect}
             gaugeLabel="Accuracy"
-            gaugeColor={isFullOetPaper ? (result.passed ? 'var(--color-success)' : 'var(--color-danger)') : 'var(--color-primary)'}
-            grade={isFullOetPaper ? { label: `Grade ${result.grade}`, tone: result.passed ? 'success' : 'danger' } : null}
+            gaugeColor={hasApprovedConversion ? (result.passed ? 'var(--color-success)' : 'var(--color-danger)') : 'var(--color-primary)'}
+            grade={hasApprovedConversion ? { label: `Grade ${result.grade}`, tone: result.passed ? 'success' : 'danger' } : null}
             stats={[
               { label: 'Correct', value: result.correctCount, tone: 'success', icon: <CheckCircle2 /> },
               { label: 'Incorrect', value: result.incorrectCount, tone: 'danger', icon: <XCircle /> },
               { label: 'Unanswered', value: result.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
               {
-                label: isFullOetPaper ? 'Scaled' : 'Raw',
-                value: isFullOetPaper ? `${result.scaledScore}/500` : `${result.rawScore}/${result.maxRawScore}`,
+                label: hasApprovedConversion ? 'Scaled' : 'Raw',
+                value: hasApprovedConversion ? `${result.scaledScore}/500` : `${result.rawScore}/${result.maxRawScore}`,
                 tone: 'info',
                 icon: <Target />,
               },
             ]}
             aside={(
               <div className={`rounded-2xl border p-4 text-center ${
-                isFullOetPaper
+                hasApprovedConversion
                   ? result.passed
                     ? 'border-success/20 bg-success/10 text-success'
                     : 'border-danger/20 bg-danger/10 text-danger'
                   : 'border-border bg-background-light text-navy'
               }`}>
                 <p className="text-xs font-black uppercase tracking-widest">
-                  {isFullOetPaper ? (result.passed ? 'Threshold met' : 'Below threshold') : 'Practice only'}
+                  {hasApprovedConversion ? (result.passed ? 'Owner table: passed' : 'Owner table: not passed') : 'Scaled score unavailable'}
                 </p>
-                <p className="mt-1 text-xs leading-5 opacity-90">A pass on Listening is 30/42 (350/500, Grade B).</p>
+                <p className="mt-1 text-xs leading-5 opacity-90">
+                  {hasApprovedConversion
+                    ? `Conversion table ${result.scoreConversionTableVersionKey ?? 'version unavailable'}.`
+                    : 'An owner-approved conversion table has not been configured for this result.'}
+                </p>
               </div>
             )}
           />
         </MotionSection>
+        <ScoreConversionEvidence
+          assessment="Listening"
+          rawScore={result.rawScore}
+          maxRawScore={result.maxRawScore}
+          scaledScore={result.scaledScore}
+          passed={result.passed}
+          grade={result.grade}
+          tableVersion={result.scoreConversionTableVersionKey}
+          errorCode={result.scoreConversionErrorCode}
+        />
+
+        <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
+          AI Practice Score — not an official OET result.
+        </p>
+        <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
+          This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
+        </p>
 
         {result.recommendedNextDrill ? (
           <MotionSection delayIndex={1}>

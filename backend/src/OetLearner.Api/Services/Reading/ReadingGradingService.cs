@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Reading;
 
@@ -14,11 +15,11 @@ namespace OetLearner.Api.Services.Reading;
 //   1. Load attempt + answers + questions
 //   2. Grade each answer via type-specific strategy
 //   3. Sum PointsEarned → RawScore
-//   4. Scaled = OetScoring.OetRawToScaled(raw)
+//   4. Scaled = owner-approved versioned lookup row, when configured
 //   5. Persist on the attempt
 //
-// MISSION CRITICAL: raw→scaled conversion happens ONLY through OetScoring.
-// No inline threshold comparisons anywhere in the grading path.
+// MISSION CRITICAL: raw→scaled conversion happens ONLY through the complete
+// owner-approved lookup table. No formula, interpolation, or fallback exists.
 // ═════════════════════════════════════════════════════════════════════════════
 
 public interface IReadingGradingService
@@ -29,7 +30,7 @@ public interface IReadingGradingService
     /// Wave 2 — re-grade an already-Submitted attempt in place from its
     /// stored answers (used by accepted-answer recalculation after an admin
     /// edits a question's correct answer / accepted synonyms). Re-derives
-    /// raw + scaled via <see cref="OetScoring"/>, persists, and bumps
+    /// raw + scaled via the owner-approved conversion table, persists, and bumps
     /// RowVersion WITHOUT changing <see cref="ReadingAttempt.SubmittedAt"/>.
     /// Returns null when the attempt is missing or not Submitted.
     /// </summary>
@@ -44,20 +45,28 @@ public sealed record ReadingGradingResult(
     int CorrectCount,
     int IncorrectCount,
     int UnansweredCount,
-    IReadOnlyList<ReadingAnswerResult> Answers);
+    IReadOnlyList<ReadingAnswerResult> Answers,
+    string? ScoreConversionTableVersionKey = null,
+    string? ScoreConversionErrorCode = null,
+    string? ScoreConversionGrade = null,
+    bool? ScoreConversionPassed = null);
 
 public sealed record ReadingAnswerResult(
     string QuestionId,
     string QuestionType,
     bool IsCorrect,
     int PointsEarned,
-    int MaxPoints);
+    int MaxPoints,
+    string? MissReason = null);
 
 public sealed class ReadingGradingService(
     LearnerDbContext db,
     IReadingPolicyService policyService,
-    ILogger<ReadingGradingService> logger) : IReadingGradingService
+    ILogger<ReadingGradingService> logger,
+    IAssessmentScoreConversionService? scoreConversion = null) : IReadingGradingService
 {
+    private readonly IAssessmentScoreConversionService _scoreConversion =
+        scoreConversion ?? new AssessmentScoreConversionService(db);
     public async Task<ReadingGradingResult> GradeAttemptAsync(string attemptId, CancellationToken ct)
     {
         var attempt = await db.ReadingAttempts
@@ -150,16 +159,33 @@ public sealed class ReadingGradingService(
             answer.MissReason = ClassifyMiss(q, answer, policy, partCode, isCorrect);
             raw += pts;
             if (isCorrect) correctCount++; else incorrectCount++;
-            details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points));
+            details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points, answer.MissReason));
         }
 
         attempt.RawScore = raw;
         attempt.MaxRawScore = isSubsetPracticeMode ? maxRaw : ReadingStructureService.CanonicalMaxRawScore;
 
-        // Subset attempts skip OET 0-500 conversion: the 30/42 anchor only
-        // applies to the canonical full paper. Store null so the result
-        // surface treats it as practice-only.
-        attempt.ScaledScore = isSubsetPracticeMode ? null : OetScoring.OetRawToScaled(raw);
+        var conversion = isSubsetPracticeMode
+            ? AssessmentScoreConversionResult.Unavailable(
+                "reading",
+                "default",
+                raw,
+                "subset_practice_no_conversion")
+            : await _scoreConversion.ResolveAsync(
+                "reading",
+                raw,
+                scopeKey: "default",
+                tableId: attempt.ScoreConversionTableId,
+                cancellationToken: ct);
+        if (conversion.TableId is not null && conversion.IsAvailable)
+        {
+            await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);
+        }
+        attempt.ScoreConversionTableId = conversion.TableId;
+        attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
+        attempt.ScoreConversionGrade = conversion.Grade;
+        attempt.ScoreConversionPassed = conversion.Passed;
+        attempt.ScaledScore = conversion.ConvertedScore;
         attempt.Status = ReadingAttemptStatus.Submitted;
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         attempt.LastActivityAt = DateTimeOffset.UtcNow;
@@ -213,13 +239,15 @@ public sealed class ReadingGradingService(
             RawScore: raw,
             MaxRawScore: attempt.MaxRawScore,
             ScaledScore: attempt.ScaledScore,
-            GradeLetter: attempt.ScaledScore is int scaledForReturn
-                ? OetScoring.OetGradeLetterFromScaled(scaledForReturn)
-                : "—",
+            GradeLetter: conversion.Grade ?? "—",
             CorrectCount: correctCount,
             IncorrectCount: incorrectCount,
             UnansweredCount: unanswered,
-            Answers: details);
+            Answers: details,
+            ScoreConversionTableVersionKey: conversion.TableVersionKey,
+            ScoreConversionErrorCode: conversion.ErrorCode,
+            ScoreConversionGrade: conversion.Grade,
+            ScoreConversionPassed: conversion.Passed);
     }
 
     private static HashSet<string>? ParseScopeQuestionIds(ReadingAttempt attempt)
@@ -414,16 +442,8 @@ public sealed class ReadingGradingService(
         var user = ParseStringSet(a.UserAnswerJson);
         if (correct.Count == 0) return (false, 0);
 
-        if (policy.MatchingAllowPartialCredit)
-        {
-            // Partial: each correct element contributes proportionally.
-            var hits = correct.Count(c => user.Contains(c));
-            if (hits == 0) return (false, 0);
-            var pts = (int)Math.Floor((double)q.Points * hits / correct.Count);
-            return (hits == correct.Count, Math.Max(0, pts));
-        }
-
-        // All-or-nothing
+        // Listening/Reading v1.1 does not award partial credit for a Part A
+        // matching response. The exact set must match the versioned key.
         var allRight = correct.SetEquals(user);
         return (allRight, allRight ? q.Points : 0);
     }
@@ -447,8 +467,8 @@ public sealed class ReadingGradingService(
         // smart-quote / hyphen / unit folding, then compare. NO Levenshtein
         // and NO synonyms for Part A — real OET answers are copied
         // word-for-word from the text. Case-insensitivity is policy-gated.
-        var nc = CollapseWhitespace(ApplyTextNormalization(correct.Trim(), policy));
-        var nu = CollapseWhitespace(ApplyTextNormalization(user.Trim(), policy));
+        var nc = Normalise(ApplyTextNormalization(correct, policy), policy.ShortAnswerNormalisation);
+        var nu = Normalise(ApplyTextNormalization(user, policy), policy.ShortAnswerNormalisation);
 
         var ok = policy.PartACaseInsensitive
             ? string.Equals(nu, nc, StringComparison.OrdinalIgnoreCase)
@@ -519,8 +539,11 @@ public sealed class ReadingGradingService(
     {
         "exact" => s,
         "trim_only" => s.Trim(),
-        "fuzzy_levenshtein_1" => CollapseWhitespace(s.Trim()),
-        _ /* trim_collapse_case_insensitive */ => CollapseWhitespace(s.Trim()),
+        "trim_collapse" => CollapseWhitespace(s.Trim()),
+        // Legacy fuzzy policy names are deliberately reduced to exact matching
+        // with trimming only; fuzzy acceptance is never permitted.
+        "fuzzy_levenshtein_1" => s.Trim(),
+        _ => s.Trim(),
     };
 
     // R04.2: true when the two normalised answers differ ONLY by a
@@ -947,14 +970,18 @@ public sealed class ReadingGradingService(
             }
             var ok = a.IsCorrect ?? false;
             if (ok) correct++; else wrong++;
-            details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points));
+            details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points, a.MissReason));
         }
 
         var scaled = IsSubsetPracticeMode(attempt.Mode) ? null : attempt.ScaledScore;
-        var grade = scaled is null ? "—" : OetScoring.OetGradeLetterFromScaled(scaled.Value);
+        var grade = scaled is null ? "—" : attempt.ScoreConversionGrade ?? "—";
         return new ReadingGradingResult(
             raw, attempt.MaxRawScore, scaled, grade,
-            correct, wrong, unans, details);
+            correct, wrong, unans, details,
+            attempt.ScoreConversionTableVersionKey,
+            scaled is null ? "score_conversion_unavailable" : null,
+            attempt.ScoreConversionGrade,
+            scaled is null ? null : attempt.ScoreConversionPassed);
     }
 
     private async Task<ReadingResolvedPolicy> ResolvePolicyForAttemptAsync(ReadingAttempt attempt, CancellationToken ct)
@@ -967,7 +994,7 @@ public sealed class ReadingGradingService(
                 && !string.IsNullOrWhiteSpace(snapshot.ShortAnswerNormalisation)
                 && !string.IsNullOrWhiteSpace(snapshot.UnknownTypeFallbackPolicy))
             {
-                return snapshot;
+                return ApplyGovernedMarkingPolicy(snapshot, attempt.PolicySnapshotJson);
             }
         }
         catch (JsonException)
@@ -977,4 +1004,37 @@ public sealed class ReadingGradingService(
 
         return await policyService.ResolveForUserAsync(attempt.UserId, ct);
     }
+    private static ReadingResolvedPolicy ApplyGovernedMarkingPolicy(
+        ReadingResolvedPolicy policy,
+        string snapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotJson)) return policy;
+        try
+        {
+            using var document = JsonDocument.Parse(snapshotJson);
+            if (!document.RootElement.TryGetProperty("markingPolicy", out var element))
+                return policy;
+            var policyJson = element.ValueKind == JsonValueKind.String
+                ? element.GetString()
+                : element.GetRawText();
+            var marking = AssessmentMarkingPolicyDocument.Parse(policyJson);
+            var normalisation = !marking.TrimLeadingTrailingWhitespace
+                ? "exact"
+                : marking.CollapseInternalWhitespace ? "trim_collapse" : "trim_only";
+            return policy with
+            {
+                ShortAnswerNormalisation = normalisation,
+                MatchingAllowPartialCredit = marking.ReadingPartAMatchingPartialCredit,
+                PartACaseInsensitive = !marking.CaseSensitive,
+            };
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid_json");
+        }
+        catch (InvalidOperationException)
+        {
+            throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid");
+        }
+}
 }

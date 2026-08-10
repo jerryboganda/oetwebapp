@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
@@ -153,7 +155,8 @@ public sealed class ReadingAttemptService(
     IReadingGradingService grader,
     IContentEntitlementService entitlements,
     ILogger<ReadingAttemptService> logger,
-    IAiPackageCreditService? aiPackageCreditService = null) : IReadingAttemptService
+    IAiPackageCreditService? aiPackageCreditService = null,
+    IAssessmentMarkingPolicyService? markingPolicyService = null) : IReadingAttemptService
 {
     public const int PartABreakMaxSeconds = 600;
     private const int MaxIdempotencyRecordKeyLength = 128;
@@ -209,6 +212,10 @@ public sealed class ReadingAttemptService(
         await entitlements.RequireAccessAsync(userId, paper, ct);
 
         var policy = await policyService.ResolveForUserAsync(userId, ct);
+        var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
+        var markingPolicy = await markingPolicyResolver.ResolveAsync("reading", "default", cancellationToken: ct);
+        if (markingPolicy.PolicyId is not null && markingPolicy.ErrorCode is null)
+            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId, ct);
 
         // Gate 1: archived paper
         if (paper.Status == ContentStatus.Archived && !globalPolicy.AllowAttemptOnArchivedPaper)
@@ -332,7 +339,8 @@ public sealed class ReadingAttemptService(
             PartABreakUsed = mode != ReadingAttemptMode.Exam,
             Status = ReadingAttemptStatus.InProgress,
             MaxRawScore = maxRaw,
-            PolicySnapshotJson = JsonSerializer.Serialize(policy),
+            MarkingPolicyVersionId = markingPolicy.PolicyId,
+            PolicySnapshotJson = CreatePolicySnapshot(policy, markingPolicy),
             PaperRevisionId = paper.PublishedRevisionId,
             RulebookVersion = rulebookVersion,
             Mode = mode,
@@ -1204,6 +1212,16 @@ public sealed class ReadingAttemptService(
         return expiredCount;
     }
 
+    private static string CreatePolicySnapshot(
+        ReadingResolvedPolicy policy,
+        AssessmentMarkingPolicyResolution markingPolicy)
+    {
+        var node = JsonSerializer.SerializeToNode(policy)?.AsObject() ?? new JsonObject();
+        node["markingPolicy"] = JsonSerializer.SerializeToNode(markingPolicy.Document);
+        node["markingPolicyVersionKey"] = markingPolicy.PolicyVersionKey;
+        node["markingPolicyErrorCode"] = markingPolicy.ErrorCode;
+        return node.ToJsonString();
+    }
     private static ReadingResolvedPolicy ResolvePolicySnapshot(string json)
     {
         try

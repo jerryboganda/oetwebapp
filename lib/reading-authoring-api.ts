@@ -530,6 +530,9 @@ export interface ReadingAttemptReviewDto {
     maxRawScore: number;
     scaledScore: number | null;
     gradeLetter: string;
+    passed: boolean | null;
+    scoreConversionTableVersionKey?: string | null;
+    scoreConversionErrorCode?: string | null;
     partADeadlineAt: string;
     partBCDeadlineAt: string;
   };

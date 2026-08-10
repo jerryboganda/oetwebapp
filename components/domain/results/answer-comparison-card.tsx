@@ -19,6 +19,7 @@ export interface AnswerComparisonCardProps {
   maxPoints?: number | null;
   timeMs?: number | null;
   missReason?: { title: string; detail?: string } | null;
+  missReasonTestId?: string;
   distractor?: string | null;
   explanation?: ReactNode;
   /** Module extras rendered below the grid (transcript reveal, box explanations…). */
@@ -77,6 +78,7 @@ export function AnswerComparisonCard({
   maxPoints,
   timeMs,
   missReason,
+  missReasonTestId,
   distractor,
   explanation,
   children,
@@ -134,7 +136,7 @@ export function AnswerComparisonCard({
         </div>
 
         {missReason ? (
-          <div className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <div data-testid={missReasonTestId} className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
             <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>
               <span className="font-bold">{missReason.title}</span>

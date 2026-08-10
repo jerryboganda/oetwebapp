@@ -9,6 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { formatAnswerValue } from '@/lib/results/format-answer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,6 @@ import {
 } from '@/lib/reading-authoring-api';
 import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
-import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { readErrorMessage } from '@/lib/read-error-message';
 
 /**
@@ -195,8 +195,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
   const raw = review?.attempt.rawScore ?? 0;
   const scaled = review?.attempt.scaledScore ?? null;
-  const isPracticeOnly = scaled === null;
-  const passed = !isPracticeOnly && typeof scaled === 'number' && isListeningReadingPassByScaled(scaled);
+  const hasApprovedConversion = scaled !== null && review?.attempt.scoreConversionTableVersionKey != null;
 
   const partTotals = (review?.partBreakdown ?? []).reduce(
     (acc, part) => ({
@@ -208,15 +207,13 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   );
   const gradedItems = partTotals.correct + partTotals.incorrect + partTotals.unanswered;
   const accuracyPct = gradedItems > 0 ? (partTotals.correct / gradedItems) * 100 : 0;
-  const nextAction = !isPracticeOnly && passed
-    ? { label: 'Enter Mock Setup', href: '/mocks', title: 'Validate in a mock', desc: 'Confirm the Reading gain transfers under full-exam pressure.' }
-    : {
+  const nextAction = {
         label: 'Back to Reading',
         href: '/reading',
-        title: isPracticeOnly ? 'Keep sharpening this cluster' : 'Repeat focused Reading practice',
-        desc: isPracticeOnly
-          ? 'Repeat the same skill, then return to a full Reading paper.'
-          : 'Review missed clusters, then start another structured Reading paper.',
+        title: hasApprovedConversion ? 'Review your Reading result' : 'Keep sharpening this cluster',
+        desc: hasApprovedConversion
+          ? 'Review missed clusters, then start another structured Reading paper.'
+          : 'Repeat the same skill, then return to a full Reading paper.',
       };
 
   return (
@@ -272,34 +269,29 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
             <LearnerPageHero
               eyebrow="Reading Review"
               icon={BookOpen}
-              accent={isPracticeOnly ? 'blue' : passed ? 'emerald' : 'amber'}
+              accent={hasApprovedConversion ? 'emerald' : 'blue'}
               title={review.paper.title}
-              description={isPracticeOnly
+              description={!hasApprovedConversion
                 ? `${raw}/${review.attempt.maxRawScore} practice marks`
                 : `${raw}/${review.attempt.maxRawScore} raw | ${scaled}/500 scaled`}
               highlights={[
                 { icon: Target, label: 'Raw score', value: `${raw}/${review.attempt.maxRawScore}` },
-                { icon: FileText, label: 'Scaled score', value: isPracticeOnly ? 'Practice only' : `${scaled}/500` },
-                { icon: isPracticeOnly ? BookOpen : passed ? CheckCircle2 : XCircle, label: 'Grade', value: isPracticeOnly ? 'No OET grade' : `Grade ${review.attempt.gradeLetter}` },
+                { icon: FileText, label: 'Scaled score', value: !hasApprovedConversion ? 'Unavailable' : `${scaled}/500` },
+                { icon: hasApprovedConversion ? CheckCircle2 : BookOpen, label: 'Grade', value: !hasApprovedConversion ? 'Unavailable' : `Grade ${review.attempt.gradeLetter}` },
               ]}
               aside={(
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <Badge variant={isPracticeOnly ? 'info' : passed ? 'success' : 'warning'}>
-                    {isPracticeOnly ? 'Practice-only review' : passed ? 'Reading pass evidence' : 'Below Reading pass anchor'}
+                  <Badge variant={hasApprovedConversion ? 'success' : 'info'}>
+                    {hasApprovedConversion ? 'Owner-table conversion' : 'Scaled score unavailable'}
                   </Badge>
                   <p className="mt-3 text-sm leading-6 text-muted">
-                    {isPracticeOnly
-                      ? 'This subset attempt reports practice marks only. Use the item review to choose the next focused route.'
-                      : 'Reading pass evidence is anchored to 30/42 equalling 350/500. Use the item review to choose the next practice route.'}
+                    {hasApprovedConversion
+                      ? `This result uses owner-approved conversion table ${review.attempt.scoreConversionTableVersionKey}.`
+                      : 'This result reports raw practice marks because an owner-approved conversion table is not configured.'}
                   </p>
-                  {!isPracticeOnly ? (
-                    <p
-                      className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted"
-                      data-testid="reading-results-estimate-disclaimer"
-                    >
-                      This is an estimate, not an official OET conversion.
-                    </p>
-                  ) : null}
+                  <p className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted">
+                    AI Practice Score — not an official OET result.
+                  </p>
                 </div>
               )}
             />
@@ -308,20 +300,20 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               eyebrow="Reading review"
               icon={BookOpen}
               title={review.paper.title}
-              subtitle={isPracticeOnly
-                ? `${raw}/${review.attempt.maxRawScore} practice marks`
+              subtitle={!hasApprovedConversion
+                ? `${raw}/${review.attempt.maxRawScore} raw practice score`
                 : `${scaled}/500 scaled · Grade ${review.attempt.gradeLetter}`}
               gaugeValue={accuracyPct}
               gaugeLabel="Accuracy"
-              gaugeColor={isPracticeOnly ? 'var(--color-primary)' : passed ? 'var(--color-success)' : 'var(--color-warning)'}
-              grade={isPracticeOnly ? null : { label: `Grade ${review.attempt.gradeLetter}`, tone: passed ? 'success' : 'warning' }}
+              gaugeColor={hasApprovedConversion ? 'var(--color-success)' : 'var(--color-primary)'}
+              grade={hasApprovedConversion ? { label: `Grade ${review.attempt.gradeLetter}`, tone: 'success' } : null}
               stats={[
                 { label: 'Correct', value: partTotals.correct, tone: 'success', icon: <CheckCircle2 /> },
                 { label: 'Incorrect', value: partTotals.incorrect, tone: 'danger', icon: <XCircle /> },
                 { label: 'Unanswered', value: partTotals.unanswered, tone: 'warning', icon: <MinusCircle /> },
                 {
-                  label: isPracticeOnly ? 'Raw score' : 'Scaled',
-                  value: isPracticeOnly ? `${raw}/${review.attempt.maxRawScore}` : `${scaled}/500`,
+                  label: hasApprovedConversion ? 'Scaled' : 'Raw score',
+                  value: hasApprovedConversion ? `${scaled}/500` : `${raw}/${review.attempt.maxRawScore}`,
                   tone: 'info',
                   icon: <Target />,
                 },
@@ -335,6 +327,16 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   </Button>
                 </div>
               )}
+            />
+
+            <ScoreConversionEvidence
+              assessment="Reading"
+              rawScore={raw}
+              maxRawScore={review.attempt.maxRawScore}
+              scaledScore={scaled}
+              passed={review.attempt.passed}
+              grade={review.attempt.gradeLetter}
+              tableVersion={review.attempt.scoreConversionTableVersionKey}
             />
 
             {structure?.paper.questionPaperAssets?.length ? (
@@ -513,9 +515,12 @@ function ReviewItemDetails({ item }: { item: ReviewItem }) {
       maxPoints={item.maxPoints}
       timeMs={timeMs}
       missReason={missReason}
+      missReasonTestId={item.missReason ? `reading-miss-${item.missReason}` : undefined}
       distractor={distractor}
       explanation={item.explanationMarkdown ? (
-        <MarkdownContent markdown={item.explanationMarkdown} className="text-sm leading-6 text-navy dark:text-white/90" />
+        <div data-testid="reading-explanation">
+          <MarkdownContent markdown={item.explanationMarkdown} className="text-sm leading-6 text-navy dark:text-white/90" />
+        </div>
       ) : null}
     >
       {item.boxExplanations && Object.keys(item.boxExplanations).length > 0 ? (

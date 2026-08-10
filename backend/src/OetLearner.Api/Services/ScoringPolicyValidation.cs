@@ -6,8 +6,8 @@ public static class ScoringPolicyValidation
 {
     public const string CanonicalDefaultPolicyJson = """
     {
-      "listening": { "passing": { "default": 350 }, "rawToScaled": [{ "raw": 30, "scaled": 350, "grade": "B" }] },
-      "reading": { "passing": { "default": 350 }, "rawToScaled": [{ "raw": 30, "scaled": 350, "grade": "B" }] },
+      "listening": { "conversionTable": "owner-managed" },
+      "reading": { "conversionTable": "owner-managed" },
       "writing": { "passing": { "uk": 350, "ie": 350, "au": 350, "nz": 350, "ca": 350, "us": 300, "qa": 300 } },
       "speaking": { "passing": { "default": 350 } }
     }
@@ -33,19 +33,11 @@ public static class ScoringPolicyValidation
                 return "policyJson must be a JSON object";
             }
 
-            var listeningReadingPass = OetScoring.ScaledPassGradeB;
-            var rawAnchor = OetScoring.OetRawToScaled(OetScoring.ListeningReadingRawPass);
-            if (rawAnchor != listeningReadingPass)
-            {
-                return "canonical OET scoring anchor is misconfigured";
-            }
-
             foreach (var sectionName in new[] { "listening", "reading" })
             {
-                if (!HasPassingDefault(root, sectionName, listeningReadingPass)
-                    || !HasRawToScaledAnchor(root, sectionName, OetScoring.ListeningReadingRawPass, rawAnchor))
+                if (!HasOwnerManagedConversionTable(root, sectionName))
                 {
-                    return "policyJson contradicts canonical OET scoring";
+                    return "policyJson must delegate Listening/Reading conversion to an owner-managed versioned table";
                 }
             }
 
@@ -85,26 +77,15 @@ public static class ScoringPolicyValidation
             && TryGetObject(section, "passing", out var passing)
             && HasScore(passing, "default", expected);
 
-    private static bool HasRawToScaledAnchor(JsonElement root, string sectionName, int raw, int scaled)
+    private static bool HasOwnerManagedConversionTable(JsonElement root, string sectionName)
     {
         if (!TryGetObject(root, sectionName, out var section)
-            || !TryGetProperty(section, "rawToScaled", out var rawToScaled)
-            || rawToScaled.ValueKind != JsonValueKind.Array)
+            || !TryGetProperty(section, "conversionTable", out var conversionTable)
+            || conversionTable.ValueKind != JsonValueKind.String)
         {
             return false;
         }
-
-        foreach (var item in rawToScaled.EnumerateArray())
-        {
-            if (item.ValueKind == JsonValueKind.Object
-                && HasScore(item, "raw", raw)
-                && HasScore(item, "scaled", scaled))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return string.Equals(conversionTable.GetString(), "owner-managed", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasScore(JsonElement parent, string propertyName, int expected)

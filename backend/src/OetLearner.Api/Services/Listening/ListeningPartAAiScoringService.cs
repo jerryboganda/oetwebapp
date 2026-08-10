@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
@@ -48,7 +49,7 @@ public sealed class ListeningPartAAiScoringService(
         PropertyNameCaseInsensitive = true,
     };
 
-    private sealed record GapItem(int Number, string Context, string UserAnswer, string Canonical, IReadOnlyList<string> Accepted);
+    private sealed record GapItem(int Number, string Context, string UserAnswer, string Canonical, IReadOnlyList<string> Accepted, string ApprovedRationale);
     private sealed record Verdict(int Number, string? Verdict_, string? Rationale);
 
     public async Task ScoreAttemptAsync(string attemptId, CancellationToken ct)
@@ -69,6 +70,11 @@ public sealed class ListeningPartAAiScoringService(
             .ToListAsync(ct);
         if (questions.Count == 0) return;
         var qById = questions.ToDictionary(q => q.Id);
+        var rationaleByQuestionId = await db.AssessmentRationales.AsNoTracking()
+            .Where(r => r.Assessment == "listening"
+                && r.Status == AssessmentGovernanceStatus.Effective
+                && questionIds.Contains(r.QuestionRevisionId))
+            .ToDictionaryAsync(r => r.QuestionRevisionId, r => r.RationaleText, ct);
 
         var partAAnswers = answers.Where(a => qById.ContainsKey(a.ListeningQuestionId)).ToList();
         if (partAAnswers.Count == 0) return;
@@ -90,7 +96,9 @@ public sealed class ListeningPartAAiScoringService(
                 Context: x.q.ListeningExtractId is { } eid && notesByExtract.TryGetValue(eid, out var nb) ? nb : string.Empty,
                 UserAnswer: TryReadString(x.a.UserAnswerJson) ?? string.Empty,
                 Canonical: TryReadString(x.q.CorrectAnswerJson) ?? string.Empty,
-                Accepted: ParseAccepted(x.q.AcceptedSynonymsJson)))
+                Accepted: ParseAccepted(x.q.AcceptedSynonymsJson),
+                ApprovedRationale: rationaleByQuestionId.GetValueOrDefault(x.q.Id, string.Empty)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.ApprovedRationale))
             .ToList();
 
         var provider = await ResolveProviderAsync(ct);

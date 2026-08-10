@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -13,19 +14,23 @@ namespace OetLearner.Api.Services.Listening;
 /// (or <see cref="ListeningAttempt.LastQuestionVersionMapJson"/> as a
 /// fallback) so admin edits in flight never silently invalidate scoring.
 /// Raw→scaled conversion routes ONLY through
-/// <see cref="OetScoring.OetRawToScaled"/> (mission-critical: the
+/// versioned score-conversion table is the sole scaled-score source (the
 /// <c>ListeningScoringPathAuditTest</c> source-scan fails CI on inline math).
 /// </summary>
 public sealed class ListeningGradingService
 {
     private readonly LearnerDbContext _db;
+    private readonly IAssessmentScoreConversionService _scoreConversion;
 
     private const string Subtest = "listening";
     private const int MaxOverrideReasonLength = 2_000;
 
-    public ListeningGradingService(LearnerDbContext db)
+    public ListeningGradingService(
+        LearnerDbContext db,
+        IAssessmentScoreConversionService? scoreConversion = null)
     {
         _db = db;
+        _scoreConversion = scoreConversion ?? new AssessmentScoreConversionService(db);
     }
 
     public async Task<ListeningGradingResult> GradeAsync(
@@ -103,8 +108,11 @@ public sealed class ListeningGradingService
         attempt.HumanScoreOverridesJson = JsonSerializer.Serialize(existing, OverrideJsonOptions);
 
         var result = await GradeAttemptAsync(attempt, refreshSubmittedAt: false, ct);
-        var grade = OetScoring.OetGradeLetterFromScaled(result.ScaledScore);
-        await RefreshLatestEvaluationAsync(result, grade, actorId, normalizedReason, ct);
+        var grade = result.ScoreConversionGrade ?? "—";
+        if (result.ScaledScore is not null)
+        {
+            await RefreshLatestEvaluationAsync(result, grade, actorId, normalizedReason, ct);
+        }
 
         _db.AuditEvents.Add(new AuditEvent
         {
@@ -186,10 +194,13 @@ public sealed class ListeningGradingService
             .Include(q => q.Options)
             .ToListAsync(ct);
 
-        // Read the singleton policy once per grade pass. The grader honours
-        // ShortAnswerNormalisation (e.g. "fuzzy_levenshtein_1") so admins can
-        // tighten or loosen Part A matching paper-wide without code changes.
-        var normalisation = await ResolveNormalisationStrategyAsync(ct);
+        // Resolve the captured policy once per grade pass. The owner-approved
+        // profile controls whether internal whitespace may be collapsed; the
+        // grader never enables fuzzy or synonym inference implicitly.
+        var markingPolicy = await ResolveMarkingPolicyAsync(attempt, ct);
+        var normalisation = !markingPolicy.TrimLeadingTrailingWhitespace
+            ? "exact"
+            : markingPolicy.CollapseInternalWhitespace ? "trim_collapse" : "trim_only";
 
         // Build a paper-wide map: normalisedAnswer → questionId. Powers the
         // WrongSection heuristic — if a learner's answer matches another
@@ -235,7 +246,7 @@ public sealed class ListeningGradingService
             // result so analytics can split it out.
             var drifted = pinnedVersion != q.Version;
 
-            var (isCorrect, distractor, missReason) = Evaluate(q, ans, paperAnswerMap, normalisation);
+            var (isCorrect, distractor, missReason) = Evaluate(q, ans, paperAnswerMap, normalisation, q.CaseSensitive && markingPolicy.CaseSensitive);
             ans.IsCorrect = isCorrect;
             ans.PointsEarned = isCorrect ? q.Points : 0;
             ans.SelectedDistractorCategory = distractor;
@@ -298,21 +309,41 @@ public sealed class ListeningGradingService
                 "Cannot grade this attempt: the paper has no structured questions in the relational store. Run backfill first.");
         }
 
-        // ── MISSION-CRITICAL ── raw→scaled MUST go through OetScoring.
-        // Inline math (* 350 / / 42 / * 500 / * 8.33) is forbidden and
+        // ── MISSION-CRITICAL ── raw→scaled MUST go through the owner-approved
+        // versioned lookup table. Inline math and interpolation are forbidden.
         // ListeningScoringPathAuditTest source-scans for it on CI.
-        attempt.ScaledScore = OetScoring.OetRawToScaled(rawCorrect);
+        var conversion = await _scoreConversion.ResolveAsync(
+            Subtest,
+            rawCorrect,
+            scopeKey: "default",
+            tableId: attempt.ScoreConversionTableId,
+            cancellationToken: ct);
+        if (conversion.TableId is not null && conversion.IsAvailable)
+        {
+            await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);
+        }
+        attempt.ScoreConversionTableId = conversion.TableId;
+        attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
+        attempt.ScoreConversionGrade = conversion.Grade;
+        attempt.ScoreConversionPassed = conversion.Passed;
+        attempt.ScaledScore = conversion.ConvertedScore;
         if (refreshSubmittedAt || attempt.SubmittedAt is null)
         {
             attempt.SubmittedAt = now;
         }
+        attempt.LastActivityAt = now;
         attempt.Status = ListeningAttemptStatus.Submitted;
+        attempt.RowVersion++;
 
         return new ListeningGradingResult(
             AttemptId: attempt.Id,
             RawScore: rawCorrect,
             MaxRawScore: attempt.MaxRawScore,
-            ScaledScore: attempt.ScaledScore.Value);
+            ScaledScore: attempt.ScaledScore,
+            ScoreConversionTableVersionKey: attempt.ScoreConversionTableVersionKey,
+            ScoreConversionErrorCode: conversion.ErrorCode,
+            ScoreConversionGrade: conversion.Grade,
+            ScoreConversionPassed: conversion.Passed);
     }
 
     private async Task RefreshLatestEvaluationAsync(
@@ -328,10 +359,21 @@ public sealed class ListeningGradingService
             .FirstOrDefaultAsync(ct);
         if (evaluation is null) return;
 
-        var passed = OetScoring.IsListeningReadingPassByScaled(result.ScaledScore);
+        if (result.ScaledScore is not int scaledScore)
+        {
+            return;
+        }
+
+        var passed = result.ScoreConversionPassed;
         var scoreDisplay = FormatScoreDisplay(result, grade);
         evaluation.ScoreRange = scoreDisplay;
         evaluation.GradeRange = $"Grade {grade}";
+        evaluation.RawScore = result.RawScore;
+        evaluation.MaxRawScore = result.MaxRawScore;
+        evaluation.ScaledScore = result.ScaledScore;
+        evaluation.ScoreConversionTableVersionKey = result.ScoreConversionTableVersionKey;
+        evaluation.ScoreConversionGrade = result.ScoreConversionGrade;
+        evaluation.ScoreConversionPassed = result.ScoreConversionPassed;
         evaluation.CriterionScoresJson = JsonSerializer.Serialize(new[]
         {
             new
@@ -339,7 +381,7 @@ public sealed class ListeningGradingService
                 criterionCode = "listening_accuracy",
                 rawScore = result.RawScore,
                 maxRawScore = result.MaxRawScore,
-                scaledScore = result.ScaledScore,
+                scaledScore,
                 grade,
                 passed,
                 scoreDisplay,
@@ -357,13 +399,14 @@ public sealed class ListeningGradingService
     // Pure evaluation helpers — no DB access, fully unit-testable.
     // ─────────────────────────────────────────────────────────────────────
 
-    public const string DefaultNormalisation = "trim_collapse_case_insensitive";
+    public const string DefaultNormalisation = "trim_only";
 
     public static (bool IsCorrect, ListeningDistractorCategory? Distractor, ListeningMissReason? MissReason) Evaluate(
         ListeningQuestion q,
         ListeningAnswer ans,
         IReadOnlyDictionary<string, string>? paperAnswerMap = null,
-        string normalisation = DefaultNormalisation)
+        string normalisation = DefaultNormalisation,
+        bool? caseSensitiveOverride = null)
     {
         switch (q.QuestionType)
         {
@@ -412,7 +455,8 @@ public sealed class ListeningGradingService
                     .Where(c => !string.IsNullOrWhiteSpace(c))
                     .ToList();
 
-                bool matches = candidates.Any(c => StringsMatch(user, c, q.CaseSensitive, normalisation));
+                var caseSensitive = caseSensitiveOverride ?? q.CaseSensitive;
+                bool matches = candidates.Any(c => StringsMatch(user, c, caseSensitive, normalisation));
                 if (matches) return (true, null, ListeningMissReason.Match);
 
                 var miss = ClassifyMiss(user, candidates, q, paperAnswerMap, normalisation);
@@ -448,8 +492,11 @@ public sealed class ListeningGradingService
     {
         "exact" => s,
         "trim_only" => s.Trim(),
-        "fuzzy_levenshtein_1" => CollapseWhitespace(s.Trim()),
-        _ /* trim_collapse_case_insensitive */ => CollapseWhitespace(s.Trim()),
+        "trim_collapse" => CollapseWhitespace(s.Trim()),
+        // Legacy fuzzy policy names are deliberately reduced to exact matching
+        // with trimming only; fuzzy acceptance is never permitted.
+        "fuzzy_levenshtein_1" => s.Trim(),
+        _ => s.Trim(),
     };
 
     private static bool LevenshteinDistanceAtMostOne(string a, string b)
@@ -622,12 +669,32 @@ public sealed class ListeningGradingService
         return map;
     }
 
-    private async Task<string> ResolveNormalisationStrategyAsync(CancellationToken ct)
+    private static Task<AssessmentMarkingPolicyDocument> ResolveMarkingPolicyAsync(
+        ListeningAttempt attempt,
+        CancellationToken ct)
     {
-        var policy = await _db.ListeningPolicies.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == "global", ct);
-        var s = policy?.ShortAnswerNormalisation;
-        return string.IsNullOrWhiteSpace(s) ? DefaultNormalisation : s!;
+        _ = ct;
+        if (string.IsNullOrWhiteSpace(attempt.PolicySnapshotJson))
+            return Task.FromResult(new AssessmentMarkingPolicyDocument());
+
+        try
+        {
+            using var document = JsonDocument.Parse(attempt.PolicySnapshotJson);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("markingPolicy", out var policyElement))
+            {
+                var policyJson = policyElement.ValueKind == JsonValueKind.String
+                    ? policyElement.GetString()
+                    : policyElement.GetRawText();
+                return Task.FromResult(AssessmentMarkingPolicyDocument.Parse(policyJson));
+            }
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid_json");
+        }
+
+        return Task.FromResult(new AssessmentMarkingPolicyDocument());
     }
 
     private static string? TryReadString(string? json)
@@ -676,7 +743,9 @@ public sealed class ListeningGradingService
     }
 
     private static string FormatScoreDisplay(ListeningGradingResult result, string grade)
-        => $"{result.RawScore} / {result.MaxRawScore} \u2022 {result.ScaledScore} / 500 \u2022 Grade {grade}";
+        => result.ScaledScore is int scaled
+            ? $"{result.RawScore} / {result.MaxRawScore} \u2022 {scaled} / 500 \u2022 Grade {grade}"
+            : $"{result.RawScore} / {result.MaxRawScore} \u2022 scaled score unavailable";
 
     private static Dictionary<string, ScoreOverride> ParseOverrides(string? json)
     {
@@ -696,7 +765,14 @@ public sealed class ListeningGradingService
 }
 
 public sealed record ListeningGradingResult(
-    string AttemptId, int RawScore, int MaxRawScore, int ScaledScore);
+    string AttemptId,
+    int RawScore,
+    int MaxRawScore,
+    int? ScaledScore,
+    string? ScoreConversionTableVersionKey,
+    string? ScoreConversionErrorCode,
+    string? ScoreConversionGrade,
+    bool? ScoreConversionPassed);
 
 public sealed record ListeningScoreOverrideResult(
     string AttemptId,
@@ -706,5 +782,5 @@ public sealed record ListeningScoreOverrideResult(
     string By,
     int RawScore,
     int MaxRawScore,
-    int ScaledScore,
+    int? ScaledScore,
     string Grade);

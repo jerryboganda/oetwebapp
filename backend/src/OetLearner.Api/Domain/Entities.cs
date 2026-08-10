@@ -355,6 +355,13 @@ public class Attempt
     public string Scratchpad { get; set; } = string.Empty;
     public string ChecklistJson { get; set; } = "[]";
     public string AnswersJson { get; set; } = "{}";
+    /// <summary>Owner marking-policy version captured at attempt start.</summary>
+    [MaxLength(64)]
+    public string? MarkingPolicyVersionId { get; set; }
+
+    /// <summary>Immutable Listening marking-policy snapshot for legacy attempts.</summary>
+    [MaxLength(16384)]
+    public string PolicySnapshotJson { get; set; } = "{}";
     public UploadState AudioUploadState { get; set; }
     public string? AudioObjectKey { get; set; }
     public string AudioMetadataJson { get; set; } = "{}";
@@ -387,6 +394,12 @@ public class Evaluation
 
     public AsyncState State { get; set; }
     public string ScoreRange { get; set; } = default!;
+    public int? RawScore { get; set; }
+    public int? MaxRawScore { get; set; }
+    public int? ScaledScore { get; set; }
+    public string? ScoreConversionTableVersionKey { get; set; }
+    public string? ScoreConversionGrade { get; set; }
+    public bool? ScoreConversionPassed { get; set; }
     public string? GradeRange { get; set; }
     public ConfidenceBand ConfidenceBand { get; set; }
     public string StrengthsJson { get; set; } = "[]";

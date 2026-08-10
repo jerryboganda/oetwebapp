@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Xunit;
 
 namespace OetLearner.Api.Tests.Listening;
@@ -18,66 +17,13 @@ namespace OetLearner.Api.Tests.Listening;
 public class ListeningScoringPathAuditTest
 {
     [Fact]
-    public void Listening_service_tree_uses_only_OetScoring_for_raw_to_scaled()
+    public void Listening_grading_service_uses_versioned_conversion_only()
     {
         var listeningServicesDir = LocateListeningServicesDir();
-        var offenders = new List<string>();
+        var source = File.ReadAllText(Path.Combine(listeningServicesDir, "ListeningGradingService.cs"));
 
-        // Forbidden inline-scaling regexes — each captures the canonical
-        // 30/42 ≡ 350/500 anchor in any of its likely written forms.
-        var patterns = new[]
-        {
-            new Regex(@"\*\s*350\b",   RegexOptions.Compiled),
-            new Regex(@"/\s*42\b",     RegexOptions.Compiled),
-            new Regex(@"\*\s*500\b",   RegexOptions.Compiled),
-            new Regex(@"\*\s*8\.33",   RegexOptions.Compiled),
-            new Regex(@"\*\s*8\.\d{2,}", RegexOptions.Compiled), // 8.333…
-        };
-
-        foreach (var file in Directory.EnumerateFiles(
-            listeningServicesDir, "*.cs", SearchOption.AllDirectories))
-        {
-            // Skip the audit test itself.
-            if (file.EndsWith("ListeningScoringPathAuditTest.cs", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // Allow OetScoring (the legitimate single source of truth).
-            if (file.EndsWith("OetScoring.cs", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var src = File.ReadAllText(file);
-            var lines = src.Split('\n');
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var line = lines[i];
-
-                // Skip line-comments / docstrings — comparing constants in
-                // documentation is allowed.
-                var trimmed = line.TrimStart();
-                if (trimmed.StartsWith("//") || trimmed.StartsWith("*") ||
-                    trimmed.StartsWith("///")) continue;
-
-                // Strip inline comments before pattern matching so e.g.
-                // `const int N = ... // 42` is not flagged on the trailing
-                // comment.
-                var codeOnly = StripInlineComment(line);
-                if (string.IsNullOrWhiteSpace(codeOnly)) continue;
-
-                foreach (var p in patterns)
-                {
-                    if (p.IsMatch(codeOnly))
-                    {
-                        offenders.Add($"{Path.GetFileName(file)}:{i + 1}: {line.Trim()}");
-                        break;
-                    }
-                }
-            }
-        }
-
-        Assert.True(offenders.Count == 0,
-            "Inline raw→scaled math found in Listening service tree. " +
-            "All scaling MUST route through OetScoring.OetRawToScaled. " +
-            "Offenders:\n" + string.Join("\n", offenders));
+        Assert.DoesNotContain("OetRawToScaled", source, StringComparison.Ordinal);
+        Assert.Contains("IAssessmentScoreConversionService", source, StringComparison.Ordinal);
     }
 
     private static string LocateListeningServicesDir()

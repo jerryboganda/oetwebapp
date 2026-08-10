@@ -73,9 +73,11 @@ export interface ListeningHomeResultDto {
   paperTitle: string;
   rawScore: number;
   maxRawScore: number;
-  scaledScore: number;
+  scaledScore: number | null;
   grade: string;
-  passed: boolean;
+  passed: boolean | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionErrorCode?: string | null;
   submittedAt: string | null;
   scoreDisplay: string;
   route: string;
@@ -357,9 +359,11 @@ export interface ListeningReviewDto {
   paper: ListeningSessionDto['paper'];
   rawScore: number;
   maxRawScore: number;
-  scaledScore: number;
+  scaledScore: number | null;
   grade: string;
-  passed: boolean;
+  passed: boolean | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionErrorCode?: string | null;
   scoreDisplay: string;
   correctCount: number;
   incorrectCount: number;

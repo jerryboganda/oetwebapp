@@ -34,21 +34,21 @@ describe('Reading paper results page', () => {
     mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
   });
 
-  it('uses the canonical scaled pass helper for the 350 pass anchor', async () => {
+  it('uses the owner-approved conversion row for a converted result', async () => {
     mockGetReadingAttemptReview.mockResolvedValueOnce(buildReview({ scaledScore: 350, rawScore: 30, gradeLetter: 'B' }));
 
     await renderResults();
 
-    expect(await screen.findByText('Reading pass evidence')).toBeInTheDocument();
+    expect(await screen.findByText('Owner-table conversion')).toBeInTheDocument();
     expect(screen.getByText('30/42 raw | 350/500 scaled')).toBeInTheDocument();
   });
 
-  it('uses scaled score rather than raw score for below-anchor evidence', async () => {
+  it('does not infer a pass from raw score when the owner row says not passed', async () => {
     mockGetReadingAttemptReview.mockResolvedValueOnce(buildReview({ scaledScore: 349, rawScore: 30, gradeLetter: 'C+' }));
 
     await renderResults();
 
-    expect(await screen.findByText('Below Reading pass anchor')).toBeInTheDocument();
+    expect(await screen.findByText('Owner-table conversion')).toBeInTheDocument();
     expect(screen.getByText('30/42 raw | 349/500 scaled')).toBeInTheDocument();
   });
 
@@ -57,7 +57,7 @@ describe('Reading paper results page', () => {
 
     await renderResults();
 
-    expect(await screen.findByText('Practice-only review')).toBeInTheDocument();
+    expect(await screen.findByText('Scaled score unavailable')).toBeInTheDocument();
     expect(screen.getByText('6/10 practice marks')).toBeInTheDocument();
   });
 
@@ -176,6 +176,8 @@ function buildReview(opts: {
       maxRawScore,
       scaledScore: opts.scaledScore,
       gradeLetter: opts.gradeLetter,
+      passed: opts.scaledScore === null ? null : opts.scaledScore >= 350,
+      scoreConversionTableVersionKey: opts.scaledScore === null ? null : 'owner-test-v1',
       partADeadlineAt: '2026-05-12T10:15:00.000Z',
       partBCDeadlineAt: '2026-05-12T11:00:00.000Z',
     },

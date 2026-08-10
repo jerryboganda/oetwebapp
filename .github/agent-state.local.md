@@ -624,3 +624,25 @@ Last updated: 2026-08-10
   tests, and state file; preserve `.codex/config.toml`, `.superpowers/`, and
   unrelated user files. Commit/push `main`, monitor deployment, then verify
   production health and protected endpoint boundaries without using credentials.
+
+
+# Current Task - Listening and Reading AI system specification v1.1
+
+## Implementation checkpoint
+
+- Added versioned owner-managed exact 0-42 conversion tables with persisted raw/scaled/grade/pass evidence and no formula fallback.
+- Added effective/locked marking-policy snapshots, rationale approval gates, controlled re-mark jobs, audit events, and admin lifecycle controls.
+- Added deterministic Listening/Reading grading safeguards, after-submit additive AI gates, exact non-official result disclosures, and conversion evidence graphs.
+- Preserved unrelated Writing, PDF-policy copies, .codex/config.toml, and .superpowers/ worktree content.
+
+## Validation
+
+- Canonical Reading results test: 1 file, 5/5 passed, excluding unrelated untracked PDF-policy copies.
+- Focused ESLint over changed frontend files: 0 errors, existing React hook warnings only.
+- git diff --check: passed.
+- Full TypeScript check is blocked by pre-existing duplicate test globals and unrelated untracked PDF-policy copies.
+- Backend compile/test boundary remains the pre-existing untracked Writing source errors; touched governance/grading files had no compiler errors in the bounded compile check.
+
+## Next step
+
+- Stage only the explicit v1.1 implementation files, commit and push main, then verify the GitHub Actions production release and both live health endpoints. Owner-supplied conversion tables, normalization profile, and live production acceptance remain required boundaries.

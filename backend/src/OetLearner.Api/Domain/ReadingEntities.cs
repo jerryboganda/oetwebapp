@@ -501,6 +501,22 @@ public class ReadingAttempt
     /// <summary>Scaled 0-500 via <c>OetScoring.RawToScaled</c>. Null until graded.</summary>
     public int? ScaledScore { get; set; }
 
+    /// <summary>Exact score-conversion table used for this submitted result.</summary>
+    [MaxLength(64)]
+    public string? ScoreConversionTableId { get; set; }
+
+    [MaxLength(64)]
+    public string? ScoreConversionTableVersionKey { get; set; }
+
+    [MaxLength(16)]
+    public string? ScoreConversionGrade { get; set; }
+
+    public bool? ScoreConversionPassed { get; set; }
+
+    /// <summary>Exact marking-policy version captured for this attempt.</summary>
+    [MaxLength(64)]
+    public string? MarkingPolicyVersionId { get; set; }
+
     /// <summary>Max raw achievable at time of attempt start (snapshot).</summary>
     public int MaxRawScore { get; set; }
 
