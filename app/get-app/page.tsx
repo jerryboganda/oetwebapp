@@ -4,14 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
-  Apple,
   ArrowLeft,
   BellRing,
-  Laptop,
-  MonitorDown,
   PlayCircle,
   ShieldCheck,
-  Smartphone,
   Video,
 } from 'lucide-react';
 import {
@@ -23,14 +19,19 @@ import {
   WINDOWS_DOWNLOAD_URL,
   type DesktopOsKind,
 } from '@/lib/app-downloads';
-import { AppStoreBadge, DesktopAppBadge, GooglePlayBadge } from '@/components/marketing/store-badges';
+import {
+  PlatformDownloadBadge,
+  PlatformGlyph,
+  type PlatformKey,
+} from '@/components/marketing/store-badges';
 
 const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 
-const OS_CTA: Partial<Record<DesktopOsKind, { label: string; href: string }>> = {
-  windows: { label: 'Download for Windows', href: WINDOWS_DOWNLOAD_URL },
-  mac: { label: 'Download for Mac', href: MAC_DOWNLOAD_URL },
-  android: { label: 'Download the Android app', href: ANDROID_INSTALL_URL },
+const OS_CTA: Partial<Record<DesktopOsKind, { platform: PlatformKey; href: string }>> = {
+  windows: { platform: 'windows', href: WINDOWS_DOWNLOAD_URL },
+  mac: { platform: 'mac', href: MAC_DOWNLOAD_URL },
+  android: { platform: 'android', href: ANDROID_INSTALL_URL },
+  ios: { platform: 'ios', href: IOS_DOWNLOAD_URL },
 };
 
 const FEATURES = [
@@ -84,13 +85,11 @@ export default function GetAppPage() {
             mobile apps. One account, everything in sync.
           </p>
           {heroCta && (
-            <a
+            <PlatformDownloadBadge
+              platform={heroCta.platform}
               href={heroCta.href}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white hover:bg-primary-dark"
-            >
-              <MonitorDown className="h-5 w-5" />
-              {heroCta.label}
-            </a>
+              className="mx-auto mt-6 max-w-[240px]"
+            />
           )}
         </section>
 
@@ -98,47 +97,43 @@ export default function GetAppPage() {
           <div
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
-            <Laptop className="h-8 w-8 text-primary" />
+            <PlatformGlyph platform="windows" className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">Windows</h2>
               <p className="mt-1 text-xs text-muted">Installer (.exe) — auto-updates</p>
             </div>
-            <DesktopAppBadge href={WINDOWS_DOWNLOAD_URL} label="Windows" className="w-full max-w-[220px] justify-center" />
+            <PlatformDownloadBadge platform="windows" href={WINDOWS_DOWNLOAD_URL} className="max-w-[220px]" />
           </div>
 
           <div
             className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
           >
-            <Apple className="h-8 w-8 text-primary" />
+            <PlatformGlyph platform="mac" className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">macOS</h2>
               <p className="mt-1 text-xs text-muted">Disk image (.dmg) — auto-updates</p>
             </div>
-            <DesktopAppBadge href={MAC_DOWNLOAD_URL} label="Mac" className="w-full max-w-[220px] justify-center" />
+            <PlatformDownloadBadge platform="mac" href={MAC_DOWNLOAD_URL} className="max-w-[220px]" />
           </div>
 
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary">
-            <Smartphone className="h-8 w-8 text-primary" />
+            <PlatformGlyph platform="android" className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">Android</h2>
               <p className="mt-1 text-xs text-muted">Signed APK (.apk) — latest release</p>
             </div>
-            <GooglePlayBadge href={ANDROID_INSTALL_URL} className="w-full max-w-[220px] justify-center" />
+            <PlatformDownloadBadge platform="android" href={ANDROID_INSTALL_URL} className="max-w-[220px]" />
           </div>
 
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
-            <Apple className="h-8 w-8 text-primary" />
+            <PlatformGlyph platform="ios" className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
               <p className="mt-1 text-xs text-muted">
                 {IOS_STORE_URL ? 'Official App Store download' : 'Temporary direct IPA download'}
               </p>
             </div>
-            <AppStoreBadge
-              href={IOS_DOWNLOAD_URL}
-              directDownload={!IOS_STORE_URL}
-              className="w-full max-w-[220px] justify-center"
-            />
+            <PlatformDownloadBadge platform="ios" href={IOS_DOWNLOAD_URL} className="max-w-[220px]" />
           </div>
         </section>
 

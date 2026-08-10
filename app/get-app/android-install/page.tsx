@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Download, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, ShieldAlert } from 'lucide-react';
+import { PlatformGlyph } from '@/components/marketing/store-badges';
 import { ANDROID_DOWNLOAD_URL } from '@/lib/app-downloads';
 
 interface NativeReleaseInfo {
@@ -61,7 +62,7 @@ export default function AndroidInstallPage() {
             href={ANDROID_DOWNLOAD_URL}
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white hover:bg-primary-dark"
           >
-            <Download className="h-5 w-5" />
+            <PlatformGlyph platform="android" className="h-5 w-5" />
             Download the update
           </a>
         </section>

@@ -1,20 +1,29 @@
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { AppDownloadPromo } from './app-download-promo';
 
-describe('AppDownloadPromo', () => {
-  it('renders a compact, actionable responsive strip', () => {
-    render(<AppDownloadPromo variant="banner" />);
+const platformLabels = [
+  'Download the OET app for Windows',
+  'Download the OET app for Mac',
+  'Get the OET app on Google Play',
+  'Download the OET app on the App Store',
+];
 
-    const strip = screen.getByRole('region', { name: /official OET apps/i });
-    expect(strip).toBeInTheDocument();
-    expect(screen.getByText(/Keep your account in sync/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Windows & Mac/i })).toHaveAttribute('href', '/get-app');
-    expect(screen.getByRole('link', { name: /Google Play/i })).toHaveAttribute('href', '/get-app/android-install');
-    const iosLink = screen.getByRole('link', { name: /iPhone and iPad/i });
-    expect(iosLink).toHaveAttribute('href', '/api/download/ios');
-    expect(iosLink).toHaveClass('sm:w-[176px]');
-    expect(screen.getByRole('link', { name: /Windows & Mac/i })).toHaveClass('sm:w-[176px]');
-    expect(screen.getByRole('link', { name: /Google Play/i })).toHaveClass('sm:w-[176px]');
-    expect(screen.queryByText(/Download Official Apps for Video Access/i)).not.toBeInTheDocument();
+describe('AppDownloadPromo', () => {
+  it.each(['banner', 'card', 'modal'] as const)('renders four equal platform badges in the %s variant', (variant) => {
+    render(<AppDownloadPromo variant={variant} onClose={variant === 'modal' ? () => undefined : undefined} />);
+
+    const expectedHrefs = ['/get-app', '/get-app', '/get-app/android-install', '/api/download/ios'];
+    platformLabels.forEach((label, index) => {
+      const link = screen.getByRole('link', { name: label });
+      expect(link).toHaveAttribute('href', expectedHrefs[index]);
+      expect(link).toHaveClass(variant === 'banner' ? 'h-16' : 'h-20', 'w-full', 'rounded-2xl');
+    });
+
+    expect(screen.getAllByRole('link')).toHaveLength(4);
+    expect(screen.queryByText('Download for')).not.toBeInTheDocument();
+    expect(screen.queryByText('Download directly')).not.toBeInTheDocument();
+    expect(screen.queryByText('iOS app')).not.toBeInTheDocument();
+    expect(screen.queryByText('Windows & Mac')).not.toBeInTheDocument();
   });
 });

@@ -15,12 +15,14 @@ describe('GetAppPage download badges', () => {
       screen.getByRole('link', { name: 'Download the OET app for Windows' }),
       screen.getByRole('link', { name: 'Download the OET app for Mac' }),
       screen.getByRole('link', { name: 'Get the OET app on Google Play' }),
-      screen.getByRole('link', { name: 'Download the OET iOS app for iPhone and iPad' }),
+      screen.getByRole('link', { name: 'Download the OET app on the App Store' }),
     ];
 
-    for (const badge of badges) {
+    const expectedHrefs = ['/api/download/windows', '/api/download/mac', '/get-app/android-install', '/api/download/ios'];
+    badges.forEach((badge, index) => {
       expect(badge).toHaveClass('w-full', 'max-w-[220px]', 'justify-center');
-    }
-    expect(badges[3]).toHaveAttribute('href', '/api/download/ios');
+      expect(badge).toHaveClass('h-20', 'rounded-2xl');
+      expect(badge).toHaveAttribute('href', expectedHrefs[index]);
+    });
   });
 });

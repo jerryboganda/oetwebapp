@@ -412,3 +412,33 @@ Last updated: 2026-08-08
   push `main`. Pushing `main` is the production deployment trigger; owner
   verification of real mobile fullscreen behavior and the eventual IPA remains
   the external acceptance boundary.
+
+# Current Task - Four-platform app-download icon system
+
+Last updated: 2026-08-10
+
+## Outcome
+
+- Replaced grouped/generic app-download artwork with shared Windows, Mac,
+  Google Play, and App Store inline SVG glyphs in the marketing badge system.
+- Applied the four-button system to banner, modal, card, auth, `/get-app`, and
+  Android install download surfaces used by the web, desktop, and Capacitor
+  shells.
+- Preserved existing download destinations and left native launcher/splash
+  assets untouched.
+
+## Validation
+
+- Focused Vitest: `components/marketing/app-download-promo.test.tsx`,
+  `components/auth/__tests__/auth-screen-shell.test.tsx`, and
+  `app/get-app/page.test.tsx`: 3 files, 6/6 tests passed.
+- `git diff --check`: passed.
+- Source audit found no remaining generic app-download `Monitor`, `Laptop`,
+  `Smartphone`, `Apple`, `Download`, or grouped desktop/mobile badge usage in
+  the audited surfaces.
+
+## Next step
+
+Stage only the explicit four-platform implementation, tests, plan, and this
+state file; preserve unrelated existing changes plus `.codex/config.toml` and
+`.superpowers/`, then commit and push `main`.

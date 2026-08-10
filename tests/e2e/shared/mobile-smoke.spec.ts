@@ -33,9 +33,11 @@ test.describe('Mobile viewport smoke @mobile', () => {
 
     const appDownloadStrip = page.getByRole('region', { name: /official OET apps/i });
     await expect(appDownloadStrip).toBeVisible();
-    await expect(appDownloadStrip.getByRole('link', { name: /Windows & Mac/i })).toHaveAttribute('href', '/get-app');
+    await expect(appDownloadStrip.getByRole('link', { name: /download the OET app for Windows/i })).toHaveAttribute('href', '/get-app');
+    await expect(appDownloadStrip.getByRole('link', { name: /download the OET app for Mac/i })).toHaveAttribute('href', '/get-app');
     await expect(appDownloadStrip.getByRole('link', { name: /Google Play/i })).toHaveAttribute('href', '/get-app/android-install');
-    await expect(appDownloadStrip.getByRole('link', { name: /iPhone and iPad/i })).toHaveAttribute('href', '/get-app');
+    await expect(appDownloadStrip.getByRole('link', { name: /App Store/i })).toHaveAttribute('href', '/api/download/ios');
+    await expect(appDownloadStrip.getByRole('link')).toHaveCount(4);
 
     // Mobile viewport dimensions should be applied
     const viewportSize = page.viewportSize();
