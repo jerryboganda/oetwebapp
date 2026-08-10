@@ -210,8 +210,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
-        var client = CreateClient();
         EnsureLocalAuthIdentity(email, expectedRole);
+        var client = CreateClient();
         var signInResponse = client.PostAsJsonAsync(
                 "/v1/auth/sign-in",
                 new PasswordSignInRequest(email, password, RememberMe: true))
