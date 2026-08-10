@@ -1062,22 +1062,22 @@ public sealed class ReadingGradingService(
         if (document.RootElement.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("remark_key_snapshot_invalid_json");
         var root = document.RootElement;
-        var hasCorrect = root.TryGetProperty("correctAnswerJson", out var correctJson)
-            || root.TryGetProperty("correctAnswer", out correctJson);
-        var hasAccepted = root.TryGetProperty("acceptedSynonymsJson", out var acceptedJson)
-            || root.TryGetProperty("acceptedVariants", out acceptedJson);
+        var hasCorrectJson = root.TryGetProperty("correctAnswerJson", out var correctJson);
+        var hasCorrect = hasCorrectJson || root.TryGetProperty("correctAnswer", out correctJson);
+        var hasAcceptedJson = root.TryGetProperty("acceptedSynonymsJson", out var acceptedJson);
+        var hasAccepted = hasAcceptedJson || root.TryGetProperty("acceptedVariants", out acceptedJson);
         if (!hasCorrect && !hasAccepted)
             throw new InvalidOperationException("remark_key_snapshot_missing_key");
 
         var correctedAnswer = hasCorrect
-            ? correctJson.NameEquals("correctAnswerJson") && correctJson.ValueKind == JsonValueKind.String
+            ? hasCorrectJson && correctJson.ValueKind == JsonValueKind.String
                 ? correctJson.GetString() ?? "null"
                 : correctJson.ValueKind == JsonValueKind.String
                     ? JsonSerializer.Serialize(correctJson.GetString())
                     : correctJson.GetRawText()
             : question.CorrectAnswerJson;
         var correctedVariants = hasAccepted
-            ? acceptedJson.NameEquals("acceptedSynonymsJson") && acceptedJson.ValueKind == JsonValueKind.String
+            ? hasAcceptedJson && acceptedJson.ValueKind == JsonValueKind.String
                 ? acceptedJson.GetString()
                 : acceptedJson.ValueKind == JsonValueKind.Null ? null : acceptedJson.GetRawText()
             : question.AcceptedSynonymsJson;
