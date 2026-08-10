@@ -571,6 +571,15 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             CreatedAt = now,
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        var balance = await scope.ServiceProvider
+            .GetRequiredService<OetLearner.Api.Services.AiManagement.IAiCreditService>()
+            .GetBalanceAsync(userId, cancellationToken);
+        if (balance.TokensAvailable < tokens)
+        {
+            throw new InvalidOperationException(
+                $"Test AI credit grant for {userId} was not visible to the canonical credit service: {balance.TokensAvailable} available.");
+        }
     }
 
     public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName)
