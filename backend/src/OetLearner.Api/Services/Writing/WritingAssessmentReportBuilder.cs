@@ -160,7 +160,7 @@ public static class WritingAssessmentReportBuilder
         report.TopPrioritiesJson = JsonSerializer.Serialize(topPriorities);
         report.StrengthsJson = JsonSerializer.Serialize(criteria.Select(x => x.StrengthObservation).Take(3));
         report.StudyPlanJson = JsonSerializer.Serialize(criteria
-            .OrderBy(x => x.Score / (double)Math.Max(1, x.MaximumScore))
+            .OrderBy(x => x.Score / (double)Math.Max(1, (int)x.MaximumScore))
             .Take(4)
             .Select(x => x.ImprovementAction));
         report.FeatureRecordJson = JsonSerializer.Serialize(new

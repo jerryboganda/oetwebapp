@@ -65,7 +65,7 @@ public sealed class WritingEvaluationPipeline(
             db,
             attempt,
             evaluation,
-            "medicine",
+            ExamProfession.Medicine,
             "routine_referral",
             Array.Empty<LintFinding>(),
             "writing_v11_required",
