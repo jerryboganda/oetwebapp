@@ -212,6 +212,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         EnsureLocalAuthIdentity(email, expectedRole);
         var client = CreateClient();
+        var testDeviceId = "test-device-" + email.Trim().ToLowerInvariant()
+            .Replace("@", "-at-", StringComparison.Ordinal)
+            .Replace(".", "-dot-", StringComparison.Ordinal);
         var signInResponse = client.PostAsJsonAsync(
                 "/v1/auth/sign-in",
                 new PasswordSignInRequest(email, password, RememberMe: true))
@@ -273,21 +276,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         var accountId = ResolveSeedAccountId(email, role);
         var now = DateTimeOffset.UtcNow;
         var normalizedEmail = email.ToUpperInvariant();
-
-        // The application defaults security gates on when RuntimeSettings has
-        // no row. These fixture clients intentionally exercise password sign-in
-        // without the production device-challenge round-trip, so seed the
-        // explicit test profile rather than relying on nullable production
-        // defaults. Production hosts never use this factory.
-        var runtimeSettings = db.RuntimeSettings.SingleOrDefault(x => x.Id == "default");
-        if (runtimeSettings is null)
-        {
-            runtimeSettings = new RuntimeSettingsRow { Id = "default" };
-            db.RuntimeSettings.Add(runtimeSettings);
-        }
-        runtimeSettings.SecurityRiskMode = OetLearner.Api.Services.Settings.SecurityRiskModes.Off;
-        runtimeSettings.SecurityTrustedDeviceRequired = false;
-        runtimeSettings.SecurityRequireVerifiedEmailForLearners = false;
 
         var account = db.ApplicationUserAccounts.SingleOrDefault(x => x.Id == accountId || x.NormalizedEmail == normalizedEmail);
         if (account is null)
