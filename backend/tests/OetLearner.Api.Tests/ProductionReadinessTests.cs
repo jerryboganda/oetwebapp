@@ -262,7 +262,11 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
                 await _factory.DrainBackgroundJobsAsync();
                 var response = await learner.GetAsync($"/v1/speaking/evaluations/{evaluationId}/summary");
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                return json.RootElement.GetProperty("state").GetString() == "completed";
+                var state = json.RootElement.GetProperty("state").GetString();
+                if (string.Equals(state, "failed", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Speaking evaluation failed: {json.RootElement.GetProperty("statusReasonCode").GetString()}");
+
+                return string.Equals(state, "completed", StringComparison.OrdinalIgnoreCase);
             },
             "speaking evaluation to complete");
 
