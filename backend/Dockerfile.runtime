@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+
+# - curl: required for the container HEALTHCHECK
+# - tesseract-ocr / tesseract-ocr-eng: native binaries + English trained data
+#   for the Tesseract wrapper used by WritingOcrService.
+# - libleptonica-dev: provides libleptonica used by libtesseract.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        libleptonica-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN groupadd --gid 10001 appgroup \
+    && useradd --uid 10001 --gid appgroup --create-home --home-dir /home/appuser appuser \
+    && mkdir -p /var/opt/oet-learner/storage \
+    && chown -R appuser:appgroup /app /var/opt/oet-learner /home/appuser
+
+# The publish directory is produced and checked by the preceding Actions-host
+# step. The VPS never receives source code or performs a source build.
+COPY backend/publish ./
+
+ENV ASPNETCORE_ENVIRONMENT=Production \
+    ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl --fail http://127.0.0.1:8080/health/ready || exit 1
+
+USER appuser
+
+ENTRYPOINT ["dotnet", "OetLearner.Api.dll"]
