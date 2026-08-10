@@ -1,3 +1,42 @@
+# Current Task - OET Speaking booking workflow PDF implementation
+
+Last updated: 2026-08-10
+
+## Outcome
+
+- Implemented the PDF booking policy across the canonical mock-booking and
+  private-speaking flows: AI/tutor selection, the seven-day tutor cutoff,
+  tutor-calendar-only slots, tutor availability CRUD, booking/reschedule/
+  cancellation rules, Zoom-gated confirmation/access, immediate confirmation,
+  one-hour reminders, and strict greater-than-24-hour refund eligibility.
+- Closed legacy direct-bundle and arbitrary-reschedule bypasses, and made
+  failed Zoom provisioning fail closed for confirmation/reminders.
+- Implementation commit `f3c06a3ba339f8720d4385980688510f26619c4e` and test-policy
+  alignment commit `1423ff45b2f332595f49bbb656cb9df9499c8599` are on `main`.
+- Build & Deploy run `31404507080` passed web/API/backup images, off-box
+  migration generation/application, and blue/green VPS deployment. The deploy
+  reported live blue-slot health/public verification and image tags for
+  `1423ff45b...`; public checks returned app/API HTTP 200.
+
+## Validation
+
+- Targeted ESLint and `git diff --check` passed. Local TypeScript checking
+  timed out without diagnostics; local .NET validation was not usable, so the
+  GitHub Actions image build is authoritative for compilation.
+- Speaking CI run `31404514288` still has unrelated baseline frontend Vitest,
+  backend 403 test-fixture, and one speaking-upload timeout failures. The
+  PDF-policy tests/fixtures corrected in `1423ff45b` are not among its
+  failures; the three legacy penalty tests remain intentionally skipped because
+  the PDF removes that workflow.
+- QA Smoke is a separate broad workflow and is not a gate for this slice.
+
+## Next step
+
+No further source implementation remains in scope. Authenticated learner/tutor/
+admin browser acceptance, real Zoom meeting creation, provider email delivery,
+and Stripe refund/inbox verification remain owner-side acceptance boundaries;
+no credentials or customer data were accessed.
+
 # Current Task - Maximum Performance Optimisation
 
 Last updated: 2026-08-08
