@@ -1,10 +1,13 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations;
 
+[DbContext(typeof(LearnerDbContext))]
 [Migration("20260811120000_AddWritingAssessmentV11")]
 public partial class AddWritingAssessmentV11 : Migration
 {
