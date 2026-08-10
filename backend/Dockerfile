@@ -20,7 +20,7 @@ RUN rm -rf backend/src/OetLearner.Api/obj backend/src/OetLearner.Api/bin \
     && mkdir -p /app/publish \
     && dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
        -c Release -o /app/publish /p:UseAppHost=false /m:1 \
-       /p:BuildInParallel=false /p:UseSharedCompilation=false \
+       /p:BuildInParallel=false /p:UseSharedCompilation=false /p:RunAnalyzers=false \
     && test "$(ls -A /app/publish | wc -l)" -gt 0 \
        || (echo "ERROR: dotnet publish wrote no output — possible OOM kill" && exit 1)
 
