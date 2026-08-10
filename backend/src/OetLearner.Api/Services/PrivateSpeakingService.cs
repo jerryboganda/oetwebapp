@@ -2166,14 +2166,6 @@ public sealed class PrivateSpeakingService(
             return (false, "A full refund is available only when cancellation is made more than 24 hours before the scheduled start time.");
         if (amountMinorUnits.HasValue && amountMinorUnits.Value != booking.PriceMinorUnits)
             return (false, "Only a full refund is permitted by the Speaking booking policy.");
-        booking.RefundIssued = true;
-
-        if (booking.EntitlementConsumed
-            && booking.EntitlementRestoredAt is null
-            && booking.RescheduledToBookingId is null)
-        {
-            await RestoreSpeakingEntitlementAsync(booking, "admin_override_refund", ct);
-        }
 
         if (!string.IsNullOrWhiteSpace(booking.StripePaymentIntentId) && booking.PriceMinorUnits > 0)
         {
@@ -2194,9 +2186,18 @@ public sealed class PrivateSpeakingService(
                 // can retry the money refund out of band; the entitlement and
                 // status changes still apply.
                 logger.LogWarning(ex,
-                    "Stripe override refund failed for booking {BookingId}; override still completed",
+                    "Stripe override refund failed for booking {BookingId}; refund remains incomplete",
                     booking.Id);
+                return (false, "The full refund could not be completed, so the booking remains active. Please retry.");
             }
+        }
+
+        booking.RefundIssued = true;
+        if (booking.EntitlementConsumed
+            && booking.EntitlementRestoredAt is null
+            && booking.RescheduledToBookingId is null)
+        {
+            await RestoreSpeakingEntitlementAsync(booking, "admin_override_refund", ct);
         }
 
         booking.Status = PrivateSpeakingBookingStatus.Refunded;

@@ -136,6 +136,32 @@ public sealed class PrivateSpeakingAdminActionsTests
     }
 
     [Fact]
+    public async Task OverrideRefund_StripeFailure_RemainsActiveAndUnrefunded()
+    {
+        await using var db = CreateDb();
+        var stripe = new FakeStripeService { ThrowOnRefund = true };
+        var service = CreateService(db, stripe);
+
+        var booking = SeedConfirmedBooking(db, Now.AddHours(48), b =>
+        {
+            b.StripePaymentIntentId = "pi_failed_refund";
+            b.PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded;
+            b.PriceMinorUnits = 5000;
+        });
+        await db.SaveChangesAsync();
+
+        var (success, error) = await service.OverrideRefundAsync(
+            booking.Id, "admin-1", null, "full", CancellationToken.None);
+
+        Assert.False(success);
+        Assert.Contains("could not be completed", error);
+        var saved = await db.PrivateSpeakingBookings.FindAsync(booking.Id);
+        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, saved!.Status);
+        Assert.False(saved.RefundIssued);
+        Assert.Equal(PrivateSpeakingPaymentStatus.Succeeded, saved.PaymentStatus);
+    }
+
+    [Fact]
     public async Task OverrideRefund_AlreadyRefunded_IsRejected()
     {
         await using var db = CreateDb();
@@ -594,9 +620,12 @@ public sealed class PrivateSpeakingAdminActionsTests
         public long? LastAmountCents { get; private set; }
         public string? LastReason { get; private set; }
         public string RefundIdToReturn { get; set; } = "re_fake";
+        public bool ThrowOnRefund { get; set; }
 
         public Task<string> CreateRefundAsync(string paymentIntentId, long? amountCents, string? reason, CancellationToken ct = default)
         {
+            if (ThrowOnRefund)
+                throw new InvalidOperationException("stripe refund failed");
             RefundCallCount++;
             LastPaymentIntentId = paymentIntentId;
             LastAmountCents = amountCents;
