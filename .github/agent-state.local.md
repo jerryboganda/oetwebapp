@@ -2,6 +2,36 @@
 
 Last updated: 2026-08-10
 
+## Latest release checkpoint
+
+- Closed the remaining server-side bypasses: canonical mock reschedules now
+  re-check the seven-day tutor cutoff; legacy admin assignment cannot mutate
+  Speaking rows; admin booking moves validate active tutor-calendar slots and
+  recreate Zoom/calendar state; admin refunds enforce strictly more than 24
+  hours and full-refund-only semantics.
+- Commit `1e3ceeae745b2a8fff2038c78e5aafe1e2c70b2c` is on `main`.
+- Build & Deploy run `31411775123` passed web/API/backup builds, production
+  migration, and blue/green deployment. The VPS reported
+  `AUTO_DEPLOY_DONE: live on green` with the new image SHA.
+- Public checks after deployment: web `/api/health`, API `/health/live`, and
+  API `/health/ready` all returned HTTP 200; database, migrations, stuck_jobs,
+  and storage were all `ok`.
+
+## Remaining evidence boundary
+
+- The separate Speaking CI run `31411775002` remains red from existing 403
+  auth-fixture failures, one speaking-upload timeout, and unrelated frontend
+  Vitest failures; no failure was attributed to the four policy files in this
+  release. Local Windows MSBuild also stalled after restore; the successful
+  Actions API image build is the compile gate.
+- Authenticated learner/tutor/admin browser walkthrough, real Zoom/provider
+  email delivery, and Stripe inbox/refund confirmation remain owner-side
+  acceptance boundaries; no credentials or customer data were accessed.
+
+# Current Task - OET Speaking booking workflow PDF implementation
+
+Last updated: 2026-08-10
+
 ## Outcome
 
 - Implemented the PDF booking policy across the canonical mock-booking and
