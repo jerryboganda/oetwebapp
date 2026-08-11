@@ -358,3 +358,7 @@ an owner-controlled value that must not be invented in code.
   grant access; `system_admin` is the only break-glass override.
 - The admin scoring-system route uses the dedicated governance-read permission,
   matching the backend `/v1/admin/assessment-governance` policy boundary.
+- Effective marking-policy documents now fail closed when any owner-controlled
+  normalization, answer-form, audio-lock, replay, or technical-guidance field
+  is omitted; no omitted field inherits a runtime default. A focused regression
+  test covers incomplete policy JSON; backend execution remains bounded/pending.

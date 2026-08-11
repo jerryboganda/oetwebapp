@@ -7,6 +7,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Tests;
@@ -152,7 +153,7 @@ public sealed class ListeningStartGovernanceTests
             Assessment = "listening",
             ScopeKey = "default",
             VersionKey = "deadline-v1",
-            PolicyJson = "{}",
+            PolicyJson = new AssessmentMarkingPolicyDocument().Serialize(),
             Status = AssessmentGovernanceStatus.Effective,
             EffectiveFrom = now.AddMinutes(-1),
             CreatedByUserId = "owner",

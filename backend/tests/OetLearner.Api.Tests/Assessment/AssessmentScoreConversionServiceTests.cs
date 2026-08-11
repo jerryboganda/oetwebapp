@@ -199,6 +199,23 @@ public sealed class AssessmentScoreConversionServiceTests
         Assert.Equal("marking_policy_invalid_json", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task MarkingPolicyResolver_fails_closed_when_owner_fields_are_omitted()
+    {
+        await using var db = NewDb();
+        var policy = CreateEffectivePolicy("policy-reading-incomplete", "reading", "incomplete");
+        policy.PolicyJson = "{\"caseSensitive\":true}";
+        db.AssessmentMarkingPolicyVersions.Add(policy);
+        await db.SaveChangesAsync();
+
+        var result = await new AssessmentMarkingPolicyService(db)
+            .ResolveAsync("reading");
+
+        Assert.False(result.IsAvailable);
+        Assert.Null(result.PolicyId);
+        Assert.Equal("marking_policy_invalid_json", result.ErrorCode);
+    }
+
     private static AssessmentScoreConversionTable CreateEffectiveTable(
         string id,
         string assessment,

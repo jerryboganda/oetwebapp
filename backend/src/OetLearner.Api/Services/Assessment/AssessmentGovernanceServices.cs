@@ -451,16 +451,36 @@ public sealed record AssessmentMarkingPolicyDocument(
     string AudioLockMode = "exam",
     bool TechnicalRequirementsGuidanceOnly = true)
 {
+    private static readonly string[] RequiredProperties =
+    [
+        "trimLeadingTrailingWhitespace",
+        "collapseInternalWhitespace",
+        "caseSensitive",
+        "readingPartAMatchingPartialCredit",
+        "listeningAudioReplayAllowed",
+        "audioLockMode",
+        "technicalRequirementsGuidanceOnly",
+    ];
+
     public static AssessmentMarkingPolicyDocument Parse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
-            return new AssessmentMarkingPolicyDocument();
+            throw new InvalidOperationException("assessment_marking_policy_incomplete");
 
         try
         {
-            return JsonSerializer.Deserialize<AssessmentMarkingPolicyDocument>(json,
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || RequiredProperties.Any(required => !document.RootElement.EnumerateObject()
+                    .Any(property => string.Equals(property.Name, required, StringComparison.OrdinalIgnoreCase))))
+                throw new InvalidOperationException("assessment_marking_policy_incomplete");
+
+            var parsed = JsonSerializer.Deserialize<AssessmentMarkingPolicyDocument>(document.RootElement.GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                ?? new AssessmentMarkingPolicyDocument();
+                ?? throw new InvalidOperationException("assessment_marking_policy_incomplete");
+            if (string.IsNullOrWhiteSpace(parsed.AudioLockMode) || !parsed.TechnicalRequirementsGuidanceOnly)
+                throw new InvalidOperationException("assessment_marking_policy_incomplete");
+            return parsed;
         }
         catch (JsonException)
         {
