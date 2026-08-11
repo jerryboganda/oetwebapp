@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -8,6 +9,26 @@ namespace OetLearner.Api.Tests.Speaking;
 
 public sealed class SpeakingSimulationV11ReleaseGateTests
 {
+    [Fact]
+    public void Rubric_contract_requires_exact_order_weights_anchors_and_excludes_rule55()
+    {
+        var exact = SpeakingSimulationV11Contracts.RubricCriteria.Criteria;
+        Assert.True(SpeakingSimulationV11Contracts.IsValidRubric(exact));
+
+        var wrongWeight = exact
+            .Select((item, index) => index == 0 ? item with { Weight = item.Weight + 1 } : item)
+            .ToArray();
+        Assert.False(SpeakingSimulationV11Contracts.IsValidRubric(wrongWeight));
+
+        var wrongOrder = exact.Reverse().ToArray();
+        Assert.False(SpeakingSimulationV11Contracts.IsValidRubric(wrongOrder));
+
+        var rule55 = exact
+            .Select((item, index) => index == 0 ? item with { EnabledRuleIds = ["R55"] } : item)
+            .ToArray();
+        Assert.False(SpeakingSimulationV11Contracts.IsValidRubric(rule55));
+    }
+
     [Fact]
     public async Task EvaluateAsync_blocks_release_until_all_owner_gates_are_approved()
     {
@@ -19,9 +40,17 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
         Assert.Contains("calibration_approval_required", result.BlockingReasons);
         Assert.Contains("concurrency_budget_required", result.BlockingReasons);
         Assert.Contains("cost_ceiling_required", result.BlockingReasons);
+        Assert.Contains("latency_sla_required", result.BlockingReasons);
+        Assert.Contains("retention_days_required", result.BlockingReasons);
+        Assert.Contains("stt_cost_per_minute_required", result.BlockingReasons);
+        Assert.Contains("tts_cost_per_1000_characters_required", result.BlockingReasons);
         Assert.Contains("retention_approval_required", result.BlockingReasons);
+        Assert.Contains("silence_prompt_threshold_required", result.BlockingReasons);
+        Assert.Contains("silence_prompt_approval_required", result.BlockingReasons);
         Assert.Contains("graph_approval_required", result.BlockingReasons);
         Assert.Contains("profession_pack_approval_required", result.BlockingReasons);
+        Assert.Contains("audio_assessment_approval_required", result.BlockingReasons);
+        Assert.Contains("audio_assessment_provider_required", result.BlockingReasons);
         Assert.DoesNotContain("rule55", result.EnabledRuleIds);
     }
 
@@ -38,6 +67,12 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
         Assert.Equal(SpeakingSimulationV11Contracts.RubricVersion, result.RubricVersion);
         Assert.NotEmpty(result.EnabledRuleIds);
         Assert.DoesNotContain("rule55", result.EnabledRuleIds);
+
+        var budget = await fixture.Gate.GetOperationalBudgetAsync(
+            result.SpecVersion, result.RubricVersion, CancellationToken.None);
+        Assert.NotNull(budget);
+        Assert.Equal(0.01m, budget!.SttCostPerMinuteUsd);
+        Assert.Equal(0.03m, budget.TtsCostPerThousandCharactersUsd);
     }
 
     private sealed class SimulationV11Fixture(LearnerDbContext db) : IAsyncDisposable
@@ -69,7 +104,7 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
                 RubricVersion = SpeakingSimulationV11Contracts.RubricVersion,
                 CalibrationVersion = SpeakingSimulationV11Contracts.CalibrationVersion,
                 Status = SpeakingSimulationV11ReleaseStatus.Approved,
-                CriteriaJson = "[]",
+                CriteriaJson = JsonSerializer.Serialize(SpeakingSimulationV11Contracts.RubricCriteria.Criteria),
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
             });
@@ -80,9 +115,17 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
                     BuildApproval("calibration_approval", "global"),
                     BuildApproval("concurrency_budget", "global", numericValue: 8m),
                     BuildApproval("cost_ceiling", "global", numericValue: 25m),
+                    BuildApproval("latency_sla_ms", "global", numericValue: 2500m),
+                    BuildApproval("retention_days", "global", numericValue: 30m),
+                    BuildApproval("stt_cost_per_minute", "global", numericValue: 0.01m),
+                    BuildApproval("tts_cost_per_1000_characters", "global", numericValue: 0.03m),
+                    BuildApproval("silence_prompt_threshold_ms", "global", numericValue: 12000m),
                     BuildApproval("retention_approval", "global"),
+                    BuildApproval("silence_prompt_approval", "global"),
                     BuildApproval("graph_approval", "global"),
-                    BuildApproval("profession_pack_approval", "medicine"));
+                    BuildApproval("profession_pack_approval", "medicine"),
+                    BuildApproval("audio_assessment_approval", "global",
+                        evidenceJson: "{\"provider\":\"azure-phoneme\"}"));
             }
 
             await db.SaveChangesAsync();
@@ -94,15 +137,18 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
         private static SpeakingSimulationV11OwnerApproval BuildApproval(
             string approvalKey,
             string scopeKey,
-            decimal? numericValue = null)
+            decimal? numericValue = null,
+            string? evidenceJson = null)
             => new()
             {
                 Id = $"{approvalKey}-{scopeKey}",
                 ApprovalKey = approvalKey,
                 ScopeKey = scopeKey,
+                SpecVersion = SpeakingSimulationV11Contracts.SpecVersion,
+                RubricVersion = SpeakingSimulationV11Contracts.RubricVersion,
                 Status = SpeakingSimulationV11ApprovalStatus.Approved,
                 NumericValue = numericValue,
-                EvidenceJson = "{}",
+                EvidenceJson = evidenceJson ?? "{}",
                 ApprovedByUserId = "system-admin",
                 ApprovedAt = DateTimeOffset.UtcNow,
                 CreatedAt = DateTimeOffset.UtcNow,

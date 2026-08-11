@@ -17,7 +17,7 @@
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { AlertTriangle, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input, RadioGroup, Textarea } from '@/components/ui/form-controls';
+import { Checkbox, CheckboxGroup, Input, RadioGroup, Textarea } from '@/components/ui/form-controls';
 import {
   RESISTANCE_LEVEL_OPTIONS,
   type InterlocutorScriptDetail,
@@ -67,6 +67,24 @@ export function InterlocutorScriptEditor({
   const [patientTask3, setPatientTask3] = useState(patientTasksInit[2] ?? '');
   const [patientTask4, setPatientTask4] = useState(patientTasksInit[3] ?? '');
   const [patientTask5, setPatientTask5] = useState(patientTasksInit[4] ?? '');
+  const [allowsSecondVisit, setAllowsSecondVisit] = useState(value?.allowsSecondVisit ?? false);
+  const [secondVisitIndicator, setSecondVisitIndicator] = useState(value?.secondVisitIndicator ?? '');
+  const [secondVisitCarryFacts, setSecondVisitCarryFacts] = useState<string[]>(value?.secondVisitCarryFacts ?? []);
+
+  const secondVisitFactOptions = [
+    { value: 'patientBackground', label: 'Patient background', description: 'Only the authored Card A background field.' },
+    { value: 'patientTasks', label: 'Patient-side task goals', description: 'Only the authored patient task fields.' },
+    { value: 'openingResponse', label: 'Opening response', description: 'The authored opening line, never the transcript.' },
+    { value: 'prompts', label: 'Persona prompts', description: 'Only the authored prompt cues.' },
+    { value: 'hiddenInformation', label: 'Hidden information', description: 'Only the authored hidden persona field.' },
+    { value: 'closingCue', label: 'Closing cue', description: 'Only the authored closing cue.' },
+    { value: 'emotionalState', label: 'Emotional state', description: 'The authored persona emotion.' },
+    { value: 'resistanceLevel', label: 'Resistance level', description: 'The authored difficulty behaviour.' },
+    { value: 'layLanguageTriggersJson', label: 'Lay-language triggers', description: 'The authored jargon trigger list.' },
+    { value: 'patientEmotion', label: 'Card emotion', description: 'The authored card emotion.' },
+    { value: 'communicationGoal', label: 'Communication goal', description: 'The authored communication goal.' },
+    { value: 'clinicalTopic', label: 'Clinical topic', description: 'The authored clinical topic.' },
+  ];
 
   const validationHints = useMemo(() => {
     const hints: string[] = [];
@@ -125,6 +143,9 @@ export function InterlocutorScriptEditor({
       patientTask3: patientTask3.trim() || null,
       patientTask4: patientTask4.trim() || null,
       patientTask5: patientTask5.trim() || null,
+      allowsSecondVisit,
+      secondVisitIndicator: allowsSecondVisit ? secondVisitIndicator.trim() : null,
+      secondVisitCarryFacts: allowsSecondVisit ? secondVisitCarryFacts : [],
     };
     await onSubmit(cardId, payload);
   };
@@ -187,6 +208,42 @@ export function InterlocutorScriptEditor({
             maxLength={500}
           />
         </div>
+      </section>
+
+      {/* Section 2b: explicit Card B follow-up controls */}
+      <section className="space-y-4 rounded-2xl border-2 border-sky-200 bg-sky-50/60 p-4 dark:border-sky-900 dark:bg-sky-950/30">
+        <div>
+          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-sky-900 dark:text-sky-100">
+            Card B second-visit controls
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-sky-800 dark:text-sky-200">
+            Card B is independent by default. Enable this only for an explicitly authored follow-up card. The phrase “your patient” alone never activates carry-over, and the Card A transcript is never carried.
+          </p>
+        </div>
+        <Checkbox
+          label="Allow this Card B persona to use an explicit second-visit path"
+          checked={allowsSecondVisit}
+          onChange={(event) => setAllowsSecondVisit(event.target.checked)}
+        />
+        {allowsSecondVisit ? (
+          <>
+            <Input
+              label="Explicit second-visit indicator"
+              value={secondVisitIndicator}
+              onChange={(event) => setSecondVisitIndicator(event.target.value)}
+              placeholder="e.g. returning for a review of the medication"
+              maxLength={500}
+              required
+              hint="The candidate must use this indicator or an approved equivalent before any carry-over activates."
+            />
+            <CheckboxGroup
+              label="Owner-approved facts that may carry forward"
+              options={secondVisitFactOptions}
+              values={secondVisitCarryFacts}
+              onChange={setSecondVisitCarryFacts}
+            />
+          </>
+        ) : null}
       </section>
 
       {/* Section 1b: printed roleplayer (patient) card face (2026-06-11) */}

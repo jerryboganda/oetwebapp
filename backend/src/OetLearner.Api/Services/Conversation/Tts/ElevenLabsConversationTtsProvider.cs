@@ -66,7 +66,7 @@ public sealed class ElevenLabsConversationTtsProvider(
         }
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         return new ConversationTtsResult(bytes, "audio/mpeg",
-            ConversationTtsDuration.ApproxDurationMs(request.Text), Name, $"elevenlabs voice={voice}");
+            ConversationTtsDuration.ApproxDurationMs(request.Text), Name, $"elevenlabs voice={voice}", model);
     }
 
     private static string NormalizeMp3OutputFormat(string? outputFormat)

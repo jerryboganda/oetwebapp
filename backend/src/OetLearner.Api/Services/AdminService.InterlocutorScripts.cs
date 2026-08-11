@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services;
 
@@ -90,6 +91,43 @@ public partial class AdminService
             db.InterlocutorScripts.Add(script);
         }
 
+        var allowsSecondVisit = req.AllowsSecondVisit
+            ?? script.AllowsSecondVisit;
+        var secondVisitIndicator = req.SecondVisitIndicator is null
+            ? script.SecondVisitIndicator
+            : string.IsNullOrWhiteSpace(req.SecondVisitIndicator)
+                ? null
+                : req.SecondVisitIndicator.Trim();
+        var secondVisitCarryFacts = (req.SecondVisitCarryFacts
+                ?? DeserializeStringArray(script.SecondVisitCarryFactsJson))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (allowsSecondVisit && string.IsNullOrWhiteSpace(secondVisitIndicator))
+        {
+            throw ApiException.Validation(
+                "INTERLOCUTOR_SECOND_VISIT_INDICATOR_REQUIRED",
+                "An explicit second-visit indicator is required when Card B carry-over is enabled.");
+        }
+
+        var invalidCarryFacts = secondVisitCarryFacts
+            .Where(key => !SpeakingSimulationV11PersonaService.ApprovedCarryFactKeys.Contains(key))
+            .ToArray();
+        if (invalidCarryFacts.Length > 0)
+        {
+            throw ApiException.Validation(
+                "INTERLOCUTOR_SECOND_VISIT_CARRY_FACT_INVALID",
+                $"Only approved persona fact keys may be carried to a second visit: {string.Join(", ", invalidCarryFacts)}.");
+        }
+
+        if (!allowsSecondVisit)
+        {
+            secondVisitIndicator = null;
+            secondVisitCarryFacts = Array.Empty<string>();
+        }
+
         script.OpeningResponse = req.OpeningResponse.Trim();
         script.Prompt1 = string.IsNullOrWhiteSpace(req.Prompt1) ? null : req.Prompt1.Trim();
         script.Prompt2 = string.IsNullOrWhiteSpace(req.Prompt2) ? null : req.Prompt2.Trim();
@@ -109,6 +147,9 @@ public partial class AdminService
         script.PatientTask3 = string.IsNullOrWhiteSpace(req.PatientTask3) ? null : req.PatientTask3.Trim();
         script.PatientTask4 = string.IsNullOrWhiteSpace(req.PatientTask4) ? null : req.PatientTask4.Trim();
         script.PatientTask5 = string.IsNullOrWhiteSpace(req.PatientTask5) ? null : req.PatientTask5.Trim();
+        script.AllowsSecondVisit = allowsSecondVisit;
+        script.SecondVisitIndicator = secondVisitIndicator;
+        script.SecondVisitCarryFactsJson = JsonSerializer.Serialize(secondVisitCarryFacts);
         script.UpdatedAt = now;
 
         // Touch the parent card so list views resort by latest activity.

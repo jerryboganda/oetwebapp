@@ -809,6 +809,11 @@ public sealed class AiGatewayService(
             RulebookVersion = request.Prompt.Metadata.RulebookVersion,
             AppliedRuleIds = request.Prompt.Metadata.AppliedRuleIds,
             ResolvedModel = effectiveModel,
+            ResolvedProvider = selectedProviderCode ?? provider.Name,
+            UsageRecordId = usageRecordId,
+            LatencyMs = (int)Math.Min(int.MaxValue, stopwatch.ElapsedMilliseconds),
+            EstimatedCostUsd = costEstimate,
+            RetryCount = 0,
         };
     }
 
@@ -1678,6 +1683,26 @@ public sealed class AiGatewayResult
     /// caller/fake does not populate it.
     /// </summary>
     public string ResolvedModel { get; init; } = "";
+
+    /// <summary>
+    /// The provider registry code (or provider name when no registry code was
+    /// selected) that actually served the completion. Callers that persist
+    /// turn telemetry must use this value instead of guessing from the
+    /// requested feature or model.
+    /// </summary>
+    public string ResolvedProvider { get; init; } = "";
+
+    /// <summary>The single usage-ledger id for this gateway completion.</summary>
+    public string? UsageRecordId { get; init; }
+
+    /// <summary>End-to-end gateway latency, including any provider retries.</summary>
+    public int LatencyMs { get; init; }
+
+    /// <summary>Rate-card estimate captured for the usage-ledger row.</summary>
+    public decimal EstimatedCostUsd { get; init; }
+
+    /// <summary>Provider retry count represented by the usage-ledger row.</summary>
+    public int RetryCount { get; init; }
 }
 
 public sealed class AiUsage

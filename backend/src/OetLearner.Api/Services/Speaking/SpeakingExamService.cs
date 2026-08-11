@@ -498,12 +498,10 @@ public sealed class SpeakingExamService(
         string overall;
         int? combined = null;
         string? band = null;
-        // Human-marked when a live-tutor booking OR a mock-set exam. Mock
-        // Speaking is always LiveTutor after the creation guard; the MockSetId
-        // clause is defensive so any legacy AI-mode mock row still reports
-        // awaiting_tutor (human marking) rather than pending (AI).
-        var humanMarked = exam.Mode == SpeakingExamMode.LiveTutor
-            || !string.IsNullOrWhiteSpace(exam.MockSetId);
+        // Only a live-tutor booking is human-marked. A curated mock-set may be
+        // an AI exam; its child sessions are routed to the released v1.1
+        // assessor and must never be mislabeled as awaiting tutor review.
+        var humanMarked = exam.Mode == SpeakingExamMode.LiveTutor;
         if (humanMarked)
         {
             overall = cards.All(c => c.Status == "scored") ? "scored" : "awaiting_tutor";
@@ -550,10 +548,9 @@ public sealed class SpeakingExamService(
             return new SpeakingExamCardResult(cardNumber, string.Empty, "pending", null);
         }
 
-        // Human-marked: live-tutor booking OR a mock-set exam (defensive against
-        // any legacy AI-mode mock row). Surface the tutor assessment when final,
-        // else pending — never fall through to AI scoring below.
-        if (exam.Mode == SpeakingExamMode.LiveTutor || !string.IsNullOrWhiteSpace(exam.MockSetId))
+        // Human-marked only for a live-tutor booking. AI curated mock-set
+        // sessions continue to the v1.1 guard below.
+        if (exam.Mode == SpeakingExamMode.LiveTutor)
         {
             var tutor = await db.SpeakingTutorAssessments.AsNoTracking()
                 .Where(t => t.SpeakingSessionId == sessionId && t.IsFinal)
@@ -563,8 +560,22 @@ public sealed class SpeakingExamService(
                 cardNumber, sessionId, tutor is null ? "awaiting_tutor" : "scored", null);
         }
 
-        // AI exam: official AI assessment. Generate lazily if the card is
-        // finished but not yet scored (transcript may still be settling).
+        // A session with a captured v1.1 persona is owned by the released
+        // ten-criterion simulation path. Do not silently create a second,
+        // legacy AI score while the v1.1 report is being generated or is
+        // fail-closed behind its owner gates. The dedicated v1.1 endpoints
+        // remain the only scoring path for these sessions.
+        var hasSimulationV11Persona = await db.SpeakingSimulationV11PersonaRuntimeSnapshots
+            .AsNoTracking()
+            .AnyAsync(x => x.SpeakingSessionId == sessionId, ct);
+        if (hasSimulationV11Persona)
+        {
+            return new SpeakingExamCardResult(cardNumber, sessionId, "pending", null);
+        }
+
+        // Legacy AI exam without a v1.1 persona: preserve the historical
+        // assessment path. Generate lazily if the card is finished but not
+        // yet scored (the transcript may still be settling).
         var latest = await assessor.GetLatestAsync(sessionId, ct);
         if (latest is null)
         {

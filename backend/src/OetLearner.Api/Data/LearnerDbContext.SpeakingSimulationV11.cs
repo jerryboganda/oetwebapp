@@ -13,10 +13,12 @@ public partial class LearnerDbContext
     public DbSet<SpeakingSimulationV11Evidence> SpeakingSimulationV11EvidenceRows => Set<SpeakingSimulationV11Evidence>();
     public DbSet<SpeakingSimulationV11CriterionScore> SpeakingSimulationV11CriterionScores => Set<SpeakingSimulationV11CriterionScore>();
     public DbSet<SpeakingSimulationV11TurnMetric> SpeakingSimulationV11TurnMetrics => Set<SpeakingSimulationV11TurnMetric>();
+    public DbSet<SpeakingSimulationV11TurnTelemetry> SpeakingSimulationV11TurnTelemetryRows => Set<SpeakingSimulationV11TurnTelemetry>();
     public DbSet<SpeakingSimulationV11PersonaRuntimeSnapshot> SpeakingSimulationV11PersonaRuntimeSnapshots => Set<SpeakingSimulationV11PersonaRuntimeSnapshot>();
     public DbSet<SpeakingSimulationV11TurnEvidence> SpeakingSimulationV11TurnEvidenceRows => Set<SpeakingSimulationV11TurnEvidence>();
     public DbSet<SpeakingSimulationV11AudioQualityCheck> SpeakingSimulationV11AudioQualityChecks => Set<SpeakingSimulationV11AudioQualityCheck>();
     public DbSet<SpeakingSimulationV11CardTimingSnapshot> SpeakingSimulationV11CardTimingSnapshots => Set<SpeakingSimulationV11CardTimingSnapshot>();
+    public DbSet<SpeakingSimulationV11TutorOverride> SpeakingSimulationV11TutorOverrides => Set<SpeakingSimulationV11TutorOverride>();
 
     partial void OnModelCreatingSpeakingSimulationV11(ModelBuilder modelBuilder)
     {
@@ -48,9 +50,11 @@ public partial class LearnerDbContext
             entity.HasKey(x => x.Id);
             entity.Property(x => x.ConfidenceScore).HasColumnType("numeric(5,2)");
             entity.Property(x => x.GraphDisclaimer).HasColumnType("text");
+            entity.Property(x => x.ReportJson).HasColumnType("jsonb");
             entity.HasIndex(x => new { x.ExamSessionId, x.SpeakingSessionId });
             entity.HasIndex(x => x.RolePlayCardId);
             entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => new { x.ExamSessionId, x.AssessmentKind, x.CardSlot });
             entity.HasOne<SpeakingExamSession>()
                 .WithMany()
                 .HasForeignKey(x => x.ExamSessionId)
@@ -192,6 +196,42 @@ public partial class LearnerDbContext
             entity.Property(x => x.EstimatedCostUsd).HasColumnType("numeric(18,6)");
             entity.HasIndex(x => new { x.AssessmentId, x.TurnNumber }).IsUnique();
             entity.HasIndex(x => x.GeneratedAt);
+        });
+
+        modelBuilder.Entity<SpeakingSimulationV11TurnTelemetry>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EstimatedCostUsd).HasColumnType("numeric(18,6)");
+            entity.Property(x => x.CostComponentsJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.SpeakingSessionId, x.TurnNumber, x.Role });
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => new { x.TechnicalReviewRequired, x.CreatedAt });
+            entity.HasOne<SpeakingSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SpeakingSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SpeakingSimulationV11TutorOverride>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OriginalReportJson).HasColumnType("jsonb");
+            entity.Property(x => x.OverrideReportJson).HasColumnType("jsonb");
+            entity.Property(x => x.Reason).HasColumnType("text");
+            entity.HasIndex(x => new { x.AssessmentId, x.CreatedAt })
+                .HasDatabaseName("IX_SPV11TutorOverrides_Assessment");
+            entity.HasIndex(x => new { x.SpeakingSessionId, x.CreatedAt })
+                .HasDatabaseName("IX_SPV11TutorOverrides_Session");
+            entity.HasIndex(x => new { x.TutorId, x.CreatedAt })
+                .HasDatabaseName("IX_SPV11TutorOverrides_Tutor");
+            entity.HasOne<SpeakingSimulationV11Assessment>()
+                .WithMany()
+                .HasForeignKey(x => x.AssessmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SpeakingSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SpeakingSessionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

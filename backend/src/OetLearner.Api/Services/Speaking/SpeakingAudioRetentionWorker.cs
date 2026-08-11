@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -17,8 +18,9 @@ namespace OetLearner.Api.Services.Speaking;
 ///
 /// Sweeps in batches of 500 to keep memory bounded. The blob is removed
 /// via <see cref="IFileStorage"/> and the <c>AudioObjectKey</c> column is
-/// cleared. Other attempt fields (transcript, analysis, scores) are retained
-/// - only the raw recording is reaped.
+/// cleared. Once every recording in a session has expired, transcript and
+/// report evidence is redacted while non-content score/version/audit metadata
+/// remains available.
 ///
 /// Phase 7 of the OET Speaking module plan (B.8) extended this worker
 /// with a second sweep that walks <see cref="SpeakingRecording"/> rows
@@ -146,8 +148,15 @@ public sealed class SpeakingAudioRetentionWorker(
             {
                 if (await storage.ExistsAsync(key, ct))
                 {
-                    await storage.DeleteAsync(key, ct);
-                    deletedBlobs++;
+                    var deleted = await storage.DeleteAsync(key, ct);
+                    if (deleted)
+                    {
+                        deletedBlobs++;
+                    }
+                    else if (await storage.ExistsAsync(key, ct))
+                    {
+                        canClearPointer = false;
+                    }
                 }
             }
             catch (Exception ex)
@@ -188,6 +197,8 @@ public sealed class SpeakingAudioRetentionWorker(
     ///   * An <see cref="AuditEvent"/> row with action
     ///     <c>SpeakingRecordingExpiredByRetention</c> so the GDPR audit
     ///     trail captures every reaper-initiated deletion.
+    ///   * A session-level audit row when all recordings are expired; the
+    ///     session transcript/report evidence is then redacted.
     /// Returns the number of rows archived in this sweep.
     /// </summary>
     public async Task<int> SweepSpeakingRecordingsOnceAsync(CancellationToken ct)
@@ -195,13 +206,6 @@ public sealed class SpeakingAudioRetentionWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
-        var options = scope.ServiceProvider
-            .GetRequiredService<IOptions<SpeakingComplianceOptions>>().Value;
-
-        if (options.RetentionDaysDefault <= 0)
-        {
-            return 0;
-        }
 
         var now = DateTimeOffset.UtcNow;
 
@@ -239,10 +243,12 @@ public sealed class SpeakingAudioRetentionWorker(
         }
 
         var archivedCount = 0;
+        var auditCount = 0;
         foreach (var recording in due)
         {
             var blobDeleted = false;
             string? storageKey = null;
+            var deletionConfirmed = true;
 
             try
             {
@@ -255,13 +261,41 @@ public sealed class SpeakingAudioRetentionWorker(
                     if (await storage.ExistsAsync(storageKey, ct))
                     {
                         blobDeleted = await storage.DeleteAsync(storageKey, ct);
+                        deletionConfirmed = blobDeleted || !await storage.ExistsAsync(storageKey, ct);
                     }
                 }
             }
             catch (Exception ex)
             {
+                deletionConfirmed = false;
                 logger.LogWarning(ex,
                     "Failed to delete blob for SpeakingRecording {RecordingId}", recording.Id);
+            }
+
+            if (!deletionConfirmed)
+            {
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    OccurredAt = now,
+                    ActorId = "system",
+                    ActorName = "SpeakingAudioRetentionWorker",
+                    Action = "SpeakingRecordingRetentionDeletionFailed",
+                    ResourceType = "SpeakingRecording",
+                    ResourceId = recording.Id,
+                    Details = JsonSerializer.Serialize(new
+                    {
+                        sessionId = recording.SpeakingSessionId,
+                        storageKey,
+                        source = recording.Source.ToString(),
+                        sha256 = recording.Sha256,
+                        retryable = true,
+                    }),
+                });
+                auditCount++;
+                // Keep IsArchived=false and retain the storage pointer. The
+                // next sweep must be able to retry the deletion safely.
+                continue;
             }
 
             recording.IsArchived = true;
@@ -290,14 +324,279 @@ public sealed class SpeakingAudioRetentionWorker(
             archivedCount++;
         }
 
-        if (archivedCount == 0)
+        if (archivedCount == 0 && auditCount == 0)
         {
             return 0;
         }
 
         await db.SaveChangesAsync(ct);
+
+        var redactedSessions = archivedCount > 0
+            ? await RedactExpiredSessionEvidenceAsync(
+                db,
+                due.Where(x => x.IsArchived).Select(x => x.SpeakingSessionId),
+                now,
+                ct)
+            : 0;
+        if (redactedSessions > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+
         logger.LogInformation(
-            "SpeakingRecording retention sweep archived {Count} rows.", archivedCount);
+            "SpeakingRecording retention sweep archived {Count} rows, redacted {RedactedSessions} expired sessions, and wrote {AuditCount} audit rows.",
+            archivedCount, redactedSessions, auditCount);
         return archivedCount;
     }
+
+    private static async Task<int> RedactExpiredSessionEvidenceAsync(
+        LearnerDbContext db,
+        IEnumerable<string> candidateSessionIds,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var sessionIds = candidateSessionIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (sessionIds.Length == 0)
+        {
+            return 0;
+        }
+
+        var sessions = await db.SpeakingSessions
+            .Where(x => sessionIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.ExamSessionId })
+            .ToListAsync(ct);
+        var redacted = 0;
+
+        foreach (var session in sessions)
+        {
+            // A full mock can have more than one recording. Do not remove
+            // the relevant transcript until every recording in its retention
+            // scope has either been archived successfully or has no remaining
+            // retention window. Card reports can be redacted independently;
+            // the combined report waits for both cards.
+            var retentionScopeSessionIds = session.ExamSessionId is null
+                ? new[] { session.Id }
+                : await db.SpeakingSessions
+                    .Where(x => x.ExamSessionId == session.ExamSessionId)
+                    .Select(x => x.Id)
+                    .ToArrayAsync(ct);
+            if (retentionScopeSessionIds.Length == 0)
+            {
+                retentionScopeSessionIds = [session.Id];
+            }
+
+            var hasLiveRecording = await db.SpeakingRecordings
+                .AnyAsync(x => retentionScopeSessionIds.Contains(x.SpeakingSessionId)
+                    && !x.IsArchived
+                    && (x.RetentionExpiresAt == null || x.RetentionExpiresAt > now), ct);
+            var currentSessionHasLiveRecording = await db.SpeakingRecordings
+                .AnyAsync(x => x.SpeakingSessionId == session.Id
+                    && !x.IsArchived
+                    && (x.RetentionExpiresAt == null || x.RetentionExpiresAt > now), ct);
+            if (currentSessionHasLiveRecording)
+            {
+                continue;
+            }
+
+            var allExamRecordingsExpired = !hasLiveRecording;
+
+            var transcriptRows = await db.SpeakingTranscripts
+                .Where(x => x.SpeakingSessionId == session.Id)
+                .ToListAsync(ct);
+            foreach (var transcript in transcriptRows)
+            {
+                transcript.SegmentsJson = "[]";
+                transcript.WordCount = 0;
+                transcript.MeanConfidence = 0;
+            }
+
+            var turnEvidence = await db.SpeakingSimulationV11TurnEvidenceRows
+                .Where(x => x.SpeakingSessionId == session.Id)
+                .ToListAsync(ct);
+            foreach (var turn in turnEvidence)
+            {
+                turn.Text = string.Empty;
+                turn.WordConfidenceJson = "[]";
+                turn.SourceTranscriptId = string.Empty;
+                turn.SourceRecordingId = null;
+            }
+
+            var assessmentRows = await db.SpeakingSimulationV11Assessments
+                .Where(x => x.SpeakingSessionId == session.Id
+                    || (allExamRecordingsExpired
+                        && session.ExamSessionId != null
+                        && x.ExamSessionId == session.ExamSessionId))
+                .ToListAsync(ct);
+            var assessmentIds = assessmentRows.Select(x => x.Id).ToArray();
+            foreach (var assessment in assessmentRows)
+            {
+                assessment.ReportJson = RedactReportJson(assessment.ReportJson);
+                assessment.SourceTranscriptId = null;
+                assessment.SourceRecordingId = null;
+            }
+
+            var reportEvidence = assessmentIds.Length == 0
+                ? new List<SpeakingSimulationV11Evidence>()
+                : await db.SpeakingSimulationV11EvidenceRows
+                    .Where(x => assessmentIds.Contains(x.AssessmentId))
+                    .ToListAsync(ct);
+            foreach (var evidence in reportEvidence)
+            {
+                evidence.SourceReference = null;
+                evidence.QuoteText = string.Empty;
+                evidence.FindingText = null;
+                evidence.ActionSuggestion = null;
+                evidence.StartMs = null;
+                evidence.EndMs = null;
+                evidence.SourceTranscriptId = null;
+                evidence.SourceRecordingId = null;
+                evidence.EvidenceStatus = "expired";
+                evidence.IsPrimary = false;
+            }
+
+            var criterionScores = assessmentIds.Length == 0
+                ? new List<SpeakingSimulationV11CriterionScore>()
+                : await db.SpeakingSimulationV11CriterionScores
+                    .Where(x => assessmentIds.Contains(x.AssessmentId))
+                    .ToListAsync(ct);
+            foreach (var criterion in criterionScores)
+            {
+                criterion.Rationale = null;
+            }
+
+            var tutorOverrides = await db.SpeakingSimulationV11TutorOverrides
+                .Where(x => x.SpeakingSessionId == session.Id)
+                .ToListAsync(ct);
+            foreach (var tutorOverride in tutorOverrides)
+            {
+                tutorOverride.OriginalReportJson = RedactReportJson(tutorOverride.OriginalReportJson) ?? "{}";
+                tutorOverride.OverrideReportJson = RedactReportJson(tutorOverride.OverrideReportJson) ?? "{}";
+                tutorOverride.Reason = "Tutor review evidence expired under the approved retention policy.";
+            }
+
+            var audioQuality = await db.SpeakingSimulationV11AudioQualityChecks
+                .Where(x => x.SpeakingSessionId == session.Id)
+                .ToListAsync(ct);
+            foreach (var quality in audioQuality)
+            {
+                quality.SourceRecordingId = null;
+                quality.SourceMediaAssetId = null;
+                quality.OriginalSha256 = null;
+            }
+
+            var telemetry = await db.SpeakingSimulationV11TurnTelemetryRows
+                .Where(x => x.SpeakingSessionId == session.Id)
+                .ToListAsync(ct);
+            foreach (var row in telemetry)
+            {
+                row.SourceTranscriptId = null;
+            }
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = "system",
+                ActorName = "SpeakingAudioRetentionWorker",
+                Action = "SpeakingSimulationV11ContentExpiredByRetention",
+                ResourceType = "SpeakingSession",
+                ResourceId = session.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    sessionId = session.Id,
+                    transcriptRows = transcriptRows.Count,
+                    assessmentRows = assessmentRows.Count,
+                    reportEvidenceRows = reportEvidence.Count,
+                    tutorOverrides = tutorOverrides.Count,
+                }),
+            });
+            redacted++;
+        }
+
+        return redacted;
+    }
+
+    private static string? RedactReportJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return json;
+        }
+
+        try
+        {
+            var report = JsonSerializer.Deserialize<SpeakingSimulationV11AssessmentReport>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (report is null)
+            {
+                return null;
+            }
+
+            var criteria = (report.Criteria ?? Array.Empty<SpeakingSimulationV11CriterionResult>())
+                .Select(RedactCriterion)
+                .ToArray();
+            var cardBreakdowns = (report.CardBreakdowns ?? Array.Empty<SpeakingSimulationV11CardBreakdown>())
+                .Select(card => card with
+                {
+                    Criteria = (card.Criteria ?? Array.Empty<SpeakingSimulationV11CriterionResult>())
+                        .Select(RedactCriterion).ToArray(),
+                    Strengths = Array.Empty<string>(),
+                    Weaknesses = Array.Empty<string>(),
+                    TaskMap = (card.TaskMap ?? Array.Empty<SpeakingSimulationV11TaskResult>())
+                        .Select(task => task with { Evidence = null }).ToArray(),
+                    Timeline = (card.Timeline ?? Array.Empty<SpeakingSimulationV11TimelineItem>())
+                        .Select(item => item with { Note = null }).ToArray(),
+                    LanguageAnalysis = new Dictionary<string, object?>(),
+                    TimeManagement = new Dictionary<string, object?>(),
+                    TopFive = Array.Empty<string>(),
+                    BetterAlternatives = Array.Empty<SpeakingSimulationV11Alternative>(),
+                    Tips = Array.Empty<string>(),
+                    PracticePlan = Array.Empty<SpeakingSimulationV11PracticePlanItem>(),
+                    SourceTranscriptId = null,
+                    SourceRecordingId = null,
+                })
+                .ToArray();
+
+            var redacted = report with
+            {
+                OverallSummary = "Detailed transcript evidence expired under the approved retention policy.",
+                Criteria = criteria,
+                CardBreakdowns = cardBreakdowns,
+                Strengths = Array.Empty<string>(),
+                Weaknesses = Array.Empty<string>(),
+                TaskMap = (report.TaskMap ?? Array.Empty<SpeakingSimulationV11TaskResult>())
+                    .Select(task => task with { Evidence = null }).ToArray(),
+                Timeline = (report.Timeline ?? Array.Empty<SpeakingSimulationV11TimelineItem>())
+                    .Select(item => item with { Note = null }).ToArray(),
+                LanguageAnalysis = new Dictionary<string, object?>(),
+                TimeManagement = new Dictionary<string, object?>(),
+                TopFive = Array.Empty<string>(),
+                BetterAlternatives = Array.Empty<SpeakingSimulationV11Alternative>(),
+                Tips = Array.Empty<string>(),
+                PracticePlan = Array.Empty<SpeakingSimulationV11PracticePlanItem>(),
+                SourceTranscriptId = null,
+                SourceRecordingId = null,
+            };
+            return JsonSerializer.Serialize(redacted);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static SpeakingSimulationV11CriterionResult RedactCriterion(
+        SpeakingSimulationV11CriterionResult criterion)
+        => criterion with
+        {
+            Rationale = "Detailed transcript evidence expired under the approved retention policy.",
+            Evidence = Array.Empty<SpeakingSimulationV11EvidenceResult>(),
+            Strength = null,
+            Weakness = null,
+            Action = null,
+        };
 }

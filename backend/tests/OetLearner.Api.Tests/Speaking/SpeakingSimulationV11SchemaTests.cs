@@ -49,6 +49,13 @@ public sealed class SpeakingSimulationV11SchemaTests
         AssertHasIndex<SpeakingSimulationV11Evidence>(db, nameof(SpeakingSimulationV11Evidence.PrimaryCriterionCode));
         AssertHasIndex<SpeakingSimulationV11Evidence>(db, nameof(SpeakingSimulationV11Evidence.GeneratedAt));
         AssertHasIndex<SpeakingSimulationV11TurnMetric>(db, nameof(SpeakingSimulationV11TurnMetric.GeneratedAt));
+        AssertHasIndex<SpeakingSimulationV11TurnTelemetry>(db,
+            nameof(SpeakingSimulationV11TurnTelemetry.SpeakingSessionId),
+            nameof(SpeakingSimulationV11TurnTelemetry.TurnNumber),
+            nameof(SpeakingSimulationV11TurnTelemetry.Role));
+        AssertHasIndex<SpeakingSimulationV11TurnTelemetry>(db,
+            nameof(SpeakingSimulationV11TurnTelemetry.TechnicalReviewRequired),
+            nameof(SpeakingSimulationV11TurnTelemetry.CreatedAt));
     }
 
     private static void AssertHasIndex<TEntity>(LearnerDbContext db, params string[] propertyNames)

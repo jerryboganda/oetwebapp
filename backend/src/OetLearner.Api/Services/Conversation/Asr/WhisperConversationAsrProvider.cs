@@ -101,6 +101,7 @@ public sealed class WhisperConversationAsrProvider(
         double? duration = root.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetDouble() : null;
         double confidence = 0.85;
         var speakerSegments = new List<ConversationSpeakerSegment>();
+        var wordConfidences = new List<ConversationWordConfidence>();
         if (root.TryGetProperty("segments", out var segs) && segs.ValueKind == JsonValueKind.Array)
         {
             var probs = new List<double>();
@@ -108,6 +109,33 @@ public sealed class WhisperConversationAsrProvider(
             {
                 if (s.TryGetProperty("avg_logprob", out var lp) && lp.ValueKind == JsonValueKind.Number)
                     probs.Add(Math.Exp(lp.GetDouble()));
+                if (s.TryGetProperty("words", out var words) && words.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var word in words.EnumerateArray())
+                    {
+                        var value = word.TryGetProperty("word", out var wordValue)
+                            ? (wordValue.GetString() ?? string.Empty).Trim()
+                            : string.Empty;
+                        if (value.Length == 0) continue;
+                        var startMs = word.TryGetProperty("start", out var wordStart)
+                            && wordStart.ValueKind == JsonValueKind.Number
+                            ? Math.Max(0, (int)(wordStart.GetDouble() * 1000))
+                            : 0;
+                        var endMs = word.TryGetProperty("end", out var wordEnd)
+                            && wordEnd.ValueKind == JsonValueKind.Number
+                            ? Math.Max(startMs, (int)(wordEnd.GetDouble() * 1000))
+                            : startMs;
+                        var wordConfidence = word.TryGetProperty("probability", out var probability)
+                            && probability.ValueKind == JsonValueKind.Number
+                            ? probability.GetDouble()
+                            : (s.TryGetProperty("avg_logprob", out var segmentLogProbability)
+                                && segmentLogProbability.ValueKind == JsonValueKind.Number
+                                ? Math.Exp(segmentLogProbability.GetDouble())
+                                : confidence);
+                        wordConfidences.Add(new ConversationWordConfidence(
+                            value, startMs, endMs, Math.Clamp(wordConfidence, 0.0, 1.0)));
+                    }
+                }
                 if (request.EnableDiarization)
                 {
                     var segmentText = s.TryGetProperty("text", out var st) ? (st.GetString() ?? "").Trim() : "";
@@ -134,7 +162,8 @@ public sealed class WhisperConversationAsrProvider(
         return new ConversationAsrResult(
             text, confidence, duration.HasValue ? (int)(duration.Value * 1000) : 0,
             lang, Name, $"whisper {text.Length} chars",
-            request.EnableDiarization ? speakerSegments : null);
+            request.EnableDiarization ? speakerSegments : null,
+            wordConfidences.Count > 0 ? wordConfidences : null);
     }
 
     private static string GuessFileName(string mime)

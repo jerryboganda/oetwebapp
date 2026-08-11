@@ -37,6 +37,16 @@ public sealed class AzurePronunciationAsrProvider(
         (!string.IsNullOrWhiteSpace(_options.AzureSpeechKey) &&
          !string.IsNullOrWhiteSpace(_options.AzureSpeechRegion));
 
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+    {
+        var registry = await credentialResolver.ResolveAsync("azure-phoneme", ct);
+        return (registry is not null
+                && !string.IsNullOrWhiteSpace(registry.ApiKey)
+                && !string.IsNullOrWhiteSpace(registry.AzureRegion))
+            || (!string.IsNullOrWhiteSpace(_options.AzureSpeechKey)
+                && !string.IsNullOrWhiteSpace(_options.AzureSpeechRegion));
+    }
+
     public async Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct)
     {
         // Resolve credentials with registry-first / options-fallback.

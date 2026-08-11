@@ -41,7 +41,8 @@ public sealed record ConversationAsrRequest(
 public sealed record ConversationAsrResult(
     string Text, double Confidence, int DurationMs, string Language,
     string ProviderName, string? ProviderResponseSummary,
-    IReadOnlyList<ConversationSpeakerSegment>? SpeakerSegments = null);
+    IReadOnlyList<ConversationSpeakerSegment>? SpeakerSegments = null,
+    IReadOnlyList<ConversationWordConfidence>? WordConfidences = null);
 
 public sealed record ConversationRealtimeAsrStartRequest(
     string SessionId,
@@ -82,6 +83,12 @@ public sealed record ConversationSpeakerSegment(
     int StartMs,
     int EndMs,
     double? Confidence);
+
+public sealed record ConversationWordConfidence(
+    string Word,
+    int StartMs,
+    int EndMs,
+    double Confidence);
 
 public sealed class ConversationAsrException(string code, string message) : Exception(message)
 {

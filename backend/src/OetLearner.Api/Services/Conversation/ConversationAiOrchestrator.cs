@@ -20,7 +20,11 @@ public sealed record ConversationAiContext(
 
 public sealed record ConversationAiReply(
     string Text, string? EmotionHint, bool ShouldEnd,
-    IReadOnlyList<string> AppliedRuleIds, string RulebookVersion);
+    IReadOnlyList<string> AppliedRuleIds, string RulebookVersion,
+    string? ProviderName = null, string? ModelName = null,
+    string? UsageRecordId = null, int LatencyMs = 0,
+    decimal EstimatedCostUsd = 0m, int RetryCount = 0,
+    int PromptTokens = 0, int CompletionTokens = 0);
 
 public sealed record ConversationAiCriterion(
     string Id, double Score06, string Evidence, IReadOnlyList<string> Quotes);
@@ -86,7 +90,20 @@ public sealed class ConversationAiOrchestrator(
             text = task == AiTaskMode.GenerateConversationOpening
                 ? "Hello. How can I help you today?"
                 : "Could you tell me a little more about that, please?";
-        return new ConversationAiReply(text, emotion, shouldEnd, rules, result.RulebookVersion);
+        return new ConversationAiReply(
+            text,
+            emotion,
+            shouldEnd,
+            rules,
+            result.RulebookVersion,
+            result.ResolvedProvider,
+            result.ResolvedModel,
+            result.UsageRecordId,
+            result.LatencyMs,
+            result.EstimatedCostUsd,
+            result.RetryCount,
+            result.Usage?.PromptTokens ?? 0,
+            result.Usage?.CompletionTokens ?? 0);
     }
 
     public async Task<ConversationAiEvaluation> EvaluateAsync(ConversationAiContext ctx, CancellationToken ct)

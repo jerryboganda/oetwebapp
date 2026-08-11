@@ -11,10 +11,9 @@ namespace OetLearner.Api.Services.Pronunciation;
 /// libraries that do not transcribe) can plug in without subclassing the
 /// full ASR contract.
 /// <para>
-/// IMPORTANT: This interface is currently scaffolding. Live pronunciation
-/// scoring still routes through <see cref="IPronunciationAsrProviderSelector"/>
-/// → <see cref="IPronunciationAsrProvider"/>. Switching the live grading
-/// path is a separate, gated change tracked as Phase 6d.
+/// The released v1.1 simulation assessor consumes this interface only after
+/// its explicit owner-approved provider gate passes. Legacy pronunciation
+/// grading may continue through the existing ASR selector.
 /// </para>
 /// </summary>
 public interface IPronunciationPhonemeProvider
@@ -22,6 +21,11 @@ public interface IPronunciationPhonemeProvider
     string Name { get; }
 
     bool IsConfigured { get; }
+
+    /// <summary>Resolves runtime/registry credentials without relying on a
+    /// cold synchronous configuration cache.</summary>
+    Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => Task.FromResult(IsConfigured);
 
     /// <summary>Score a single attempt and return per-phoneme accuracy.
     /// Implementations re-use the existing <see cref="AsrResult"/> shape

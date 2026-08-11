@@ -50,11 +50,37 @@ public sealed class AzureConversationAsrProvider(
         var text = root.TryGetProperty("DisplayText", out var dt) ? (dt.GetString() ?? "") : "";
         double confidence = 0.85;
         int durationMs = 0;
+        var wordConfidences = new List<ConversationWordConfidence>();
         if (root.TryGetProperty("NBest", out var nb) && nb.ValueKind == JsonValueKind.Array && nb.GetArrayLength() > 0)
         {
             var top = nb[0];
             if (top.TryGetProperty("Confidence", out var c) && c.ValueKind == JsonValueKind.Number) confidence = c.GetDouble();
             if (string.IsNullOrEmpty(text) && top.TryGetProperty("Display", out var dp)) text = dp.GetString() ?? "";
+            if (top.TryGetProperty("Words", out var words) && words.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var word in words.EnumerateArray())
+                {
+                    var value = word.TryGetProperty("Word", out var wordValue)
+                        ? wordValue.GetString()
+                        : null;
+                    if (string.IsNullOrWhiteSpace(value)) continue;
+                    var startMs = word.TryGetProperty("Offset", out var offset)
+                        && offset.ValueKind == JsonValueKind.Number
+                        ? Math.Max(0, (int)(offset.GetInt64() / 10000))
+                        : 0;
+                    var wordDurationMs = word.TryGetProperty("Duration", out var wordDuration)
+                        && wordDuration.ValueKind == JsonValueKind.Number
+                        ? Math.Max(0, (int)(wordDuration.GetInt64() / 10000))
+                        : 0;
+                    var wordConfidence = word.TryGetProperty("Confidence", out var wordConfidenceElement)
+                        && wordConfidenceElement.ValueKind == JsonValueKind.Number
+                        ? wordConfidenceElement.GetDouble()
+                        : confidence;
+                    wordConfidences.Add(new ConversationWordConfidence(
+                        value.Trim(), startMs, startMs + wordDurationMs,
+                        Math.Clamp(wordConfidence, 0.0, 1.0)));
+                }
+            }
         }
         if (root.TryGetProperty("Duration", out var dur) && dur.ValueKind == JsonValueKind.Number)
             durationMs = (int)(dur.GetInt64() / 10000);
@@ -69,7 +95,8 @@ public sealed class AzureConversationAsrProvider(
             request.EnableDiarization ? $"azure {text.Length} chars; diarization requested" : $"azure {text.Length} chars",
             request.EnableDiarization && !string.IsNullOrWhiteSpace(trimmed)
                 ? [new ConversationSpeakerSegment("learner", trimmed, 0, durationMs, confidence)]
-                : null);
+                : null,
+            wordConfidences.Count > 0 ? wordConfidences : null);
     }
 
     private static string MapContentType(string mime) => mime switch

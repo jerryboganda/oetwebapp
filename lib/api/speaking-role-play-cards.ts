@@ -244,6 +244,9 @@ export interface InterlocutorScriptDetail {
   // Speaking module rebuild (2026-06-11) — printed roleplayer card face.
   patientBackground?: string;
   patientTasks?: (string | null)[];
+  allowsSecondVisit?: boolean;
+  secondVisitIndicator?: string | null;
+  secondVisitCarryFacts?: string[];
 }
 
 export interface CreateRolePlayCardInput {
@@ -295,6 +298,9 @@ export interface UpsertInterlocutorScriptInput {
   patientTask3?: string | null;
   patientTask4?: string | null;
   patientTask5?: string | null;
+  allowsSecondVisit?: boolean;
+  secondVisitIndicator?: string | null;
+  secondVisitCarryFacts?: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

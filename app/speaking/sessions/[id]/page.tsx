@@ -319,6 +319,7 @@ export default function SpeakingSessionRecordingPage() {
       {!consentAccepted ? (
         <SpeakingConsentBanner
           sessionMode="ai"
+          sessionId={session.sessionId}
           onAccepted={() => setConsentAccepted(true)}
           consentVersionOverride={session.consentVersion}
         />

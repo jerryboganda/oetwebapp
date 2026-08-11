@@ -20,6 +20,7 @@ import {
   Eye,
   FileSearch,
   Loader2,
+  LockKeyhole,
   Minus,
   Pencil,
   Plus,
@@ -76,6 +77,14 @@ const operationsLinks: AdminHubLink[] = [
     description: 'Inspect access patterns and audit trails for learner speaking recordings.',
     icon: <FileSearch className="h-5 w-5" />,
     badge: 'Audit',
+    badgeVariant: 'warning',
+  },
+  {
+    href: '/admin/speaking/simulation-v1.1',
+    title: 'Simulation v1.1 governance',
+    description: 'Manage versioned releases, exact rubric, owner approvals, latency/cost budgets, retention, and profession gates.',
+    icon: <LockKeyhole className="h-5 w-5" />,
+    badge: 'Release gate',
     badgeVariant: 'warning',
   },
 ];

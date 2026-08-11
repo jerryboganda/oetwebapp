@@ -59,6 +59,7 @@ interface LearnerCaptionMsg {
 interface RoleplayReadyMsg {
   phase: 'warmup' | 'roleplay';
   patientSpeaksFirst: boolean;
+  silencePromptThresholdMs?: number;
 }
 
 /** Client-side turn metadata sent alongside the audio — the backend records
@@ -74,6 +75,7 @@ interface ConversationHubBridge {
   stop: () => Promise<void>;
   sendTurn: (sessionId: string, audioBase64: string, mimeType: string, metaJson: string | null) => Promise<void>;
   sendText: (sessionId: string, text: string) => Promise<void>;
+  sendSilence: (sessionId: string, silenceMs: number) => Promise<void>;
   onUtterance: (cb: (u: PatientUtterance) => void) => void;
   onLearnerCaption: (cb: (c: LearnerCaptionMsg) => void) => void;
   onReady: (cb: (r: RoleplayReadyMsg) => void) => void;
@@ -104,6 +106,7 @@ const MIN_SPEECH_MS = 450; // ignore blips/coughs (measured from speech onset)
 const MAX_UTTERANCE_MS = 210_000;
 const SILENT_BUFFER_RESET_MS = 8_000; // drop + restart a buffer with no speech
 const THINKING_TIMEOUT_MS = 25_000; // watchdog if no reply arrives
+const DEFAULT_SILENCE_PROMPT_THRESHOLD_MS = 12_000;
 // Speech-only bitrate. Browsers default MediaRecorder/Opus to ~128kbps —
 // 32kbps mono is ample for Whisper and keeps a worst-case 210s turn around
 // ~840KB binary (~1.12MB base64), inside the hub's 2MB max message.
@@ -170,6 +173,9 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
       },
       sendText: async (sessionId, text) => {
         await connection.invoke('SendSpeakingRoleplayText', sessionId, text);
+      },
+      sendSilence: async (sessionId, silenceMs) => {
+        await connection.invoke('SendSpeakingRoleplaySilence', sessionId, silenceMs);
       },
       onUtterance: (cb) => {
         utter = cb;
@@ -247,6 +253,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   const [voiceUnavailable, setVoiceUnavailable] = useState(false);
   const [ended, setEnded] = useState(false);
   const [awaitingCandidateStart, setAwaitingCandidateStart] = useState(false);
+  const [silencePromptThresholdMs, setSilencePromptThresholdMs] = useState(DEFAULT_SILENCE_PROMPT_THRESHOLD_MS);
 
   const hubRef = useRef<ConversationHubBridge | null>(null);
   const sessionIdRef = useRef(sessionId);
@@ -276,6 +283,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silencePromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setPhase = useCallback((p: ConversationPhase) => {
     phaseRef.current = p;
@@ -317,6 +325,13 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     }
   }, []);
 
+  const clearSilencePromptTimer = useCallback(() => {
+    if (silencePromptTimerRef.current) {
+      clearTimeout(silencePromptTimerRef.current);
+      silencePromptTimerRef.current = null;
+    }
+  }, []);
+
   // ── Send one captured utterance ──────────────────────────────────────
   const sendUtterance = useCallback(
     async (blob: Blob, mimeType: string, speechDurationMs: number) => {
@@ -327,6 +342,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       }
       setPhase('thinking');
       clearThinkingWatchdog();
+      clearSilencePromptTimer();
       thinkingTimerRef.current = setTimeout(() => {
         // No reply arrived — recover so the learner isn't stuck.
         if (phaseRef.current === 'thinking') {
@@ -353,7 +369,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
         setPhase(micEnabledRef.current ? 'listening' : 'idle');
       }
     },
-    [clearThinkingWatchdog, setPhase],
+    [clearThinkingWatchdog, clearSilencePromptTimer, setPhase],
   );
 
   // ── Capture lifecycle ────────────────────────────────────────────────
@@ -470,6 +486,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
             hadSpeechRef.current = true;
             speechStartRef.current = now;
             lastVoiceRef.current = now;
+            clearSilencePromptTimer();
             interruptedPatientRef.current = true;
             stopPlayback();
             setPhase('listening');
@@ -495,6 +512,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
             hadSpeechRef.current = true;
             speechStartRef.current = now;
             lastVoiceRef.current = now;
+            clearSilencePromptTimer();
           }
         } else {
           startFramesRef.current = 0;
@@ -527,7 +545,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     // 'thinking' / 'idle': ignore onsets so turns never overlap.
 
     rafRef.current = requestAnimationFrame(runVadFrame);
-  }, [beginCapture, finishCapture, setPhase, stopPlayback]);
+  }, [beginCapture, clearSilencePromptTimer, finishCapture, setPhase, stopPlayback]);
 
   // ── Play an AI reply, then resume listening ───────────────────────────
   const playReply = useCallback(
@@ -580,9 +598,13 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       hubRef.current = hub;
       hub.onLearnerCaption((c) => {
         setAwaitingCandidateStart(false);
+        clearSilencePromptTimer();
         pushCaption('candidate', c.text);
       });
       hub.onReady((r) => {
+        if (Number.isFinite(r.silencePromptThresholdMs) && (r.silencePromptThresholdMs ?? 0) > 0) {
+          setSilencePromptThresholdMs(Math.max(1, Math.round(r.silencePromptThresholdMs!)));
+        }
         if (r.patientSpeaksFirst) return; // warm-up: opening utterance is on its way
         // Role-play: the candidate opens. Go straight to listening — the
         // patient stays silent until spoken to.
@@ -625,7 +647,23 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       hubRef.current?.stop().catch(() => undefined);
       hubRef.current = null;
     };
-  }, [sessionId, pushCaption, playReply, clearThinkingWatchdog, setPhase]);
+    }, [sessionId, pushCaption, playReply, clearThinkingWatchdog, clearSilencePromptTimer, setPhase]);
+
+  useEffect(() => {
+    clearSilencePromptTimer();
+    if (phase !== 'listening' || !micEnabled || !sessionId) return;
+
+    silencePromptTimerRef.current = setTimeout(() => {
+      silencePromptTimerRef.current = null;
+      if (phaseRef.current !== 'listening' || hadSpeechRef.current) return;
+      const hub = hubRef.current;
+      const currentSessionId = sessionIdRef.current;
+      if (!hub || !currentSessionId) return;
+      void hub.sendSilence(currentSessionId, silencePromptThresholdMs).catch(() => undefined);
+    }, silencePromptThresholdMs);
+
+    return clearSilencePromptTimer;
+  }, [clearSilencePromptTimer, micEnabled, phase, sessionId, silencePromptThresholdMs]);
 
   // ── Teardown of audio/mic resources ───────────────────────────────────
   const teardownAudio = useCallback(() => {
@@ -647,8 +685,9 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     analyserRef.current = null;
     stopPlayback();
     clearThinkingWatchdog();
+    clearSilencePromptTimer();
     setMicLevel(0);
-  }, [clearThinkingWatchdog, finishCapture, stopPlayback]);
+  }, [clearThinkingWatchdog, clearSilencePromptTimer, finishCapture, stopPlayback]);
 
   useEffect(() => () => teardownAudio(), [teardownAudio]);
 
@@ -718,6 +757,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
       const hub = hubRef.current;
       const trimmed = text.trim();
       if (!hub || !trimmed || !sessionIdRef.current) return;
+      clearSilencePromptTimer();
       pushCaption('candidate', trimmed);
       setPhase('thinking');
       clearThinkingWatchdog();
@@ -735,7 +775,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
         setPhase(micEnabledRef.current ? 'listening' : 'idle');
       }
     },
-    [clearThinkingWatchdog, pushCaption, setPhase],
+    [clearSilencePromptTimer, clearThinkingWatchdog, pushCaption, setPhase],
   );
 
   return {

@@ -1,8 +1,10 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Speaking;
 
@@ -12,8 +14,10 @@ namespace OetLearner.Api.Services.Speaking;
 /// </summary>
 public sealed class SpeakingSimulationV11EvidenceCaptureService(
     LearnerDbContext db,
+    IFileStorage storage,
     ILogger<SpeakingSimulationV11EvidenceCaptureService> logger)
 {
+    private const double MinimumAsrConfidence = 0.60;
     private static readonly Regex FillerRegex = new(
         @"\b(?:um|uh|er|erm|you know)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -57,13 +61,40 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
             .OrderByDescending(x => x.GeneratedAt)
             .FirstOrDefaultAsync(ct);
 
-        var recording = await db.SpeakingRecordings
+        var recordings = await db.SpeakingRecordings
             .AsNoTracking()
+            .Include(x => x.MediaAsset)
             .Where(x => x.SpeakingSessionId == speakingSessionId && !x.IsWarmup)
             .OrderByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
+        var recording = recordings.FirstOrDefault();
 
         var quality = CaptureAudioQuality(session, recording);
+        var signalAnalyses = new List<SpeakingSimulationV11AudioSignalAnalysis>();
+        SpeakingSimulationV11AudioSignalAnalysis? signalAnalysis = null;
+        if (recording is not null && quality.Status != SpeakingSimulationV11AudioQualityStatus.Failed)
+        {
+            foreach (var candidateRecording in recordings)
+            {
+                signalAnalyses.Add(await AnalyzeStoredAudioAsync(candidateRecording, ct));
+            }
+
+            signalAnalysis = signalAnalyses.FirstOrDefault(x => x.Analyzed)
+                ?? signalAnalyses.FirstOrDefault();
+            quality.SampleRateHz = signalAnalysis?.SampleRateHz;
+            quality.Channels = signalAnalysis?.Channels;
+            quality.Codec = signalAnalysis?.Codec;
+            var signalIssueCode = signalAnalyses
+                .Select(x => x.IssueCode)
+                .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+            if (!string.IsNullOrWhiteSpace(signalIssueCode)
+                && quality.Status != SpeakingSimulationV11AudioQualityStatus.Failed)
+            {
+                quality.Status = SpeakingSimulationV11AudioQualityStatus.NeedsReview;
+                quality.IssueCode ??= signalIssueCode;
+            }
+            quality.DetailsJson = BuildQualityDetails(quality, signalAnalysis, signalAnalyses);
+        }
         db.SpeakingSimulationV11AudioQualityChecks.Add(quality);
 
         var timing = await CaptureTimingAsync(session, ct);
@@ -79,7 +110,64 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
                 AudioQualityIssueCode: quality.IssueCode);
         }
 
-        var sourceTurns = ParseSourceTurns(transcript.SegmentsJson);
+        var sourceTurns = ParseSourceTurns(transcript.SegmentsJson)
+            .Where(x => !string.Equals(x.Phase, "warmup", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var candidateTurns = sourceTurns
+            .Where(x => string.Equals(x.Speaker, "candidate", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(x.Speaker, "learner", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var recordingsById = recordings.ToDictionary(x => x.Id, StringComparer.Ordinal);
+        var sourceRecordingIds = candidateTurns
+            .Select(x => x.SourceRecordingId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var missingRecordingLink = candidateTurns.Count == 0
+            || candidateTurns.Any(x => string.IsNullOrWhiteSpace(x.SourceRecordingId)
+                || !recordingsById.ContainsKey(x.SourceRecordingId!));
+        var lowAsrConfidence = candidateTurns.Any(x => x.Confidence < MinimumAsrConfidence);
+        if (lowAsrConfidence && quality.Status == SpeakingSimulationV11AudioQualityStatus.Passed)
+        {
+            quality.Status = SpeakingSimulationV11AudioQualityStatus.NeedsReview;
+            quality.IssueCode = "asr_confidence_low";
+        }
+        if (!missingRecordingLink)
+        {
+            foreach (var sourceRecordingId in sourceRecordingIds)
+            {
+                var storageIssue = await VerifyStoredRecordingAsync(
+                    recordingsById[sourceRecordingId], ct);
+                if (storageIssue is not null)
+                {
+                    quality.Status = storageIssue == "audio_hash_mismatch"
+                        ? SpeakingSimulationV11AudioQualityStatus.Failed
+                        : SpeakingSimulationV11AudioQualityStatus.NeedsReview;
+                    quality.IssueCode = storageIssue;
+                    break;
+                }
+            }
+        }
+        if (missingRecordingLink && quality.Status == SpeakingSimulationV11AudioQualityStatus.Passed)
+        {
+            quality.Status = SpeakingSimulationV11AudioQualityStatus.NeedsReview;
+            quality.IssueCode = "candidate_audio_link_missing";
+        }
+        quality.DetailsJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["originalAudioRequired"] = true,
+            ["metadataOnlyCheck"] = false,
+            ["candidateTurnCount"] = candidateTurns.Count,
+            ["sourceRecordingCount"] = sourceRecordingIds.Length,
+            ["issueCode"] = quality.IssueCode,
+            ["sampleRateHz"] = quality.SampleRateHz,
+            ["channels"] = quality.Channels,
+            ["codec"] = quality.Codec,
+            ["signal"] = signalAnalysis?.Details,
+            ["signalAnalyses"] = signalAnalyses.Select(x => x.Details).ToArray(),
+        });
         if (sourceTurns.Count == 0)
         {
             logger.LogWarning(
@@ -135,7 +223,7 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
                         Id = $"spv11_turn_{Guid.NewGuid():N}",
                         SpeakingSessionId = speakingSessionId,
                         SourceTranscriptId = transcript.Id,
-                        SourceRecordingId = recording?.Id,
+                        SourceRecordingId = source.SourceRecordingId,
                         CardVersion = cardVersion,
                         TurnNumber = index + 1,
                         Speaker = source.Speaker,
@@ -239,10 +327,22 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
                 var endMs = Math.Max(startMs, ReadLong(element, "endMs", startMs));
                 var interrupted = element.TryGetProperty("interrupted", out var interruptedElement)
                     && interruptedElement.ValueKind == JsonValueKind.True;
+                var phase = element.TryGetProperty("phase", out var phaseElement)
+                    && phaseElement.ValueKind == JsonValueKind.String
+                    ? phaseElement.GetString() ?? "roleplay"
+                    : "roleplay";
+                var confidence = element.TryGetProperty("confidence", out var confidenceElement)
+                    && confidenceElement.ValueKind == JsonValueKind.Number
+                    ? Math.Clamp(confidenceElement.GetDouble(), 0.0, 1.0)
+                    : 1.0;
                 var wordConfidenceJson = element.TryGetProperty("words", out var words)
                     && words.ValueKind == JsonValueKind.Array
                     ? words.GetRawText()
                     : "[]";
+                var sourceRecordingId = element.TryGetProperty("sourceRecordingId", out var sourceRecordingElement)
+                    && sourceRecordingElement.ValueKind == JsonValueKind.String
+                    ? sourceRecordingElement.GetString()
+                    : null;
 
                 turns.Add(new SourceTurn(
                     speaker,
@@ -250,7 +350,10 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
                     endMs,
                     text,
                     wordConfidenceJson,
-                    interrupted));
+                    interrupted,
+                    phase,
+                    sourceRecordingId,
+                    confidence));
             }
         }
         catch (JsonException)
@@ -385,6 +488,116 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
         };
     }
 
+    private async Task<SpeakingSimulationV11AudioSignalAnalysis> AnalyzeStoredAudioAsync(
+        SpeakingRecording recording,
+        CancellationToken ct)
+    {
+        if (recording.IsArchived || recording.MediaAsset is null
+            || string.IsNullOrWhiteSpace(recording.MediaAsset.StoragePath))
+        {
+            return StorageAnalysisFailure(recording.MimeType, "audio_signal_storage_pointer_missing");
+        }
+
+        try
+        {
+            if (!await storage.ExistsAsync(recording.MediaAsset.StoragePath, ct))
+            {
+                return StorageAnalysisFailure(recording.MimeType, "audio_signal_blob_missing");
+            }
+
+            await using var source = await storage.OpenReadAsync(recording.MediaAsset.StoragePath, ct);
+            return SpeakingSimulationV11AudioSignalAnalyzer.Analyze(source, recording.MimeType);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Could not inspect v1.1 speaking signal quality for recording {RecordingId}.",
+                recording.Id);
+            return StorageAnalysisFailure(recording.MimeType, "audio_signal_storage_unavailable");
+        }
+    }
+
+    private static SpeakingSimulationV11AudioSignalAnalysis StorageAnalysisFailure(
+        string? mimeType,
+        string issueCode)
+        => new(
+            Analyzed: false,
+            AnalysisLimited: false,
+            Codec: "unknown",
+            SampleRateHz: null,
+            Channels: null,
+            SampleCount: null,
+            Peak: null,
+            Rms: null,
+            ZeroCrossingRate: null,
+            ClippingDetected: false,
+            SevereNoiseDetected: false,
+            NearSilenceDetected: false,
+            IssueCode: issueCode,
+            Details: new Dictionary<string, object?>
+            {
+                ["signalAnalysis"] = "storage_unavailable",
+                ["analysisLimited"] = false,
+                ["mimeType"] = mimeType,
+                ["issueCode"] = issueCode,
+            });
+
+    private static string BuildQualityDetails(
+        SpeakingSimulationV11AudioQualityCheck quality,
+        SpeakingSimulationV11AudioSignalAnalysis? signalAnalysis,
+        IReadOnlyList<SpeakingSimulationV11AudioSignalAnalysis>? signalAnalyses = null,
+        int? candidateTurnCount = null,
+        int? sourceRecordingCount = null)
+        => JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["originalAudioRequired"] = true,
+            ["metadataOnlyCheck"] = false,
+            ["candidateTurnCount"] = candidateTurnCount,
+            ["sourceRecordingCount"] = sourceRecordingCount,
+            ["issueCode"] = quality.IssueCode,
+            ["sampleRateHz"] = quality.SampleRateHz,
+            ["channels"] = quality.Channels,
+            ["codec"] = quality.Codec,
+            ["signal"] = signalAnalysis?.Details,
+            ["signalAnalyses"] = signalAnalyses?.Select(x => x.Details).ToArray(),
+        });
+
+    private async Task<string?> VerifyStoredRecordingAsync(
+        SpeakingRecording recording,
+        CancellationToken ct)
+    {
+        if (recording.IsArchived || recording.MediaAsset is null
+            || string.IsNullOrWhiteSpace(recording.MediaAsset.StoragePath))
+        {
+            return "original_audio_storage_pointer_missing";
+        }
+
+        try
+        {
+            if (!await storage.ExistsAsync(recording.MediaAsset.StoragePath, ct))
+            {
+                return "original_audio_blob_missing";
+            }
+
+            await using var source = await storage.OpenReadAsync(recording.MediaAsset.StoragePath, ct);
+            using var sha256 = SHA256.Create();
+            var hash = await sha256.ComputeHashAsync(source, ct);
+            var actual = Convert.ToHexString(hash).ToLowerInvariant();
+            return string.Equals(actual, recording.Sha256, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : "audio_hash_mismatch";
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not verify v1.1 speaking audio blob {RecordingId}.", recording.Id);
+            return "original_audio_storage_unavailable";
+        }
+    }
+
     private static long ReadLong(JsonElement element, string property, long fallback = 0)
         => element.TryGetProperty(property, out var value)
             && value.ValueKind == JsonValueKind.Number
@@ -430,7 +643,10 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
         long EndMs,
         string Text,
         string WordConfidenceJson,
-        bool Interrupted);
+        bool Interrupted,
+        string Phase = "roleplay",
+        string? SourceRecordingId = null,
+        double Confidence = 1.0);
 }
 
 public sealed record SpeakingSimulationV11EvidenceCaptureResult(

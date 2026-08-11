@@ -887,6 +887,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceN
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11EvidenceCaptureService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11PersonaService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AudioCaptureService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AudioAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11ReleaseGate>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11TurnTelemetryService>();
 // WS6 — Speaking result-visibility config (§10).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisibilityService,
     OetLearner.Api.Services.Speaking.SpeakingResultVisibilityService>();
@@ -920,6 +925,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveRoomService>();
 // Phase 4 — tutor-side scoring + review-queue services.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11TutorOverrideService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorReviewQueueService>();
 // Double-marking + senior moderation (§15.4 / §15.5).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingModerationService>();
@@ -1332,10 +1338,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationA
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProviderSelector,
     OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>();
 // Phase 6c: registry-first credential resolver (singleton, 30s cache) +
-// scaffolding interface + Azure adapter for phoneme scoring. The live
-// grading path still routes through the ASR selector — the phoneme
-// interface is currently visibility-only (Phase 6d will move grading
-// to it once production traffic is verified stable).
+// Azure phoneme adapter. The v1.1 simulation assessor uses this adapter only
+// after its explicit owner-approved provider gate passes; legacy pronunciation
+// grading continues through the existing ASR selector.
 builder.Services.AddSingleton<OetLearner.Api.Services.Pronunciation.IPronunciationCredentialResolver,
     OetLearner.Api.Services.Pronunciation.PronunciationCredentialResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationPhonemeProvider,
@@ -2459,11 +2464,14 @@ app.MapSpeakingCalibrationEndpoints();
 
 // ── OET Speaking module (Phase 1+ role-play cards, sessions, compliance) ──
 app.MapAdminSpeakingContentEndpoints();
+app.MapSpeakingSimulationV11GovernanceEndpoints();
 app.MapLearnerSpeakingRolePlayCardEndpoints();
 app.MapSpeakingComplianceEndpoints();
 // Phase 2 — typed Speaking session lifecycle (prep → active → finished).
 app.MapSpeakingSessionEndpoints();
 app.MapSpeakingExamEndpoints();
+app.MapSpeakingSimulationV11Endpoints();
+app.MapSpeakingSimulationV11TutorEndpoints();
 // WS6 — Speaking result-visibility (learner read + admin upsert, §10).
 app.MapSpeakingResultVisibilityEndpoints();
 // Phase 3 — live-tutor rooms + LiveKit webhook ingestion.

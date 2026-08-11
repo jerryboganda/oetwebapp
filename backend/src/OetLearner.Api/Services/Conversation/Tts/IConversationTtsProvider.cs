@@ -18,7 +18,8 @@ public sealed record ConversationTtsRequest(
 
 public sealed record ConversationTtsResult(
     byte[] Audio, string MimeType, int DurationMs,
-    string ProviderName, string? ProviderResponseSummary);
+    string ProviderName, string? ProviderResponseSummary,
+    string? ModelName = null);
 
 public sealed class ConversationTtsException(string code, string message) : Exception(message)
 {

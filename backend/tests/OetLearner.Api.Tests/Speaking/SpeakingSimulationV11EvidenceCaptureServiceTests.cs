@@ -65,6 +65,7 @@ public sealed class SpeakingSimulationV11EvidenceCaptureServiceTests
 
         var service = new SpeakingSimulationV11EvidenceCaptureService(
             db,
+            new OetLearner.Api.Tests.InMemoryFileStorage(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SpeakingSimulationV11EvidenceCaptureService>.Instance);
 
         var result = await service.CaptureAsync(session.Id, CancellationToken.None);
@@ -120,6 +121,7 @@ public sealed class SpeakingSimulationV11EvidenceCaptureServiceTests
 
         var service = new SpeakingSimulationV11EvidenceCaptureService(
             db,
+            new OetLearner.Api.Tests.InMemoryFileStorage(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SpeakingSimulationV11EvidenceCaptureService>.Instance);
 
         var result = await service.CaptureAsync(session.Id, CancellationToken.None);

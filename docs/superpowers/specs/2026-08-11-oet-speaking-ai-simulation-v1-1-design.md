@@ -99,7 +99,7 @@ Enforce the PDF roles matrix: candidates see only their attempts; tutors see ass
 
 Use the existing consent, encrypted storage, retention worker, deletion/erasure, AI usage, audit, and provider-health paths. Keep audio/transcript retention explicitly visible at consent and prevent model-training reuse without separate lawful consent.
 
-Record per-turn latency, STT/LLM/TTS usage, cost estimate, concurrency bucket, degradation state, and release identifiers. The system must alert on cost or latency budget breaches and mark the session `technical_review` rather than silently degrading turn-taking.
+Record per-turn latency, STT/LLM/TTS usage, cost estimate, concurrency bucket, degradation state, and release identifiers. STT and TTS rate cards are versioned owner-approved inputs rather than silent zeroes. The system must alert on cost or latency budget breaches and mark the session `technical_review` rather than silently degrading turn-taking.
 
 ## Owner-approval gates
 
@@ -107,9 +107,9 @@ The source PDF intentionally leaves several release values to the owner. The cod
 
 - The recommended starting AI turn-start target is 2.5 seconds p95, but production activation requires an approved concurrency target and SLA record.
 - A positive maximum concurrent full-mock-session budget is required before live mode is enabled.
-- A positive per-completed-attempt cost ceiling covering STT, actor LLM, assessor LLM, and TTS is required before live mode is enabled.
+- A positive per-completed-attempt cost ceiling covering STT, actor LLM, assessor LLM, and TTS is required before live mode is enabled; positive STT-per-minute and TTS-per-1,000-character rate approvals are also required so the ledger cannot undercount provider spend.
 - Non-Medicine scoring remains blocked until an approved profession pack and interim behaviour decision exists.
-- Silence prompts, confidence label/range presentation, graph legal/brand approval, and retention duration require explicit versioned approvals.
+- Silence prompts, confidence label/range presentation, graph legal/brand approval, and retention duration require explicit versioned approvals. When every recording for a session has expired, raw transcript/report evidence is redacted while non-content score/version/audit metadata may remain.
 - Rule 55 remains excluded until an owner decision changes its status.
 
 Development fixtures may exercise each branch, but an unapproved branch cannot be presented as a production-ready release.

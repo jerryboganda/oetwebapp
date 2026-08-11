@@ -189,15 +189,36 @@ public static class LearnerEndpoints
         // compliance copy (consent text + score disclaimer + retention
         // window). Driven by SpeakingComplianceOptions so operators can
         // tune wording and retention without code changes.
-        speaking.MapGet("/compliance", (
-            Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingComplianceOptions> opts) =>
+        speaking.MapGet("/compliance", async (
+            Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingComplianceOptions> opts,
+            LearnerDbContext db,
+            CancellationToken ct) =>
         {
             var o = opts.Value;
+            var approvedV11RetentionDays = await db.SpeakingSimulationV11OwnerApprovals
+                .AsNoTracking()
+                .Where(x => x.ApprovalKey == "retention_days"
+                    && x.ScopeKey == "global"
+                    && x.SpecVersion == SpeakingSimulationV11Contracts.SpecVersion
+                    && x.RubricVersion == SpeakingSimulationV11Contracts.RubricVersion
+                    && x.Status == SpeakingSimulationV11ApprovalStatus.Approved
+                    && x.NumericValue.HasValue
+                    && x.NumericValue.Value > 0)
+                .OrderByDescending(x => x.ApprovedAt ?? x.UpdatedAt)
+                .Select(x => x.NumericValue)
+                .FirstOrDefaultAsync(ct);
+            var v11RetentionDays = approvedV11RetentionDays is > 0
+                ? (int)Math.Min((decimal)int.MaxValue, approvedV11RetentionDays.Value)
+                : Math.Max(1, o.RetentionDaysDefault);
+
             return Results.Ok(new
             {
                 consentText = o.ConsentText,
                 scoreDisclaimer = o.ScoreDisclaimer,
                 audioRetentionDays = o.AudioRetentionDays,
+                speakingSimulationV11RetentionDays = v11RetentionDays,
+                speakingSimulationV11RetentionNotice =
+                    $"For this AI simulation, original audio and transcript evidence are retained for up to {v11RetentionDays} days, then deleted according to the retention policy. You may request deletion sooner.",
             });
         });
 

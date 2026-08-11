@@ -109,7 +109,13 @@ public record AdminInterlocutorScriptUpsertRequest(
     string? PatientTask2 = null,
     string? PatientTask3 = null,
     string? PatientTask4 = null,
-    string? PatientTask5 = null);
+    string? PatientTask5 = null,
+    // v1.1: Card B may carry forward facts only when the author explicitly
+    // enables the second-visit path and supplies an indicator. The default is
+    // independent-card behaviour.
+    bool? AllowsSecondVisit = null,
+    string? SecondVisitIndicator = null,
+    string[]? SecondVisitCarryFacts = null);
 
 // ── Response shapes ──────────────────────────────────────────────────────
 
@@ -192,7 +198,12 @@ public record AdminInterlocutorScriptDetail(
     DateTimeOffset UpdatedAt,
     // Speaking module rebuild (2026-06-11). The printed roleplayer card face.
     string PatientBackground = "",
-    string?[]? PatientTasks = null);
+    string?[]? PatientTasks = null,
+    // v1.1 second-visit controls. These are admin/tutor-only and never enter
+    // the learner card projection.
+    bool AllowsSecondVisit = false,
+    string? SecondVisitIndicator = null,
+    string[]? SecondVisitCarryFacts = null);
 
 // ── Card types (2026-06-11 rebuild) — fully admin-configurable taxonomy ─────
 

@@ -494,6 +494,9 @@ public partial class AdminService
                 PatientTask3 = sourceScript.PatientTask3,
                 PatientTask4 = sourceScript.PatientTask4,
                 PatientTask5 = sourceScript.PatientTask5,
+                AllowsSecondVisit = sourceScript.AllowsSecondVisit,
+                SecondVisitIndicator = sourceScript.SecondVisitIndicator,
+                SecondVisitCarryFactsJson = sourceScript.SecondVisitCarryFactsJson,
                 CreatedByUserId = adminId,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -855,7 +858,10 @@ public partial class AdminService
             {
                 script.PatientTask1, script.PatientTask2, script.PatientTask3,
                 script.PatientTask4, script.PatientTask5,
-            });
+            },
+            AllowsSecondVisit: script.AllowsSecondVisit,
+            SecondVisitIndicator: script.SecondVisitIndicator,
+            SecondVisitCarryFacts: DeserializeStringArray(script.SecondVisitCarryFactsJson));
 
     internal static string[] DeserializeStringArray(string? json)
     {

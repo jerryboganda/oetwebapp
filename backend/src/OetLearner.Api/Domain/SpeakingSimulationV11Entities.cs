@@ -108,6 +108,15 @@ public class SpeakingSimulationV11Assessment
     [MaxLength(64)]
     public string? RolePlayCardId { get; set; }
 
+    /// <summary>"card" for a single role-play or "combined" for the
+    /// derived two-card report. Combined rows never contain invented
+    /// transcript evidence.</summary>
+    [MaxLength(16)]
+    public string AssessmentKind { get; set; } = "card";
+
+    [MaxLength(16)]
+    public string CardSlot { get; set; } = "standalone";
+
     [MaxLength(32)]
     public string ProfessionId { get; set; } = "medicine";
 
@@ -130,7 +139,33 @@ public class SpeakingSimulationV11Assessment
     [MaxLength(64)]
     public string? ConfidenceRange { get; set; }
 
+    public int? EstimatedPracticeScore { get; set; }
+    public int? ScoreRangeLow { get; set; }
+    public int? ScoreRangeHigh { get; set; }
+
+    [MaxLength(128)]
+    public string? Provider { get; set; }
+
+    [MaxLength(128)]
+    public string? ModelName { get; set; }
+
+    [MaxLength(128)]
+    public string? PromptTemplateId { get; set; }
+
+    [MaxLength(64)]
+    public string? SourceTranscriptId { get; set; }
+
+    [MaxLength(64)]
+    public string? SourceRecordingId { get; set; }
+
+    [MaxLength(64)]
+    public string? CardVersion { get; set; }
+
+    [MaxLength(64)]
+    public string? TechnicalReviewCode { get; set; }
+
     public string GraphDisclaimer { get; set; } = string.Empty;
+    public string? ReportJson { get; set; }
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -269,4 +304,51 @@ public class SpeakingSimulationV11TurnMetric
     public int OutputTokens { get; set; }
     public decimal EstimatedCostUsd { get; set; }
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// Immutable human revision of one completed v1.1 card report. The original
+/// AI report is copied into the row at submission time; the AI assessment row
+/// is never edited, so calibration and audit can always compare both versions.
+/// </summary>
+public class SpeakingSimulationV11TutorOverride
+{
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string AssessmentId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SpeakingSessionId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string TutorId { get; set; } = default!;
+
+    public int EstimatedPracticeScore { get; set; }
+    public int ScoreRangeLow { get; set; }
+    public int ScoreRangeHigh { get; set; }
+
+    [MaxLength(2000)]
+    public string Reason { get; set; } = string.Empty;
+
+    public string OriginalReportJson { get; set; } = "{}";
+    public string OverrideReportJson { get; set; } = "{}";
+
+    [MaxLength(64)]
+    public string OriginalSpecVersion { get; set; } = string.Empty;
+
+    [MaxLength(64)]
+    public string OriginalRubricVersion { get; set; } = string.Empty;
+
+    [MaxLength(64)]
+    public string OriginalCalibrationVersion { get; set; } = string.Empty;
+
+    [MaxLength(128)]
+    public string? OriginalProvider { get; set; }
+
+    [MaxLength(128)]
+    public string? OriginalModelName { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

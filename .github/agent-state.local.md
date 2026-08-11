@@ -1,3 +1,49 @@
+# Current Task - OET Speaking AI Simulation Assessment Specification v1.1
+
+Last updated: 2026-08-11
+
+## Current implementation checkpoint
+
+- Implemented the PDF v1.1 slice across the server-authoritative two-card AI
+  role-play lifecycle, versioned hidden persona/card governance, transcript and
+  audio evidence capture, ten-criterion calibrated practice report, learner
+  report/transcript/audio UI, tutor override audit path, profession isolation,
+  consent/retention copy, and operational telemetry.
+- Added fail-closed STT-per-minute and TTS-per-1,000-character owner rate-card
+  approvals. Completed-turn telemetry now records STT + actor LLM + TTS cost
+  components and logs technical review on cost/latency/degradation breaches.
+- Retention now deletes expired recording blobs and, after every recording in
+  the relevant session scope is archived, redacts transcript/report evidence
+  while preserving non-content score/version/audit metadata.
+- Evidence primary ownership is fingerprint-based: distinct behaviours in one
+  turn may each own one primary criterion, while the same evidence fingerprint
+  cannot reduce multiple criteria.
+
+## Validation completed
+
+- `dotnet build backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+  --no-restore --nologo -v:minimal -p:RunAnalyzers=false
+  -p:UseSharedCompilation=false -m:1 --disable-build-servers`: passed with
+  0 errors and existing repository warnings.
+- Fresh no-build filter
+  `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+  --no-build --no-restore --filter "FullyQualifiedName~SpeakingSimulationV11"`:
+  33 passed, 0 failed.
+- Targeted frontend ESLint over the touched Speaking/admin/API surfaces:
+  0 errors, 11 existing React Compiler/hooks warnings.
+
+## Next concrete step and boundary
+
+- Run `git diff --check`, stage only the explicit v1.1 implementation/design,
+  test, migration, and handoff paths; preserve `.codex/config.toml`,
+  `.superpowers/`, `pdf-policy-release/`, and `pdf-policy-release2/`.
+- Compare `HEAD` with `origin/main`, commit, push `main`, watch the required
+  Build & Deploy workflow, and verify deployed SHA/migrations/health.
+- Owner-controlled calibration, profession-pack, silence/confidence/graph,
+  concurrency, cost-rate, and retention approvals plus authenticated browser,
+  provider, and live production acceptance remain required before claiming
+  the PDF's full production boundary.
+
 # Current Task - OET Listening and Reading AI System v1.1
 
 Last updated: 2026-08-11

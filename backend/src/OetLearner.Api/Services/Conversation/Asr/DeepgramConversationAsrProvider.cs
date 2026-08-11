@@ -28,7 +28,7 @@ public sealed class DeepgramConversationAsrProvider(
         var lang = string.IsNullOrWhiteSpace(options.DeepgramLanguage) ? request.Locale : options.DeepgramLanguage;
         var model = string.IsNullOrWhiteSpace(options.DeepgramModel) ? "nova-2" : options.DeepgramModel;
         var diarization = request.EnableDiarization ? "&diarize=true&utterances=true" : "";
-        var url = $"https://api.deepgram.com/v1/listen?model={Uri.EscapeDataString(model)}&language={Uri.EscapeDataString(lang)}&smart_format=true&punctuate=true{diarization}";
+        var url = $"https://api.deepgram.com/v1/listen?model={Uri.EscapeDataString(model)}&language={Uri.EscapeDataString(lang)}&smart_format=true&punctuate=true&words=true{diarization}";
 
         var content = new StreamContent(request.Audio);
         content.Headers.ContentType = MediaTypeHeaderValue.Parse(request.AudioMimeType);
@@ -45,6 +45,7 @@ public sealed class DeepgramConversationAsrProvider(
         var text = "";
         double confidence = 0.85;
         int durationMs = 0;
+        var wordConfidences = new List<ConversationWordConfidence>();
         if (root.TryGetProperty("results", out var results) &&
             results.TryGetProperty("channels", out var channels) &&
             channels.ValueKind == JsonValueKind.Array && channels.GetArrayLength() > 0)
@@ -56,6 +57,32 @@ public sealed class DeepgramConversationAsrProvider(
                 text = best.TryGetProperty("transcript", out var tr) ? (tr.GetString() ?? "").Trim() : "";
                 if (best.TryGetProperty("confidence", out var c) && c.ValueKind == JsonValueKind.Number)
                     confidence = c.GetDouble();
+                if (best.TryGetProperty("words", out var words) && words.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var word in words.EnumerateArray())
+                    {
+                        var value = word.TryGetProperty("punctuated_word", out var punctuated)
+                            ? punctuated.GetString()
+                            : word.TryGetProperty("word", out var rawWord)
+                                ? rawWord.GetString()
+                                : null;
+                        if (string.IsNullOrWhiteSpace(value)) continue;
+                        var startMs = word.TryGetProperty("start", out var wordStart)
+                            && wordStart.ValueKind == JsonValueKind.Number
+                            ? Math.Max(0, (int)(wordStart.GetDouble() * 1000))
+                            : 0;
+                        var endMs = word.TryGetProperty("end", out var wordEnd)
+                            && wordEnd.ValueKind == JsonValueKind.Number
+                            ? Math.Max(startMs, (int)(wordEnd.GetDouble() * 1000))
+                            : startMs;
+                        var wordConfidence = word.TryGetProperty("confidence", out var wordConfidenceElement)
+                            && wordConfidenceElement.ValueKind == JsonValueKind.Number
+                            ? wordConfidenceElement.GetDouble()
+                            : confidence;
+                        wordConfidences.Add(new ConversationWordConfidence(
+                            value.Trim(), startMs, endMs, Math.Clamp(wordConfidence, 0.0, 1.0)));
+                    }
+                }
             }
         }
         if (root.TryGetProperty("metadata", out var meta) &&
@@ -66,7 +93,8 @@ public sealed class DeepgramConversationAsrProvider(
             ? ParseUtterances(root)
             : null;
 
-        return new ConversationAsrResult(text, confidence, durationMs, lang, Name, $"deepgram {text.Length} chars", speakerSegments);
+        return new ConversationAsrResult(text, confidence, durationMs, lang, Name, $"deepgram {text.Length} chars", speakerSegments,
+            wordConfidences.Count > 0 ? wordConfidences : null);
     }
 
     private static IReadOnlyList<ConversationSpeakerSegment> ParseUtterances(JsonElement root)

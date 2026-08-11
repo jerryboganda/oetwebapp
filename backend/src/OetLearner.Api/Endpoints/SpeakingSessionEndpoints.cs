@@ -243,6 +243,8 @@ public static class SpeakingSessionEndpoints
         string id,
         SpeakingSessionService sessions,
         SpeakingAiAssessmentService assessor,
+        SpeakingSimulationV11AssessmentService v11Assessor,
+        LearnerDbContext db,
         CancellationToken ct)
     {
         // Owner check via the session service first — returns NotFound if
@@ -250,6 +252,12 @@ public static class SpeakingSessionEndpoints
         // by id without re-checking ownership.
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
+        if (await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
+            .AnyAsync(x => x.SpeakingSessionId == id, ct))
+        {
+            return Results.Ok(await v11Assessor.RunAssessmentAsync(id, ct));
+        }
+
         var assessment = await assessor.RunAssessmentAsync(id, ct);
         return Results.Ok(assessment);
     }
@@ -262,10 +270,27 @@ public static class SpeakingSessionEndpoints
         string id,
         SpeakingSessionService sessions,
         SpeakingAiAssessmentService assessor,
+        SpeakingSimulationV11AssessmentService v11Assessor,
+        LearnerDbContext db,
         CancellationToken ct)
     {
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
+        if (await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
+            .AnyAsync(x => x.SpeakingSessionId == id, ct))
+        {
+            var v11Latest = await v11Assessor.GetLatestAsync(id, ct);
+            if (v11Latest is null)
+            {
+                return Results.NotFound(new
+                {
+                    errorCode = "speaking_v11_assessment_not_found",
+                    message = "No v1.1 assessment has been generated for this session yet.",
+                });
+            }
+            return Results.Ok(v11Latest);
+        }
+
         var latest = await assessor.GetLatestAsync(id, ct);
         if (latest is null)
         {

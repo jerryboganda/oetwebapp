@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Conversation;
@@ -51,6 +53,9 @@ public partial class ConversationHub
     /// the hub uses to abort if the learner ends the session early.
     /// </summary>
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> ActiveRolePlayTimers =
+        new(StringComparer.Ordinal);
+
+    private static readonly ConcurrentDictionary<string, DateTimeOffset> LastSilencePromptAt =
         new(StringComparer.Ordinal);
 
     /// <summary>
@@ -145,6 +150,7 @@ public partial class ConversationHub
             {
                 phase = "warmup",
                 patientSpeaksFirst = true,
+                silencePromptThresholdMs = SpeakingSimulationV11Contracts.DefaultSilencePromptThresholdMs,
                 timestamp = DateTimeOffset.UtcNow,
             });
 
@@ -172,9 +178,29 @@ public partial class ConversationHub
             return;
         }
 
+        if (!RulebookProfessionParser.TryParse(card.ProfessionId, out _))
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "UNSUPPORTED_PROFESSION",
+                "This role-play card has no explicit profession pack and cannot start an AI simulation.");
+            return;
+        }
+
+        var releaseGate = scope.ServiceProvider.GetRequiredService<SpeakingSimulationV11ReleaseGate>();
+        var release = await releaseGate.EvaluateAsync(card.ProfessionId, Context.ConnectionAborted);
+        if (!release.IsReleased)
+        {
+            await Clients.Caller.SendAsync(
+                "SpeakingRoleplayError",
+                "V11_RELEASE_BLOCKED",
+                "This AI simulation is not available until the approved v1.1 release gates are complete.");
+            return;
+        }
+
         var personaService = scope.ServiceProvider.GetRequiredService<SpeakingSimulationV11PersonaService>();
         var personaSnapshot = await personaService.EnsureForSessionAsync(session, card, Context.ConnectionAborted);
         await db.SaveChangesAsync(Context.ConnectionAborted);
+
+        var silencePromptThresholdMs = release.SilencePromptThresholdMs;
 
         var personaPrompt = SpeakingSimulationV11PersonaService.BuildActorPrompt(personaSnapshot);
         logger.LogInformation(
@@ -190,8 +216,14 @@ public partial class ConversationHub
         {
             phase = "roleplay",
             patientSpeaksFirst = false,
+            silencePromptThresholdMs,
             timestamp = DateTimeOffset.UtcNow,
         });
+
+        // The server owns the role-play deadline. Starting this broadcaster
+        // from the authenticated ready handshake means a refreshed client
+        // cannot extend the card by omitting or falsifying a client timer.
+        await StartRolePlayTimer(speakingSessionId, card.RolePlayTimeSeconds);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -237,6 +269,129 @@ public partial class ConversationHub
     /// </summary>
     public Task SendSpeakingRoleplayText(string speakingSessionId, string text)
         => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64: null, transcribedText: text, mimeType: null, turnMetaJson: null);
+
+    /// <summary>
+    /// Sends the neutral, server-authored response after a learner has been
+    /// silent. It never creates a candidate turn, never affects evidence, and
+    /// is rate-limited so a client cannot manufacture an actor loop.
+    /// </summary>
+    public async Task SendSpeakingRoleplaySilence(string speakingSessionId, int? silenceMs = null)
+    {
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(speakingSessionId))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (LastSilencePromptAt.TryGetValue(speakingSessionId, out var last)
+            && now - last < TimeSpan.FromSeconds(10))
+        {
+            return;
+        }
+
+        var ct = Context.ConnectionAborted;
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<LearnerDbContext>();
+        var silencePromptThresholdMs = await sp.GetRequiredService<SpeakingSimulationV11ReleaseGate>()
+            .GetSilencePromptThresholdMsAsync(ct);
+        var session = await db.SpeakingSessions
+            .FirstOrDefaultAsync(x => x.Id == speakingSessionId, ct);
+        if (session is null
+            || !string.Equals(session.UserId, userId, StringComparison.Ordinal)
+            || session.State != SpeakingSessionState.Active
+            || session.Mode == SpeakingSessionMode.LiveTutor)
+        {
+            return;
+        }
+
+        var transcript = await db.SpeakingTranscripts
+            .Where(x => x.SpeakingSessionId == speakingSessionId && x.IsLatest)
+            .OrderByDescending(x => x.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+        var segments = ParseSpeakingSegments(transcript?.SegmentsJson);
+        var lastRoleplaySegment = segments.LastOrDefault(segment =>
+            string.Equals(segment.Phase, "roleplay", StringComparison.OrdinalIgnoreCase));
+
+        var startedAt = session.RolePlayStartedAt;
+        var rolePlaySeconds = await db.RolePlayCards
+            .AsNoTracking()
+            .Where(x => x.Id == session.RolePlayCardId)
+            .Select(x => x.RolePlayTimeSeconds)
+            .FirstOrDefaultAsync(ct);
+        rolePlaySeconds = rolePlaySeconds > 0 ? rolePlaySeconds : 300;
+        var nowMs = startedAt.HasValue
+            ? (long)Math.Max(0, (now - startedAt.Value).TotalMilliseconds)
+            : lastRoleplaySegment?.EndMs ?? 0;
+        if (startedAt.HasValue && now >= startedAt.Value.AddSeconds(rolePlaySeconds))
+        {
+            await Clients.Caller.SendAsync("TimeUp", new { at = now }, ct);
+            return;
+        }
+
+        // The client reports the silence duration only as UX metadata. The
+        // server decides whether the quiet window has actually elapsed from
+        // the persisted role-play timeline. This also covers the required
+        // initial wait before the candidate has produced their first turn and
+        // the wait after a patient reply.
+        var lastActivityMs = lastRoleplaySegment?.EndMs ?? 0;
+        if (nowMs - lastActivityMs < silencePromptThresholdMs)
+        {
+            return;
+        }
+
+        if (!TryReserveSilencePrompt(speakingSessionId, now))
+        {
+            return;
+        }
+        try
+        {
+            var prompt = SpeakingSimulationV11PersonaService.NeutralSilencePrompt;
+            segments.Add(new SpeakingTurnSegment(
+                "patient", nowMs, nowMs, prompt, 1.0, false, "roleplay"));
+            await PersistSpeakingSegmentsAsync(db, transcript, speakingSessionId, segments, ct);
+
+            var audioUrl = await TrySynthesizeReplyAudioAsync(sp, prompt, ct);
+            await Clients.Caller.SendAsync("PatientUtterance", new
+            {
+                speaker = "patient",
+                phase = "roleplay",
+                text = prompt,
+                audioUrl,
+                shouldEnd = false,
+                silencePrompt = true,
+                silenceMs = silencePromptThresholdMs,
+                timestamp = now,
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            LastSilencePromptAt.TryRemove(speakingSessionId, out _);
+        }
+        catch (Exception ex)
+        {
+            LastSilencePromptAt.TryRemove(speakingSessionId, out _);
+            logger.LogWarning(ex, "Speaking silence prompt failed for session {SessionId}.", speakingSessionId);
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "SILENCE_PROMPT_ERROR",
+                "The patient prompt could not be delivered. Please continue when ready.");
+        }
+    }
+
+    private static bool TryReserveSilencePrompt(string speakingSessionId, DateTimeOffset now)
+    {
+        while (true)
+        {
+            if (LastSilencePromptAt.TryGetValue(speakingSessionId, out var previous))
+            {
+                if (now - previous < TimeSpan.FromSeconds(10)) return false;
+                if (LastSilencePromptAt.TryUpdate(speakingSessionId, now, previous)) return true;
+                continue;
+            }
+
+            if (LastSilencePromptAt.TryAdd(speakingSessionId, now)) return true;
+        }
+    }
 
     private async Task ProcessSpeakingTurnAsync(
         string speakingSessionId,
@@ -289,8 +444,26 @@ public partial class ConversationHub
                 "The role-play card linked to this session is missing.");
             return;
         }
+        if (!RulebookProfessionParser.TryParse(card.ProfessionId, out var profession))
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "UNSUPPORTED_PROFESSION",
+                "This role-play card has no explicit profession pack and cannot start an AI simulation.");
+            return;
+        }
+
+        if (session.State == SpeakingSessionState.Active)
+        {
+            var deadlineRolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
+            if (session.RolePlayStartedAt is not { } rolePlayStartedAt
+                || DateTimeOffset.UtcNow >= rolePlayStartedAt.AddSeconds(deadlineRolePlaySeconds))
+            {
+                await Clients.Caller.SendAsync("TimeUp", new { at = DateTimeOffset.UtcNow }, ct);
+                return;
+            }
+        }
 
         var isWarmUp = session.State == SpeakingSessionState.WarmUp;
+        var turnStartedAt = DateTimeOffset.UtcNow;
         SpeakingSimulationV11PersonaService? personaService = null;
         SpeakingSimulationV11PersonaRuntimeSnapshot? personaSnapshot = null;
         if (!isWarmUp)
@@ -309,11 +482,19 @@ public partial class ConversationHub
         }
 
         // ── 1. Resolve the learner utterance (STT or supplied text) ──
+        var (interruptedPatient, speechDurationMs) = ParseTurnMeta(turnMetaJson);
+        SpeakingSimulationV11AudioCaptureResult? audioCapture = null;
+        IReadOnlyList<ConversationWordConfidence> wordConfidences = [];
+        long? authoritativeSpeechDurationMs = null;
         string learnerText;
         var learnerConfidence = 1.0;
+        string? asrProviderName = null;
+        var asrLatencyMs = 0;
+        var asrDurationMs = 0;
         if (!string.IsNullOrWhiteSpace(transcribedText))
         {
             learnerText = transcribedText.Trim();
+            asrProviderName = "text-input";
         }
         else if (!string.IsNullOrWhiteSpace(audioBase64))
         {
@@ -332,8 +513,33 @@ public partial class ConversationHub
                 return;
             }
             var audioMime = string.IsNullOrWhiteSpace(mimeType) ? "audio/webm" : mimeType;
+            if (session.ConsentAcceptedAt is null)
+            {
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "AUDIO_CONSENT_REQUIRED",
+                    "Accept the recording consent before sending spoken turns.");
+                return;
+            }
             try
             {
+                var audioCaptureService = sp.GetRequiredService<SpeakingSimulationV11AudioCaptureService>();
+                audioCapture = await audioCaptureService.CaptureTurnAsync(
+                    session,
+                    audioBytes,
+                    audioMime,
+                    isWarmUp,
+                    speechDurationMs,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Original speaking audio persistence failed for session {SessionId}.", speakingSessionId);
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "AUDIO_PERSIST",
+                    "We could not securely save the original audio. Please try again.");
+                return;
+            }
+            try
+            {
+                var asrStartedAt = Stopwatch.GetTimestamp();
                 var asrSelector = sp.GetRequiredService<IConversationAsrProviderSelector>();
                 var asrProvider = await asrSelector.SelectAsync(ct);
                 using var asrStream = new MemoryStream(audioBytes);
@@ -341,7 +547,22 @@ public partial class ConversationHub
                     new ConversationAsrRequest(asrStream, audioMime, "en-GB", audioBytes.LongLength, EnableDiarization: false),
                     ct);
                 learnerText = (asr.Text ?? string.Empty).Trim();
-                learnerConfidence = asr.Confidence;
+                learnerConfidence = Math.Clamp(asr.Confidence, 0.0, 1.0);
+                wordConfidences = asr.WordConfidences is { Count: > 0 }
+                    ? asr.WordConfidences
+                    : BuildFallbackWordConfidences(learnerText, learnerConfidence, asr.DurationMs);
+                authoritativeSpeechDurationMs = asr.DurationMs > 0
+                    ? asr.DurationMs
+                    : wordConfidences.Count > 0
+                        ? wordConfidences.Max(word => word.EndMs)
+                        : null;
+                asrDurationMs = Math.Max(0, asr.DurationMs > 0
+                    ? asr.DurationMs
+                    : wordConfidences.Count > 0 ? wordConfidences.Max(word => word.EndMs) : 0);
+                asrProviderName = string.IsNullOrWhiteSpace(asr.ProviderName)
+                    ? asrProvider.Name
+                    : asr.ProviderName;
+                asrLatencyMs = ElapsedMilliseconds(asrStartedAt);
             }
             catch (Exception ex)
             {
@@ -388,13 +609,14 @@ public partial class ConversationHub
         // Client-reported turn metadata. Interruptions only count in the
         // scored role-play — the warm-up interlocutor legitimately speaks
         // first and the phase is unscored.
-        var (interruptedPatient, speechDurationMs) = ParseTurnMeta(turnMetaJson);
         if (isWarmUp) interruptedPatient = false;
-        var turnStartMs = speechDurationMs is > 0
-            ? Math.Max(0, nowMs - speechDurationMs.Value)
+        var turnStartMs = authoritativeSpeechDurationMs is > 0
+            ? Math.Max(0, nowMs - authoritativeSpeechDurationMs.Value)
             : nowMs;
         segments.Add(new SpeakingTurnSegment(
-            "candidate", turnStartMs, nowMs, learnerText, learnerConfidence, interruptedPatient));
+            "candidate", turnStartMs, nowMs, learnerText, learnerConfidence, interruptedPatient,
+            isWarmUp ? "warmup" : "roleplay", audioCapture?.RecordingId, wordConfidences));
+        var candidateSegmentNumber = segments.Count;
         var learnerTurnCount = segments.Count(s => string.Equals(s.Speaker, "candidate", StringComparison.Ordinal));
 
         if (!isWarmUp && personaService is not null && personaSnapshot is not null)
@@ -425,55 +647,166 @@ public partial class ConversationHub
         var rolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
         var remainingSeconds = Math.Max(0, rolePlaySeconds - elapsedSeconds);
 
-        ConversationAiReply reply;
-        try
+        SpeakingSimulationV11TurnTelemetryService? telemetryService = null;
+        SpeakingSimulationV11TurnLease? turnLease = null;
+        if (!isWarmUp)
         {
-            var orchestrator = sp.GetRequiredService<IConversationAiOrchestrator>();
-            var aiCtx = new ConversationAiContext(
-                SessionId: speakingSessionId,
-                UserId: userId,
-                AuthAccountId: null,
-                TenantId: null,
-                Profession: ParseProfessionCode(card.ProfessionId),
-                TaskTypeCode: isWarmUp ? "speaking_warmup" : "speaking_roleplay",
-                ScenarioJson: scenarioJson,
-                TranscriptJson: transcriptJson,
-                TurnIndex: learnerTurnCount,
-                ElapsedSeconds: elapsedSeconds,
-                RemainingSeconds: remainingSeconds,
-                CandidateCountry: null);
-            reply = await orchestrator.GenerateReplyAsync(aiCtx, ct);
-        }
-        catch (PromptNotGroundedException)
-        {
-            await Clients.Caller.SendAsync("SpeakingRoleplayError", "UNGROUNDED",
-                "AI grounding failed. Please contact support.");
-            return;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Speaking AI reply failed for session {SessionId}.", speakingSessionId);
-            await Clients.Caller.SendAsync("SpeakingRoleplayError", "AI_ERROR",
-                "The patient could not respond. Please try again.");
-            return;
+            telemetryService = sp.GetRequiredService<SpeakingSimulationV11TurnTelemetryService>();
+            turnLease = await telemetryService.TryAcquireAsync(
+                speakingSessionId, card.ProfessionId, "roleplay", ct);
+            if (turnLease is null)
+            {
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "V11_TURN_LIMITED",
+                    "This AI simulation is temporarily at capacity. Please try again shortly.", ct);
+                return;
+            }
         }
 
-        var replyText = string.IsNullOrWhiteSpace(reply.Text)
+        var sttEstimatedCostUsd = !isWarmUp && asrDurationMs > 0 && turnLease is not null
+            ? asrDurationMs / 60_000m * turnLease.Budget.SttCostPerMinuteUsd
+            : 0m;
+        var sttCostUnavailable = !isWarmUp && !string.Equals(asrProviderName, "text-input", StringComparison.OrdinalIgnoreCase)
+            && asrDurationMs <= 0;
+
+        try
+        {
+            ConversationAiReply reply;
+            try
+            {
+                var orchestrator = sp.GetRequiredService<IConversationAiOrchestrator>();
+                var aiCtx = new ConversationAiContext(
+                    SessionId: speakingSessionId,
+                    UserId: userId,
+                    AuthAccountId: null,
+                    TenantId: null,
+                    Profession: profession,
+                    TaskTypeCode: isWarmUp ? "speaking_warmup" : "speaking_roleplay",
+                    ScenarioJson: scenarioJson,
+                    TranscriptJson: transcriptJson,
+                    TurnIndex: learnerTurnCount,
+                    ElapsedSeconds: elapsedSeconds,
+                    RemainingSeconds: remainingSeconds,
+                    CandidateCountry: null);
+                reply = await orchestrator.GenerateReplyAsync(aiCtx, ct);
+            }
+            catch (PromptNotGroundedException)
+            {
+                if (turnLease is not null && telemetryService is not null)
+                {
+                    await telemetryService.RecordAsync(turnLease, new SpeakingSimulationV11TurnTelemetryInput(
+                        candidateSegmentNumber, "turn", "roleplay", transcriptRow?.Id,
+                        asrProviderName, null, asrLatencyMs,
+                        "unavailable", null, null, 0,
+                        null, null, 0, 0, 0, 0, 0, 0m, turnLease.ConcurrencyBucket,
+                        "actor_error", "actor_grounding_failed", "actor_grounding_failed", true, "{}",
+                        turnStartedAt, DateTimeOffset.UtcNow), ct);
+                    turnLease = null;
+                }
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "UNGROUNDED",
+                    "AI grounding failed. Please contact support.", ct);
+                return;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Speaking AI reply failed for session {SessionId}.", speakingSessionId);
+                if (turnLease is not null && telemetryService is not null)
+                {
+                    await telemetryService.RecordAsync(turnLease, new SpeakingSimulationV11TurnTelemetryInput(
+                        candidateSegmentNumber, "turn", "roleplay", transcriptRow?.Id,
+                        asrProviderName, null, asrLatencyMs,
+                         "unavailable", null, null, 0,
+                         null, null, 0, ElapsedMilliseconds(turnStartedAt), 0, 0, 0, 0m,
+                        turnLease.ConcurrencyBucket,
+                        "actor_error", "actor_unavailable", "actor_unavailable", true, "{}",
+                        turnStartedAt, DateTimeOffset.UtcNow), ct);
+                    turnLease = null;
+                }
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "AI_ERROR",
+                    "The patient could not respond. Please try again.", ct);
+                return;
+            }
+
+        var rawReplyText = string.IsNullOrWhiteSpace(reply.Text)
             ? "Sorry, could you say that again?"
             : reply.Text.Trim();
+        var replyText = SpeakingSimulationV11PersonaService.SanitizeActorReply(rawReplyText);
+        if (!string.Equals(rawReplyText, replyText, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "Replaced unsafe v1.1 actor response for session {SessionId}.",
+                speakingSessionId);
+        }
 
         // ── 4. Synthesise the reply + persist both turns ──
         var replyMs = nowMs + 800;
         segments.Add(new SpeakingTurnSegment(
-            isWarmUp ? "interlocutor" : "patient", replyMs, replyMs, replyText, 1.0));
+            isWarmUp ? "interlocutor" : "patient", replyMs, replyMs, replyText, 1.0, false,
+            isWarmUp ? "warmup" : "roleplay"));
+        var patientSegmentNumber = segments.Count;
 
         // TTS and transcript persistence are independent — run them
         // concurrently to shave reply latency (owner asks for a fast,
         // natural patient response).
-        var ttsTask = TrySynthesizeReplyAudioAsync(sp, replyText, ct);
+        var ttsTask = TrySynthesizeReplyTelemetryAsync(
+            sp,
+            replyText,
+            ct,
+            turnLease?.Budget.TtsCostPerThousandCharactersUsd);
         var persistTask = PersistSpeakingSegmentsAsync(db, transcriptRow, speakingSessionId, segments, ct);
         await Task.WhenAll(ttsTask, persistTask);
-        var replyAudioUrl = ttsTask.Result;
+        var ttsTelemetry = ttsTask.Result;
+        var replyAudioUrl = ttsTelemetry.AudioUrl;
+
+        if (turnLease is not null && telemetryService is not null)
+        {
+            var latestTranscriptId = await db.SpeakingTranscripts
+                .AsNoTracking()
+                .Where(t => t.SpeakingSessionId == speakingSessionId && t.IsLatest)
+                .OrderByDescending(t => t.GeneratedAt)
+                .Select(t => t.Id)
+                .FirstOrDefaultAsync(ct);
+            var ttsNeedsReview = ttsTelemetry.AudioUrl is null;
+            var estimatedCostUsd = sttEstimatedCostUsd
+                + reply.EstimatedCostUsd
+                + ttsTelemetry.EstimatedCostUsd;
+            var technicalReviewCode = ttsNeedsReview
+                ? "tts_unavailable"
+                : sttCostUnavailable ? "stt_cost_unavailable" : null;
+            await telemetryService.RecordAsync(turnLease, new SpeakingSimulationV11TurnTelemetryInput(
+                patientSegmentNumber,
+                "turn",
+                "roleplay",
+                latestTranscriptId,
+                asrProviderName,
+                null,
+                asrLatencyMs,
+                reply.ProviderName,
+                reply.ModelName,
+                reply.UsageRecordId,
+                reply.LatencyMs,
+                ttsTelemetry.ProviderName,
+                ttsTelemetry.ModelName,
+                ttsTelemetry.LatencyMs,
+                ElapsedMilliseconds(turnStartedAt),
+                reply.PromptTokens,
+                reply.CompletionTokens,
+                reply.RetryCount,
+                estimatedCostUsd,
+                turnLease.ConcurrencyBucket,
+                technicalReviewCode ?? "normal",
+                null,
+                technicalReviewCode,
+                ttsNeedsReview || sttCostUnavailable,
+                JsonSerializer.Serialize(new
+                {
+                    stt = sttEstimatedCostUsd,
+                    actorLlm = reply.EstimatedCostUsd,
+                    tts = ttsTelemetry.EstimatedCostUsd,
+                }),
+                turnStartedAt,
+                DateTimeOffset.UtcNow), ct);
+            turnLease = null;
+        }
 
         // ── 5. Stream the patient utterance back (hidden card stays server-side) ──
         await Clients.Caller.SendAsync("PatientUtterance", new
@@ -495,6 +828,73 @@ public partial class ConversationHub
                 at = DateTimeOffset.UtcNow,
             }, ct);
         }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The client disconnected or the server cancelled the turn. The
+            // lease is released by finally; no user-facing error is emitted.
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Speaking turn processing failed for session {SessionId}.", speakingSessionId);
+            if (turnLease is not null && telemetryService is not null)
+            {
+                try
+                {
+                    await telemetryService.RecordAsync(turnLease, new SpeakingSimulationV11TurnTelemetryInput(
+                        TurnNumber: candidateSegmentNumber,
+                        Role: "turn",
+                        Phase: "roleplay",
+                        SourceTranscriptId: transcriptRow?.Id,
+                        AsrProvider: asrProviderName,
+                        AsrModel: null,
+                        AsrLatencyMs: asrLatencyMs,
+                        ActorProvider: null,
+                        ActorModel: null,
+                        ActorUsageRecordId: null,
+                        ActorLatencyMs: 0,
+                        TtsProvider: null,
+                        TtsModel: null,
+                        TtsLatencyMs: 0,
+                        TotalLatencyMs: ElapsedMilliseconds(turnStartedAt),
+                        InputTokens: 0,
+                        OutputTokens: 0,
+                        RetryCount: 0,
+                        EstimatedCostUsd: 0m,
+                        ConcurrencyBucket: turnLease.ConcurrencyBucket,
+                        DegradationState: "processing_error",
+                        BudgetBreachCode: null,
+                        TechnicalReviewCode: "turn_processing_failed",
+                        TechnicalReviewRequired: true,
+                        CostComponentsJson: "{}",
+                        StartedAt: turnStartedAt,
+                        CompletedAt: DateTimeOffset.UtcNow),
+                        CancellationToken.None);
+                    turnLease = null;
+                }
+                catch (Exception telemetryException)
+                {
+                    logger.LogWarning(telemetryException,
+                        "Could not persist v1.1 processing-error telemetry for session {SessionId}.",
+                        speakingSessionId);
+                }
+            }
+
+            try
+            {
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "TURN_PROCESSING_ERROR",
+                    "The patient response could not be completed. Please try again.",
+                    CancellationToken.None);
+            }
+            catch
+            {
+                // The caller may have disconnected while the turn failed.
+            }
+        }
+        finally
+        {
+            turnLease?.Dispose();
+        }
     }
 
     /// <summary>
@@ -504,18 +904,13 @@ public partial class ConversationHub
     /// Idempotent — calling twice cancels the prior timer before starting
     /// a fresh one. Phase 4 (4.2).
     /// </summary>
-    public async Task StartRolePlayTimer(string speakingSessionId, int rolePlaySeconds)
+    public async Task StartRolePlayTimer(string speakingSessionId, int requestedRolePlaySeconds)
     {
         var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(speakingSessionId))
         {
             return;
         }
-        if (rolePlaySeconds <= 0)
-        {
-            return;
-        }
-
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var session = await db.SpeakingSessions
@@ -529,6 +924,21 @@ public partial class ConversationHub
         {
             return;
         }
+
+        var card = await db.RolePlayCards
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == session.RolePlayCardId, Context.ConnectionAborted);
+        if (card is null || session.RolePlayStartedAt is not { } rolePlayStartedAt)
+        {
+            return;
+        }
+
+        // Keep the public method compatible with existing clients, but never
+        // trust their duration. The published card and persisted server start
+        // timestamp are the only timing authorities.
+        _ = requestedRolePlaySeconds;
+        var rolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
+        var deadline = rolePlayStartedAt.AddSeconds(rolePlaySeconds);
 
         // Cancel any pre-existing timer for this session — replacing it
         // is intentional (e.g. learner refreshed the page).
@@ -552,10 +962,12 @@ public partial class ConversationHub
         {
             try
             {
-                var nearlyUpAfter = Math.Max(0, rolePlaySeconds - 30);
-                if (nearlyUpAfter > 0)
+                var now = DateTimeOffset.UtcNow;
+                var nearlyUpAt = deadline.AddSeconds(-30);
+                var untilNearlyUp = nearlyUpAt - now;
+                if (untilNearlyUp > TimeSpan.Zero)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(nearlyUpAfter), cts.Token);
+                    await Task.Delay(untilNearlyUp, cts.Token);
                     if (hubContext is not null)
                     {
                         await hubContext.Clients.Group(groupName).SendAsync(
@@ -565,8 +977,11 @@ public partial class ConversationHub
                     }
                 }
 
-                var remainingAfterNearlyUp = Math.Min(rolePlaySeconds, 30);
-                await Task.Delay(TimeSpan.FromSeconds(remainingAfterNearlyUp), cts.Token);
+                var untilDeadline = deadline - DateTimeOffset.UtcNow;
+                if (untilDeadline > TimeSpan.Zero)
+                {
+                    await Task.Delay(untilDeadline, cts.Token);
+                }
 
                 if (hubContext is not null)
                 {
@@ -596,17 +1011,35 @@ public partial class ConversationHub
                 // notification when the row is persisted.
                 try
                 {
-                    var assessor = sp.GetRequiredService<SpeakingAiAssessmentService>();
-                    var assessment = await assessor.RunAssessmentAsync(speakingSessionId, cts.Token);
+                    var assessmentDb = sp.GetRequiredService<LearnerDbContext>();
+                    var hasV11 = await assessmentDb.SpeakingSimulationV11PersonaRuntimeSnapshots
+                        .AsNoTracking()
+                        .AnyAsync(x => x.SpeakingSessionId == speakingSessionId, cts.Token);
+                    string assessmentId;
+                    bool awaitingReview;
+                    if (hasV11)
+                    {
+                        var v11Assessor = sp.GetRequiredService<SpeakingSimulationV11AssessmentService>();
+                        var v11 = await v11Assessor.RunAssessmentAsync(speakingSessionId, cts.Token);
+                        assessmentId = v11.AssessmentId;
+                        awaitingReview = string.IsNullOrEmpty(v11.AssessmentId)
+                            || !string.Equals(v11.Status, "Complete", StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        var assessor = sp.GetRequiredService<SpeakingAiAssessmentService>();
+                        var assessment = await assessor.RunAssessmentAsync(speakingSessionId, cts.Token);
+                        assessmentId = assessment.AssessmentId;
+                        awaitingReview = string.IsNullOrEmpty(assessment.AssessmentId);
+                    }
                     if (hubContext is not null)
                     {
                         // Mock Speaking is human-marked: RunAssessmentAsync returns an
                         // empty AssessmentId (no AI row) and the session is routed to
                         // the tutor queue. Signal "AwaitingReview" instead of a score.
-                        var awaitingReview = string.IsNullOrEmpty(assessment.AssessmentId);
                         await hubContext.Clients.Group(groupName).SendAsync(
                             awaitingReview ? "AwaitingReview" : "AssessmentReady",
-                            new { assessmentId = assessment.AssessmentId, sessionId = speakingSessionId, awaitingReview },
+                            new { assessmentId, sessionId = speakingSessionId, awaitingReview },
                             cts.Token);
                     }
                 }
@@ -629,6 +1062,7 @@ public partial class ConversationHub
             }
             finally
             {
+                LastSilencePromptAt.TryRemove(speakingSessionId, out _);
                 if (ActiveRolePlayTimers.TryRemove(speakingSessionId, out var done) && ReferenceEquals(done, cts))
                 {
                     done.Dispose();
@@ -650,6 +1084,7 @@ public partial class ConversationHub
             try { cts.Cancel(); } catch { /* ignore */ }
             cts.Dispose();
         }
+        LastSilencePromptAt.TryRemove(speakingSessionId, out _);
         return Task.CompletedTask;
     }
 
@@ -664,28 +1099,66 @@ public partial class ConversationHub
     /// </summary>
     private async Task<string?> TrySynthesizeReplyAudioAsync(
         IServiceProvider sp, string text, CancellationToken ct)
+        => (await TrySynthesizeReplyTelemetryAsync(sp, text, ct)).AudioUrl;
+
+    private async Task<SpeakingTtsTelemetry> TrySynthesizeReplyTelemetryAsync(
+        IServiceProvider sp,
+        string text,
+        CancellationToken ct,
+        decimal? costPerThousandCharactersUsd = null)
     {
-        if (string.IsNullOrWhiteSpace(text)) return null;
+        var startedAt = Stopwatch.GetTimestamp();
+        if (string.IsNullOrWhiteSpace(text))
+            return new SpeakingTtsTelemetry(null, null, null, 0, 0m);
         try
         {
             var ttsSelector = sp.GetRequiredService<IConversationTtsProviderSelector>();
             var tts = await ttsSelector.TrySelectAsync(ct);
-            if (tts is null) return null;
+            if (tts is null)
+                return new SpeakingTtsTelemetry(null, null, null, ElapsedMilliseconds(startedAt), 0m);
 
             var ttsResult = await tts.SynthesizeAsync(
                 new ConversationTtsRequest(text, string.Empty, "en-GB"), ct);
-            if (ttsResult.Audio.Length == 0) return null;
+            if (ttsResult.Audio.Length == 0)
+                return new SpeakingTtsTelemetry(
+                    null,
+                    ttsResult.ProviderName,
+                    ttsResult.ModelName,
+                    ElapsedMilliseconds(startedAt),
+                    0m);
 
             var audio = sp.GetRequiredService<IConversationAudioService>();
             var aref = await audio.WriteAsync(ttsResult.Audio, ttsResult.MimeType, ct);
-            return aref.Url;
+            return new SpeakingTtsTelemetry(
+                aref.Url,
+                ttsResult.ProviderName,
+                ttsResult.ModelName,
+                ElapsedMilliseconds(startedAt),
+                costPerThousandCharactersUsd is > 0
+                    ? text.Length / 1000m * costPerThousandCharactersUsd.Value
+                    : 0m);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Speaking utterance TTS failed.");
-            return null;
+            return new SpeakingTtsTelemetry(
+                null,
+                "unavailable",
+                null,
+                ElapsedMilliseconds(startedAt),
+                0m);
         }
     }
+
+    private static int ElapsedMilliseconds(long startedAt)
+        => (int)Math.Min(
+            int.MaxValue,
+            Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+
+    private static int ElapsedMilliseconds(DateTimeOffset startedAt)
+        => (int)Math.Min(
+            int.MaxValue,
+            Math.Max(0, (DateTimeOffset.UtcNow - startedAt).TotalMilliseconds));
 
     /// <summary>
     /// Builds a textual persona prompt the AI patient should adopt for
@@ -838,7 +1311,16 @@ public partial class ConversationHub
     /// started this turn while the patient was still speaking (barge-in) —
     /// the AI grader weighs it under relationship building/appropriateness.</summary>
     internal sealed record SpeakingTurnSegment(
-        string Speaker, long StartMs, long EndMs, string Text, double Confidence, bool Interrupted = false);
+        string Speaker, long StartMs, long EndMs, string Text, double Confidence, bool Interrupted = false,
+        string Phase = "roleplay", string? SourceRecordingId = null,
+        IReadOnlyList<ConversationWordConfidence>? WordConfidences = null);
+
+    private sealed record SpeakingTtsTelemetry(
+        string? AudioUrl,
+        string? ProviderName,
+        string? ModelName,
+        int LatencyMs,
+        decimal EstimatedCostUsd);
 
     /// <summary>Parses the optional client turn metadata JSON
     /// (<c>{"interruptedPatient":true,"speechDurationMs":N}</c>). Defensive:
@@ -865,22 +1347,6 @@ public partial class ConversationHub
         }
     }
 
-    /// <summary>Maps a free-form profession id (e.g. <c>"occupational-therapy"</c>)
-    /// to the <see cref="ExamProfession"/> enum, mirroring
-    /// <c>SpeakingAiAssessmentService.ParseProfession</c> so AI grounding is
-    /// consistent between the live loop and post-hoc assessment.</summary>
-    private static ExamProfession ParseProfessionCode(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return ExamProfession.Medicine;
-        var normalised = raw
-            .Replace("-", "", StringComparison.Ordinal)
-            .Replace("_", "", StringComparison.Ordinal)
-            .Replace(" ", "", StringComparison.Ordinal);
-        return Enum.TryParse<ExamProfession>(normalised, ignoreCase: true, out var parsed)
-            ? parsed
-            : ExamProfession.Medicine;
-    }
-
     /// <summary>Parses an existing <c>SpeakingTranscript.SegmentsJson</c>
     /// array into the typed segment list, tolerating malformed / failure
     /// envelopes by returning an empty list.</summary>
@@ -901,7 +1367,16 @@ public partial class ConversationHub
                 var text = s.TryGetProperty("text", out var tx) ? tx.GetString() ?? string.Empty : string.Empty;
                 var conf = s.TryGetProperty("confidence", out var cf) && cf.ValueKind == JsonValueKind.Number ? cf.GetDouble() : 1.0;
                 var interrupted = s.TryGetProperty("interrupted", out var ir) && ir.ValueKind == JsonValueKind.True;
-                list.Add(new SpeakingTurnSegment(speaker, startMs, endMs, text, conf, interrupted));
+                var phase = s.TryGetProperty("phase", out var ph) && ph.ValueKind == JsonValueKind.String
+                    ? ph.GetString() ?? "roleplay"
+                    : "roleplay";
+                var sourceRecordingId = s.TryGetProperty("sourceRecordingId", out var sr)
+                    && sr.ValueKind == JsonValueKind.String
+                    ? sr.GetString()
+                    : null;
+                var wordConfidences = ParseWordConfidences(s);
+                list.Add(new SpeakingTurnSegment(speaker, startMs, endMs, text, conf, interrupted, phase,
+                    sourceRecordingId, wordConfidences));
             }
         }
         catch (JsonException)
@@ -924,8 +1399,60 @@ public partial class ConversationHub
             text = s.Text,
             confidence = s.Confidence,
             interrupted = s.Interrupted,
-            words = Array.Empty<string>(),
+            phase = s.Phase,
+            sourceRecordingId = s.SourceRecordingId,
+            words = (s.WordConfidences ?? []).Select(word => new
+            {
+                word = word.Word,
+                startMs = word.StartMs,
+                endMs = word.EndMs,
+                confidence = word.Confidence,
+            }),
         }));
+
+    private static IReadOnlyList<ConversationWordConfidence> ParseWordConfidences(JsonElement segment)
+    {
+        if (!segment.TryGetProperty("words", out var words) || words.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var result = new List<ConversationWordConfidence>();
+        foreach (var word in words.EnumerateArray())
+        {
+            if (word.ValueKind != JsonValueKind.Object) continue;
+            var value = word.TryGetProperty("word", out var wordValue)
+                ? wordValue.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            var startMs = word.TryGetProperty("startMs", out var start)
+                && start.ValueKind == JsonValueKind.Number && start.TryGetInt32(out var startValue)
+                ? Math.Max(0, startValue)
+                : 0;
+            var endMs = word.TryGetProperty("endMs", out var end)
+                && end.ValueKind == JsonValueKind.Number && end.TryGetInt32(out var endValue)
+                ? Math.Max(startMs, endValue)
+                : startMs;
+            var confidence = word.TryGetProperty("confidence", out var conf)
+                && conf.ValueKind == JsonValueKind.Number
+                ? Math.Clamp(conf.GetDouble(), 0.0, 1.0)
+                : 0.0;
+            result.Add(new ConversationWordConfidence(value.Trim(), startMs, endMs, confidence));
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<ConversationWordConfidence> BuildFallbackWordConfidences(
+        string text, double confidence, long durationMs)
+    {
+        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0) return [];
+        var totalDuration = Math.Max(words.Length * 250L, durationMs);
+        return words.Select((word, index) =>
+        {
+            var start = (int)Math.Min((long)int.MaxValue, totalDuration * index / words.Length);
+            var end = (int)Math.Min((long)int.MaxValue, totalDuration * (index + 1) / words.Length);
+            return new ConversationWordConfidence(word, start, Math.Max(start, end), confidence);
+        }).ToArray();
+    }
 
     private static async Task PersistSpeakingSegmentsAsync(
         LearnerDbContext db,

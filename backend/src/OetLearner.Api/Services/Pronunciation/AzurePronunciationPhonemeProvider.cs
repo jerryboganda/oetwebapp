@@ -21,6 +21,9 @@ public sealed class AzurePronunciationPhonemeProvider(
 
     public bool IsConfigured => azureAsr.IsConfigured;
 
+    public Task<bool> IsConfiguredAsync(CancellationToken ct = default)
+        => azureAsr.IsConfiguredAsync(ct);
+
     public Task<AsrResult> AnalyzePhonemesAsync(AsrRequest request, CancellationToken ct)
         => azureAsr.AnalyzeAsync(request, ct);
 }

@@ -28,6 +28,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { DualAssessmentLayout } from '@/components/domain/speaking/DualAssessmentLayout';
+import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
 import { TranscriptPlayerWithComments, type TranscriptPayload } from '@/components/domain/speaking/TranscriptPlayerWithComments';
 import {
   SpeakingAssessmentApiError,
@@ -45,6 +46,12 @@ import {
   type SpeakingResultVisibilityDto,
 } from '@/lib/api/speaking-result-visibility';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
+import {
+  getSpeakingSimulationV11Assessment,
+  getSpeakingSimulationV11TutorOverride,
+  type SpeakingSimulationV11AssessmentResponse,
+  type SpeakingSimulationV11LearnerTutorOverride,
+} from '@/lib/api/speaking-simulation-v11';
 
 function TutorReviewCta() {
   return (
@@ -93,6 +100,8 @@ export default function SpeakingSessionResultsPage() {
   const sessionId = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
 
   const [data, setData] = useState<DualAssessmentResponse | null>(null);
+  const [v11, setV11] = useState<SpeakingSimulationV11AssessmentResponse | null>(null);
+  const [v11TutorOverride, setV11TutorOverride] = useState<SpeakingSimulationV11LearnerTutorOverride | null>(null);
   const [session, setSession] = useState<SpeakingSessionDetail | null>(null);
   const [visibility, setVisibility] = useState<SpeakingResultVisibilityDto | null>(null);
   const [transcript, setTranscript] = useState<SpeakingTranscriptPayload | null>(null);
@@ -110,15 +119,24 @@ export default function SpeakingSessionResultsPage() {
       const sessionDetail = await getSpeakingSession(sessionId);
       const visibilityDto = await getSpeakingResultVisibility(sessionDetail.card.cardId).catch(() => null);
 
-      const assessmentPromise = learnerGetDualAssessment(sessionId);
+      const assessmentPromise = learnerGetDualAssessment(sessionId).catch(() => null);
+      const v11Promise = getSpeakingSimulationV11Assessment(sessionId).catch(() => null);
+      const v11TutorOverridePromise = getSpeakingSimulationV11TutorOverride(sessionId).catch(() => null);
       const transcriptPromise = visibilityDto?.showTranscript !== false
         ? getSpeakingSessionTranscript(sessionId).catch(() => null)
         : Promise.resolve(null);
 
-      const [assessmentResponse, transcriptResponse] = await Promise.all([assessmentPromise, transcriptPromise]);
+      const [v11Response, assessmentResponse, transcriptResponse, tutorOverrideResponse] = await Promise.all([
+        v11Promise,
+        assessmentPromise,
+        transcriptPromise,
+        v11TutorOverridePromise,
+      ]);
       setSession(sessionDetail);
       setVisibility(visibilityDto);
       setData(assessmentResponse);
+      setV11(v11Response);
+      setV11TutorOverride(tutorOverrideResponse);
       setTranscript(transcriptResponse?.transcript ?? null);
     } catch (err) {
       const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to load assessment.';
@@ -135,12 +153,12 @@ export default function SpeakingSessionResultsPage() {
   useEffect(() => {
     // Poll once a minute while AI is still processing or the transcript is pending.
     const interval = window.setInterval(() => {
-      if (!data?.ai || (visibility?.showTranscript && !transcript)) {
+      if ((!v11 && !data?.ai) || (visibility?.showTranscript && !transcript)) {
         void load(false);
       }
     }, 60_000);
     return () => window.clearInterval(interval);
-  }, [data?.ai, load, transcript, visibility?.showTranscript]);
+  }, [data?.ai, load, transcript, v11, visibility?.showTranscript]);
 
   const showSubmissionReceived = visibility?.showSubmissionReceived ?? true;
   const showAiEstimate = visibility?.showAiEstimate ?? true;
@@ -247,6 +265,37 @@ export default function SpeakingSessionResultsPage() {
             <Skeleton className="h-96 w-full" />
             <Skeleton className="h-96 w-full" />
           </div>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
+
+  if (v11 && session) {
+    return (
+      <LearnerDashboardShell
+        pageTitle="Speaking results"
+        subtitle={`${session.card.scenarioTitle} · Session ${sessionId.slice(0, 8)}…`}
+      >
+        <div className="flex flex-col gap-4">
+          {showSubmissionReceived && session.submittedAt ? (
+            <InlineAlert
+              variant="success"
+              title="Submission received"
+              action={allowReattempt ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={reattemptHref}>Try another role play</Link>
+                </Button>
+              ) : undefined}
+            >
+              We received your recording{submissionAtLabel ? ` on ${submissionAtLabel}` : ''} and queued it for the released v1.1 practice report.
+            </InlineAlert>
+          ) : null}
+          <SpeakingSimulationV11ReportView
+            sessionId={sessionId}
+            response={v11}
+            transcript={showTranscript ? transcript : null}
+            tutorOverride={v11TutorOverride}
+          />
         </div>
       </LearnerDashboardShell>
     );

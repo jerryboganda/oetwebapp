@@ -194,7 +194,14 @@ export interface SpeakingTranscriptSegment {
   endMs: number;
   text: string;
   confidence?: number;
-  words?: unknown[];
+  words?: SpeakingTranscriptWord[];
+}
+
+export interface SpeakingTranscriptWord {
+  word: string;
+  startMs: number;
+  endMs: number;
+  confidence: number;
 }
 
 export interface SpeakingTranscriptPayload {

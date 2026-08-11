@@ -3,11 +3,11 @@
 /**
  * Speaking module rebuild (2026-06-11 spec).
  *
- * Results page for the two-card Speaking exam. AI-mode exams show the OFFICIAL
- * per-card AI scores + combined readiness band. Live-tutor exams show an
- * "awaiting examiner marking" state until the tutor submits.
+ * Results page for the two-card Speaking exam. v1.1 AI-mode exams show the
+ * calibrated practice report; live-tutor exams remain pending until a tutor
+ * submits. Legacy sessions retain their existing result fallback.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Mic } from 'lucide-react';
@@ -20,6 +20,17 @@ import {
   type SpeakingExamResults,
 } from '@/lib/api/speaking-exams';
 import { ApiError } from '@/lib/api';
+import { getSpeakingSessionTranscript, type SpeakingTranscriptPayload } from '@/lib/api/speaking-sessions';
+import {
+  getSpeakingSimulationV11Assessment,
+  getSpeakingSimulationV11CombinedAssessment,
+  getSpeakingSimulationV11TutorOverride,
+  runSpeakingSimulationV11Assessment,
+  runSpeakingSimulationV11CombinedAssessment,
+  type SpeakingSimulationV11AssessmentResponse,
+  type SpeakingSimulationV11LearnerTutorOverride,
+} from '@/lib/api/speaking-simulation-v11';
+import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
 
 const POLL_INTERVAL_MS = 4_000;
 
@@ -27,14 +38,66 @@ export default function SpeakingExamResultsPage() {
   const params = useParams<{ id: string }>();
   const examId = params?.id ?? '';
   const [results, setResults] = useState<SpeakingExamResults | null>(null);
+  const [v11Cards, setV11Cards] = useState<Record<string, SpeakingSimulationV11AssessmentResponse>>({});
+  const [v11Transcripts, setV11Transcripts] = useState<Record<string, SpeakingTranscriptPayload | null>>({});
+  const [v11TutorOverrides, setV11TutorOverrides] = useState<Record<string, SpeakingSimulationV11LearnerTutorOverride | null>>({});
+  const [v11Combined, setV11Combined] = useState<SpeakingSimulationV11AssessmentResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestedCardAssessmentsRef = useRef(new Set<string>());
+  const requestedCombinedRef = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!examId) return;
     try {
       const r = await getSpeakingExamResults(examId);
       setResults(r);
+      const isAiExam = r.mode === 'ai';
+      const canAssessV11 = isAiExam && r.state === 'completed';
+      const cardDetails = await Promise.all(
+        r.cards.map(async (card) => {
+          if (!card.sessionId) return null;
+          const existing = await getSpeakingSimulationV11Assessment(card.sessionId).catch(() => null);
+          let assessment = existing;
+          if (!assessment && canAssessV11 && !requestedCardAssessmentsRef.current.has(card.sessionId)) {
+            assessment = await runSpeakingSimulationV11Assessment(card.sessionId).catch(() => null);
+            if (assessment) requestedCardAssessmentsRef.current.add(card.sessionId);
+          }
+          const [transcriptResponse, tutorOverride] = await Promise.all([
+            getSpeakingSessionTranscript(card.sessionId).catch(() => null),
+            getSpeakingSimulationV11TutorOverride(card.sessionId).catch(() => null),
+          ]);
+          return {
+            sessionId: card.sessionId,
+            assessment,
+            transcript: transcriptResponse?.transcript ?? null,
+            tutorOverride,
+          };
+        }),
+      );
+      const nextCards: Record<string, SpeakingSimulationV11AssessmentResponse> = {};
+      const nextTranscripts: Record<string, SpeakingTranscriptPayload | null> = {};
+      const nextTutorOverrides: Record<string, SpeakingSimulationV11LearnerTutorOverride | null> = {};
+      for (const item of cardDetails) {
+        if (!item) continue;
+        if (item.assessment) nextCards[item.sessionId] = item.assessment;
+        nextTranscripts[item.sessionId] = item.transcript;
+        nextTutorOverrides[item.sessionId] = item.tutorOverride;
+      }
+      setV11Cards(nextCards);
+      setV11Transcripts(nextTranscripts);
+      setV11TutorOverrides(nextTutorOverrides);
+
+      let combined = await getSpeakingSimulationV11CombinedAssessment(examId).catch(() => null);
+      const completeCards = Object.values(nextCards).filter((item) => item.status === 'Complete');
+      if (!combined && canAssessV11 && completeCards.length === 2 && !requestedCombinedRef.current) {
+        const assessedCombined = await runSpeakingSimulationV11CombinedAssessment(examId).catch(() => null);
+        if (assessedCombined) {
+          requestedCombinedRef.current = true;
+          combined = assessedCombined;
+        }
+      }
+      setV11Combined(combined);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.userMessage : 'Could not load results.');
@@ -69,6 +132,49 @@ export default function SpeakingExamResultsPage() {
   }
 
   if (!results) return null;
+
+  const firstCardSessionId = results.cards.find((card) => card.sessionId)?.sessionId ?? examId;
+  if (v11Combined) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <SpeakingSimulationV11ReportView
+          sessionId={firstCardSessionId}
+          response={v11Combined}
+          transcriptsBySessionId={v11Transcripts}
+          tutorOverridesBySessionId={v11TutorOverrides}
+          title="Full Speaking mock report"
+        />
+        <div className="mt-6 flex justify-center">
+          <Button asChild variant="outline">
+            <Link href="/speaking">Back to Speaking</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const firstV11Entry = results.cards
+    .map((card) => card.sessionId ? [card.sessionId, v11Cards[card.sessionId]] as const : null)
+    .find((entry): entry is readonly [string, SpeakingSimulationV11AssessmentResponse] => Boolean(entry?.[1]));
+  if (firstV11Entry) {
+    const [firstV11SessionId, firstV11Card] = firstV11Entry;
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <SpeakingSimulationV11ReportView
+          sessionId={firstV11SessionId}
+          response={firstV11Card}
+          transcript={v11Transcripts[firstV11SessionId]}
+          tutorOverride={v11TutorOverrides[firstV11SessionId]}
+          title="Speaking card report"
+        />
+        <div className="mt-6 flex justify-center">
+          <Button asChild variant="outline">
+            <Link href="/speaking">Back to Speaking</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const pending = results.overallStatus !== 'scored';
   const awaitingTutor = results.overallStatus === 'awaiting_tutor';

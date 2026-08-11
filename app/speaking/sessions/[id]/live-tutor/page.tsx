@@ -164,6 +164,7 @@ export default function SpeakingSessionLiveTutorPage() {
       {!consentAccepted ? (
         <SpeakingConsentBanner
           sessionMode="live_tutor"
+          sessionId={session.sessionId}
           onAccepted={() => setConsentAccepted(true)}
         />
       ) : null}

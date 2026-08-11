@@ -31,6 +31,20 @@ public sealed class SpeakingSimulationV11PersonaServiceTests
     }
 
     [Fact]
+    public void Actor_safety_boundary_replaces_coaching_or_medical_advice()
+    {
+        Assert.Equal(
+            SpeakingSimulationV11PersonaService.NeutralSilencePrompt,
+            SpeakingSimulationV11PersonaService.SanitizeActorReply("Excellent question. Your score will be high."));
+        Assert.Equal(
+            SpeakingSimulationV11PersonaService.NeutralSilencePrompt,
+            SpeakingSimulationV11PersonaService.SanitizeActorReply("You should stop taking this medicine immediately."));
+        Assert.Equal(
+            "I feel worried about the pain.",
+            SpeakingSimulationV11PersonaService.SanitizeActorReply(" I feel worried about the pain. "));
+    }
+
+    [Fact]
     public async Task Card_b_is_independent_without_explicit_authoring_flag()
     {
         await using var db = CreateDb();

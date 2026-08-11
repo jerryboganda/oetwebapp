@@ -23,6 +23,7 @@ import {
   recordSpeakingConsent,
   type SpeakingConsentType,
 } from '@/lib/api/speaking-compliance';
+import { recordConsent } from '@/lib/api/speaking-sessions';
 
 const FALLBACK_DISCLAIMER =
   'Practice estimate only. This is not an official OET score or result.';
@@ -36,12 +37,15 @@ const FALLBACK_LIVE_VIDEO_BODY =
 interface ComplianceCopy {
   consentText?: unknown;
   scoreDisclaimer?: unknown;
+  speakingSimulationV11RetentionNotice?: unknown;
 }
 
 export type SpeakingSessionMode = 'ai' | 'live_tutor';
 
 export interface SpeakingConsentBannerProps {
   sessionMode: SpeakingSessionMode;
+  /** Speaking session whose recorder gate must be opened after compliance consent. */
+  sessionId?: string;
   /** Invoked once the consent row has been written successfully. */
   onAccepted: () => void;
   /** Optional explicit consent version override (testing). */
@@ -59,6 +63,7 @@ function resolveConsentType(mode: SpeakingSessionMode): SpeakingConsentType {
 
 export function SpeakingConsentBanner({
   sessionMode,
+  sessionId,
   onAccepted,
   consentVersionOverride,
   postConsent,
@@ -71,6 +76,7 @@ export function SpeakingConsentBanner({
   const [accepted, setAccepted] = useState(false);
   const [serverDisclaimer, setServerDisclaimer] = useState<string>(FALLBACK_DISCLAIMER);
   const [serverConsentText, setServerConsentText] = useState<string | null>(null);
+  const [serverRetentionNotice, setServerRetentionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +89,10 @@ export function SpeakingConsentBanner({
         }
         if (typeof data.consentText === 'string' && data.consentText.trim().length > 0) {
           setServerConsentText(data.consentText);
+        }
+        if (typeof data.speakingSimulationV11RetentionNotice === 'string'
+          && data.speakingSimulationV11RetentionNotice.trim().length > 0) {
+          setServerRetentionNotice(data.speakingSimulationV11RetentionNotice);
         }
       })
       .catch(() => {
@@ -107,12 +117,16 @@ export function SpeakingConsentBanner({
           recordSpeakingConsent(input));
       if (sessionMode === 'live_tutor') {
         await post({ consentType: 'recording' });
+        await post({ consentType: 'tutor_review' });
+        await post({ consentType: 'retention' });
         await post({ consentType: 'live_video_with_tutor' });
       } else {
-        await post({
-          consentType,
-          consentVersion: consentVersionOverride,
-        });
+        await post({ consentType, consentVersion: consentVersionOverride });
+        await post({ consentType: 'ai_processing' });
+        await post({ consentType: 'retention' });
+      }
+      if (sessionId) {
+        await recordConsent(sessionId, consentVersionOverride ?? 'recording.v1');
       }
       setAccepted(true);
       onAccepted();
@@ -122,7 +136,7 @@ export function SpeakingConsentBanner({
     } finally {
       setAccepting(false);
     }
-  }, [consentType, consentVersionOverride, onAccepted, postConsent, sessionMode]);
+  }, [consentType, consentVersionOverride, onAccepted, postConsent, sessionId, sessionMode]);
 
   if (accepted) {
     return null;
@@ -154,6 +168,11 @@ export function SpeakingConsentBanner({
 
         <div id={descId} className="space-y-3 text-sm leading-relaxed text-foreground">
           <p>{bodyCopy}</p>
+          {serverRetentionNotice ? (
+            <p className="rounded-lg border border-border bg-background-light p-3 text-xs leading-relaxed text-muted">
+              {serverRetentionNotice}
+            </p>
+          ) : null}
           <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-amber-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <p className="text-xs">{serverDisclaimer}</p>

@@ -25,7 +25,8 @@ namespace OetLearner.Api.Services.Speaking;
 public sealed class SpeakingSessionService(
     LearnerDbContext db,
     IAiPackageCreditService? aiPackageCreditService = null,
-    IEffectiveEntitlementResolver? entitlementResolver = null)
+    IEffectiveEntitlementResolver? entitlementResolver = null,
+    SpeakingSimulationV11PersonaService? personaService = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -106,6 +107,15 @@ public sealed class SpeakingSessionService(
 
         db.Attempts.Add(attempt);
         db.SpeakingSessions.Add(session);
+        // Capture the immutable v1.1 persona at card reveal. The script
+        // existence check keeps legacy unconfigured cards on their existing
+        // path and never manufactures hidden persona facts.
+        if (await db.InterlocutorScripts.AsNoTracking()
+            .AnyAsync(x => x.RolePlayCardId == card.Id, ct))
+        {
+            var runtimePersona = personaService ?? new SpeakingSimulationV11PersonaService(db);
+            await runtimePersona.CaptureAtRevealAsync(null, session, card, now, ct);
+        }
         await db.SaveChangesAsync(ct);
 
         // Until warm-up finishes the prep window has not started, so the
