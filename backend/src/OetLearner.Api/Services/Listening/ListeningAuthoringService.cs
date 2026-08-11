@@ -140,7 +140,9 @@ public sealed record ListeningQuestionPatch(
     string? SpeakerAttitude = null,
     int? TranscriptEvidenceStartMs = null,
     int? TranscriptEvidenceEndMs = null,
-    string? AcceptedVariantChangeReason = null);
+    string? AcceptedVariantChangeReason = null,
+    string? ValidationStatus = null,
+    string? ValidationNote = null);
 
 /// <summary>
 /// Per-extract PATCH body. Every field is nullable so admins can ship a
@@ -192,7 +194,12 @@ public sealed record ListeningAuthoredQuestion(
     string? SpeakerAttitude = null,
     // Phase 5: time-coded transcript evidence (start/end ms in section audio).
     int? TranscriptEvidenceStartMs = null,
-    int? TranscriptEvidenceEndMs = null);
+    int? TranscriptEvidenceEndMs = null,
+    // Section 12: every published question carries an explicit validation
+    // status. New/imported questions are draft until an authorised reviewer
+    // marks them published through the authoring workflow.
+    string ValidationStatus = "draft",
+    string? ValidationNote = null);
 
 public sealed record ListeningAuthoredQuestionList(
     IReadOnlyList<ListeningAuthoredQuestion> Questions,
@@ -1329,7 +1336,11 @@ public sealed class ListeningAuthoringService(
             OptionDistractorCategory: ReadNullableList("optionDistractorCategory"),
             SpeakerAttitude: Read("speakerAttitude"),
             TranscriptEvidenceStartMs: ReadInt("transcriptEvidenceStartMs"),
-            TranscriptEvidenceEndMs: ReadInt("transcriptEvidenceEndMs"));
+            TranscriptEvidenceEndMs: ReadInt("transcriptEvidenceEndMs"),
+            ValidationStatus: NormalizeValidationStatus(Read("validationStatus")),
+            ValidationNote: Read("validationNote") is { } validationNote && !string.IsNullOrWhiteSpace(validationNote)
+                ? validationNote.Trim()
+                : null);
     }
 
     private static ListeningAuthoredQuestion NormalizeForStorage(ListeningAuthoredQuestion q)
@@ -1368,7 +1379,20 @@ public sealed class ListeningAuthoringService(
             SpeakerAttitude = NormalizeSpeakerAttitude(q.SpeakerAttitude),
             TranscriptEvidenceStartMs = q.TranscriptEvidenceStartMs is int s && s >= 0 ? s : null,
             TranscriptEvidenceEndMs = q.TranscriptEvidenceEndMs is int e && e >= 0 ? e : null,
+            ValidationStatus = NormalizeValidationStatus(q.ValidationStatus),
+            ValidationNote = string.IsNullOrWhiteSpace(q.ValidationNote) ? null : q.ValidationNote.Trim(),
         };
+    }
+
+    private static readonly HashSet<string> AllowedValidationStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "draft", "in_review", "validated", "published", "rejected",
+    };
+
+    private static string NormalizeValidationStatus(string? raw)
+    {
+        var normalized = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        return AllowedValidationStatuses.Contains(normalized) ? normalized : "draft";
     }
 
     private static readonly HashSet<string> AllowedDistractorCategories = new(StringComparer.OrdinalIgnoreCase)
@@ -1698,6 +1722,8 @@ public sealed class ListeningAuthoringService(
             SpeakerAttitude = p.SpeakerAttitude ?? existing.SpeakerAttitude,
             TranscriptEvidenceStartMs = p.TranscriptEvidenceStartMs ?? existing.TranscriptEvidenceStartMs,
             TranscriptEvidenceEndMs = p.TranscriptEvidenceEndMs ?? existing.TranscriptEvidenceEndMs,
+            ValidationStatus = p.ValidationStatus ?? existing.ValidationStatus,
+            ValidationNote = p.ValidationNote ?? existing.ValidationNote,
         };
 
     private static ListeningAuthoredExtract ApplyExtractPatch(

@@ -84,6 +84,19 @@ public static class ListeningAuthoringAdminEndpoints
         return Results.Forbid();
     }
 
+    private static IResult? EnforceQuestionValidationPublishPermission(HttpContext http, bool promotingToPublished)
+    {
+        if (!promotingToPublished) return null;
+        var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+        return AdminPermissionEvaluator.HasAny(
+            perms,
+            AdminPermissions.ContentPublish,
+            AdminPermissions.ContentPublisherApproval,
+            AdminPermissions.SystemAdmin)
+            ? null
+            : Results.Forbid();
+    }
+
     public static IEndpointRouteBuilder MapListeningAuthoringAdminEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/v1/admin/papers/{paperId}/listening")
@@ -199,6 +212,15 @@ public static class ListeningAuthoringAdminEndpoints
             var conflict = CheckIfMatch(http, paper);
             if (conflict is not null) return conflict;
 
+            var current = await svc.GetStructureAsync(paperId, ct);
+            var currentById = current.Questions.ToDictionary(q => q.Id, StringComparer.OrdinalIgnoreCase);
+            var promotesQuestion = (body?.Questions ?? []).Any(q =>
+                string.Equals(q.ValidationStatus, "published", StringComparison.OrdinalIgnoreCase)
+                && (!currentById.TryGetValue(q.Id, out var existing)
+                    || !string.Equals(existing.ValidationStatus, "published", StringComparison.OrdinalIgnoreCase)));
+            var validationForbidden = EnforceQuestionValidationPublishPermission(http, promotesQuestion);
+            if (validationForbidden is not null) return validationForbidden;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var doc = await svc.ReplaceStructureAsync(paperId, body.Questions ?? [], adminId, ct);
             await db.Entry(paper).ReloadAsync(ct);
@@ -224,6 +246,11 @@ public static class ListeningAuthoringAdminEndpoints
             if (forbidden is not null) return forbidden;
             var conflict = CheckIfMatch(http, paper);
             if (conflict is not null) return conflict;
+
+            var validationForbidden = EnforceQuestionValidationPublishPermission(
+                http,
+                string.Equals(body?.ValidationStatus, "published", StringComparison.OrdinalIgnoreCase));
+            if (validationForbidden is not null) return validationForbidden;
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var doc = await svc.PatchQuestionAsync(paperId, questionId, body ?? new(), adminId, ct);

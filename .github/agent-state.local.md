@@ -920,6 +920,13 @@ dirty work in the main checkout.
   snapshots. Listening Part A bulk editing now requires a reason for variant
   changes and renders the same history per answer row; question editors show
   the history inline.
+- Listening questions now carry `validationStatus`/`validationNote` in the
+  existing authoring JSON and relational contracts, the admin question editor
+  exposes them, both JSON and relational publish validation hard-block any
+  question not marked `published`, and only content-publish/publisher-approval
+  permissions may promote a question to `published`. Added a focused fixture
+  regression for the fail-closed default and updated canonical publish-ready
+  fixtures.
 - Only `git diff --check` and scoped source searches were run by request;
   no long local validation, CI, push, or deployment was started.
 - Preserve the four untracked user-owned paths above. Owner release inputs and

@@ -279,11 +279,24 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 q.TranscriptEvidenceStartMs,
                 q.TranscriptEvidenceEndMs,
                 q.DifficultyLevel,
+                ValidationStatus = (q.ValidationStatus ?? string.Empty).Trim().ToLowerInvariant(),
                 Options = q.Options
                     .Select(o => new RelationalOption(o.OptionKey, o.Text, o.IsCorrect, o.DistractorCategory))
                     .ToArray(),
             })
             .ToList();
+
+        var unpublishedStatuses = rows
+            .Where(row => row.ValidationStatus != "published")
+            .Select(row => row.QuestionNumber)
+            .Distinct()
+            .OrderBy(number => number)
+            .ToArray();
+        if (unpublishedStatuses.Length > 0)
+        {
+            warnings.Add(new("listening_question_validation_status", "error",
+                $"Every Listening question requires validationStatus=published before paper publish; question(s) {string.Join(", ", unpublishedStatuses)} are not published."));
+        }
 
         var a1 = rows.Count(row => row.PartCode == ListeningPartCode.A1);
         var a2 = rows.Count(row => row.PartCode == ListeningPartCode.A2);
@@ -791,9 +804,16 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var missingQuestionDifficulty = 0;
         var wrongOptionsMissingDistractorCategory = 0;
         var wrongOptionsInvalidDistractorCategory = 0;
+        var unpublishedStatuses = new List<int>();
 
         foreach (var q in questions)
         {
+            var validationStatus = (ReadString(q, "validationStatus") ?? "draft").Trim().ToLowerInvariant();
+            if (!string.Equals(validationStatus, "published", StringComparison.Ordinal))
+            {
+                unpublishedStatuses.Add(TryGetInt(q, "number") ?? 0);
+            }
+
             if (TryGetInt(q, "number") is int number)
             {
                 numbers[number] = numbers.GetValueOrDefault(number) + 1;
@@ -916,6 +936,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_blank_answers", "error",
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
+        }
+
+        if (unpublishedStatuses.Count > 0)
+        {
+            warnings.Add(new("listening_question_validation_status", "error",
+                $"Every Listening question requires validationStatus=published before paper publish; question(s) {string.Join(", ", unpublishedStatuses.Where(n => n > 0).Distinct().OrderBy(n => n))} are not published."));
         }
 
         if (mcqItemsWithBadShape > 0)

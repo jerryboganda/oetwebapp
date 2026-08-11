@@ -954,6 +954,8 @@ public sealed class ListeningGradingService
             AcceptedSynonymsJson = correctedVariants,
             CaseSensitive = question.CaseSensitive,
             Options = question.Options,
+            ValidationStatus = question.ValidationStatus,
+            ValidationNote = question.ValidationNote,
             Version = question.Version,
         };
     }

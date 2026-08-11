@@ -397,6 +397,12 @@ public class ListeningQuestion
     /// Used by drill targeting and CAT/IRT placement (v2.1 deferred).</summary>
     public int? DifficultyLevel { get; set; }
 
+    [MaxLength(32)]
+    public string ValidationStatus { get; set; } = "draft";
+
+    [MaxLength(2048)]
+    public string? ValidationNote { get; set; }
+
     /// <summary>Listening V2 — version-pin counter incremented by
     /// <c>ListeningAuthoringService</c> on every meaningful edit (stem,
     /// correct answer, options, accepted synonyms). In-flight attempts

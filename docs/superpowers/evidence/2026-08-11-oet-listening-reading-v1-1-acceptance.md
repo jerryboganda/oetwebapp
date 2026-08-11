@@ -207,3 +207,11 @@ an owner-controlled value that must not be invented in code.
   The remaining backend failures are the known owner-approved marking-policy
   gate and legacy expectations for unavailable score conversion/default
   normalization; no owner values were invented to mask them.
+
+- Listening authored questions now carry an explicit `validationStatus` and
+  optional validation note in the admin JSON and relational structures. Both
+  JSON and relational publish validation fail closed unless every question is
+  marked `published`; promotion to `published` is restricted to content-publish
+  or publisher-approval permissions. Canonical publish-ready fixtures now set
+  the explicit status, and a missing-status regression is present; focused
+  execution and deployed admin verification remain pending.

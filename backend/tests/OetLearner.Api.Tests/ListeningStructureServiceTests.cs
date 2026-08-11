@@ -84,6 +84,7 @@ public class ListeningStructureServiceTests
                 transcriptEvidenceStartMs = num * 1000,
                 transcriptEvidenceEndMs = num * 1000 + 500,
                 difficultyLevel = 3,
+                validationStatus = "published",
             });
             num++;
         }
@@ -93,12 +94,14 @@ public class ListeningStructureServiceTests
                 correctAnswer = "opt-0", skillTag = "detail", transcriptExcerpt = "opt-0",
                 transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500,
                 difficultyLevel = 3,
+                validationStatus = "published",
                 optionDistractorCategory = Enumerable.Range(0, partBOptionCount).Select(index => index == 0 ? null : "reused_keyword").ToArray() });
         for (var i = 0; i < partC; i++)
             list.Add(new { id = $"c-{i}", number = num++, partCode = i < partC / 2 ? "C1" : "C2", type = "multiple_choice_3", text = "q",
                 options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude",
                 transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000,
                 transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3,
+                validationStatus = "published",
                 optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         // One extract per sub-section, each with a non-overlapping audio window.
         // A1/A2 carry a note-completion body whose gap count matches that
@@ -136,6 +139,26 @@ public class ListeningStructureServiceTests
         Assert.Equal(12, report.Counts.PartCCount);
         Assert.Equal(42, report.Counts.TotalItems);
         Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public async Task QuestionWithoutPublishedValidationStatus_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        questions[0].Remove("validationStatus");
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new
+        {
+            listeningQuestions = questions,
+            listeningExtracts = doc.RootElement.GetProperty("listeningExtracts").Clone(),
+        }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_question_validation_status" && i.Severity == "error");
     }
 
     [Theory]
@@ -315,12 +338,12 @@ public class ListeningStructureServiceTests
         var list = new List<object>();
         var num = 1;
         for (var i = 0; i < 24; i++)
-            list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x", skillTag = "note_completion", transcriptExcerpt = "x", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3 });
+            list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x", skillTag = "note_completion", transcriptExcerpt = "x", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published" });
         for (var i = 0; i < 6; i++)
             list.Add(new { id = $"b-{i}", number = num++, partCode = PartBCodes[i], type = "multiple_choice_3", text = "q",
-                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
+                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
         for (var i = 0; i < 12; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
+            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         var extracts = new List<object>
         {
             new { partCode = "A", displayOrder = 1, kind = "consultation", title = "A", audioStartMs = 0, audioEndMs = 120_000, difficultyRating = 3 },
@@ -889,6 +912,7 @@ public class ListeningStructureServiceTests
                     TranscriptEvidenceStartMs = qNum * 1000,
                     TranscriptEvidenceEndMs = qNum * 1000 + 500,
                     DifficultyLevel = 3,
+                    ValidationStatus = "published",
                     CreatedAt = now,
                     UpdatedAt = now,
                 };

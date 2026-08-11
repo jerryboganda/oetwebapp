@@ -284,6 +284,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 TranscriptEvidenceText = q.TranscriptExcerpt,
                 TranscriptEvidenceStartMs = q.TranscriptEvidenceStartMs,
                 TranscriptEvidenceEndMs = q.TranscriptEvidenceEndMs,
+                ValidationStatus = NormalizeValidationStatus(q.ValidationStatus),
+                ValidationNote = q.ValidationNote,
                 SpeakerAttitude = ParseSpeakerAttitude(q.SpeakerAttitude),
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -447,7 +449,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 OptionDistractorWhy: optionDistractorWhy,
                 SpeakerAttitude: GetString(item, "speakerAttitude"),
                 TranscriptEvidenceStartMs: GetInt(item, "transcriptEvidenceStartMs"),
-                TranscriptEvidenceEndMs: GetInt(item, "transcriptEvidenceEndMs")));
+                TranscriptEvidenceEndMs: GetInt(item, "transcriptEvidenceEndMs"),
+                ValidationStatus: GetString(item, "validationStatus"),
+                ValidationNote: GetString(item, "validationNote")));
         }
         return output;
     }
@@ -634,6 +638,14 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         };
     }
 
+    private static string NormalizeValidationStatus(string? raw)
+    {
+        var normalized = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "draft" or "in_review" or "validated" or "published" or "rejected"
+            ? normalized
+            : "draft";
+    }
+
     private static ListeningDistractorCategory? ParseDistractorCategoryAt(IReadOnlyList<string?>? list, int index)
     {
         if (list is null || index >= list.Count) return null;
@@ -747,7 +759,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         IReadOnlyList<string?> OptionDistractorWhy,
         string? SpeakerAttitude,
         int? TranscriptEvidenceStartMs,
-        int? TranscriptEvidenceEndMs);
+        int? TranscriptEvidenceEndMs,
+        string? ValidationStatus,
+        string? ValidationNote);
 
     private sealed record AuthoredExtract(
         string PartCode,

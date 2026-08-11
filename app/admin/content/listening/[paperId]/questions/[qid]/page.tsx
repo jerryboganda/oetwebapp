@@ -23,6 +23,7 @@ import {
   type ListeningDistractorCategory,
   type ListeningQuestionPatchBody,
   type ListeningSpeakerAttitude,
+  type ListeningValidationStatus,
 } from '@/lib/listening-authoring-api';
 
 const DISTRACTOR_OPTIONS: { value: ListeningDistractorCategory | ''; label: string }[] = [
@@ -43,6 +44,14 @@ const ATTITUDE_OPTIONS: { value: ListeningSpeakerAttitude | ''; label: string }[
   { value: 'critical', label: 'Critical' },
   { value: 'neutral', label: 'Neutral' },
   { value: 'other', label: 'Other' },
+];
+
+const VALIDATION_STATUS_OPTIONS: { value: ListeningValidationStatus; label: string }[] = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'in_review', label: 'In review' },
+  { value: 'validated', label: 'Validated' },
+  { value: 'published', label: 'Published' },
+  { value: 'rejected', label: 'Rejected' },
 ];
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -68,6 +77,8 @@ interface FormState {
   transcriptEvidenceStartMs: number | '';
   transcriptEvidenceEndMs: number | '';
   acceptedVariantChangeReason: string;
+  validationStatus: ListeningValidationStatus;
+  validationNote: string;
 }
 
 function fromQuestion(q: ListeningAuthoredQuestion): FormState {
@@ -92,6 +103,8 @@ function fromQuestion(q: ListeningAuthoredQuestion): FormState {
     transcriptEvidenceStartMs: q.transcriptEvidenceStartMs ?? '',
     transcriptEvidenceEndMs: q.transcriptEvidenceEndMs ?? '',
     acceptedVariantChangeReason: '',
+    validationStatus: q.validationStatus ?? 'draft',
+    validationNote: q.validationNote ?? '',
   };
 }
 
@@ -130,6 +143,8 @@ function diffPatch(initial: FormState, current: FormState, isMcq: boolean): List
   if (current.transcriptEvidenceEndMs !== initial.transcriptEvidenceEndMs) {
     patch.transcriptEvidenceEndMs = current.transcriptEvidenceEndMs === '' ? null : current.transcriptEvidenceEndMs;
   }
+  if (current.validationStatus !== initial.validationStatus) patch.validationStatus = current.validationStatus;
+  if (current.validationNote !== initial.validationNote) patch.validationNote = current.validationNote || null;
   return patch;
 }
 
@@ -380,6 +395,23 @@ export default function AdminListeningQuestionEditorPage() {
                     options={ATTITUDE_OPTIONS}
                   />
                 )}
+              </div>
+
+              <div className="grid gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 md:grid-cols-[minmax(0,1fr)_2fr]">
+                <Select
+                  label="Validation status"
+                  value={form.validationStatus}
+                  onChange={(e) => setField('validationStatus', e.target.value as ListeningValidationStatus)}
+                  options={VALIDATION_STATUS_OPTIONS}
+                  hint="A paper cannot publish while this question is not Published."
+                />
+                <Textarea
+                  label="Validation note"
+                  rows={2}
+                  value={form.validationNote}
+                  onChange={(e) => setField('validationNote', e.target.value)}
+                  placeholder="Reviewer note or validation rationale"
+                />
               </div>
 
               {isMcq ? (

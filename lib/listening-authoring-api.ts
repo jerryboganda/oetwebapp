@@ -13,6 +13,7 @@ import { apiClient } from './api';
 export type ListeningPartCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
 export type ListeningQuestionType = 'short_answer' | 'fill_in_blank' | 'multiple_choice_3';
 export type ListeningExtractKind = 'consultation' | 'workplace' | 'presentation';
+export type ListeningValidationStatus = 'draft' | 'in_review' | 'validated' | 'published' | 'rejected';
 
 /**
  * The 10 restructured Listening sub-sections. Part B was split into B1–B6, so a
@@ -123,6 +124,9 @@ export interface ListeningAuthoredQuestion {
   // for jump-to-evidence in the post-attempt review player.
   transcriptEvidenceStartMs?: number | null;
   transcriptEvidenceEndMs?: number | null;
+  /** Section 12 per-question publish-validation state. */
+  validationStatus?: ListeningValidationStatus;
+  validationNote?: string | null;
 }
 
 export interface ListeningAuthoredSpeaker {
@@ -292,6 +296,8 @@ export interface ListeningQuestionPatchBody {
   transcriptEvidenceEndMs?: number | null;
   /** Required when acceptedAnswers changes; stored in the audit event. */
   acceptedVariantChangeReason?: string;
+  validationStatus?: ListeningValidationStatus;
+  validationNote?: string | null;
 }
 
 /**

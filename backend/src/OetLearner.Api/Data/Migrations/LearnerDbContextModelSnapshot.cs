@@ -12099,6 +12099,17 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int?>("DifficultyLevel")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ValidationNote")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("ValidationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("draft");
+
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("integer");
 
