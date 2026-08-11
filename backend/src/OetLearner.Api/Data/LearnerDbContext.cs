@@ -1403,6 +1403,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // result-visibility. Partial class in LearnerDbContext.WritingExam.cs.
         OnModelCreatingWritingExam(modelBuilder);
         OnModelCreatingWritingAssessmentV11(modelBuilder);
+        OnModelCreatingSpeakingSimulationV11(modelBuilder);
 
         // Materials library — nestable folders, files, and per-folder audience
         // assignment. Partial class in LearnerDbContext.Materials.cs.
@@ -1558,6 +1559,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     partial void OnModelCreatingWritingCalibration(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingExam(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingAssessmentV11(ModelBuilder modelBuilder);
+    partial void OnModelCreatingSpeakingSimulationV11(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.Materials.cs (partial).
