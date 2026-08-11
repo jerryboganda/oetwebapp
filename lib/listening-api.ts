@@ -568,6 +568,7 @@ export const recordListeningIntegrityEvent = (
 export const submitListeningAttempt = (attemptId: string, answers?: Record<string, string | null>) =>
   api<ListeningReviewDto>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/submit`, {
     method: 'POST',
+    headers: { 'Idempotency-Key': `listening-submit:${attemptId}` },
     body: JSON.stringify({ answers: answers ?? {} }),
   });
 

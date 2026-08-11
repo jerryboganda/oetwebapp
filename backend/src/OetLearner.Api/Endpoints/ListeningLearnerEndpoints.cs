@@ -292,7 +292,13 @@ public static class ListeningLearnerEndpoints
             HttpContext http,
             ListeningLearnerService service,
             CancellationToken ct) =>
-            Results.Ok(await service.SubmitAsync(http.UserId(), attemptId, request?.Answers, ct)))
+        {
+            var idempotencyKey = http.Request.Headers.TryGetValue("Idempotency-Key", out var header)
+                ? header.ToString()
+                : null;
+            return Results.Ok(await service.SubmitAsync(
+                http.UserId(), attemptId, request?.Answers, idempotencyKey, ct));
+        })
             .RequireRateLimiting("PerUserWrite")
             .WithName("SubmitListeningPaperAttempt")
             .WithSummary("Submit and server-grade a Listening attempt");

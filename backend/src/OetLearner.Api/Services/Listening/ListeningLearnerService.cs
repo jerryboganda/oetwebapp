@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
@@ -21,6 +23,8 @@ public sealed class ListeningLearnerService(
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
+    private const string SubmitIdempotencyScope = "listening-submit";
+    private const int MaxIdempotencyRecordKeyLength = 128;
 
     /// <summary>
     /// Reserved key under which the monotonic one-way <c>sectionCursor</c> is
@@ -804,22 +808,36 @@ public sealed class ListeningLearnerService(
     }
 
     public Task<object> SubmitAsync(string userId, string attemptId, CancellationToken ct) =>
-        SubmitAsync(userId, attemptId, null, ct);
+        SubmitAsync(userId, attemptId, null, null, ct);
 
     public async Task<object> SubmitAsync(
         string userId,
         string attemptId,
         IReadOnlyDictionary<string, string?>? finalAnswers,
         CancellationToken ct)
+        => await SubmitAsync(userId, attemptId, finalAnswers, null, ct);
+
+    public async Task<object> SubmitAsync(
+        string userId,
+        string attemptId,
+        IReadOnlyDictionary<string, string?>? finalAnswers,
+        string? idempotencyKey,
+        CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
         var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
         if (relationalAttempt is not null)
         {
-            return await SubmitRelationalAttemptAsync(userId, relationalAttempt, finalAnswers, ct);
+            var relationalKey = BuildSubmitIdempotencyKey(userId, relationalAttempt.Id, idempotencyKey);
+            var relationalCached = await GetCachedSubmitAsync(relationalKey, ct);
+            if (relationalCached is not null) return relationalCached;
+            return await SubmitRelationalAttemptAsync(userId, relationalAttempt, finalAnswers, relationalKey, ct);
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
+        var key = BuildSubmitIdempotencyKey(userId, attempt.Id, idempotencyKey);
+        var cached = await GetCachedSubmitAsync(key, ct);
+        if (cached is not null) return cached;
         var source = await ResolveSourceAsync(attempt.ContentId, ct);
 
         if (source.Questions.Count == 0)
@@ -830,7 +848,8 @@ public sealed class ListeningLearnerService(
         var existing = await db.Evaluations.FirstOrDefaultAsync(e => e.AttemptId == attempt.Id, ct);
         if (attempt.State == AttemptState.Completed && existing is not null)
         {
-            return BuildReview(attempt, source, existing);
+            var existingReview = BuildReview(attempt, source, existing);
+            return await PersistSubmitIdempotencyAsync(key, existingReview, ct) ?? existingReview;
         }
 
         var submitNow = DateTimeOffset.UtcNow;
@@ -950,7 +969,8 @@ public sealed class ListeningLearnerService(
             }
         }
 
-        return BuildReview(attempt, source, evaluation);
+        var completedReview = BuildReview(attempt, source, evaluation);
+        return await PersistSubmitIdempotencyAsync(key, completedReview, ct) ?? completedReview;
     }
 
     public async Task<object> GetReviewAsync(string userId, string attemptId, CancellationToken ct)
@@ -1357,6 +1377,7 @@ public sealed class ListeningLearnerService(
         string userId,
         ListeningAttempt attempt,
         IReadOnlyDictionary<string, string?>? finalAnswers,
+        string idempotencyKey,
         CancellationToken ct)
     {
         var source = await ResolveSourceAsync(attempt.PaperId, ct);
@@ -1369,7 +1390,8 @@ public sealed class ListeningLearnerService(
         if (attempt.Status == ListeningAttemptStatus.Submitted && existing is not null)
         {
             var existingAnswers = await LoadRelationalAnswersAsync(attempt.Id, ct);
-            return BuildReview(attempt, source, existingAnswers, existing);
+            var existingReview = BuildReview(attempt, source, existingAnswers, existing);
+            return await PersistSubmitIdempotencyAsync(idempotencyKey, existingReview, ct) ?? existingReview;
         }
 
         MarkExpiredIfDeadlinePassed(attempt);
@@ -1440,13 +1462,14 @@ public sealed class ListeningLearnerService(
             throw ApiException.Conflict("listening_attempt_concurrent_update",
                 "This attempt was modified by another process. Please retry.");
         }
-        return BuildReview(
+        var completedReview = BuildReview(
             attempt,
             source,
             answers,
             evaluation,
             answerByQuestionId,
             gradingResult.ScoreConversionErrorCode);
+        return await PersistSubmitIdempotencyAsync(idempotencyKey, completedReview, ct) ?? completedReview;
     }
 
     private static void ApplyFinalLegacyAnswers(
@@ -2416,6 +2439,78 @@ public sealed class ListeningLearnerService(
         ListeningSpeakerAttitude.Other => "other",
         _ => "other",
     };
+
+    private async Task<ListeningReviewDto?> GetCachedSubmitAsync(
+        string key,
+        CancellationToken ct)
+    {
+        var record = await db.IdempotencyRecords.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.Scope == SubmitIdempotencyScope && row.Key == key, ct);
+        return record is null ? null : TryDeserializeListeningReview(record.ResponseJson);
+    }
+
+    private async Task<ListeningReviewDto?> PersistSubmitIdempotencyAsync(
+        string key,
+        ListeningReviewDto review,
+        CancellationToken ct)
+    {
+        var record = new IdempotencyRecord
+        {
+            Id = $"idem-{Guid.NewGuid():N}",
+            Scope = SubmitIdempotencyScope,
+            Key = key,
+            ResponseJson = JsonSerializer.Serialize(review),
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.IdempotencyRecords.Add(record);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return null;
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent retry won the unique (Scope, Key) insert. Return
+            // its exact persisted response instead of grading twice at the
+            // API boundary.
+            db.Entry(record).State = EntityState.Detached;
+            var winner = await db.IdempotencyRecords.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Scope == SubmitIdempotencyScope && row.Key == key, ct);
+            return winner is null ? null : TryDeserializeListeningReview(winner.ResponseJson);
+        }
+    }
+
+    private static ListeningReviewDto? TryDeserializeListeningReview(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ListeningReviewDto>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string BuildSubmitIdempotencyKey(
+        string userId,
+        string attemptId,
+        string? callerSuppliedKey)
+    {
+        var suffix = string.IsNullOrWhiteSpace(callerSuppliedKey)
+            ? "default"
+            : callerSuppliedKey.Trim();
+        var rawKey = $"{userId}:{attemptId}:{suffix}";
+        if (rawKey.Length <= MaxIdempotencyRecordKeyLength)
+            return rawKey;
+
+        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))).ToLowerInvariant();
+        var scopedDigestKey = $"{userId}:{attemptId}:sha256:{digest}";
+        return scopedDigestKey.Length <= MaxIdempotencyRecordKeyLength
+            ? scopedDigestKey
+            : $"sha256:{digest}";
+    }
 
     private ListeningReviewDto BuildReview(Attempt attempt, ListeningSource source, Evaluation? evaluation = null)
         => BuildReviewCore(
@@ -3717,7 +3812,10 @@ public sealed class ListeningLearnerService(
         string? Gender,                       // m | f | nb | null
         string? Accent);                      // optional override of extract accentCode
 
-    private sealed record ListeningTranscriptSegmentDto(
+    // These response graph records are internal so the submit idempotency
+    // cache can round-trip an exact review without weakening the learner API
+    // surface or exposing answer-key types as public contracts.
+    internal sealed record ListeningTranscriptSegmentDto(
         int StartMs,
         int EndMs,
         string? PartCode,        // optional: A1 | A2 | B | C1 | C2
@@ -3756,9 +3854,9 @@ public sealed class ListeningLearnerService(
 
     private sealed record ListeningScoreDto(int RawScore, int MaxRawScore, int? ScaledScore, string Grade, bool? Passed);
 
-    private sealed record ListeningTranscriptSnippetDto(bool Allowed, string? Excerpt, string? DistractorExplanation);
+    internal sealed record ListeningTranscriptSnippetDto(bool Allowed, string? Excerpt, string? DistractorExplanation);
 
-    private sealed record ListeningReviewItemDto(
+    internal sealed record ListeningReviewItemDto(
         string QuestionId,
         int Number,
         string PartCode,
@@ -3786,20 +3884,20 @@ public sealed class ListeningLearnerService(
 
     private sealed record ListeningHumanScoreOverride(string QuestionId, int Override, string? By, string? Reason);
 
-    private sealed record ListeningHumanScoreOverrideDto(int Override, string Message);
+    internal sealed record ListeningHumanScoreOverrideDto(int Override, string Message);
 
-    private sealed record ListeningOptionAnalysisDto(
+    internal sealed record ListeningOptionAnalysisDto(
         string OptionLabel,                 // "A" | "B" | "C"
         string OptionText,
         bool IsCorrect,
         string? DistractorCategory,         // too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword | out_of_scope
         string? WhyMarkdown);
 
-    private sealed record ListeningErrorClusterDto(string ErrorType, string Label, int Count, IReadOnlyList<string> AffectedQuestionIds);
+    internal sealed record ListeningErrorClusterDto(string ErrorType, string Label, int Count, IReadOnlyList<string> AffectedQuestionIds);
 
-    private sealed record ListeningTranscriptAccessDto(string Policy, string State, IReadOnlyList<string> AllowedQuestionIds, string Reason);
+    internal sealed record ListeningTranscriptAccessDto(string Policy, string State, IReadOnlyList<string> AllowedQuestionIds, string Reason);
 
-    private sealed record ListeningDrillDto(
+    internal sealed record ListeningDrillDto(
         string DrillId,
         string Title,
         string FocusLabel,
@@ -3810,7 +3908,7 @@ public sealed class ListeningLearnerService(
         string LaunchRoute,
         string ReviewRoute);
 
-    private sealed record ListeningReviewDto(
+    internal sealed record ListeningReviewDto(
         string? EvaluationId,
         string AttemptId,
         object Paper,

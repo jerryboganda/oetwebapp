@@ -234,6 +234,40 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task RelationalSubmit_WithSameIdempotencyKey_ReplaysThePersistedReview()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        const string idempotencyKey = "listening-submit-retry-1";
+
+        var first = await svc.SubmitAsync(
+            userId,
+            attempt.Id,
+            new Dictionary<string, string?> { [questionId] = "five" },
+            idempotencyKey,
+            default);
+        var firstJson = JsonSerializer.Serialize(first);
+
+        // A retry with a different late payload must replay the original
+        // result rather than mutate or grade the attempt a second time.
+        var second = await svc.SubmitAsync(
+            userId,
+            attempt.Id,
+            new Dictionary<string, string?> { [questionId] = "wrong" },
+            idempotencyKey,
+            default);
+
+        Assert.Equal(firstJson, JsonSerializer.Serialize(second));
+        Assert.Equal(1, await db.Evaluations.CountAsync(e => e.AttemptId == attempt.Id));
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync(r =>
+            r.Scope == "listening-submit" && r.Key.Contains(idempotencyKey)));
+        Assert.True((await db.ListeningAnswers.SingleAsync(a => a.ListeningAttemptId == attempt.Id)).IsCorrect);
+    }
+
+    [Fact]
     public async Task GetSessionAsync_ExposesPerSectionAudioUrls_AndDropsPartAMode()
     {
         var (db, svc) = Build();
