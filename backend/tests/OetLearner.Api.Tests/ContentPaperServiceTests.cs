@@ -504,6 +504,34 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
+    public async Task Publish_rejects_reading_mcq_with_duplicate_options()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "Reading MCQ gate", null, null, true, null, 60, null, null, 0, null,
+            DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredReadingAssetsAsync(db, svc, paper.Id);
+
+        var structure = new ReadingStructureService(db);
+        await structure.EnsureCanonicalPartsAsync(paper.Id, default);
+        await FullyAuthorReadingPaperAsync(db, structure, paper.Id);
+
+        var partB = await db.ReadingParts.FirstAsync(p => p.PaperId == paper.Id && p.PartCode == ReadingPartCode.B);
+        var question = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partB.Id);
+        question.OptionsJson = "[\"A\",\"A\",\"C\"]";
+        question.CorrectAnswerJson = "\"C\"";
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
+
+        Assert.Contains("MCQ publication gate failed", ex.Message);
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        Assert.NotEqual(ContentStatus.Published, reload.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Publish_records_warning_when_speaking_structure_is_not_ready()
     {
         var (db, svc) = Build();

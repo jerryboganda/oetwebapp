@@ -3,6 +3,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Reading;
 using OetLearner.Api.Services.Writing;
 
@@ -798,7 +799,40 @@ public sealed class ContentPaperService(
             EnforceRequiredAssetRoles(paper);
         }
 
-        // Decision 2 — publishing is NEVER blocked on rule-conformance grounds.
+        // Section 12 hard invariant — a malformed MCQ must never reach a
+        // published paper. The remaining rule-conformance findings stay
+        // advisory under the existing owner policy, but duplicate options and
+        // zero/multiple correct options are publication blockers.
+        if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+        {
+            var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            await RecordPublishConformanceWarningsAsync(
+                paper,
+                report.Issues.Select(i => $"[{i.Severity}] {i.Message}"),
+                adminId,
+                ct);
+            ThrowIfMcqPublicationInvalid(
+                "Reading",
+                report.Issues
+                    .Where(i => i.Code == "question_payload_invalid")
+                    .Select(i => (i.Code, i.Message)));
+        }
+        else if (isListening)
+        {
+            var report = await new ListeningStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            await RecordPublishConformanceWarningsAsync(
+                paper,
+                report.Issues.Select(i => $"[{i.Severity}] {i.Message}"),
+                adminId,
+                ct);
+            ThrowIfMcqPublicationInvalid(
+                "Listening",
+                report.Issues
+                    .Where(i => i.Code == "listening_mcq_shape")
+                    .Select(i => (i.Code, i.Message)));
+        }
+
+        // Decision 2 — publishing is NEVER blocked on broader rule-conformance grounds.
         // Structural problems (e.g. a 4-option Part B, a non-canonical shape)
         // are recorded as a NON-BLOCKING conformance-warning audit and surfaced
         // read-only on /admin/conformance; publishing always proceeds.
@@ -810,12 +844,7 @@ public sealed class ContentPaperService(
         // lacks fresh warnings for this revision.
         try
         {
-            if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
-            {
-                var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
-                await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
-            }
-            else if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
             {
                 var report = SpeakingContentStructure.Validate(paper);
                 await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
@@ -1048,6 +1077,21 @@ public sealed class ContentPaperService(
             paper.Id,
             $"{paper.Title} — {messages.Count} conformance warning(s): {string.Join(" | ", messages.Take(50))}",
             adminId, ct);
+    }
+
+    private static void ThrowIfMcqPublicationInvalid(
+        string subtest,
+        IEnumerable<(string Code, string Message)> issues)
+    {
+        var messages = issues
+            .Where(issue => !string.IsNullOrWhiteSpace(issue.Message))
+            .Select(issue => $"[{issue.Code}] {issue.Message}")
+            .Take(20)
+            .ToArray();
+        if (messages.Length == 0) return;
+
+        throw new InvalidOperationException(
+            $"{subtest} MCQ publication gate failed: {string.Join(" | ", messages)}");
     }
 
     private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)

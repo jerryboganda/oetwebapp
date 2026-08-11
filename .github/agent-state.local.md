@@ -883,6 +883,11 @@ dirty work in the main checkout.
   option text. Focused execution remains pending.
 - Local .NET execution previously stalled after 124 seconds; per the current
   owner instruction, do not start or wait on long CI/CD or full validation runs.
+- The shared ContentPaper publish path now runs Reading/Listening structural
+  validation and hard-blocks malformed MCQs (including duplicate options and
+  zero/multiple correct options) while preserving the broader advisory policy.
+  Added `ContentPaperServiceTests.Publish_rejects_reading_mcq_with_duplicate_options`;
+  only `git diff --check` has been run for this slice.
 - Preserve `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and
   `pdf-policy-release2/`. Owner tables, normalization/lock policy, rationale
   library, thresholds/labels, graph approval, load evidence, and authenticated
