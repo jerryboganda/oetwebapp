@@ -642,7 +642,11 @@ public sealed class ReadingGradingService(
     {
         return policy.UnknownTypeFallbackPolicy switch
         {
-            "grade_as_correct" => (true, q.Points),
+            // Listening/Reading v1.1 is fail-closed: an unknown or corrupt
+            // question type must never receive credit from a permissive legacy
+            // policy value. Keep the legacy setting readable for snapshot
+            // compatibility, but treat it as zero-credit at the grader.
+            "grade_as_correct" => (false, 0),
             "fail_grading" => throw new InvalidOperationException(
                 $"Grader refused for question {q.Id} type {q.QuestionType} per fallback policy."),
             _ /* skip_with_zero */ => (false, 0),

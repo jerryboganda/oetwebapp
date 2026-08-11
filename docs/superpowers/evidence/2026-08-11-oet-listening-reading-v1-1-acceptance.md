@@ -381,3 +381,25 @@ an owner-controlled value that must not be invented in code.
 - The canonical Reading results page now carries the same persistent
   stricter-than-examiner spelling disclosure as Listening, with a focused page
   regression assertion.
+
+## Fail-closed unknown-question grading
+
+- Reading grading no longer honors the legacy `grade_as_correct` fallback for
+  an unknown or corrupt question type. Such a question always receives zero
+  credit, preserving deterministic strict marking even if an old policy
+  snapshot contains the permissive value.
+- A regression test covers the permissive legacy snapshot path. The backend
+  test was not executed in this bounded pass by explicit user request; the
+  source change and focused test fixture are present for the owner's check.
+
+## Listening scored-audio preflight
+
+- Strict Listening readiness now verifies every distinct scored audio URL in
+  the session before the first server-authoritative timer transition. Relative
+  and `/v1/` media URLs are fetched through the authorized blob path; each
+  asset must reach `canplaythrough`, and a failed asset keeps readiness blocked.
+  The existing audible sound probe remains required as the candidate-facing
+  output check.
+- Section playback still loads its active source after the strict transition;
+  later playback errors remain fail-stop and are surfaced for administrator
+  review. Full browser execution was not run in this bounded pass.

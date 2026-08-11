@@ -17,6 +17,7 @@ const baseArgs = {
   drillId: null,
   strictReadinessRequired: true,
   techReadiness: null,
+  audioUrls: [],
   isStarting: false,
   audioError: null,
   startError: null,

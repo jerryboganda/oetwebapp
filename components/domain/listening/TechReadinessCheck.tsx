@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2, Loader2, Mic, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { fetchAuthorizedObjectUrl } from '@/lib/api';
 
 /**
  * Listening V2 R10 — pre-attempt audio sound check. It verifies the
@@ -16,11 +17,13 @@ type ProbeStatus = 'idle' | 'running' | 'ok' | 'failed';
 
 export interface TechReadinessCheckProps {
   audioProbeUrl?: string;
+  /** Every scored audio asset in the session, not only the sound-check clip. */
+  audioUrls?: string[];
   onReady: (result: { audioOk: boolean; durationMs: number }) => void;
   onSkip?: () => void;
 }
 
-export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadinessCheckProps) {
+export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady, onSkip }: TechReadinessCheckProps) {
   const [status, setStatus] = useState<ProbeStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -42,6 +45,7 @@ export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadi
       await playProbe(audioProbeUrl, (cleanup) => {
         cleanupRef.current = cleanup;
       });
+      await verifyScoredAudioAssets(audioUrls);
       if (!mountedRef.current) return;
       cleanupRef.current?.();
       cleanupRef.current = null;
@@ -98,6 +102,54 @@ export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadi
       </div>
     </div>
   );
+}
+
+async function verifyScoredAudioAssets(audioUrls: string[]) {
+  const uniqueUrls = [...new Set(audioUrls.map((url) => url.trim()).filter(Boolean))];
+  await Promise.all(uniqueUrls.map((url) => verifyAudioAsset(url)));
+}
+
+async function verifyAudioAsset(url: string) {
+  let sourceUrl = url;
+  let objectUrl: string | null = null;
+  try {
+    // Authenticated media cannot be loaded directly by a native audio element.
+    // Fetching it first also proves the complete response is available before
+    // the server-authoritative attempt timer is allowed to start.
+    if (!/^https?:\/\//i.test(url) || /\/v1\//i.test(url)) {
+      objectUrl = await fetchAuthorizedObjectUrl(url);
+      sourceUrl = objectUrl;
+    }
+    const audio = new Audio();
+    audio.preload = 'auto';
+    await new Promise<void>((resolve, reject) => {
+      let timeoutId: number | null = null;
+      let cleanup = () => {};
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('A scored audio asset failed its readiness check.'));
+      };
+      cleanup = () => {
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        audio.removeEventListener('canplaythrough', onReady);
+        audio.removeEventListener('error', onError);
+      };
+      timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('A scored audio asset timed out during its readiness check.'));
+      }, 15_000);
+      audio.addEventListener('canplaythrough', onReady, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+      audio.src = sourceUrl;
+      audio.load();
+    });
+  } finally {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
 }
 
 async function playProbe(audioProbeUrl: string | undefined, setCleanup: (cleanup: () => void) => void) {

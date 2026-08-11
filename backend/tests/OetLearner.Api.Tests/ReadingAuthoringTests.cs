@@ -2699,6 +2699,45 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Unknown_type_fallback_never_awards_credit_from_legacy_permissive_policy()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.MultipleChoice3,
+            "X", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default);
+        var rowRaw = await db.ReadingQuestions.FirstAsync(x => x.Id == q.Id);
+        rowRaw.QuestionType = (ReadingQuestionType)999;
+        await db.SaveChangesAsync();
+
+        var global = await policy.GetGlobalAsync(default);
+        global.UnknownTypeFallbackPolicy = "grade_as_correct";
+        await policy.UpsertGlobalAsync(global, "admin", default);
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "aX-permissive", UserId = "u", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42,
+            PolicySnapshotJson = "{\"UnknownTypeFallbackPolicy\":\"grade_as_correct\"}",
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "ax-permissive", ReadingAttemptId = "aX-permissive", ReadingQuestionId = q.Id,
+            UserAnswerJson = "\"A\"", AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("aX-permissive", default);
+        Assert.Equal(0, result.PointsEarnedSum());
+        Assert.False(result.Answers.Single().IsCorrect);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Multiple_selection_mcq_scores_zero_and_creates_admin_review_evidence()
     {
         var (db, structure, _, grader, _) = Build();

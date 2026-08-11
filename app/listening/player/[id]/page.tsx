@@ -1099,6 +1099,13 @@ function PlayerContent() {
     && (session?.modePolicy.canScrub !== false || audioGateSatisfied),
   );
   const strictServerNavigationActive = strictReadinessRequired && Boolean(attempt?.attemptId ?? attemptIdFromRoute);
+  const scoredAudioUrls = useMemo(() => {
+    const urls = [
+      session?.paper.audioUrl ?? null,
+      ...Object.values(session?.paper.audioUrlByPart ?? {}),
+    ];
+    return [...new Set(urls.filter((url): url is string => Boolean(url?.trim())).map((url) => url.trim()))];
+  }, [session?.paper.audioUrl, session?.paper.audioUrlByPart]);
 
   const applyStrictServerState = useCallback((state: ListeningV2SessionState) => {
     setStrictServerState(state);
@@ -1767,6 +1774,7 @@ function PlayerContent() {
             drillId={drillId ?? null}
             strictReadinessRequired={strictReadinessRequired}
             techReadiness={techReadiness}
+            audioUrls={scoredAudioUrls}
             isStarting={isStarting}
             audioError={audioError}
             startError={startError}

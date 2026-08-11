@@ -21,6 +21,7 @@ export interface ListeningIntroCardProps {
   drillId: string | null;
   strictReadinessRequired: boolean;
   techReadiness: { audioOk: boolean; durationMs: number } | null;
+  audioUrls: string[];
   isStarting: boolean;
   audioError: string | null;
   startError: string | null;
@@ -54,6 +55,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
     drillId,
     strictReadinessRequired,
     techReadiness,
+    audioUrls,
     isStarting,
     audioError,
     startError,
@@ -203,7 +205,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
 
       {strictReadinessRequired ? (
         <div className="mx-auto mb-8 max-w-2xl text-left">
-          <TechReadinessCheck onReady={onTechReadinessReady} />
+          <TechReadinessCheck audioUrls={audioUrls} onReady={onTechReadinessReady} />
         </div>
       ) : null}
 
