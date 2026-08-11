@@ -161,3 +161,15 @@ an owner-controlled value that must not be invented in code.
   API readiness, and web health; `/`, `/listening`, and `/reading` returned
   HTTP 307 to sign-in. Readiness at `2026-08-11T17:36:11Z` reported database,
   migrations, stuck_jobs, and storage all `ok`.
+
+## Final evidence-correction deployment
+
+- Evidence correction commit `b0705877bfa03afca0e03ae39134fd3b50cfcbd9`
+  is on `main` and `origin/main`. Build & Deploy run `31518463827`
+  completed successfully; image builds, off-box migration
+  generation/application, and blue/green deployment passed. The VPS reported
+  `AUTO_DEPLOY_DONE: live on green (previous slot blue kept for rollback)`.
+- Independent checks at `2026-08-11T17:46:46Z` returned HTTP 200 for API live,
+  API readiness, and web health; `/`, `/listening`, and `/reading` returned
+  HTTP 307 to sign-in. Readiness at `2026-08-11T17:46:50Z` reported database,
+  migrations, stuck_jobs, and storage all `ok`.
