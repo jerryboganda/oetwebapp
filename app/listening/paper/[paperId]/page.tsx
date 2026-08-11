@@ -22,6 +22,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils';
+import { ApiError } from '@/lib/api';
 import { useTimer } from '@/hooks/useTimer';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
@@ -45,12 +46,27 @@ import {
 } from '@/lib/listening-api';
 import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from '@/lib/reading-authoring-api';
 import {
+  enableAutoSync,
+  markAttemptConflict,
+  markAttemptSynced,
+  queueOfflineAttempt,
+  syncPendingAttempts,
+  type OfflineAttempt,
+} from '@/lib/mobile/offline-sync';
+import { reconcileOfflineAnswer, type OfflineAnswerPayload } from '@/lib/mobile/offline-answer-reconciliation';
+import {
   buildListeningExamSubSections,
   LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
   type ListeningExamSubSection,
 } from '@/lib/listening-exam-sections';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
+type AnswerSaveResult = 'server' | 'offline';
+
+function isNetworkInterruption(error: unknown): boolean {
+  return (error instanceof ApiError && error.status === 0)
+    || (typeof navigator !== 'undefined' && !navigator.onLine);
+}
 
 // Only the strict one-way exam surface lives here. The legacy
 // diagnostic/mock/practice player (app/listening/player/[id]) still serves
@@ -126,6 +142,8 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
+  const serverAnswers = useRef<Record<string, string | null>>({});
+  const answerBaseValues = useRef<Record<string, string | null>>({});
   // Guards the advance pipeline so a Next-click racing the timer's onExpire
   // cannot fire two advances (and two backend section-cursor writes).
   const advanceInFlight = useRef(false);
@@ -185,6 +203,10 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
           if (typeof value === 'string') restored[questionId] = value;
         }
         setAnswers(restored);
+        serverAnswers.current = Object.fromEntries(
+          Object.entries(loaded.attempt.answers ?? {}).map(([questionId, value]) => [questionId, typeof value === 'string' ? value : null]),
+        );
+        answerBaseValues.current = {};
         dirtyQuestionIds.current.clear();
       }
     } catch (err) {
@@ -214,6 +236,10 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
         if (typeof value === 'string') restored[questionId] = value;
       }
       setAnswers(restored);
+      serverAnswers.current = Object.fromEntries(
+        Object.entries(started.answers ?? {}).map(([questionId, value]) => [questionId, typeof value === 'string' ? value : null]),
+      );
+      answerBaseValues.current = {};
       setCurrentIndex(0);
       dirtyQuestionIds.current.clear();
       if (mockAttemptId && mockSectionId && !resumeAttemptId) {
@@ -232,28 +258,55 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     }
   }, [mockAttemptId, mockSectionId, mode, paperId, resumeAttemptId, router, search]);
 
-  const persistAnswer = useCallback(async (questionId: string, value: string) => {
-    if (!attempt) return;
+  const persistAnswer = useCallback(async (
+    questionId: string,
+    value: string,
+    baseValue = answerBaseValues.current[questionId] ?? serverAnswers.current[questionId] ?? null,
+  ): Promise<AnswerSaveResult> => {
+    if (!attempt) return 'server';
     setSaveState('saving');
     try {
       await saveListeningAnswer(attempt.attemptId, questionId, value);
       dirtyQuestionIds.current.delete(questionId);
+      serverAnswers.current[questionId] = value;
+      delete answerBaseValues.current[questionId];
       setSaveState('saved');
+      return 'server';
     } catch (err) {
+      if (isNetworkInterruption(err)) {
+        try {
+          const payload: OfflineAnswerPayload = { questionId, value, baseValue };
+          await queueOfflineAttempt(
+            'listening-answer',
+            attempt.attemptId,
+            payload,
+            { id: `listening-answer:${encodeURIComponent(attempt.attemptId)}:${encodeURIComponent(questionId)}` },
+          );
+          setSaveState('offline-saved');
+          return 'offline';
+        } catch {
+          // Encryption is mandatory for offline answer recovery. If it is not
+          // available, keep the answer dirty and surface the normal failure.
+        }
+      }
       setSaveState('error');
       setError(readErrorMessage(err, 'Autosave failed.'));
+      return 'server';
     }
   }, [attempt]);
 
   // Debounced autosave, mirroring the Reading player's 400ms settle.
   const setAnswer = useCallback((question: ListeningSessionQuestionDto, value: string) => {
     if (!attempt) return;
+    if (!Object.prototype.hasOwnProperty.call(answerBaseValues.current, question.id)) {
+      answerBaseValues.current[question.id] = serverAnswers.current[question.id] ?? null;
+    }
     setAnswers((prev) => ({ ...prev, [question.id]: value }));
     dirtyQuestionIds.current.add(question.id);
     setSaveState('saving');
     if (saveTimers.current[question.id]) clearTimeout(saveTimers.current[question.id]);
     saveTimers.current[question.id] = setTimeout(() => {
-      void persistAnswer(question.id, value);
+      void persistAnswer(question.id, value, answerBaseValues.current[question.id]);
     }, 400);
   }, [attempt, persistAnswer]);
 
@@ -264,19 +317,67 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     Object.values(saveTimers.current).forEach(clearTimeout);
     saveTimers.current = {};
     const pending = Array.from(dirtyQuestionIds.current)
-      .map((questionId) => [questionId, answers[questionId]] as const)
+      .map((questionId) => [questionId, answers[questionId], answerBaseValues.current[questionId] ?? serverAnswers.current[questionId] ?? null] as const)
       .filter(([, value]) => typeof value === 'string');
     if (pending.length === 0) return;
     setSaveState('saving');
     try {
-      await Promise.all(pending.map(([questionId, value]) => saveListeningAnswer(attempt.attemptId, questionId, value)));
-      pending.forEach(([questionId]) => dirtyQuestionIds.current.delete(questionId));
-      setSaveState('saved');
+      const results = await Promise.all(pending.map(([questionId, value, baseValue]) => persistAnswer(questionId, value, baseValue)));
+      if (results.every((result) => result === 'server')) setSaveState('saved');
+      else setSaveState('offline-saved');
     } catch (err) {
       setSaveState('error');
       setError(readErrorMessage(err, 'Autosave failed.'));
     }
-  }, [answers, attempt]);
+  }, [answers, attempt, persistAnswer]);
+
+  const reconcilePendingOfflineAnswer = useCallback(async (queued: OfflineAttempt): Promise<boolean> => {
+    if (!attempt || queued.subtest !== 'listening-answer' || queued.contentId !== attempt.attemptId) return false;
+    const payload = queued.payload as Partial<OfflineAnswerPayload>;
+    if (typeof payload.questionId !== 'string' || typeof payload.value !== 'string') return false;
+
+    const latest = await getListeningSession(paperId, { mode, attemptId: attempt.attemptId });
+    const serverValue = latest.attempt?.answers?.[payload.questionId] ?? null;
+    const decision = reconcileOfflineAnswer(serverValue, {
+      questionId: payload.questionId,
+      value: payload.value,
+      baseValue: typeof payload.baseValue === 'string' ? payload.baseValue : null,
+    });
+
+    if (decision === 'already-synced') {
+      await markAttemptSynced(queued.id);
+      dirtyQuestionIds.current.delete(payload.questionId);
+      serverAnswers.current[payload.questionId] = payload.value;
+      delete answerBaseValues.current[payload.questionId];
+      setSaveState('saved');
+      return true;
+    }
+    if (decision === 'conflict') {
+      await markAttemptConflict(queued.id);
+      setSaveState('conflict');
+      setError('A newer Listening answer is already saved on the server. Your offline answer was not applied.');
+      return true;
+    }
+
+    try {
+      await saveListeningAnswer(attempt.attemptId, payload.questionId, payload.value);
+      await markAttemptSynced(queued.id);
+      dirtyQuestionIds.current.delete(payload.questionId);
+      serverAnswers.current[payload.questionId] = payload.value;
+      delete answerBaseValues.current[payload.questionId];
+      setSaveState('saved');
+      return true;
+    } catch (err) {
+      if (isNetworkInterruption(err)) return false;
+      throw err;
+    }
+  }, [attempt, mode, paperId]);
+
+  useEffect(() => {
+    if (!attempt) return;
+    void syncPendingAttempts(reconcilePendingOfflineAnswer).catch(() => undefined);
+    return enableAutoSync(reconcilePendingOfflineAnswer);
+  }, [attempt, reconcilePendingOfflineAnswer]);
 
   const submit = useCallback(async () => {
     if (!attempt || submitting) return;
@@ -521,11 +622,18 @@ function ExamToolbar({
 }
 
 function SaveStatus({ state }: { state: SaveState }) {
-  const label = { idle: 'Autosave ready', saving: 'Saving...', saved: 'Saved', error: 'Save failed' }[state];
-  const Icon = state === 'saving' ? Loader2 : state === 'error' ? AlertCircle : Save;
+  const label = {
+    idle: 'Autosave ready',
+    saving: 'Saving...',
+    saved: 'Saved',
+    'offline-saved': 'Saved securely offline',
+    conflict: 'Server answer kept',
+    error: 'Save failed',
+  }[state];
+  const Icon = state === 'saving' ? Loader2 : state === 'error' || state === 'conflict' ? AlertCircle : Save;
   return (
     <span
-      className={cn('inline-flex items-center gap-2 text-sm font-semibold', state === 'error' ? 'text-danger' : 'text-muted')}
+      className={cn('inline-flex items-center gap-2 text-sm font-semibold', state === 'error' || state === 'conflict' ? 'text-danger' : 'text-muted')}
       role="status"
       aria-live="polite"
     >

@@ -12,13 +12,19 @@ const STORES = {
   meta: 'meta',
 } as const;
 
-type OfflineAttempt = {
+export type OfflineAttempt = {
   id: string;
   subtest: string;
   contentId: string;
   payload: unknown;
   createdAt: string;
   synced: boolean;
+};
+
+type StoredOfflineAttempt = Omit<OfflineAttempt, 'payload'> & {
+  payload: string;
+  _encrypted: true;
+  _conflict?: boolean;
 };
 
 type OfflineContent = {
@@ -78,7 +84,14 @@ let _encryptionKey: string | null = null;
 
 /** Configure encryption for offline cache. Call after login with a user-unique key. */
 export function setOfflineEncryptionKey(key: string): void {
-  _encryptionKey = key;
+  _encryptionKey = key.trim() || null;
+}
+
+/** Clear the in-memory key without deleting queued data. The same account can
+ * decrypt its pending records after a later authenticated session; another
+ * account cannot read them. */
+export function clearOfflineEncryptionKey(): void {
+  _encryptionKey = null;
 }
 
 export async function cacheContent(id: string, type: string, data: unknown): Promise<void> {
@@ -174,19 +187,28 @@ export async function queueOfflineAttempt(
   subtest: string,
   contentId: string,
   payload: unknown,
+  options: { id?: string } = {},
 ): Promise<string> {
+  // Learner answers are sensitive attempt data. Fail closed rather than ever
+  // putting an unencrypted answer into IndexedDB.
+  if (!_encryptionKey || !isEncryptionAvailable()) {
+    throw new Error('Offline answer encryption is unavailable.');
+  }
+
   const db = await openDb();
   const tx = db.transaction(STORES.attempts, 'readwrite');
   const store = tx.objectStore(STORES.attempts);
 
-  const id = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const attempt: OfflineAttempt = {
+  const id = options.id ?? `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const encryptedPayload = await encryptForStorage(payload, _encryptionKey);
+  const attempt: StoredOfflineAttempt = {
     id,
     subtest,
     contentId,
-    payload,
+    payload: encryptedPayload,
     createdAt: new Date().toISOString(),
     synced: false,
+    _encrypted: true,
   };
 
   store.put(attempt);
@@ -200,11 +222,25 @@ export async function getPendingAttempts(): Promise<OfflineAttempt[]> {
   const db = await openDb();
   const tx = db.transaction(STORES.attempts, 'readonly');
   const store = tx.objectStore(STORES.attempts);
-  const index = store.index('synced');
 
   return new Promise((resolve, reject) => {
-    const request = index.getAll(IDBKeyRange.only(0));
-    request.onsuccess = () => resolve(request.result as OfflineAttempt[]);
+    const request = store.getAll();
+    request.onsuccess = async () => {
+      if (!_encryptionKey || !isEncryptionAvailable()) {
+        resolve([]);
+        return;
+      }
+
+      const entries = request.result as StoredOfflineAttempt[];
+      const pending = await Promise.all(entries
+        .filter((entry) => !entry.synced && entry._encrypted)
+        .map(async (entry): Promise<OfflineAttempt | null> => {
+          const payload = await decryptFromStorage(entry.payload, _encryptionKey!);
+          if (payload === null) return null;
+          return { ...entry, payload };
+        }));
+      resolve(pending.filter((entry): entry is OfflineAttempt => entry !== null));
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -220,6 +256,28 @@ export async function markAttemptSynced(id: string): Promise<void> {
       const entry = request.result as OfflineAttempt | undefined;
       if (entry) {
         entry.synced = true;
+        store.put(entry);
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/** Mark a queued record as reconciled with a newer server value. It is kept
+ * encrypted for audit/recovery hygiene but excluded from future sync passes. */
+export async function markAttemptConflict(id: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(STORES.attempts, 'readwrite');
+  const store = tx.objectStore(STORES.attempts);
+
+  return new Promise((resolve, reject) => {
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const entry = request.result as StoredOfflineAttempt | undefined;
+      if (entry) {
+        entry.synced = true;
+        entry._conflict = true;
         store.put(entry);
       }
       resolve();

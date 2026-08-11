@@ -30,6 +30,7 @@ import type {
 } from '@/lib/types/auth';
 import { initializeAnalyticsTransport } from '@/lib/analytics';
 import { resetAllStores } from '@/lib/stores/registry';
+import { clearOfflineEncryptionKey, setOfflineEncryptionKey } from '@/lib/mobile/offline-sync';
 import { getQueryClient } from '@/components/providers/query-provider';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
@@ -128,6 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       initializeAnalyticsTransport();
     }
   }, [state.session]);
+
+  useEffect(() => {
+    // Offline Listening/Reading answer records are encrypted with an
+    // account-bound in-memory key. Keep the key stable across access-token
+    // refreshes so an authenticated return can recover pending answers, while
+    // clearing it immediately when no account is authenticated.
+    if (state.user?.userId) {
+      setOfflineEncryptionKey(`oet-assessment:${state.user.userId}`);
+    } else {
+      clearOfflineEncryptionKey();
+    }
+  }, [state.user?.userId]);
 
   const value = useMemo<AuthContextValue>(() => ({
     ...state,

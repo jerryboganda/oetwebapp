@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/form-controls';
 import { cn } from '@/lib/utils';
+import { ApiError } from '@/lib/api';
 import { useReadingAnnotations } from '@/hooks/use-reading-annotations';
 import {
   getReadingAttempt,
@@ -36,14 +37,29 @@ import { readingPublicDisplayNumber } from '@/lib/reading-display-number';
 import { completeMockSection } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { deriveDeliveryMode, deliveryModeToReadingPresentation } from '@/lib/mocks/delivery-mode';
+import {
+  enableAutoSync,
+  markAttemptConflict,
+  markAttemptSynced,
+  queueOfflineAttempt,
+  syncPendingAttempts,
+  type OfflineAttempt,
+} from '@/lib/mobile/offline-sync';
+import { reconcileOfflineAnswer, type OfflineAnswerPayload } from '@/lib/mobile/offline-answer-reconciliation';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
 
 type PendingReadingAnswer = {
   attemptId: string;
   valueJson: string;
+  baseValueJson: string | null;
   inFlight: boolean;
 };
+
+function isNetworkInterruption(error: unknown): boolean {
+  return (error instanceof ApiError && error.status === 0)
+    || (typeof navigator !== 'undefined' && !navigator.onLine);
+}
 
 type ReadingSectionCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
 
@@ -213,6 +229,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // Latest debounced answer values awaiting the server. This is an in-flight
   // queue only; the attempt row remains the durable source of truth.
   const pendingAnswersRef = useRef<Record<string, PendingReadingAnswer>>({});
+  const serverAnswers = useRef<Record<string, string | null>>({});
   const autoSubmitTriggered = useRef(false);
   const warnedMiniTest2min = useRef(false);
   const warnedMiniTest1min = useRef(false);
@@ -258,11 +275,24 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             setSaveState('saving');
           }
         })
-        .catch(() => {
+        .catch((err) => {
           const current = pendingAnswersRef.current[questionId];
           if (current?.attemptId === pending.attemptId && current.valueJson === pending.valueJson) {
             current.inFlight = false;
-            setSaveState('error');
+            if (isNetworkInterruption(err)) {
+              void queueOfflineAttempt(
+                'reading-answer',
+                pending.attemptId,
+                {
+                  questionId,
+                  value: pending.valueJson,
+                  baseValue: current.baseValueJson,
+                } satisfies OfflineAnswerPayload,
+                { id: `reading-answer:${encodeURIComponent(pending.attemptId)}:${encodeURIComponent(questionId)}` },
+              ).then(() => setSaveState('offline-saved')).catch(() => setSaveState('error'));
+            } else {
+              setSaveState('error');
+            }
           }
         });
     });
@@ -389,6 +419,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           scopeQuestionIds: saved.scopeQuestionIds,
         });
         setAnswers(restoredAnswers);
+        serverAnswers.current = Object.fromEntries(
+          saved.answers.map((answer) => [answer.readingQuestionId, answer.userAnswerJson]),
+        );
         // R08 — hydrate persisted rule-out / highlight marks for this attempt.
         setInitialAnnotationsJson(saved.annotationsJson);
         dirtyQuestionIds.current.clear();
@@ -625,6 +658,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         router.replace(`/reading/paper/${encodeURIComponent(paperId)}?${nextParams.toString()}`);
       }
       setAnswers({});
+      serverAnswers.current = {};
       setFlagged(new Set());
       setInitialAnnotationsJson(null);
       autoSubmitTriggered.current = false;
@@ -676,20 +710,42 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       // since this save (no double-counting). If the learner switches tabs,
       // the visibilitychange handler also resets this entry.
       questionFocusStartedAt.current[questionId] = Date.now();
-      dirtyQuestionIds.current.delete(questionId);
-      if (
-        pendingAnswersRef.current[questionId]?.attemptId === attempt.attemptId
-        && pendingAnswersRef.current[questionId]?.valueJson === valueJson
-      ) {
+      const currentPending = pendingAnswersRef.current[questionId];
+      const isCurrentValue = !currentPending
+        || (currentPending.attemptId === attempt.attemptId && currentPending.valueJson === valueJson);
+      if (isCurrentValue) {
+        serverAnswers.current[questionId] = valueJson;
+        dirtyQuestionIds.current.delete(questionId);
         delete pendingAnswersRef.current[questionId];
+        setSaveState('saved');
+      } else {
+        setSaveState('saving');
       }
-      setSaveState('saved');
     } catch (err) {
       if (
         pendingAnswersRef.current[questionId]?.attemptId === attempt.attemptId
         && pendingAnswersRef.current[questionId]?.valueJson === valueJson
       ) {
         pendingAnswersRef.current[questionId].inFlight = false;
+      }
+      if (isNetworkInterruption(err)) {
+        try {
+          await queueOfflineAttempt(
+            'reading-answer',
+            attempt.attemptId,
+            {
+              questionId,
+              value: valueJson,
+              baseValue: pending?.baseValueJson ?? serverAnswers.current[questionId] ?? null,
+            } satisfies OfflineAnswerPayload,
+            { id: `reading-answer:${encodeURIComponent(attempt.attemptId)}:${encodeURIComponent(questionId)}` },
+          );
+          setSaveState('offline-saved');
+          return;
+        } catch {
+          // Encryption is mandatory for offline answer recovery. Keep the
+          // authenticated server path as the only fallback when unavailable.
+        }
       }
       setSaveState('error');
       setError(readErrorMessage(err, 'Autosave failed.'));
@@ -705,6 +761,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     pendingAnswersRef.current[question.id] = {
       attemptId: attempt.attemptId,
       valueJson: json,
+      baseValueJson: pendingAnswersRef.current[question.id]?.baseValueJson
+        ?? serverAnswers.current[question.id]
+        ?? null,
       inFlight: false,
     };
     setSaveState('saving');
@@ -719,6 +778,58 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       void persistAnswer(question.id, json);
     }, 400);
   };
+
+  const reconcilePendingOfflineAnswer = useCallback(async (queued: OfflineAttempt): Promise<boolean> => {
+    if (!attempt || queued.subtest !== 'reading-answer' || queued.contentId !== attempt.attemptId) return false;
+    const payload = queued.payload as Partial<OfflineAnswerPayload>;
+    if (typeof payload.questionId !== 'string' || typeof payload.value !== 'string') return false;
+
+    const latest = await getReadingAttempt(attempt.attemptId);
+    const serverValue = latest.answers.find((answer) => answer.readingQuestionId === payload.questionId)?.userAnswerJson ?? null;
+    const decision = reconcileOfflineAnswer(serverValue, {
+      questionId: payload.questionId,
+      value: payload.value,
+      baseValue: typeof payload.baseValue === 'string' ? payload.baseValue : null,
+    });
+
+    if (decision === 'already-synced') {
+      await markAttemptSynced(queued.id);
+      delete pendingAnswersRef.current[payload.questionId];
+      dirtyQuestionIds.current.delete(payload.questionId);
+      serverAnswers.current[payload.questionId] = payload.value;
+      setSaveState('saved');
+      return true;
+    }
+    if (decision === 'conflict') {
+      await markAttemptConflict(queued.id);
+      delete pendingAnswersRef.current[payload.questionId];
+      dirtyQuestionIds.current.delete(payload.questionId);
+      setSaveState('conflict');
+      setError('A newer Reading answer is already saved on the server. Your offline answer was not applied.');
+      return true;
+    }
+
+    try {
+      // Do not replay client-measured elapsed time from an offline interval;
+      // the server remains authoritative for deadline and saved-answer state.
+      await saveReadingAnswer(attempt.attemptId, payload.questionId, payload.value);
+      await markAttemptSynced(queued.id);
+      delete pendingAnswersRef.current[payload.questionId];
+      dirtyQuestionIds.current.delete(payload.questionId);
+      serverAnswers.current[payload.questionId] = payload.value;
+      setSaveState('saved');
+      return true;
+    } catch (err) {
+      if (isNetworkInterruption(err)) return false;
+      throw err;
+    }
+  }, [attempt]);
+
+  useEffect(() => {
+    if (!attempt) return;
+    void syncPendingAttempts(reconcilePendingOfflineAnswer).catch(() => undefined);
+    return enableAutoSync(reconcilePendingOfflineAnswer);
+  }, [attempt, reconcilePendingOfflineAnswer]);
 
   const submit = useCallback(async () => {
     if (!attempt) return;
@@ -1377,15 +1488,17 @@ function SaveStatus({ state }: { state: SaveState }) {
     idle: 'Autosave ready',
     saving: 'Saving...',
     saved: 'Saved',
+    'offline-saved': 'Saved securely offline',
+    conflict: 'Server answer kept',
     error: 'Save failed',
   }[state];
-  const Icon = state === 'saving' ? Loader2 : state === 'error' ? AlertCircle : Save;
+  const Icon = state === 'saving' ? Loader2 : state === 'error' || state === 'conflict' ? AlertCircle : Save;
 
   return (
     <span
       className={cn(
         'inline-flex items-center gap-2 text-sm font-semibold',
-        state === 'error' ? 'text-danger' : 'text-muted',
+        state === 'error' || state === 'conflict' ? 'text-danger' : 'text-muted',
       )}
       role="status"
       aria-live="polite"
