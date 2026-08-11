@@ -843,10 +843,10 @@ public sealed class ContentPaperService(
             // Advisory only — never block the publish on a conformance-check failure.
         }
 
-        // Section 12 hard invariant — a malformed MCQ must never reach a
-        // published paper. The remaining rule-conformance findings stay
-        // advisory under the existing owner policy, but duplicate options and
-        // zero/multiple correct options are publication blockers.
+        // Section 12 hard invariants — malformed MCQs and Listening audio
+        // source/duration/timing defects must never reach a published paper.
+        // The remaining rule-conformance findings stay advisory under the
+        // existing owner policy.
         if (readingReport is not null)
         {
             await RecordPublishConformanceWarningsAsync(
@@ -871,6 +871,15 @@ public sealed class ContentPaperService(
                 "Listening",
                 listeningReport.Issues
                     .Where(i => i.Code == "listening_mcq_shape")
+                    .Select(i => (i.Code, i.Message)));
+            ThrowIfPublicationInvalid(
+                "Listening audio/timing",
+                listeningReport.Issues
+                    .Where(i => i.Code is "listening_audio_source_missing"
+                        or "listening_audio_duration"
+                        or "listening_extract_timing"
+                        or "listening_extract_cue_overlap"
+                        or "listening_section_timing")
                     .Select(i => (i.Code, i.Message)));
         }
 
@@ -1116,6 +1125,21 @@ public sealed class ContentPaperService(
 
         throw new InvalidOperationException(
             $"{subtest} MCQ publication gate failed: {string.Join(" | ", messages)}");
+    }
+
+    private static void ThrowIfPublicationInvalid(
+        string gate,
+        IEnumerable<(string Code, string Message)> issues)
+    {
+        var messages = issues
+            .Where(issue => !string.IsNullOrWhiteSpace(issue.Message))
+            .Select(issue => $"[{issue.Code}] {issue.Message}")
+            .Take(20)
+            .ToArray();
+        if (messages.Length == 0) return;
+
+        throw new InvalidOperationException(
+            $"{gate} publication gate failed: {string.Join(" | ", messages)}");
     }
 
     private static string CreatePublishedRevisionId(string paperId)

@@ -901,3 +901,21 @@ dirty work in the main checkout.
   `pdf-policy-release2/`. Owner tables, normalization/lock policy, rationale
   library, thresholds/labels, graph approval, load evidence, and authenticated
   browser/mobile acceptance remain unresolved.
+
+# Latest LR coding checkpoint - 2026-08-12 (audio/timing gate)
+
+- Listening validation now reads processed `MediaAsset.DurationSeconds` for
+  every primary audio asset, supports paper-level and per-section audio, and
+  emits `listening_audio_duration` when duration metadata is absent or
+  non-positive.
+- Relational and legacy JSON Listening extracts now validate authored
+  `timeLimitSeconds` against cue end times and uploaded audio duration through
+  `listening_section_timing`; explicit non-positive section limits also fail.
+- `ContentPaperService` now hard-blocks Listening audio-source, duration,
+  extract-timing, cue-overlap, and section-timing defects while preserving the
+  broader advisory authoring policy. Added focused duration/section-timing
+  regression fixtures.
+- Only `git diff --check` and scoped source searches were run by request;
+  no long local validation, CI, push, or deployment was started.
+- Preserve the four untracked user-owned paths above. Owner release inputs and
+  authenticated deployed browser/mobile acceptance remain unresolved.

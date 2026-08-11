@@ -260,6 +260,28 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
+    public async Task JsonSectionTimingShorterThanAudio_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        var extracts = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningExtracts").GetRawText())!;
+        extracts[0]["timeLimitSeconds"] = 30;
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new
+        {
+            listeningQuestions = questions,
+            listeningExtracts = extracts,
+        }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_section_timing" && i.Severity == "error");
+    }
+
+    [Fact]
     public async Task MalformedJson_BlocksPublish_WithExplicitIssue()
     {
         var (db, svc) = Build();
@@ -601,13 +623,27 @@ public class ListeningStructureServiceTests
         seed.Extracts[ListeningPartCode.B1].AudioStartMs = null;
         seed.Extracts[ListeningPartCode.B1].AudioEndMs = null;
         seed.Extracts[ListeningPartCode.B1].AudioContentSha = null;
+        var mediaId = Guid.NewGuid().ToString("N");
+        db.Set<MediaAsset>().Add(new MediaAsset
+        {
+            Id = mediaId,
+            OriginalFilename = "b1.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            DurationSeconds = 60,
+            StoragePath = $"test/{mediaId}.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
         db.Set<ContentPaperAsset>().Add(new ContentPaperAsset
         {
             Id = Guid.NewGuid().ToString("N"),
             PaperId = seed.Paper.Id,
             Role = PaperAssetRole.Audio,
             Part = "B1",
-            MediaAssetId = Guid.NewGuid().ToString("N"),
+            MediaAssetId = mediaId,
             IsPrimary = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -618,6 +654,89 @@ public class ListeningStructureServiceTests
         Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
         Assert.DoesNotContain(report.Issues, i => i.Code == "listening_extract_timing");
         Assert.DoesNotContain(report.Issues, i => i.Code == "listening_audio_source_missing");
+    }
+
+    [Fact]
+    public async Task UploadedAudioWithoutDuration_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        seed.Extracts[ListeningPartCode.B1].AudioStartMs = null;
+        seed.Extracts[ListeningPartCode.B1].AudioEndMs = null;
+        seed.Extracts[ListeningPartCode.B1].AudioContentSha = null;
+
+        var mediaId = Guid.NewGuid().ToString("N");
+        db.Set<MediaAsset>().Add(new MediaAsset
+        {
+            Id = mediaId,
+            OriginalFilename = "b1.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            DurationSeconds = null,
+            StoragePath = $"test/{mediaId}.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.Set<ContentPaperAsset>().Add(new ContentPaperAsset
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            PaperId = seed.Paper.Id,
+            Role = PaperAssetRole.Audio,
+            Part = "B1",
+            MediaAssetId = mediaId,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_audio_duration" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task AudioLongerThanExpectedSectionTiming_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        seed.Extracts[ListeningPartCode.B1].AudioStartMs = null;
+        seed.Extracts[ListeningPartCode.B1].AudioEndMs = null;
+        seed.Extracts[ListeningPartCode.B1].AudioContentSha = null;
+        seed.Parts[ListeningPartCode.B1].TimeLimitSeconds = 30;
+
+        var mediaId = Guid.NewGuid().ToString("N");
+        db.Set<MediaAsset>().Add(new MediaAsset
+        {
+            Id = mediaId,
+            OriginalFilename = "b1.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            DurationSeconds = 60,
+            StoragePath = $"test/{mediaId}.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.Set<ContentPaperAsset>().Add(new ContentPaperAsset
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            PaperId = seed.Paper.Id,
+            Role = PaperAssetRole.Audio,
+            Part = "B1",
+            MediaAssetId = mediaId,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_section_timing" && i.Severity == "error");
     }
 
     [Fact]

@@ -42,6 +42,10 @@ an owner-controlled value that must not be invented in code.
   `preview-structure` projection plus a separate marking preview console for
   the Section 12 candidate/marking review gate; focused UI/API execution is
   still pending.
+- Listening authoring now validates processed uploaded-audio duration and
+  authored per-section timing (including legacy JSON extracts), and the shared
+  publish path hard-blocks missing audio, duration, cue-window, and section
+  timing defects. Focused execution remains pending.
 - `0a5867199` adds the branded practice score-band graph with approved-table-only conversion, raw-only fallback, the 350 reference marker, and the persistent non-official-result disclosure.
 - `4bdffbc97` normalizes the score-graph source file ending.
 - `831da6795` rejects blank/unanswered stored responses before grounded AI explanation generation.

@@ -54,6 +54,8 @@ public sealed record ListeningValidationCounts(
 
 public sealed class ListeningStructureService(LearnerDbContext db) : IListeningStructureService
 {
+    private sealed record UploadedAudioAsset(string? Part, int? DurationSeconds);
+
     /// <summary>Canonical OET Listening shape. Non-configurable invariant.</summary>
     public const int CanonicalPartACount = 24;
     public const int CanonicalPartBCount = 6;
@@ -81,9 +83,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     /// <summary>
     /// Pedagogical authoring gates that are advisory (warning) rather than
     /// publish-blocking for the uploaded-audio Listening flow. They still
-    /// surface to authors; they just don't block Publish. Audio source, the
-    /// 42-item structure, MCQ shape, blank stem/answer, and source provenance
-    /// remain hard publish blockers.
+    /// surface to authors; they just don't block Publish. Audio source,
+    /// processed duration, section timing, the 42-item structure, MCQ shape,
+    /// blank stem/answer, and source provenance remain hard publish blockers.
     /// </summary>
     private static readonly HashSet<string> AdvisoryPublishGateCodes = new(StringComparer.Ordinal)
     {
@@ -113,6 +115,28 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 Message: "Source provenance and original/legal-content attestation are required before publishing a Listening paper."));
         }
 
+        // Duration is authoritative only after the media-processing pipeline has
+        // populated MediaAsset.DurationSeconds. A missing or non-positive value
+        // must never let an uploaded audio file reach a published paper.
+        var uploadedAudioAssets = await db.Set<ContentPaperAsset>()
+            .AsNoTracking()
+            .Where(a => a.PaperId == paperId
+                && a.Role == PaperAssetRole.Audio
+                && a.IsPrimary)
+            .Include(a => a.MediaAsset)
+            .ToListAsync(ct);
+        var uploadedAudioTimings = uploadedAudioAssets
+            .Select(a => new UploadedAudioAsset(a.Part, a.MediaAsset?.DurationSeconds))
+            .ToList();
+        var missingAudioDurations = uploadedAudioTimings.Count(audio => audio.DurationSeconds is not > 0);
+        if (missingAudioDurations > 0)
+        {
+            issues.Add(new(
+                Code: "listening_audio_duration",
+                Severity: "error",
+                Message: $"Every primary Listening audio asset requires a positive processed duration; {missingAudioDurations} asset(s) are missing duration metadata."));
+        }
+
         // Prefer the relational ListeningQuestion table when authoring has
         // migrated off the legacy ExtractedTextJson blob; fall back to the
         // JSON shape so older draft papers keep validating.
@@ -124,12 +148,14 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         string source;
         if (hasRelational)
         {
-            (partA, partB, partC, total, structuralWarnings) = await CountItemsRelationalAsync(paperId, ct);
+            (partA, partB, partC, total, structuralWarnings) = await CountItemsRelationalAsync(
+                paperId, uploadedAudioTimings, ct);
             source = "relational";
         }
         else
         {
-            (partA, partB, partC, total, structuralWarnings) = CountItems(paper.ExtractedTextJson);
+            (partA, partB, partC, total, structuralWarnings) = CountItems(
+                paper.ExtractedTextJson, uploadedAudioTimings);
             source = "json";
         }
         issues.AddRange(structuralWarnings);
@@ -188,7 +214,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     /// <see cref="ListeningPart"/> and bucketing the <see cref="ListeningPartCode"/>
     /// (<c>A1/A2 → A</c>, <c>B → B</c>, <c>C1/C2 → C</c>).</summary>
     private async Task<(int partA, int partB, int partC, int total, List<ListeningValidationIssue> warnings)>
-        CountItemsRelationalAsync(string paperId, CancellationToken ct)
+        CountItemsRelationalAsync(
+            string paperId,
+            IReadOnlyList<UploadedAudioAsset> uploadedAudioAssets,
+            CancellationToken ct)
     {
         var warnings = new List<ListeningValidationIssue>();
 
@@ -204,9 +233,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var partRows = await db.Set<ListeningPart>()
             .AsNoTracking()
             .Where(p => partIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.PartCode, p.MaxRawScore })
+            .Select(p => new { p.Id, p.PartCode, p.MaxRawScore, p.TimeLimitSeconds })
             .ToListAsync(ct);
         var parts = partRows.ToDictionary(p => p.Id, p => p.PartCode, StringComparer.Ordinal);
+        var partTimeLimits = partRows.ToDictionary(p => p.PartCode, p => p.TimeLimitSeconds);
         var partMaxRawScores = partRows.Sum(p => p.MaxRawScore);
         var extractIds = questions
             .Select(q => q.ListeningExtractId)
@@ -219,20 +249,16 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             .Where(extract => extractIds.Contains(extract.Id))
             .ToDictionaryAsync(extract => extract.Id, StringComparer.Ordinal, ct);
         // Per-sub-section uploaded-audio asset map (Role==Audio && IsPrimary),
-        // keyed by the part code string (A1..C2, case-insensitive). Drives the
-        // listening_audio_source_missing gate and relaxes the TTS-window checks
-        // for sub-sections whose audio is an uploaded file (no start/end window).
-        var uploadedAudioParts = (await db.Set<ContentPaperAsset>()
-            .AsNoTracking()
-            .Where(a => a.PaperId == paperId
-                && a.Role == PaperAssetRole.Audio
-                && a.IsPrimary
-                && a.Part != null)
-            .Select(a => a.Part!)
-            .ToListAsync(ct))
-            .Select(p => p.Trim().ToUpperInvariant())
+        // keyed by the part code string (A1..C2, case-insensitive). A primary
+        // asset with no Part is paper-level audio and covers every section.
+        // Uploaded audio has no authored extract cue window, so it relaxes the
+        // TTS-window checks for the covered sub-sections.
+        var uploadedAudioParts = uploadedAudioAssets
+            .Where(audio => !string.IsNullOrWhiteSpace(audio.Part))
+            .Select(audio => audio.Part!.Trim().ToUpperInvariant())
             .Where(p => p.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
+        var hasGlobalUploadedAudio = uploadedAudioAssets.Any(audio => string.IsNullOrWhiteSpace(audio.Part));
         // Singleton (id = "global") Listening policy — drives the effective
         // preview-window resolution below. Null when no policy row is authored
         // yet; the resolver then falls back to ListeningPolicyDefaults.
@@ -410,7 +436,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         // OR a TTS AudioContentSha on its extract. (Uploaded files carry no
         // start/end window, so they are exempt from the cue-window checks below.)
         bool PartHasUploadedAudio(ListeningPartCode code)
-            => uploadedAudioParts.Contains(PartCodeKey(code));
+            => hasGlobalUploadedAudio || uploadedAudioParts.Contains(PartCodeKey(code));
         bool PartHasTtsAudio(ListeningPartCode code)
             => extracts.Values.Any(extract =>
                 parts.GetValueOrDefault(extract.ListeningPartId) == code
@@ -421,6 +447,44 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             .Where(code => code != default)
             .Distinct()
             .ToArray();
+
+        var invalidSectionTimingParts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var code in partsWithQuestions)
+        {
+            if (!partTimeLimits.TryGetValue(code, out var timeLimitSeconds)) continue;
+
+            if (timeLimitSeconds is <= 0)
+            {
+                invalidSectionTimingParts.Add($"{code} has a non-positive time limit");
+                continue;
+            }
+
+            var timeLimitMs = (long)timeLimitSeconds.Value * 1000L;
+            var maxExtractEndMs = extracts.Values
+                .Where(extract => parts.GetValueOrDefault(extract.ListeningPartId) == code)
+                .Select(extract => (long?)extract.AudioEndMs)
+                .Max() ?? 0;
+            var maxUploadedDurationSeconds = uploadedAudioAssets
+                .Where(audio => hasGlobalUploadedAudio
+                    || string.Equals(audio.Part?.Trim(), PartCodeKey(code), StringComparison.OrdinalIgnoreCase))
+                .Select(audio => audio.DurationSeconds)
+                .Where(duration => duration is > 0)
+                .Select(duration => (long)duration!.Value)
+                .DefaultIfEmpty()
+                .Max();
+
+            if (maxExtractEndMs > timeLimitMs || maxUploadedDurationSeconds * 1000L > timeLimitMs)
+            {
+                invalidSectionTimingParts.Add(
+                    $"{code} exceeds its {timeLimitSeconds.Value}s expected section timing");
+            }
+        }
+        if (invalidSectionTimingParts.Count > 0)
+        {
+            warnings.Add(new("listening_section_timing", "error",
+                $"Listening audio and authored cue windows must fit each section's expected timing; {string.Join(", ", invalidSectionTimingParts)}."));
+        }
+
         var partsMissingAudioSource = partsWithQuestions
             .Where(code => !PartHasUploadedAudio(code) && !PartHasTtsAudio(code))
             .Select(PartCodeKey)
@@ -689,7 +753,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     /// normalized part. Accepts both granular (A1/A2/C1/C2) and legacy (A/C)
     /// partCodes. Also validates Part B items expose a 3-option MCQ.</summary>
     private static (int partA, int partB, int partC, int total, List<ListeningValidationIssue> warnings)
-        CountItems(string? extractedTextJson)
+        CountItems(
+            string? extractedTextJson,
+            IReadOnlyList<UploadedAudioAsset> uploadedAudioAssets)
     {
         var warnings = new List<ListeningValidationIssue>();
         if (string.IsNullOrWhiteSpace(extractedTextJson)) return (0, 0, 0, 0, warnings);
@@ -870,6 +936,43 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             {
                 warnings.Add(new("listening_extract_timing", "error",
                     $"Every Listening extract requires valid audio cue timings; {invalidExtractTimings} extract(s) are missing start/end ms or have an invalid window."));
+            }
+
+            var hasGlobalUploadedAudio = uploadedAudioAssets.Any(audio => string.IsNullOrWhiteSpace(audio.Part));
+            var invalidSectionTimingParts = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var extract in extracts)
+            {
+                var partCode = (extract.GetValueOrDefault("partCode") ?? extract.GetValueOrDefault("part"))
+                    ?.ToString()?.Trim().ToUpperInvariant();
+                var timeLimitSeconds = TryGetInt(extract, "timeLimitSeconds");
+                if (string.IsNullOrWhiteSpace(partCode) || timeLimitSeconds is null) continue;
+
+                if (timeLimitSeconds is <= 0)
+                {
+                    invalidSectionTimingParts.Add($"{partCode} has a non-positive time limit");
+                    continue;
+                }
+
+                var timeLimitMs = (long)timeLimitSeconds.Value * 1000L;
+                var audioEndMs = (long)(TryGetInt(extract, "audioEndMs") ?? 0);
+                var uploadedDurationSeconds = uploadedAudioAssets
+                    .Where(audio => hasGlobalUploadedAudio
+                        || string.Equals(audio.Part?.Trim(), partCode, StringComparison.OrdinalIgnoreCase))
+                    .Select(audio => audio.DurationSeconds)
+                    .Where(duration => duration is > 0)
+                    .Select(duration => (long)duration!.Value)
+                    .DefaultIfEmpty()
+                    .Max();
+                if (audioEndMs > timeLimitMs || uploadedDurationSeconds * 1000L > timeLimitMs)
+                {
+                    invalidSectionTimingParts.Add(
+                        $"{partCode} exceeds its {timeLimitSeconds.Value}s expected section timing");
+                }
+            }
+            if (invalidSectionTimingParts.Count > 0)
+            {
+                warnings.Add(new("listening_section_timing", "error",
+                    $"Listening audio and authored cue windows must fit each section's expected timing; {string.Join(", ", invalidSectionTimingParts)}."));
             }
 
             var missingExtractDifficulty = extracts.Count(extract => !IsValidDifficulty(TryGetInt(extract, "difficultyRating") ?? TryGetInt(extract, "difficultyLevel")));
