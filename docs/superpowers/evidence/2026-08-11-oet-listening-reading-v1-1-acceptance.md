@@ -83,6 +83,9 @@ an owner-controlled value that must not be invented in code.
   reports containing Reading/Listening modules, so a mock-wide numeric average
   cannot become an unapproved assessment pass claim. Focused admin analytics
   execution remains pending.
+- The legacy background mock-report builder is aligned with the same governed
+  score gate, withholding Reading/Listening formula grades, mock-wide grade,
+  and booking pass advice when owner conversion evidence is absent.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

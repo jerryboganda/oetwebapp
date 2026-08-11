@@ -1048,3 +1048,14 @@ dirty work in the main checkout.
   admin analytics execution and authenticated deployed acceptance remain
   pending. Preserve the four untracked user-owned paths above and the owner
   release gates listed in the acceptance matrix.
+
+# Latest LR coding checkpoint - 2026-08-12 (legacy mock builder gate)
+
+- The legacy background mock-report builder now mirrors the active mock
+  aggregation gate, withholding Reading/Listening formula grades, mock-wide
+  grade, and booking pass advice without owner conversion evidence.
+- Only bounded source searches and `git diff --check` were run for this slice;
+  no long local validation, CI/CD, push, or deployment was started. Focused
+  execution and authenticated deployed acceptance remain pending. Preserve
+  the four untracked user-owned paths above and the owner release gates listed
+  in the acceptance matrix.

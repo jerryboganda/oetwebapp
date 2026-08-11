@@ -1429,6 +1429,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             var section = row.sectionAttempt;
             var subtest = section.SubtestCode;
             var scaled = ResolveMockScaledScore(section);
+            var governedScore = subtest.Trim().ToLowerInvariant() is "reading" or "listening";
             var review = reviewRequests.FirstOrDefault(x => x.AttemptId == section.ContentAttemptId);
             var state = section.State == AttemptState.Completed
                 ? review is null ? "completed" : ReviewStateForReport(review.State)
@@ -1440,7 +1441,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 score = scaled?.ToString() ?? (state is "queued" or "in_review" ? "Pending review" : "Pending"),
                 rawScore = FormatMockRawScore(section),
                 scaledScore = scaled,
-                grade = scaled is null ? null : OetScoring.OetGradeLetterFromScaled(scaled.Value),
+                grade = scaled is null
+                    ? null
+                    : governedScore ? section.Grade : OetScoring.OetGradeLetterFromScaled(scaled.Value),
                 state,
                 contentPaperTitle = row.bundleSection.ContentPaper?.Title,
                 reviewRequestId = review?.Id,
@@ -1478,15 +1481,20 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             .ToListAsync(cancellationToken);
         var perModuleReadiness = subTests.Select(x =>
         {
-            var advisory = x.scaledScore.HasValue ? OetScoring.AdvisoryTier(x.scaledScore.Value) : null;
+            var governedScore = x.id is "reading" or "listening";
+            var advisory = !governedScore && x.scaledScore.HasValue ? OetScoring.AdvisoryTier(x.scaledScore.Value) : null;
             return new
             {
                 subtest = x.name,
                 scaledScore = x.scaledScore,
                 grade = x.grade,
-                rag = advisory?.Tier ?? "pending",
-                message = advisory?.Message ?? "Awaiting scored evidence or teacher review.",
-                passThreshold = advisory?.PassThreshold
+                rag = governedScore ? (x.scaledScore.HasValue ? "owner-converted" : "pending") : advisory?.Tier ?? "pending",
+                message = governedScore
+                    ? (x.scaledScore.HasValue
+                        ? "Owner-approved conversion is available; no mock-wide pass label is inferred."
+                        : "Awaiting owner-approved score conversion or teacher review.")
+                    : advisory?.Message ?? "Awaiting scored evidence or teacher review.",
+                passThreshold = governedScore ? null : advisory?.PassThreshold
             };
         }).ToArray();
         var timingAnalysis = sections.Select(x => new
@@ -1525,7 +1533,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             strictness = ReadString(config, "strictness") ?? mockAttempt.Strictness,
             releasePolicy = ReadString(config, "releasePolicy"),
             overallScore = overall?.ToString() ?? "Pending",
-            overallGrade = overall is null ? null : OetScoring.OetGradeLetterFromScaled(overall.Value),
+            overallGrade = overall is null || subTests.Any(x => x.id is "reading" or "listening")
+                ? null
+                : OetScoring.OetGradeLetterFromScaled(overall.Value),
             summary = BuildMockReportSummary(overall, subTests.Count(x => x.state is "queued" or "in_review")),
             subTests,
             weakestCriterion,
@@ -1556,7 +1566,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 completed = reviewRequests.Count(x => x.State == ReviewRequestState.Completed),
                 pending = reviewRequests.Count(x => x.State is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment)
             },
-            bookingAdvice = BuildMockBookingAdvice(overall),
+            bookingAdvice = BuildMockBookingAdvice(
+                overall,
+                subTests.Any(x => x.id is "reading" or "listening")),
             retakeAdvice = new
             {
                 recommendedWindowDays = 7,
@@ -1614,7 +1626,18 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
     private static int? ResolveMockScaledScore(MockSectionAttempt section)
     {
-        return section.ScaledScore;
+        var governedScore = section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening";
+        return governedScore && !IsOwnerConvertedSection(section) ? null : section.ScaledScore;
+    }
+
+    private static bool IsOwnerConvertedSection(MockSectionAttempt section)
+    {
+        if (section.SubtestCode.Trim().ToLowerInvariant() is not ("reading" or "listening")) return true;
+        var evidence = JsonSupport.Deserialize<Dictionary<string, object?>>(
+            section.FeedbackJson,
+            new Dictionary<string, object?>());
+        return evidence.TryGetValue("scoreConversionTableVersionKey", out var key)
+            && !string.IsNullOrWhiteSpace(key?.ToString());
     }
 
     private static string FormatMockRawScore(MockSectionAttempt section)
@@ -1666,11 +1689,22 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             : "The report is waiting for scored section evidence before calculating an advisory overall score.";
     }
 
-    private static object BuildMockBookingAdvice(int? overall)
+    private static object BuildMockBookingAdvice(int? overall, bool containsGovernedScore)
     {
         if (!overall.HasValue)
         {
             return new { status = "pending", message = "Wait for scored sections and teacher review before booking the official OET.", route = "/mocks/setup" };
+        }
+
+        if (containsGovernedScore)
+        {
+            return new
+            {
+                status = "pending",
+                score = overall.Value,
+                message = "Use the owner-approved per-assessment pass labels before booking the official OET; no mock-wide pass claim is inferred.",
+                route = "/exam-booking"
+            };
         }
 
         var advisory = OetScoring.AdvisoryTier(overall.Value);
