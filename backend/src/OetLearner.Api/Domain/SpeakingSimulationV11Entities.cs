@@ -205,6 +205,24 @@ public class SpeakingSimulationV11Evidence
     public string QuoteText { get; set; } = string.Empty;
     public int? StartMs { get; set; }
     public int? EndMs { get; set; }
+    [MaxLength(32)]
+    public string EvidenceStatus { get; set; } = "supported";
+
+    public string? FindingText { get; set; }
+    public string? ActionSuggestion { get; set; }
+
+    [MaxLength(32)]
+    public string? ConfidenceLabel { get; set; }
+    public decimal? ConfidenceScore { get; set; }
+    public bool IsPrimary { get; set; } = true;
+
+    [MaxLength(64)]
+    public string? SourceTranscriptId { get; set; }
+    [MaxLength(64)]
+    public string? SourceRecordingId { get; set; }
+    [MaxLength(64)]
+    public string? CardVersion { get; set; }
+
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

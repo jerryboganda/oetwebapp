@@ -14,6 +14,9 @@ public partial class LearnerDbContext
     public DbSet<SpeakingSimulationV11CriterionScore> SpeakingSimulationV11CriterionScores => Set<SpeakingSimulationV11CriterionScore>();
     public DbSet<SpeakingSimulationV11TurnMetric> SpeakingSimulationV11TurnMetrics => Set<SpeakingSimulationV11TurnMetric>();
     public DbSet<SpeakingSimulationV11PersonaRuntimeSnapshot> SpeakingSimulationV11PersonaRuntimeSnapshots => Set<SpeakingSimulationV11PersonaRuntimeSnapshot>();
+    public DbSet<SpeakingSimulationV11TurnEvidence> SpeakingSimulationV11TurnEvidenceRows => Set<SpeakingSimulationV11TurnEvidence>();
+    public DbSet<SpeakingSimulationV11AudioQualityCheck> SpeakingSimulationV11AudioQualityChecks => Set<SpeakingSimulationV11AudioQualityCheck>();
+    public DbSet<SpeakingSimulationV11CardTimingSnapshot> SpeakingSimulationV11CardTimingSnapshots => Set<SpeakingSimulationV11CardTimingSnapshot>();
 
     partial void OnModelCreatingSpeakingSimulationV11(ModelBuilder modelBuilder)
     {
@@ -114,12 +117,64 @@ public partial class LearnerDbContext
                 .HasForeignKey(x => x.RolePlayCardId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<SpeakingSimulationV11TurnEvidence>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Text).HasColumnType("text");
+            entity.Property(x => x.WordConfidenceJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.SpeakingSessionId, x.SourceTranscriptId, x.TurnNumber }).IsUnique();
+            entity.HasIndex(x => x.AssessmentId);
+            entity.HasIndex(x => x.SourceRecordingId);
+            entity.HasOne<SpeakingSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SpeakingSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<SpeakingSimulationV11Assessment>()
+                .WithMany()
+                .HasForeignKey(x => x.AssessmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<SpeakingSimulationV11AudioQualityCheck>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DetailsJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.SpeakingSessionId, x.CheckedAt });
+            entity.HasIndex(x => x.Status);
+            entity.HasOne<SpeakingSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SpeakingSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<SpeakingSimulationV11Assessment>()
+                .WithMany()
+                .HasForeignKey(x => x.AssessmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<SpeakingSimulationV11CardTimingSnapshot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.SpeakingSessionId, x.CapturedAt });
+            entity.HasOne<SpeakingSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SpeakingSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<SpeakingExamSession>()
+                .WithMany()
+                .HasForeignKey(x => x.ExamSessionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
         modelBuilder.Entity<SpeakingSimulationV11Evidence>(entity =>
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.QuoteText).HasColumnType("text");
+            entity.Property(x => x.FindingText).HasColumnType("text");
+            entity.Property(x => x.ActionSuggestion).HasColumnType("text");
+            entity.Property(x => x.ConfidenceScore).HasColumnType("numeric(5,2)");
             entity.HasIndex(x => x.PrimaryCriterionCode);
             entity.HasIndex(x => x.GeneratedAt);
+            entity.HasIndex(x => x.SourceTranscriptId);
+            entity.HasIndex(x => x.SourceRecordingId);
         });
 
         modelBuilder.Entity<SpeakingSimulationV11CriterionScore>(entity =>

@@ -27,7 +27,8 @@ namespace OetLearner.Api.Services.Speaking;
 public sealed class SpeakingAiAssessmentService(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
-    ILogger<SpeakingAiAssessmentService> logger)
+    ILogger<SpeakingAiAssessmentService> logger,
+    SpeakingSimulationV11EvidenceCaptureService? v11EvidenceCapture = null)
 {
     private const string PromptTemplateId = "speaking.score.v2";
     private const string ProviderName = "ai_gateway";
@@ -164,6 +165,11 @@ Scoring rules:
             .Where(t => t.SpeakingSessionId == sessionId && t.IsLatest)
             .OrderByDescending(t => t.GeneratedAt)
             .FirstOrDefaultAsync(ct);
+
+        if (v11EvidenceCapture is not null)
+        {
+            await v11EvidenceCapture.CaptureAsync(sessionId, ct);
+        }
 
         if (transcript is null)
         {
