@@ -1589,10 +1589,10 @@ public sealed class ReadingStructureService : IReadingStructureService
         {
             if (option.ValueKind == JsonValueKind.String)
             {
-                var label = option.GetString()?.Trim();
-                if (string.IsNullOrWhiteSpace(label))
+                var stringOptionLabel = option.GetString()?.Trim();
+                if (string.IsNullOrWhiteSpace(stringOptionLabel))
                     throw new InvalidOperationException("MCQ options must be non-empty and unique.");
-                if (!labels.Add(label))
+                if (!labels.Add(stringOptionLabel))
                     throw new InvalidOperationException("MCQ options must be non-empty and unique.");
                 continue;
             }

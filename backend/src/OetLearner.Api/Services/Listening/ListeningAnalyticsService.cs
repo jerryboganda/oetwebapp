@@ -690,7 +690,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         var scaled = conversionByAttempt.Values.Select(x => x.Scaled).ToList();
         int? avgScaled = scaled.Count == 0 ? null : (int)Math.Round(scaled.Average());
-        var percentPassing = conversionByAttempt.Count == 0
+        double? percentPassing = conversionByAttempt.Count == 0
             ? null
             : Math.Round(100.0 * conversionByAttempt.Values.Count(x => x.Passed) / conversionByAttempt.Count, 1);
 

@@ -250,7 +250,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             TotalAttempts: attempts.Count,
             SubmittedAttempts: submitted.Count,
             MeanRawScore: Math.Round(meanRaw, 2),
-            MeanScaledScore: Math.Round(meanScaled, 2),
+            MeanScaledScore: meanScaled is null ? null : Math.Round(meanScaled.Value, 2),
             CompletionRate: Math.Round(completionRate, 4),
             AbandonmentRate: Math.Round(abandonmentRate, 4),
             AverageTimePerQuestionMs: Math.Round(avgTimePerQuestion, 1),
