@@ -9,6 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { formatAnswerValue } from '@/lib/results/format-answer';
 import { Badge } from '@/components/ui/badge';
@@ -328,6 +329,15 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                     <Link href={nextAction.href}>{nextAction.label}</Link>
                   </Button>
                 </div>
+              )}
+              chartSlot={(
+                <ScoreBandGraph
+                  rawScore={raw}
+                  maxRawScore={review.attempt.maxRawScore}
+                  scaledScore={scaled}
+                  grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
+                  tableVersion={review.attempt.scoreConversionTableVersionKey}
+                />
               )}
             />
 

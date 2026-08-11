@@ -9,6 +9,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -175,6 +176,15 @@ function ListeningResultsContent() {
                     : 'An owner-approved conversion table has not been configured for this result.'}
                 </p>
               </div>
+            )}
+            chartSlot={(
+              <ScoreBandGraph
+                rawScore={result.rawScore}
+                maxRawScore={result.maxRawScore}
+                scaledScore={result.scaledScore}
+                grade={hasApprovedConversion ? result.grade : null}
+                tableVersion={result.scoreConversionTableVersionKey}
+              />
             )}
           />
         </MotionSection>
