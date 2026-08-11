@@ -279,7 +279,7 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
                 ? session.ElapsedSeconds
                 : session.RolePlayStartedAt is { } liveStart
                     ? Math.Max(0, (int)(now - liveStart).TotalSeconds)
-                    : null;
+                    : (int?)null;
 
         var snapshot = await db.SpeakingSimulationV11CardTimingSnapshots
             .FirstOrDefaultAsync(x => x.SpeakingSessionId == session.Id, ct);

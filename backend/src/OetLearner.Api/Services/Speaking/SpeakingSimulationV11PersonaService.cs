@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -340,6 +341,16 @@ public sealed class SpeakingSimulationV11PersonaService(LearnerDbContext db)
         {
             return [];
         }
+    }
+
+    private static string NormalizeFactKeyJson(string? json)
+    {
+        var normalized = ParseStringArray(json)
+            .Where(ApprovedCarryFactKeys.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return JsonSerializer.Serialize(normalized);
     }
 
     private static Dictionary<string, JsonElement> CopyApprovedFacts(
