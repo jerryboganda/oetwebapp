@@ -1466,12 +1466,12 @@ public sealed class ListeningLearnerService(
             deterministicAnswers: answerByQuestionId,
             persistedConversionErrorCode: gradingResult.ScoreConversionErrorCode);
 
-        var score = new ListeningScoreDto(
+        var score = ApplyScoreConversionGate(new ListeningScoreDto(
             gradingResult.RawScore,
             gradingResult.MaxRawScore,
             gradingResult.ScaledScore,
             gradingResult.ScoreConversionGrade ?? "—",
-            gradingResult.ScoreConversionPassed);
+            gradingResult.ScoreConversionPassed), review.ScoreConversionTableVersionKey);
         var evaluation = CreateEvaluation(attempt.Id, score, review);
         db.Evaluations.Add(evaluation);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
@@ -2605,9 +2605,10 @@ public sealed class ListeningLearnerService(
         var raw = PersistedRawScore is int persistedRaw
             ? Math.Clamp(persistedRaw, 0, maxRaw)
             : Math.Clamp(items.Sum(i => i.PointsEarned), 0, maxRaw);
-        var scaled = PersistedScaledScore;
-        var grade = scaled is null ? "—" : PersistedScoreConversionGrade ?? "—";
-        var passed = scaled is null ? null : PersistedScoreConversionPassed;
+        var hasApprovedConversion = HasApprovedScoreConversion(ScoreConversionTableVersionKey, PersistedScaledScore, PersistedScoreConversionPassed);
+        var scaled = hasApprovedConversion ? PersistedScaledScore : null;
+        var grade = hasApprovedConversion ? PersistedScoreConversionGrade ?? "—" : "—";
+        var passed = hasApprovedConversion ? PersistedScoreConversionPassed : null;
         var score = new ListeningScoreDto(
             raw,
             maxRaw,
@@ -2632,8 +2633,8 @@ public sealed class ListeningLearnerService(
             ScaledScore: score.ScaledScore,
             Grade: score.Grade,
             Passed: score.Passed,
-            ScoreConversionTableVersionKey: ScoreConversionTableVersionKey,
-            ScoreConversionErrorCode: ScoreConversionErrorCode,
+            ScoreConversionTableVersionKey: hasApprovedConversion ? ScoreConversionTableVersionKey : null,
+            ScoreConversionErrorCode: hasApprovedConversion ? ScoreConversionErrorCode : "score_conversion_unavailable",
             ScoreDisplay: FormatScoreDisplay(score),
             CorrectCount: items.Count(i => i.IsCorrect),
             IncorrectCount: items.Count(i => !i.IsCorrect && !string.IsNullOrWhiteSpace(i.LearnerAnswer)),
@@ -3283,12 +3284,13 @@ public sealed class ListeningLearnerService(
             if (evaluation.RawScore is int persistedRaw)
             {
                 var persistedMax = Math.Clamp(evaluation.MaxRawScore ?? CanonicalRawMax, 1, CanonicalRawMax);
+                var hasApprovedConversion = HasApprovedScoreConversion(evaluation.ScoreConversionTableVersionKey, evaluation.ScaledScore, evaluation.ScoreConversionPassed);
                 return new ListeningScoreDto(
                     Math.Clamp(persistedRaw, 0, persistedMax),
                     persistedMax,
-                    evaluation.ScaledScore,
-                    evaluation.ScaledScore is null ? "—" : evaluation.ScoreConversionGrade ?? "—",
-                    evaluation.ScaledScore is null ? null : evaluation.ScoreConversionPassed);
+                    hasApprovedConversion ? evaluation.ScaledScore : null,
+                    hasApprovedConversion ? evaluation.ScoreConversionGrade ?? "—" : "—",
+                    hasApprovedConversion ? evaluation.ScoreConversionPassed : null);
             }
             var rows = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, []);
             var row = rows.FirstOrDefault();
@@ -3299,12 +3301,14 @@ public sealed class ListeningLearnerService(
             {
                 var maxRawValue = Math.Clamp(maxRaw ?? CanonicalRawMax, 1, CanonicalRawMax);
                 var rawValue = Math.Clamp(raw ?? 0, 0, maxRawValue);
-                var grade = scaled is not null ? evaluation.ScoreConversionGrade ?? "—" : "—";
-                var passed = scaled is not null ? evaluation.ScoreConversionPassed : null;
+                var hasApprovedConversion = HasApprovedScoreConversion(evaluation.ScoreConversionTableVersionKey, scaled, evaluation.ScoreConversionPassed);
+                var approvedScaled = hasApprovedConversion ? scaled : null;
+                var grade = hasApprovedConversion ? evaluation.ScoreConversionGrade ?? "—" : "—";
+                var passed = hasApprovedConversion ? evaluation.ScoreConversionPassed : null;
                 return new ListeningScoreDto(
                     rawValue,
                     maxRawValue,
-                    scaled,
+                    approvedScaled,
                     grade,
                     passed);
             }
@@ -3312,6 +3316,19 @@ public sealed class ListeningLearnerService(
 
         return new ListeningScoreDto(0, CanonicalRawMax, null, "—", null);
     }
+
+    private static ListeningScoreDto ApplyScoreConversionGate(ListeningScoreDto score, string? scoreConversionTableVersionKey)
+    {
+        if (HasApprovedScoreConversion(scoreConversionTableVersionKey, score.ScaledScore, score.Passed))
+            return score;
+
+        return new ListeningScoreDto(score.RawScore, score.MaxRawScore, null, "—", null);
+    }
+
+    private static bool HasApprovedScoreConversion(string? scoreConversionTableVersionKey, int? scaledScore, bool? passed)
+        => scaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
+            && passed.HasValue;
 
     private static ListeningScoreDto ResolveScoreFromRelationalAttempt(ListeningAttempt attempt, Evaluation? evaluation)
     {
@@ -3321,9 +3338,10 @@ public sealed class ListeningLearnerService(
         }
 
         var rawValue = Math.Clamp(attempt.RawScore ?? 0, 0, CanonicalRawMax);
-        var scaledValue = attempt.ScaledScore;
-        var grade = scaledValue is not null ? attempt.ScoreConversionGrade ?? "—" : "—";
-        var passed = scaledValue is not null ? attempt.ScoreConversionPassed : null;
+        var hasApprovedConversion = HasApprovedScoreConversion(attempt.ScoreConversionTableVersionKey, attempt.ScaledScore, attempt.ScoreConversionPassed);
+        var scaledValue = hasApprovedConversion ? attempt.ScaledScore : null;
+        var grade = hasApprovedConversion ? attempt.ScoreConversionGrade ?? "—" : "—";
+        var passed = hasApprovedConversion ? attempt.ScoreConversionPassed : null;
         return new ListeningScoreDto(
             rawValue,
             attempt.MaxRawScore > 0 ? attempt.MaxRawScore : CanonicalRawMax,

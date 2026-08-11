@@ -104,6 +104,10 @@ an owner-controlled value that must not be invented in code.
   explicit persisted conversion decision, preventing pathway branching or
   milestone display from relying on table-key-only metadata. Focused pathway
   execution remains pending.
+- Shared learner-facing Listening result and transcript-review projections now
+  suppress scaled score, grade, pass, conversion-key, and score-display claims
+  unless scaled score, owner table key, and explicit decision are all present.
+  Focused Listening result/review execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation
