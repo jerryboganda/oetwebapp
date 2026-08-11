@@ -4,6 +4,24 @@ Last updated: 2026-08-11
 
 ## Current checkpoint
 
+### Latest exact-slice checkpoint
+
+- Commits `ddebd85be`, `abe859e2f`, `0a5867199`, `4bdffbc97`, and
+  `831da6795` are on `main` and `origin/main`. They cover encrypted offline
+  answer reconciliation, grounded post-submit Listening/Reading explanations,
+  approved-table-only branded practice score graphs, and fail-closed blank
+  response handling for grounded AI.
+- Targeted evidence passed: offline reconciliation (3 tests), Reading player
+  lifecycle (30 tests), and score-band graph (2 tests). Touched AI/graph
+  frontend lint had zero errors; the full TypeScript check remains blocked by
+  unrelated nullable/duplicate-test/Speaking/PDF-catalog diagnostics.
+- Actions run `31506238928` for exact SHA `831da6795` failed during the
+  Actions-host API publish on pre-existing Speaking v1.1 compile errors; no
+  production deployment is claimed for this SHA. The previously live release
+  still reports API live/readiness HTTP 200 and web Listening HTTP 307 to
+  sign-in.
+- Acceptance matrix: `docs/superpowers/evidence/2026-08-11-oet-listening-reading-v1-1-acceptance.md`.
+
 - Current uncommitted slice adds explicit accepted-variant change reasons to
   Listening and Reading authoring contracts, admin editors, audit details, and
   regression tests. Actor/time remain supplied by the existing AuditEvent.
@@ -82,14 +100,14 @@ Last updated: 2026-08-11
 
 ## Next step
 
-After the current playback/interruption slice is shipped, continue the PDF
-audit at remaining server-authoritative recovery, admin release, and
-authenticated acceptance evidence. Owner action
-remains: supply the approved score tables, normalization profile,
-practice/mock lock mode, rationale/evidence library, pathway thresholds, graph
-legal/style sign-off, timed-attempt concurrency target, and authenticated
-browser/mobile evidence. Preserve unrelated Speaking changes and do not
-approve a candidate release gate without those owner controls.
+Resolve or receive authorization for the unrelated Speaking compile blocker,
+then rerun the exact-SHA production workflow and verify the deployed browser
+and authenticated/mobile evidence. Owner action remains: supply the approved
+score tables, normalization profile, practice/mock lock mode, rationale/evidence
+library, pathway thresholds, graph legal/style sign-off, timed-attempt
+concurrency target, and authenticated browser/mobile evidence. Preserve
+unrelated Speaking changes and do not approve a candidate release gate without
+those owner controls.
 
 # Current Task - OET Speaking booking workflow PDF implementation
 
