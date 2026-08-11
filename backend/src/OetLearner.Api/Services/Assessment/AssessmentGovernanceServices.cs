@@ -39,6 +39,9 @@ public static class AssessmentScoreTableValidator
         if (rows.Any(row => row.ConvertedScore is < ConvertedMinimum or > ConvertedMaximum))
             return new(false, "score_table_converted_score_out_of_range");
 
+        if (rows.Any(row => string.IsNullOrWhiteSpace(row.Grade) || !row.Passed.HasValue))
+            return new(false, "score_table_requires_grade_and_pass_decision");
+
         return AssessmentScoreTableValidationResult.Valid;
     }
 

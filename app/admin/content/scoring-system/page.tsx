@@ -331,14 +331,16 @@ export default function AdminScoringSystemPage() {
       const rows = parsed.map((row, index) => {
         if (!row || typeof row !== 'object') throw new Error(`Row ${index + 1} is not an object.`);
         const candidate = row as Record<string, unknown>;
-        if (typeof candidate.rawScore !== 'number' || typeof candidate.convertedScore !== 'number') {
-          throw new Error(`Row ${index + 1} needs numeric rawScore and convertedScore.`);
+        if (typeof candidate.rawScore !== 'number' || typeof candidate.convertedScore !== 'number'
+          || typeof candidate.grade !== 'string' || !candidate.grade.trim()
+          || typeof candidate.passed !== 'boolean') {
+          throw new Error(`Row ${index + 1} needs rawScore, convertedScore, grade, and passed.`);
         }
         return {
           rawScore: candidate.rawScore,
           convertedScore: candidate.convertedScore,
-          grade: typeof candidate.grade === 'string' ? candidate.grade : null,
-          passed: typeof candidate.passed === 'boolean' ? candidate.passed : null,
+          grade: candidate.grade.trim(),
+          passed: candidate.passed,
         } satisfies AssessmentScoreConversionRowDto;
       });
       setScoreTableError(rows.length === 43 ? null : 'The owner table must contain exactly 43 rows covering raw scores 0 through 42.');
@@ -447,7 +449,7 @@ export default function AdminScoringSystemPage() {
               onChange={(event) => { setScoreTableJson(event.target.value); setScoreTableError(null); }}
               rows={10}
               aria-label="Score table rows JSON"
-              placeholder='[{"rawScore":0,"convertedScore":0,"grade":"E"}, ...]'
+              placeholder='[{"rawScore":0,"convertedScore":0,"grade":"E","passed":false}, ...]'
               className="mt-1 font-mono text-xs"
             />
             {scoreTableError ? (

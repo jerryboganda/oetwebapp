@@ -362,3 +362,6 @@ an owner-controlled value that must not be invented in code.
   normalization, answer-form, audio-lock, replay, or technical-guidance field
   is omitted; no omitted field inherits a runtime default. A focused regression
   test covers incomplete policy JSON; backend execution remains bounded/pending.
+- Score-table validation now also requires an explicit grade band and pass
+  decision for every raw score row, so a converted number alone cannot become
+  a governed result. The admin editor rejects incomplete rows before submit.

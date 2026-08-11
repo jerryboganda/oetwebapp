@@ -34,6 +34,19 @@ public sealed class AssessmentScoreConversionServiceTests
     }
 
     [Fact]
+    public void Validator_requires_grade_and_explicit_pass_decision_for_every_row()
+    {
+        var rows = Enumerable.Range(0, 43)
+            .Select(raw => new AssessmentScoreTableRowInput(raw, raw * 10, null, null))
+            .ToArray();
+
+        var result = AssessmentScoreTableValidator.Validate("reading", rows);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("score_table_requires_grade_and_pass_decision", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task Resolver_returns_unavailable_without_an_effective_owner_table()
     {
         await using var db = NewDb();
@@ -239,6 +252,8 @@ public sealed class AssessmentScoreConversionServiceTests
                     Id = $"{id}-row-{raw}",
                     RawScore = raw,
                     ConvertedScore = raw == 0 ? 0 : raw == 42 ? 500 : 350,
+                    Grade = raw >= 30 ? "B" : "C",
+                    Passed = raw >= 30,
                 })
                 .ToList(),
         };
