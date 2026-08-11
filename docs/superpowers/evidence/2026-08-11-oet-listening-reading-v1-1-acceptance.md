@@ -41,6 +41,7 @@ an owner-controlled value that must not be invented in code.
 - `0a5867199` adds the branded practice score-band graph with approved-table-only conversion, raw-only fallback, the 350 reference marker, and the persistent non-official-result disclosure.
 - `4bdffbc97` normalizes the score-graph source file ending.
 - `831da6795` rejects blank/unanswered stored responses before grounded AI explanation generation.
+- `d992d198e` and `20d19043c` repair the pre-existing Speaking baseline compilation blockers without staging the user’s remaining Speaking work; the hosted API publish gate now passes.
 
 ## Deployment evidence
 
@@ -69,16 +70,16 @@ an owner-controlled value that must not be invented in code.
 
 ## Current release attempt
 
-- `831da6795960dcb02c33245082aa54f3e122eacf` is on `main` and `origin/main`.
-- Actions run `31506238928` reached the API publish step but failed on
-  pre-existing Speaking v1.1 compilation errors in
-  `SpeakingSimulationV11PersonaService.cs` and
-  `SpeakingSimulationV11EvidenceCaptureService.cs`; the Listening/Reading
-  release therefore has not been proven live at this SHA.
-- The currently live deployment remains healthy: `/health/live` and
-  `/health/ready` returned HTTP 200 at `2026-08-11T15:25:19Z`; readiness
-  reported database, migrations, stuck jobs, and storage all `ok`.
-  `https://app.oetwithdrhesham.co.uk/listening` returned HTTP 307 to sign-in.
+- `20d19043cf369c707b6766f001383561a1535eb7` is on `main` and `origin/main`.
+- Actions run `31509360292` completed successfully for the exact SHA, including
+  web/API/backup image builds, off-box migration SQL generation and production
+  application, and blue/green deployment. The VPS reported
+  `AUTO_DEPLOY_DONE: live on green (previous slot blue kept for rollback)`.
+- The deploy log verified target-slot API and web health, router health, and
+  public API/web verification. Independent checks at `2026-08-11T16:02:07Z`
+  returned HTTP 200 for `/health/live` and `/health/ready`; readiness reported
+  database, migrations, stuck jobs, and storage all `ok`. The app root and
+  `/listening` returned HTTP 307 to sign-in with the expected `next` paths.
 
 ## Latest conformance hardening
 

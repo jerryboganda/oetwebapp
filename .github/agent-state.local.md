@@ -6,6 +6,13 @@ Last updated: 2026-08-11
 
 ### Latest exact-slice checkpoint
 
+- Commit `20d19043c` is on `main` and `origin/main`; Actions run
+  `31509360292` completed successfully for that exact SHA. Web/API/backup
+  images, off-box migration SQL generation/application, and blue/green deploy
+  passed. The VPS reported live on green with blue retained for rollback.
+- Post-deploy checks at `2026-08-11T16:02:07Z` returned API live/readiness
+  HTTP 200; readiness reported database, migrations, stuck jobs, and storage
+  all `ok`. Web root and `/listening` returned HTTP 307 to sign-in.
 - Commits `ddebd85be`, `abe859e2f`, `0a5867199`, `4bdffbc97`, and
   `831da6795` are on `main` and `origin/main`. They cover encrypted offline
   answer reconciliation, grounded post-submit Listening/Reading explanations,
@@ -15,11 +22,9 @@ Last updated: 2026-08-11
   lifecycle (30 tests), and score-band graph (2 tests). Touched AI/graph
   frontend lint had zero errors; the full TypeScript check remains blocked by
   unrelated nullable/duplicate-test/Speaking/PDF-catalog diagnostics.
-- Actions run `31506238928` for exact SHA `831da6795` failed during the
-  Actions-host API publish on pre-existing Speaking v1.1 compile errors; no
-  production deployment is claimed for this SHA. The previously live release
-  still reports API live/readiness HTTP 200 and web Listening HTTP 307 to
-  sign-in.
+- Actions runs `31506238928` and `31507118003` recorded the earlier Speaking
+  baseline compile blocker; isolated fixes in `d992d198e` and `20d19043c`
+  cleared it without staging the user’s remaining Speaking edits.
 - Acceptance matrix: `docs/superpowers/evidence/2026-08-11-oet-listening-reading-v1-1-acceptance.md`.
 
 - Current uncommitted slice adds explicit accepted-variant change reasons to
