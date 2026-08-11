@@ -108,6 +108,10 @@ an owner-controlled value that must not be invented in code.
   suppress scaled score, grade, pass, conversion-key, and score-display claims
   unless scaled score, owner table key, and explicit decision are all present.
   Focused Listening result/review execution remains pending.
+- Reading grading persistence and learner attempt/result projections now apply
+  the same three-field conversion gate, including idempotent existing-result
+  responses and submit responses. Focused Reading result/review execution
+  remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

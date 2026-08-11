@@ -533,6 +533,7 @@ public static class ReadingLearnerEndpoints
             var breakWindowActive = attempt.Mode == ReadingAttemptMode.Exam
                 && !attempt.PartABreakUsed
                 && now < partADeadline.AddSeconds(ReadingAttemptService.PartABreakMaxSeconds);
+            var hasApprovedConversion = HasApprovedScoreConversion(attempt);
 
             return Results.Ok(new
             {
@@ -545,7 +546,7 @@ public static class ReadingLearnerEndpoints
                 attempt.DeadlineAt,
                 attempt.SubmittedAt,
                 attempt.RawScore,
-                attempt.ScaledScore,
+                scaledScore = hasApprovedConversion ? attempt.ScaledScore : null,
                 attempt.MaxRawScore,
                 partADeadlineAt = partADeadline,
                 partBCDeadlineAt = partBCDeadline,
@@ -777,7 +778,8 @@ public static class ReadingLearnerEndpoints
                 .ThenBy(x => x.label)
                 .ToList();
 
-            var gradeLetter = attempt.ScaledScore is not null
+            var hasApprovedConversion = HasApprovedScoreConversion(attempt);
+            var gradeLetter = hasApprovedConversion
                 ? attempt.ScoreConversionGrade ?? "—"
                 : "—";
 
@@ -811,11 +813,11 @@ public static class ReadingLearnerEndpoints
                     attempt.SubmittedAt,
                     attempt.RawScore,
                     attempt.MaxRawScore,
-                    attempt.ScaledScore,
+                    scaledScore = hasApprovedConversion ? attempt.ScaledScore : null,
                     gradeLetter,
-                    passed = attempt.ScaledScore is null ? null : attempt.ScoreConversionPassed,
-                    scoreConversionTableVersionKey = attempt.ScoreConversionTableVersionKey,
-                    scoreConversionErrorCode = attempt.ScaledScore is null ? "score_conversion_unavailable" : null,
+                    passed = hasApprovedConversion ? attempt.ScoreConversionPassed : null,
+                    scoreConversionTableVersionKey = hasApprovedConversion ? attempt.ScoreConversionTableVersionKey : null,
+                    scoreConversionErrorCode = hasApprovedConversion ? null : "score_conversion_unavailable",
                     partADeadlineAt = partADeadline,
                     partBCDeadlineAt = partBCDeadline,
                     partABreakAvailable = attempt.Mode == ReadingAttemptMode.Exam,
@@ -1673,6 +1675,11 @@ public static class ReadingLearnerEndpoints
         return !string.IsNullOrWhiteSpace(profession)
             && string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool HasApprovedScoreConversion(ReadingAttempt attempt)
+        => attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
 
     private sealed record QuestionPaperAssetDto(
         string Id,

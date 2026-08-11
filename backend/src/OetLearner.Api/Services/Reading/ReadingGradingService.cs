@@ -243,9 +243,12 @@ public sealed class ReadingGradingService(
         }
         attempt.ScoreConversionTableId = conversion.TableId;
         attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
-        attempt.ScoreConversionGrade = conversion.Grade;
-        attempt.ScoreConversionPassed = conversion.Passed;
-        attempt.ScaledScore = conversion.ConvertedScore;
+        var hasApprovedConversion = conversion.ConvertedScore.HasValue
+            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+            && conversion.Passed.HasValue;
+        attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
+        attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
+        attempt.ScaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
         attempt.Status = ReadingAttemptStatus.Submitted;
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         attempt.LastActivityAt = DateTimeOffset.UtcNow;
@@ -320,15 +323,15 @@ public sealed class ReadingGradingService(
             RawScore: raw,
             MaxRawScore: attempt.MaxRawScore,
             ScaledScore: attempt.ScaledScore,
-            GradeLetter: conversion.Grade ?? "—",
+            GradeLetter: hasApprovedConversion ? conversion.Grade ?? "—" : "—",
             CorrectCount: correctCount,
             IncorrectCount: incorrectCount,
             UnansweredCount: unanswered,
             Answers: details,
-            ScoreConversionTableVersionKey: conversion.TableVersionKey,
-            ScoreConversionErrorCode: conversion.ErrorCode,
-            ScoreConversionGrade: conversion.Grade,
-            ScoreConversionPassed: conversion.Passed);
+            ScoreConversionTableVersionKey: hasApprovedConversion ? conversion.TableVersionKey : null,
+            ScoreConversionErrorCode: hasApprovedConversion ? conversion.ErrorCode : "score_conversion_unavailable",
+            ScoreConversionGrade: hasApprovedConversion ? conversion.Grade : null,
+            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null);
     }
 
     private static HashSet<string>? ParseScopeQuestionIds(ReadingAttempt attempt)
@@ -1099,15 +1102,19 @@ public sealed class ReadingGradingService(
             details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points, a.MissReason));
         }
 
-        var scaled = IsSubsetPracticeMode(attempt.Mode) ? null : attempt.ScaledScore;
-        var grade = scaled is null ? "—" : attempt.ScoreConversionGrade ?? "—";
+        var hasApprovedConversion = !IsSubsetPracticeMode(attempt.Mode)
+            && attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
+        var scaled = hasApprovedConversion ? attempt.ScaledScore : null;
+        var grade = hasApprovedConversion ? attempt.ScoreConversionGrade ?? "—" : "—";
         return new ReadingGradingResult(
             raw, attempt.MaxRawScore, scaled, grade,
             correct, wrong, unans, details,
-            attempt.ScoreConversionTableVersionKey,
-            scaled is null ? "score_conversion_unavailable" : null,
-            attempt.ScoreConversionGrade,
-            scaled is null ? null : attempt.ScoreConversionPassed);
+            hasApprovedConversion ? attempt.ScoreConversionTableVersionKey : null,
+            hasApprovedConversion ? null : "score_conversion_unavailable",
+            hasApprovedConversion ? attempt.ScoreConversionGrade : null,
+            hasApprovedConversion ? attempt.ScoreConversionPassed : null);
     }
 
     private async Task<ReadingResolvedPolicy> ResolvePolicyForAttemptAsync(ReadingAttempt attempt, CancellationToken ct)
