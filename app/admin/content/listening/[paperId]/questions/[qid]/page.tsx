@@ -15,9 +15,11 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   getListeningStructure,
+  getListeningAcceptedVariantHistory,
   patchListeningQuestion,
   type ListeningAuthoredQuestion,
   type ListeningAuthoredQuestionList,
+  type ListeningAcceptedVariantAuditEntry,
   type ListeningDistractorCategory,
   type ListeningQuestionPatchBody,
   type ListeningSpeakerAttitude,
@@ -143,6 +145,7 @@ export default function AdminListeningQuestionEditorPage() {
   const [target, setTarget] = useState<ListeningAuthoredQuestion | null>(null);
   const [initial, setInitial] = useState<FormState | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
+  const [variantAudit, setVariantAudit] = useState<ListeningAcceptedVariantAuditEntry[]>([]);
   const [save, setSave] = useState<SaveState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [variantDraft, setVariantDraft] = useState('');
@@ -158,8 +161,10 @@ export default function AdminListeningQuestionEditorPage() {
     try {
       const result = await getListeningStructure(paperId);
       const found = result.questions.find((q) => q.id === questionId) ?? null;
+      const audit = found ? await getListeningAcceptedVariantHistory(paperId) : [];
       setDoc(result);
       setTarget(found);
+      setVariantAudit(audit.filter((entry) => entry.questionId === questionId));
       const state = found ? fromQuestion(found) : null;
       setInitial(state);
       setForm(state);
@@ -178,6 +183,7 @@ export default function AdminListeningQuestionEditorPage() {
   const isMcq = target?.type === 'multiple_choice_3';
   const isPartC = target?.partCode === 'C1' || target?.partCode === 'C2';
   const isPartA = target?.partCode === 'A1' || target?.partCode === 'A2';
+  const isTypedAnswer = Boolean(target && !isMcq);
 
   const patch = useMemo(() => {
     if (!initial || !form) return {};
@@ -201,9 +207,11 @@ export default function AdminListeningQuestionEditorPage() {
     setError(null);
     try {
       const result = await patchListeningQuestion(paperId, questionId, patch);
+      const audit = await getListeningAcceptedVariantHistory(paperId);
       const found = result.questions.find((q) => q.id === questionId) ?? null;
       setDoc(result);
       setTarget(found);
+      setVariantAudit(audit.filter((entry) => entry.questionId === questionId));
       const state = found ? fromQuestion(found) : null;
       setInitial(state);
       setForm(state);
@@ -435,7 +443,7 @@ export default function AdminListeningQuestionEditorPage() {
                 />
               )}
 
-              {isPartA && (
+              {isTypedAnswer && (
                 <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4">
                   <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Accepted variants</p>
                   <p className="mt-1 text-xs text-admin-fg-muted">UK/US spelling, abbreviations, plurals. Keep tight; OET expects exact wording.</p>
@@ -473,9 +481,26 @@ export default function AdminListeningQuestionEditorPage() {
                       value={form.acceptedVariantChangeReason}
                       onChange={(e) => setField('acceptedVariantChangeReason', e.target.value)}
                       placeholder="For example: UK spelling used in the source transcript."
-                      hint="The admin audit event already records who and when; this records why."
+                      hint="The audit history below records who, when, and why each saved change was made."
                     />
                   )}
+                  <div className="mt-4 border-t border-admin-border pt-3">
+                    <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Accepted variant change history</p>
+                    {variantAudit.length === 0 ? (
+                      <p className="mt-2 text-xs text-admin-fg-muted">No accepted-variant changes recorded.</p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {variantAudit.map((entry) => (
+                          <div key={entry.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-xs">
+                            <p className="font-semibold text-admin-fg-strong">
+                              {entry.actorName || entry.actorId} · {new Date(entry.occurredAt).toLocaleString()}
+                            </p>
+                            <p className="mt-1 text-admin-fg-muted">{entry.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

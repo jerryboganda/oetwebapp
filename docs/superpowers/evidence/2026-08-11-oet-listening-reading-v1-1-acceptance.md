@@ -46,6 +46,10 @@ an owner-controlled value that must not be invented in code.
   authored per-section timing (including legacy JSON extracts), and the shared
   publish path hard-blocks missing audio, duration, cue-window, and section
   timing defects. Focused execution remains pending.
+- Typed-answer authoring now exposes a least-privilege accepted-variant audit
+  projection (actor, timestamp, reason) for Reading and Listening; Listening
+  Part A bulk edits also require and display the reason before saving. Focused
+  execution and deployed admin verification remain pending.
 - `0a5867199` adds the branded practice score-band graph with approved-table-only conversion, raw-only fallback, the 350 reference marker, and the persistent non-official-result disclosure.
 - `4bdffbc97` normalizes the score-graph source file ending.
 - `831da6795` rejects blank/unanswered stored responses before grounded AI explanation generation.

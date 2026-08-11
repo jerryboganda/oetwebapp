@@ -17,6 +17,7 @@ import { ReadingPartTabs } from '@/components/domain/admin/reading/ReadingPartTa
 import {
   getReadingStructureAdmin,
   getReadingStructureAdminPreview,
+  getReadingAcceptedVariantHistory,
   upsertReadingQuestion,
   removeReadingQuestion,
   reorderReadingQuestions,
@@ -27,6 +28,7 @@ import {
   type ReadingSectionAdminDto,
   type ReadingTextDto,
   type ReadingReviewState,
+  type ReadingAcceptedVariantAuditEntry,
 } from '@/lib/reading-authoring-api';
 import { ReadingPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
 import { ReadingAnswerSheetBuilder } from './ReadingAnswerSheetBuilder';
@@ -209,6 +211,9 @@ export default function ReadingQuestionsEditorPage() {
   const [form, setForm] = useState<QuestionFormState | null>(null);
   const [jsonText, setJsonText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [variantAudit, setVariantAudit] = useState<ReadingAcceptedVariantAuditEntry[]>([]);
+  const [variantAuditLoading, setVariantAuditLoading] = useState(false);
+  const [variantAuditError, setVariantAuditError] = useState<string | null>(null);
 
   // Review-state workflow
   const [reviewing, setReviewing] = useState<ReadingQuestionAdminDto | null>(null);
@@ -250,6 +255,35 @@ export default function ReadingQuestionsEditorPage() {
       void fetchData();
     });
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!editing || !form?.id) {
+      setVariantAudit([]);
+      setVariantAuditError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setVariantAuditLoading(true);
+    setVariantAuditError(null);
+    void getReadingAcceptedVariantHistory(paperId, form.id)
+      .then((history) => {
+        if (!cancelled) setVariantAudit(history);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setVariantAudit([]);
+          setVariantAuditError(err instanceof Error ? err.message : 'Could not load variant history.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setVariantAuditLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, form?.id, paperId]);
 
   const counts: { A: number; B: number; C: number } = {
     A: parts.find((p) => p.partCode === 'A')?.questions.length ?? 0,
@@ -760,7 +794,7 @@ export default function ReadingQuestionsEditorPage() {
                 value={form.acceptedVariantChangeReason}
                 onChange={(e) => setForm({ ...form, acceptedVariantChangeReason: e.target.value })}
                 placeholder="For example: explicit UK spelling variant verified against the source text."
-                hint="The admin audit event already records who and when; this records why."
+                hint="The audit history below records who, when, and why each saved change was made."
               />
             )}
           </div>
@@ -779,8 +813,32 @@ export default function ReadingQuestionsEditorPage() {
                 value={form.acceptedVariantChangeReason}
                 onChange={(e) => setForm({ ...form, acceptedVariantChangeReason: e.target.value })}
                 placeholder="For example: explicit spelling variant verified against the source text."
-                hint="The admin audit event already records who and when; this records why."
+                hint="The audit history below records who, when, and why each saved change was made."
               />
+            )}
+          </div>
+        )}
+
+        {form.id && (isShortOrSentence || form.questionType === 'ShortAnswerLabeled') && (
+          <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4">
+            <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Accepted variant change history</p>
+            {variantAuditLoading ? (
+              <p className="mt-2 text-xs text-admin-fg-muted">Loading audit history…</p>
+            ) : variantAuditError ? (
+              <p className="mt-2 text-xs text-red-500">{variantAuditError}</p>
+            ) : variantAudit.length === 0 ? (
+              <p className="mt-2 text-xs text-admin-fg-muted">No accepted-variant changes recorded.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {variantAudit.map((entry) => (
+                  <div key={entry.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-xs">
+                    <p className="font-semibold text-admin-fg-strong">
+                      {entry.actorName || entry.actorId} · {new Date(entry.occurredAt).toLocaleString()}
+                    </p>
+                    <p className="mt-1 text-admin-fg-muted">{entry.reason}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

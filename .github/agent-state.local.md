@@ -915,6 +915,11 @@ dirty work in the main checkout.
   extract-timing, cue-overlap, and section-timing defects while preserving the
   broader advisory authoring policy. Added focused duration/section-timing
   regression fixtures.
+- Reading and Listening typed-answer authoring now projects accepted-variant
+  audit history as actor/timestamp/reason without returning raw answer-key
+  snapshots. Listening Part A bulk editing now requires a reason for variant
+  changes and renders the same history per answer row; question editors show
+  the history inline.
 - Only `git diff --check` and scoped source searches were run by request;
   no long local validation, CI, push, or deployment was started.
 - Preserve the four untracked user-owned paths above. Owner release inputs and

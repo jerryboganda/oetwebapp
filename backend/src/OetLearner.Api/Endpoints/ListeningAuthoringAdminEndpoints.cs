@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -27,6 +28,13 @@ public static class ListeningAuthoringAdminEndpoints
 {
     public sealed record ReplaceStructureBody(IReadOnlyList<ListeningAuthoredQuestion> Questions);
     public sealed record ReplaceExtractsBody(IReadOnlyList<ListeningAuthoredExtract> Extracts);
+    public sealed record AcceptedVariantAuditEntry(
+        string QuestionId,
+        string Id,
+        string ActorId,
+        string ActorName,
+        DateTimeOffset OccurredAt,
+        string Reason);
 
     /// <summary>WS5: import body — a spec §19 manifest plus the replace toggle.</summary>
     public sealed record ImportManifestBody(bool ReplaceExisting, ListeningStructureManifest Manifest);
@@ -136,6 +144,44 @@ public static class ListeningAuthoringAdminEndpoints
             if (paper is not null) SetETag(http, paper);
             var doc = await svc.GetStructureAsync(paperId, ct);
             return Results.Ok(doc);
+        });
+
+        // Section 12: accepted typed-answer variants must expose the audit
+        // actor, time, and reason in the authoring UI. Project only those
+        // fields; the stored before/after snapshots can contain answer keys.
+        group.MapGet("/accepted-variant-history", async (
+            string paperId,
+            IListeningAuthoringService svc,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var structure = await svc.GetStructureAsync(paperId, ct);
+            var questionIds = structure.Questions.Select(q => q.Id).ToHashSet(StringComparer.Ordinal);
+            if (questionIds.Count == 0) return Results.Ok(Array.Empty<AcceptedVariantAuditEntry>());
+
+            var events = await db.AuditEvents.AsNoTracking()
+                .Where(e => e.ResourceType == "ListeningQuestion"
+                    && e.Action == "listening.question.patch"
+                    && e.ResourceId != null
+                    && questionIds.Contains(e.ResourceId))
+                .OrderByDescending(e => e.OccurredAt)
+                .Take(200)
+                .ToListAsync(ct);
+
+            var history = events
+                .Select(e =>
+                {
+                    var reason = TryReadAcceptedVariantReason(e.Details, paperId);
+                    return reason is null
+                        ? null
+                        : new AcceptedVariantAuditEntry(
+                            e.ResourceId!, e.Id, e.ActorId, e.ActorName, e.OccurredAt, reason);
+                })
+                .Where(entry => entry is not null)
+                .Select(entry => entry!)
+                .ToArray();
+
+            return Results.Ok(history);
         });
 
         group.MapPut("/structure", async (
@@ -927,6 +973,29 @@ public static class ListeningAuthoringAdminEndpoints
         });
 
         return app;
+    }
+
+    private static string? TryReadAcceptedVariantReason(string? details, string paperId)
+    {
+        if (string.IsNullOrWhiteSpace(details)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(details);
+            if (!document.RootElement.TryGetProperty("paperId", out var paperProperty)
+                || paperProperty.ValueKind != JsonValueKind.String
+                || !string.Equals(paperProperty.GetString(), paperId, StringComparison.Ordinal))
+                return null;
+            if (!document.RootElement.TryGetProperty("acceptedVariantChangeReason", out var property)
+                || property.ValueKind != JsonValueKind.String)
+                return null;
+
+            var reason = property.GetString()?.Trim();
+            return string.IsNullOrWhiteSpace(reason) ? null : reason;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     // ─── Bulk validate DTOs ──────────────────────────────────────────────────

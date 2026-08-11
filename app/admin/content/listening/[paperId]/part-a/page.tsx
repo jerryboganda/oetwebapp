@@ -7,7 +7,7 @@ import { ArrowLeft, FileText, Plus, Save, Sparkles, Upload, X } from 'lucide-rea
 import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Textarea } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { PartANotesBuilder } from '@/components/domain/listening/admin/PartANotesBuilder';
@@ -18,6 +18,7 @@ import { attachPaperAsset, getContentPaper, uploadFileChunked } from '@/lib/cont
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   ensureListeningPartASlots,
+  getListeningAcceptedVariantHistory,
   getListeningExtracts,
   getListeningStructure,
   importListeningPartAFromUpload,
@@ -25,6 +26,7 @@ import {
   patchListeningQuestion,
   type ListeningAuthoredExtract,
   type ListeningAuthoredQuestion,
+  type ListeningAcceptedVariantAuditEntry,
 } from '@/lib/listening-authoring-api';
 
 /**
@@ -122,6 +124,8 @@ function SubPartSection({
   const [initialNotesBody, setInitialNotesBody] = useState(extract?.notesBody ?? '');
   const [rows, setRows] = useState<AnswerRowState[]>(() => initRows(questions));
   const [variantDrafts, setVariantDrafts] = useState<Record<string, string>>({});
+  const [variantChangeReasons, setVariantChangeReasons] = useState<Record<string, string>>({});
+  const [variantAuditByQuestionId, setVariantAuditByQuestionId] = useState<Record<string, ListeningAcceptedVariantAuditEntry[]>>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [creatingSlots, setCreatingSlots] = useState(false);
@@ -159,6 +163,31 @@ function SubPartSection({
   useEffect(() => {
     setRows(initRows(questions));
   }, [questions]);
+
+  useEffect(() => {
+    if (!paperId || questions.length === 0) {
+      setVariantAuditByQuestionId({});
+      return;
+    }
+
+    let cancelled = false;
+    void getListeningAcceptedVariantHistory(paperId)
+      .then((history) => {
+        if (cancelled) return;
+        const grouped: Record<string, ListeningAcceptedVariantAuditEntry[]> = {};
+        for (const entry of history) {
+          (grouped[entry.questionId] ??= []).push(entry);
+        }
+        setVariantAuditByQuestionId(grouped);
+      })
+      .catch(() => {
+        if (!cancelled) setVariantAuditByQuestionId({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId, questions]);
 
   // Apply an AI-import payload (one-click OCR). Pre-fills the editor + answer
   // rows but deliberately does NOT touch the `initial*` snapshots, so the change
@@ -246,6 +275,16 @@ function SubPartSection({
   );
 
   const onSave = useCallback(async () => {
+    const missingReason = changedRows.find((row) => {
+      const variantsChanged = JSON.stringify(row.acceptedAnswers) !== JSON.stringify(row.initialAcceptedAnswers);
+      return variantsChanged && !variantChangeReasons[row.questionId]?.trim();
+    });
+    if (missingReason) {
+      setSaveState('error');
+      setToast({ variant: 'error', message: `Explain the accepted-variant change for Q${missingReason.questionNumber}.` });
+      return;
+    }
+
     setSaveState('saving');
     try {
       // PATCH notesBody if changed (WYSIWYG method).
@@ -263,9 +302,13 @@ function SubPartSection({
 
       // PATCH each changed question row
       for (const row of changedRows) {
+        const variantsChanged = JSON.stringify(row.acceptedAnswers) !== JSON.stringify(row.initialAcceptedAnswers);
         await patchListeningQuestion(paperId, row.questionId, {
           correctAnswer: row.correctAnswer,
           acceptedAnswers: row.acceptedAnswers,
+          ...(variantsChanged
+            ? { acceptedVariantChangeReason: variantChangeReasons[row.questionId].trim() }
+            : {}),
         });
       }
 
@@ -280,6 +323,7 @@ function SubPartSection({
           initialAcceptedAnswers: r.acceptedAnswers,
         })),
       );
+      setVariantChangeReasons({});
 
       setSaveState('saved');
       setToast({ variant: 'success', message: `Part ${code} saved.` });
@@ -289,7 +333,7 @@ function SubPartSection({
       const msg = e instanceof Error ? e.message : `Could not save Part ${code}.`;
       setToast({ variant: 'error', message: msg });
     }
-  }, [paperId, code, notesBody, notesBodyChanged, methodChanged, overlayChanged, method, overlayJson, changedRows, onSaveSuccess]);
+  }, [paperId, code, notesBody, notesBodyChanged, methodChanged, overlayChanged, method, overlayJson, changedRows, variantChangeReasons, onSaveSuccess]);
 
   // Create the answer-key question slots (Q1..12 / Q13..24) to match the
   // authored gap count, then reload so the answer boxes appear. Used when a note
@@ -552,6 +596,11 @@ function SubPartSection({
                     onAddVariant={() => addVariant(row.questionId)}
                     onRemoveVariant={(v) => removeVariant(row.questionId, v)}
                     onVariantKey={(e) => onVariantKey(row.questionId, e)}
+                    variantChangeReason={variantChangeReasons[row.questionId] ?? ''}
+                    onVariantChangeReason={(value) =>
+                      setVariantChangeReasons((prev) => ({ ...prev, [row.questionId]: value }))
+                    }
+                    variantAudit={variantAuditByQuestionId[row.questionId] ?? []}
                     disabled={disabled || saveState === 'saving'}
                   />
                 ))}
@@ -603,6 +652,9 @@ interface AnswerKeyRowProps {
   onAddVariant: () => void;
   onRemoveVariant: (v: string) => void;
   onVariantKey: (e: KeyboardEvent<HTMLInputElement>) => void;
+  variantChangeReason: string;
+  onVariantChangeReason: (value: string) => void;
+  variantAudit: ListeningAcceptedVariantAuditEntry[];
   disabled: boolean;
 }
 
@@ -615,9 +667,13 @@ function AnswerKeyRow({
   onAddVariant,
   onRemoveVariant,
   onVariantKey,
+  variantChangeReason,
+  onVariantChangeReason,
+  variantAudit,
   disabled,
 }: AnswerKeyRowProps) {
   const id = useId();
+  const variantsChanged = JSON.stringify(row.acceptedAnswers) !== JSON.stringify(row.initialAcceptedAnswers);
 
   return (
     <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4 space-y-3">
@@ -677,6 +733,36 @@ function AnswerKeyRow({
             Add
           </Button>
         </div>
+        {variantsChanged && (
+          <Textarea
+            className="mt-3"
+            label="Why is this variant change needed? (audit trail)"
+            rows={2}
+            value={variantChangeReason}
+            onChange={(e) => onVariantChangeReason(e.target.value)}
+            placeholder="For example: UK spelling verified against the source transcript."
+            hint="The saved history below records who, when, and why."
+            disabled={disabled}
+          />
+        )}
+      </div>
+
+      <div className="border-t border-admin-border pt-3">
+        <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Accepted variant change history</p>
+        {variantAudit.length === 0 ? (
+          <p className="mt-2 text-xs text-admin-fg-muted">No accepted-variant changes recorded.</p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {variantAudit.map((entry) => (
+              <div key={entry.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-xs">
+                <p className="font-semibold text-admin-fg-strong">
+                  {entry.actorName || entry.actorId} · {new Date(entry.occurredAt).toLocaleString()}
+                </p>
+                <p className="mt-1 text-admin-fg-muted">{entry.reason}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

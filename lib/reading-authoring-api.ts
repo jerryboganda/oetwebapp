@@ -97,6 +97,15 @@ export interface ReadingReviewLogEntryDto {
   transitionedAt: string;
 }
 
+/** Section 12: least-privilege audit projection for accepted variants. */
+export interface ReadingAcceptedVariantAuditEntry {
+  id: string;
+  actorId: string;
+  actorName: string;
+  occurredAt: string;
+  reason: string;
+}
+
 export interface ReadingReviewTransitionResultDto {
   questionId: string;
   fromState: ReadingReviewState;
@@ -905,6 +914,11 @@ export const setReadingQuestionDistractors = (
 
 export const getReadingQuestionReviewHistory = (paperId: string, questionId: string) =>
   api<ReadingReviewLogEntryDto[]>(`/v1/admin/papers/${paperId}/reading/questions/${questionId}/review-history`);
+
+export const getReadingAcceptedVariantHistory = (paperId: string, questionId: string) =>
+  api<ReadingAcceptedVariantAuditEntry[]>(
+    `/v1/admin/papers/${paperId}/reading/questions/${questionId}/accepted-variant-history`,
+  );
 
 export const transitionReadingQuestionReviewState = (
   paperId: string,

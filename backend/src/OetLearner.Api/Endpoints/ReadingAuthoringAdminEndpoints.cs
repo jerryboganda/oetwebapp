@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -16,6 +17,13 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 public static class ReadingAuthoringAdminEndpoints
 {
+    public sealed record AcceptedVariantAuditEntry(
+        string Id,
+        string ActorId,
+        string ActorName,
+        DateTimeOffset OccurredAt,
+        string Reason);
+
     public static IEndpointRouteBuilder MapReadingAuthoringAdminEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/v1/admin/papers/{paperId}/reading")
@@ -218,6 +226,48 @@ public static class ReadingAuthoringAdminEndpoints
             }
         });
 
+        // Section 12: expose only the accepted-variant audit tuple needed by
+        // the authoring UI. Do not return the free-form audit details because
+        // older entries may contain answer-key snapshots.
+        group.MapGet("/questions/{questionId}/accepted-variant-history", async (
+            string paperId,
+            string questionId,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var match = await db.ReadingQuestions.AsNoTracking()
+                .Where(q => q.Id == questionId)
+                .Join(db.ReadingParts.AsNoTracking(), q => q.ReadingPartId, p => p.Id,
+                    (q, p) => p.PaperId)
+                .FirstOrDefaultAsync(ct);
+            if (match is null) return Results.NotFound();
+            if (!string.Equals(match, paperId, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+
+            var events = await db.AuditEvents.AsNoTracking()
+                .Where(e => e.ResourceType == "ReadingAuthoring"
+                    && e.Action == "ReadingQuestionUpserted"
+                    && e.ResourceId == questionId)
+                .OrderByDescending(e => e.OccurredAt)
+                .Take(100)
+                .ToListAsync(ct);
+
+            var history = events
+                .Select(e =>
+                {
+                    var reason = TryReadAcceptedVariantReason(e.Details);
+                    return reason is null
+                        ? null
+                        : new AcceptedVariantAuditEntry(
+                            e.Id, e.ActorId, e.ActorName, e.OccurredAt, reason);
+                })
+                .Where(entry => entry is not null)
+                .Select(entry => entry!)
+                .ToArray();
+
+            return Results.Ok(history);
+        });
+
         group.MapDelete("/questions/{questionId}", async (
             string paperId, string questionId, IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
         {
@@ -415,6 +465,35 @@ public static class ReadingAuthoringAdminEndpoints
         });
 
         return app;
+    }
+
+    private static string? TryReadAcceptedVariantReason(string? details)
+    {
+        if (string.IsNullOrWhiteSpace(details)) return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(details);
+            if (document.RootElement.TryGetProperty("acceptedVariantChangeReason", out var property)
+                && property.ValueKind == JsonValueKind.String)
+            {
+                var jsonReason = property.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(jsonReason)) return jsonReason;
+            }
+        }
+        catch (JsonException)
+        {
+            // Existing Reading audit rows use a compact legacy text payload.
+        }
+
+        const string marker = "acceptedVariantChangeReason=";
+        var markerIndex = details.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0) return null;
+        var reason = details[(markerIndex + marker.Length)..].Trim();
+        return string.Equals(reason, "none", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(reason)
+            ? null
+            : reason;
     }
 
     private static object ProjectStructure(ReadingStructure structure) => new

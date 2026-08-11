@@ -248,10 +248,25 @@ export interface ListeningCandidatePreview {
   questions: ListeningCandidatePreviewQuestion[];
 }
 
+/** Section 12: least-privilege audit projection for accepted variants. */
+export interface ListeningAcceptedVariantAuditEntry {
+  questionId: string;
+  id: string;
+  actorId: string;
+  actorName: string;
+  occurredAt: string;
+  reason: string;
+}
+
 /** Candidate-safe projection for the pre-publish preview. It never returns
  * correctAnswer, acceptedAnswers, explanations, or distractor metadata. */
 export const getListeningCandidatePreview = (paperId: string) =>
   api<ListeningCandidatePreview>(`/v1/admin/papers/${paperId}/listening/preview-structure`);
+
+export const getListeningAcceptedVariantHistory = (paperId: string) =>
+  api<ListeningAcceptedVariantAuditEntry[]>(
+    `/v1/admin/papers/${paperId}/listening/accepted-variant-history`,
+  );
 
 /**
  * Per-question PATCH body. Every field is optional; absent (undefined) fields
