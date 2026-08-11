@@ -980,3 +980,15 @@ dirty work in the main checkout.
 - Focused re-mark execution and authenticated deployed acceptance remain
   pending. Preserve the four untracked user-owned paths above and the owner
   release gates listed in the acceptance matrix.
+
+# Latest LR coding checkpoint - 2026-08-12 (strict marking disclosure)
+
+- Corrected the learner-facing Listening test-rules page and exam-mode rulebook
+  metadata so misspellings, plural/article substitutions, numbers, units, and
+  word-order changes are not described as meaning-based credit. Credit is now
+  documented as canonical-answer or explicitly authorised-variant only.
+- Only bounded source inspection and `git diff --check` are intended for this
+  slice; no long local validation, CI/CD, push, or deployment was started.
+- Focused disclosure/UI execution and authenticated deployed acceptance remain
+  pending. Preserve the four untracked user-owned paths above and the owner
+  release gates listed in the acceptance matrix.

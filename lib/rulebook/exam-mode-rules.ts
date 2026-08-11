@@ -82,7 +82,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
   listening_part_a_strict_spelling: {
     checkId: 'listening_part_a_strict_spelling',
     surfaces: [
-      { kind: 'grading-service', service: 'ListeningGradingService', description: 'Whole-word-wrong policy: any spelling error in a Part A answer marks the entire answer wrong, with limited examiner-discretion variants accepted (see R02.5).' },
+      { kind: 'grading-service', service: 'ListeningGradingService', description: 'Whole-word-wrong policy: any spelling error in a Part A answer marks the entire answer wrong; only explicitly authored variants in the captured marking policy can receive credit.' },
     ],
   },
   listening_part_a_variant_acceptance: {

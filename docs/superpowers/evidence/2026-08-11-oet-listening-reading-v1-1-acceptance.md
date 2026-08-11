@@ -51,6 +51,9 @@ an owner-controlled value that must not be invented in code.
   outside the requested paper, and key snapshots without an explicit answer or
   accepted-variant field before creating an audit job. Focused endpoint and
   execution tests remain pending.
+- The learner-facing Listening test-rules disclosure no longer promises credit
+  for misspellings or meaning-based plural/article substitutions; it now states
+  strict platform marking and explicit-authorised-variant-only credit.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

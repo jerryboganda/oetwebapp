@@ -80,7 +80,7 @@ export default function ListeningTestRulesPage() {
             points={[
               'A wrong answer scores zero. A blank answer scores zero. Always write something.',
               `${rules.passRawAnchor}/${rules.questionCount} raw ≡ ${rules.passScaledAnchor}/${rules.scaledMax} scaled. Pass = ${rules.passScaledAnchor}.`,
-              'Spelling that does not change the meaning is accepted (e.g. "discharge" / "dischare" both pass; "discharge" vs "discarded" do not).',
+              'This platform grades spelling strictly: a misspelling receives zero even when the meaning is clear. Only the canonical answer or an explicitly authorised variant can receive credit.',
             ]}
           />
           <RuleCard
@@ -89,7 +89,7 @@ export default function ListeningTestRulesPage() {
             points={[
               'Listen for the exact word the speaker says. Re-using the words from the gap stem is the safest bet.',
               'Numbers, dosages, dates, and units count exactly: "5 mg" ≠ "5 g".',
-              'Plural / singular and articles (a / the) only matter when they change meaning.',
+              'Plural / singular, articles, numbers, units, and word order must match the keyed answer unless an authorised variant explicitly permits the form.',
             ]}
           />
           <RuleCard
