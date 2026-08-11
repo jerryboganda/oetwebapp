@@ -365,3 +365,7 @@ an owner-controlled value that must not be invented in code.
 - Score-table validation now also requires an explicit grade band and pass
   decision for every raw score row, so a converted number alone cannot become
   a governed result. The admin editor rejects incomplete rows before submit.
+- The admin marking-policy editor no longer pre-populates owner-controlled
+  normalization, replay, lock, or technical-guidance values. A policy draft
+  now requires explicit owner-supplied JSON, and the backend remains the
+  fail-closed completeness gate before approval.

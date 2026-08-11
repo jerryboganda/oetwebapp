@@ -46,16 +46,6 @@ const DEFAULT_POLICY_JSON = JSON.stringify({
   speaking: { passing: { default: 350 } },
 }, null, 2);
 
-
-const DEFAULT_MARKING_POLICY_JSON = JSON.stringify({
-  trimLeadingTrailingWhitespace: true,
-  collapseInternalWhitespace: false,
-  caseSensitive: true,
-  readingPartAMatchingPartialCredit: false,
-  listeningAudioReplayAllowed: false,
-  audioLockMode: 'exam',
-  technicalRequirementsGuidanceOnly: true,
-}, null, 2);
 const DEFAULT_BODY = `# How am I graded?
 
 OET reports a scaled score from 0 to 500 per sub-test. Listening and Reading
@@ -88,7 +78,9 @@ export default function AdminScoringSystemPage() {
   const [scoreTableSaving, setScoreTableSaving] = useState(false);
   const [markingPolicies, setMarkingPolicies] = useState<AssessmentMarkingPolicyDto[]>([]);
   const [markingPolicyVersion, setMarkingPolicyVersion] = useState('');
-  const [markingPolicyJson, setMarkingPolicyJson] = useState(DEFAULT_MARKING_POLICY_JSON);
+  // Owner-controlled marking rules must never be silently invented in the UI.
+  // The API also validates the complete required field set before publication.
+  const [markingPolicyJson, setMarkingPolicyJson] = useState('');
   const [markingPolicySaving, setMarkingPolicySaving] = useState(false);
   const [rationales, setRationales] = useState<AssessmentRationaleDto[]>([]);
   const [rationaleQuestionId, setRationaleQuestionId] = useState('');
@@ -522,6 +514,7 @@ export default function AdminScoringSystemPage() {
                 rows={7}
                 className="font-mono text-xs"
                 aria-label="Marking policy JSON"
+                placeholder={'Paste the complete owner-approved policy JSON, including all required fields.'}
               />
             </div>
             <Button onClick={() => void saveMarkingPolicyDraft()} disabled={markingPolicySaving} loading={markingPolicySaving}>
