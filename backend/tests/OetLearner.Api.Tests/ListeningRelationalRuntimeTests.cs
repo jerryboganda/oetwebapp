@@ -266,6 +266,7 @@ public class ListeningRelationalRuntimeTests
         var mediaA1 = Media("media-a1");
         var mediaA2 = Media("media-a2");
         var mediaB = Media("media-b");
+        var mediaAnswerKey = Media("media-answer-key");
 
         ContentPaperAsset Audio(string id, string part, MediaAsset media, int order) => new()
         {
@@ -299,6 +300,16 @@ public class ListeningRelationalRuntimeTests
                 Audio("asset-a1", "A1", mediaA1, 1),
                 Audio("asset-a2", "A2", mediaA2, 2),
                 Audio("asset-b", "B", mediaB, 3),
+                new ContentPaperAsset
+                {
+                    Id = "asset-answer-key",
+                    PaperId = "paper-audio",
+                    Role = PaperAssetRole.AnswerKey,
+                    MediaAssetId = mediaAnswerKey.Id,
+                    MediaAsset = mediaAnswerKey,
+                    DisplayOrder = 4,
+                    IsPrimary = true,
+                },
             ],
         };
         var part = new ListeningPart
@@ -328,7 +339,7 @@ public class ListeningRelationalRuntimeTests
         };
 
         db.Users.Add(user);
-        db.MediaAssets.AddRange(mediaA1, mediaA2, mediaB);
+        db.MediaAssets.AddRange(mediaA1, mediaA2, mediaB, mediaAnswerKey);
         db.ContentPapers.Add(paper);
         db.ListeningParts.Add(part);
         db.ListeningQuestions.Add(question);
@@ -344,6 +355,8 @@ public class ListeningRelationalRuntimeTests
         Assert.Contains("/v1/media/media-a1/content", json);
         Assert.Contains("/v1/media/media-a2/content", json);
         Assert.Contains("/v1/media/media-b/content", json);
+        Assert.DoesNotContain("answerKeyUrl", json);
+        Assert.DoesNotContain("media-answer-key", json);
         // The removed Part A "single audio" mode must not surface in the payload.
         Assert.DoesNotContain("partAAudioMode", json);
     }

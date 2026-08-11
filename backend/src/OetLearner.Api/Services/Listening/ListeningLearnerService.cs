@@ -2810,6 +2810,10 @@ public sealed class ListeningLearnerService(
         audioUrl = source.AudioUrl,
         questionPaperUrl = source.QuestionPaperUrl,
         questionPaperUrlByPart = source.QuestionPaperUrlByPart ?? new Dictionary<string, string>(),
+        // Answer-key assets are an authoring/admin concern. Never include the
+        // URL in a learner session or post-submit review projection: the v1.1
+        // contract keeps keys hidden until grading and exposes only the
+        // policy-controlled item review after submission.
         audioUrlByPart = source.AudioUrlByPart ?? new Dictionary<string, string>(),
         audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl)
             || (source.AudioUrlByPart?.Count ?? 0) > 0,
