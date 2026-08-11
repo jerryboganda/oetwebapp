@@ -16,7 +16,7 @@ export interface ListeningAudioTransportProps {
   isPlaying: boolean;
   progressSeconds: number;
   durationSeconds: number;
-  /** When false (exam/home/paper), the scrub slider is hidden. */
+  /** When false (exam/home), the scrub slider is hidden. */
   canScrub: boolean;
   /** When false, audio is non-pausable: the control is disabled while playing
    *  so it visibly reflects that playback can't be stopped. */

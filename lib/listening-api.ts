@@ -184,8 +184,8 @@ export interface ListeningExtractMetadataDto {
   /**
    * Part A note-completion body (markdown-ish grammar defined in
    * `lib/listening-part-a-notes.ts`). Null / absent for Part B/C extracts or
-   * when the body has not yet been authored. The player and printable booklet
-   * render this via `parseNotesDocument` when present.
+   * when the body has not yet been authored. The player renders this via
+   * `parseNotesDocument` when present.
    */
   notesBody?: string | null;
   /**
@@ -246,7 +246,7 @@ export interface ListeningSessionDto {
   attempt: ListeningAttemptDto | null;
   questions: ListeningSessionQuestionDto[];
   modePolicy: {
-    mode: 'practice' | 'exam' | 'home' | 'paper';
+    mode: 'practice' | 'exam' | 'home';
     canPause: boolean;
     canScrub: boolean;
     onePlayOnly: boolean;
@@ -254,17 +254,13 @@ export interface ListeningSessionDto {
     transcriptPolicy: string;
     /** Phase 9 tail — UI hint. Server is the source of truth for integrity
      * invariants (onePlayOnly / canScrub / canPause). */
-    presentationStyle?: 'practice' | 'exam_standard' | 'kiosk_fullscreen' | 'printable_booklet';
+    presentationStyle?: 'practice' | 'exam_standard' | 'kiosk_fullscreen';
     /** OET@Home kiosk: full-screen + integrity prompt before audio plays. */
     integrityLockRequired?: boolean;
-    /** Paper-simulation: render a printable booklet alongside the player. */
-    printableBooklet?: boolean;
-    /** R07/R06 policy hint: paper/diagnostic modes may navigate across sections. */
+    /** R07/R06 policy hint: learning/diagnostic modes may navigate across sections. */
     freeNavigation?: boolean;
     /** R06.11 policy hint: show exact unanswered numbers before lock/submit. */
     unansweredWarningRequired?: boolean;
-    /** Paper mode final all-parts review window in seconds, when configured. */
-    finalReviewAllPartsSeconds?: number | null;
   };
   scoring: {
     maxRawScore: number;
@@ -455,7 +451,7 @@ export interface ListeningTestRulesPolicyDto {
 export const getListeningTestRulesPolicy = () =>
   api<ListeningTestRulesPolicyDto>('/v1/listening-papers/policy/test-rules');
 
-export type ListeningSessionMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
+export type ListeningSessionMode = 'practice' | 'exam' | 'home' | 'diagnostic';
 
 export function getListeningSession(
   paperId: string,

@@ -1,7 +1,7 @@
 'use client';
 
 // Listening V2 — pre-start intro card. Renders mode-specific guidance,
-// extract metadata, optional printable booklet preview, and the
+// extract metadata, and the
 // readiness gate + Start CTA. Extracted from the monolithic
 // `app/listening/player/[id]/page.tsx` so the surface can be Storybook'd
 // and tested in isolation without booting the full Suspense + FSM tree.
@@ -67,11 +67,9 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
   const modeLabel =
     session.modePolicy.mode === 'home'
       ? 'OET@Home Mode'
-      : session.modePolicy.mode === 'paper'
-        ? 'Paper-Simulation Mode'
-        : isExam
-          ? 'Exam Mode'
-          : 'Practice Mode';
+      : isExam
+        ? 'Exam Mode'
+        : 'Practice Mode';
 
   return (
     <motion.div
@@ -149,15 +147,6 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
               </span>
             </li>
           ) : null}
-          {session.modePolicy.printableBooklet ? (
-            <li className="flex items-start gap-2">
-              <FileText className="h-5 w-5 shrink-0 text-warning" />
-              <span>
-                Paper-simulation: open the printable booklet alongside the player and write your
-                answers there before transcribing them online.
-              </span>
-            </li>
-          ) : null}
         </ul>
       </div>
 
@@ -185,35 +174,6 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
                     {formatMilliseconds(extract.audioEndMs) ?? 'end'}
                   </p>
                 ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {session.modePolicy.printableBooklet ? (
-        <div className="mx-auto mb-8 max-w-2xl rounded-2xl border border-border bg-surface p-5 text-left">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-muted">
-                Printable booklet
-              </h3>
-              <p className="mt-1 text-sm text-muted">
-                Print the answer sheet before starting, then transcribe final answers into the online
-                boxes.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => window.print()} className="gap-2">
-              <FileText className="h-4 w-4" /> Print
-            </Button>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted sm:grid-cols-4">
-            {session.questions.map((question) => (
-              <div
-                key={`print-preview-${question.id}`}
-                className="rounded-lg border border-border bg-background-light px-3 py-2"
-              >
-                Q{question.number} <span className="text-muted/70">{question.partCode}</span>
               </div>
             ))}
           </div>

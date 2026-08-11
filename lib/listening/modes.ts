@@ -4,23 +4,21 @@
  *
  *   - `computer` → OET on Computer (test centre). Default skin.
  *   - `home`     → OET@Home. Kiosk fullscreen, distraction-free, paste-blocked.
- *   - `paper`    → OET on Paper. Printable booklet + bubble-sheet styles.
  *
  * The server already exposes `session.modePolicy.mode` (`practice` / `exam` /
- * `home` / `paper`) and the more granular `presentationStyle`. The mapper
+ * `home`) and the more granular `presentationStyle`. The mapper
  * here collapses both into a single canonical skin code consumed by the
  * `<ListeningPlayerSkinShell />` wrapper.
  */
 
-export type ListeningPresentationMode = 'computer' | 'home' | 'paper';
+export type ListeningPresentationMode = 'computer' | 'home';
 
-export type ServerListeningMode = 'practice' | 'exam' | 'home' | 'paper';
+export type ServerListeningMode = 'practice' | 'exam' | 'home';
 
 export type ServerPresentationStyle =
   | 'practice'
   | 'exam_standard'
-  | 'kiosk_fullscreen'
-  | 'printable_booklet';
+  | 'kiosk_fullscreen';
 
 export interface PresentationModeInput {
   mode?: ServerListeningMode | null;
@@ -36,7 +34,6 @@ export interface PresentationModeInput {
 export function presentationModeFromSession(input: PresentationModeInput): ListeningPresentationMode {
   switch (input.presentationStyle) {
     case 'kiosk_fullscreen': return 'home';
-    case 'printable_booklet': return 'paper';
     case 'exam_standard':
     case 'practice':
       return 'computer';
@@ -45,7 +42,6 @@ export function presentationModeFromSession(input: PresentationModeInput): Liste
   }
   switch (input.mode) {
     case 'home': return 'home';
-    case 'paper': return 'paper';
     case 'exam':
     case 'practice':
     default:
@@ -54,5 +50,5 @@ export function presentationModeFromSession(input: PresentationModeInput): Liste
 }
 
 export function isStrictPresentation(mode: ListeningPresentationMode): boolean {
-  return mode === 'home' || mode === 'paper';
+  return mode === 'home';
 }

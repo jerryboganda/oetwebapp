@@ -1,18 +1,20 @@
 # Listening exam modes
 
-OET delivers Listening in three real-world configurations. The platform
-mirrors all three on a single FSM player; the **mode value** decides which
+OET delivers Listening through computer-based configurations supported by the
+platform. The **mode value** decides which
 behaviours unlock and which UI skin is rendered. Mode lives on
 `ListeningAttempt.Mode` (`Exam` | `Learning` | `Drill` | `MiniTest` |
-`ErrorBank` | `Home` | `Paper` | `Diagnostic`).
+`ErrorBank` | `Home` | `Diagnostic`). Paper-based simulation is not exposed.
 
 | Real exam | Platform mode | Skin (planned) | Replay | Navigation |
 |---|---|---|---|---|
 | OET on Computer (test centre) | `Exam` | `ComputerSkin` | Disabled | Forward-only, locks per section |
 | OET@Home (remote proctored) | `Home` | `HomeSkin` | Disabled | Forward-only + kiosk fullscreen + paste block |
-| OET on Paper (booklet) | `Paper` | `PaperSkin` | N/A (one play of room audio) | Free within section + final 2-min all-parts review |
 | Learning / Drill (practice) | `Learning` / `Drill` / `MiniTest` / `ErrorBank` | `ComputerSkin` | Allowed | Free; transcript loop available |
 | Diagnostic (placement) | `Diagnostic` | `ComputerSkin` | Disabled | Forward-only; routes to pathway recommendation |
+
+Paper-based Listening simulation is out of scope. Legacy paper query values
+fail closed to the computer exam surface and are never sent to the API.
 
 ## What the modes share
 
@@ -27,10 +29,9 @@ behaviours unlock and which UI skin is rendered. Mode lives on
 
 ## What the skins change
 
-The Wave 3 implementation pulls existing player surface into three sibling
-components under `components/domain/listening/player/skins/`. The current
-production build still renders the unified ComputerSkin path; Home and
-Paper skins are scoped in this iteration but not yet selected by the player.
+The Wave 3 implementation pulls the player surface into sibling components
+under `components/domain/listening/player/skins/`. Computer and Home are the
+supported production skins; no Paper skin or booklet renderer is shipped.
 
 | Behaviour | Computer | Home | Paper |
 |---|---|---|---|
@@ -39,9 +40,9 @@ Paper skins are scoped in this iteration but not yet selected by the player.
 | Fullscreen required | No | Yes (`requestFullscreen`) | No |
 | Paste / context-menu blocked | No | Yes | No |
 | Background | Surface | Black distraction-free | Paper-tone |
-| Bubble-sheet style B/C | No | No | Yes |
-| Final review banner | C2 review window | C2 review window | All-parts (`FinalReviewAllPartsMsPaper`) |
-| Print stylesheet | No | No | Yes |
+| Bubble-sheet style B/C | No | No |
+| Final review banner | C2 review window | C2 review window |
+| Print stylesheet | No | No |
 
 ## Policy fields per mode
 
@@ -51,10 +52,8 @@ Paper skins are scoped in this iteration but not yet selected by the player.
 | `LearningReplayAllowed` | `Learning`, `Drill`, `MiniTest`, `ErrorBank` |
 | `OneWayLocksEnabled` | `Exam`, `Home`, `Diagnostic` |
 | `ConfirmDialogRequired` | `Exam`, `Home` |
-| `UnansweredWarningRequired` | `Exam`, `Home`, `Paper`, `Diagnostic` |
+| `UnansweredWarningRequired` | `Exam`, `Home`, `Diagnostic` |
 | `ReviewWindowMsC2FinalCbt` | `Computer` skin |
-| `ReviewWindowMsC2FinalPaper` | `Paper` skin |
-| `FinalReviewAllPartsMsPaper` | `Paper` skin only (last 2 min banner) |
 
 ## OET@Home specifics
 

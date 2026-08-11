@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Maximize2, Printer, ShieldAlert } from 'lucide-react';
+import { Maximize2, ShieldAlert } from 'lucide-react';
 import type { ListeningPresentationMode } from '@/lib/listening/modes';
 
 export interface ListeningPlayerSkinShellProps {
   mode: ListeningPresentationMode;
   /**
    * When true (default), the Home skin requests fullscreen on first user
-   * interaction and the Paper skin emits print-friendly CSS. Tests pass
+   * interaction. Tests pass
    * `enableSideEffects={false}` to avoid touching browser globals.
    */
   enableSideEffects?: boolean;
@@ -22,9 +22,7 @@ export interface ListeningPlayerSkinShellProps {
  *
  *   - `computer` → pass-through (no chrome change).
  *   - `home`     → kiosk visuals + fullscreen + paste/context-menu block.
- *   - `paper`    → printable booklet styles + "Print" affordance + bubble-sheet
- *                  CSS hooks (the page reuses the standard renderers; print
- *                  CSS reflows them into the booklet layout).
+ *   - computer-based delivery has no printable-booklet skin.
  *
  * Per Wave 3 of the OET Listening gap-fill plan we deliberately *wrap* rather
  * than fork the 1400+ line player file. The player stays in one place; the
@@ -103,22 +101,8 @@ export function ListeningPlayerSkinShell({
     );
   }
 
-  // mode === 'paper'
+  // Unknown/legacy values fail closed to the computer-based skin.
   return (
-    <div ref={rootRef} data-listening-skin="paper" className="listening-paper-skin">
-      <div className="flex items-center gap-3 border-b border-border bg-warning/10 px-4 py-2 text-sm font-semibold print:hidden">
-        <Printer className="h-4 w-4 text-warning" aria-hidden="true" />
-        <span>OET on Paper simulation. Printable booklet styles active.</span>
-        <button
-          type="button"
-          onClick={() => { if (typeof window !== 'undefined') window.print(); }}
-          className="ml-auto inline-flex items-center gap-1 rounded-lg border border-warning/40 px-3 py-1 text-warning hover:bg-warning/20"
-        >
-          <Printer className="h-3 w-3" aria-hidden="true" />
-          Print booklet
-        </button>
-      </div>
-      {children}
-    </div>
+    <div ref={rootRef} data-listening-skin="computer">{children}</div>
   );
 }

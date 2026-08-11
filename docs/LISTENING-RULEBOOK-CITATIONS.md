@@ -12,7 +12,7 @@ academy content.
 |---|---|---|---|
 |R01|42 raw item canonical max|[`ListeningStructureService.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningStructureService.cs#L55)|`OetScoringTests.IsListeningReadingPassByRaw_Respects_30_Of_42_Threshold`|
 |R02|30/42 ≡ 350/500 pass anchor|[`OetScoring.cs`](../backend/src/OetLearner.Api/Services/OetScoring.cs#L162)|`ListeningGradingServiceTests.GradeAsync_routes_raw_to_scaled_via_OetScoring` + `ListeningScoringPathAuditTest`|
-|R03|Five attempt modes (Exam / OET-Home / Paper / Learning / Diagnostic)|[`ListeningModePolicy.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningModePolicy.cs)|`ListeningV2PathwayLaunchTargetEndpointTests` + mode-policy endpoint coverage|
+|R03|Supported computer-based modes (Exam / OET-Home / Learning / Diagnostic)|[`ListeningModePolicy.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningModePolicy.cs)|`ListeningV2PathwayLaunchTargetEndpointTests` + mode-policy endpoint coverage|
 |R04|Server-authoritative FSM for strict start/resume/phase advances and fail-closed audio resume, including pending validation|[`ListeningSessionService.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningSessionService.cs), [`ListeningFsmTransitions.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningFsmTransitions.cs), [`lib/listening/transitions.ts`](../lib/listening/transitions.ts), [`app/listening/player/[id]/page.tsx`](../app/listening/player/[id]/page.tsx)|`tests/unit/listening/transitions.parity.test.ts`, `cbla-fidelity.test.tsx`, `audio-resume.test.tsx`, `ListeningV2AdvanceEndpointTests`|
 |R05|Wall-clock window anchors and section cue-window enforcement|`ListeningAttempt.WindowStartedAt` + `WindowDurationMs` ([`ListeningEntities.cs`](../backend/src/OetLearner.Api/Domain/ListeningEntities.cs#L391)) plus active player extract `audioStartMs`/`audioEndMs` enforcement|`cbla-fidelity.test.tsx` strict resume hydration, `audio-resume.test.tsx` multi-extract Part B gate, and backend session tests|
 |R06.10|Two-step confirm-token on advance|[`ListeningConfirmTokenService.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningConfirmTokenService.cs)|`ListeningV2AdvanceEndpointTests.Advance_returns_confirm_payload_on_first_strict_mode_request_and_applies_echoed_token` + `cbla-fidelity.test.tsx` strict transition tests|
@@ -27,6 +27,9 @@ academy content.
 |R14|Inline-math forbidden in service tree|(audit)|`ListeningScoringPathAuditTest`|
 
 ## Mode policy matrix (R03)
+
+Paper-based Listening simulation is out of scope and is rejected at the learner
+mode boundary; the matrix below documents only supported computer-based modes.
 
 |Mode|Free nav|One-way locks|Audio replay|Timer enforced|Confirm token required|
 |---|---:|---|---|---|---|

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Volume2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Volume2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,6 @@ import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
 import { PartAPdfOverlayDocument } from '@/components/domain/listening/PartAPdfOverlayDocument';
 import type { PartAOverlayBlank } from '@/components/domain/listening/admin/PartAPdfOverlayEditor';
-import { ListeningPaperSimulation } from '@/components/domain/listening/ListeningPaperSimulation';
 import { ListeningQuestionPaperViewer } from '@/components/domain/listening/ListeningQuestionPaperViewer';
 import { ZoomControls } from '@/components/domain/listening/ZoomControls';
 import { ListeningIntroCard } from '@/components/domain/listening/player/ListeningIntroCard';
@@ -1023,21 +1022,10 @@ function PlayerContent() {
     return sections;
   }, [sectionGroups, focusParam, strictServerState?.state, session?.modePolicy?.onePlayOnly]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
-  const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
-  const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;
-  // The v1.1 learner product is computer-based only. The legacy booklet
-  // renderer remains compiled for historical fixtures, but is unreachable
-  // from a server-issued session.
-  const paperBookletActive = false;
-  const paperFinalReviewSeconds = session?.modePolicy.finalReviewAllPartsSeconds ?? null;
-  const paperFinalReviewActive = allPartsReviewEnabled
-    && paperFinalReviewSeconds !== null
-    && attemptSecondsRemaining !== null
-    && attemptSecondsRemaining <= paperFinalReviewSeconds;
   const currentExtracts = currentSection
     ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
     : [];
-  const visibleExtracts = allPartsReviewEnabled ? extracts : currentExtracts;
+  const visibleExtracts = currentExtracts;
   // Learner-facing question-paper PDF for the current section. Per-part map is
   // keyed by uppercased part/section code; resolve exact section code first,
   // then fall back to the parent part letter (mirrors the Reading PDF viewer).
@@ -1081,29 +1069,18 @@ function PlayerContent() {
     && extract.audioEndMs != null
     && extract.audioEndMs > extract.audioStartMs
   ));
-  const allExtractWindows = extracts.filter((extract) => (
-    extract.audioStartMs != null
-    && extract.audioEndMs != null
-    && extract.audioEndMs > extract.audioStartMs
-  ));
   const currentSectionAudioStartMs = currentExtractWindows.length > 0
     ? Math.min(...currentExtractWindows.map((extract) => extract.audioStartMs!))
     : null;
   const currentSectionAudioEndMs = currentExtractWindows.length > 0
     ? Math.max(...currentExtractWindows.map((extract) => extract.audioEndMs!))
     : null;
-  const paperAudioStartMs = allExtractWindows.length > 0
-    ? Math.min(...allExtractWindows.map((extract) => extract.audioStartMs!))
-    : null;
-  const paperAudioEndMs = allExtractWindows.length > 0
-    ? Math.max(...allExtractWindows.map((extract) => extract.audioEndMs!))
-    : null;
   const activeAudioStartMs = usingPerSectionAudio
     ? null
-    : (allPartsReviewEnabled ? paperAudioStartMs : currentSectionAudioStartMs);
+    : currentSectionAudioStartMs;
   const activeAudioEndMs = usingPerSectionAudio
     ? null
-    : (allPartsReviewEnabled ? paperAudioEndMs : currentSectionAudioEndMs);
+    : currentSectionAudioEndMs;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
   const canSkipPreview = session?.modePolicy.mode === 'practice';
@@ -1119,7 +1096,7 @@ function PlayerContent() {
     : (allCurrentExtractsCompleted || currentSectionAudioEndMs == null);
   const canOpenReviewWindow = Boolean(
     currentSection
-    && (allPartsReviewEnabled || session?.modePolicy.canScrub !== false || audioGateSatisfied),
+    && (session?.modePolicy.canScrub !== false || audioGateSatisfied),
   );
   const strictServerNavigationActive = strictReadinessRequired && Boolean(attempt?.attemptId ?? attemptIdFromRoute);
 
@@ -1237,7 +1214,6 @@ function PlayerContent() {
   // server-driven window (applied by applyStrictServerState) and bail above.
   useEffect(() => {
     if (!hasStarted || !currentSection) return;
-    if (allPartsReviewEnabled) return;
     if (strictReadinessRequired && strictServerState) return;
     if (phase === 'review') return;
     // Reset per-section forward-only end-of-extract latch + audio-run latch.
@@ -1290,16 +1266,15 @@ function PlayerContent() {
   // Legacy single-file (cue-point) papers never fire the <audio> `ended` event
   // mid-paper — a section is "done" once all its extracts cross their
   // audioEndMs. When that happens, jump straight to the next section.
-  // Per-section-audio papers advance via the <audio> onEnded handler instead;
-  // paper all-parts review owns the whole-file timeline and is excluded.
+  // Per-section-audio papers advance via the <audio> onEnded handler instead.
   useEffect(() => {
     if (phase !== 'audio' || !hasStarted) return;
-    if (usingPerSectionAudio || allPartsReviewEnabled) return;
+    if (usingPerSectionAudio) return;
     if (currentSectionAudioEndMs == null) return;
     if (!allCurrentExtractsCompleted) return;
     void autoAdvanceAfterAudio();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, hasStarted, usingPerSectionAudio, allPartsReviewEnabled, currentSectionAudioEndMs, allCurrentExtractsCompleted]);
+  }, [phase, hasStarted, usingPerSectionAudio, currentSectionAudioEndMs, allCurrentExtractsCompleted]);
 
   // C8f — when the preview countdown hits zero, transition to audio and
   // trigger playback. The cue-point seek effect below handles auto-seeking
@@ -1567,15 +1542,10 @@ function PlayerContent() {
       .sort((a, b) => a - b)
     : [];
   const currentSectionUnansweredList = formatQuestionNumberList(currentSectionUnansweredNumbers);
-  const navigationQuestions = allPartsReviewEnabled
-    ? session.questions
-    : currentSection ? sectionGroups?.[currentSection] ?? [] : [];
-  const visibleQuestionSections = allPartsReviewEnabled
-    ? sectionsInPaper.map((section) => ({
-      section,
-      questions: sectionGroups?.[section] ?? [],
-    })).filter((entry) => entry.questions.length > 0)
-    : currentSection ? [{ section: currentSection, questions: sectionGroups?.[currentSection] ?? [] }] : [];
+  const navigationQuestions = currentSection ? sectionGroups?.[currentSection] ?? [] : [];
+  const visibleQuestionSections = currentSection
+    ? [{ section: currentSection, questions: sectionGroups?.[currentSection] ?? [] }]
+    : [];
   const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
   // Wave 3 — resolve presentation skin from server-issued policy. The skin
   // wraps the existing player chrome; rendering logic below stays identical.
@@ -1899,14 +1869,8 @@ function PlayerContent() {
               sections={sectionsInPaper}
               currentIndex={currentSectionIndex}
               isReviewing={phase === 'review'}
-              freeNavigation={allPartsReviewEnabled}
-              onSelectSection={(index) => {
-                if (!allPartsReviewEnabled) return;
-                setCurrentSectionIndex(index);
-                setPhase('audio');
-                setPreviewSecondsRemaining(0);
-                setReviewSecondsRemaining(0);
-              }}
+              freeNavigation={false}
+              onSelectSection={() => undefined}
             />
 
             {/* C8f — pre-audio reading window. Audio stays paused; answer
@@ -1937,25 +1901,13 @@ function PlayerContent() {
                 </InlineAlert>
               ) : (
                 <>
-                  {allPartsReviewEnabled ? (
-                    <InlineAlert variant="info" data-testid="listening-paper-final-review-banner">
-                      {paperFinalReviewActive
-                        ? `Final ${formatTime(paperFinalReviewSeconds ?? 0)} all-parts review: every part remains editable. Use the section buttons to check any answer before the timer ends.`
-                        : 'All sections remain available for the computer-based review flow.'}
-                      {' '}
-                      {unansweredQuestionNumbers.length > 0
-                        ? `Still unanswered: ${unansweredQuestionList}.`
-                        : 'All questions currently have an answer.'}
-                    </InlineAlert>
-                  ) : null}
-
                   {/* Question jumper — intra-section in the computer-based flow.
                       In-flow (NOT sticky) so it never floats over the questions as a
                       translucent overlay on scroll (owner directive 2026-07-05). */}
                   {navigationQuestions.length > 1 ? (
                     <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
                       <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-muted">
-                        {allPartsReviewEnabled ? 'All-parts jump' : 'Jump to'}
+                        Jump to
                       </span>
                       {navigationQuestions.map((question) => {
                         const isAnswered = (answers[question.id] ?? '').trim().length > 0;
@@ -1983,20 +1935,7 @@ function PlayerContent() {
                     </div>
                   ) : null}
 
-                  {paperBookletActive ? (
-                    // WS3 — paper/booklet answer surface. Renders INSTEAD of
-                    // the inline renderer map below. Audio + transport + FSM
-                    // phase banners + final-review logic above stay intact;
-                    // this component is purely the answer booklet.
-                    <ListeningPaperSimulation
-                      session={session}
-                      answers={answers}
-                      attemptSecondsRemaining={attemptSecondsRemaining}
-                      freeNavigationActive={allPartsReviewEnabled}
-                      onAnswerChange={handleAnswerChange}
-                    />
-                  ) : (
-                    <>
+                  <>
                       <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
 
                       {currentQuestionPaperUrl && !currentSectionInlineBcReady ? (
@@ -2016,11 +1955,6 @@ function PlayerContent() {
                       <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
                         {visibleQuestionSections.map(({ section, questions }) => (
                           <section key={section} className="space-y-4" aria-label={LISTENING_SECTION_LABEL[section]}>
-                            {allPartsReviewEnabled ? (
-                              <h2 className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-black uppercase tracking-widest text-muted">
-                                {LISTENING_SECTION_LABEL[section]}
-                              </h2>
-                            ) : null}
                             {(() => {
                               // Part A1 / A2 with an authored notes body → ONE continuous note-completion document.
                               if (section === 'A1' || section === 'A2') {
@@ -2122,29 +2056,15 @@ function PlayerContent() {
                           </section>
                         ))}
                       </div>
-                    </>
-                  )}
+                  </>
                 </>
               )}
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-4">
               <p className="text-xs text-muted">
-                {allPartsReviewEnabled
-                  ? 'Paper simulation: all parts stay editable for final all-parts review.'
-                  : 'Audio plays once per section and cannot be paused, scrubbed, or replayed. The next section starts automatically when the audio ends.'}
+                Audio plays once per section and cannot be paused, scrubbed, or replayed. The next section starts automatically when the audio ends.
               </p>
-              {/* Per-section advance is automatic on audio end; the only manual
-                  control left is the paper-simulation all-parts Finish & Submit. */}
-              {phase === 'audio' && allPartsReviewEnabled ? (
-                <Button
-                  size="lg"
-                  onClick={() => setShowSubmitConfirm(true)}
-                  className="gap-2"
-                >
-                  Finish &amp; Submit <ChevronRight className="h-5 w-5" />
-                </Button>
-              ) : null}
             </div>
 
             {/* Forward-only lock confirmation */}
@@ -2214,24 +2134,6 @@ function PlayerContent() {
           </motion.div>
         )}
 
-        {/* Legacy print fallback; computer-based sessions never set printableBooklet.
-            Print button + beforeprint/afterprint 1:1 scaling), so this legacy
-            answer-number list is superseded. It remains as a fallback for any
-            other printableBooklet surface where the booklet is not rendered. */}
-        {session.modePolicy.printableBooklet && !paperBookletActive ? (
-          <div className="hidden print:block print:p-6">
-            <h1 className="text-2xl font-bold text-navy">{session.paper.title}</h1>
-            <p className="mt-2 text-sm text-muted">Listening answer sheet</p>
-            <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3">
-              {session.questions.map((question) => (
-                <div key={`print-${question.id}`} className="flex items-end gap-3 border-b border-border pb-2 text-sm">
-                  <span className="w-12 font-bold">Q{question.number}</span>
-                  <span className="flex-1 text-muted">{question.partCode}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
     </AppShell>
     </ListeningPlayerSkinShell>

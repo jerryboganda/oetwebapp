@@ -334,3 +334,18 @@ an owner-controlled value that must not be invented in code.
   or publisher-approval permissions. Canonical publish-ready fixtures now set
   the explicit status, and a missing-status regression is present; focused
   execution and deployed admin verification remain pending.
+
+## Computer-only learner-surface closure
+
+- The learner Listening client no longer exposes or renders the legacy paper
+  booklet/all-parts review surface. Paper query and delivery values fail closed
+  to the computer exam surface; the API client mode union and presentation
+  styles no longer advertise paper delivery.
+- The obsolete standalone Listening paper-simulation component, helper, and
+  dedicated tests were removed after confirming no production imports remain.
+- Direct Listening documentation and the rulebook citation map now describe
+  supported computer-based modes only. Focused Windows evidence for this slice:
+  `ListeningPlayerSkinShell.test.tsx` and `lib/listening-api.test.ts` passed
+  (15 tests), and `cbla-fidelity.test.tsx` passed (20 tests). The untracked,
+  user-owned `pdf-policy-release*` copies were excluded from these checks and
+  were not modified.

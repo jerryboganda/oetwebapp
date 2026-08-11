@@ -55,7 +55,11 @@ For the granular rulebook → file:line → test mapping see
 
 ---
 
-## 2. Five attempt modes (R03)
+## 2. Supported computer-based attempt modes (R03)
+
+Paper-based Listening simulation is not a supported learner mode. Legacy paper
+values are rejected at the server boundary and fail closed to the computer
+exam surface in stale client links.
 
 |Mode|Free nav|One-way locks|Replay|Timer|Confirm-token|
 |---|---|---|---|---|---|

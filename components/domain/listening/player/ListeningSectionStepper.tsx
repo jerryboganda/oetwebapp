@@ -101,7 +101,7 @@ export function ListeningSectionStepper({
       })}
       <span className="ml-auto hidden text-[10px] normal-case tracking-normal text-muted sm:inline">
         {freeNavigation
-          ? 'Paper simulation. Jump between available sections.'
+          ? 'Review navigation. Jump between available sections.'
           : 'Forward-only. Completed sections cannot be revisited.'}
       </span>
     </div>

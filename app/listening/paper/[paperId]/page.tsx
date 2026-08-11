@@ -71,10 +71,10 @@ function isNetworkInterruption(error: unknown): boolean {
 // Only the strict one-way exam surface lives here. The legacy
 // diagnostic/mock/practice player (app/listening/player/[id]) still serves
 // every other mode. Default to "exam" so a bare deep link to this route is a
-// graded one-way attempt; "paper" is accepted for the printable-paper variant.
+// graded one-way computer attempt. Legacy paper query values fail closed to
+// the computer exam surface and are never sent to the API.
 function normalizeExamMode(raw: string | null): ListeningSessionMode {
-  const value = (raw ?? '').trim().toLowerCase();
-  return value === 'paper' ? 'paper' : 'exam';
+  return 'exam';
 }
 
 /**
