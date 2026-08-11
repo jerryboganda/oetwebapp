@@ -863,6 +863,8 @@ export const upsertReadingQuestion = (paperId: string, body: {
   distractorRationale?: Record<string, string> | null;
   /** Per-box explanation map for ShortAnswerLabeled; null for all other types. */
   boxExplanationsJson?: string | null;
+  /** Required when acceptedSynonymsJson changes; stored in the audit event. */
+  acceptedVariantChangeReason?: string | null;
 }) => {
   const { distractorRationale, ...rest } = body;
   const payload = {

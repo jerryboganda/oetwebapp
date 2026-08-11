@@ -106,6 +106,36 @@ public class ListeningAuthoringServiceTests
     }
 
     [Fact]
+    public async Task PatchQuestion_RequiresAndAuditsAcceptedVariantReason()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+
+        var missingReason = await Assert.ThrowsAsync<ApiException>(() => svc.PatchQuestionAsync(
+            paper.Id,
+            "lq-1",
+            new ListeningQuestionPatch(AcceptedAnswers: ["alpha", "alfa"]),
+            adminId: "admin-42",
+            default));
+
+        Assert.Equal("accepted_variant_change_reason_required", missingReason.ErrorCode);
+        Assert.Empty(await db.AuditEvents.ToListAsync());
+
+        await svc.PatchQuestionAsync(
+            paper.Id,
+            "lq-1",
+            new ListeningQuestionPatch(
+                AcceptedAnswers: ["alpha", "alfa"],
+                AcceptedVariantChangeReason: "Explicit UK/US spelling evidence was verified in the transcript."),
+            adminId: "admin-42",
+            default);
+
+        var audit = await db.AuditEvents.SingleAsync(a => a.Action == "listening.question.patch");
+        Assert.Contains("acceptedVariantChangeReason", audit.Details!);
+        Assert.Contains("Explicit UK/US spelling evidence", audit.Details!);
+    }
+
+    [Fact]
     public async Task PatchQuestion_AllowsOutOfScopeDistractorCategory()
     {
         var (db, svc) = Build();

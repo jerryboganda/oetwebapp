@@ -139,7 +139,8 @@ public sealed record ListeningQuestionPatch(
     IReadOnlyList<string?>? OptionDistractorCategory = null,
     string? SpeakerAttitude = null,
     int? TranscriptEvidenceStartMs = null,
-    int? TranscriptEvidenceEndMs = null);
+    int? TranscriptEvidenceEndMs = null,
+    string? AcceptedVariantChangeReason = null);
 
 /// <summary>
 /// Per-extract PATCH body. Every field is nullable so admins can ship a
@@ -1478,6 +1479,18 @@ public sealed class ListeningAuthoringService(
         }
 
         var existing = items[index];
+        var requestedAcceptedAnswers = patch.AcceptedAnswers;
+        var acceptedVariantsChanged = requestedAcceptedAnswers is not null
+            && !(existing.AcceptedAnswers ?? Array.Empty<string>()).SequenceEqual(
+                requestedAcceptedAnswers,
+                StringComparer.Ordinal);
+        if (acceptedVariantsChanged && string.IsNullOrWhiteSpace(patch.AcceptedVariantChangeReason))
+        {
+            throw ApiException.Validation(
+                "accepted_variant_change_reason_required",
+                "Explain why the accepted variants are being added, changed, or removed.");
+        }
+
         var beforeJson = JsonSerializer.Serialize(existing, CamelJson);
         var merged = ApplyQuestionPatch(existing, patch);
         var normalized = NormalizeForStorage(merged);
@@ -1522,6 +1535,9 @@ public sealed class ListeningAuthoringService(
                 paperId,
                 questionId = normalized.Id,
                 questionNumber = normalized.Number,
+                acceptedVariantChangeReason = acceptedVariantsChanged
+                    ? patch.AcceptedVariantChangeReason!.Trim()
+                    : null,
                 beforeJson,
                 afterJson,
             })),

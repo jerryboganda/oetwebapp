@@ -1720,6 +1720,27 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Reading_authoring_requires_accepted_variant_reason()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p =>
+            p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => structure.UpsertQuestionAsync(
+            new ReadingQuestionUpsert(
+                null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+                "What does ORT stand for?", "[]", "\"ORT\"",
+                "[\"oral rehydration therapy\"]", false, null, null),
+            "admin",
+            default));
+
+        Assert.Contains("accepted variants", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task PartA_short_answer_rejects_synonyms_even_when_policy_enabled()
     {
         var (db, structure, policy, grader, _) = Build();
@@ -1729,7 +1750,8 @@ public class ReadingAuthoringTests
         var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
             null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
             "What does ORT stand for?", "[]", "\"ORT\"",
-            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null), "admin", default);
+            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null,
+            AcceptedVariantChangeReason: "Both spellings are explicitly approved by the content reviewer"), "admin", default);
 
         // Synonym acceptance is OFF by default (OET-faithful). This test
         // explicitly opts in via the policy snapshot — non-standard mode.
@@ -1771,7 +1793,8 @@ public class ReadingAuthoringTests
         var question = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
             null, partA.Id, null, 8, 1, ReadingQuestionType.ShortAnswer,
             "What does ORT stand for?", "[]", "\"ORT\"",
-            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null), "admin", default);
+            "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null,
+            AcceptedVariantChangeReason: "Both spellings are explicitly approved by the content reviewer"), "admin", default);
 
         var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
         {

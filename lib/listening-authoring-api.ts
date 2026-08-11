@@ -249,6 +249,8 @@ export interface ListeningQuestionPatchBody {
   speakerAttitude?: ListeningSpeakerAttitude | null;
   transcriptEvidenceStartMs?: number | null;
   transcriptEvidenceEndMs?: number | null;
+  /** Required when acceptedAnswers changes; stored in the audit event. */
+  acceptedVariantChangeReason?: string;
 }
 
 /**

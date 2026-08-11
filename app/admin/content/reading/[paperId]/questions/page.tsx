@@ -86,6 +86,8 @@ interface QuestionFormState {
   caseSensitive: boolean;
   correctAnswer: string;
   acceptedVariants: AcceptedVariant[];
+  acceptedVariantChangeReason: string;
+  initialAcceptedSynonymsJson: string | null;
   options: string[];
   /** Boxes for ShortAnswerLabeled questions. */
   labeledBoxes: LabeledBox[];
@@ -110,6 +112,8 @@ function emptyFormState(partId: string, partCode: ReadingPartCode, nextOrder: nu
     caseSensitive: false,
     correctAnswer: '',
     acceptedVariants: [],
+    acceptedVariantChangeReason: '',
+    initialAcceptedSynonymsJson: null,
     options: Array(optionCount).fill(''),
     labeledBoxes: [],
     explanationMarkdown: '',
@@ -137,6 +141,9 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
   const labeledBoxes = q.questionType === 'ShortAnswerLabeled'
     ? parseLabeledBoxes(q.optionsJson, q.correctAnswerJson, q.acceptedSynonymsJson, q.boxExplanationsJson)
     : [];
+  const initialAcceptedSynonymsJson = q.questionType === 'ShortAnswerLabeled'
+    ? serializeLabeledBoxes(labeledBoxes).acceptedSynonymsJson
+    : serializeAcceptedVariants(parseAcceptedVariants(q.acceptedSynonymsJson));
 
   return {
     id: q.id,
@@ -150,6 +157,8 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
     caseSensitive: q.caseSensitive,
     correctAnswer,
     acceptedVariants: parseAcceptedVariants(q.acceptedSynonymsJson),
+    acceptedVariantChangeReason: '',
+    initialAcceptedSynonymsJson,
     options,
     labeledBoxes,
     explanationMarkdown: q.explanationMarkdown ?? '',
@@ -171,6 +180,13 @@ function questionToJson(q: ReadingQuestionAdminDto): string {
     null,
     2,
   );
+}
+
+function acceptedSynonymsJsonForForm(form: QuestionFormState): string | null {
+  if (form.questionType === 'ShortAnswerLabeled') {
+    return serializeLabeledBoxes(form.labeledBoxes).acceptedSynonymsJson;
+  }
+  return serializeAcceptedVariants(form.acceptedVariants);
 }
 
 // ── Page Component ─────────────────────────────────────────────────────
@@ -349,6 +365,7 @@ export default function ReadingQuestionsEditorPage() {
       skillTag: null,
       difficulty: null,
       paragraphIndex: null,
+      acceptedVariantChangeReason: f.acceptedVariantChangeReason.trim() || null,
     };
 
     if (f.questionType === 'ShortAnswerLabeled') {
@@ -367,6 +384,15 @@ export default function ReadingQuestionsEditorPage() {
 
   async function handleSaveForm() {
     if (!form) return;
+    const acceptedVariantsChanged = acceptedSynonymsJsonForForm(form)
+      !== form.initialAcceptedSynonymsJson;
+    if (acceptedVariantsChanged && !form.acceptedVariantChangeReason.trim()) {
+      setToast({
+        variant: 'error',
+        message: 'Explain why the accepted variants are being added, changed, or removed.',
+      });
+      return;
+    }
     // Client-side validation
     if (!form.stem.trim()) {
       setToast({ variant: 'error', message: 'Question stem is required.' });
@@ -431,6 +457,9 @@ export default function ReadingQuestionsEditorPage() {
         optionsJson: typeof parsed.optionsJson === 'string' ? parsed.optionsJson : JSON.stringify(parsed.optionsJson ?? []),
         correctAnswerJson: typeof parsed.correctAnswerJson === 'string' ? parsed.correctAnswerJson : JSON.stringify(parsed.correctAnswerJson ?? ''),
         acceptedSynonymsJson: parsed.acceptedSynonymsJson ?? null,
+        acceptedVariantChangeReason: parsed.acceptedVariantChangeReason
+          ?? form?.acceptedVariantChangeReason
+          ?? null,
         caseSensitive: parsed.caseSensitive ?? false,
         explanationMarkdown: parsed.explanationMarkdown ?? null,
         skillTag: null,
@@ -438,6 +467,11 @@ export default function ReadingQuestionsEditorPage() {
         paragraphIndex: null,
         distractorRationale: null,
       };
+      const acceptedSynonymsJson = payload.acceptedSynonymsJson ?? null;
+      const acceptedVariantsChanged = acceptedSynonymsJson !== (form?.initialAcceptedSynonymsJson ?? null);
+      if (acceptedVariantsChanged && !String(payload.acceptedVariantChangeReason ?? '').trim()) {
+        throw new Error('Explain why the accepted variants are being added, changed, or removed.');
+      }
       await upsertReadingQuestion(paperId, payload);
       setToast({ variant: 'success', message: form?.id ? 'Question updated (JSON)' : 'Question created (JSON)' });
       cancelEdit();
@@ -719,14 +753,36 @@ export default function ReadingQuestionsEditorPage() {
               variants={form.acceptedVariants}
               onChange={(acceptedVariants) => setForm({ ...form, acceptedVariants })}
             />
+            {acceptedSynonymsJsonForForm(form) !== form.initialAcceptedSynonymsJson && (
+              <Textarea
+                label="Why is this variant change needed? (audit trail)"
+                rows={2}
+                value={form.acceptedVariantChangeReason}
+                onChange={(e) => setForm({ ...form, acceptedVariantChangeReason: e.target.value })}
+                placeholder="For example: explicit UK spelling variant verified against the source text."
+                hint="The admin audit event already records who and when; this records why."
+              />
+            )}
           </div>
         )}
 
         {form.questionType === 'ShortAnswerLabeled' && (
-          <LabeledBoxesManager
-            boxes={form.labeledBoxes}
-            onChange={(labeledBoxes) => setForm({ ...form, labeledBoxes })}
-          />
+          <div className="space-y-3">
+            <LabeledBoxesManager
+              boxes={form.labeledBoxes}
+              onChange={(labeledBoxes) => setForm({ ...form, labeledBoxes })}
+            />
+            {acceptedSynonymsJsonForForm(form) !== form.initialAcceptedSynonymsJson && (
+              <Textarea
+                label="Why is this variant change needed? (audit trail)"
+                rows={2}
+                value={form.acceptedVariantChangeReason}
+                onChange={(e) => setForm({ ...form, acceptedVariantChangeReason: e.target.value })}
+                placeholder="For example: explicit spelling variant verified against the source text."
+                hint="The admin audit event already records who and when; this records why."
+              />
+            )}
+          </div>
         )}
 
         {/* Matching Text Reference */}

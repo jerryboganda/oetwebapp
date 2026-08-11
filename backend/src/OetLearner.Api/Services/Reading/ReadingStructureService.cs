@@ -95,7 +95,8 @@ public sealed record ReadingQuestionUpsert(
     int? ParagraphIndex = null,
     string? DistractorRationaleJson = null,
     string? ReadingSectionId = null,
-    string? BoxExplanationsJson = null);
+    string? BoxExplanationsJson = null,
+    string? AcceptedVariantChangeReason = null);
 
 public sealed record ReadingStructure(
     string PaperId,
@@ -438,6 +439,15 @@ public sealed class ReadingStructureService : IReadingStructureService
             row = await db.ReadingQuestions.FirstOrDefaultAsync(q => q.Id == args.Id, ct);
         if (row is not null && !string.Equals(row.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
             throw new InvalidOperationException("Existing Reading question belongs to a different part.");
+        var acceptedVariantsChanged = !string.Equals(
+            row?.AcceptedSynonymsJson,
+            args.AcceptedSynonymsJson,
+            StringComparison.Ordinal);
+        if (acceptedVariantsChanged && string.IsNullOrWhiteSpace(args.AcceptedVariantChangeReason))
+        {
+            throw new InvalidOperationException(
+                "Explain why the accepted variants are being added, changed, or removed.");
+        }
         if (row is not null)
         {
             var paperStatus = await db.ReadingParts.AsNoTracking()
@@ -502,7 +512,9 @@ public sealed class ReadingStructureService : IReadingStructureService
             row.UpdatedAt = now;
         }
         await WriteAuditAsync("ReadingQuestionUpserted", row.Id,
-            $"type={args.QuestionType} order={args.DisplayOrder}", adminId, ct);
+            $"type={args.QuestionType} order={args.DisplayOrder}; " +
+            $"acceptedVariantChangeReason={(acceptedVariantsChanged ? args.AcceptedVariantChangeReason!.Trim() : "none")}",
+            adminId, ct);
         await db.SaveChangesAsync(ct);
         return row;
     }
@@ -984,7 +996,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                     questionManifest.AcceptedSynonymsJson,
                     questionManifest.CaseSensitive,
                     questionManifest.ExplanationMarkdown,
-                    questionManifest.SkillTag), adminId, ct);
+                    questionManifest.SkillTag,
+                    AcceptedVariantChangeReason: "Imported from authored Reading structure manifest"), adminId, ct);
             }
 
             // Phase 4 — patch the metadata fields the upsert DTO doesn't carry.

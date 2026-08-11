@@ -65,6 +65,7 @@ interface FormState {
   speakerAttitude: ListeningSpeakerAttitude | '';
   transcriptEvidenceStartMs: number | '';
   transcriptEvidenceEndMs: number | '';
+  acceptedVariantChangeReason: string;
 }
 
 function fromQuestion(q: ListeningAuthoredQuestion): FormState {
@@ -88,6 +89,7 @@ function fromQuestion(q: ListeningAuthoredQuestion): FormState {
     speakerAttitude: q.speakerAttitude ?? '',
     transcriptEvidenceStartMs: q.transcriptEvidenceStartMs ?? '',
     transcriptEvidenceEndMs: q.transcriptEvidenceEndMs ?? '',
+    acceptedVariantChangeReason: '',
   };
 }
 
@@ -98,6 +100,9 @@ function diffPatch(initial: FormState, current: FormState, isMcq: boolean): List
   if (current.correctAnswer !== initial.correctAnswer) patch.correctAnswer = current.correctAnswer;
   if (JSON.stringify(current.acceptedAnswers) !== JSON.stringify(initial.acceptedAnswers)) {
     patch.acceptedAnswers = current.acceptedAnswers;
+    if (current.acceptedVariantChangeReason.trim()) {
+      patch.acceptedVariantChangeReason = current.acceptedVariantChangeReason.trim();
+    }
   }
   if (isMcq && JSON.stringify(current.options) !== JSON.stringify(initial.options)) {
     patch.options = current.options;
@@ -183,6 +188,15 @@ export default function AdminListeningQuestionEditorPage() {
 
   const onSave = useCallback(async () => {
     if (!paperId || !questionId || !hasChanges) return;
+    const acceptedAnswersChanged = initial && form
+      ? JSON.stringify(form.acceptedAnswers) !== JSON.stringify(initial.acceptedAnswers)
+      : false;
+    if (acceptedAnswersChanged && !form?.acceptedVariantChangeReason.trim()) {
+      const message = 'Explain why the accepted variants are being added, changed, or removed.';
+      setError(message);
+      setToast({ variant: 'error', message });
+      return;
+    }
     setSave('saving');
     setError(null);
     try {
@@ -201,7 +215,7 @@ export default function AdminListeningQuestionEditorPage() {
       setError(msg);
       setToast({ variant: 'error', message: msg });
     }
-  }, [paperId, questionId, hasChanges, patch]);
+  }, [paperId, questionId, hasChanges, patch, initial, form]);
 
   const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => (current ? { ...current, [key]: value } : current));
@@ -452,6 +466,16 @@ export default function AdminListeningQuestionEditorPage() {
                       Add
                     </Button>
                   </div>
+                  {JSON.stringify(form.acceptedAnswers) !== JSON.stringify(initial?.acceptedAnswers ?? []) && (
+                    <Textarea
+                      label="Why is this variant change needed? (audit trail)"
+                      rows={2}
+                      value={form.acceptedVariantChangeReason}
+                      onChange={(e) => setField('acceptedVariantChangeReason', e.target.value)}
+                      placeholder="For example: UK spelling used in the source transcript."
+                      hint="The admin audit event already records who and when; this records why."
+                    />
+                  )}
                 </div>
               )}
             </div>
