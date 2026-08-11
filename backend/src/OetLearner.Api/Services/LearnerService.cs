@@ -1420,7 +1420,7 @@ public partial class LearnerService(
                     criterionLabel = CriterionLabelFromCode(criterionCode),
                     score = IsGovernedScoreAvailable(parsed.Evaluation.SubtestCode, parsed.Evaluation.ScoreConversionTableVersionKey, parsed.Evaluation.ScoreConversionPassed)
                         ? ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString())
-                        : null,
+                        : (int?)null,
                     generatedAt = parsed.Evaluation.GeneratedAt,
                     subtest = parsed.Evaluation.SubtestCode
                 };

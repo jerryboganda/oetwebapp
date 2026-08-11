@@ -58,15 +58,15 @@ public class PredictionService(LearnerDbContext db)
         string? scoreConversionTableVersionKey = null;
         if (isGovernedSubtest)
         {
-            if (evaluations.Any(e => !e.e.ScaledScore.HasValue
-                                     || string.IsNullOrWhiteSpace(e.e.ScoreConversionTableVersionKey)
-                                     || !e.e.ScoreConversionPassed.HasValue))
+            if (evaluations.Any(e => !e.ScaledScore.HasValue
+                                     || string.IsNullOrWhiteSpace(e.ScoreConversionTableVersionKey)
+                                     || !e.ScoreConversionPassed.HasValue))
             {
                 return new { available = false, reason = "score_conversion_unavailable" };
             }
 
             var conversionVersions = evaluations
-                .Select(e => e.e.ScoreConversionTableVersionKey!.Trim())
+                .Select(e => e.ScoreConversionTableVersionKey!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (conversionVersions.Count != 1)
@@ -79,7 +79,7 @@ public class PredictionService(LearnerDbContext db)
 
         // Parse score ranges — format "300-350" or single number
         var scores = evaluations
-            .Select(e => isGovernedSubtest ? e.e.ScaledScore!.Value : ParseMidScore(e.e.ScoreRange))
+            .Select(e => isGovernedSubtest ? e.ScaledScore!.Value : ParseMidScore(e.ScoreRange))
             .Where(s => s > 0)
             .ToList();
 
