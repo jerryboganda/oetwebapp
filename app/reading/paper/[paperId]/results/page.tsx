@@ -354,6 +354,13 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               errorCode={review.attempt.scoreConversionErrorCode}
             />
 
+            <p
+              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted"
+              data-testid="reading-marking-strictness-disclosure"
+            >
+              This platform grades minor spelling variations strictly to build exam-safe habits - some real OET examiners may allow minor variants at their discretion.
+            </p>
+
             {structure?.paper.questionPaperAssets?.length ? (
               <section id="pdf-review">
                 <LearnerSurfaceSectionHeader

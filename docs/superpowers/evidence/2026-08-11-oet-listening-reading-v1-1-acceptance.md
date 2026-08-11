@@ -373,3 +373,6 @@ an owner-controlled value that must not be invented in code.
   canonical Listening player and Reading paper routes on desktop and mobile
   learner projects. It asserts route health and rejects document or element
   overflow beyond the viewport; execution remains pending by request.
+- The canonical Reading results page now carries the same persistent
+  stricter-than-examiner spelling disclosure as Listening, with a focused page
+  regression assertion.

@@ -61,6 +61,16 @@ describe('Reading paper results page', () => {
     expect(screen.getByText('6/10 practice marks')).toBeInTheDocument();
   });
 
+  it('shows the stricter-than-examiner marking disclosure', async () => {
+    mockGetReadingAttemptReview.mockResolvedValueOnce(buildReview({ scaledScore: 350, rawScore: 30, gradeLetter: 'B' }));
+
+    await renderResults();
+
+    expect(await screen.findByTestId('reading-marking-strictness-disclosure')).toHaveTextContent(
+      /grades minor spelling variations strictly/i,
+    );
+  });
+
   it('renders the spelling miss diagnostic and per-part accuracy percentage from the payload', async () => {
     mockGetReadingAttemptReview.mockResolvedValueOnce(
       buildReview({
