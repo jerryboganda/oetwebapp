@@ -268,8 +268,8 @@ export interface ListeningSessionDto {
   };
   scoring: {
     maxRawScore: number;
-    passRawScore: number;
-    passScaledScore: number;
+    passRawScore: number | null;
+    passScaledScore: number | null;
   };
   readiness: {
     objectiveReady: boolean;
@@ -434,10 +434,9 @@ export const deleteListeningPaperAnnotation = (paperId: string, annotationId: st
 export const getListeningHome = () =>
   api<ListeningHomeDto>('/v1/listening/home');
 
-// Public OET Listening test-rules constants. Anonymous-allowed on the backend
-// — the /listening/test-rules page sources its 42-q / 40-min / 30-pass / 350-
-// scaled-pass numbers from here so future spec changes don't require a code
-// Structural values are always available; pass anchors are nullable until an
+// Public OET Listening test-rules policy. Anonymous-allowed on the backend;
+// structural values are always available, while pass anchors are nullable
+// until an
 // effective owner-approved conversion table supplies them. The page falls
 // back to its static structural copy if this fetch fails.
 export interface ListeningTestRulesPolicyDto {

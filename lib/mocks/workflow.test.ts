@@ -126,4 +126,36 @@ describe('mocks workflow policy', () => {
       route: '/writing/practice/library',
     });
   });
+
+  it('withholds mock-wide readiness claims when Reading evidence is present', () => {
+    const report: MockReport = {
+      id: 'mock-report-reading',
+      title: 'Reading mock',
+      date: '2026-05-02',
+      overallScore: '500',
+      summary: 'Reading evidence.',
+      subTests: [{
+        id: 'reading',
+        name: 'Reading',
+        score: '500',
+        rawScore: '42/42',
+        color: '',
+        bg: '',
+        scaledScore: 500,
+        grade: 'B',
+      }],
+      weakestCriterion: { subtest: 'Reading', criterion: 'Evidence', description: 'Review evidence.' },
+      priorComparison: {
+        exists: false,
+        priorMockName: '',
+        overallTrend: 'flat',
+        details: 'No previous mock.',
+      },
+    };
+
+    expect(getMockReadinessDecision(report)).toMatchObject({
+      level: 'pending',
+      label: 'Assessment conversion pending',
+    });
+  });
 });

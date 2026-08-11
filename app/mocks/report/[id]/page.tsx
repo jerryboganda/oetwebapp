@@ -58,15 +58,19 @@ const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg:
   speaking:  { icon: Mic,        color: 'text-primary', bg: 'bg-primary/10' },
 };
 
-/**
- * Colour a sub-test score cell based on its grade band. Always derives the
- * grade through the canonical scoring module so we can never drift from the
- * 350/300 thresholds or the 30/42 raw mapping. Accepts either a scaled
- * numeric string ("370", "350") or a letter-prefixed label ("A", "B").
- */
-function scoreColor(score: string) {
+/** Colour a mock sub-test from persisted grade evidence. Reading/Listening
+ * must never derive a grade from a numeric score in the browser. */
+function scoreColor(score: string, persistedGrade?: string | null, governedScore = false) {
   const trimmed = score.trim();
   if (trimmed.length === 0) return 'text-muted';
+  if (persistedGrade?.trim()) {
+    const grade = persistedGrade.trim().toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '';
+    if (grade === 'A' || grade === 'B') return 'text-success';
+    if (grade === 'C+' || grade === 'C') return 'text-warning';
+    if (grade === 'D' || grade === 'E') return 'text-danger';
+    return 'text-muted';
+  }
+  if (governedScore) return 'text-muted';
   const numeric = Number(trimmed);
   const grade = Number.isFinite(numeric)
     ? oetGradeFromScaled(numeric)
@@ -78,8 +82,8 @@ function scoreColor(score: string) {
 }
 
 /** Map a sub-test score to a stat-strip tone (mirrors {@link scoreColor}). */
-function scoreTone(score: string): 'success' | 'warning' | 'danger' | 'default' {
-  const color = scoreColor(score);
+function scoreTone(score: string, persistedGrade?: string | null, governedScore = false): 'success' | 'warning' | 'danger' | 'default' {
+  const color = scoreColor(score, persistedGrade, governedScore);
   if (color === 'text-success') return 'success';
   if (color === 'text-warning') return 'warning';
   if (color === 'text-danger') return 'danger';
@@ -87,8 +91,8 @@ function scoreTone(score: string): 'success' | 'warning' | 'danger' | 'default' 
 }
 
 /** CSS colour for a sub-test gauge arc, derived from the same grade bands. */
-function scoreGaugeColor(score: string): string {
-  const color = scoreColor(score);
+function scoreGaugeColor(score: string, persistedGrade?: string | null, governedScore = false): string {
+  const color = scoreColor(score, persistedGrade, governedScore);
   if (color === 'text-success') return 'var(--color-success)';
   if (color === 'text-warning') return 'var(--color-warning)';
   if (color === 'text-danger') return 'var(--color-danger)';
@@ -335,7 +339,8 @@ function MockReportContent() {
             grade={{ label: readiness.label, tone: readinessTone }}
             stats={report.subTests.map((test) => {
               const Icon = SUBTEST_META[test.id]?.icon ?? Headphones;
-              return { label: test.name, value: test.score, tone: scoreTone(test.score), icon: <Icon /> };
+              const governedScore = test.id === 'reading' || test.id === 'listening';
+              return { label: test.name, value: test.score, tone: scoreTone(test.score, test.grade, governedScore), icon: <Icon /> };
             })}
             aside={(
               <div className="rounded-2xl border border-border bg-background-light p-4">
@@ -437,6 +442,7 @@ function MockReportContent() {
               const meta = SUBTEST_META[test.id] ?? SUBTEST_META.listening;
               const Icon = meta.icon;
               const isWriting = test.id === 'writing';
+              const governedScore = test.id === 'reading' || test.id === 'listening';
               const canDownload = isWriting && Boolean(report.mockAttemptId);
               return (
                 <div key={test.id} className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
@@ -459,9 +465,9 @@ function MockReportContent() {
                       value={typeof test.scaledScore === 'number' ? (test.scaledScore / 500) * 100 : 0}
                       size={56}
                       stroke={6}
-                      color={scoreGaugeColor(test.score)}
+                      color={scoreGaugeColor(test.score, test.grade, governedScore)}
                     >
-                      <span className={`text-sm font-black ${scoreColor(test.score)}`}>{test.grade ?? test.score}</span>
+                      <span className={`text-sm font-black ${scoreColor(test.score, test.grade, governedScore)}`}>{test.grade ?? test.score}</span>
                     </ResultGauge>
                   </div>
                   {canDownload ? (

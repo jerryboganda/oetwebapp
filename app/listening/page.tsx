@@ -66,7 +66,7 @@ const HUB_CARDS: HubCard[] = [
   },
   {
     title: 'Full Listening Exam',
-    subtitle: '45 minutes • 42 questions • audio plays once. Scored on the official OET 0–500 scale.',
+    subtitle: '45 minutes • 42 questions • audio plays once. Raw practice evidence is retained; owner-approved conversion is shown only when configured.',
     href: '/listening/exam',
     accent: 'exam',
   },

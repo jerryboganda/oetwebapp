@@ -307,7 +307,7 @@ export interface ActivityCalendarDto {
 
 export interface ReadingDashboardDto {
   readinessScore: number;
-  predictedScore: number;
+  predictedScore: number | null;
   streak: number;
   longestStreak: number;
   totalXp: number;
@@ -600,7 +600,7 @@ export const markStrategyRead = (slug: string) =>
 export const getReadingDashboard = () =>
   api<RawDashboardStatsDto>('/v1/reading-pathway/stats/dashboard').then((raw) => ({
     readinessScore: raw.readinessScore ?? 0,
-    predictedScore: raw.predictedScore ?? 0,
+    predictedScore: raw.predictedScore ?? null,
     streak: raw.streakStatus?.currentStreak ?? 0,
     longestStreak: raw.streakStatus?.longestStreak ?? 0,
     totalXp: 0,

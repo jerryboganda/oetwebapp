@@ -1059,3 +1059,16 @@ dirty work in the main checkout.
   execution and authenticated deployed acceptance remain pending. Preserve
   the four untracked user-owned paths above and the owner release gates listed
   in the acceptance matrix.
+
+# Latest LR coding checkpoint - 2026-08-12 (client score-disclosure gate)
+
+- Reading dashboard predicted values are now labelled as AI Practice Score and
+  explicitly not an official OET result. Listening session scoring types and
+  hub copy now represent nullable owner conversion. Mock client readiness and
+  color helpers exclude Reading/Listening-bearing reports from mock-wide pass
+  logic and use persisted owner grades when available.
+- Only bounded source searches and `git diff --check` were run for this slice;
+  no long local validation, CI/CD, push, or deployment was started. Focused UI
+  execution and authenticated deployed acceptance remain pending. Preserve the
+  four untracked user-owned paths above and the owner release gates listed in
+  the acceptance matrix.

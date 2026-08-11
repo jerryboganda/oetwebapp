@@ -213,6 +213,15 @@ export function getMockSubmissionReadiness(session: MockSession): MockSubmission
 }
 
 export function getMockReadinessDecision(report: MockReport): MockReadinessDecision {
+  if (containsGovernedScore(report)) {
+    return {
+      level: 'pending',
+      label: 'Assessment conversion pending',
+      description: 'Review the owner-approved Reading/Listening conversion evidence before using this mock for booking decisions. No mock-wide pass label is inferred.',
+      variant: 'muted',
+    };
+  }
+
   const score = parseScoreValue(report.overallScore);
   if (score === null) {
     return {
@@ -262,8 +271,8 @@ export function getMockReadinessDecision(report: MockReport): MockReadinessDecis
  * Trend-based readiness across multiple completed MockReports. Mirrors the
  * backend `MockReadinessTrendService.ComputeAsync` semantics:
  *
- *   - "consistent green" is true when the two most-recent reports both reach
- *     the canonical OET Grade-B threshold (scaled >= 350).
+ *   - Reading/Listening-bearing reports are excluded because their mock-wide
+ *     numeric score cannot produce an assessment pass label.
  *   - `overallTrend` is "up" / "down" / "flat" based on the linear delta
  *     between the most-recent and the oldest considered report (>=10 = up,
  *     <=-10 = down, otherwise flat).
@@ -285,7 +294,8 @@ export function getMockReadinessTrend(reports: MockReport[]): MockReadinessTrend
     .sort((a, b) => compareReportDatesDesc(a, b))
     .slice(0, MOCK_READINESS_TREND_DEFAULT_WINDOW);
 
-  const scores = sorted
+  const eligibleReports = sorted.filter((report) => !containsGovernedScore(report));
+  const scores = eligibleReports
     .map((report) => parseScoreValue(report.overallScore))
     .filter((value): value is number => value !== null);
 
@@ -405,6 +415,13 @@ function parseScoreValue(value: string): number | null {
   if (!Number.isFinite(numeric)) return null;
   if (trimmed.includes('%')) return Math.round(numeric * 5);
   return numeric;
+}
+
+function containsGovernedScore(report: MockReport): boolean {
+  return report.subTests.some((test) => {
+    const id = String(test.id ?? test.name ?? '').trim().toLowerCase();
+    return id === 'reading' || id === 'listening';
+  });
 }
 
 function routeForWeakness(subtest: string): string {

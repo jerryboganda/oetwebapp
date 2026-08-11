@@ -86,6 +86,10 @@ an owner-controlled value that must not be invented in code.
 - The legacy background mock-report builder is aligned with the same governed
   score gate, withholding Reading/Listening formula grades, mock-wide grade,
   and booking pass advice when owner conversion evidence is absent.
+- Reading dashboard copy now labels predicted values as an AI Practice Score
+  with the non-official-result disclosure; mock client readiness and color
+  helpers exclude Reading/Listening-bearing reports from mock-wide pass logic
+  and use persisted owner grades when available.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

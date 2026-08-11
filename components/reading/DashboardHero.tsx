@@ -2,7 +2,7 @@
 
 interface DashboardHeroProps {
   readinessScore: number;
-  predictedScore: number;
+  predictedScore: number | null;
   daysToExam: number | null;
   streak: number;
 }
@@ -23,10 +23,10 @@ export function DashboardHero({ readinessScore, predictedScore, daysToExam, stre
       accent: readinessScore >= 80 ? 'text-success' : readinessScore >= 60 ? 'text-warning' : 'text-danger',
     },
     {
-      label: 'Predicted OET',
-      value: predictedScore > 0 ? String(predictedScore) : '–',
-      sub: predictedScore >= 350 ? 'Pass band' : predictedScore > 0 ? 'Below pass' : 'No data yet',
-      accent: predictedScore >= 350 ? 'text-success' : 'text-muted',
+      label: 'AI Practice Score',
+      value: predictedScore != null && predictedScore > 0 ? String(predictedScore) : '–',
+      sub: predictedScore != null && predictedScore > 0 ? 'Not an official OET result' : 'No data yet',
+      accent: 'text-muted',
     },
     {
       label: 'Days to Exam',
