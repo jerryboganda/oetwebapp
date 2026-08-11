@@ -157,6 +157,9 @@ async function confirmDestructiveAction(phrase: string) {
 
 describe('AdminPricingHubPage — destructive pricing controls', () => {
   beforeEach(() => {
+    // Other Vitest files use fake timers; reset them before userEvent drives
+    // the confirmation dialog so typing cannot remain pending in CI workers.
+    vi.useRealTimers();
     vi.clearAllMocks();
     authState.adminPermissions = ['billing:read', 'billing:write'];
     searchState.tab = 'wallet';
