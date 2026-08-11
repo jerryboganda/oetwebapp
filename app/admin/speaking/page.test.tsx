@@ -77,6 +77,7 @@ describe('AdminSpeakingPage', () => {
     expect(screen.queryByRole('link', { name: /New mock set/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Operations & quality' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Result visibility Open workspace/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Simulation v1\.1 governance Open workspace/i })).not.toBeInTheDocument();
 
     // But the content tabs are still visible for reading.
     expect(screen.getByRole('button', { name: 'Role-play cards' })).toBeInTheDocument();

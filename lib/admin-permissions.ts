@@ -249,6 +249,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/signup-catalog': [AdminPermission.ContentRead],
   '/admin/sla-health': [AdminPermission.SystemAdmin],
   '/admin/speaking/recordings/audit': [AdminPermission.ReviewOps],
+  '/admin/speaking/simulation-v1.1': [AdminPermission.SystemAdmin],
   '/admin/speaking': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ReviewOps, AdminPermission.QualityAnalytics, AdminPermission.ContentPublish],
   '/admin/speaking/result-visibility': [AdminPermission.ContentWrite],
   '/admin/taxonomy': [AdminPermission.ContentRead],
