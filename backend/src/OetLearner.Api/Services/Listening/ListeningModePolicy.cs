@@ -41,7 +41,9 @@ public interface IListeningModePolicy
     /// <summary>R07 — paper-mode free navigation across all parts.</summary>
     bool FreeNavigation { get; }
 
-    /// <summary>R10 — tech-readiness probe required before <c>intro→a1_preview</c>.</summary>
+    /// <summary>R10 — audio sound check required before <c>intro→a1_preview</c>.
+    /// Device, resolution, scale, and network signals remain advisory guidance
+    /// and are never represented by this launch gate.</summary>
     bool RequiresTechReadiness { get; }
 
     /// <summary>R08 — annotations (highlights, strikethroughs) survive section advance.</summary>

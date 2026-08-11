@@ -3,17 +3,18 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../f
 
 // Listening V2 R10 — in strict modes (`exam` and `home`), the Start
 // button on `app/listening/player/[id]/page.tsx` must be disabled until
-// the `TechReadinessCheck` (audio probe) has reported success. Without
-// it, the FSM cannot legally advance out of `intro` to `a1_preview`
-// (the first strict state).
+// the audio sound check has reported success. Without it, the FSM cannot
+// legally advance out of `intro` to `a1_preview` (the first strict state).
+// Device, resolution, display-scale, VPN, and similar real-exam checks are
+// guidance telemetry only and are intentionally not asserted as launch gates.
 //
 // We assert the cheaper of the two contracts here: the UI gate. The
 // server-side gate (POST /v1/listening/v2/attempts/{id}/advance returns
 // rejection without a recorded tech-readiness payload) is covered by
 // `backend/tests/OetLearner.Api.Tests/Listening/
 // ListeningV2AdvanceEndpointTests.cs`.
-test.describe('Listening R10 readiness gate @learner @listening', () => {
-  test('exam mode Start button is disabled until readiness probe succeeds', async ({ page }, testInfo) => {
+test.describe('Listening R10 audio sound-check gate @learner @listening', () => {
+  test('exam mode Start button is disabled until the audio sound check succeeds', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }

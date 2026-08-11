@@ -109,7 +109,7 @@ public static class ListeningV2Endpoints
         })
         .RequireRateLimiting("PerUserWrite")
         .WithName("RecordListeningV2TechReadiness")
-        .WithSummary("Listening V2 — record R10 tech readiness before strict attempt start")
+        .WithSummary("Listening V2 — record the audio sound check and advisory R10 technical guidance before strict attempt start")
         .Produces<TechReadinessDto>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status403Forbidden)

@@ -2,17 +2,17 @@
  * Client-side tech-readiness probe for the Listening exam.
  *
  * Surfaces:
- *   - The active audio output / input device labels (so the backend can
- *     reject Bluetooth devices per rule L-R10.3).
- *   - The screen resolution (rule L-R10.1: must be ≥ 1920×1080).
- *   - A coarse display-scale estimate via devicePixelRatio (rule L-R10.2:
- *     must be ≤ 125%).
+ *   - The active audio output / input device labels for real-exam guidance.
+ *   - The screen resolution for real-exam guidance (1920×1080 is a
+ *     recommendation, not a platform launch constraint).
+ *   - A coarse display-scale estimate via devicePixelRatio for guidance
+ *     (125% is a recommendation, not a platform launch constraint).
  *
  * The helper degrades gracefully: when `navigator.mediaDevices` is
  * unavailable (older browsers, SSR), the device-label fields are returned
  * as `null` and the backend treats their absence as "unknown" rather than
- * a violation. The hard gate fires only when the candidate is actively in
- * exam or home mode AND the labels look like a wireless device.
+ * a guidance signal. The only strict pre-start gate is the separate audio
+ * sound check (`audioOk`).
  */
 
 import type { TechReadinessProbe } from './v2-api';
@@ -63,9 +63,8 @@ function pickLabel(devices: MediaDeviceInfo[], kind: MediaDeviceKind): string | 
 }
 
 /**
- * Pure heuristic — exposed for tests and for the client to mirror the
- * server-side check before submitting. Matches the server's regex in
- * `TechReadinessAudioPolicy.BluetoothDeviceLabelPattern`.
+ * Pure heuristic — exposed for guidance copy, diagnostics, and tests. It must
+ * not be used to block a practice or strict attempt launch.
  */
 export function looksLikeBluetoothAudio(label: string | null | undefined): boolean {
   if (!label) return false;

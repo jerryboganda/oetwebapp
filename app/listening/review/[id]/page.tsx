@@ -11,6 +11,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
 import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
@@ -229,7 +230,7 @@ export default function ListeningReviewPage() {
         {!loading && review ? (
           <>
             {(() => {
-              const hasApprovedConversion = review.scaledScore != null && review.passed != null;
+              const hasApprovedConversion = review.scaledScore != null && review.scoreConversionTableVersionKey != null;
               return (
                 <>
             <ResultsScorePanel
@@ -248,16 +249,23 @@ export default function ListeningReviewPage() {
                 { label: 'Unanswered', value: review.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
                 {
                   label: 'Scaled',
-                  value: typeof review.scaledScore === 'number' ? `${review.scaledScore}/500` : '—',
+                  value: hasApprovedConversion ? `${review.scaledScore}/500` : '—',
                   tone: 'info',
                   icon: <Target />,
                 },
               ]}
             />
 
-            <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
-              AI Practice Score — not an official OET result.
-            </p>
+            <ScoreConversionEvidence
+              assessment="Listening"
+              rawScore={review.rawScore}
+              maxRawScore={review.maxRawScore}
+              scaledScore={review.scaledScore}
+              passed={review.passed}
+              grade={review.grade}
+              tableVersion={review.scoreConversionTableVersionKey}
+              errorCode={review.scoreConversionErrorCode}
+            />
             <p className="mt-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
               This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
             </p>

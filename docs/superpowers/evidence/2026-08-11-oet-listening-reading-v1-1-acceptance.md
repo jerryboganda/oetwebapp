@@ -16,7 +16,7 @@ an owner-controlled value that must not be invented in code.
 | LR-05 | Strikethrough is not a selected MCQ answer | Candidate selection remains a server-validated option key and annotation metadata is separate in `ListeningLearnerService`; `tests/unit/listening/BCQuestionRenderer.test.tsx` and `app/reading/paper/[paperId]/page.test.tsx` assert rule-out leaves the radio answer unchecked | Implemented; focused UI regression passed |
 | LR-06 | Reading Part A locks at the authoritative 15-minute deadline | `backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
 | LR-07 | Reading B+C share one authoritative 45-minute timer | `ReadingAttemptService`, `ReadingLearnerEndpoints`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
-| LR-08 | Raw score is reproducible from stored response/key version | `ListeningAttempt.LastQuestionVersionMapJson`, `ListeningAnswer.QuestionVersionSnapshot`, `ReadingAttempt.PaperRevisionId`, governed `MarkingPolicyVersionId`/snapshot guards, attempt-start `AssessmentScoreConversionSnapshot`, migration `20260902090000_AddAssessmentScoreConversionAttemptSnapshots`, and `backend/tests/OetLearner.Api.Tests/Assessment/AssessmentScoreConversionServiceTests.cs` | Implemented fail-closed revision, policy-snapshot, and score-table selection guards; focused backend run pending |
+| LR-08 | Raw score is reproducible from stored response/key version | `ListeningAttempt.LastQuestionVersionMapJson`, `ListeningAnswer.QuestionVersionSnapshot`, `ReadingAttempt.PaperRevisionId`, governed `MarkingPolicyVersionId`/snapshot guards, legacy `Attempt` capture in `LearnerService.CreateAttemptAsync`, attempt-start `AssessmentScoreConversionSnapshot`, migration `20260902090000_AddAssessmentScoreConversionAttemptSnapshots`, and `backend/tests/OetLearner.Api.Tests/Assessment/AssessmentScoreConversionServiceTests.cs` | Implemented fail-closed revision, policy-snapshot, and score-table selection guards; focused backend run pending |
 | LR-09 | No answer/rationale is visible before final submission | `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs`, `tests/e2e/listening/listening-answer-key-not-exposed.spec.ts` | Implemented; deployed browser verification pending |
 | LR-10 | Result has raw/part/converted/graph/review/disclosure contracts | `components/domain/results/score-conversion-evidence.tsx`, `app/listening/results/[id]/page.tsx`, `app/reading/paper/[paperId]/results/page.tsx`, `app/reading/paper/[paperId]/results/page.test.tsx` | Implemented; deployed responsive verification pending |
 | LR-11 | Refresh/reconnect restores answers without extra time | `ReadingAttemptService`, `ListeningLearnerService`, server deadline fields and idempotent submit paths | Implemented in source; focused reconnect test pending |
@@ -24,7 +24,7 @@ an owner-controlled value that must not be invented in code.
 | LR-13 | MCQ publication rejects zero/multiple correct options | `ListeningStructureService`, `ReadingStructureService`, existing authoring validation tests | Implemented; focused release test pending |
 | LR-14 | Key change uses controlled auditable re-mark | `AssessmentGovernanceEndpoints`, `ReadingGradingService.RegradeSubmittedAsync`, `ListeningGradingService.RegradeWithKeyAsync`; original/updated result snapshots retained on the job | Implemented; focused re-mark test pending |
 | LR-15 | Desktop/mobile timer, passage, and controls do not clip | Responsive result/player layouts and existing mobile/desktop route surfaces | Pending dedicated Playwright run |
-| LR-16 | Exam technical requirements are guidance only | `AssessmentMarkingPolicyDocument.TechnicalRequirementsGuidanceOnly`; no resolution/headset/VPN hard gate added | Implemented; owner style/copy review pending |
+| LR-16 | Exam technical requirements are guidance only | `ListeningSessionService.RecordTechReadinessAsync` records Bluetooth, resolution, and scale signals without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Implemented; focused backend run stalled locally; owner style/copy review pending |
 
 ## Release gates that cannot be guessed
 
@@ -71,6 +71,10 @@ an owner-controlled value that must not be invented in code.
 - Full Listening/Reading and legacy Listening attempts now capture the score
   conversion table selection (including a raw-only unavailable reason) at
   attempt start, so a later table cannot change an in-flight result.
+- Real-exam device requirements are now explicitly advisory for Listening:
+  the audio sound check remains a strict preflight, while Bluetooth/wireless
+  labels, resolution, display scale, VPN, and similar signals are recorded for
+  guidance/audit and cannot block an AI practice launch.
 - Legacy learner, mock, analytics, tutor, expert, and background LR surfaces
   now expose raw-only evidence when no owner-approved conversion row exists;
   no raw-to-scaled formula fallback remains in the audited LR paths.

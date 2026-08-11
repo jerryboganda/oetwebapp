@@ -4,26 +4,30 @@ namespace OetLearner.Api.Tests.Listening;
 
 /// <summary>
 /// Listening V2 — mission-critical scoring-path audit. Source-scans the
-/// Listening service tree for inline raw→scaled math (* 350 / / 42 / * 500
-/// / * 8.33). The ONLY allowed scaling path is
-/// <c>OetScoring.OetRawToScaled</c>. Any other inline formula is a CI fail.
+/// Listening service tree for legacy raw→scaled formula paths. Listening
+/// scoring must resolve an owner-approved versioned table; no formula helper
+/// is an acceptable production fallback.
 ///
-/// Why a meta-test: AGENTS.md mission-critical invariant — Listening (like
-/// Reading) is graded server-side and the 30/42 ≡ 350 anchor must never be
-/// duplicated outside <c>OetScoring</c>. A reviewer-only check is not
-/// sufficient because copy-paste of an old ad-hoc formula is the most likely
-/// regression vector.
+/// Why a meta-test: the v1.1 invariant is that a later or missing table cannot
+/// silently change a result and no copied formula can bypass governance. A
+/// reviewer-only check is not sufficient because copy-paste of an old ad-hoc
+/// formula is the most likely regression vector.
 /// </summary>
 public class ListeningScoringPathAuditTest
 {
     [Fact]
-    public void Listening_grading_service_uses_versioned_conversion_only()
+    public void Listening_services_use_versioned_conversion_only()
     {
         var listeningServicesDir = LocateListeningServicesDir();
-        var source = File.ReadAllText(Path.Combine(listeningServicesDir, "ListeningGradingService.cs"));
+        var gradingSource = File.ReadAllText(Path.Combine(listeningServicesDir, "ListeningGradingService.cs"));
+        var serviceSource = string.Join(
+            "\n",
+            Directory.GetFiles(listeningServicesDir, "*.cs", SearchOption.TopDirectoryOnly)
+                .Select(File.ReadAllText));
 
-        Assert.DoesNotContain("OetRawToScaled", source, StringComparison.Ordinal);
-        Assert.Contains("IAssessmentScoreConversionService", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("OetRawToScaled", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GradeListeningReading", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("IAssessmentScoreConversionService", gradingSource, StringComparison.Ordinal);
     }
 
     private static string LocateListeningServicesDir()

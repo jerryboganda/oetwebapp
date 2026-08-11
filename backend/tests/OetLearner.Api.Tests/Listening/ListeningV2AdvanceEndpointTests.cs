@@ -115,6 +115,49 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
     }
 
     [Fact]
+    public async Task Technical_guidance_signals_are_recorded_without_blocking_strict_readiness()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await SeedStrictAttemptAsync(userId, attemptId);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        var response = await client.PostAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/tech-readiness",
+            new
+            {
+                audioOk = true,
+                durationMs = 1800,
+                audioOutputDeviceLabel = "Bluetooth Headphones",
+                audioInputDeviceLabel = "Built-in microphone",
+                screenWidth = 1366,
+                screenHeight = 768,
+                displayScalePercent = 150,
+            });
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<TechReadinessDto>(JsonSupport.Options);
+        Assert.NotNull(result);
+        Assert.True(result.AudioOk);
+        Assert.True(result.TechnicalRequirementsGuidanceOnly);
+        Assert.True(result.BluetoothAudioDetected);
+        Assert.False(result.ResolutionMeetsMinimum);
+        Assert.False(result.DisplayScaleAcceptable);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.ListeningAttempts.FindAsync([attemptId], CancellationToken.None);
+        Assert.NotNull(attempt);
+        Assert.Contains("Bluetooth Headphones", attempt.TechReadinessJson, StringComparison.Ordinal);
+        Assert.Contains("1366", attempt.TechReadinessJson, StringComparison.Ordinal);
+        Assert.Contains("150", attempt.TechReadinessJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Advance_rejects_expired_tech_readiness_snapshot()
     {
         var userId = $"listener-{Guid.NewGuid():N}";

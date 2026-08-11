@@ -337,6 +337,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               passed={review.attempt.passed}
               grade={review.attempt.gradeLetter}
               tableVersion={review.attempt.scoreConversionTableVersionKey}
+              errorCode={review.attempt.scoreConversionErrorCode}
             />
 
             {structure?.paper.questionPaperAssets?.length ? (

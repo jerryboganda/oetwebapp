@@ -243,31 +243,31 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
   listening_tech_min_screen_resolution: {
     checkId: 'listening_tech_min_screen_resolution',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'screenWidth/screenHeight', description: 'Pre-exam probe asserts at least 1920×1080.' },
+      { kind: 'tech-readiness-probe', field: 'screenWidth/screenHeight', description: 'Pre-exam probe records the 1920×1080 exam-day guidance target; it does not block launch.' },
     ],
   },
   listening_tech_display_scale: {
     checkId: 'listening_tech_display_scale',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'displayScalePercent', description: 'Pre-exam probe asserts ≤ 125%.' },
+      { kind: 'tech-readiness-probe', field: 'displayScalePercent', description: 'Pre-exam probe records the ≤125% exam-day guidance target; it does not block launch.' },
     ],
   },
   listening_tech_wired_audio_device: {
     checkId: 'listening_tech_wired_audio_device',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'audioDeviceLabel', description: 'Pre-exam probe enumerates input/output devices and rejects bluetooth/wireless devices in exam mode.' },
+      { kind: 'tech-readiness-probe', field: 'audioDeviceLabel', description: 'Pre-exam probe records input/output device labels for wired-audio guidance; it does not reject Bluetooth/wireless devices.' },
     ],
   },
   listening_tech_stable_internet: {
     checkId: 'listening_tech_stable_internet',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'networkStability', description: 'Pre-exam probe runs a short ping/latency check.' },
+      { kind: 'tech-readiness-probe', field: 'networkStability', description: 'Pre-exam probe may record network guidance signals; it does not block an AI practice launch.' },
     ],
   },
   listening_tech_no_vpn_vm: {
     checkId: 'listening_tech_no_vpn_vm',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'vpnDetected/vmDetected', description: 'Pre-exam probe checks for known VPN/VM signals (best-effort; ProProctor is the authoritative gate at exam-day).' },
+      { kind: 'tech-readiness-probe', field: 'vpnDetected/vmDetected', description: 'Candidate-facing VPN/VM guidance is advisory; the AI practice platform does not enforce these real-exam signals.' },
     ],
   },
 });
@@ -440,31 +440,31 @@ export const READING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnforc
   reading_tech_min_screen_resolution: {
     checkId: 'reading_tech_min_screen_resolution',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'screenWidth/screenHeight', description: 'Pre-exam probe asserts at least 1920×1080.' },
+      { kind: 'tech-readiness-probe', field: 'screenWidth/screenHeight', description: 'Pre-exam probe records the 1920×1080 exam-day guidance target; it does not block launch.' },
     ],
   },
   reading_tech_display_scale: {
     checkId: 'reading_tech_display_scale',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'displayScalePercent', description: 'Pre-exam probe asserts ≤ 125%.' },
+      { kind: 'tech-readiness-probe', field: 'displayScalePercent', description: 'Pre-exam probe records the ≤125% exam-day guidance target; it does not block launch.' },
     ],
   },
   reading_tech_at_home_pre_check: {
     checkId: 'reading_tech_at_home_pre_check',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'preExamChecklist', description: 'At-home candidates run an end-to-end tech-readiness probe at least 24h before exam day.' },
+      { kind: 'tech-readiness-probe', field: 'preExamChecklist', description: 'At-home candidates may use an end-to-end technical checklist before exam day; this is guidance only.' },
     ],
   },
   reading_tech_stable_internet: {
     checkId: 'reading_tech_stable_internet',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'networkStability', description: 'Pre-exam probe runs a short ping/latency check.' },
+      { kind: 'tech-readiness-probe', field: 'networkStability', description: 'Pre-exam probe may record network guidance signals; it does not block an AI practice launch.' },
     ],
   },
   reading_tech_no_vpn_vm: {
     checkId: 'reading_tech_no_vpn_vm',
     surfaces: [
-      { kind: 'tech-readiness-probe', field: 'vpnDetected/vmDetected', description: 'Pre-exam probe checks for known VPN/VM signals.' },
+      { kind: 'tech-readiness-probe', field: 'vpnDetected/vmDetected', description: 'Candidate-facing VPN/VM guidance is advisory; the AI practice platform does not enforce these real-exam signals.' },
     ],
   },
 });

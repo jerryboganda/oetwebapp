@@ -54,25 +54,27 @@ export interface TechReadinessResult {
   durationMs: number;
   checkedAt: string;
   ttlMs: number;
-  // 2026-05-27 audit fix — Listening rule L-R10.3 wired-audio gate.
+  // v1.1 technical requirements are guidance-only; these fields are advisory
+  // telemetry and are never a client launch gate.
   audioOutputDeviceLabel?: string | null;
   audioInputDeviceLabel?: string | null;
   bluetoothAudioDetected?: boolean;
   resolutionMeetsMinimum?: boolean;
   displayScaleAcceptable?: boolean;
+  technicalRequirementsGuidanceOnly?: boolean;
 }
 
 export interface TechReadinessProbe {
   audioOk: boolean;
   durationMs: number;
-  /** Output device label from navigator.mediaDevices.enumerateDevices(); used to detect Bluetooth. */
+  /** Output device label from navigator.mediaDevices.enumerateDevices(); used for guidance. */
   audioOutputDeviceLabel?: string | null;
   /** Input device label (microphone). */
   audioInputDeviceLabel?: string | null;
-  /** Screen.width / Screen.height — checked against the 1920×1080 minimum. */
+  /** Screen.width / Screen.height — recorded against the 1920×1080 guidance target. */
   screenWidth?: number | null;
   screenHeight?: number | null;
-  /** window.devicePixelRatio * 100 (a coarse proxy for Windows display scale). */
+  /** window.devicePixelRatio * 100 (a coarse proxy for display-scale guidance). */
   displayScalePercent?: number | null;
 }
 

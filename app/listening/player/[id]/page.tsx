@@ -587,9 +587,9 @@ function PlayerContent() {
         if (!readinessSnapshot?.audioOk) {
           throw new Error('Complete the audio readiness check before starting this strict Listening attempt.');
         }
-        // 2026-05-27 audit fix — Listening rule L-R10.3 (wired headset).
-        // The full probe enumerates devices + screen so the server can
-        // reject Bluetooth audio, sub-1920×1080 resolution, and >125% scale.
+        // v1.1 — collect real-exam technical guidance telemetry. The server
+        // records device/screen observations for guidance and audit only; the
+        // audio sound check above is the only strict pre-start readiness gate.
         const probe = await buildTechReadinessProbe({
           audioOk: readinessSnapshot.audioOk,
           durationMs: readinessSnapshot.durationMs,

@@ -122,6 +122,17 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
               item per extract.
             </span>
           </li>
+          {strictReadinessRequired ? (
+            <li className="flex items-start gap-2">
+              <Volume2 className="h-5 w-5 shrink-0 text-muted" />
+              <span>
+                <strong className="text-navy">Exam-day setup guidance:</strong> use reliable audio,
+                a stable connection, and a comfortable display. Resolution, headset type, display
+                scale, VPN, and similar device checks are advisory on this platform and do not block
+                your AI practice attempt.
+              </span>
+            </li>
+          ) : null}
           <li className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
             <span className="font-bold text-danger">

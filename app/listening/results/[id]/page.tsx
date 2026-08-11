@@ -126,7 +126,7 @@ function ListeningResultsContent() {
   // papers show a practice-score frame (percent correct, no OET grade letter,
   // no pass/fail badge).
   const isFullOetPaper = result.maxRawScore >= 42;
-  const hasApprovedConversion = result.scaledScore != null && result.passed != null;
+  const hasApprovedConversion = result.scaledScore != null && result.scoreConversionTableVersionKey != null;
   const percentCorrect = result.maxRawScore > 0
     ? Math.round((result.rawScore / result.maxRawScore) * 100)
     : 0;

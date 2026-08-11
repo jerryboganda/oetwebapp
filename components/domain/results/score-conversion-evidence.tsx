@@ -25,6 +25,12 @@ export function ScoreConversionEvidence({
     ? Math.min(100, Math.max(0, (rawScore / maxRawScore) * 100))
     : 0;
   const hasConversion = scaledScore != null && tableVersion != null;
+  const scaledPercent = !hasConversion || scaledScore == null
+    ? null
+    : Math.min(100, Math.max(0, (scaledScore / 500) * 100));
+  const graphAriaLabel = hasConversion
+    ? `${assessment} AI Practice Score, ${scaledScore} out of 500. Not an official OET result.`
+    : `${assessment} AI Practice Score graph. Converted score unavailable. Not an official OET result.`;
 
   return (
     <section className={`rounded-2xl border border-border bg-surface p-5 shadow-sm ${className ?? ''}`} aria-label={`${assessment} score conversion evidence`}>
@@ -68,6 +74,38 @@ export function ScoreConversionEvidence({
           {errorCode ? ` (${errorCode})` : ''}
         </p>
       )}
+      <div
+        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy p-4 text-white shadow-inner"
+        role="img"
+        aria-label={graphAriaLabel}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Platform score graph</p>
+            <p className="mt-1 text-sm font-black tracking-tight">AI Practice Score — not an official OET result</p>
+          </div>
+          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-black tabular-nums">
+            {hasConversion ? `${scaledScore}/500` : 'Awaiting table'}
+          </span>
+        </div>
+        <div className="relative mt-5 h-3 rounded-full bg-white/15" aria-hidden="true">
+          <div
+            className="h-3 rounded-full bg-primary shadow-[0_0_18px_rgba(255,255,255,0.25)] transition-[width] duration-500"
+            style={{ width: `${scaledPercent ?? 0}%` }}
+          />
+          {scaledPercent != null ? (
+            <span
+              className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-navy bg-white shadow-lg"
+              style={{ left: `${scaledPercent}%` }}
+            />
+          ) : null}
+        </div>
+        <div className="mt-2 flex justify-between text-[10px] font-bold tabular-nums text-white/60" aria-hidden="true">
+          <span>0</span>
+          <span>250</span>
+          <span>500</span>
+        </div>
+      </div>
       <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted">
         Practice evidence only; this is not an official OET result.
       </p>

@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 /**
- * Listening V2 R10 — pre-attempt tech readiness probe. Verifies the
- * candidate's audio output and (optionally) microphone permission before
- * the FSM can advance out of `intro`. Result is persisted server-side in
- * `ListeningAttempt.TechReadinessJson` for audit / regret-window analytics.
+ * Listening V2 R10 — pre-attempt audio sound check. It verifies the
+ * candidate's audio output before the strict FSM can advance out of `intro`.
+ * Separate device, resolution, scale, and network requirements are
+ * candidate-facing real-exam guidance only; they are recorded as telemetry
+ * and never used to block an AI practice attempt.
  */
 
 type ProbeStatus = 'idle' | 'running' | 'ok' | 'failed';

@@ -16,7 +16,7 @@ namespace OetLearner.Api.Services.Listening;
 //   Part B =  6 items (six INDEPENDENT sub-sections B1..B6, exactly 1 item each)
 //   Part C = 12 items (two presentations, 6 items each; partCode C1 / C2)
 //   ───────────────
-//   Total  = 42 items  (30 / 42 ≡ 350 / 500 pass anchor via OetScoring)
+//   Total  = 42 items  (scaled conversion is resolved from the governed table)
 //
 // Any sub-section may use any of the 3 content types (MCQ / fill-in-the-blank /
 // free-text). Audio for a sub-section is either an uploaded ContentPaperAsset
@@ -642,11 +642,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     /// <summary>
     /// <c>listening_results_calc</c> — results-calculation integrity. The
     /// authored points must sum to the OET Listening/Reading raw max
-    /// (<see cref="OetScoring.ListeningReadingRawMax"/> = 42), the per-part
-    /// max-raw totals must agree, and the canonical raw→scaled pass anchor
-    /// (<see cref="OetScoring.ListeningReadingRawPass"/> → 350) must hold.
-    /// Any inconsistency would mis-grade a published paper, so it blocks
-    /// publish.
+    /// (<see cref="OetScoring.ListeningReadingRawMax"/> = 42) and the per-part
+    /// max-raw totals must agree. Scaled conversion is resolved only from the
+    /// owner-approved versioned table at attempt start; this publish validator
+    /// must not invent or duplicate a conversion formula.
     /// </summary>
     private static List<ListeningValidationIssue> EvaluateResultsCalc(
         int authoredPoints,
@@ -663,15 +662,6 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         if (partMaxRawScores != OetScoring.ListeningReadingRawMax)
         {
             problems.Add($"per-part max-raw scores sum to {partMaxRawScores}, not {OetScoring.ListeningReadingRawMax}");
-        }
-
-        // Pass-anchor integrity: 30/42 must still scale to exactly the Grade B
-        // pass constant (350). Defends against an OetScoring regression that
-        // would silently move every published paper's pass line.
-        var anchorScaled = OetScoring.OetRawToScaled(OetScoring.ListeningReadingRawPass);
-        if (anchorScaled != OetScoring.ScaledPassGradeB)
-        {
-            problems.Add($"raw pass anchor {OetScoring.ListeningReadingRawPass}/{OetScoring.ListeningReadingRawMax} scales to {anchorScaled}, not the Grade B pass {OetScoring.ScaledPassGradeB}");
         }
 
         if (problems.Count > 0)

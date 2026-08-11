@@ -14,6 +14,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services;
@@ -82,7 +83,9 @@ public partial class LearnerService(
     IPlanContentAvailabilityService? planContentAvailability = null,
     IManualPaymentService? manualPaymentService = null,
     IPasswordHasher<ApplicationUserAccount>? passwordHasher = null,
-    ILogger<LearnerService>? logger = null)
+    ILogger<LearnerService>? logger = null,
+    IAssessmentScoreConversionService? scoreConversionService = null,
+    IAssessmentMarkingPolicyService? markingPolicyService = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -6737,6 +6740,30 @@ public partial class LearnerService(
             return await GetAttemptAsync(existing.Id, cancellationToken);
         }
 
+        AssessmentMarkingPolicyResolution? markingPolicy = null;
+        AssessmentScoreConversionResult? scoreConversionAtStart = null;
+        if (subtest is "listening" or "reading")
+        {
+            var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
+            markingPolicy = await markingPolicyResolver.ResolveAsync(
+                subtest,
+                "default",
+                cancellationToken: cancellationToken);
+            if (!markingPolicy.IsAvailable || markingPolicy.ErrorCode is not null)
+            {
+                throw ApiException.Conflict(
+                    $"{subtest}_marking_policy_unavailable",
+                    $"{ToDisplaySubtest(subtest)} attempts are unavailable until an owner-approved marking policy is effective.");
+            }
+
+            var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
+            scoreConversionAtStart = await conversionResolver.ResolveAsync(
+                subtest,
+                rawScore: 0,
+                scopeKey: "default",
+                cancellationToken: cancellationToken);
+        }
+
         var attempt = new Attempt
         {
             Id = $"{subtest[..1]}a-{Guid.NewGuid():N}",
@@ -6749,12 +6776,34 @@ public partial class LearnerService(
             StartedAt = DateTimeOffset.UtcNow,
             DeviceType = request.DeviceType ?? "web",
             ParentAttemptId = request.ParentAttemptId,
-            ComparisonGroupId = $"{subtest}-{request.ContentId}"
+            ComparisonGroupId = $"{subtest}-{request.ContentId}",
+            MarkingPolicyVersionId = markingPolicy?.PolicyId,
+            ScoreConversionSnapshotJson = scoreConversionAtStart is null
+                ? null
+                : AssessmentScoreConversionSnapshot.Capture(scoreConversionAtStart).Serialize(),
+            PolicySnapshotJson = markingPolicy is null
+                ? "{}"
+                : JsonSupport.Serialize(new
+                {
+                    markingPolicy = markingPolicy.Document,
+                    markingPolicyVersionKey = markingPolicy.PolicyVersionKey,
+                    markingPolicyErrorCode = markingPolicy.ErrorCode,
+                })
         };
         db.Attempts.Add(attempt);
         await LearnerWorkflowCoordinator.AttachAttemptToDiagnosticAsync(db, attempt, cancellationToken);
         await RecordEventAsync(userId, "task_started", new { attemptId = attempt.Id, contentId = attempt.ContentId, subtest = attempt.SubtestCode, mode = attempt.Mode, context = attempt.Context }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        if (markingPolicy is not null)
+        {
+            var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
+            await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, cancellationToken);
+        }
+        if (scoreConversionAtStart is { TableId: not null, IsAvailable: true } conversionAtStart)
+        {
+            var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
+            await conversionResolver.MarkUsedAsync(conversionAtStart.TableId, cancellationToken);
+        }
         return await GetAttemptAsync(attempt.Id, cancellationToken);
     }
 
@@ -6891,8 +6940,25 @@ public partial class LearnerService(
         var questions = ObjectiveQuestionsForContent(content);
         var answers = JsonSupport.Deserialize<Dictionary<string, string?>>(attempt.AnswersJson, new Dictionary<string, string?>());
         var rawScore = ObjectiveRawScore(questions, answers);
-        var score = OetScoring.GradeListeningReading(subtest, rawScore);
-        var scoreDisplay = $"{score.RawCorrect} / {score.RawMax} \u2022 {score.ScaledScore} / 500 \u2022 Grade {score.Grade}";
+        var maxRawScore = OetScoring.ListeningReadingRawMax;
+        var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
+        var conversion = await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+            conversionResolver,
+            subtest,
+            rawScore,
+            attempt.ScoreConversionSnapshotJson,
+            tableId: null,
+            scopeKey: "default",
+            cancellationToken: cancellationToken);
+        if (conversion.TableId is not null && conversion.IsAvailable)
+        {
+            await conversionResolver.MarkUsedAsync(conversion.TableId, cancellationToken);
+        }
+        var scaledScore = conversion.ConvertedScore;
+        var grade = conversion.Grade ?? "—";
+        var scoreDisplay = scaledScore is int converted
+            ? $"{rawScore} / {maxRawScore} \u2022 {converted} / 500 \u2022 Grade {grade}"
+            : $"{rawScore} / {maxRawScore} \u2022 Practice score unavailable ({conversion.ErrorCode ?? "score_conversion_unavailable"})";
         var incorrectItems = questions
             .Where(question =>
             {
@@ -6908,9 +6974,15 @@ public partial class LearnerService(
             SubtestCode = subtest,
             State = AsyncState.Completed,
             ScoreRange = scoreDisplay,
-            GradeRange = $"Grade {score.Grade}",
+            RawScore = rawScore,
+            MaxRawScore = maxRawScore,
+            ScaledScore = scaledScore,
+            ScoreConversionTableVersionKey = conversion.TableVersionKey,
+            ScoreConversionGrade = conversion.Grade,
+            ScoreConversionPassed = conversion.Passed,
+            GradeRange = scaledScore is null ? "Practice score unavailable" : $"Grade {grade}",
             ConfidenceBand = ConfidenceBand.High,
-            StrengthsJson = JsonSupport.Serialize(score.Passed
+            StrengthsJson = JsonSupport.Serialize(conversion.Passed is true
                 ? new[] { $"Your {ToDisplaySubtest(subtest)} raw score is at or above the OET Grade B practice threshold.", "Your answer flow remained controlled under time pressure." }
                 : new[] { $"You completed the {ToDisplaySubtest(subtest)} attempt and now have item-level evidence to review." }),
             IssuesJson = JsonSupport.Serialize(incorrectItems
@@ -6924,11 +6996,13 @@ public partial class LearnerService(
                 new
                 {
                     criterionCode = $"{subtest}_accuracy",
-                    rawScore = score.RawCorrect,
-                    maxRawScore = score.RawMax,
-                    scaledScore = score.ScaledScore,
-                    grade = score.Grade,
-                    passed = score.Passed,
+                    rawScore,
+                    maxRawScore,
+                    scaledScore,
+                    grade,
+                    passed = conversion.Passed,
+                    scoreConversionTableVersionKey = conversion.TableVersionKey,
+                    scoreConversionErrorCode = conversion.ErrorCode,
                     scoreDisplay,
                     confidenceBand = "high",
                     explanation = "Objective score graded from the authored answer key."
@@ -6987,9 +7061,14 @@ public partial class LearnerService(
         var itemReview = questions
             .Select(question => ObjectiveItemReviewDto(content.SubtestCode, question, answers))
             .ToList();
-        var rawScore = ObjectiveRawScore(questions, answers);
-        var score = OetScoring.GradeListeningReading(content.SubtestCode, rawScore);
-        var scoreDisplay = $"{score.RawCorrect} / {score.RawMax} \u2022 {score.ScaledScore} / 500 \u2022 Grade {score.Grade}";
+        var rawScore = evaluation.RawScore ?? ObjectiveRawScore(questions, answers);
+        var maxRawScore = evaluation.MaxRawScore ?? OetScoring.ListeningReadingRawMax;
+        var scaledScore = evaluation.ScaledScore;
+        var grade = evaluation.ScoreConversionGrade ?? "—";
+        var scoreDisplay = evaluation.ScoreRange
+            ?? (scaledScore is int converted
+                ? $"{rawScore} / {maxRawScore} \u2022 {converted} / 500 \u2022 Grade {grade}"
+                : $"{rawScore} / {maxRawScore} \u2022 Practice score unavailable");
         var errorClusters = ObjectiveErrorClusters(content.SubtestCode, itemReview);
         return new
         {
@@ -6999,12 +7078,14 @@ public partial class LearnerService(
             title = content.Title,
             subtest = content.SubtestCode,
             score = scoreDisplay,
-            rawScore = score.RawCorrect,
-            maxRawScore = score.RawMax,
-            scaledScore = score.ScaledScore,
-            grade = score.Grade,
-            passed = score.Passed,
-            gradeRange = $"Grade {score.Grade}",
+            rawScore,
+            maxRawScore,
+            scaledScore,
+            scoreConversionTableVersionKey = evaluation.ScoreConversionTableVersionKey,
+            scoreConversionErrorCode = scaledScore is null ? "score_conversion_unavailable" : null,
+            grade,
+            passed = evaluation.ScoreConversionPassed,
+            gradeRange = scaledScore is null ? "Practice score unavailable" : $"Grade {grade}",
             state = ToAsyncState(evaluation.State),
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),

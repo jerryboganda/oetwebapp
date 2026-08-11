@@ -29,8 +29,8 @@ public sealed class ListeningSessionService
     /// valid as the gate for strict Listening exams. Sized to comfortably span
     /// a single exam sitting + the lead-up; a learner who passed the check
     /// within this window may start without re-running it. Independent of the
-    /// per-attempt <c>TechReadinessTtlMs</c>, which gates a separate device
-    /// probe.</summary>
+    /// per-attempt <c>TechReadinessTtlMs</c>, which expires the recorded audio
+    /// sound-check snapshot.</summary>
     public const int AudioCheckTtlMs = 24 * 60 * 60 * 1000; // 24 hours
 
     private readonly LearnerDbContext _db;
@@ -110,7 +110,7 @@ public sealed class ListeningSessionService
         // WS2 — strict Listening exams (Exam / OET@Home, OneWayLocks) require a
         // passed sound-check from the Listening flow before the learner can
         // leave intro. Practice / Learning / Paper / Diagnostic modes stay
-        // ungated. Mirrors the tech-readiness gate above but reads the
+        // ungated. Mirrors the audio sound-check gate above but reads the
         // learner's LearnerListeningProfile.AudioCheckPassedAt instead of the
         // per-attempt readiness snapshot.
         if (RequiresAudioCheck(nav.State, cmd.ToState, mode)
@@ -219,14 +219,12 @@ public sealed class ListeningSessionService
         var policy = await ResolveEffectivePolicyAsync(userId, ct);
         var now = _clock.GetUtcNow();
 
-        // 2026-05-27 audit fix — enforce Listening rules L-R10.1/R10.2/R10.3
-        // BEFORE persisting readiness. Exam and home modes reject Bluetooth
-        // audio devices, sub-1920×1080 resolution, and >125% display scale.
-        var modePolicy = _modes.For(attempt.Mode);
-        // OneWayLocks is true for exam + home + at-home strict modes — the
-        // exact set the device gate must enforce. Learning / Practice modes
-        // have OneWayLocks=false, which lets them iterate without device gates.
-        var enforceDeviceGates = modePolicy.OneWayLocks;
+        // v1.1 §Technical requirements: real-exam device guidance is advisory
+        // on this platform. Record the observed signals for candidate guidance,
+        // support diagnostics, and admin review, but never reject a readiness
+        // submission because of Bluetooth/wireless audio, screen dimensions, or
+        // display scale. The separate AudioOk sound check remains the only
+        // readiness value used by the strict intro → A1 preview gate.
         var outputBluetooth = TechReadinessAudioPolicy.LabelLooksBluetooth(cmd.AudioOutputDeviceLabel);
         var inputBluetooth = TechReadinessAudioPolicy.LabelLooksBluetooth(cmd.AudioInputDeviceLabel);
         var bluetoothDetected = outputBluetooth || inputBluetooth;
@@ -237,29 +235,6 @@ public sealed class ListeningSessionService
                 && cmd.ScreenHeight >= TechReadinessAudioPolicy.MinScreenHeight);
         var scaleOk = cmd.DisplayScalePercent is null
             || cmd.DisplayScalePercent <= TechReadinessAudioPolicy.MaxDisplayScalePercent;
-
-        if (enforceDeviceGates)
-        {
-            if (bluetoothDetected)
-            {
-                throw new InvalidOperationException(
-                    "Listening rule L-R10.3 — wired headset or earphones required. " +
-                    $"A Bluetooth/wireless audio device was detected ({cmd.AudioOutputDeviceLabel ?? cmd.AudioInputDeviceLabel}). " +
-                    "Disconnect the wireless device and connect a wired one before continuing.");
-            }
-            if (!resolutionOk)
-            {
-                throw new InvalidOperationException(
-                    "Listening rule L-R10.1 — minimum screen resolution is 1920×1080. " +
-                    $"Detected {cmd.ScreenWidth}×{cmd.ScreenHeight}. Adjust your display before continuing.");
-            }
-            if (!scaleOk)
-            {
-                throw new InvalidOperationException(
-                    "Listening rule L-R10.2 — display scale must be 100% or at most 125%. " +
-                    $"Detected {cmd.DisplayScalePercent}%. Reduce your display scale before continuing.");
-            }
-        }
 
         var snapshot = new TechReadinessSnapshot(
             AudioOk: cmd.AudioOk,
@@ -292,6 +267,7 @@ public sealed class ListeningSessionService
                 bluetoothDetected,
                 resolutionOk,
                 scaleOk,
+                technicalRequirementsGuidanceOnly = true,
             }),
         });
 
@@ -306,7 +282,8 @@ public sealed class ListeningSessionService
             AudioInputDeviceLabel: snapshot.AudioInputDeviceLabel,
             BluetoothAudioDetected: bluetoothDetected,
             ResolutionMeetsMinimum: resolutionOk,
-            DisplayScaleAcceptable: scaleOk);
+            DisplayScaleAcceptable: scaleOk,
+            TechnicalRequirementsGuidanceOnly: true);
     }
 
     public async Task<AudioResumeDto> AudioResumeAsync(
@@ -627,11 +604,10 @@ public sealed record AdvanceCommand(string ToState, string? ConfirmToken);
 public sealed record TechReadinessCommand(
     bool AudioOk,
     int DurationMs,
-    // 2026-05-27 audit fix — Listening rule L-R10.3 (wired headset required).
-    // The client enumerates `navigator.mediaDevices` and reports the label of
-    // the active output device. Bluetooth / wireless devices are detected by
-    // matching the label against `BluetoothDeviceLabelPattern` and the request
-    // is rejected when the attempt is in exam or home mode.
+    // v1.1 technical guidance telemetry. The client may enumerate
+    // `navigator.mediaDevices` and report the active device label so the UI and
+    // support tooling can explain real-exam recommendations. These fields are
+    // never a platform launch gate.
     string? AudioOutputDeviceLabel = null,
     string? AudioInputDeviceLabel = null,
     int? ScreenWidth = null,
@@ -657,11 +633,13 @@ public sealed record TechReadinessDto(
     string? AudioInputDeviceLabel = null,
     bool BluetoothAudioDetected = false,
     bool ResolutionMeetsMinimum = true,
-    bool DisplayScaleAcceptable = true);
+    bool DisplayScaleAcceptable = true,
+    bool TechnicalRequirementsGuidanceOnly = true);
 
 /// <summary>
-/// Configuration for the audio-device gate. Centralised so a single edit
-/// updates both `RecordTechReadinessAsync` and the contract tests.
+/// Configuration for advisory technical-readiness metadata. Centralised so a
+/// single edit updates `RecordTechReadinessAsync` and the contract tests. The
+/// values describe real-exam guidance; they do not authorize a launch block.
 /// </summary>
 public static class TechReadinessAudioPolicy
 {
@@ -671,8 +649,8 @@ public static class TechReadinessAudioPolicy
 
     /// <summary>
     /// Case-insensitive regex applied to `audioOutputDeviceLabel` /
-    /// `audioInputDeviceLabel`. Matches well-known Bluetooth / wireless
-    /// device labels that are forbidden in exam and home mode.
+    /// `audioInputDeviceLabel`. Matches well-known Bluetooth / wireless device
+    /// labels so candidate guidance and audit data can be more specific.
     /// </summary>
     public static readonly System.Text.RegularExpressions.Regex BluetoothDeviceLabelPattern =
         new(@"\b(bluetooth|airpods|beats|wireless|sony wf|sony wh|jabra|bose qc)\b",
@@ -709,5 +687,3 @@ public sealed record AdvanceResultDto(
 }
 
 public sealed record AudioResumeDto(bool Resume, string ServerState, int ResumeAtMs, string Reason);
-
-
