@@ -79,6 +79,7 @@ public sealed class ListeningSessionService
         string attemptId, string userId, AdvanceCommand cmd, CancellationToken ct)
     {
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
+        EnsureAttemptNotOnAdminReviewHold(attempt);
         if (attempt.Status != ListeningAttemptStatus.InProgress)
         {
             return AdvanceResultDto.Rejected(
@@ -211,6 +212,7 @@ public sealed class ListeningSessionService
         }
 
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
+        EnsureAttemptNotOnAdminReviewHold(attempt);
         if (attempt.Status != ListeningAttemptStatus.InProgress)
         {
             throw new InvalidOperationException($"Attempt {attemptId} is {attempt.Status} and cannot accept readiness updates.");
@@ -290,6 +292,7 @@ public sealed class ListeningSessionService
         string attemptId, string userId, int cuePointMs, CancellationToken ct)
     {
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
+        EnsureAttemptNotOnAdminReviewHold(attempt);
         var policy = await ResolveEffectivePolicyAsync(userId, ct);
         var mode = _modes.For(attempt.Mode);
         var nav = ParseNavigationState(attempt.NavigationStateJson)
@@ -347,6 +350,16 @@ public sealed class ListeningSessionService
             .FirstOrDefaultAsync(x => x.Id == attemptId && x.UserId == userId, ct)
             ?? throw new KeyNotFoundException($"Attempt {attemptId} not found.");
         return a;
+    }
+
+    private static void EnsureAttemptNotOnAdminReviewHold(ListeningAttempt attempt)
+    {
+        if (attempt.RequiresAdminReview)
+        {
+            throw ApiException.Conflict(
+                "listening_attempt_requires_admin_review",
+                "This Listening attempt is on hold because audio playback failed and requires administrator review before scoring.");
+        }
     }
 
     private async Task<EffectiveListeningPolicy> ResolveEffectivePolicyAsync(string userId, CancellationToken ct)
@@ -536,6 +549,7 @@ public sealed class ListeningSessionService
         string attemptId, string userId, string? annotationsJson, CancellationToken ct)
     {
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
+        EnsureAttemptNotOnAdminReviewHold(attempt);
         if (attempt.Status != ListeningAttemptStatus.InProgress)
         {
             throw ApiException.Conflict(

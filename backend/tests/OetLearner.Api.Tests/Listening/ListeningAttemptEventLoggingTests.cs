@@ -230,6 +230,29 @@ public class ListeningAttemptEventLoggingTests
     }
 
     [Fact]
+    public async Task RecordIntegrityEvent_AudioErrorFlagsAttemptForAdminReview()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+        var attempt = await StartHomeAttemptAsync(db, svc, userId, paperId);
+
+        await svc.RecordIntegrityEventAsync(
+            userId,
+            attempt.Id,
+            new ListeningIntegrityEventRequest("audio_error", "{\"playbackValidity\":\"admin_review_required\"}", DateTimeOffset.UtcNow),
+            default);
+
+        var updated = await db.ListeningAttempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
+        Assert.True(updated.RequiresAdminReview);
+        Assert.Equal("audio_playback_error", updated.AdminReviewReason);
+        Assert.NotNull(updated.AdminReviewFlaggedAt);
+
+        var audit = await db.AuditEvents.SingleAsync(e => e.Action == "ListeningIntegrityEvent");
+        Assert.Contains("\"requiresAdminReview\":true", audit.Details);
+        Assert.Contains("audio_playback_error", audit.Details);
+    }
+
+    [Fact]
     public async Task RecordIntegrityEvent_AppendsAudioStartAndEndToCueTimeline()
     {
         var (db, svc) = Build();

@@ -77,17 +77,6 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function handleAudioPlaybackError(error: unknown, onVisibleError: (message: string) => void) {
-  const message = error instanceof Error ? error.message : String(error);
-  if (
-    (error instanceof DOMException && error.name === 'AbortError')
-    || message.includes('play() request was interrupted')
-  ) {
-    return;
-  }
-  onVisibleError('Audio could not start. Check the device output, reload the audio, and try again.');
-}
-
 function formatMilliseconds(value: number | null | undefined) {
   if (value == null) return null;
   const seconds = Math.floor(value / 1000);
@@ -270,6 +259,7 @@ function PlayerContent() {
   const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioValidityHeld, setAudioValidityHeld] = useState(false);
   const [integrityWarning, setIntegrityWarning] = useState<string | null>(null);
   const [audioResumeWarning, setAudioResumeWarning] = useState<string | null>(null);
   const [audioState, setAudioState] = useState<'idle' | 'buffering' | 'ready' | 'error'>('idle');
@@ -355,6 +345,10 @@ function PlayerContent() {
         if (cancelled || !data) return;
         setSession(data);
         setAttempt(data.attempt);
+        if (data.attempt?.requiresAdminReview) {
+          setAudioValidityHeld(true);
+          setIntegrityWarning('This Listening attempt is on hold because audio playback failed and has been flagged for administrator review. Do not replay the scored audio.');
+        }
         setAnswers(Object.fromEntries(Object.entries(data.attempt?.answers ?? {}).map(([key, value]) => [key, value ?? ''])));
         analytics.track('task_started', { subtest: 'listening', taskId: id, attemptId: data.attempt?.attemptId, mode });
       })
@@ -392,6 +386,12 @@ function PlayerContent() {
   // attempt id is known (resume or fresh start). The V1 session DTO doesn't
   // carry the annotations payload, so pull it via the dedicated GET. reload()
   // no-ops when there's no attempt id.
+  useEffect(() => {
+    if (!attempt?.requiresAdminReview) return;
+    setAudioValidityHeld(true);
+    setIntegrityWarning('This Listening attempt is on hold because audio playback failed and has been flagged for administrator review. Do not replay the scored audio.');
+  }, [attempt?.requiresAdminReview]);
+
   useEffect(() => {
     if (!activeAttemptId || !annotationsSupported) return;
     void annotations.reload();
@@ -438,6 +438,40 @@ function PlayerContent() {
     // a render / effect path.
     void Promise.resolve(recordListeningIntegrityEvent(attempt.attemptId, eventType, details)).catch(() => undefined);
   }, [attempt?.attemptId]);
+
+  const flagAudioFailure = useCallback((message: string) => {
+    const hasActiveAttempt = Boolean(attempt?.attemptId);
+    audioBufferingActiveRef.current = false;
+    allowedPauseRef.current = true;
+    audioResumeInFlightRef.current = false;
+    setIsPlaying(false);
+    setAudioState('error');
+    if (hasActiveAttempt) setAudioValidityHeld(true);
+    setAudioError(message);
+    if (hasActiveAttempt) {
+      setIntegrityWarning('Audio playback failed. This attempt has been halted and flagged for administrator review; do not replay the scored audio.');
+      Object.values(saveTimers.current).forEach(clearTimeout);
+      saveTimers.current = {};
+      pendingAnswersRef.current = {};
+    }
+    try {
+      audioRef.current?.pause();
+    } catch {
+      // The media element may already have been detached after the failure.
+    }
+    logAttemptEvent('audio_error', { playbackValidity: 'admin_review_required' });
+  }, [attempt?.attemptId, logAttemptEvent]);
+
+  const handlePlaybackFailure = useCallback((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      (error instanceof DOMException && error.name === 'AbortError')
+      || message.includes('play() request was interrupted')
+    ) {
+      return;
+    }
+    flagAudioFailure('Audio could not start. This attempt has been halted and flagged for administrator review; do not replay the scored audio.');
+  }, [flagAudioFailure]);
 
   const savePendingAnswer = useCallback((questionId: string, pending: PendingListeningAnswer, keepalive = false) => {
     setSaveState('saving');
@@ -557,7 +591,7 @@ function PlayerContent() {
           setIsPlaying(true);
           const playResult = audio.play();
           if (playResult && typeof playResult.catch === 'function') {
-            playResult.catch((err) => handleAudioPlaybackError(err, setAudioError));
+            playResult.catch(handlePlaybackFailure);
           }
           return;
         }
@@ -637,6 +671,7 @@ function PlayerContent() {
   };
 
   const startTask = async () => {
+    if (audioValidityHeld) return;
     if (!session?.paper.audioAvailable || !session.readiness.objectiveReady) return;
     const readinessSnapshot = techReadiness;
     if (strictReadinessRequired && !readinessSnapshot?.audioOk) {
@@ -702,6 +737,7 @@ function PlayerContent() {
   };
 
   const togglePlayPause = () => {
+    if (audioValidityHeld) return;
     if (phase === 'preview') return;
     if (isPlaying && session?.modePolicy.canPause === false) return;
     if (!isPlaying && session?.modePolicy.onePlayOnly && hasReachedEndRef.current) return;
@@ -713,10 +749,11 @@ function PlayerContent() {
       return;
     }
     if (isPlaying) pauseAudio();
-    else audioRef.current.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
+    else audioRef.current.play().catch(handlePlaybackFailure);
   };
 
   const handleScrub = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (audioValidityHeld) return;
     if (!session?.modePolicy.canScrub) return;
     const newTime = Number(event.target.value);
     if (!audioRef.current) return;
@@ -747,6 +784,7 @@ function PlayerContent() {
   };
 
   const handleAnswerChange = (questionId: string, answer: string) => {
+    if (audioValidityHeld) return;
     setAnswers((current) => ({ ...current, [questionId]: answer }));
     persistAnswer(questionId, answer, attempt);
   };
@@ -761,6 +799,7 @@ function PlayerContent() {
   ) => {
     // Diff against the current persisted state to emit the §17.11 telemetry,
     // then route the mutation through the durable hook (debounced autosave).
+    if (audioValidityHeld) return;
     const previous = annotations.state.byQuestion[questionId] ?? {};
     const next = mutator(previous);
     const prevStruck = new Set(previous.struckOptions ?? []);
@@ -777,7 +816,7 @@ function PlayerContent() {
   };
 
   const handleSubmit = async ({ skipFinalSave = false }: { skipFinalSave?: boolean } = {}) => {
-    if (!session) return;
+    if (!session || audioValidityHeld) return;
     // Set the synchronous gate before any await so the 15s heartbeat tick
     // cannot race a Submitted attempt and trip the 409 diagnostics check.
     isSubmittingRef.current = true;
@@ -1101,6 +1140,7 @@ function PlayerContent() {
   };
 
   const advanceFromReview = async () => {
+    if (audioValidityHeld) return;
     if (isLastSection) {
       void handleSubmit();
       return;
@@ -1159,7 +1199,7 @@ function PlayerContent() {
       if (audio) {
         const result = audio.play();
         if (result && typeof result.catch === 'function') {
-          result.catch((err) => handleAudioPlaybackError(err, setAudioError));
+          result.catch(handlePlaybackFailure);
         }
       }
     })();
@@ -1247,9 +1287,7 @@ function PlayerContent() {
       })
       .catch(() => {
         if (cancelled) return;
-        setAudioState('error');
-        setAudioError('Audio failed to load. Reload the audio or return to Listening if the media asset is still processing.');
-        logAttemptEvent('audio_error');
+        flagAudioFailure('Audio failed to load. This attempt has been halted and flagged for administrator review; do not replay the scored audio.');
       });
     return () => {
       cancelled = true;
@@ -1261,10 +1299,11 @@ function PlayerContent() {
     strictReadinessRequired,
     hasStarted,
     audioRetryKey,
-    logAttemptEvent,
+    flagAudioFailure,
   ]);
 
   const confirmNextFromAudio = async () => {
+    if (audioValidityHeld) return;
     if (!currentSection) return;
     if (!canOpenReviewWindow) return;
     pauseAudio();
@@ -1298,6 +1337,7 @@ function PlayerContent() {
   // Fired from the <audio> `onEnded` handler. Idempotent via
   // `autoAdvanceInFlightRef` (reset when the section changes).
   const autoAdvanceAfterAudio = async () => {
+    if (audioValidityHeld) return;
     if (!currentSection) return;
     if (autoAdvanceInFlightRef.current) return;
     autoAdvanceInFlightRef.current = true;
@@ -1540,6 +1580,12 @@ function PlayerContent() {
             setAudioState('ready');
           }}
           onPlay={() => {
+            if (audioValidityHeld) {
+              allowedPauseRef.current = true;
+              audioRef.current?.pause();
+              setIsPlaying(false);
+              return;
+            }
             // C8e — once the active extract's end has been reached in
             // exam mode, any subsequent play() is immediately re-paused.
             const audio = audioRef.current;
@@ -1586,7 +1632,7 @@ function PlayerContent() {
               // C8g — flag the upcoming play() as a resume so the onPlay
               // handler issues a server-side audio-resume validation.
               wasPausedRef.current = true;
-              audio?.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
+              audio?.play().catch(handlePlaybackFailure);
               return;
             }
             // C8g — flag the next play() as a resume.
@@ -1614,11 +1660,7 @@ function PlayerContent() {
             void autoAdvanceAfterAudio();
           }}
           onError={() => {
-            audioBufferingActiveRef.current = false;
-            setAudioState('error');
-            setAudioError('Audio failed to load. Reload the audio or return to Listening if the media asset is still processing.');
-            // §17.11 — surface the media error into the attempt-event stream.
-            logAttemptEvent('audio_error');
+            flagAudioFailure('Audio failed to load. This attempt has been halted and flagged for administrator review; do not replay the scored audio.');
           }}
           preload="metadata"
         />
@@ -1673,17 +1715,19 @@ function PlayerContent() {
             {audioError ? (
               <InlineAlert variant="error">
                 {audioError}
-                <button
-                  type="button"
-                  className="ml-3 underline font-medium"
-                  onClick={() => {
-                    setAudioError(null);
-                    setAudioState('idle');
-                    setAudioRetryKey((k) => k + 1);
-                  }}
-                >
-                  Retry
-                </button>
+                {!audioValidityHeld ? (
+                  <button
+                    type="button"
+                    className="ml-3 underline font-medium"
+                    onClick={() => {
+                      setAudioError(null);
+                      setAudioState('idle');
+                      setAudioRetryKey((k) => k + 1);
+                    }}
+                  >
+                    Retry
+                  </button>
+                ) : null}
               </InlineAlert>
             ) : null}
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}

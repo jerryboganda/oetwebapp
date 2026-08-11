@@ -931,3 +931,20 @@ dirty work in the main checkout.
   no long local validation, CI, push, or deployment was started.
 - Preserve the four untracked user-owned paths above. Owner release inputs and
   authenticated deployed browser/mobile acceptance remain unresolved.
+
+# Latest LR coding checkpoint - 2026-08-12 (audio validity hold)
+
+- Listening `audio_error` events now persist a fail-closed admin-review hold on
+  both relational `ListeningAttempt` and legacy `Attempt` rows, with reason and
+  timestamp fields, migration/snapshot metadata, and admin-export coverage.
+- Relational and generic save/advance/submit paths reject held attempts. The
+  Listening FSM also rejects held navigation, readiness, resume, and annotation
+  mutations so a failed scored media run cannot continue silently.
+- The Listening player halts playback, clears pending answer timers, blocks
+  answer/navigation/submit actions, removes retry for an active attempt, and
+  logs structured `audio_error` validity metadata without automatic replay.
+- Added `ListeningAttemptEventLoggingTests.RecordIntegrityEvent_AudioErrorFlagsAttemptForAdminReview`.
+- Only bounded source searches and `git diff --check` are intended for this
+  slice; no long local validation, CI/CD, push, or deployment was started.
+- Preserve the four untracked user-owned paths above. Owner release inputs and
+  authenticated deployed browser/mobile acceptance remain unresolved.

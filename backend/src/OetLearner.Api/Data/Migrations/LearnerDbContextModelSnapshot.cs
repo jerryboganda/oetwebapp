@@ -2276,6 +2276,16 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("AudioUploadState")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("AdminReviewFlaggedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AdminReviewReason")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("RequiresAdminReview")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ChecklistJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -11208,6 +11218,13 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("AnnotationsJson")
                         .HasColumnType("jsonb");
 
+                    b.Property<DateTimeOffset?>("AdminReviewFlaggedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AdminReviewReason")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("AudioCueTimelineJson")
                         .HasColumnType("jsonb");
 
@@ -11255,6 +11272,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("RowVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
+
+                    b.Property<bool>("RequiresAdminReview")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("RulebookVersion")
                         .HasMaxLength(32)

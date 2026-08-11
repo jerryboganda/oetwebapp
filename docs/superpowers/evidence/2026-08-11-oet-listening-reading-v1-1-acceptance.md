@@ -36,6 +36,12 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Listening media `audio_error` now durably sets `RequiresAdminReview`,
+  `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
+  legacy attempts; the admin export includes the hold fields, server mutation
+  and submit paths fail closed, and the player halts without automatic replay.
+  Focused execution and authenticated deployed browser verification remain
+  pending.
 - `ddebd85be` adds encrypted offline autosave reconciliation with server-wins conflict handling; submission and timer state are never queued offline.
 - `abe859e2f` adds grounded post-submit Listening and Reading explanations sourced from stored answers and authored rationale/transcript evidence, with usage attribution and advisory-only UI contracts.
 - The Listening admin authoring flow now includes an answer-key-free

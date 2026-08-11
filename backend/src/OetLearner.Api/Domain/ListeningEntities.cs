@@ -484,6 +484,15 @@ public class ListeningAttempt
     public ListeningAttemptStatus Status { get; set; } = ListeningAttemptStatus.InProgress;
     public ListeningAttemptMode Mode { get; set; } = ListeningAttemptMode.Exam;
 
+    /// <summary>True when a scored media failure means the attempt requires
+    /// admin review before its validity can be trusted.</summary>
+    public bool RequiresAdminReview { get; set; }
+
+    [MaxLength(256)]
+    public string? AdminReviewReason { get; set; }
+
+    public DateTimeOffset? AdminReviewFlaggedAt { get; set; }
+
     /// <summary>Optimistic concurrency token — incremented on every mutation.
     /// Prevents lost updates when grader, expert, FSM, autosave, and expire-worker race.</summary>
     [ConcurrencyCheck]

@@ -828,6 +828,7 @@ public sealed class ListeningLearnerService(
         var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
         if (relationalAttempt is not null)
         {
+            EnsureAttemptNotOnAdminReviewHold(relationalAttempt.RequiresAdminReview);
             var relationalKey = BuildSubmitIdempotencyKey(userId, relationalAttempt.Id, idempotencyKey);
             var relationalCached = await GetCachedSubmitAsync(relationalKey, ct);
             if (relationalCached is not null) return relationalCached;
@@ -835,6 +836,7 @@ public sealed class ListeningLearnerService(
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
         var key = BuildSubmitIdempotencyKey(userId, attempt.Id, idempotencyKey);
         var cached = await GetCachedSubmitAsync(key, ct);
         if (cached is not null) return cached;
@@ -1056,9 +1058,17 @@ public sealed class ListeningLearnerService(
         var questionId = ReadJsonProperty(request.Details, "questionId");
 
         var now = DateTimeOffset.UtcNow;
+        var requiresAdminReview = string.Equals(eventType, "audio_error", StringComparison.Ordinal);
+        const string adminReviewReason = "audio_playback_error";
         if (relationalAttempt is not null)
         {
             relationalAttempt.LastActivityAt = now;
+            if (requiresAdminReview)
+            {
+                relationalAttempt.RequiresAdminReview = true;
+                relationalAttempt.AdminReviewReason ??= adminReviewReason;
+                relationalAttempt.AdminReviewFlaggedAt ??= now;
+            }
             // §17.11 — audio lifecycle events also append to the per-attempt
             // audio cue timeline (the column already exists). Append, never
             // overwrite, so the full replay log accumulates across sections.
@@ -1074,6 +1084,12 @@ public sealed class ListeningLearnerService(
         else if (attempt is not null)
         {
             attempt.LastClientSyncAt = now;
+            if (requiresAdminReview)
+            {
+                attempt.RequiresAdminReview = true;
+                attempt.AdminReviewReason ??= adminReviewReason;
+                attempt.AdminReviewFlaggedAt ??= now;
+            }
         }
 
         db.AuditEvents.Add(new AuditEvent
@@ -1092,6 +1108,8 @@ public sealed class ListeningLearnerService(
                 mode = relationalAttempt is not null ? ToApiMode(relationalAttempt.Mode) : attempt!.Mode,
                 cuePointMs,
                 questionId,
+                requiresAdminReview,
+                adminReviewReason = requiresAdminReview ? adminReviewReason : null,
                 request.Details,
                 serverRecordedAt = now,
             }),
@@ -1578,6 +1596,7 @@ public sealed class ListeningLearnerService(
 
     private async Task EnsureRelationalAttemptCanMutateAsync(ListeningAttempt attempt, CancellationToken ct)
     {
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
         if (attempt.Status != ListeningAttemptStatus.InProgress)
         {
             throw ApiException.Validation(
@@ -1611,6 +1630,7 @@ public sealed class ListeningLearnerService(
 
     private static void EnsureRelationalAttemptCanSubmit(ListeningAttempt attempt)
     {
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
         if (attempt.Status == ListeningAttemptStatus.Expired && attempt.DeadlineAt.HasValue)
         {
             return;
@@ -2959,6 +2979,9 @@ public sealed class ListeningLearnerService(
         attempt.CompletedAt,
         attempt.ElapsedSeconds,
         attempt.LastClientSyncAt,
+        attempt.RequiresAdminReview,
+        attempt.AdminReviewReason,
+        attempt.AdminReviewFlaggedAt,
         expiresAt = ReadGenericDeadline(attempt),
         // Strip reserved navigation keys (e.g. the one-way section cursor) so
         // they never leak into the player's answer map or get re-submitted as a
@@ -2990,6 +3013,9 @@ public sealed class ListeningLearnerService(
         completedAt = attempt.SubmittedAt,
         elapsedSeconds = (int)Math.Max(0, (attempt.LastActivityAt - attempt.StartedAt).TotalSeconds),
         lastClientSyncAt = attempt.LastActivityAt,
+        requiresAdminReview = attempt.RequiresAdminReview,
+        adminReviewReason = attempt.AdminReviewReason,
+        adminReviewFlaggedAt = attempt.AdminReviewFlaggedAt,
         expiresAt = attempt.DeadlineAt,
         answers
     };
@@ -3350,6 +3376,7 @@ public sealed class ListeningLearnerService(
         Attempt attempt,
         CancellationToken ct)
     {
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
         if (attempt.State == AttemptState.Completed)
         {
             throw ApiException.Conflict("listening_attempt_locked", "This Listening attempt has already been submitted.");
@@ -3364,6 +3391,16 @@ public sealed class ListeningLearnerService(
         }
         ct.ThrowIfCancellationRequested();
         return Task.CompletedTask;
+    }
+
+    private static void EnsureAttemptNotOnAdminReviewHold(bool requiresAdminReview)
+    {
+        if (requiresAdminReview)
+        {
+            throw ApiException.Conflict(
+                "listening_attempt_requires_admin_review",
+                "This Listening attempt is on hold because audio playback failed and requires administrator review before scoring.");
+        }
     }
 
     private static DateTimeOffset? ReadGenericDeadline(Attempt attempt)

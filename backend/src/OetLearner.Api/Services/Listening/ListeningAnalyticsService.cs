@@ -132,6 +132,9 @@ public sealed record ListeningAttemptExportDto(
     string? AnnotationsJson,
     string? HumanScoreOverridesJson,
     string? LastQuestionVersionMapJson,
+    bool RequiresAdminReview,
+    string? AdminReviewReason,
+    DateTimeOffset? AdminReviewFlaggedAt,
     IReadOnlyList<ListeningAttemptAnswerExportDto> Answers,
     IReadOnlyList<ListeningAttemptEvaluationExportDto> Evaluations);
 
@@ -438,6 +441,9 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
                 AnnotationsJson: relationalAttempt.AnnotationsJson,
                 HumanScoreOverridesJson: relationalAttempt.HumanScoreOverridesJson,
                 LastQuestionVersionMapJson: relationalAttempt.LastQuestionVersionMapJson,
+                RequiresAdminReview: relationalAttempt.RequiresAdminReview,
+                AdminReviewReason: relationalAttempt.AdminReviewReason,
+                AdminReviewFlaggedAt: relationalAttempt.AdminReviewFlaggedAt,
                 Answers: answers,
                 Evaluations: evaluations);
         }
@@ -484,6 +490,9 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             AnnotationsJson: null,
             HumanScoreOverridesJson: null,
             LastQuestionVersionMapJson: null,
+            RequiresAdminReview: legacyAttempt.RequiresAdminReview,
+            AdminReviewReason: legacyAttempt.AdminReviewReason,
+            AdminReviewFlaggedAt: legacyAttempt.AdminReviewFlaggedAt,
             Answers: [],
             Evaluations: legacyEvaluations);
     }

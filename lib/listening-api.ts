@@ -289,6 +289,10 @@ export interface ListeningAttemptDto {
   completedAt: string | null;
   elapsedSeconds: number;
   lastClientSyncAt: string | null;
+  /** True when a scored media failure placed this attempt on an admin-review hold. */
+  requiresAdminReview?: boolean;
+  adminReviewReason?: string | null;
+  adminReviewFlaggedAt?: string | null;
   answers: Record<string, string | null>;
   /**
    * Server-authoritative deadline for this attempt (ISO-8601). Drives the

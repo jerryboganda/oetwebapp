@@ -341,6 +341,16 @@ public class Attempt
     public int ElapsedSeconds { get; set; }
     public int DraftVersion { get; set; } = 1;
 
+    /// <summary>Listening playback failure hold. A media error can invalidate
+    /// the scored audio run, so the attempt remains auditable and requires
+    /// admin review instead of silently replaying or being treated as clean.</summary>
+    public bool RequiresAdminReview { get; set; }
+
+    [MaxLength(256)]
+    public string? AdminReviewReason { get; set; }
+
+    public DateTimeOffset? AdminReviewFlaggedAt { get; set; }
+
     [MaxLength(64)]
     public string? ParentAttemptId { get; set; }
 
