@@ -1607,6 +1607,26 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public void ValidatePayload_rejects_mcq_with_no_correct_option()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                "[\"a\",\"b\",\"c\"]",
+                "\"\"", null));
+    }
+
+    [Fact]
+    public void ValidatePayload_rejects_mcq_with_multiple_correct_options()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                "[\"a\",\"b\",\"c\"]",
+                "[\"A\",\"B\"]", null));
+    }
+
+    [Fact]
     public void ValidatePayload_rejects_unsafe_mcq_option_object_fields()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>

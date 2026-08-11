@@ -499,6 +499,43 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
+    public async Task RelationalMcq_WithNoCorrectOption_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
+        var options = await db.Set<ListeningQuestionOption>()
+            .Where(option => option.ListeningQuestionId == question.Id)
+            .ToListAsync();
+        foreach (var option in options) option.IsCorrect = false;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_mcq_shape" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task RelationalMcq_WithMultipleCorrectOptions_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
+        var options = await db.Set<ListeningQuestionOption>()
+            .Where(option => option.ListeningQuestionId == question.Id)
+            .OrderBy(option => option.DisplayOrder)
+            .ToListAsync();
+        options[1].IsCorrect = true;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_mcq_shape" && i.Severity == "error");
+    }
+
+    [Fact]
     public async Task RelationalAbsent_FallsBackToJsonSource()
     {
         var (db, svc) = Build();
