@@ -500,6 +500,7 @@ public class ContentPaperServiceTests
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
         Assert.Equal(ContentStatus.Published, reload.Status);
+        Assert.False(string.IsNullOrWhiteSpace(reload.PublishedRevisionId));
         await db.DisposeAsync();
     }
 

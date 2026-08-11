@@ -756,6 +756,7 @@ public sealed class ContentPaperService(
         if (paper.Status == ContentStatus.Archived)
             throw new InvalidOperationException("Cannot unpublish an archived paper. Restore it first.");
         paper.Status = ContentStatus.Draft;
+        paper.PublishedRevisionId = null;
         paper.UpdatedAt = DateTimeOffset.UtcNow;
         if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)
             || string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
@@ -780,6 +781,7 @@ public sealed class ContentPaperService(
             .Include(p => p.Assets)
             .FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
+        var wasPublished = paper.Status == ContentStatus.Published;
 
         // Listening publishes with NO content constraints (owner decision): any
         // paper can go live as-is and the learner surface renders friendly
@@ -872,6 +874,16 @@ public sealed class ContentPaperService(
         paper.Status = ContentStatus.Published;
         paper.PublishedAt = now;
         paper.UpdatedAt = now;
+        if ((paper.SubtestCode.Equals("reading", StringComparison.OrdinalIgnoreCase)
+                || paper.SubtestCode.Equals("listening", StringComparison.OrdinalIgnoreCase))
+            && (!wasPublished || string.IsNullOrWhiteSpace(paper.PublishedRevisionId)))
+        {
+            // Reading/Listening attempts pin this value at start and grading
+            // refuses to silently use a changed paper revision. Keep the ID
+            // bounded for the varchar(64) column and issue a new one after an
+            // Unpublish -> Publish cycle.
+            paper.PublishedRevisionId = CreatePublishedRevisionId(paper.Id);
+        }
         if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
         {
             await UpsertSpeakingContentItemAsync(paper, adminId, now, ct);
@@ -1100,6 +1112,13 @@ public sealed class ContentPaperService(
 
         throw new InvalidOperationException(
             $"{subtest} MCQ publication gate failed: {string.Join(" | ", messages)}");
+    }
+
+    private static string CreatePublishedRevisionId(string paperId)
+    {
+        var prefix = paperId.Trim();
+        if (prefix.Length > 24) prefix = prefix[..24];
+        return $"{prefix}-{Guid.NewGuid():N}";
     }
 
     private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)

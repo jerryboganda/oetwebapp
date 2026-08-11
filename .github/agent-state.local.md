@@ -893,6 +893,10 @@ dirty work in the main checkout.
   server projection omits correct answers/accepted variants/explanations, while
   the same page provides a separate answer-key marking view from the protected
   authoring endpoint. Focused UI/API execution remains pending.
+- Closed the LR-08 publication revision gap: Reading/Listening paper publish
+  now assigns a bounded `PublishedRevisionId`, and unpublish clears it so a
+  later publish receives a new pin; the focused service test asserts the ID.
+  Only `git diff --check` has been run.
 - Preserve `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and
   `pdf-policy-release2/`. Owner tables, normalization/lock policy, rationale
   library, thresholds/labels, graph approval, load evidence, and authenticated
