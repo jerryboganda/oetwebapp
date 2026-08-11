@@ -13,6 +13,7 @@ public partial class LearnerDbContext
     public DbSet<SpeakingSimulationV11Evidence> SpeakingSimulationV11EvidenceRows => Set<SpeakingSimulationV11Evidence>();
     public DbSet<SpeakingSimulationV11CriterionScore> SpeakingSimulationV11CriterionScores => Set<SpeakingSimulationV11CriterionScore>();
     public DbSet<SpeakingSimulationV11TurnMetric> SpeakingSimulationV11TurnMetrics => Set<SpeakingSimulationV11TurnMetric>();
+    public DbSet<SpeakingSimulationV11PersonaRuntimeSnapshot> SpeakingSimulationV11PersonaRuntimeSnapshots => Set<SpeakingSimulationV11PersonaRuntimeSnapshot>();
 
     partial void OnModelCreatingSpeakingSimulationV11(ModelBuilder modelBuilder)
     {
@@ -88,6 +89,31 @@ public partial class LearnerDbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<SpeakingSimulationV11PersonaRuntimeSnapshot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AllowedFactsJson).HasColumnType("jsonb");
+            entity.Property(x => x.ApprovedCarryFactKeysJson).HasColumnType("jsonb");
+            entity.Property(x => x.ProhibitedFactsJson).HasColumnType("jsonb");
+            entity.Property(x => x.RevealConditionsJson).HasColumnType("jsonb");
+            entity.Property(x => x.CarriedFactsJson).HasColumnType("jsonb");
+            entity.Property(x => x.PersonaJson).HasColumnType("jsonb");
+            entity.HasIndex(x => x.SpeakingSessionId).IsUnique();
+            entity.HasIndex(x => new { x.ExamSessionId, x.CardSlot });
+            entity.HasIndex(x => x.MemoryScopeKey).IsUnique();
+            entity.HasOne<SpeakingExamSession>()
+                .WithMany()
+                .HasForeignKey(x => x.ExamSessionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SpeakingSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SpeakingSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<RolePlayCard>()
+                .WithMany()
+                .HasForeignKey(x => x.RolePlayCardId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<SpeakingSimulationV11Evidence>(entity =>
         {
             entity.HasKey(x => x.Id);

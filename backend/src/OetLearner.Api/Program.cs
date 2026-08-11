@@ -885,6 +885,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingPreScoreServic
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceNoteService>();
 // Phase 2 (B.3) — typed Speaking session lifecycle service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11PersonaService>();
 // WS6 — Speaking result-visibility config (§10).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisibilityService,
     OetLearner.Api.Services.Speaking.SpeakingResultVisibilityService>();

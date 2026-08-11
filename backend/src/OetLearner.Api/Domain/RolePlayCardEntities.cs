@@ -253,6 +253,17 @@ public class InterlocutorScript
     /// to the scorer to mark down candidates who fail to simplify.</summary>
     public string LayLanguageTriggersJson { get; set; } = "[]";
 
+    /// <summary>When true, an explicitly authored Card B may reference a
+    /// selected subset of Card A facts after the candidate gives the
+    /// configured second-visit indicator.</summary>
+    public bool AllowsSecondVisit { get; set; }
+
+    [MaxLength(500)]
+    public string? SecondVisitIndicator { get; set; }
+
+    /// <summary>JSON array of fact keys approved for the explicit second visit.</summary>
+    public string SecondVisitCarryFactsJson { get; set; } = "[]";
+
     [MaxLength(64)]
     public string? CreatedByUserId { get; set; }
 

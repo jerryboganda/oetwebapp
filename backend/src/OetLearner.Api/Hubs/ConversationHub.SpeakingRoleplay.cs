@@ -162,22 +162,21 @@ public partial class ConversationHub
         }
 
         // ── Role-play branch (Prep or Active) ───────────────────────────
-        var script = await db.InterlocutorScripts
+        var hasPersonaScript = await db.InterlocutorScripts
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.RolePlayCardId == card.Id, Context.ConnectionAborted);
-        if (script is null)
+            .AnyAsync(x => x.RolePlayCardId == card.Id, Context.ConnectionAborted);
+        if (!hasPersonaScript)
         {
-            await Clients.Caller.SendAsync(
-                "SpeakingRoleplayError",
-                "INTERLOCUTOR_SCRIPT_MISSING",
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "INTERLOCUTOR_SCRIPT_MISSING",
                 "This role-play card has not been wired with an interlocutor script.");
             return;
         }
 
-        // Compose the patient persona prompt up-front; downstream audio
-        // turns can read it back from the session metadata when the full
-        // ConversationHub pipeline takes over.
-        var personaPrompt = BuildPatientPersonaPrompt(card, script);
+        var personaService = scope.ServiceProvider.GetRequiredService<SpeakingSimulationV11PersonaService>();
+        var personaSnapshot = await personaService.EnsureForSessionAsync(session, card, Context.ConnectionAborted);
+        await db.SaveChangesAsync(Context.ConnectionAborted);
+
+        var personaPrompt = SpeakingSimulationV11PersonaService.BuildActorPrompt(personaSnapshot);
         logger.LogInformation(
             "Speaking role-play ready for session {SessionId} (persona length={PersonaLength}, candidate opens).",
             speakingSessionId,
@@ -292,17 +291,21 @@ public partial class ConversationHub
         }
 
         var isWarmUp = session.State == SpeakingSessionState.WarmUp;
-        InterlocutorScript? script = null;
+        SpeakingSimulationV11PersonaService? personaService = null;
+        SpeakingSimulationV11PersonaRuntimeSnapshot? personaSnapshot = null;
         if (!isWarmUp)
         {
-            script = await db.InterlocutorScripts.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.RolePlayCardId == card.Id, ct);
-            if (script is null)
+            var hasPersonaScript = await db.InterlocutorScripts
+                .AsNoTracking()
+                .AnyAsync(x => x.RolePlayCardId == card.Id, ct);
+            if (!hasPersonaScript)
             {
                 await Clients.Caller.SendAsync("SpeakingRoleplayError", "INTERLOCUTOR_SCRIPT_MISSING",
                     "This role-play card has not been wired with an interlocutor script.");
                 return;
             }
+            personaService = sp.GetRequiredService<SpeakingSimulationV11PersonaService>();
+            personaSnapshot = await personaService.EnsureForSessionAsync(session, card, ct);
         }
 
         // ── 1. Resolve the learner utterance (STT or supplied text) ──
@@ -394,10 +397,15 @@ public partial class ConversationHub
             "candidate", turnStartMs, nowMs, learnerText, learnerConfidence, interruptedPatient));
         var learnerTurnCount = segments.Count(s => string.Equals(s.Speaker, "candidate", StringComparison.Ordinal));
 
+        if (!isWarmUp && personaService is not null && personaSnapshot is not null)
+        {
+            personaSnapshot = await personaService.ObserveCandidateTurnAsync(personaSnapshot, learnerText, ct);
+        }
+
         // ── 3. Ask the grounded AI to reply in character ──
         var personaPrompt = isWarmUp
             ? BuildWarmUpPersonaPrompt(card)
-            : BuildPatientPersonaPrompt(card, script!);
+            : SpeakingSimulationV11PersonaService.BuildActorPrompt(personaSnapshot!);
         var scenarioJson = JsonSerializer.Serialize(new
         {
             mode = isWarmUp ? "warmup" : "roleplay",

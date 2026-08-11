@@ -31,7 +31,8 @@ public sealed class SpeakingExamService(
     LearnerDbContext db,
     SpeakingAiAssessmentService assessor,
     ILogger<SpeakingExamService> logger,
-    IAiPackageCreditService? creditService = null)
+    IAiPackageCreditService? creditService = null,
+    SpeakingSimulationV11PersonaService? personaService = null)
 {
     private const int DefaultPrepSeconds = 180;
     private const int DefaultDiscussionSeconds = 300;
@@ -705,7 +706,7 @@ public sealed class SpeakingExamService(
             ExamTypeCode = "oet",
         });
 
-        db.SpeakingSessions.Add(new SpeakingSession
+        var childSession = new SpeakingSession
         {
             Id = sessionId,
             UserId = exam.UserId,
@@ -723,7 +724,10 @@ public sealed class SpeakingExamService(
             RulebookVersion = exam.RulebookVersion,
             CreatedAt = now,
             UpdatedAt = now,
-        });
+        };
+        db.SpeakingSessions.Add(childSession);
+        var snapshotService = personaService ?? new SpeakingSimulationV11PersonaService(db);
+        await snapshotService.CaptureAtRevealAsync(exam, childSession, card, now, ct);
 
         return sessionId;
     }
