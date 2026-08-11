@@ -105,10 +105,12 @@ public sealed class SpeakingSimulationV11EvidenceCaptureServiceTests
             Id = "transcript-1",
             SpeakingSessionId = session.Id,
             Provider = "source-asr",
-            SegmentsJson = """[
+            SegmentsJson = """
+[
                 {"speaker":"candidate","startMs":0,"endMs":5000,"text":"Um hypertension","interrupted":true},
                 {"speaker":"patient","startMs":4000,"endMs":6000,"text":"I am worried."}
-            ]""",
+]
+""",
             IsLatest = true,
             GeneratedAt = DateTimeOffset.UtcNow,
         });
