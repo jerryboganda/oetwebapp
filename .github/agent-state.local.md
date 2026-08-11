@@ -114,6 +114,21 @@ concurrency target, and authenticated browser/mobile evidence. Preserve
 unrelated Speaking changes and do not approve a candidate release gate without
 those owner controls.
 
+# Latest OET Listening/Reading v1.1 checkpoint
+
+- `428eda72cff3980739f0e904ad09a1fc69f2414d` is on `main` and live on the
+  blue production slot from Build & Deploy run `31514162141`.
+- API live/readiness and web health returned 200 at `2026-08-11T17:09:55Z`;
+  readiness reported database, migrations, stuck_jobs, and storage `ok`.
+- The clean LR frontend validation passed; backend compiled and passed 110
+  scoped tests, while 21 failed closed because owner-approved marking policy
+  data is not configured. The acceptance filter has been widened to include
+  the remaining deterministic LR classes for the next run.
+- Owner-controlled conversion tables, normalization policy, practice/mock
+  lock mode, rationale/evidence library, pathway thresholds/pass labels,
+  graph legal/style sign-off, peak concurrency target/load evidence, and
+  authenticated browser/mobile acceptance remain unprovided boundaries.
+
 # Current Task - OET Speaking booking workflow PDF implementation
 
 Last updated: 2026-08-10

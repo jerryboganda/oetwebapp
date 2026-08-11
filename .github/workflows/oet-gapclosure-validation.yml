@@ -39,7 +39,7 @@ jobs:
           dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
           -c Debug --no-restore --nologo
           --logger "console;verbosity=normal"
-          --filter "FullyQualifiedName~ListeningSequenceServiceTests|FullyQualifiedName~ListeningAudioCheckGateTests|FullyQualifiedName~ListeningManifestImportTests|FullyQualifiedName~ListeningAttemptEventLoggingTests|FullyQualifiedName~ListeningMockLaunchRouteTests|FullyQualifiedName~ListeningStructureServiceTests|FullyQualifiedName~ListeningExpertServiceTests|FullyQualifiedName~ListeningAnnotationsServiceTests|FullyQualifiedName~ReadingTutorScopeTests|FullyQualifiedName~ListeningV2AdvanceEndpointTests"
+          --filter "FullyQualifiedName~ListeningSequenceServiceTests|FullyQualifiedName~ListeningAudioCheckGateTests|FullyQualifiedName~ListeningManifestImportTests|FullyQualifiedName~ListeningAttemptEventLoggingTests|FullyQualifiedName~ListeningMockLaunchRouteTests|FullyQualifiedName~ListeningStructureServiceTests|FullyQualifiedName~ListeningExpertServiceTests|FullyQualifiedName~ListeningAnnotationsServiceTests|FullyQualifiedName~ReadingTutorScopeTests|FullyQualifiedName~ListeningV2AdvanceEndpointTests|FullyQualifiedName~ListeningPartASpellingTests|FullyQualifiedName~ListeningGradingServiceTests|FullyQualifiedName~ListeningScoringPathAuditTest|FullyQualifiedName~ListeningLearnerLeakAuditTest|FullyQualifiedName~ReadingGradingServiceV11Tests|FullyQualifiedName~AssessmentScoreConversionServiceTests|FullyQualifiedName~ReadingAuthoringTests"
 
   frontend:
     name: Frontend (tsc / vitest / lint)

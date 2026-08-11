@@ -83,6 +83,29 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest conformance hardening
 
+## Latest release attempt
+
+- Commit `428eda72cff3980739f0e904ad09a1fc69f2414d` is on `main` and
+  `origin/main`. It exposes deterministic score-conversion error evidence on
+  Listening score overrides, preserves the Listening V2 answer-request
+  contract, and keeps raw-only mock results type-safe.
+- Build & Deploy run `31514162141` completed successfully after one transient
+  web-build rerun. The exact SHA passed API/web/backup images, off-box
+  migration SQL generation/application, and blue/green deployment. The VPS
+  reported `AUTO_DEPLOY_DONE: live on blue` with green retained for rollback.
+- Independent checks at `2026-08-11T17:09:55Z` returned HTTP 200 for API live,
+  API readiness, and web health. Readiness reported database, migrations,
+  stuck_jobs, and storage all `ok`; `/`, `/listening`, and `/reading` returned
+  HTTP 307 to sign-in with their requested `next` paths.
+- Clean-runner gap-closure run `31514179563` passed the complete frontend
+  type-check, Vitest, and lint ladder. Its backend scope compiled and passed
+  110 tests; 21 tests failed closed at the missing owner-approved marking
+  policy gate, so no owner score table or policy was invented to make them
+  green. The filter now includes the LR spelling, explicit-variant, score
+  snapshot, leak, Reading grading, and authoring classes for the next run.
+- Speaking CI run `31514162202` passed its full frontend job; its backend job
+  had 363 passes and one unrelated owner-gate failure.
+
 - Policy versions are locked only after a Listening/Reading attempt is
   durably created; failed starts no longer consume an owner policy version.
 - Governed graders reject missing or malformed marking-policy snapshots rather
