@@ -382,6 +382,18 @@ an owner-controlled value that must not be invented in code.
   stricter-than-examiner spelling disclosure as Listening, with a focused page
   regression assertion.
 
+## Remaining role-scope boundary
+
+- The repository has no ticket entity, support-case lifecycle, or ticket-bound
+  authorization context. Therefore the PDF role requirement for
+  customer-support access that is both candidate-scoped and time-limited is
+  not claimed as implemented; adding a guessed support workflow would violate
+  the specification's scope and auditability requirements.
+- Candidate, tutor/expert, content, and assessment-governance boundaries that
+  are represented by existing surfaces are enforced in their current API/UI
+  paths; full cross-role acceptance remains pending the missing support
+  workflow and owner-provided release inputs.
+
 ## Fail-closed unknown-question grading
 
 - Reading grading no longer honors the legacy `grade_as_correct` fallback for
