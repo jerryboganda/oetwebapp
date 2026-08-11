@@ -756,7 +756,11 @@ public sealed class ContentPaperService(
         if (paper.Status == ContentStatus.Archived)
             throw new InvalidOperationException("Cannot unpublish an archived paper. Restore it first.");
         paper.Status = ContentStatus.Draft;
-        paper.PublishedRevisionId = null;
+        if (paper.SubtestCode.Equals("reading", StringComparison.OrdinalIgnoreCase)
+            || paper.SubtestCode.Equals("listening", StringComparison.OrdinalIgnoreCase))
+        {
+            paper.PublishedRevisionId = null;
+        }
         paper.UpdatedAt = DateTimeOffset.UtcNow;
         if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)
             || string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
