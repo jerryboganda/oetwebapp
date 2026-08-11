@@ -30,7 +30,7 @@
 
 | Boundary | Files created or modified | Responsibility |
 | --- | --- | --- |
-| v1.1 persistence | `backend/src/OetLearner.Api/Domain/SpeakingSimulationV11Entities.cs`, `backend/src/OetLearner.Api/Data/LearnerDbContext.SpeakingSimulationV11.cs`, `backend/src/OetLearner.Api/Data/Migrations/20260811090000_AddSpeakingSimulationV11.cs` | Immutable release, snapshots, evidence, scores, assessments, and turn metrics |
+| v1.1 persistence | `backend/src/OetLearner.Api/Domain/SpeakingSimulationV11Entities.cs`, `backend/src/OetLearner.Api/Data/LearnerDbContext.SpeakingSimulationV11.cs`, `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`, `backend/src/OetLearner.Api/Data/Migrations/20260901090000_AddSpeakingSimulationV11.cs` | Immutable release, snapshots, evidence, scores, assessments, and turn metrics |
 | Release governance | `backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11ReleaseGate.cs`, `backend/src/OetLearner.Api/Endpoints/SpeakingSimulationV11GovernanceEndpoints.cs`, `app/admin/speaking/simulation/page.tsx` | Owner approvals, release state, calibration gate, budget gate, audit |
 | Runtime actor | `backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11PersonaService.cs`, `backend/src/OetLearner.Api/Hubs/ConversationHub.SpeakingRoleplay.cs`, `backend/src/OetLearner.Api/Services/Speaking/SpeakingExamService.cs` | Current-card persona isolation, follow-up classification, actor guardrails, strict lifecycle |
 | Transcript and scoring | `backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11EvidenceService.cs`, `backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11AssessmentService.cs`, `backend/src/OetLearner.Api/Services/SpeakingEvaluationPipeline.cs`, `backend/src/OetLearner.Api/Services/Speaking/SpeakingTranscriptionPipeline.cs` | Evidence extraction, technical fairness, primary-criterion assignment, calibrated score |
@@ -45,9 +45,10 @@
 **Files:**
 - Create: `backend/src/OetLearner.Api/Domain/SpeakingSimulationV11Entities.cs`
 - Create: `backend/src/OetLearner.Api/Data/LearnerDbContext.SpeakingSimulationV11.cs`
+- Modify: `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
 - Create: `backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11ReleaseGate.cs`
 - Create: `backend/src/OetLearner.Api/Contracts/SpeakingSimulationV11Contracts.cs`
-- Create: `backend/src/OetLearner.Api/Data/Migrations/20260811090000_AddSpeakingSimulationV11.cs`
+- Create: `backend/src/OetLearner.Api/Data/Migrations/20260901090000_AddSpeakingSimulationV11.cs`
 - Test: `backend/tests/OetLearner.Api.Tests/Speaking/SpeakingSimulationV11ReleaseGateTests.cs`
 - Test: `backend/tests/OetLearner.Api.Tests/Speaking/SpeakingSimulationV11SchemaTests.cs`
 
@@ -111,7 +112,7 @@ Expected: all focused tests pass; existing unrelated tests are not used as evide
 - [ ] **Step 7: Commit only Task 1 paths.**
 
 ```powershell
-git add -- backend/src/OetLearner.Api/Domain/SpeakingSimulationV11Entities.cs backend/src/OetLearner.Api/Data/LearnerDbContext.SpeakingSimulationV11.cs backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11ReleaseGate.cs backend/src/OetLearner.Api/Contracts/SpeakingSimulationV11Contracts.cs backend/src/OetLearner.Api/Data/Migrations/20260811090000_AddSpeakingSimulationV11.cs backend/tests/OetLearner.Api.Tests/Speaking/SpeakingSimulationV11ReleaseGateTests.cs backend/tests/OetLearner.Api.Tests/Speaking/SpeakingSimulationV11SchemaTests.cs
+git add -- backend/src/OetLearner.Api/Domain/SpeakingSimulationV11Entities.cs backend/src/OetLearner.Api/Data/LearnerDbContext.SpeakingSimulationV11.cs backend/src/OetLearner.Api/Data/LearnerDbContext.cs backend/src/OetLearner.Api/Services/Speaking/SpeakingSimulationV11ReleaseGate.cs backend/src/OetLearner.Api/Contracts/SpeakingSimulationV11Contracts.cs backend/src/OetLearner.Api/Data/Migrations/20260901090000_AddSpeakingSimulationV11.cs backend/tests/OetLearner.Api.Tests/Speaking/SpeakingSimulationV11ReleaseGateTests.cs backend/tests/OetLearner.Api.Tests/Speaking/SpeakingSimulationV11SchemaTests.cs
 git diff --cached --check
 git commit -m "feat(speaking): add v1.1 simulation release model"
 ```
