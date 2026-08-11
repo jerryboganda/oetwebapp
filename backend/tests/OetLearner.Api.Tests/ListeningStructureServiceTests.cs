@@ -504,9 +504,10 @@ public class ListeningStructureServiceTests
         var (db, svc) = Build();
         var seed = await SeedCanonicalRelationalAsync(db);
         var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
-        var options = await db.Set<ListeningQuestionOption>()
-            .Where(option => option.ListeningQuestionId == question.Id)
-            .ToListAsync();
+        var options = db.ChangeTracker.Entries<ListeningQuestionOption>()
+            .Where(entry => entry.Entity.ListeningQuestionId == question.Id)
+            .Select(entry => entry.Entity)
+            .ToList();
         foreach (var option in options) option.IsCorrect = false;
         await db.SaveChangesAsync();
 
@@ -522,10 +523,11 @@ public class ListeningStructureServiceTests
         var (db, svc) = Build();
         var seed = await SeedCanonicalRelationalAsync(db);
         var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
-        var options = await db.Set<ListeningQuestionOption>()
-            .Where(option => option.ListeningQuestionId == question.Id)
+        var options = db.ChangeTracker.Entries<ListeningQuestionOption>()
+            .Where(entry => entry.Entity.ListeningQuestionId == question.Id)
+            .Select(entry => entry.Entity)
             .OrderBy(option => option.DisplayOrder)
-            .ToListAsync();
+            .ToList();
         options[1].IsCorrect = true;
         await db.SaveChangesAsync();
 
