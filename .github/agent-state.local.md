@@ -886,7 +886,8 @@ dirty work in the main checkout.
 - The shared ContentPaper publish path now runs Reading/Listening structural
   validation and hard-blocks malformed MCQs (including duplicate options and
   zero/multiple correct options) while preserving the broader advisory policy.
-  Added `ContentPaperServiceTests.Publish_rejects_reading_mcq_with_duplicate_options`;
+  Added `ContentPaperServiceTests.Publish_rejects_reading_mcq_with_duplicate_options`
+  and `Publish_rejects_listening_mcq_with_duplicate_options`;
   only `git diff --check` has been run for this slice.
 - Added the Listening Section 12 pre-publish preview surface: an admin-only
   server projection omits correct answers/accepted variants/explanations, while

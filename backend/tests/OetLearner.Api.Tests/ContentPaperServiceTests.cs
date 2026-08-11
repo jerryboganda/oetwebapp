@@ -532,6 +532,40 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
+    public async Task Publish_rejects_listening_mcq_with_duplicate_options()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "listening", "Listening MCQ gate", null, null, true, null, 40, null, null, 0, null,
+            SourceProvenance: null), "admin-1", default);
+        paper.ExtractedTextJson = JsonSupport.Serialize(new
+        {
+            listeningQuestions = new[]
+            {
+                new
+                {
+                    id = "q-1",
+                    number = 25,
+                    partCode = "B1",
+                    type = "multiple_choice_3",
+                    text = "Which option is correct?",
+                    options = new[] { "A", "A", "C" },
+                    correctAnswer = "C",
+                },
+            },
+        });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
+
+        Assert.Contains("MCQ publication gate failed", ex.Message);
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        Assert.NotEqual(ContentStatus.Published, reload.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Publish_records_warning_when_speaking_structure_is_not_ready()
     {
         var (db, svc) = Build();
