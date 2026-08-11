@@ -241,8 +241,16 @@ public sealed class ReadingTutorService(
         var oldScaled = attempt.ScoreOverrideScaled;
 
         // Scaled resolution: an explicit scaled value is a human override and
-        // is range-checked. A raw-only override may use only the exact owner
-        // conversion row already attached to the attempt; no formula fallback.
+        // is range-checked only when the attempt already carries an owner
+        // conversion decision. A raw-only override may use only the exact
+        // owner conversion row attached to the attempt; no formula fallback.
+        if (request.ScaledScore.HasValue && !HasOwnerConvertedScore(attempt))
+        {
+            throw ApiException.Conflict(
+                "score_conversion_unavailable",
+                "A Reading scaled-score override requires owner-approved conversion metadata.");
+        }
+
         int? scaledToStore;
         if (request.ScaledScore.HasValue)
             scaledToStore = Math.Clamp(request.ScaledScore.Value, 0, 500);
@@ -435,7 +443,10 @@ public sealed class ReadingTutorService(
 
         var hasOverride = attempt.ScoreOverrideRaw.HasValue || attempt.ScoreOverrideScaled.HasValue;
         var effectiveRaw = hasOverride ? attempt.ScoreOverrideRaw : attempt.RawScore;
-        var effectiveScaled = hasOverride ? attempt.ScoreOverrideScaled : attempt.ScaledScore;
+        var hasOwnerConvertedScore = HasOwnerConvertedScore(attempt);
+        var effectiveScaled = hasOwnerConvertedScore
+            ? hasOverride ? attempt.ScoreOverrideScaled : attempt.ScaledScore
+            : null;
 
         return new ReadingPrivilegedAttemptReview(
             AttemptId: attempt.Id,
@@ -447,11 +458,13 @@ public sealed class ReadingTutorService(
             StartedAt: attempt.StartedAt,
             SubmittedAt: attempt.SubmittedAt,
             GradedRawScore: attempt.RawScore,
-            GradedScaledScore: attempt.ScaledScore,
-            GradedGradeLetter: attempt.ScaledScore is int gs ? OetScoring.OetGradeLetterFromScaled(gs) : "—",
+            GradedScaledScore: hasOwnerConvertedScore ? attempt.ScaledScore : null,
+            GradedGradeLetter: hasOwnerConvertedScore ? attempt.ScoreConversionGrade ?? "—" : "—",
             EffectiveRawScore: effectiveRaw,
             EffectiveScaledScore: effectiveScaled,
-            EffectiveGradeLetter: effectiveScaled is int es ? OetScoring.OetGradeLetterFromScaled(es) : "—",
+            EffectiveGradeLetter: effectiveScaled.HasValue && hasOwnerConvertedScore
+                ? attempt.ScoreConversionGrade ?? "—"
+                : "—",
             HasOverride: hasOverride,
             OverrideRaw: attempt.ScoreOverrideRaw,
             OverrideScaled: attempt.ScoreOverrideScaled,
@@ -463,6 +476,11 @@ public sealed class ReadingTutorService(
             Questions: questions,
             FlaggedQuestionIds: flagged);
     }
+
+    private static bool HasOwnerConvertedScore(ReadingAttempt attempt)
+        => attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
 
     // ── Feedback CRUD ──────────────────────────────────────────────────────
 

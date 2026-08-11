@@ -29,7 +29,7 @@ public sealed record ReadingPaperAnalytics(
     int TotalAttempts,
     int SubmittedAttempts,
     double MeanRawScore,
-    double MeanScaledScore,
+    double? MeanScaledScore,
     double CompletionRate,
     double AbandonmentRate,
     double AverageTimePerQuestionMs,
@@ -136,9 +136,15 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
         var meanRaw = submitted.Count == 0
             ? 0.0
             : submitted.Where(a => a.RawScore.HasValue).Select(a => (double)a.RawScore!.Value).DefaultIfEmpty(0).Average();
-        var meanScaled = submitted.Count == 0
-            ? 0.0
-            : submitted.Where(a => a.ScaledScore.HasValue).Select(a => (double)a.ScaledScore!.Value).DefaultIfEmpty(0).Average();
+        var approvedScaledScores = submitted
+            .Where(HasOwnerConvertedScore)
+            .Select(EffectiveScaled)
+            .Where(score => score.HasValue)
+            .Select(score => (double)score!.Value)
+            .ToList();
+        var meanScaled = approvedScaledScores.Count == 0
+            ? (double?)null
+            : approvedScaledScores.Average();
 
         // Question lookup (with part code for nicer labels)
         var parts = await db.ReadingParts.AsNoTracking()
@@ -425,17 +431,16 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             .GroupBy(x => x.AssignedToUserId)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        // Per-student RAG (Green = pass band, Amber = one band below pass,
-        // Red = below) — derived purely from OetScoring grade letters so no
-        // scaled threshold is ever inlined here.
+        // Per-student RAG is derived only from the persisted owner conversion
+        // decision and grade; no scaled threshold is inferred here.
         var students = ids
             .Select(uid =>
             {
                 bestByUser.TryGetValue(uid, out var best);
                 var scaled = best is null ? null : EffectiveScaled(best);
                 var raw = best is null ? null : EffectiveRaw(best);
-                var letter = scaled is int s ? OetScoring.OetGradeLetterFromScaled(s) : "—";
-                var rag = ResolveRag(scaled);
+                var letter = HasOwnerConvertedScore(best) ? best!.ScoreConversionGrade ?? "—" : "—";
+                var rag = ResolveRag(best);
                 assignmentsByUser.TryGetValue(uid, out var userAssignments);
                 return new ReadingCohortStudent(
                     UserId: uid,
@@ -459,22 +464,28 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             Students: students);
     }
 
+    private static bool HasOwnerConvertedScore(ReadingAttempt? a)
+        => a is not null
+            && a.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
+            && a.ScoreConversionPassed.HasValue;
+
     private static int? EffectiveScaled(ReadingAttempt a)
-        => (a.ScoreOverrideRaw.HasValue || a.ScoreOverrideScaled.HasValue) ? a.ScoreOverrideScaled : a.ScaledScore;
+        => !HasOwnerConvertedScore(a)
+            ? null
+            : (a.ScoreOverrideRaw.HasValue || a.ScoreOverrideScaled.HasValue) ? a.ScoreOverrideScaled : a.ScaledScore;
 
     private static int? EffectiveRaw(ReadingAttempt a)
         => (a.ScoreOverrideRaw.HasValue || a.ScoreOverrideScaled.HasValue) ? a.ScoreOverrideRaw : a.RawScore;
 
-    /// <summary>Green when the effective scaled score is a pass-band grade
-    /// (A/B), Amber when it is the band immediately below pass (C+), Red for
-    /// anything lower, and "none" when the student has no graded attempt. All
-    /// boundaries come from OetScoring grade letters — never a literal score.</summary>
-    private static string ResolveRag(int? scaled)
+    /// <summary>Resolve cohort RAG only from persisted owner conversion
+    /// metadata. A missing table/version/pass decision remains unavailable;
+    /// no raw-to-scaled formula or numeric threshold is inferred here.</summary>
+    private static string ResolveRag(ReadingAttempt? attempt)
     {
-        if (scaled is not int s) return "none";
-        var letter = OetScoring.OetGradeLetterFromScaled(s);
-        if (OetScoring.IsListeningReadingPassByScaled(s)) return "green"; // A / B
-        return letter == "C+" ? "amber" : "red";
+        if (!HasOwnerConvertedScore(attempt)) return "none";
+        if (attempt!.ScoreConversionPassed == true) return "green";
+        return attempt.ScoreConversionGrade == "C+" ? "amber" : "red";
     }
 
     private static string Truncate(string s, int max)

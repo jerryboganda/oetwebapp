@@ -571,7 +571,8 @@ public class ReadingAttempt
     /// admin after review. When set, the override raw/scaled take display
     /// precedence over the machine-graded <see cref="RawScore"/> /
     /// <see cref="ScaledScore"/>. Null = no override. The scaled value MUST
-    /// still be produced via <c>OetScoring</c> at the call site.</summary>
+    /// still be backed by the attempt's owner-approved conversion metadata
+    /// before it is exposed as a converted result.</summary>
     public int? ScoreOverrideRaw { get; set; }
 
     public int? ScoreOverrideScaled { get; set; }

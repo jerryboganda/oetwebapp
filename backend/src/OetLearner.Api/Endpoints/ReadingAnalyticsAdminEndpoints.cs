@@ -198,10 +198,7 @@ public static class ReadingAnalyticsAdminEndpoints
             .Select(score => (double)score!.Value)
             .ToList();
         var passedCount = submittedAttempts.Count(a =>
-        {
-            var scaled = GetScaledScore(a);
-            return scaled.HasValue && OetScoring.IsListeningReadingPassByScaled(scaled.Value);
-        });
+            GetScaledScore(a).HasValue && a.ScoreConversionPassed == true);
         var passEligibleCount = submittedAttempts.Count(a => GetScaledScore(a).HasValue);
         var totalOpportunities = questions.Sum(q => OpportunityCount(q, questionOpportunityMetrics.OpportunityCountsByQuestion));
         var totalAnswered = questionOpportunityMetrics.InScopeAnswers.Count;
@@ -420,7 +417,8 @@ public static class ReadingAnalyticsAdminEndpoints
             .Where(score => score.HasValue)
             .Select(score => score!.Value)
             .ToList();
-        var passedCount = scaledScores.Count(OetScoring.IsListeningReadingPassByScaled);
+        var passedCount = submittedAttempts.Count(a =>
+            GetScaledScore(a).HasValue && a.ScoreConversionPassed == true);
         var completionSeconds = submittedAttempts
             .Where(a => a.SubmittedAt.HasValue)
             .Select(a => Math.Max(0, (a.SubmittedAt!.Value - a.StartedAt).TotalSeconds));
@@ -555,10 +553,11 @@ public static class ReadingAnalyticsAdminEndpoints
             {
                 var modeAttempts = group.ToList();
                 var submitted = modeAttempts.Where(a => a.Status == ReadingAttemptStatus.Submitted).ToList();
-                var scaledScores = submitted
-                    .Select(GetScaledScore)
-                    .Where(score => score.HasValue)
-                    .Select(score => score!.Value)
+                var convertedAttempts = submitted
+                    .Where(a => GetScaledScore(a).HasValue)
+                    .ToList();
+                var scaledScores = convertedAttempts
+                    .Select(a => a.ScaledScore!.Value)
                     .ToList();
                 return new ReadingModeAnalyticsDto(
                     group.Key.ToString(),
@@ -566,7 +565,7 @@ public static class ReadingAnalyticsAdminEndpoints
                     submitted.Count,
                     AverageOrNull(submitted.Where(IsCanonicalScoreEligible).Where(a => a.RawScore.HasValue).Select(a => (double)a.RawScore!.Value)),
                     AverageOrNull(scaledScores.Select(score => (double)score)),
-                    Percent(scaledScores.Count(OetScoring.IsListeningReadingPassByScaled), scaledScores.Count));
+                    Percent(convertedAttempts.Count(a => a.ScoreConversionPassed == true), convertedAttempts.Count));
             })
             .OrderByDescending(m => m.AttemptCount)
             .ThenBy(m => m.Mode)
@@ -667,6 +666,12 @@ public static class ReadingAnalyticsAdminEndpoints
     private static int? GetScaledScore(ReadingAttempt attempt)
     {
         if (!IsCanonicalScoreEligible(attempt)) return null;
+        if (!attempt.ScaledScore.HasValue
+            || string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            || !attempt.ScoreConversionPassed.HasValue)
+        {
+            return null;
+        }
         return attempt.ScaledScore;
     }
 

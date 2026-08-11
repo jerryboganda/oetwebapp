@@ -1024,3 +1024,16 @@ dirty work in the main checkout.
   state and owner-table source. Only bounded source inspection and
   `git diff --check` are intended for this slice; no long local validation,
   CI/CD, push, or deployment was started.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading analytics conversion gate)
+
+- Reading cohort/paper analytics and privileged tutor review now withhold
+  formula-derived converted scores and grade letters unless the attempt has
+  an owner table version and persisted pass decision. Reading admin analytics
+  uses the same gate, and scaled-score overrides fail closed without owner
+  conversion evidence.
+- Only bounded source searches and `git diff --check` were run for this slice;
+  no long local validation, CI/CD, push, or deployment was started. Focused
+  Reading analytics/tutor execution and authenticated deployed acceptance
+  remain pending. Preserve the four untracked user-owned paths above and the
+  owner release gates listed in the acceptance matrix.

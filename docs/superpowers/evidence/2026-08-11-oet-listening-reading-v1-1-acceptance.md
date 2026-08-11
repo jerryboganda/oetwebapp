@@ -74,6 +74,11 @@ an owner-controlled value that must not be invented in code.
   booking advice, and Mock Center projections withhold formula-derived grade
   or pass labels when that metadata is absent. Focused mock execution remains
   pending.
+- Reading cohort/paper analytics, privileged tutor review, and admin analytics
+  now expose converted Reading scores only when the persisted owner table
+  version and pass decision are present; missing metadata is null/unavailable,
+  and scaled-score overrides fail closed without owner conversion evidence.
+  Focused Reading analytics/tutor execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation
