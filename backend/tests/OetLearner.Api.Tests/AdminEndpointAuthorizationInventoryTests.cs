@@ -88,6 +88,12 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/assessment-governance/rationales", "GET", "AdminAssessmentGovernanceRead")]
     [InlineData("/v1/admin/assessment-governance/re-mark-jobs/{id}/approve", "POST", "AdminAssessmentGovernanceApprove")]
     [InlineData("/v1/admin/assessment-governance/re-mark-jobs/{id}/execute", "POST", "AdminAssessmentGovernanceExecute")]
+    [InlineData("/v1/admin/reading/attempts/{attemptId}", "GET", "AdminAssessmentResultsRead")]
+    [InlineData("/v1/admin/reading/attempts/{attemptId}/feedback", "GET", "AdminAssessmentResultsRead")]
+    [InlineData("/v1/admin/reading/attempts/{attemptId}/feedback", "POST", "AdminAssessmentResultsWrite")]
+    [InlineData("/v1/admin/reading/attempts/{attemptId}/override", "POST", "AdminAssessmentResultsWrite")]
+    [InlineData("/v1/admin/reading/assignments", "GET", "AdminAssessmentResultsRead")]
+    [InlineData("/v1/admin/reading/assignments", "POST", "AdminAssessmentResultsWrite")]
     public void SensitiveAdminRoutes_UseExpectedGranularPolicies(string routePattern, string method, string policy)
     {
         using var client = _factory.CreateClient();

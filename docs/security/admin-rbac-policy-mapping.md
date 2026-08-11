@@ -23,6 +23,8 @@ Scope: granular admin authorization policies registered in `backend/src/OetLearn
 - `AdminAssessmentGovernanceWrite`: requires `assessment:governance_write` or `system_admin`.
 - `AdminAssessmentGovernanceApprove`: requires `assessment:governance_approve` or `system_admin`.
 - `AdminAssessmentGovernanceExecute`: requires `assessment:governance_execute` or `system_admin`.
+- `AdminAssessmentResultsRead`: requires `assessment:results_read` or `system_admin`.
+- `AdminAssessmentResultsWrite`: requires `assessment:results_write` or `system_admin`.
 - `AdminBillingRead`: requires `billing:read` or `system_admin`.
 - `AdminBillingWrite`: requires `billing:write` or `system_admin`.
 - `AdminBillingRefundWrite`: requires `billing:refund_write`, `billing:write`, or `system_admin`.
@@ -83,6 +85,13 @@ Scope: granular admin authorization policies registered in `backend/src/OetLearn
 - Content-author permissions do not grant access to these endpoints. Draft
   creation, owner approval, and re-mark execution use separate permissions;
   `system_admin` remains the explicit break-glass override.
+
+Candidate-result review is separately isolated: Reading tutor/admin attempt
+reviews, assignment reads, feedback, overrides, and assignment mutations use
+`assessment:results_read`/`assessment:results_write`. Content-author access
+alone cannot reach candidate attempt data or score overrides; expert/tutor
+routes still enforce assigned-candidate checks, and `system_admin` remains the
+break-glass override.
 
 ## Production Dev-Auth Guard
 

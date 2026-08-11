@@ -166,6 +166,14 @@ describe('admin route permissions', () => {
     expect(canAccessAdminRoute([AdminPermission.ContentWrite], '/admin/speaking/result-visibility')).toBe(true);
   });
 
+  it('isolates Reading candidate-result routes from content-author permissions', () => {
+    expect(getAdminRoutePermissions('/admin/reading/assignments')).toEqual([AdminPermission.AssessmentResultsRead]);
+    expect(getAdminRoutePermissions('/admin/reading/attempts/attempt-1')).toEqual([AdminPermission.AssessmentResultsRead]);
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/reading/attempts/attempt-1')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ContentWrite], '/admin/reading/assignments')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.AssessmentResultsRead], '/admin/reading/attempts/attempt-1')).toBe(true);
+  });
+
   it('keeps mock bundle wizard routes out of read-only access', () => {
     expect(getAdminRoutePermissions('/admin/content/mocks/wizard')).toEqual([AdminPermission.ContentWrite]);
     expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/bundle')).toEqual([AdminPermission.ContentWrite]);

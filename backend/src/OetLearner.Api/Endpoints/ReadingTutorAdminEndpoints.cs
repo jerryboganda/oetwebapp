@@ -9,7 +9,7 @@ namespace OetLearner.Api.Endpoints;
 /// Wave 2 — privileged Reading tutor endpoints (manual override,
 /// accepted-answer recalculation, non-redacted attempt review, attempt
 /// feedback CRUD, and the assignment workflow). The same surface is exposed
-/// under the admin route group (gated by <c>AdminContentWrite</c>) and the
+/// under the admin route group (gated by dedicated candidate-results permissions) and the
 /// expert route group (gated by the existing <c>ExpertOnly</c> policy that
 /// tutors already use), plus a learner-facing read of active assignments.
 ///
@@ -231,12 +231,12 @@ public static class ReadingTutorAdminEndpoints
     }
 
     /// <summary>Apply the write-endpoint policy for the given route group:
-    /// admin endpoints layer the granular <c>AdminContentWrite</c> permission
+    /// admin endpoints layer dedicated candidate-results permissions
     /// (and write-bucket limit); expert endpoints inherit <c>ExpertOnly</c>
     /// from the group and only add the write rate limit.</summary>
     private static void Write(RouteHandlerBuilder builder, bool isAdmin)
     {
-        if (isAdmin) builder.WithAdminWrite("AdminContentWrite");
+        if (isAdmin) builder.WithAdminWrite("AdminAssessmentResultsWrite");
         else builder.RequireRateLimiting("PerUserWrite");
     }
 
@@ -245,7 +245,7 @@ public static class ReadingTutorAdminEndpoints
     /// reads inherit <c>ExpertOnly</c> + the group read limit.</summary>
     private static void Read(RouteHandlerBuilder builder, bool isAdmin)
     {
-        if (isAdmin) builder.WithAdminRead("AdminContentWrite");
+        if (isAdmin) builder.WithAdminRead("AdminAssessmentResultsRead");
     }
 
     private static string CurrentUserId(HttpContext http)

@@ -775,6 +775,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminAssessmentGovernanceExecute", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:governance_execute", "system_admin")));
+    options.AddPolicy("AdminAssessmentResultsRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:results_read", "system_admin")));
+    options.AddPolicy("AdminAssessmentResultsWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:results_write", "system_admin")));
     options.AddPolicy("AdminBillingRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));

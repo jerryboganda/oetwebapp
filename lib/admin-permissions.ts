@@ -9,6 +9,8 @@ export const AdminPermission = {
   AssessmentGovernanceWrite: 'assessment:governance_write',
   AssessmentGovernanceApprove: 'assessment:governance_approve',
   AssessmentGovernanceExecute: 'assessment:governance_execute',
+  AssessmentResultsRead: 'assessment:results_read',
+  AssessmentResultsWrite: 'assessment:results_write',
   BillingRead: 'billing:read',
   /** Legacy superset write permission. Continues to grant every billing-write surface. */
   BillingWrite: 'billing:write',
@@ -310,8 +312,8 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/learners/:param': [AdminPermission.UsersRead],
   '/admin/policies/reading': [AdminPermission.UsersWrite],
   // Reading admin surfaces
-  '/admin/reading/assignments': [AdminPermission.ContentRead],
-  '/admin/reading/attempts/:param': [AdminPermission.ContentRead],
+  '/admin/reading/assignments': [AdminPermission.AssessmentResultsRead],
+  '/admin/reading/attempts/:param': [AdminPermission.AssessmentResultsRead],
   '/admin/reading/cohort': [AdminPermission.QualityAnalytics],
   '/admin/reading/papers/:param': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
 };

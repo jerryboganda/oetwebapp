@@ -215,6 +215,10 @@ public static class AdminPermissions
     public const string AssessmentGovernanceApprove = "assessment:governance_approve";
     /// <summary>Execute an approved controlled re-mark job.</summary>
     public const string AssessmentGovernanceExecute = "assessment:governance_execute";
+    /// <summary>Read candidate Listening/Reading attempt results and assignments.</summary>
+    public const string AssessmentResultsRead = "assessment:results_read";
+    /// <summary>Write candidate Listening/Reading tutor review and assignment actions.</summary>
+    public const string AssessmentResultsWrite = "assessment:results_write";
     public const string BillingRead = "billing:read";
 
     /// <summary>
@@ -264,6 +268,7 @@ public static class AdminPermissions
         ContentEditorReview, ContentPublisherApproval,
         AssessmentGovernanceRead, AssessmentGovernanceWrite,
         AssessmentGovernanceApprove, AssessmentGovernanceExecute,
+        AssessmentResultsRead, AssessmentResultsWrite,
         BillingRead, BillingWrite,
         BillingRefundWrite, BillingCatalogWrite, BillingSubscriptionWrite,
         LearnerRead, LearnerWrite,
