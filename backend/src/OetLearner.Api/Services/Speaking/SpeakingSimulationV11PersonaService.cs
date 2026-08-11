@@ -71,7 +71,7 @@ public sealed class SpeakingSimulationV11PersonaService(LearnerDbContext db)
             CardSlot = cardSlot,
             ProfessionId = card.ProfessionId,
             SpecVersion = SpeakingSimulationV11Contracts.SpecVersion,
-            PersonaVersion,
+            PersonaVersion = PersonaVersion,
             CardVersion = BuildCardVersion(card),
             MemoryScopeKey = $"{exam?.Id ?? session.ExamSessionId ?? "standalone"}:{session.Id}",
             ScenarioTitle = card.ScenarioTitle,
@@ -345,8 +345,9 @@ public sealed class SpeakingSimulationV11PersonaService(LearnerDbContext db)
 
     private static string NormalizeFactKeyJson(string? json)
     {
+        var allowedKeys = GetAllowedFactKeys();
         var normalized = ParseStringArray(json)
-            .Where(ApprovedCarryFactKeys.Contains)
+            .Where(key => allowedKeys.Contains(key, StringComparer.Ordinal))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
