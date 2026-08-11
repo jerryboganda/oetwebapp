@@ -303,6 +303,53 @@ public static class ListeningLearnerEndpoints
             .WithName("SubmitListeningPaperAttempt")
             .WithSummary("Submit and server-grade a Listening attempt");
 
+        // Grounded post-submit AI explanation. The service derives the
+        // learner answer from the owned submitted attempt and requires an
+        // effective author-approved rationale before invoking the gateway.
+        group.MapGet("/attempts/{attemptId}/questions/{questionId}/ai-explanation", async (
+            string attemptId,
+            string questionId,
+            string? language,
+            HttpContext http,
+            IListeningExplanationService explanationService,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var explanation = await explanationService.GetSubmittedAttemptExplanationAsync(
+                    http.UserId(), attemptId, questionId, language ?? "en", ct);
+                return Results.Ok(new
+                {
+                    explanation,
+                    grounded = true,
+                    advisoryOnly = true,
+                    marksUnaffected = true,
+                });
+            }
+            catch (ListeningGroundedExplanationUnavailableException ex)
+            {
+                return Results.Conflict(new
+                {
+                    code = "grounded_ai_unavailable",
+                    error = ex.Message,
+                    message = "A grounded explanation is unavailable until effective author-approved evidence exists.",
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "grounded_ai_not_ready",
+                    error = ex.Message,
+                    message = ex.Message,
+                });
+            }
+        }).RequireRateLimiting("PerUser");
+
         group.MapGet("/attempts/{attemptId}/review", async (
             string attemptId,
             HttpContext http,

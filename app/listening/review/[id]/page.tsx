@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
@@ -443,6 +444,11 @@ export default function ListeningReviewPage() {
                     missReason={chip ? { title: `Missed because: ${chip.label}`, detail: chip.hint } : null}
                     explanation={question.explanation ? <p>{question.explanation}</p> : null}
                   >
+                    <GroundedListeningAiExplanation
+                      attemptId={attemptId ?? ''}
+                      questionId={question.questionId}
+                      unanswered={unanswered}
+                    />
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                       {question.speakerAttitude ? (
                         <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-navy">

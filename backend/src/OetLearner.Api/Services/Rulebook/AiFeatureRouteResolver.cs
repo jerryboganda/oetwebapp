@@ -213,6 +213,7 @@ public static class AiFeatureRouteDefaults
         SonnetDefault(AiFeatureCodes.PronunciationFeedback, "Pronunciation corrective feedback."),
         SonnetDefault(AiFeatureCodes.ReadingExplanation, "Reading question explanations."),
         SonnetDefault(AiFeatureCodes.ReadingVocabularyCard, "Reading vocabulary cards."),
+        SonnetDefault(AiFeatureCodes.ListeningExplanation, "Listening question explanations."),
         SonnetDefault(AiFeatureCodes.SummarisePassage, "Passage summarisation."),
         SonnetDefault(AiFeatureCodes.VocabularyGloss, "On-demand vocabulary glossing."),
         SonnetDefault(AiFeatureCodes.RecallsMistakeExplain, "Recalls mistake explanation."),
@@ -304,6 +305,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         // Reading explanations / vocabulary cards — route to Claude Sonnet 4.6.
         AiFeatureCodes.ReadingExplanation,
         AiFeatureCodes.ReadingVocabularyCard,
+        AiFeatureCodes.ListeningExplanation,
         // Writing module V2 coaching tools (text LLM; embeddings excluded).
         AiFeatureCodes.WritingCoachV1,
         AiFeatureCodes.WritingRewriteV1,

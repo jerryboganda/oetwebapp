@@ -1166,6 +1166,27 @@ export const readingAnnotationsApi = {
 export const getReadingAttemptReview = (attemptId: string) =>
   api<ReadingAttemptReviewDto>(`/v1/reading-papers/attempts/${attemptId}/review`);
 
+export interface ReadingGroundedAiExplanationDto {
+  explanation: {
+    whyCorrect: string;
+    whyWrong: string;
+    trapName: string;
+    avoidTip: string;
+    language: string;
+  };
+  grounded: true;
+  advisoryOnly: true;
+  marksUnaffected: true;
+}
+
+export const getReadingAttemptAiExplanation = (
+  attemptId: string,
+  questionId: string,
+  language = 'en',
+) => api<ReadingGroundedAiExplanationDto>(
+  `/v1/reading-papers/attempts/${attemptId}/questions/${questionId}/ai-explanation?language=${encodeURIComponent(language)}`,
+);
+
 // ── Phase 3: Practice Mode + Error Bank ────────────────────────────────
 
 export interface ReadingPracticeStartedDto {

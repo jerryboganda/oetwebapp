@@ -9,6 +9,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
@@ -282,6 +283,12 @@ function ListeningResultsContent() {
                             <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">Explanation</span>
                             <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
                           </div>
+
+                          <GroundedListeningAiExplanation
+                            attemptId={id ?? ''}
+                            questionId={item.questionId}
+                            unanswered={!item.learnerAnswer}
+                          />
 
                           {item.transcript?.allowed && item.transcript.excerpt ? (
                             <div className="pt-2">

@@ -582,6 +582,55 @@ public static class ReadingLearnerEndpoints
         });
 
         // ── Policy-safe review after submit ──────────────────────────────────
+        // Grounded post-submit AI is available only through the server-owned
+        // submitted attempt. The service validates ownership, stored answer,
+        // effective rationale/evidence, and submission state again.
+        group.MapGet("/attempts/{attemptId}/questions/{questionId}/ai-explanation", async (
+            string attemptId,
+            string questionId,
+            string? language,
+            IReadingExplanationService explanationService,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            try
+            {
+                var explanation = await explanationService.GetSubmittedAttemptExplanationAsync(
+                    userId, attemptId, questionId, language ?? "en", ct);
+                return Results.Ok(new
+                {
+                    explanation,
+                    grounded = true,
+                    advisoryOnly = true,
+                    marksUnaffected = true,
+                });
+            }
+            catch (ReadingGroundedExplanationUnavailableException ex)
+            {
+                return Results.Conflict(new
+                {
+                    code = "grounded_ai_unavailable",
+                    error = ex.Message,
+                    message = "A grounded explanation is unavailable until effective author-approved evidence exists.",
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "grounded_ai_not_ready",
+                    error = ex.Message,
+                    message = ex.Message,
+                });
+            }
+        }).RequireRateLimiting("PerUser");
+
         group.MapGet("/attempts/{attemptId}/review", async (
             string attemptId,
             LearnerDbContext db,

@@ -577,6 +577,27 @@ export const getListeningResult = (attemptId: string) =>
 
 export const getListeningReview = getListeningResult;
 
+export interface ListeningGroundedAiExplanationDto {
+  explanation: {
+    whyCorrect: string;
+    whyWrong: string;
+    trapName: string;
+    avoidTip: string;
+    language: string;
+  };
+  grounded: true;
+  advisoryOnly: true;
+  marksUnaffected: true;
+}
+
+export const getListeningAttemptAiExplanation = (
+  attemptId: string,
+  questionId: string,
+  language = 'en',
+) => api<ListeningGroundedAiExplanationDto>(
+  `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/ai-explanation?language=${encodeURIComponent(language)}`,
+);
+
 export function getListeningDrill(drillId: string, options: { paperId?: string; attemptId?: string } = {}) {
   const params = new URLSearchParams();
   if (options.paperId) params.set('paperId', options.paperId);

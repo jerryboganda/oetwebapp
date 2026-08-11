@@ -313,6 +313,9 @@ public static class AiFeatureCodes
     public const string ReadingExplanation = "reading.explanation.v1";
     public const string ReadingVocabularyCard = "reading.vocabulary.card";
 
+    // Listening Module — learner-facing, post-submit, grounded advisory only.
+    public const string ListeningExplanation = "listening.explanation.v1";
+
     // ── Live Class Recording AI Pipeline (Wave A2) ─────────────────
     // Platform-only — server-side background processing of class recordings.
     // No learner BYOK key applies: these calls run inside the background-job

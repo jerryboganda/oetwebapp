@@ -1611,6 +1611,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IXpService, OetLearne
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.ILessonService, OetLearner.Api.Services.Reading.LessonService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IStrategyService, OetLearner.Api.Services.Reading.StrategyService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExplanationService,
+    OetLearner.Api.Services.Listening.ListeningExplanationService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructureService,
     OetLearner.Api.Services.Listening.ListeningStructureService>();
 // Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).

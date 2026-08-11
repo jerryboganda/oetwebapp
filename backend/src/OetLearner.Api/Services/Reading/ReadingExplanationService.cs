@@ -36,7 +36,22 @@ public interface IReadingExplanationService
         string wrongOption,
         string language,
         CancellationToken ct);
+
+    /// <summary>
+    /// Generate a learner-facing explanation only for an answer stored on the
+    /// caller's submitted attempt. The selected answer is read from the
+    /// server-side answer row; callers cannot substitute arbitrary evidence.
+    /// </summary>
+    Task<ExplanationDto> GetSubmittedAttemptExplanationAsync(
+        string userId,
+        string attemptId,
+        string questionId,
+        string language,
+        CancellationToken ct);
 }
+
+public sealed class ReadingGroundedExplanationUnavailableException(string message)
+    : Exception(message);
 
 public sealed record ExplanationDto(
     string WhyCorrect,
@@ -114,6 +129,7 @@ public sealed class ReadingExplanationService(
             approvedRationale.RationaleText,
             approvedRationale.SourceSentence,
             sourcePassage,
+            userId: null,
             ct);
 
         // 3. Cache back onto the entity (append to existing cache blob).
@@ -132,6 +148,7 @@ public sealed class ReadingExplanationService(
         string approvedRationale,
         string sourceSentence,
         string? sourcePassage,
+        string? userId,
         CancellationToken ct)
     {
         OetRulebook rulebook;
@@ -170,7 +187,7 @@ public sealed class ReadingExplanationService(
                 Model = string.Empty,
                 Temperature = 0.2,
                 FeatureCode = AiFeatureCodes.ReadingExplanation,
-                UserId = null,
+                UserId = userId,
             }, ct);
 
             parsed = TryParseExplanation(result.Completion, language);
@@ -183,6 +200,70 @@ public sealed class ReadingExplanationService(
         }
 
         return parsed ?? BuildFallbackExplanation(question, correctAnswer, wrongOption, language);
+    }
+
+    public async Task<ExplanationDto> GetSubmittedAttemptExplanationAsync(
+        string userId,
+        string attemptId,
+        string questionId,
+        string language,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("userId must not be empty.", nameof(userId));
+        if (string.IsNullOrWhiteSpace(attemptId))
+            throw new ArgumentException("attemptId must not be empty.", nameof(attemptId));
+        if (string.IsNullOrWhiteSpace(questionId))
+            throw new ArgumentException("questionId must not be empty.", nameof(questionId));
+
+        var attempt = await db.ReadingAttempts.AsNoTracking()
+            .Include(a => a.Answers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+            ?? throw new KeyNotFoundException("Reading attempt not found.");
+        if (attempt.Status != ReadingAttemptStatus.Submitted)
+            throw new InvalidOperationException("Grounded explanations are available only after submission.");
+
+        var answer = attempt.Answers.FirstOrDefault(a => a.ReadingQuestionId == questionId)
+            ?? throw new KeyNotFoundException("The question has no stored answer on this attempt.");
+        var question = await db.ReadingQuestions.AsNoTracking()
+            .Where(q => q.Id == questionId)
+            .Where(q => db.ReadingParts.Any(p => p.Id == q.ReadingPartId && p.PaperId == attempt.PaperId))
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException("Reading question not found for this attempt.");
+
+        var approvedRationale = await db.AssessmentRationales.AsNoTracking()
+            .Where(r => r.Assessment == "reading"
+                && r.QuestionRevisionId == question.Id
+                && r.Status == AssessmentGovernanceStatus.Effective)
+            .OrderByDescending(r => r.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (approvedRationale is null
+            || string.IsNullOrWhiteSpace(approvedRationale.RationaleText)
+            || string.IsNullOrWhiteSpace(approvedRationale.SourceSentence))
+        {
+            throw new ReadingGroundedExplanationUnavailableException(
+                "No effective author-approved rationale is available for this question.");
+        }
+
+        var sourcePassage = question.ReadingTextId is null
+            ? null
+            : await db.ReadingTexts.AsNoTracking()
+                .Where(t => t.Id == question.ReadingTextId)
+                .Select(t => t.BodyHtml)
+                .SingleOrDefaultAsync(ct);
+        var selectedAnswer = ResolveStoredAnswer(answer.UserAnswerJson);
+        var lang = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim().ToLowerInvariant();
+
+        return await GenerateExplanationAsync(
+            question,
+            ResolveCorrectAnswer(question),
+            selectedAnswer,
+            lang,
+            approvedRationale.RationaleText,
+            approvedRationale.SourceSentence,
+            sourcePassage,
+            userId,
+            ct);
     }
 
     // ── Prompt builder ──────────────────────────────────────────────────────
@@ -362,6 +443,26 @@ public sealed class ReadingExplanationService(
         }
 
         return raw;
+    }
+
+    private static string ResolveStoredAnswer(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "(unanswered)";
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            return doc.RootElement.ValueKind switch
+            {
+                JsonValueKind.String => doc.RootElement.GetString() ?? "(unanswered)",
+                JsonValueKind.Array => string.Join(", ", doc.RootElement.EnumerateArray()
+                    .Select(value => value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString())),
+                _ => doc.RootElement.ToString(),
+            };
+        }
+        catch (JsonException)
+        {
+            return raw;
+        }
     }
 
     private static string? ExtractJsonBlock(string raw)

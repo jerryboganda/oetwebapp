@@ -110,6 +110,8 @@ Every feature the gateway serves is classified. Defaults:
 | `conversation.opening` | ❌ | ✅ | ✅ | AI partner's first in-role utterance |
 | `conversation.reply` | ❌ | ✅ | ✅ | AI partner's in-role replies mid-session |
 | `conversation.evaluation` | ✅ | ❌ | ✅ | Post-session scoring + rubric (scoring-critical) |
+| `reading.explanation.v1` | ❌ | ✅ | ✅ | Post-submit, grounded Reading explanation; advisory only |
+| `listening.explanation.v1` | ❌ | ✅ | ✅ | Post-submit, grounded Listening explanation; advisory only |
 | `pronunciation.tip` | ❌ | ✅ | ✅ | Pronunciation feedback |
 | `pronunciation.score` | ✅ | ❌ | ✅ | Pronunciation attempt scoring / phoneme analysis |
 | `pronunciation.linguistic.score.v1` | ✅ | ❌ | ✅ | Gemini native-audio linguistic pronunciation scoring through provider code `gemini-pronunciation-audio` |
