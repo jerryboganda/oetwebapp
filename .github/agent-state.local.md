@@ -19,6 +19,23 @@ Last updated: 2026-08-11
   thresholds/labels, graph approval, load target/evidence, and authenticated
   browser/mobile acceptance remain unresolved.
 
+## Hosted LR-16 regression checkpoint
+
+- Gap-closure run `31522316211` executed against exact SHA `8707607e7`. Frontend
+  type-check, Vitest, and lint passed. Backend ran 293 scoped tests: 212 passed
+  and 81 failed.
+- Every `ListeningV2AdvanceEndpointTests` test passed, including the repaired
+  `Technical_guidance_signals_are_recorded_without_blocking_strict_readiness`
+  regression. The remaining backend failures are the known owner-approved
+  marking-policy gate and legacy unconfigured conversion/default-normalization
+  expectations; do not seed owner values to force green.
+- The exact SHA deployed successfully in Build & Deploy run `31521129361`:
+  web/API/backup images, off-box migration generation/application, and
+  blue/green deploy all passed. Production is live on green with blue retained
+  for rollback; independent checks at `2026-08-11T18:21:23Z` returned 200 for
+  API live/readiness and web health, with 307 redirects for `/`, `/listening`,
+  and `/reading`. Readiness dependencies were all `ok` at `18:21:33Z`.
+
 ## Latest exact release checkpoint
 
 - `428f9b27583d5ea336d92710cc6e4e7a56932ec5` is the implementation slice;

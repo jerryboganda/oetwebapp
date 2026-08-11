@@ -24,7 +24,7 @@ an owner-controlled value that must not be invented in code.
 | LR-13 | MCQ publication rejects zero/multiple correct options | `ListeningStructureService`, `ReadingStructureService`, existing authoring validation tests | Implemented; focused release test pending |
 | LR-14 | Key change uses controlled auditable re-mark | `AssessmentGovernanceEndpoints`, `ReadingGradingService.RegradeSubmittedAsync`, `ListeningGradingService.RegradeWithKeyAsync`; original/updated result snapshots retained on the job | Implemented; focused re-mark test pending |
 | LR-15 | Desktop/mobile timer, passage, and controls do not clip | Responsive result/player layouts and existing mobile/desktop route surfaces | Pending dedicated Playwright run |
-| LR-16 | Exam technical requirements are guidance only | `ListeningV2Endpoints.TechReadinessRequest` now forwards device labels, screen dimensions, and display scale to `ListeningSessionService.RecordTechReadinessAsync`; the service records them without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Implemented; focused backend run stalled locally; hosted regression/deployed browser verification and owner style/copy review pending |
+| LR-16 | Exam technical requirements are guidance only | `ListeningV2Endpoints.TechReadinessRequest` now forwards device labels, screen dimensions, and display scale to `ListeningSessionService.RecordTechReadinessAsync`; the service records them without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Hosted regression passed on exact release SHA; deployed browser verification and owner style/copy review pending |
 
 ## Release gates that cannot be guessed
 
@@ -184,3 +184,14 @@ an owner-controlled value that must not be invented in code.
 - `git diff --check` passed. The focused Windows
   `ListeningV2AdvanceEndpointTests` run timed out after 124 seconds before
   producing compiler/test output; hosted CI is required for execution evidence.
+
+## Hosted LR-16 regression evidence
+
+- Gap-closure run `31522316211` executed against exact SHA `8707607e7`.
+  Frontend type-check, Vitest, and lint all passed. The backend scope compiled
+  and ran 293 tests: 212 passed and 81 failed.
+- All `ListeningV2AdvanceEndpointTests` passed, including
+  `Technical_guidance_signals_are_recorded_without_blocking_strict_readiness`.
+  The remaining backend failures are the known owner-approved marking-policy
+  gate and legacy expectations for unavailable score conversion/default
+  normalization; no owner values were invented to mask them.
