@@ -242,7 +242,9 @@ public class ListeningAudioCheckGateTests
     /// <summary>Seed a published relational Listening paper (+ owning user) with
     /// a primary audio asset so an exam-mode start can clear the audio-asset
     /// guard once the sound-check gate has passed.</summary>
-    private static async Task SeedRelationalPaperWithAudioAsync(LearnerDbContext db)
+    private static async Task SeedRelationalPaperWithAudioAsync(
+        LearnerDbContext db,
+        bool perSectionAudioOnly = false)
     {
         var user = new LearnerUser
         {
@@ -287,6 +289,7 @@ public class ListeningAudioCheckGateTests
                     Id = "asset-audio-1",
                     PaperId = "paper-1",
                     Role = PaperAssetRole.Audio,
+                    Part = perSectionAudioOnly ? "A1" : null,
                     MediaAssetId = media.Id,
                     MediaAsset = media,
                     IsPrimary = true,
@@ -355,6 +358,20 @@ public class ListeningAudioCheckGateTests
 
         Assert.NotNull(dto);
         // The exam attempt was created (gate passed + audio asset present).
+        Assert.True(await db.ListeningAttempts.AnyAsync(a => a.Mode == ListeningAttemptMode.Exam));
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_exam_accepts_per_section_audio_without_combined_audio()
+    {
+        await using var db = NewDb();
+        await SeedRelationalPaperWithAudioAsync(db, perSectionAudioOnly: true);
+        SeedProfile(db, audioCheckPassedAt: Now.AddHours(-1));
+        var svc = new ListeningLearnerService(db, new AllowAllContentEntitlementService());
+
+        var dto = await svc.StartAttemptAsync(UserId, "paper-1", "exam", null, forceNewAttempt: true, CancellationToken.None);
+
+        Assert.NotNull(dto);
         Assert.True(await db.ListeningAttempts.AnyAsync(a => a.Mode == ListeningAttemptMode.Exam));
     }
 

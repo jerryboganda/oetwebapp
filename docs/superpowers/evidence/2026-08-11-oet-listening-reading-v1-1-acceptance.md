@@ -394,6 +394,14 @@ an owner-controlled value that must not be invented in code.
   paths; full cross-role acceptance remains pending the missing support
   workflow and owner-provided release inputs.
 
+## Per-section Listening audio start gate
+
+- The strict server start gate now accepts a paper when it has either a
+  combined scored audio asset or one or more non-empty per-section scored
+  audio assets. A per-section-only regression fixture was added so valid
+  `audioUrlByPart` papers are not rejected as missing audio. Backend execution
+  of this regression remains pending by explicit request.
+
 ## Fail-closed unknown-question grading
 
 - Reading grading no longer honors the legacy `grade_as_correct` fallback for

@@ -1238,7 +1238,9 @@ public sealed class ListeningLearnerService(
         // H11: Server-verify audio asset exists before allowing exam-mode attempt start.
         // The client shows audioAvailable but a race or stale cache could let a learner
         // start an attempt for a paper whose audio has been deleted or never uploaded.
-        if (isExamLike && string.IsNullOrWhiteSpace(source.AudioUrl))
+        var hasScoredAudio = !string.IsNullOrWhiteSpace(source.AudioUrl)
+            || (source.AudioUrlByPart?.Values.Any(url => !string.IsNullOrWhiteSpace(url)) ?? false);
+        if (isExamLike && !hasScoredAudio)
         {
             throw ApiException.Conflict(
                 "listening_audio_asset_missing",
