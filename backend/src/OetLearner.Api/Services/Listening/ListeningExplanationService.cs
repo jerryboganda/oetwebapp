@@ -85,6 +85,9 @@ public sealed class ListeningExplanationService(
             : "en";
         var correctAnswer = ResolveJsonValue(question.CorrectAnswerJson);
         var storedAnswer = ResolveJsonValue(answer.UserAnswerJson);
+        if (string.IsNullOrWhiteSpace(storedAnswer) || storedAnswer == "(unanswered)")
+            throw new ListeningGroundedExplanationUnavailableException(
+                "A grounded explanation requires a non-empty stored response.");
         var transcriptEvidence = question.TranscriptEvidenceText;
         var userMessage = BuildPrompt(
             question,

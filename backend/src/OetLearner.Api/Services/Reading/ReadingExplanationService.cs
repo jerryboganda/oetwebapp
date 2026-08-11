@@ -252,6 +252,9 @@ public sealed class ReadingExplanationService(
                 .Select(t => t.BodyHtml)
                 .SingleOrDefaultAsync(ct);
         var selectedAnswer = ResolveStoredAnswer(answer.UserAnswerJson);
+        if (string.IsNullOrWhiteSpace(selectedAnswer) || selectedAnswer == "(unanswered)")
+            throw new ReadingGroundedExplanationUnavailableException(
+                "A grounded explanation requires a non-empty stored response.");
         var lang = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim().ToLowerInvariant();
 
         return await GenerateExplanationAsync(
