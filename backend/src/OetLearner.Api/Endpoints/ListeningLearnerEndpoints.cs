@@ -5,6 +5,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Endpoints;
@@ -50,20 +51,61 @@ public static class ListeningLearnerEndpoints
     public static IEndpointRouteBuilder MapListeningLearnerEndpoints(this IEndpointRouteBuilder app)
     {
         // ── Public test-rules constants (anonymous-allowed) ──
-        // Surfaces OET-spec numbers (42 q, 30 raw pass, 350 scaled pass, etc.)
-        // so the /listening/test-rules page can source them from the API
-        // instead of hard-coding them in JSX. No learner data is read here.
-        app.MapGet("/v1/listening-papers/policy/test-rules", () => Results.Ok(new
+        // Structural values are safe to publish. Pass anchors are derived only
+        // from a complete, effective owner table; no legacy formula constant
+        // becomes a public scaled-score or pass claim.
+        app.MapGet("/v1/listening-papers/policy/test-rules", async (
+            LearnerDbContext db,
+            CancellationToken ct) =>
         {
-            questionCount = OetScoring.ListeningReadingRawMax,
-            durationMinutes = 40,
-            partA = new { items = 24, extracts = 2, itemType = "short-answer" },
-            partB = new { items = 6, extracts = 6, itemType = "mcq-3-option" },
-            partC = new { items = 12, extracts = 2, itemType = "mcq-3-option" },
-            passRawAnchor = OetScoring.ListeningReadingRawPass,
-            passScaledAnchor = OetScoring.ScaledPassGradeB,
-            scaledMax = OetScoring.ScaledMax,
-        }))
+            var now = DateTimeOffset.UtcNow;
+            var effectiveTables = await db.AssessmentScoreConversionTables
+                .AsNoTracking()
+                .Include(table => table.Rows)
+                .Where(table => table.Assessment == "listening"
+                    && table.ScopeKey == "default"
+                    && table.EffectiveFrom <= now
+                    && (table.Status == AssessmentGovernanceStatus.Effective
+                        || table.Status == AssessmentGovernanceStatus.Locked))
+                .OrderByDescending(table => table.EffectiveFrom)
+                .ThenByDescending(table => table.VersionKey)
+                .Take(2)
+                .ToListAsync(ct);
+
+            AssessmentScoreConversionTable? table = effectiveTables.Count == 1
+                || (effectiveTables.Count > 1
+                    && effectiveTables[0].EffectiveFrom != effectiveTables[1].EffectiveFrom)
+                ? effectiveTables[0]
+                : null;
+            var validation = table is null
+                ? null
+                : AssessmentScoreTableValidator.Validate(
+                    table.Assessment,
+                    table.Rows.Select(row => new AssessmentScoreTableRowInput(
+                        row.RawScore, row.ConvertedScore, row.Grade, row.Passed)).ToArray());
+            var passingRow = validation?.IsValid == true
+                ? table!.Rows
+                    .Where(row => row.Passed == true)
+                    .OrderBy(row => row.RawScore)
+                    .FirstOrDefault()
+                : null;
+
+            return Results.Ok(new
+            {
+                questionCount = AssessmentScoreTableValidator.RawMaximum,
+                durationMinutes = 40,
+                partA = new { items = 24, extracts = 2, itemType = "short-answer" },
+                partB = new { items = 6, extracts = 6, itemType = "mcq-3-option" },
+                partC = new { items = 12, extracts = 2, itemType = "mcq-3-option" },
+                passRawAnchor = passingRow?.RawScore,
+                passScaledAnchor = passingRow?.ConvertedScore,
+                scaledMax = AssessmentScoreTableValidator.ConvertedMaximum,
+                conversionTableVersion = table?.VersionKey,
+                conversionUnavailableReason = passingRow is null
+                    ? validation?.ErrorCode ?? "score_table_not_configured"
+                    : null,
+            });
+        })
             .AllowAnonymous()
             .WithName("GetListeningTestRulesPolicy")
             .WithSummary("OET Listening test-rules constants (anonymous-allowed)");

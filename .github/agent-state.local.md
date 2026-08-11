@@ -992,3 +992,14 @@ dirty work in the main checkout.
 - Focused disclosure/UI execution and authenticated deployed acceptance remain
   pending. Preserve the four untracked user-owned paths above and the owner
   release gates listed in the acceptance matrix.
+
+# Latest LR coding checkpoint - 2026-08-12 (owner-table rules policy)
+
+- The anonymous Listening test-rules policy now derives pass anchors only from
+  a complete effective/locked default Listening conversion table. With no
+  owner-approved table, pass anchors are null and the UI explicitly avoids a
+  scaled-score/pass claim; no legacy OetScoring formula constants are exposed.
+- The TypeScript contract and rulebook metadata now represent this unavailable
+  state and owner-table source. Only bounded source inspection and
+  `git diff --check` are intended for this slice; no long local validation,
+  CI/CD, push, or deployment was started.

@@ -437,16 +437,20 @@ export const getListeningHome = () =>
 // Public OET Listening test-rules constants. Anonymous-allowed on the backend
 // — the /listening/test-rules page sources its 42-q / 40-min / 30-pass / 350-
 // scaled-pass numbers from here so future spec changes don't require a code
-// deploy. Page falls back to its static copy if this fetch fails.
+// Structural values are always available; pass anchors are nullable until an
+// effective owner-approved conversion table supplies them. The page falls
+// back to its static structural copy if this fetch fails.
 export interface ListeningTestRulesPolicyDto {
   questionCount: number;
   durationMinutes: number;
   partA: { items: number; extracts: number; itemType: string };
   partB: { items: number; extracts: number; itemType: string };
   partC: { items: number; extracts: number; itemType: string };
-  passRawAnchor: number;
-  passScaledAnchor: number;
+  passRawAnchor: number | null;
+  passScaledAnchor: number | null;
   scaledMax: number;
+  conversionTableVersion?: string | null;
+  conversionUnavailableReason?: string | null;
 }
 
 export const getListeningTestRulesPolicy = () =>

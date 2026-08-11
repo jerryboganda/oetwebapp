@@ -76,7 +76,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
   listening_pass_threshold: {
     checkId: 'listening_pass_threshold',
     surfaces: [
-      { kind: 'grading-service', service: 'OetScoring', description: 'Canonical 30/42 ≡ 350/500 anchor — set by Listening grading service post-submit.' },
+      { kind: 'grading-service', service: 'AssessmentScoreConversionService', description: 'Pass status and scaled score come only from a complete effective owner table; no OetScoring formula fallback is permitted.' },
     ],
   },
   listening_part_a_strict_spelling: {
@@ -293,7 +293,7 @@ export const READING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnforc
   reading_pass_threshold: {
     checkId: 'reading_pass_threshold',
     surfaces: [
-      { kind: 'grading-service', service: 'OetScoring', description: 'Canonical 30/42 ≡ 350/500 anchor — set by Reading grading service post-submit.' },
+      { kind: 'grading-service', service: 'AssessmentScoreConversionService', description: 'Pass status and scaled score come only from a complete effective owner table; no OetScoring formula fallback is permitted.' },
     ],
   },
   reading_no_score_clipping: {

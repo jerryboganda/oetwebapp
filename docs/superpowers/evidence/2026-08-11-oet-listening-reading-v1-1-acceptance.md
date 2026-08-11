@@ -54,6 +54,10 @@ an owner-controlled value that must not be invented in code.
 - The learner-facing Listening test-rules disclosure no longer promises credit
   for misspellings or meaning-based plural/article substitutions; it now states
   strict platform marking and explicit-authorised-variant-only credit.
+- The anonymous Listening rules policy no longer publishes legacy `30/42` or
+  `350/500` constants. It derives pass anchors only from a complete effective
+  owner table and otherwise returns an explicit unavailable state; the UI shows
+  raw-score guidance without an unsupported scaled pass claim.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

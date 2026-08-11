@@ -31,8 +31,8 @@ const DEFAULT_RULES: ListeningTestRulesPolicyDto = {
   partA: { items: 24, extracts: 2, itemType: 'short-answer' },
   partB: { items: 6, extracts: 6, itemType: 'mcq-3-option' },
   partC: { items: 12, extracts: 2, itemType: 'mcq-3-option' },
-  passRawAnchor: 30,
-  passScaledAnchor: 350,
+  passRawAnchor: null,
+  passScaledAnchor: null,
   scaledMax: 500,
 };
 
@@ -79,7 +79,9 @@ export default function ListeningTestRulesPage() {
             title="No negative marking"
             points={[
               'A wrong answer scores zero. A blank answer scores zero. Always write something.',
-              `${rules.passRawAnchor}/${rules.questionCount} raw ≡ ${rules.passScaledAnchor}/${rules.scaledMax} scaled. Pass = ${rules.passScaledAnchor}.`,
+              rules.passRawAnchor != null && rules.passScaledAnchor != null
+                ? `${rules.passRawAnchor}/${rules.questionCount} raw ≡ ${rules.passScaledAnchor}/${rules.scaledMax} scaled according to owner table ${rules.conversionTableVersion ?? 'version unavailable'}.`
+                : 'The owner-approved pass threshold is not configured for this release. Your raw score remains auditable; no scaled pass claim is shown.',
               'This platform grades spelling strictly: a misspelling receives zero even when the meaning is clear. Only the canonical answer or an explicitly authorised variant can receive credit.',
             ]}
           />
