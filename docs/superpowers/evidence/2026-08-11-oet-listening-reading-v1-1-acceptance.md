@@ -41,6 +41,9 @@ an owner-controlled value that must not be invented in code.
   reconciliation, conflict messaging, and reconnect auto-sync. Submission and
   timer state remain online/server-authoritative; focused reconnect execution is
   still pending.
+- The same player transport now visibly disables playback and seeking while an
+  audio-validity hold is active; a focused component regression covers the
+  administrator-review state.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

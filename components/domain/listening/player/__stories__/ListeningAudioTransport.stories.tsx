@@ -16,6 +16,7 @@ const baseArgs = {
   durationSeconds: 240,
   canScrub: false,
   isPreviewPhase: false,
+  isHalted: false,
   audioState: 'ready' as const,
   saveState: 'idle' as const,
   answeredCount: 0,

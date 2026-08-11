@@ -1817,6 +1817,7 @@ function PlayerContent() {
               canScrub={session.modePolicy.canScrub !== false}
               canPause={session.modePolicy.canPause !== false}
               isPreviewPhase={phase === 'preview'}
+              isHalted={audioValidityHeld}
               audioState={audioState}
               saveState={saveState}
               answeredCount={answeredCount}

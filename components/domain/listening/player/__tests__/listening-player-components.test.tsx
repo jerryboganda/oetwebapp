@@ -78,6 +78,7 @@ describe('ListeningAudioTransport', () => {
     canScrub: true,
     canPause: true,
     isPreviewPhase: false,
+    isHalted: false,
     audioState: 'ready' as const,
     saveState: 'idle' as const,
     answeredCount: 5,
@@ -103,6 +104,15 @@ describe('ListeningAudioTransport', () => {
     const buttons = screen.getByTestId('listening-audio-transport').querySelectorAll('button');
     // First button is the play/pause toggle.
     expect((buttons[0] as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('halts playback and seeking while an attempt requires admin review', () => {
+    render(<ListeningAudioTransport {...baseProps} isHalted />);
+    const transport = screen.getByTestId('listening-audio-transport');
+    const button = transport.querySelector('button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-label')).toMatch(/administrator review/i);
+    expect(transport.querySelector('input[type="range"]')).toBeNull();
   });
 
   it('omits the scrub slider when canScrub=false', () => {

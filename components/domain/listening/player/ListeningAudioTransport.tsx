@@ -23,6 +23,8 @@ export interface ListeningAudioTransportProps {
   canPause: boolean;
   /** Disables the play/pause button while the FSM is in preview phase. */
   isPreviewPhase: boolean;
+  /** Audio failed during the scored attempt; playback and seeking are halted. */
+  isHalted: boolean;
   audioState: 'idle' | 'buffering' | 'ready' | 'error';
   saveState: 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
   answeredCount: number;
@@ -48,6 +50,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
     canScrub,
     canPause,
     isPreviewPhase,
+    isHalted,
     audioState,
     saveState,
     answeredCount,
@@ -63,7 +66,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
   // Non-pausable audio: once playing, the control is locked so the learner
   // cannot stop it. It stays interactive before playback (to press Play) and
   // is also disabled during the pre-audio reading window.
-  const controlDisabled = isPreviewPhase || (!canPause && isPlaying);
+  const controlDisabled = isHalted || isPreviewPhase || (!canPause && isPlaying);
 
   return (
     <div
@@ -73,7 +76,11 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
       <button
         onClick={onTogglePlayPause}
         disabled={controlDisabled}
-        aria-label={isPlaying ? (canPause ? 'Pause audio' : 'Audio cannot be paused') : 'Play audio'}
+        aria-label={isHalted
+          ? 'Audio halted for administrator review'
+          : isPlaying
+            ? (canPause ? 'Pause audio' : 'Audio cannot be paused')
+            : 'Play audio'}
         className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
           controlDisabled
             ? 'cursor-not-allowed bg-white/10 text-white/30'
@@ -93,7 +100,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
             className="absolute left-0 top-0 h-full w-full origin-left bg-info transition-transform duration-100 ease-linear"
             style={{ transform: `scaleX(${Math.max(0, Math.min(100, widthPercent)) / 100})` }}
           />
-          {canScrub ? (
+          {canScrub && !isHalted ? (
             <input
               type="range"
               min="0"
