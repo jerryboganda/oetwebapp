@@ -104,6 +104,19 @@ public sealed class ReadingGradingServiceV11Tests
         Assert.Equal(expectedCorrect ? 1 : 0, result.RawScore);
         Assert.Equal(expectedCorrect, Assert.Single(result.Answers).IsCorrect);
         Assert.Null(result.ScaledScore);
+
+        var variantAudit = await db.AuditEvents.SingleOrDefaultAsync(e =>
+            e.Action == "reading.marking.accepted_variant_used");
+        if (expectedCorrect)
+        {
+            Assert.NotNull(variantAudit);
+            Assert.Contains("acetylsalicylic acid", variantAudit!.Details);
+            Assert.Contains(attempt.Id, variantAudit.Details);
+        }
+        else
+        {
+            Assert.Null(variantAudit);
+        }
     }
 
     private static LearnerDbContext NewDb() => new(

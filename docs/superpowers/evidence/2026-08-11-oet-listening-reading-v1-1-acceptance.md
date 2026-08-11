@@ -12,7 +12,7 @@ an owner-controlled value that must not be invented in code.
 | LR-01 | Listening audio cannot pause, replay, or restart on refresh | `backend/src/OetLearner.Api/Endpoints/ListeningAudioEndpoints.cs`, `components/domain/listening/player/ListeningAudioTransport.tsx`, `tests/unit/listening/audio-integrity.test.ts`, `tests/e2e/listening/exam-mode-locks.spec.ts` | Implemented; deployed browser verification pending |
 | LR-02 | Section boundary confirmation is irreversible and locks prior answers | `backend/src/OetLearner.Api/Endpoints/ListeningV2Endpoints.cs`, `backend/tests/OetLearner.Api.Tests/Listening/ListeningV2AdvanceEndpointTests.cs`, `tests/e2e/listening/exam-mode-locks.spec.ts` | Implemented; deployed browser verification pending |
 | LR-03 | Misspelled Part A answer receives zero with no fuzzy/AI override | `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs`, `backend/src/OetLearner.Api/Services/Reading/ReadingGradingService.cs`, `backend/tests/OetLearner.Api.Tests/Listening/ListeningPartASpellingTests.cs`, `backend/tests/OetLearner.Api.Tests/Reading/ReadingGradingServiceV11Tests.cs`; deterministic `IsCorrect` remains authoritative over AI metadata | Implemented; focused backend run pending |
-| LR-04 | Explicit accepted variant receives credit and is named in audit | `ListeningGradingService` writes `listening.marking.accepted_variant_used` with the matched variant; `ReadingGradingService` consumes only explicitly authored Part A variants when the attempt policy enables them; `AssessmentGovernanceEndpoints` preserves key snapshots | Implemented; focused audit test pending |
+| LR-04 | Explicit accepted variant receives credit and is named in audit | `ListeningGradingService` writes `listening.marking.accepted_variant_used` with the matched variant; `ReadingGradingService` consumes only explicitly authored Part A variants when the attempt policy enables them; `AssessmentGovernanceEndpoints` preserves key snapshots | Implemented; focused audit test added, execution pending by request |
 | LR-05 | Strikethrough is not a selected MCQ answer | Candidate selection remains a server-validated option key and annotation metadata is separate in `ListeningLearnerService`; `tests/unit/listening/BCQuestionRenderer.test.tsx` and `app/reading/paper/[paperId]/page.test.tsx` assert rule-out leaves the radio answer unchecked | Implemented; focused UI regression passed |
 | LR-06 | Reading Part A locks at the authoritative 15-minute deadline | `backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
 | LR-07 | Reading B+C share one authoritative 45-minute timer | `ReadingAttemptService`, `ReadingLearnerEndpoints`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
@@ -130,6 +130,10 @@ an owner-controlled value that must not be invented in code.
   the same three-field conversion gate, including idempotent existing-result
   responses and submit responses. Focused Reading result/review execution
   remains pending.
+- Reading grading now writes `reading.marking.accepted_variant_used` with the
+  matched explicit variant and attempt/question/policy provenance whenever that
+  variant earns credit; the focused regression fixture covers both accepted and
+  non-accepted answers.
 - Remaining legacy Listening submit, expert re-mark, generic objective submit,
   mock-result, background-report, analytics-export, and client result paths now
   apply the same explicit conversion-decision gate and clear stale scaled values

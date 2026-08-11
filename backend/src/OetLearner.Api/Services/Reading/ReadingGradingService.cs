@@ -215,6 +215,32 @@ public sealed class ReadingGradingService(
                 ? null
                 : ResolveSelectedDistractor(gradingQuestion, answer);
             answer.MissReason = ClassifyMiss(gradingQuestion, answer, policy, partCode, isCorrect);
+            var acceptedVariant = isCorrect
+                ? FindAcceptedVariant(gradingQuestion, answer, policy)
+                : null;
+            if (acceptedVariant is not null)
+            {
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    OccurredAt = DateTimeOffset.UtcNow,
+                    ActorId = attempt.UserId,
+                    ActorName = "ReadingGradingService",
+                    Action = "reading.marking.accepted_variant_used",
+                    ResourceType = "ReadingAttemptAnswer",
+                    ResourceId = $"{attempt.Id}:{q.Id}",
+                    Details = JsonSerializer.Serialize(new
+                    {
+                        attemptId = attempt.Id,
+                        questionId = q.Id,
+                        questionNumber = q.DisplayOrder,
+                        acceptedVariant,
+                        policyNormalisation = policy.ShortAnswerNormalisation,
+                        caseSensitive = q.CaseSensitive,
+                        policyVersionId = attempt.MarkingPolicyVersionId,
+                    }),
+                });
+            }
             raw += pts;
             if (isCorrect) correctCount++; else incorrectCount++;
             details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points, answer.MissReason));
@@ -636,6 +662,77 @@ public sealed class ReadingGradingService(
                 return (true, q.Points);
         }
         return (false, 0);
+    }
+
+    private static string? FindAcceptedVariant(
+        ReadingQuestion q,
+        ReadingAnswer a,
+        ReadingResolvedPolicy policy)
+    {
+        if (!policy.ShortAnswerAcceptSynonyms
+            || q.QuestionType is not (ReadingQuestionType.ShortAnswer
+                or ReadingQuestionType.SentenceCompletion
+                or ReadingQuestionType.FillInBlank
+                or ReadingQuestionType.ShortAnswerLabeled))
+        {
+            return null;
+        }
+
+        if (q.QuestionType == ReadingQuestionType.ShortAnswerLabeled
+            && TryParseStringMap(q.CorrectAnswerJson, out var correctMap)
+            && TryParseStringMap(a.UserAnswerJson, out var userMap))
+        {
+            ParseLabeledSynonyms(q.AcceptedSynonymsJson, out var globalSynonyms, out var labeledSynonyms);
+            foreach (var (label, correctValue) in correctMap)
+            {
+                if (!userMap.TryGetValue(label, out var userValue)) continue;
+                var variants = labeledSynonyms.TryGetValue(label, out var labelVariants)
+                    ? labelVariants
+                    : globalSynonyms ?? Array.Empty<string>();
+                foreach (var variant in variants)
+                {
+                    if (StringsMatch(
+                            ApplyTextNormalization(userValue, policy),
+                            ApplyTextNormalization(variant, policy),
+                            q.CaseSensitive,
+                            policy.ShortAnswerNormalisation)
+                        && !StringsMatch(
+                            ApplyTextNormalization(userValue, policy),
+                            ApplyTextNormalization(correctValue, policy),
+                            q.CaseSensitive,
+                            policy.ShortAnswerNormalisation))
+                    {
+                        return variant.Trim();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        var correct = ParseJsonString(q.CorrectAnswerJson);
+        var user = ParseJsonString(a.UserAnswerJson);
+        if (correct is null || user is null) return null;
+
+        ParseLabeledSynonyms(q.AcceptedSynonymsJson, out var synonyms, out _);
+        foreach (var variant in synonyms ?? Array.Empty<string>())
+        {
+            if (StringsMatch(
+                    ApplyTextNormalization(user, policy),
+                    ApplyTextNormalization(variant, policy),
+                    q.CaseSensitive,
+                    policy.ShortAnswerNormalisation)
+                && !StringsMatch(
+                    ApplyTextNormalization(user, policy),
+                    ApplyTextNormalization(correct, policy),
+                    q.CaseSensitive,
+                    policy.ShortAnswerNormalisation))
+            {
+                return variant.Trim();
+            }
+        }
+
+        return null;
     }
 
     private static (bool, int) ApplyUnknownFallback(ReadingQuestion q, ReadingAnswer a, ReadingResolvedPolicy policy)
