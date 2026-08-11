@@ -112,10 +112,16 @@ export const listeningV2Api = {
       { cuePointMs },
     );
   },
-  saveAnswer(attemptId: string, questionId: string, userAnswer: string | null) {
+  saveAnswer(
+    attemptId: string,
+    questionId: string,
+    userAnswer: string | null,
+    options?: Pick<RequestInit, 'keepalive'>,
+  ) {
     return apiClient.put<void>(
       `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(questionId)}`,
       { userAnswer },
+      options,
     );
   },
   submit(attemptId: string, answers?: Record<string, string | null>) {

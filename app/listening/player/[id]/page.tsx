@@ -60,6 +60,12 @@ const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
 type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
 
+type PendingListeningAnswer = {
+  attemptId: string;
+  value: string;
+  eventLogged: boolean;
+};
+
 function formatTime(seconds: number) {
   if (!seconds || Number.isNaN(seconds)) return '00:00';
   const minutes = Math.floor(seconds / 60);
@@ -199,6 +205,10 @@ function PlayerContent() {
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Keep the latest debounced value available for a page-lifecycle flush.
+  // The server remains the durable source of truth; this is only an in-flight
+  // queue, not a second answer store.
+  const pendingAnswersRef = useRef<Record<string, PendingListeningAnswer>>({});
   // C8e — last-known forward-only audio time. onTimeUpdate keeps this in sync;
   // onSeeking snaps backwards seeks back to this value in exam mode.
   const lastKnownTimeRef = useRef<number>(0);
@@ -428,6 +438,56 @@ function PlayerContent() {
     // a render / effect path.
     void Promise.resolve(recordListeningIntegrityEvent(attempt.attemptId, eventType, details)).catch(() => undefined);
   }, [attempt?.attemptId]);
+
+  const savePendingAnswer = useCallback((questionId: string, pending: PendingListeningAnswer, keepalive = false) => {
+    setSaveState('saving');
+    if (!pending.eventLogged) {
+      pending.eventLogged = true;
+      logAttemptEvent('answer_changed', { questionId });
+    }
+    void listeningV2Api.saveAnswer(pending.attemptId, questionId, pending.value, { keepalive })
+      .then(() => {
+        const current = pendingAnswersRef.current[questionId];
+        const matchesLatest =
+          current?.attemptId === pending.attemptId
+          && current?.value === pending.value;
+        if (matchesLatest) {
+          delete pendingAnswersRef.current[questionId];
+          setSaveState('saved');
+        } else if (current) {
+          // A newer keystroke is already queued; do not show the older
+          // request as the final durable state.
+          setSaveState('saving');
+        }
+      })
+      .catch(() => {
+        if (pendingAnswersRef.current[questionId]?.value === pending.value) setSaveState('error');
+      });
+  }, [logAttemptEvent]);
+
+  const flushPendingAnswers = useCallback((keepalive = false) => {
+    Object.entries(pendingAnswersRef.current).forEach(([questionId, pending]) => {
+      clearTimeout(saveTimers.current[questionId]);
+      savePendingAnswer(questionId, pending, keepalive);
+    });
+  }, [savePendingAnswer]);
+
+  // A tab hide/pagehide can happen before the 500ms debounce expires. Flush
+  // the latest values through the browser's keepalive path so refresh,
+  // navigation, and transient visibility changes cannot erase typed answers.
+  useEffect(() => {
+    if (!attempt?.attemptId || !hasStarted) return;
+    const flush = () => flushPendingAnswers(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [attempt?.attemptId, flushPendingAnswers, hasStarted]);
 
   const pauseAudio = useCallback(() => {
     const audio = audioRef.current;
@@ -667,15 +727,22 @@ function PlayerContent() {
   const persistAnswer = (questionId: string, value: string, currentAttempt: ListeningAttemptDto | null) => {
     if (!currentAttempt) return;
     clearTimeout(saveTimers.current[questionId]);
+    const previous = pendingAnswersRef.current[questionId];
+    pendingAnswersRef.current[questionId] = {
+      attemptId: currentAttempt.attemptId,
+      value,
+      eventLogged: previous?.attemptId === currentAttempt.attemptId && previous.value === value
+        ? previous.eventLogged
+        : false,
+    };
     setSaveState('saving');
     saveTimers.current[questionId] = setTimeout(() => {
-      listeningV2Api.saveAnswer(currentAttempt.attemptId, questionId, value)
-        .then(() => setSaveState('saved'))
-        .catch(() => setSaveState('error'));
+      const pending = pendingAnswersRef.current[questionId];
+      if (!pending || pending.attemptId !== currentAttempt.attemptId || pending.value !== value) return;
       // §17.11 — log one answer_changed per question settle (piggybacks on the
       // 500ms autosave debounce above, so a burst of keystrokes coalesces into
       // a single event rather than one per character).
-      logAttemptEvent('answer_changed', { questionId });
+      savePendingAnswer(questionId, pending);
     }, 500);
   };
 
@@ -724,9 +791,16 @@ function PlayerContent() {
       // is still InProgress (the hook unmounts on the post-submit navigation).
       await annotations.flush();
       if (!skipFinalSave) {
+        Object.entries(pendingAnswersRef.current).forEach(([questionId, pending]) => {
+          if (!pending.eventLogged) {
+            pending.eventLogged = true;
+            logAttemptEvent('answer_changed', { questionId });
+          }
+        });
         await Promise.all(Object.entries(answers).map(([questionId, answer]) => listeningV2Api.saveAnswer(activeAttempt.attemptId, questionId, answer)));
       }
       const result = await listeningV2Api.submit(activeAttempt.attemptId, answers);
+      pendingAnswersRef.current = {};
       analytics.track('task_submitted', { subtest: 'listening', taskId: session.paper.id, attemptId: activeAttempt.attemptId });
       if (mockAttemptId && mockSectionId) {
         try {

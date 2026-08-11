@@ -15,6 +15,10 @@ Last updated: 2026-08-11
   `audio_buffering_end`, and `audio_stalled` events for the Listening player,
   edge-triggered per interruption, plus an explicit halted-playback notice that
   tells candidates not to replay or seek while buffering.
+- The current recovery slice retains the latest debounced answer in an
+  in-flight queue and flushes it with authenticated `keepalive` requests on
+  tab hide/pagehide, while final submit remains the server-authoritative
+  durable path.
 - Scoped frontend ESLint passed with zero errors (the player retains its
   existing React Compiler/hooks warnings). The focused Windows .NET
   event-logging test timed out after 124 seconds without diagnostics. Actions
