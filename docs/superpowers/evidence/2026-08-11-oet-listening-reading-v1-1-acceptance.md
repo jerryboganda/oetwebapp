@@ -410,6 +410,15 @@ an owner-controlled value that must not be invented in code.
 - Focused relational and JSON regression fixtures cover this gate; backend
   execution remains pending by explicit user request.
 
+## Canonical Reading part and section marks
+
+- Reading publish validation now checks persisted part max-raw metadata against
+  A=20, B=6, and C=16, and checks the canonical B1..B6/C1..C2 section rows
+  against their one-mark scores. A paper cannot retain 42 question points while
+  carrying inconsistent results-calculation metadata.
+- Focused part and section mutation fixtures cover these gates; backend
+  execution remains pending by explicit user request.
+
 ## Fail-closed unknown-question grading
 
 - Reading grading no longer honors the legacy `grade_as_correct` fallback for

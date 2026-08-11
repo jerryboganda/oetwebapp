@@ -1072,6 +1072,7 @@ public sealed class ReadingStructureService : IReadingStructureService
         var parts = await db.ReadingParts.AsNoTracking()
             .Where(p => p.PaperId == paperId)
             .Include(p => p.Questions)
+            .Include(p => p.Sections)
             .ToListAsync(ct);
 
         int partA = 0, partB = 0, partC = 0, totalPoints = 0;
@@ -1090,6 +1091,35 @@ public sealed class ReadingStructureService : IReadingStructureService
                     Severity: "error",
                     Message: $"Part {part.PartCode} has a {part.TimeLimitMinutes}-minute limit, expected {expectedMinutes} minute(s).",
                     TargetId: part.Id));
+            }
+            if (part.MaxRawScore != expected)
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_max_raw_score",
+                    Severity: "error",
+                    Message: $"Part {part.PartCode} has a max raw score of {part.MaxRawScore}, expected {expected}.",
+                    TargetId: part.Id));
+            }
+            if (CanonicalSectionCodes.TryGetValue(part.PartCode, out var canonicalSectionCodes))
+            {
+                foreach (var sectionCode in canonicalSectionCodes)
+                {
+                    var sectionRows = part.Sections
+                        .Where(section => section.SectionCode == sectionCode)
+                        .ToArray();
+                    var expectedSectionScore = CanonicalSectionRawScores[sectionCode];
+                    if (sectionRows.Length != 1 || sectionRows[0].MaxRawScore != expectedSectionScore)
+                    {
+                        var actual = sectionRows.Length == 1
+                            ? sectionRows[0].MaxRawScore.ToString()
+                            : sectionRows.Length == 0 ? "missing" : $"{sectionRows.Length} rows";
+                        issues.Add(new(
+                            Code: $"part_{part.PartCode}_section_max_raw_score",
+                            Severity: "error",
+                            Message: $"Reading section {sectionCode} has max raw score {actual}, expected exactly one row worth {expectedSectionScore}.",
+                            TargetId: part.Id));
+                    }
+                }
             }
             if (texts.Count > 0 && !HasContiguousDisplayOrders(texts.Select(t => t.DisplayOrder)))
             {

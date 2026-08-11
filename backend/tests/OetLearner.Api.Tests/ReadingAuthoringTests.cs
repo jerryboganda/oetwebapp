@@ -157,6 +157,47 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Validator_rejects_noncanonical_part_max_raw_score()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partB = await db.ReadingParts.SingleAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.B);
+        partB.MaxRawScore = 7;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_B_max_raw_score" && i.Severity == "error");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Validator_rejects_noncanonical_section_max_raw_score()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partB = await db.ReadingParts.SingleAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.B);
+        var sectionB1 = await db.ReadingSections.SingleAsync(section =>
+            section.ReadingPartId == partB.Id
+            && section.SectionCode == ReadingSectionCode.B1);
+        sectionB1.MaxRawScore = 2;
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "part_B_section_max_raw_score" && i.Severity == "error");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Validator_requires_three_part_pdfs()
     {
         var (db, structure, _, _, _) = Build();
