@@ -523,7 +523,8 @@ public static class ReadingLearnerEndpoints
             if (attempt is null) return Results.NotFound();
 
             var policy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
-            var showExplain = attempt.Status == ReadingAttemptStatus.Submitted
+            var isSubmitted = attempt.Status == ReadingAttemptStatus.Submitted;
+            var showExplain = isSubmitted
                 && policy.ShowExplanationsAfterSubmit;
             var scopeIds = ParseScopeQuestionIdsForPlayer(attempt.ScopeJson);
             var totalQuestions = scopeIds?.Count ?? await CountQuestionsForPaperAsync(db, attempt.PaperId, ct);
@@ -565,8 +566,12 @@ public static class ReadingLearnerEndpoints
                 {
                     a.ReadingQuestionId,
                     a.UserAnswerJson,
-                    a.IsCorrect,
-                    a.PointsEarned,
+                    // Never expose correctness or marks while the attempt is
+                    // in progress. The player needs the saved answer only;
+                    // grading feedback becomes available through the
+                    // post-submit review contract.
+                    IsCorrect = isSubmitted ? a.IsCorrect : null,
+                    PointsEarned = isSubmitted ? a.PointsEarned : 0,
                     a.AnsweredAt,
                 }),
                 showExplanations = showExplain,

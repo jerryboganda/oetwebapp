@@ -2071,6 +2071,46 @@ public class ReadingAuthoringTests
         Assert.Equal("DISCLOSED-EXPLANATION", item.GetProperty("explanationMarkdown").GetString());
     }
 
+    [Fact]
+    public async Task Resume_endpoint_hides_grading_feedback_before_submit()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "resume-feedback-redaction-paper";
+        const string userId = "resume-feedback-redaction-user";
+
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+        var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
+        var started = await attemptSvc.StartInModeAsync(userId, paperId, ReadingAttemptMode.Learning, null, default);
+        var question = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        await attemptSvc.SaveAnswerAsync(userId, started.AttemptId, question.Id, "\"candidate\"", default);
+
+        // Simulate stale/prematurely populated grading columns. The learner
+        // resume projection must still redact them until the attempt submits.
+        var answer = await db.ReadingAnswers.SingleAsync(a =>
+            a.ReadingAttemptId == started.AttemptId && a.ReadingQuestionId == question.Id);
+        answer.IsCorrect = true;
+        answer.PointsEarned = 1;
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        using var response = await client.GetAsync($"/v1/reading-papers/attempts/{started.AttemptId}");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var saved = Assert.Single(json.RootElement.GetProperty("answers").EnumerateArray());
+
+        Assert.Equal("\"candidate\"", saved.GetProperty("userAnswerJson").GetString());
+        Assert.Equal(JsonValueKind.Null, saved.GetProperty("isCorrect").ValueKind);
+        Assert.Equal(0, saved.GetProperty("pointsEarned").GetInt32());
+        Assert.False(json.RootElement.GetProperty("showExplanations").GetBoolean());
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Attempt lifecycle
     // ════════════════════════════════════════════════════════════════════
