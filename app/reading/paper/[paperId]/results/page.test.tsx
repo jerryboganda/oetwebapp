@@ -67,7 +67,7 @@ describe('Reading paper results page', () => {
     await renderResults();
 
     expect(await screen.findByTestId('reading-marking-strictness-disclosure')).toHaveTextContent(
-      /grades minor spelling variations strictly/i,
+      'This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.',
     );
   });
 
