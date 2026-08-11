@@ -61,6 +61,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     public const int CanonicalPartBCount = 6;
     public const int CanonicalPartCCount = 12;
     public const int CanonicalTotalItems = CanonicalPartACount + CanonicalPartBCount + CanonicalPartCCount; // 42
+    public const int CanonicalPartAMarks = 24;
+    public const int CanonicalPartBMarks = 6;
+    public const int CanonicalPartCMarks = 12;
 
     private static readonly HashSet<string> AllowedDistractorCategories = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -229,6 +232,15 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var parts = partRows.ToDictionary(p => p.Id, p => p.PartCode, StringComparer.Ordinal);
         var partTimeLimits = partRows.ToDictionary(p => p.PartCode, p => p.TimeLimitSeconds);
         var partMaxRawScores = partRows.Sum(p => p.MaxRawScore);
+        var partAMaxRawScore = partRows
+            .Where(p => p.PartCode is ListeningPartCode.A1 or ListeningPartCode.A2)
+            .Sum(p => p.MaxRawScore);
+        var partBMaxRawScore = partRows
+            .Where(p => IsPartB(p.PartCode))
+            .Sum(p => p.MaxRawScore);
+        var partCMaxRawScore = partRows
+            .Where(p => p.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2)
+            .Sum(p => p.MaxRawScore);
         var extractIds = questions
             .Select(q => q.ListeningExtractId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -260,6 +272,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             .Select(q => new
             {
                 PartCode = parts.GetValueOrDefault(q.ListeningPartId),
+                q.Points,
                 q.ListeningExtractId,
                 q.QuestionNumber,
                 q.QuestionType,
@@ -297,6 +310,15 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var c2 = rows.Count(row => row.PartCode == ListeningPartCode.C2);
         var a = a1 + a2;
         var c = c1 + c2;
+        var authoredPartAMarks = rows
+            .Where(row => row.PartCode is ListeningPartCode.A1 or ListeningPartCode.A2)
+            .Sum(row => row.Points);
+        var authoredPartBMarks = rows
+            .Where(row => IsPartB(row.PartCode))
+            .Sum(row => row.Points);
+        var authoredPartCMarks = rows
+            .Where(row => row.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2)
+            .Sum(row => row.Points);
 
         // Part B split: each of the six sub-sections B1..B6 must carry exactly
         // one item (replaces the legacy single Part-B=6 shape). Only fires when
@@ -580,7 +602,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             parts.Values.Where(code => !PartHasUploadedAudio(code)), policy));
         warnings.AddRange(EvaluateResultsCalc(
             authoredPoints: questions.Sum(q => q.Points),
-            partMaxRawScores: partMaxRawScores));
+            partMaxRawScores: partMaxRawScores,
+            authoredPartAMarks: authoredPartAMarks,
+            authoredPartBMarks: authoredPartBMarks,
+            authoredPartCMarks: authoredPartCMarks,
+            partAMaxRawScore: partAMaxRawScore,
+            partBMaxRawScore: partBMaxRawScore,
+            partCMaxRawScore: partCMaxRawScore));
 
         return (a, b, c, a + b + c, warnings);
     }
@@ -725,7 +753,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     /// </summary>
     private static List<ListeningValidationIssue> EvaluateResultsCalc(
         int authoredPoints,
-        int partMaxRawScores)
+        int partMaxRawScores,
+        int authoredPartAMarks,
+        int authoredPartBMarks,
+        int authoredPartCMarks,
+        int partAMaxRawScore,
+        int partBMaxRawScore,
+        int partCMaxRawScore)
     {
         var issues = new List<ListeningValidationIssue>();
         var problems = new List<string>();
@@ -738,6 +772,24 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         if (partMaxRawScores != OetScoring.ListeningReadingRawMax)
         {
             problems.Add($"per-part max-raw scores sum to {partMaxRawScores}, not {OetScoring.ListeningReadingRawMax}");
+        }
+
+        if (authoredPartAMarks != CanonicalPartAMarks
+            || authoredPartBMarks != CanonicalPartBMarks
+            || authoredPartCMarks != CanonicalPartCMarks)
+        {
+            problems.Add(
+                $"authored part marks are A={authoredPartAMarks}, B={authoredPartBMarks}, C={authoredPartCMarks}; "
+                + $"required A={CanonicalPartAMarks}, B={CanonicalPartBMarks}, C={CanonicalPartCMarks}");
+        }
+
+        if (partAMaxRawScore != CanonicalPartAMarks
+            || partBMaxRawScore != CanonicalPartBMarks
+            || partCMaxRawScore != CanonicalPartCMarks)
+        {
+            problems.Add(
+                $"per-part max-raw scores are A={partAMaxRawScore}, B={partBMaxRawScore}, C={partCMaxRawScore}; "
+                + $"required A={CanonicalPartAMarks}, B={CanonicalPartBMarks}, C={CanonicalPartCMarks}");
         }
 
         if (problems.Count > 0)
@@ -792,6 +844,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
         int a = 0, b = 0, c = 0;
         int a1 = 0, a2 = 0, c1 = 0, c2 = 0;
+        int authoredPartAMarks = 0, authoredPartBMarks = 0, authoredPartCMarks = 0;
         var bSub = new int[6]; // B1..B6 counts
         var mcqItemsWithBadShape = 0;
         var blankAnswers = 0;
@@ -844,6 +897,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
             var partCode = (q.GetValueOrDefault("partCode") ?? q.GetValueOrDefault("part"))?.ToString()
                 ?.Trim().ToUpperInvariant() ?? "A";
+            var points = TryGetInt(q, "points") ?? 1;
 
             // Any sub-section may use any of the 3 content types — only validate
             // 3-option shape on items that ARE typed MCQ (parity with relational
@@ -862,12 +916,14 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             if (partCode.StartsWith("A", StringComparison.Ordinal))
             {
                 a++;
+                authoredPartAMarks += points;
                 if (partCode == "A1") a1++;
                 else if (partCode == "A2") a2++;
             }
             else if (partCode.StartsWith("B", StringComparison.Ordinal))
             {
                 b++;
+                authoredPartBMarks += points;
                 // B1..B6 sub-section tally. Bare legacy "B" floors to B1 so a
                 // not-yet-split paper still aggregates; the split rule then flags
                 // the missing sub-sections.
@@ -877,6 +933,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             else if (partCode.StartsWith("C", StringComparison.Ordinal))
             {
                 c++;
+                authoredPartCMarks += points;
                 if (partCode == "C1") c1++;
                 else if (partCode == "C2") c2++;
             }
@@ -1057,6 +1114,16 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             warnings.Add(new("listening_distractor_categories_invalid", "error",
                 $"Every wrong Part B/C option distractor category must use the canonical vocabulary; {wrongOptionsInvalidDistractorCategory} option(s) have unsupported values."));
         }
+
+        warnings.AddRange(EvaluateResultsCalc(
+            authoredPoints: authoredPartAMarks + authoredPartBMarks + authoredPartCMarks,
+            partMaxRawScores: authoredPartAMarks + authoredPartBMarks + authoredPartCMarks,
+            authoredPartAMarks: authoredPartAMarks,
+            authoredPartBMarks: authoredPartBMarks,
+            authoredPartCMarks: authoredPartCMarks,
+            partAMaxRawScore: authoredPartAMarks,
+            partBMaxRawScore: authoredPartBMarks,
+            partCMaxRawScore: authoredPartCMarks));
 
         return (a, b, c, a + b + c, warnings);
     }

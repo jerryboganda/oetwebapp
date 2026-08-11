@@ -1043,6 +1043,25 @@ public class ListeningStructureServiceTests
         Assert.Contains(report.Issues, i => i.Code == "listening_results_calc" && i.Severity == "error");
     }
 
+    [Fact]
+    public async Task PartMarkTotalsMustMatchCanonicalListeningBreakdown()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // Preserve total 42 while moving one mark from C to A.
+        seed.Questions[0].Points = 2;
+        seed.Questions.Single(q => q.ListeningPartId == seed.Parts[ListeningPartCode.C1].Id).Points = 0;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_results_calc"
+            && i.Severity == "error"
+            && i.Message.Contains("authored part marks"));
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Part A note-completion gap-count publish gate (listening_part_a_gap_count).
     // For each authored A1/A2 sub-part, the number of ____ gap markers in that
@@ -1069,6 +1088,33 @@ public class ListeningStructureServiceTests
         if (notesBody is null) target.Remove("notesBody");
         else target["notesBody"] = notesBody;
         return JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts });
+    }
+
+    private static string JsonPaperWithPartMarkMutation()
+    {
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        var extracts = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningExtracts").GetRawText())!;
+        questions[0]["points"] = 2;
+        questions[30]["points"] = 0; // First Part C item; total remains 42.
+        return JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts });
+    }
+
+    [Fact]
+    public async Task Json_PartMarkTotalsMustMatchCanonicalListeningBreakdown()
+    {
+        var (db, svc) = Build();
+        var paper = await AddPaperAsync(db, JsonPaperWithPartMarkMutation());
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_results_calc"
+            && i.Severity == "error"
+            && i.Message.Contains("authored part marks"));
     }
 
     [Fact]

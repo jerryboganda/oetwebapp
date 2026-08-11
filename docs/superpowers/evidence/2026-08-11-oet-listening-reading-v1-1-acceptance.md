@@ -402,6 +402,14 @@ an owner-controlled value that must not be invented in code.
   `audioUrlByPart` papers are not rejected as missing audio. Backend execution
   of this regression remains pending by explicit request.
 
+## Canonical Listening part-mark validation
+
+- Publish validation now enforces both total raw marks of 42 and the canonical
+  Listening part-mark breakdown A=24, B=6, C=12 for relational and legacy JSON
+  papers. A paper cannot redistribute marks while retaining a total of 42.
+- Focused relational and JSON regression fixtures cover this gate; backend
+  execution remains pending by explicit user request.
+
 ## Fail-closed unknown-question grading
 
 - Reading grading no longer honors the legacy `grade_as_correct` fallback for
