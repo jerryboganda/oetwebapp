@@ -192,6 +192,7 @@ public sealed class ListeningGradingService
             RawScore: result.RawScore,
             MaxRawScore: result.MaxRawScore,
             ScaledScore: result.ScaledScore,
+            ScoreConversionErrorCode: result.ScoreConversionErrorCode,
             Grade: grade);
     }
 
@@ -1024,4 +1025,5 @@ public sealed record ListeningScoreOverrideResult(
     int RawScore,
     int MaxRawScore,
     int? ScaledScore,
+    string? ScoreConversionErrorCode,
     string Grade);

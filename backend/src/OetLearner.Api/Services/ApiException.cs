@@ -6,6 +6,7 @@ public sealed class ApiException : Exception
 {
     public int StatusCode { get; }
     public string ErrorCode { get; }
+    public string Code => ErrorCode;
     public IReadOnlyList<ApiFieldError> FieldErrors { get; }
     public bool Retryable { get; }
     public string? SupportHint { get; }
