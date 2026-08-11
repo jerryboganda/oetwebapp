@@ -1614,13 +1614,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
     private static int? ResolveMockScaledScore(MockSectionAttempt section)
     {
-        if (section.ScaledScore.HasValue) return section.ScaledScore.Value;
-        if (section.SubtestCode is "reading" or "listening" && section.RawScore.HasValue)
-        {
-            return OetScoring.OetRawToScaled(section.RawScore.Value);
-        }
-
-        return null;
+        return section.ScaledScore;
     }
 
     private static string FormatMockRawScore(MockSectionAttempt section)

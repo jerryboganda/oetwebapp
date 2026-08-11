@@ -26,11 +26,9 @@ namespace OetLearner.Api.Services.Listening;
 //   • IListeningSkillScoringService.UpdateScoresFromSessionAsync to feed the
 //     rolling per-skill / per-accent dashboards.
 //
-// Mock score scaling uses OetScoring as the single source of truth so the
-// 30/42 = 350 invariant holds across diagnostic, mocks, and the V2 attempt
-// surface. The OetScoring.OetRawToScaled mapping is preferred over the spec
-// linear "raw * 500/42" because the OET anchor at 30/42==350 is critical for
-// pass/fail display continuity. We clamp to [0,500] defensively.
+// Legacy pathway sessions do not capture a governed conversion-table version.
+// They therefore expose raw evidence only; scaled results belong to the
+// versioned ListeningAttempt pipeline.
 // ═════════════════════════════════════════════════════════════════════════════
 
 public interface IListeningMockService
@@ -53,11 +51,6 @@ public sealed class ListeningMockService : IListeningMockService
 {
     /// <summary>Canonical mock test length per OET — also matches OetScoring.ListeningReadingRawMax.</summary>
     private const int MockTotalQuestions = 42;
-
-    /// <summary>±20 confidence band on the scaled prediction. Tighter than the
-    /// diagnostic's ±25 because the mock samples the full 42-item surface and
-    /// therefore carries less measurement noise.</summary>
-    private const int PredictionBandPoints = 20;
 
     /// <summary>L1..L8 → display label. Duplicated with
     /// <see cref="ListeningLearnerPathwayService"/> so this service doesn't
@@ -438,18 +431,11 @@ public sealed class ListeningMockService : IListeningMockService
         CancellationToken ct)
     {
         // ── Scoring ─────────────────────────────────────────────────────
-        // OetScoring is the single source of truth — see §section 1 of
-        // OetScoring.cs for the 30/42==350 invariant. The spec's
-        // "raw * 500/42" formula is approximated by this anchor, but the
-        // OetScoring mapping is the canonical one used elsewhere in the
-        // codebase so we match it for consistency.
         var rawScore = ClampInt(grading.CorrectCount, 0, MockTotalQuestions);
-        var scaledScore = OetScoring.OetRawToScaled(rawScore);
-        var gradeLetter = OetScoring.OetGradeLetterFromScaled(scaledScore);
-        var gradeLabel = $"Grade {gradeLetter}";
-
-        var predictedLow = Math.Max(0, scaledScore - PredictionBandPoints);
-        var predictedHigh = Math.Min(500, scaledScore + PredictionBandPoints);
+        int? scaledScore = null;
+        const string gradeLabel = "Scaled score unavailable";
+        int? predictedLow = null;
+        int? predictedHigh = null;
 
         // ── Skill radar — pull rolling rows + overlay this mock's baseline ─
         var (skillRows, accentRows) = await _scoring.GetScoresAsync(userId, ct);
@@ -541,7 +527,7 @@ public sealed class ListeningMockService : IListeningMockService
         //  • consistency (10%) — left to analytics service; we use 50 here
         //  • pronunciation retention (10%) — pulled lazily
         var mockComponent = lastMockScore.HasValue
-            ? Math.Clamp(OetScoring.OetRawToScaled(lastMockScore.Value) / 5.0, 0, 100)
+            ? Math.Clamp(lastMockScore.Value / (double)MockTotalQuestions * 100.0, 0, 100)
             : 0.0;
 
         var lowestSkill = skillRows.Count > 0
@@ -621,4 +607,3 @@ public sealed class ListeningMockService : IListeningMockService
     private static int ClampInt(int value, int min, int max)
         => value < min ? min : value > max ? max : value;
 }
-

@@ -667,7 +667,6 @@ public static class ReadingAnalyticsAdminEndpoints
     private static int? GetScaledScore(ReadingAttempt attempt)
     {
         if (!IsCanonicalScoreEligible(attempt)) return null;
-        if (attempt.RawScore.HasValue) return OetScoring.OetRawToScaled(attempt.RawScore.Value);
         return attempt.ScaledScore;
     }
 

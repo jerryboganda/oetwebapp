@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Reading;
 
@@ -15,7 +16,8 @@ namespace OetLearner.Api.Services.Reading;
 //   • Attempt feedback CRUD
 //   • Assignment workflow (assign retake / drill, list, cancel)
 //
-// MISSION CRITICAL: every raw→scaled conversion routes through OetScoring
+// MISSION CRITICAL: every raw→scaled conversion routes through an
+// owner-approved versioned lookup table; no formula fallback is allowed.
 // (anchor 30/42 ≡ 350/500). Every mutation writes an AuditEvent. Attempts
 // carrying a manual override are never silently re-graded by recalculation.
 // ═════════════════════════════════════════════════════════════════════════════
@@ -221,8 +223,11 @@ public sealed record ReadingPrivilegedQuestion(
 public sealed class ReadingTutorService(
     LearnerDbContext db,
     IReadingGradingService grader,
-    ILogger<ReadingTutorService> logger) : IReadingTutorService
+    ILogger<ReadingTutorService> logger,
+    IAssessmentScoreConversionService? scoreConversion = null) : IReadingTutorService
 {
+    private readonly IAssessmentScoreConversionService _scoreConversion =
+        scoreConversion ?? new AssessmentScoreConversionService(db);
     // ── Manual override ────────────────────────────────────────────────────
 
     public async Task<ReadingPrivilegedAttemptReview?> ApplyScoreOverrideAsync(
@@ -235,14 +240,22 @@ public sealed class ReadingTutorService(
         var oldRaw = attempt.ScoreOverrideRaw;
         var oldScaled = attempt.ScoreOverrideScaled;
 
-        // Scaled resolution: an explicit scaled value is range-checked but
-        // stored as given; otherwise derive it from the raw score via the
-        // canonical OET conversion (never inline a threshold here).
+        // Scaled resolution: an explicit scaled value is a human override and
+        // is range-checked. A raw-only override may use only the exact owner
+        // conversion row already attached to the attempt; no formula fallback.
         int? scaledToStore;
         if (request.ScaledScore.HasValue)
             scaledToStore = Math.Clamp(request.ScaledScore.Value, 0, 500);
         else if (request.RawScore.HasValue)
-            scaledToStore = OetScoring.OetRawToScaled(request.RawScore.Value);
+        {
+            var conversion = await _scoreConversion.ResolveAsync(
+                "reading",
+                request.RawScore.Value,
+                scopeKey: "default",
+                tableId: attempt.ScoreConversionTableId,
+                cancellationToken: ct);
+            scaledToStore = conversion.ConvertedScore;
+        }
         else
             scaledToStore = null;
 

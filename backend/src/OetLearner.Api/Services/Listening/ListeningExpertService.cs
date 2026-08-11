@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -151,9 +152,14 @@ public interface IListeningExpertService
 // Implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-public sealed class ListeningExpertService(LearnerDbContext db, ILogger<ListeningExpertService> logger)
+public sealed class ListeningExpertService(
+    LearnerDbContext db,
+    ILogger<ListeningExpertService> logger,
+    IAssessmentScoreConversionService? scoreConversion = null)
     : IListeningExpertService
 {
+    private readonly IAssessmentScoreConversionService _scoreConversion =
+        scoreConversion ?? new AssessmentScoreConversionService(db);
     private const int MaxPageSize = 100;
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
@@ -502,9 +508,20 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
             };
             attempt.HumanScoreOverridesJson = JsonSerializer.Serialize(overrideRecord, JsonOpts);
 
-            // Recalculate attempt scores from override (MISSION CRITICAL: always via OetScoring)
+            // Recalculate attempt scores from an exact owner-approved row. A
+            // raw override without a configured table remains raw-only.
             attempt.RawScore = req.RawScoreOverride.Value;
-            attempt.ScaledScore = OetScoring.OetRawToScaled(req.RawScoreOverride.Value);
+            var conversion = await _scoreConversion.ResolveAsync(
+                "listening",
+                req.RawScoreOverride.Value,
+                scopeKey: "default",
+                tableId: attempt.ScoreConversionTableId,
+                cancellationToken: ct);
+            attempt.ScoreConversionTableId = conversion.TableId;
+            attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
+            attempt.ScoreConversionGrade = conversion.Grade;
+            attempt.ScoreConversionPassed = conversion.Passed;
+            attempt.ScaledScore = conversion.ConvertedScore;
 
             // B1: emit an audit row for every override so the missing
             // ExpertReviewAssignment model is compensated by traceability.

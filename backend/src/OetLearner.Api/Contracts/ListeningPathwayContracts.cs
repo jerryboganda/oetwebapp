@@ -299,12 +299,12 @@ public sealed record MockSubmitRequest(
 public sealed record MockResultResponse(
     Guid SessionId,
     int RawScore,
-    int ScaledScore,
+    int? ScaledScore,
     string GradeLabel,
     IReadOnlyList<SkillScoreDto> SkillRadar,
     IReadOnlyList<AccentProgressDto> AccentChart,
-    int PredictedScoreLow,
-    int PredictedScoreHigh,
+    int? PredictedScoreLow,
+    int? PredictedScoreHigh,
     DateTimeOffset SubmittedAt);
 
 /// <summary>Hero block of the analytics dashboard (§19.2).</summary>
@@ -328,13 +328,11 @@ public sealed record ScoreHistoryDto(IReadOnlyList<MockHistoryPoint> Points);
 public sealed record MockHistoryPoint(
     DateTimeOffset At,
     int RawScore,
-    int ScaledScore);
+    int? ScaledScore);
 
 /// <summary>Per-day activity counts for the calendar heatmap (§19.7).</summary>
 public sealed record CalendarHeatmapDto(IReadOnlyList<CalendarDay> Days);
 
 /// <summary>One day of question-attempt activity.</summary>
 public sealed record CalendarDay(DateOnly Date, int QuestionsAttempted);
-
-
 

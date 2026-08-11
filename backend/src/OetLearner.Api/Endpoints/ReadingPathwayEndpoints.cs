@@ -416,7 +416,10 @@ public static class ReadingPathwayEndpoints
                 Score: session.Score ?? 0,
                 TotalQuestions: session.TotalQuestions ?? 0,
                 DurationSeconds: session.DurationSeconds,
-                ScaledScore: EstimateScaled(session.Score ?? 0, session.TotalQuestions ?? 42)));
+                // Legacy pathway sessions do not capture a governed conversion
+                // table/version. Return raw evidence only; never synthesize a
+                // scaled score from accuracy.
+                ScaledScore: null));
         });
 
         // ── §23.5 Lessons + Strategies ────────────────────────────────────────
@@ -804,19 +807,6 @@ public static class ReadingPathwayEndpoints
         return false;
     }
 
-    /// <summary>
-    /// Quick heuristic OET scaled score estimate from raw accuracy.
-    /// Range 80–500, matching the OET scale.
-    /// </summary>
-    private static int EstimateScaled(int raw, int total)
-    {
-        if (total <= 0) return 0;
-        var projectedRaw = (int)Math.Round(
-            (decimal)raw / total * OetScoring.ListeningReadingRawMax,
-            MidpointRounding.AwayFromZero);
-        return OetScoring.OetRawToScaled(projectedRaw);
-    }
-
     private static async Task<PracticeSessionSubmitResponse> BuildPracticeSessionSubmitResponseAsync(
         ReadingPracticeSession session,
         string userId,
@@ -836,7 +826,7 @@ public static class ReadingPathwayEndpoints
             Score: session.Score ?? correct,
             TotalQuestions: totalQuestions,
             DurationSeconds: session.DurationSeconds,
-            ScaledScore: session.SessionType == "mock" ? EstimateScaled(session.Score ?? correct, totalQuestions) : null);
+            ScaledScore: null);
     }
 
     private static ReadingProfileResponse ToProfileResponse(string userId, LearnerReadingProfile? profile)

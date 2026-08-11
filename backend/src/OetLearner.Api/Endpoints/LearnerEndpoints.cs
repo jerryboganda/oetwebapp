@@ -822,9 +822,8 @@ public static class LearnerEndpoints
                 paperTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper"),
                 rawScore = a.RawScore ?? 0,
                 maxRawScore = a.MaxRawScore,
-                scaledScore = a.ScaledScore ?? OetScoring.OetRawToScaled(a.RawScore ?? 0),
-                gradeLetter = OetScoring.OetGradeLetterFromScaled(
-                    a.ScaledScore ?? OetScoring.OetRawToScaled(a.RawScore ?? 0)),
+                scaledScore = a.ScaledScore,
+                gradeLetter = a.ScoreConversionGrade ?? "—",
                 a.SubmittedAt,
                 route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
             })

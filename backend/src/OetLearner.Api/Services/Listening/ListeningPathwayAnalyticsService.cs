@@ -155,19 +155,9 @@ public sealed class ListeningPathwayAnalyticsService : IListeningPathwayAnalytic
         // dashboard load is fine — the computation is sub-millisecond.
         var readiness = await CalculateReadinessAsync(userId, ct);
 
-        var lastMock = await _db.ListeningPracticeSessions
-            .AsNoTracking()
-            .Where(s => s.UserId == userId
-                && s.SessionType == "mock"
-                && s.CompletedAt != null
-                && s.Score != null)
-            .OrderByDescending(s => s.CompletedAt)
-            .Select(s => new { s.Score })
-            .FirstOrDefaultAsync(ct);
-
-        int? lastMockScaled = lastMock?.Score is int raw
-            ? OetScoring.OetRawToScaled(raw)
-            : null;
+        // Legacy practice sessions do not retain a governed conversion-table
+        // version, so the dashboard must not manufacture a scaled result.
+        int? lastMockScaled = null;
 
         int? daysUntilExam = profile.ExamDate is { } exam
             ? Math.Max(0, (int)Math.Ceiling((exam - _clock.GetUtcNow()).TotalDays))
@@ -273,19 +263,12 @@ public sealed class ListeningPathwayAnalyticsService : IListeningPathwayAnalytic
         var points = new List<MockHistoryPoint>(sessions.Count);
         foreach (var s in sessions)
         {
-            // Diagnostic sessions are 23-item — project them onto the canonical
-            // 42-item raw scale before passing through OetScoring so the line
-            // doesn't dip artificially when diagnostics and mocks interleave.
-            var rawAt42 = s.Total > 0
-                ? (int)Math.Round(
-                    (double)s.Score / s.Total * OetScoring.ListeningReadingRawMax,
-                    MidpointRounding.AwayFromZero)
-                : 0;
-            var scaled = OetScoring.OetRawToScaled(rawAt42);
             points.Add(new MockHistoryPoint(
                 At: s.CompletedAt,
                 RawScore: s.Score,
-                ScaledScore: scaled));
+                // These legacy sessions do not capture an owner-table
+                // version, so their scaled score is intentionally unavailable.
+                ScaledScore: null));
         }
 
         return new ScoreHistoryDto(points);
@@ -340,21 +323,19 @@ public sealed class ListeningPathwayAnalyticsService : IListeningPathwayAnalytic
         var mockComponent = 0.0;
         if (recentMocks.Count > 0)
         {
-            var scaledScores = recentMocks
+            var rawAccuracyScores = recentMocks
                 .Where(m => m.Score is int && m.TotalQuestions is int t && t > 0)
                 .Select(m =>
                 {
-                    var rawAt42 = (int)Math.Round(
-                        (double)m.Score!.Value / m.TotalQuestions!.Value
-                            * OetScoring.ListeningReadingRawMax,
-                        MidpointRounding.AwayFromZero);
-                    return OetScoring.OetRawToScaled(rawAt42);
+                    // Readiness is an internal percentage signal, not an OET
+                    // scaled score. Keep it separate from governed conversion.
+                    return (double)m.Score!.Value / m.TotalQuestions!.Value * 100.0;
                 })
                 .ToList();
 
-            if (scaledScores.Count > 0)
+            if (rawAccuracyScores.Count > 0)
             {
-                mockComponent = Math.Clamp(scaledScores.Average() / 5.0, 0, 100);
+                mockComponent = Math.Clamp(rawAccuracyScores.Average(), 0, 100);
             }
         }
 
@@ -547,6 +528,3 @@ public sealed class ListeningPathwayAnalyticsService : IListeningPathwayAnalytic
         }
     }
 }
-
-
-

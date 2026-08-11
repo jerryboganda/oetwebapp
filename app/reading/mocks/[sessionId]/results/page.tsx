@@ -81,35 +81,42 @@ export default function MockResultsPage() {
           </div>
         ) : result ? (
           <>
+            {(() => {
+              const hasConversion = result.scaledScore !== null;
+              const grade = result.grade;
+              const gradeTone: 'success' | 'warning' | 'danger' | 'info' = !hasConversion ? 'info' : grade === 'A' || grade === 'B' ? 'success' : grade === 'C' ? 'warning' : 'danger';
+              return (
             <ResultsScorePanel
               eyebrow="Reading mock"
               icon={BookOpen}
               title="Mock result"
               subtitle={`Session ${sessionId}`}
-              gaugeValue={(result.scaledScore / 500) * 100}
-              gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{result.grade}</span>}
-              gaugeLabel={`${result.scaledScore}/500`}
+              gaugeValue={hasConversion ? (result.scaledScore / 500) * 100 : 0}
+              gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{hasConversion ? grade : '—'}</span>}
+              gaugeLabel={hasConversion ? `${result.scaledScore}/500` : 'Owner table unavailable'}
               gaugeColor={
-                result.grade === 'A' || result.grade === 'B'
+                !hasConversion ? 'var(--color-info)' : grade === 'A' || grade === 'B'
                   ? 'var(--color-success)'
-                  : result.grade === 'C'
+                  : grade === 'C'
                     ? 'var(--color-warning)'
                     : 'var(--color-danger)'
               }
               grade={{
-                label: `Grade ${result.grade}`,
-                tone: result.grade === 'A' || result.grade === 'B' ? 'success' : result.grade === 'C' ? 'warning' : 'danger',
+                label: hasConversion ? `Grade ${grade}` : 'Scaled score unavailable',
+                tone: gradeTone,
               }}
               stats={[
-                { label: 'Scaled', value: `${result.scaledScore}/500`, tone: 'info' },
+                { label: 'Scaled', value: hasConversion ? `${result.scaledScore}/500` : 'Unavailable', tone: 'info' },
                 { label: 'Raw score', value: result.rawScore, tone: 'default' },
                 {
                   label: 'Grade',
-                  value: result.grade,
-                  tone: result.grade === 'A' || result.grade === 'B' ? 'success' : result.grade === 'C' ? 'warning' : 'danger',
+                  value: hasConversion ? grade : '—',
+                  tone: gradeTone,
                 },
               ]}
             />
+              );
+            })()}
 
             {/* Tab bar */}
             <div className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1">
@@ -135,10 +142,10 @@ export default function MockResultsPage() {
               {activeTab === 'score' && (
                 <div className="flex flex-col items-center gap-4 py-4">
                   <p className="text-6xl font-bold tabular-nums text-navy">
-                    {result.scaledScore}
+                    {result.scaledScore ?? '—'}
                   </p>
-                  <p className="text-sm text-muted">Scaled score (out of 500)</p>
-                  <GradeBadge grade={result.grade} />
+                  <p className="text-sm text-muted">{result.scaledScore === null ? 'Owner-approved scaled conversion is unavailable.' : 'Scaled score (out of 500)'}</p>
+                  {result.grade ? <GradeBadge grade={result.grade} /> : null}
                   <p className="text-sm text-muted">Raw score: {result.rawScore}</p>
                 </div>
               )}

@@ -220,8 +220,6 @@ public sealed class ReadingAttemptService(
                 "reading_marking_policy_unavailable",
                 "Reading attempts are unavailable until an owner-approved marking policy is effective.");
         }
-        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
-
         // Gate 1: archived paper
         if (paper.Status == ContentStatus.Archived && !globalPolicy.AllowAttemptOnArchivedPaper)
             throw new InvalidOperationException("This paper has been archived and cannot be attempted.");
@@ -365,6 +363,9 @@ public sealed class ReadingAttemptService(
             Details = $"paper={paperId}; mode={mode}",
         });
         await db.SaveChangesAsync(ct);
+        // Lock the owner-approved policy only after the attempt is durable.
+        // Failed gates or persistence must not consume a governance version.
+        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
 
         return new ReadingAttemptStarted(
             AttemptId: attempt.Id,

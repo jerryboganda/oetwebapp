@@ -767,9 +767,9 @@ public sealed class MockService(
             ?? (string.IsNullOrWhiteSpace(request.ContentAttemptId) ? section.ContentAttemptId : request.ContentAttemptId.Trim());
         section.RawScore = canonicalEvidence?.RawScore ?? request.RawScore ?? section.RawScore;
         section.RawScoreMax = canonicalEvidence?.RawScoreMax ?? request.RawScoreMax ?? section.RawScoreMax;
-        section.ScaledScore = canonicalEvidence?.ScaledScore ?? ResolveScaledScore(section.SubtestCode, request.RawScore, request.ScaledScore);
+        section.ScaledScore = canonicalEvidence?.ScaledScore ?? ResolveScaledScore(request.ScaledScore);
         section.Grade = canonicalEvidence?.Grade ?? (string.IsNullOrWhiteSpace(request.Grade)
-            ? section.ScaledScore is null ? section.Grade : OetScoring.OetGradeLetterFromScaled(section.ScaledScore.Value)
+            ? section.Grade
             : request.Grade);
         section.FeedbackJson = JsonSupport.Serialize(BuildSectionEvidencePayload(request.Evidence, canonicalEvidence));
 
@@ -975,7 +975,14 @@ public sealed class MockService(
             throw ApiException.Conflict("content_attempt_not_graded", "The submitted section evidence has not been graded yet.");
         }
 
-        var scaled = scaledScore ?? OetScoring.OetRawToScaled(rawScore.Value);
+        if (!scaledScore.HasValue)
+        {
+            throw ApiException.Conflict(
+                "content_attempt_scaled_unavailable",
+                "The submitted section has a raw score but no owner-approved scaled conversion yet.");
+        }
+
+        var scaled = scaledScore.Value;
         var max = rawScoreMax > 0 ? rawScoreMax : 42;
         return new CanonicalSectionEvidence(contentAttemptId, rawScore.Value, max, scaled, OetScoring.OetGradeLetterFromScaled(scaled), evidenceSource);
     }
@@ -2409,13 +2416,8 @@ public sealed class MockService(
             : MockReviewReservationState.Released;
     }
 
-    private static int? ResolveScaledScore(string subtest, int? rawScore, int? scaledScore)
+    private static int? ResolveScaledScore(int? scaledScore)
     {
-        if (subtest is "reading" or "listening" && rawScore.HasValue)
-        {
-            return OetScoring.OetRawToScaled(rawScore.Value);
-        }
-
         return scaledScore.HasValue
             ? Math.Clamp(scaledScore.Value, OetScoring.ScaledMin, OetScoring.ScaledMax)
             : null;

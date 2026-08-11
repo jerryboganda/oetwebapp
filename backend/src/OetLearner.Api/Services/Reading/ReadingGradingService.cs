@@ -1034,8 +1034,27 @@ public sealed class ReadingGradingService(
 
     private async Task<ReadingResolvedPolicy> ResolvePolicyForAttemptAsync(ReadingAttempt attempt, CancellationToken ct)
     {
+        var requiresGovernedSnapshot = !string.IsNullOrWhiteSpace(attempt.MarkingPolicyVersionId);
+        if (string.IsNullOrWhiteSpace(attempt.PolicySnapshotJson))
+        {
+            if (requiresGovernedSnapshot)
+                throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+
+            return await policyService.ResolveForUserAsync(attempt.UserId, ct);
+        }
+
         try
         {
+            using var document = JsonDocument.Parse(attempt.PolicySnapshotJson);
+            if (!document.RootElement.TryGetProperty("markingPolicy", out var markingPolicyElement)
+                || markingPolicyElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                if (requiresGovernedSnapshot)
+                    throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+
+                return await policyService.ResolveForUserAsync(attempt.UserId, ct);
+            }
+
             var snapshot = JsonSerializer.Deserialize<ReadingResolvedPolicy>(attempt.PolicySnapshotJson);
             if (snapshot is not null
                 && !string.IsNullOrWhiteSpace(snapshot.PartATimerStrictness)
@@ -1044,12 +1063,18 @@ public sealed class ReadingGradingService(
             {
                 return ApplyGovernedMarkingPolicy(snapshot, attempt.PolicySnapshotJson);
             }
+
+            if (requiresGovernedSnapshot)
+                throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid");
         }
         catch (JsonException)
         {
-            // Older or malformed attempts fall back to the current resolver.
+            if (requiresGovernedSnapshot)
+                throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid_json");
         }
 
+        // Legacy attempts created before governed policy versioning remain
+        // readable. New governed attempts never fall back to mutable policy.
         return await policyService.ResolveForUserAsync(attempt.UserId, ct);
     }
 

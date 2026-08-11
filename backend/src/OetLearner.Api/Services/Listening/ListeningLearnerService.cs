@@ -536,7 +536,6 @@ public sealed class ListeningLearnerService(
                 "listening_marking_policy_unavailable",
                 "Listening attempts are unavailable until an owner-approved marking policy is effective.");
         }
-        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         var attempt = new Attempt
         {
             Id = genericAttemptId,
@@ -560,6 +559,8 @@ public sealed class ListeningLearnerService(
         };
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(ct);
+        // Lock the policy only after the candidate attempt is durable.
+        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         return AttemptDto(attempt, new Dictionary<string, string?>());
     }
 
@@ -1183,7 +1184,6 @@ public sealed class ListeningLearnerService(
                 "listening_marking_policy_unavailable",
                 "Listening attempts are unavailable until an owner-approved marking policy is effective.");
         }
-        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         var questionVersionMap = await db.ListeningQuestions.AsNoTracking()
             .Where(q => q.PaperId == source.Id)
             .ToDictionaryAsync(q => q.Id, q => q.Version, StringComparer.Ordinal, ct);
@@ -1236,6 +1236,8 @@ public sealed class ListeningLearnerService(
             Details = $"paper={source.Id}; mode={normalizedMode}; pathwayStage={normalizedPathwayStage ?? "none"}; structure=relational",
         });
         await db.SaveChangesAsync(ct);
+        // Lock the policy only after the candidate attempt is durable.
+        await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         return RelationalAttemptDto(attempt, new Dictionary<string, string?>());
     }
 

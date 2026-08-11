@@ -51,7 +51,7 @@ public sealed record MockSessionResultResponse(
     int Score,
     int TotalQuestions,
     int? DurationSeconds,
-    int ScaledScore);
+    int? ScaledScore);
 
 public sealed record SubmitDiagnosticRequest(
     Guid SessionId,

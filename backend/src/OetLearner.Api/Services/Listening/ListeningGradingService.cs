@@ -750,8 +750,14 @@ public sealed class ListeningGradingService
         CancellationToken ct)
     {
         _ = ct;
+        var requiresGovernedSnapshot = !string.IsNullOrWhiteSpace(attempt.MarkingPolicyVersionId);
         if (string.IsNullOrWhiteSpace(attempt.PolicySnapshotJson))
+        {
+            if (requiresGovernedSnapshot)
+                throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+
             return Task.FromResult(new AssessmentMarkingPolicyDocument());
+        }
 
         try
         {
@@ -764,12 +770,18 @@ public sealed class ListeningGradingService
                     : policyElement.GetRawText();
                 return Task.FromResult(AssessmentMarkingPolicyDocument.Parse(policyJson));
             }
+
+            if (requiresGovernedSnapshot)
+                throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
         }
         catch (JsonException)
         {
-            throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid_json");
+            if (requiresGovernedSnapshot)
+                throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid_json");
         }
 
+        // Legacy attempts created before governed policy versioning retain the
+        // conservative historical defaults. Governed attempts fail closed.
         return Task.FromResult(new AssessmentMarkingPolicyDocument());
     }
 

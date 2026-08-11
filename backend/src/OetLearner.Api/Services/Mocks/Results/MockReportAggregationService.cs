@@ -115,13 +115,13 @@ public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "authoritative_attempt_not_found");
         }
 
-        var scaled = attempt.ScaledScore ?? (attempt.RawScore.HasValue ? OetScoring.OetRawToScaled(attempt.RawScore.Value) : null);
+        var scaled = attempt.ScaledScore;
         return new MockSectionResolvedResult(
             attempt.SubmittedAt is null ? "in_progress" : scaled.HasValue ? "completed" : "pending_score",
             attempt.RawScore,
             attempt.MaxRawScore > 0 ? attempt.MaxRawScore : 42,
             scaled,
-            scaled.HasValue ? OetScoring.OetGradeLetterFromScaled(scaled.Value) : null,
+            attempt.ScoreConversionGrade,
             "reading_attempt");
     }
 }
@@ -163,13 +163,13 @@ public sealed class ListeningMockSectionResultAdapter : IMockSectionResultAdapte
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "authoritative_attempt_not_found");
         }
 
-        var scaled = attempt.ScaledScore ?? (attempt.RawScore.HasValue ? OetScoring.OetRawToScaled(attempt.RawScore.Value) : null);
+        var scaled = attempt.ScaledScore;
         return new MockSectionResolvedResult(
             attempt.SubmittedAt is null ? "in_progress" : scaled.HasValue ? "completed" : "pending_score",
             attempt.RawScore,
             attempt.MaxRawScore > 0 ? attempt.MaxRawScore : 42,
             scaled,
-            scaled.HasValue ? OetScoring.OetGradeLetterFromScaled(scaled.Value) : null,
+            attempt.ScoreConversionGrade,
             "listening_attempt");
     }
 }
@@ -184,11 +184,6 @@ public sealed class LegacyMockSectionResultAdapter : IMockSectionResultAdapter
     public static MockSectionResolvedResult ResolveLegacy(MockSectionAttempt section, string source)
     {
         var scaled = section.ScaledScore;
-        if (scaled is null && section.SubtestCode is "reading" or "listening" && section.RawScore.HasValue)
-        {
-            scaled = OetScoring.OetRawToScaled(section.RawScore.Value);
-        }
-
         var status = section.State == AttemptState.Completed
             ? scaled.HasValue ? "completed" : "pending_score"
             : "not_completed";
@@ -198,7 +193,7 @@ public sealed class LegacyMockSectionResultAdapter : IMockSectionResultAdapter
             section.RawScore,
             section.RawScoreMax,
             scaled,
-            scaled.HasValue ? OetScoring.OetGradeLetterFromScaled(scaled.Value) : section.Grade,
+            section.Grade,
             source);
     }
 }

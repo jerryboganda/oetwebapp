@@ -176,8 +176,8 @@ export interface AnswerResultDto {
 export interface MockResultDto {
   sessionId: string;
   rawScore: number;
-  scaledScore: number;
-  grade: string;
+  scaledScore: number | null;
+  grade: string | null;
   sectionBreakdown: Record<string, number>;
   skillBreakdown: Record<string, number>;
   timeMap: Record<string, number>;
@@ -507,7 +507,7 @@ export const startMock = (mockTemplateId: string) =>
 
 export const getMockResults = (sessionId: string) =>
   api<RawMockResultDto>(`/v1/reading-pathway/mocks/sessions/${encodeURIComponent(sessionId)}/results`).then((raw) => {
-    const scaledScore = raw.scaledScore ?? 0;
+    const scaledScore = raw.scaledScore ?? null;
     const timeMap: Record<string, number> = raw.durationSeconds === null || raw.durationSeconds === undefined
       ? {}
       : { total: raw.durationSeconds };
@@ -516,7 +516,7 @@ export const getMockResults = (sessionId: string) =>
       sessionId,
       rawScore: raw.score ?? 0,
       scaledScore,
-      grade: gradeFromScaled(scaledScore),
+      grade: scaledScore === null ? null : gradeFromScaled(scaledScore),
       sectionBreakdown: {},
       skillBreakdown: {},
       timeMap,
@@ -765,4 +765,3 @@ function optionText(option: unknown): string {
 
   return String(option);
 }
-
