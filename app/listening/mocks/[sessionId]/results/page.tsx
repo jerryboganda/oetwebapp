@@ -65,7 +65,8 @@ export default function ListeningMockResultsPage() {
         AI Practice Score — not an official OET result.
       </p>
       {(() => {
-        const hasConversion = result.scaledScore !== null;
+        const scaledScore = result.scaledScore;
+        const hasConversion = scaledScore !== null;
   const gradeTone: 'success' | 'warning' | 'danger' | 'info' = !hasConversion ? 'info' : result.gradeLabel === 'A' || result.gradeLabel === 'B' ? 'success' : result.gradeLabel === 'C' ? 'warning' : 'danger';
         return (
       <ResultsScorePanel
@@ -73,9 +74,9 @@ export default function ListeningMockResultsPage() {
         icon={Headphones}
         title="Mock result"
         subtitle={hasConversion ? `Scaled OET Listening · Grade ${result.gradeLabel}` : 'Raw Listening practice result'}
-        gaugeValue={hasConversion ? (result.scaledScore / 500) * 100 : 0}
+        gaugeValue={hasConversion ? (scaledScore / 500) * 100 : 0}
         gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{hasConversion ? result.gradeLabel : '—'}</span>}
-        gaugeLabel={hasConversion ? `${result.scaledScore}/500` : 'Owner table unavailable'}
+        gaugeLabel={hasConversion ? `${scaledScore}/500` : 'Owner table unavailable'}
         gaugeColor={
           !hasConversion ? 'var(--color-info)' : result.gradeLabel === 'A' || result.gradeLabel === 'B'
             ? 'var(--color-success)'
@@ -88,7 +89,7 @@ export default function ListeningMockResultsPage() {
           tone: gradeTone,
         }}
         stats={[
-          { label: 'Scaled', value: hasConversion ? `${result.scaledScore}/500` : 'Unavailable', tone: 'info' },
+          { label: 'Scaled', value: hasConversion ? `${scaledScore}/500` : 'Unavailable', tone: 'info' },
           { label: 'Raw score', value: `${result.rawScore}/42`, tone: 'default' },
           {
             label: 'Grade',

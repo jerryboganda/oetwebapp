@@ -82,7 +82,8 @@ export default function MockResultsPage() {
         ) : result ? (
           <>
             {(() => {
-              const hasConversion = result.scaledScore !== null;
+              const scaledScore = result.scaledScore;
+              const hasConversion = scaledScore !== null;
               const grade = result.grade;
               const gradeTone: 'success' | 'warning' | 'danger' | 'info' = !hasConversion ? 'info' : grade === 'A' || grade === 'B' ? 'success' : grade === 'C' ? 'warning' : 'danger';
               return (
@@ -91,9 +92,9 @@ export default function MockResultsPage() {
               icon={BookOpen}
               title="Mock result"
               subtitle={`Session ${sessionId}`}
-              gaugeValue={hasConversion ? (result.scaledScore / 500) * 100 : 0}
+              gaugeValue={hasConversion ? (scaledScore / 500) * 100 : 0}
               gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{hasConversion ? grade : '—'}</span>}
-              gaugeLabel={hasConversion ? `${result.scaledScore}/500` : 'Owner table unavailable'}
+              gaugeLabel={hasConversion ? `${scaledScore}/500` : 'Owner table unavailable'}
               gaugeColor={
                 !hasConversion ? 'var(--color-info)' : grade === 'A' || grade === 'B'
                   ? 'var(--color-success)'
@@ -106,7 +107,7 @@ export default function MockResultsPage() {
                 tone: gradeTone,
               }}
               stats={[
-                { label: 'Scaled', value: hasConversion ? `${result.scaledScore}/500` : 'Unavailable', tone: 'info' },
+                { label: 'Scaled', value: hasConversion ? `${scaledScore}/500` : 'Unavailable', tone: 'info' },
                 { label: 'Raw score', value: result.rawScore, tone: 'default' },
                 {
                   label: 'Grade',
