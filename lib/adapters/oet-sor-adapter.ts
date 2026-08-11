@@ -53,6 +53,19 @@ function subtestsByCanonicalKey(report: MockReport) {
   return Object.fromEntries(report.subTests.map((subtest) => [reportSubtestKey(subtest), subtest]));
 }
 
+function isGovernedSubtest(subtest: MockReport['subTests'][number]): boolean {
+  const key = reportSubtestKey(subtest);
+  return key === 'listening' || key === 'reading';
+}
+
+function hasApprovedConversion(subtest: MockReport['subTests'][number] | undefined): boolean {
+  if (!subtest || subtest.scaledScore == null) return false;
+  if (!isGovernedSubtest(subtest)) return true;
+  return typeof subtest.scoreConversionTableVersionKey === 'string'
+    && subtest.scoreConversionTableVersionKey.trim().length > 0
+    && typeof subtest.scoreConversionPassed === 'boolean';
+}
+
 export function isMockReportStatementOfResultsReady(report: MockReport): boolean {
   const byId = subtestsByCanonicalKey(report);
   return REQUIRED_SOR_SUBTESTS.every((id) => {
@@ -60,6 +73,7 @@ export function isMockReportStatementOfResultsReady(report: MockReport): boolean
     if (!subtest) return false;
     if (subtest.reviewState && !FINAL_REVIEW_STATES.has(subtest.reviewState)) return false;
     if (subtest.state && ['queued', 'in_review', 'awaiting_payment', 'pending', 'not_completed'].includes(subtest.state)) return false;
+    if (isGovernedSubtest(subtest) && !hasApprovedConversion(subtest)) return false;
     const raw = subtest.scaledScore ?? subtest.score;
     const score = Number(String(raw).trim());
     return Number.isFinite(score);
@@ -72,6 +86,7 @@ export function mockReportToStatementOfResults(inputs: OetSorAdapterInputs): Oet
   const byId = subtestsByCanonicalKey(report);
 
   const pickScore = (id: string): number => {
+    if (['listening', 'reading'].includes(id) && !hasApprovedConversion(byId[id])) return 0;
     const raw = byId[id]?.scaledScore ?? byId[id]?.score ?? '0';
     const n = Number(String(raw).trim());
     if (!Number.isFinite(n)) return 0;

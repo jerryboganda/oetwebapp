@@ -62,6 +62,8 @@ export interface MockReportSubTestV1 {
   contentPaperTitle?: string | null;
   reviewRequestId?: string | null;
   reviewState?: string | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionPassed?: boolean | null;
 }
 
 export interface MockReportWeakestCriterionV1 {
@@ -81,6 +83,8 @@ export interface MockReportPerModuleReadinessV1 {
   subtest: string;
   scaledScore?: number | null;
   grade?: string | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionPassed?: boolean | null;
   rag: string;
   message: string;
   passThreshold?: number | null;
@@ -93,6 +97,8 @@ export interface MockReportPartScoreV1 {
   grade?: string | null;
   state?: string | null;
   evidenceSource?: string | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionPassed?: boolean | null;
 }
 
 export interface MockReportTimingAnalysisV1 {

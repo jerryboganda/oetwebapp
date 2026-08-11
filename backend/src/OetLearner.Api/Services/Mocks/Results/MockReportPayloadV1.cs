@@ -53,7 +53,9 @@ public sealed record MockReportSubTestV1(
     string EvidenceSource,
     string? ContentPaperTitle,
     string? ReviewRequestId,
-    string? ReviewState);
+    string? ReviewState,
+    string? ScoreConversionTableVersionKey = null,
+    bool? ScoreConversionPassed = null);
 
 public sealed record MockReportWeakestCriterionV1(
     string Subtest,
@@ -72,7 +74,9 @@ public sealed record MockReportPerModuleReadinessV1(
     string? Grade,
     string Rag,
     string Message,
-    int? PassThreshold);
+    int? PassThreshold,
+    string? ScoreConversionTableVersionKey = null,
+    bool? ScoreConversionPassed = null);
 
 public sealed record MockReportPartScoreV1(
     string Subtest,
@@ -80,7 +84,9 @@ public sealed record MockReportPartScoreV1(
     int? ScaledScore,
     string? Grade,
     string? State,
-    string? EvidenceSource);
+    string? EvidenceSource,
+    string? ScoreConversionTableVersionKey = null,
+    bool? ScoreConversionPassed = null);
 
 public sealed record MockReportTimingAnalysisV1(
     string SectionId,

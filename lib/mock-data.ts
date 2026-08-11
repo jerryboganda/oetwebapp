@@ -548,6 +548,8 @@ export interface SubTestScore {
   state?: string;
   reviewRequestId?: string | null;
   reviewState?: string | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionPassed?: boolean | null;
 }
 
 export interface MockReport {
@@ -572,6 +574,8 @@ export interface MockReport {
     subtest: string;
     scaledScore?: number | null;
     grade?: string | null;
+    scoreConversionTableVersionKey?: string | null;
+    scoreConversionPassed?: boolean | null;
     rag: string;
     message: string;
     passThreshold?: number | null;
@@ -582,6 +586,8 @@ export interface MockReport {
     scaledScore?: number | null;
     grade?: string | null;
     state?: string | null;
+    scoreConversionTableVersionKey?: string | null;
+    scoreConversionPassed?: boolean | null;
   }>;
   timingAnalysis?: Array<{
     sectionId: string;

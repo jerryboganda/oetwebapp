@@ -2867,6 +2867,12 @@ function mapMockReport(report: ApiRecord): MockReport {
       state: subtest.state ? String(subtest.state) : undefined,
       reviewRequestId: subtest.reviewRequestId ? String(subtest.reviewRequestId) : null,
       reviewState: subtest.reviewState ? String(subtest.reviewState) : null,
+      scoreConversionTableVersionKey: subtest.scoreConversionTableVersionKey
+        ? String(subtest.scoreConversionTableVersionKey)
+        : null,
+      scoreConversionPassed: typeof subtest.scoreConversionPassed === 'boolean'
+        ? subtest.scoreConversionPassed
+        : null,
       ...mockSubtestColors(name),
     });
     }),
@@ -2884,6 +2890,12 @@ function mapMockReport(report: ApiRecord): MockReport {
       subtest: String(item.subtest ?? 'Mock'),
       scaledScore: typeof item.scaledScore === 'number' ? item.scaledScore : null,
       grade: item.grade ? String(item.grade) : null,
+      scoreConversionTableVersionKey: item.scoreConversionTableVersionKey
+        ? String(item.scoreConversionTableVersionKey)
+        : null,
+      scoreConversionPassed: typeof item.scoreConversionPassed === 'boolean'
+        ? item.scoreConversionPassed
+        : null,
       rag: String(item.rag ?? 'pending'),
       message: String(item.message ?? 'Awaiting scored evidence.'),
       passThreshold: typeof item.passThreshold === 'number' ? item.passThreshold : null,
@@ -2894,6 +2906,12 @@ function mapMockReport(report: ApiRecord): MockReport {
       scaledScore: typeof item.scaledScore === 'number' ? item.scaledScore : null,
       grade: item.grade ? String(item.grade) : null,
       state: item.state ? String(item.state) : null,
+      scoreConversionTableVersionKey: item.scoreConversionTableVersionKey
+        ? String(item.scoreConversionTableVersionKey)
+        : null,
+      scoreConversionPassed: typeof item.scoreConversionPassed === 'boolean'
+        ? item.scoreConversionPassed
+        : null,
     })),
     timingAnalysis: asArray(report.timingAnalysis).map((item: ApiRecord) => ({
       sectionId: String(item.sectionId ?? ''),

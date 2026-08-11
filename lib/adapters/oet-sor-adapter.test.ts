@@ -9,8 +9,8 @@ const base: MockReport = {
   overallScore: 'B',
   summary: 'ok',
   subTests: [
-    { id: 'listening', name: 'Listening', score: '430', rawScore: '35/42', color: '', bg: '' },
-    { id: 'reading', name: 'Reading', score: '420', rawScore: '34/42', color: '', bg: '' },
+    { id: 'listening', name: 'Listening', score: '430', rawScore: '35/42', scaledScore: 430, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
+    { id: 'reading', name: 'Reading', score: '420', rawScore: '34/42', scaledScore: 420, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
     { id: 'speaking', name: 'Speaking', score: '350', rawScore: '', color: '', bg: '' },
     { id: 'writing', name: 'Writing', score: '370', rawScore: '', color: '', bg: '' },
   ],
@@ -32,8 +32,8 @@ describe('mockReportToStatementOfResults', () => {
       report: {
         ...base,
         subTests: [
-          { id: 'listening', name: 'Listening', score: '9999', rawScore: '', color: '', bg: '' },
-          { id: 'reading', name: 'Reading', score: '-50', rawScore: '', color: '', bg: '' },
+          { id: 'listening', name: 'Listening', score: '9999', rawScore: '', scaledScore: 9999, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
+          { id: 'reading', name: 'Reading', score: '-50', rawScore: '', scaledScore: -50, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
           { id: 'speaking', name: 'Speaking', score: '347', rawScore: '', color: '', bg: '' }, // rounds to 350
           { id: 'writing', name: 'Writing', score: 'abc', rawScore: '', color: '', bg: '' }, // non-numeric -> 0
         ],
@@ -80,8 +80,8 @@ describe('isMockReportStatementOfResultsReady', () => {
     const report: MockReport = {
       ...base,
       subTests: [
-        { id: 'g-l', name: 'Listening', score: '430', rawScore: '35/42', color: '', bg: '' },
-        { id: 'g-r', name: 'Reading', score: '420', rawScore: '34/42', color: '', bg: '' },
+        { id: 'g-l', name: 'Listening', score: '430', rawScore: '35/42', scaledScore: 430, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
+        { id: 'g-r', name: 'Reading', score: '420', rawScore: '34/42', scaledScore: 420, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
         { id: 'g-s', name: 'Speaking', score: '350', rawScore: '', color: '', bg: '' },
         { id: 'g-w', name: 'Writing', score: '370', rawScore: '', color: '', bg: '' },
       ],
@@ -109,6 +109,17 @@ describe('isMockReportStatementOfResultsReady', () => {
     expect(isMockReportStatementOfResultsReady({
       ...base,
       subTests: base.subTests.filter((subtest) => subtest.id !== 'speaking'),
+    })).toBe(false);
+  });
+
+  it('blocks Listening/Reading without explicit conversion provenance and decision', () => {
+    expect(isMockReportStatementOfResultsReady({
+      ...base,
+      subTests: base.subTests.map((subtest) =>
+        subtest.id === 'reading'
+          ? { ...subtest, scaledScore: 420, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: null }
+          : subtest,
+      ),
     })).toBe(false);
   });
 });

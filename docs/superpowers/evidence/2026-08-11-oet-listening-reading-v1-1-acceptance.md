@@ -36,6 +36,13 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Mock report aggregation now requires persisted Listening/Reading scaled
+  score, conversion-table version, and explicit pass decision before emitting
+  governed converted values. The versioned payload, client mapper, and
+  practice Statement-of-Results adapter carry and enforce the same evidence;
+  raw score fallback is no longer accepted for those two subtests. Focused
+  adapter execution passed with release-copy directories excluded; backend
+  execution remains pending.
 - Reading/Listening paper publication now requires source provenance, every
   required asset role, successful validator execution, and zero error-level
   structural findings. Listening transcript evidence and distractor-authoring

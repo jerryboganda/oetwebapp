@@ -77,7 +77,8 @@ public sealed record MockSectionResolvedResult(
     string EvidenceSource,
     string? ReviewRequestId = null,
     string? ReviewState = null,
-    string? ScoreConversionTableVersionKey = null);
+    string? ScoreConversionTableVersionKey = null,
+    bool? ScoreConversionPassed = null);
 
 public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
 {
@@ -117,7 +118,8 @@ public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
         }
 
         var approvedConversion = attempt.ScaledScore.HasValue
-            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey);
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
         var scaled = approvedConversion ? attempt.ScaledScore : null;
         return new MockSectionResolvedResult(
             attempt.SubmittedAt is null ? "in_progress" : scaled.HasValue ? "completed" : "pending_score",
@@ -126,7 +128,8 @@ public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
             scaled,
             approvedConversion ? attempt.ScoreConversionGrade : null,
             "reading_attempt",
-            ScoreConversionTableVersionKey: approvedConversion ? attempt.ScoreConversionTableVersionKey : null);
+            ScoreConversionTableVersionKey: approvedConversion ? attempt.ScoreConversionTableVersionKey : null,
+            ScoreConversionPassed: approvedConversion ? attempt.ScoreConversionPassed : null);
     }
 }
 
@@ -168,7 +171,8 @@ public sealed class ListeningMockSectionResultAdapter : IMockSectionResultAdapte
         }
 
         var approvedConversion = attempt.ScaledScore.HasValue
-            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey);
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
         var scaled = approvedConversion ? attempt.ScaledScore : null;
         return new MockSectionResolvedResult(
             attempt.SubmittedAt is null ? "in_progress" : scaled.HasValue ? "completed" : "pending_score",
@@ -177,7 +181,8 @@ public sealed class ListeningMockSectionResultAdapter : IMockSectionResultAdapte
             scaled,
             approvedConversion ? attempt.ScoreConversionGrade : null,
             "listening_attempt",
-            ScoreConversionTableVersionKey: approvedConversion ? attempt.ScoreConversionTableVersionKey : null);
+            ScoreConversionTableVersionKey: approvedConversion ? attempt.ScoreConversionTableVersionKey : null,
+            ScoreConversionPassed: approvedConversion ? attempt.ScoreConversionPassed : null);
     }
 }
 
@@ -203,7 +208,8 @@ public sealed class LegacyMockSectionResultAdapter : IMockSectionResultAdapter
             scaled,
             governedScore ? null : section.Grade,
             source,
-            ScoreConversionTableVersionKey: null);
+            ScoreConversionTableVersionKey: null,
+            ScoreConversionPassed: null);
     }
 }
 
@@ -352,7 +358,9 @@ public sealed class MockReportAggregationService(
                 evidenceSource = resolved.EvidenceSource,
                 contentPaperTitle = row.bundleSection.ContentPaper?.Title,
                 reviewRequestId = review?.Id,
-                reviewState = review is null ? null : ReviewStateForReport(review.State)
+                reviewState = review is null ? null : ReviewStateForReport(review.State),
+                scoreConversionTableVersionKey = resolved.ScoreConversionTableVersionKey,
+                scoreConversionPassed = resolved.ScoreConversionPassed,
             };
         }).ToList();
 
@@ -381,17 +389,23 @@ public sealed class MockReportAggregationService(
         var perModuleReadiness = subTests.Select(x =>
         {
             var governedScore = x.id is "reading" or "listening";
+            var hasApprovedConversion = !governedScore
+                || (x.scaledScore.HasValue
+                    && !string.IsNullOrWhiteSpace(x.scoreConversionTableVersionKey)
+                    && x.scoreConversionPassed.HasValue);
             var advisory = !governedScore && x.scaledScore.HasValue ? OetScoring.AdvisoryTier(x.scaledScore.Value) : null;
             return new
             {
                 subtest = x.name,
                 scaledScore = x.scaledScore,
                 grade = x.grade,
+                scoreConversionTableVersionKey = x.scoreConversionTableVersionKey,
+                scoreConversionPassed = x.scoreConversionPassed,
                 rag = governedScore
-                    ? (x.scaledScore.HasValue ? "owner-converted" : "pending")
+                    ? (hasApprovedConversion ? "owner-converted" : "pending")
                     : advisory?.Tier ?? "pending",
                 message = governedScore
-                    ? (x.scaledScore.HasValue
+                    ? (hasApprovedConversion
                         ? "Owner-approved conversion is available; no mock-wide pass label is inferred."
                         : "Awaiting owner-approved score conversion or teacher review.")
                     : advisory?.Message ?? "Awaiting scored evidence or teacher review.",
@@ -452,7 +466,17 @@ public sealed class MockReportAggregationService(
                 pending = reviewRequests.Count(x => x.State is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment)
             },
             perModuleReadiness,
-            partScores = subTests.Select(x => new { subtest = x.name, x.rawScore, x.scaledScore, x.grade, x.state, x.evidenceSource }).ToArray(),
+            partScores = subTests.Select(x => new
+            {
+                subtest = x.name,
+                x.rawScore,
+                x.scaledScore,
+                x.grade,
+                x.state,
+                x.evidenceSource,
+                x.scoreConversionTableVersionKey,
+                x.scoreConversionPassed,
+            }).ToArray(),
             timingAnalysis,
             errorCategories = new[]
             {
