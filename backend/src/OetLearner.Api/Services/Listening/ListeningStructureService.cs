@@ -81,11 +81,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     };
 
     /// <summary>
-    /// Pedagogical authoring gates that are advisory (warning) rather than
-    /// publish-blocking for the uploaded-audio Listening flow. They still
-    /// surface to authors; they just don't block Publish. Audio source,
-    /// processed duration, section timing, the 42-item structure, MCQ shape,
-    /// blank stem/answer, and source provenance remain hard publish blockers.
+    /// Non-essential pedagogical metadata remains advisory. Evidence and
+    /// distractor authoring are publish-blocking because the specification
+    /// requires every item to carry reviewable source/rationale support.
     /// </summary>
     private static readonly HashSet<string> AdvisoryPublishGateCodes = new(StringComparer.Ordinal)
     {
@@ -93,10 +91,6 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         "listening_question_difficulty",
         "listening_skill_tags",
         "listening_skill_tags_invalid",
-        "listening_transcript_evidence",
-        "listening_transcript_evidence_missing",
-        "listening_distractor_categories",
-        "listening_distractor_categories_invalid",
         "listening_preview_window_missing",
     };
 
@@ -184,12 +178,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                     $"Part C has {partC} item(s); OET requires exactly {CanonicalPartCCount} (6 per presentation)."));
         }
 
-        // Owner decision (uploaded-audio Listening flow): a paper publishes on
-        // audio + timer + valid questions, the 42-item count, and source
-        // provenance. The pedagogical authoring gates below are retained as
-        // ADVISORY warnings (still surfaced to authors) but no longer block
-        // publishing. Downgrade them from "error" to "warning" in one place so
-        // the per-rule emit sites stay readable.
+        // Difficulty, skill tags, and optional preview-window metadata remain
+        // advisory. All structural, evidence, rationale, audio, timing, and
+        // provenance findings remain error-level publish blockers.
         issues = issues
             .Select(issue => AdvisoryPublishGateCodes.Contains(issue.Code)
                     && string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)
@@ -274,6 +265,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 q.QuestionType,
                 q.Stem,
                 q.CorrectAnswerJson,
+                q.ExplanationMarkdown,
                 q.SkillTag,
                 q.TranscriptEvidenceText,
                 q.TranscriptEvidenceStartMs,
@@ -554,6 +546,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening question requires transcript evidence text with valid start/end timestamps; {invalidEvidence} item(s) are incomplete."));
         }
 
+        var missingRationale = rows.Count(row => string.IsNullOrWhiteSpace(row.ExplanationMarkdown));
+        if (missingRationale > 0)
+        {
+            warnings.Add(new("listening_question_rationale_missing", "error",
+                $"Every Listening question requires a post-submit rationale; {missingRationale} item(s) are missing ExplanationMarkdown."));
+        }
+
         var missingQuestionDifficulty = rows.Count(row => !IsValidDifficulty(row.DifficultyLevel));
         if (missingQuestionDifficulty > 0)
         {
@@ -801,6 +800,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var missingSkillTags = 0;
         var invalidSkillTags = 0;
         var invalidEvidence = 0;
+        var missingRationale = 0;
         var missingQuestionDifficulty = 0;
         var wrongOptionsMissingDistractorCategory = 0;
         var wrongOptionsInvalidDistractorCategory = 0;
@@ -828,6 +828,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 || !HasValidTimingWindow(TryGetInt(q, "transcriptEvidenceStartMs"), TryGetInt(q, "transcriptEvidenceEndMs")))
             {
                 invalidEvidence++;
+            }
+
+            if (string.IsNullOrWhiteSpace(ReadString(q, "explanationMarkdown")
+                ?? ReadString(q, "explanation")
+                ?? ReadString(q, "rationale")))
+            {
+                missingRationale++;
             }
 
             if (!IsValidDifficulty(TryGetInt(q, "difficultyLevel") ?? TryGetInt(q, "difficultyRating")))
@@ -1025,6 +1032,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_transcript_evidence", "error",
                 $"Every Listening question requires transcript evidence text with valid start/end timestamps; {invalidEvidence} item(s) are incomplete."));
+        }
+
+        if (missingRationale > 0)
+        {
+            warnings.Add(new("listening_question_rationale_missing", "error",
+                $"Every Listening question requires a post-submit rationale; {missingRationale} item(s) are missing explanation/rationale text."));
         }
 
         if (missingQuestionDifficulty > 0)

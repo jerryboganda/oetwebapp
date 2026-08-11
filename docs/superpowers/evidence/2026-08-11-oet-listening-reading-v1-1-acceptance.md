@@ -36,6 +36,11 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Reading/Listening paper publication now requires source provenance, every
+  required asset role, successful validator execution, and zero error-level
+  structural findings. Listening transcript evidence and distractor-authoring
+  defects remain hard blockers; only non-essential pedagogical metadata stays
+  advisory. Focused backend execution remains pending.
 - The Reading paper result and legacy Listening mock result surfaces now require
   an explicit persisted score-conversion table key and pass decision before
   rendering a converted score or grade. Legacy Reading mock normalization also

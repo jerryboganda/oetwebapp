@@ -197,7 +197,10 @@ public class ContentPaperServiceTests
             };
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
                 null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, qType,
-                $"Part A question {i}", "[]", correct, null, false, null, "detail"),
+                $"Part A question {i}", "[]", correct, null, false,
+                ExplanationMarkdown: $"The answer is supported by the Part A source text for question {i}.",
+                SkillTag: "detail",
+                EvidenceSentence: $"Part A evidence sentence for question {i}."),
                 "admin-1", default);
         }
 
@@ -205,7 +208,10 @@ public class ContentPaperServiceTests
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
                 null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
-                $"Part B question {i}", "[\"A\",\"B\",\"C\"]", "\"A\"", null, false, null, "purpose"),
+                $"Part B question {i}", "[\"A\",\"B\",\"C\"]", "\"A\"", null, false,
+                ExplanationMarkdown: $"The Part B source text supports option A for question {i}.",
+                SkillTag: "purpose",
+                EvidenceSentence: $"Part B evidence sentence for question {i}."),
                 "admin-1", default);
         }
 
@@ -213,7 +219,10 @@ public class ContentPaperServiceTests
         {
             await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
                 null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
-                $"Part C question {i}", "[\"A\",\"B\",\"C\",\"D\"]", "\"B\"", null, false, null, "inference"),
+                $"Part C question {i}", "[\"A\",\"B\",\"C\",\"D\"]", "\"B\"", null, false,
+                ExplanationMarkdown: $"The Part C source text supports option B for question {i}.",
+                SkillTag: "inference",
+                EvidenceSentence: $"Part C evidence sentence for question {i}."),
                 "admin-1", default);
         }
 
@@ -279,9 +288,8 @@ public class ContentPaperServiceTests
     public async Task Publish_fails_when_required_roles_missing()
     {
         var (db, svc) = Build();
-        // Reading still enforces its required asset roles (QuestionPaper) at
-        // publish. Listening is now exempt — see
-        // Publish_listening_succeeds_with_no_assets_or_provenance.
+        // Reading and Listening both enforce provenance and required asset
+        // roles at publish.
         var p = await svc.CreateAsync(new ContentPaperCreate(
             "reading", "R1", null, null, true, null, 40, null, null, 0, null,
             DefaultSourceProvenance), "admin-1", default);
@@ -292,22 +300,20 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_listening_succeeds_with_no_assets_or_provenance()
+    public async Task Publish_listening_requires_provenance_and_assets()
     {
-        // Owner decision: Listening publishes with NO content constraints — no
-        // required asset roles and no source-provenance gate. Any paper can go
-        // live as-is; the learner surface shows empty-state messages and the
-        // advisory ListeningStructureService report still surfaces gaps to
-        // authors without blocking.
+        // Listening cannot publish without provenance and required assets.
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
             "listening", "L1", null, null, true, null, 40, null, null, 0, null,
             SourceProvenance: null), "admin-1", default);
 
-        await svc.PublishAsync(p.Id, "admin-1", default);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(p.Id, "admin-1", default));
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
-        Assert.Equal(ContentStatus.Published, reload.Status);
+        Assert.Contains("SourceProvenance", ex.Message);
+        Assert.NotEqual(ContentStatus.Published, reload.Status);
         await db.DisposeAsync();
     }
 
@@ -340,8 +346,7 @@ public class ContentPaperServiceTests
 
         await AttachRequiredWritingAssetsAsync(db, svc, p.Id);
 
-        // Decision 2 — publishing is NEVER blocked on conformance grounds; the
-        // structural problem is recorded as a non-blocking warning instead.
+        // Writing keeps its existing advisory conformance policy.
         await svc.PublishAsync(p.Id, "admin-1", default);
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
@@ -437,7 +442,7 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_records_warning_when_reading_structure_is_not_ready()
+    public async Task Publish_fails_when_reading_structure_is_not_ready()
     {
         var (db, svc) = Build();
         var paper = await svc.CreateAsync(new ContentPaperCreate(
@@ -445,18 +450,18 @@ public class ContentPaperServiceTests
             DefaultSourceProvenance), "admin-1", default);
         await AttachRequiredReadingAssetsAsync(db, svc, paper.Id);
 
-        // Decision 2 — a non-publish-ready reading structure is a non-blocking warning.
-        await svc.PublishAsync(paper.Id, "admin-1", default);
+        // Reading structure defects are hard publication failures.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
-        Assert.Equal(ContentStatus.Published, reload.Status);
-        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
-        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
+        Assert.Contains("Reading publication gate failed", ex.Message);
+        Assert.NotEqual(ContentStatus.Published, reload.Status);
         await db.DisposeAsync();
     }
 
     [Fact]
-    public async Task Publish_records_warning_when_reading_part_pdf_media_is_not_ready_pdf()
+    public async Task Publish_fails_when_reading_part_pdf_media_is_not_ready_pdf()
     {
         var (db, svc) = Build();
         var paper = await svc.CreateAsync(new ContentPaperCreate(
@@ -473,13 +478,13 @@ public class ContentPaperServiceTests
         await structure.EnsureCanonicalPartsAsync(paper.Id, default);
         await FullyAuthorReadingPaperAsync(db, structure, paper.Id);
 
-        // Decision 2 — a missing/invalid Part B PDF is a non-blocking warning.
-        await svc.PublishAsync(paper.Id, "admin-1", default);
+        // Invalid required Part B media is a hard publication failure.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
 
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
-        Assert.Equal(ContentStatus.Published, reload.Status);
-        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
-        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
+        Assert.Contains("Reading publication gate failed", ex.Message);
+        Assert.NotEqual(ContentStatus.Published, reload.Status);
         await db.DisposeAsync();
     }
 
@@ -533,7 +538,7 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_rejects_listening_mcq_with_duplicate_options()
+    public async Task Publish_rejects_listening_before_unvalidated_content()
     {
         var (db, svc) = Build();
         var paper = await svc.CreateAsync(new ContentPaperCreate(
@@ -560,7 +565,7 @@ public class ContentPaperServiceTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.PublishAsync(paper.Id, "admin-1", default));
 
-        Assert.Contains("MCQ publication gate failed", ex.Message);
+        Assert.Contains("SourceProvenance", ex.Message);
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
         Assert.NotEqual(ContentStatus.Published, reload.Status);
         await db.DisposeAsync();

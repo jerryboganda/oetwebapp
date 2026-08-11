@@ -787,34 +787,20 @@ public sealed class ContentPaperService(
             ?? throw new InvalidOperationException("Paper not found.");
         var wasPublished = paper.Status == ContentStatus.Published;
 
-        // Listening publishes with NO content constraints (owner decision): any
-        // paper can go live as-is and the learner surface renders friendly
-        // empty-state messages for missing parts. The source-provenance and
-        // required-asset-role gates are skipped for Listening only; other subtests
-        // keep them. The advisory ListeningStructureService report still surfaces
-        // what's incomplete to authors without blocking the publish.
+        // Reading and Listening publication both require provenance, required
+        // assets, and a completed structural validation report before learner
+        // access. The publish boundary is intentionally fail-closed.
         var isListening = string.Equals(paper.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase);
 
-        if (!isListening && string.IsNullOrWhiteSpace(paper.SourceProvenance))
+        if (string.IsNullOrWhiteSpace(paper.SourceProvenance))
         {
             throw new InvalidOperationException("SourceProvenance is required before publishing.");
         }
 
-        if (!isListening)
-        {
-            EnforceRequiredAssetRoles(paper);
-        }
+        EnforceRequiredAssetRoles(paper);
 
-        // Decision 2 — publishing is NEVER blocked on broader rule-conformance grounds.
-        // Structural problems (e.g. a 4-option Part B, a non-canonical shape)
-        // are recorded as a NON-BLOCKING conformance-warning audit and surfaced
-        // read-only on /admin/conformance; publishing always proceeds.
-        //
-        // The conformance pass is purely advisory, so a failure to *compute* it
-        // (e.g. a transient query error while validating a freshly-authored
-        // paper) must also never block publishing. Wrap it defensively: if the
-        // check can't run, publish proceeds and the conformance dashboard simply
-        // lacks fresh warnings for this revision.
+        // Structural validation is fail-closed: every error-level finding
+        // blocks publication after the report is recorded for audit.
         ReadingValidationReport? readingReport = null;
         ListeningValidationReport? listeningReport = null;
         try
@@ -838,15 +824,15 @@ public sealed class ContentPaperService(
                 await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Advisory only — never block the publish on a conformance-check failure.
+            throw new InvalidOperationException(
+                "Content validation failed; publication is blocked until the validator completes successfully.",
+                ex);
         }
 
-        // Section 12 hard invariants — malformed MCQs and Listening audio
-        // source/duration/timing defects must never reach a published paper.
-        // The remaining rule-conformance findings stay advisory under the
-        // existing owner policy.
+        // Every error-level Reading/Listening validator finding is a hard
+        // publication invariant; warnings remain available for author review.
         if (readingReport is not null)
         {
             await RecordPublishConformanceWarningsAsync(
@@ -858,6 +844,11 @@ public sealed class ContentPaperService(
                 "Reading",
                 readingReport.Issues
                     .Where(i => i.Code == "question_payload_invalid")
+                    .Select(i => (i.Code, i.Message)));
+            ThrowIfPublicationInvalid(
+                "Reading",
+                readingReport.Issues
+                    .Where(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase))
                     .Select(i => (i.Code, i.Message)));
         }
         else if (listeningReport is not null)
@@ -873,13 +864,9 @@ public sealed class ContentPaperService(
                     .Where(i => i.Code == "listening_mcq_shape")
                     .Select(i => (i.Code, i.Message)));
             ThrowIfPublicationInvalid(
-                "Listening audio/timing",
+                "Listening",
                 listeningReport.Issues
-                    .Where(i => i.Code is "listening_audio_source_missing"
-                        or "listening_audio_duration"
-                        or "listening_extract_timing"
-                        or "listening_extract_cue_overlap"
-                        or "listening_section_timing")
+                    .Where(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase))
                     .Select(i => (i.Code, i.Message)));
         }
 
@@ -1094,9 +1081,9 @@ public sealed class ContentPaperService(
         return slug.Trim('-');
     }
 
-    // Decision 2 — record (never block) rule-conformance problems found at
-    // publish time. Issues are written to the unbounded Details column and
-    // surfaced read-only on /admin/conformance; publishing always proceeds.
+    // Record rule-conformance findings found at publish time. Issues are
+    // written to the unbounded Details column and surfaced read-only on
+    // /admin/conformance; the caller applies the publication gate separately.
     private async Task RecordPublishConformanceWarningsAsync(
         ContentPaper paper,
         IEnumerable<string> issues,

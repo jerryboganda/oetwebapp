@@ -1190,6 +1190,22 @@ public sealed class ReadingStructureService : IReadingStructureService
                 {
                     issues.Add(new("question_payload_invalid", "error", ex.Message, q.Id));
                 }
+                if (string.IsNullOrWhiteSpace(q.ExplanationMarkdown))
+                {
+                    issues.Add(new(
+                        "question_rationale_missing",
+                        "error",
+                        $"Reading question {q.DisplayOrder} must include a post-submit rationale.",
+                        q.Id));
+                }
+                if (string.IsNullOrWhiteSpace(q.EvidenceSentence))
+                {
+                    issues.Add(new(
+                        "question_evidence_missing",
+                        "error",
+                        $"Reading question {q.DisplayOrder} must include the source sentence that supports the correct answer.",
+                        q.Id));
+                }
             }
 
             // Part A text-link consistency — if ANY question has a text link all
