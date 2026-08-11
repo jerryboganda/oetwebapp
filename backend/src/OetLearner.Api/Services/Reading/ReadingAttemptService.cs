@@ -220,6 +220,21 @@ public sealed class ReadingAttemptService(
                 "reading_marking_policy_unavailable",
                 "Reading attempts are unavailable until an owner-approved marking policy is effective.");
         }
+        var scoreConversionService = new AssessmentScoreConversionService(db);
+        var scoreConversionAtStart = IsSubsetMode(mode)
+            ? AssessmentScoreConversionResult.Unavailable(
+                "reading",
+                "default",
+                0,
+                "subset_practice_no_conversion")
+            : await scoreConversionService.ResolveAsync(
+                "reading",
+                rawScore: 0,
+                scopeKey: "default",
+                cancellationToken: ct);
+        var scoreConversionSnapshot = AssessmentScoreConversionSnapshot
+            .Capture(scoreConversionAtStart)
+            .Serialize();
         // Gate 1: archived paper
         if (paper.Status == ContentStatus.Archived && !globalPolicy.AllowAttemptOnArchivedPaper)
             throw new InvalidOperationException("This paper has been archived and cannot be attempted.");
@@ -344,6 +359,9 @@ public sealed class ReadingAttemptService(
             MaxRawScore = maxRaw,
             MarkingPolicyVersionId = markingPolicy.PolicyId,
             PolicySnapshotJson = CreatePolicySnapshot(policy, markingPolicy),
+            ScoreConversionTableId = scoreConversionAtStart.TableId,
+            ScoreConversionTableVersionKey = scoreConversionAtStart.TableVersionKey,
+            ScoreConversionSnapshotJson = scoreConversionSnapshot,
             PaperRevisionId = paper.PublishedRevisionId,
             RulebookVersion = rulebookVersion,
             Mode = mode,
@@ -366,6 +384,8 @@ public sealed class ReadingAttemptService(
         // Lock the owner-approved policy only after the attempt is durable.
         // Failed gates or persistence must not consume a governance version.
         await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
+        if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
+            await scoreConversionService.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
 
         return new ReadingAttemptStarted(
             AttemptId: attempt.Id,

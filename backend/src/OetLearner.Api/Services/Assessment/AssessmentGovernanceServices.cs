@@ -97,6 +97,114 @@ public interface IAssessmentScoreConversionService
 }
 
 /// <summary>
+/// Immutable score-conversion selection captured when a candidate attempt is
+/// created. The table rows remain in the governed table, which is locked after
+/// first use; this record prevents a later effective table from being selected
+/// for an attempt that started before the table was available or changed.
+/// </summary>
+public sealed record AssessmentScoreConversionSnapshot(
+    string Assessment,
+    string ScopeKey,
+    string? TableId,
+    string? TableVersionKey,
+    string? ErrorCode)
+{
+    public static AssessmentScoreConversionSnapshot Capture(
+        AssessmentScoreConversionResult resolution) => new(
+            resolution.Assessment,
+            resolution.ScopeKey,
+            resolution.TableId,
+            resolution.TableVersionKey,
+            resolution.ErrorCode ?? (resolution.TableId is null ? "score_table_not_configured" : null));
+
+    public static AssessmentScoreConversionSnapshot Parse(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            throw new InvalidOperationException("assessment_score_conversion_snapshot_missing");
+
+        try
+        {
+            var snapshot = JsonSerializer.Deserialize<AssessmentScoreConversionSnapshot>(json)
+                ?? throw new InvalidOperationException("assessment_score_conversion_snapshot_invalid");
+            if (!AssessmentScoreTableValidator.IsSupportedAssessment(snapshot.Assessment)
+                || string.IsNullOrWhiteSpace(snapshot.ScopeKey)
+                || (string.IsNullOrWhiteSpace(snapshot.TableId)
+                    && string.IsNullOrWhiteSpace(snapshot.ErrorCode)))
+            {
+                throw new InvalidOperationException("assessment_score_conversion_snapshot_invalid");
+            }
+
+            return snapshot with
+            {
+                Assessment = AssessmentScoreTableValidator.NormalizeAssessment(snapshot.Assessment),
+                ScopeKey = AssessmentScoreTableValidator.NormalizeScope(snapshot.ScopeKey),
+                TableId = string.IsNullOrWhiteSpace(snapshot.TableId) ? null : snapshot.TableId.Trim(),
+                TableVersionKey = string.IsNullOrWhiteSpace(snapshot.TableVersionKey) ? null : snapshot.TableVersionKey.Trim(),
+                ErrorCode = string.IsNullOrWhiteSpace(snapshot.ErrorCode) ? null : snapshot.ErrorCode.Trim(),
+            };
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException("assessment_score_conversion_snapshot_invalid_json");
+        }
+    }
+
+    public string Serialize() => JsonSerializer.Serialize(this);
+}
+
+/// <summary>Shared resolver that preserves the attempt-start table choice.
+/// Rows created before this snapshot field existed retain the legacy behavior
+/// of resolving the current table, while every governed attempt is fail-closed
+/// when no table was available at its start.</summary>
+public static class AssessmentScoreConversionSnapshotResolver
+{
+    public static async Task<AssessmentScoreConversionResult> ResolveAsync(
+        IAssessmentScoreConversionService resolver,
+        string assessment,
+        int rawScore,
+        string? snapshotJson,
+        string? legacyTableId,
+        string? scopeKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotJson))
+        {
+            return await resolver.ResolveAsync(
+                assessment,
+                rawScore,
+                scopeKey,
+                legacyTableId,
+                cancellationToken);
+        }
+
+        var snapshot = AssessmentScoreConversionSnapshot.Parse(snapshotJson);
+        if (!string.Equals(snapshot.Assessment,
+                AssessmentScoreTableValidator.NormalizeAssessment(assessment),
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("assessment_score_conversion_snapshot_assessment_mismatch");
+        }
+
+        if (snapshot.TableId is null)
+        {
+            return AssessmentScoreConversionResult.Unavailable(
+                snapshot.Assessment,
+                snapshot.ScopeKey,
+                rawScore,
+                snapshot.ErrorCode ?? "score_table_not_configured",
+                tableVersionKey: snapshot.TableVersionKey);
+        }
+
+        return await resolver.ResolveAsync(
+            snapshot.Assessment,
+            rawScore,
+            snapshot.ScopeKey,
+            snapshot.TableId,
+            cancellationToken);
+    }
+}
+
+/// <summary>
 /// Resolves only complete, owner-effective lookup tables. There is intentionally
 /// no interpolation or formula fallback in this service.
 /// </summary>

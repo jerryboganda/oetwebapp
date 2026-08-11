@@ -508,6 +508,12 @@ public class ReadingAttempt
     [MaxLength(64)]
     public string? ScoreConversionTableVersionKey { get; set; }
 
+    /// <summary>Attempt-start score-conversion table selection and
+    /// unavailable reason. A non-null value prevents grading from resolving a
+    /// newer effective table after this attempt began.</summary>
+    [MaxLength(2048)]
+    public string? ScoreConversionSnapshotJson { get; set; }
+
     [MaxLength(16)]
     public string? ScoreConversionGrade { get; set; }
 

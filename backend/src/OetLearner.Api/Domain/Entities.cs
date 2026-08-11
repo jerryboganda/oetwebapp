@@ -359,6 +359,11 @@ public class Attempt
     [MaxLength(64)]
     public string? MarkingPolicyVersionId { get; set; }
 
+    /// <summary>Attempt-start score-conversion table selection for legacy
+    /// Listening attempts.</summary>
+    [MaxLength(2048)]
+    public string? ScoreConversionSnapshotJson { get; set; }
+
     /// <summary>Immutable Listening marking-policy snapshot for legacy attempts.</summary>
     [MaxLength(16384)]
     public string PolicySnapshotJson { get; set; } = "{}";

@@ -536,6 +536,12 @@ public sealed class ListeningLearnerService(
                 "listening_marking_policy_unavailable",
                 "Listening attempts are unavailable until an owner-approved marking policy is effective.");
         }
+        var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
+        var scoreConversionAtStart = await conversionResolver.ResolveAsync(
+            Subtest,
+            rawScore: 0,
+            scopeKey: "default",
+            cancellationToken: ct);
         var attempt = new Attempt
         {
             Id = genericAttemptId,
@@ -550,6 +556,9 @@ public sealed class ListeningLearnerService(
             ComparisonGroupId = $"listening-{source.Id}",
             AnswersJson = "{}",
             MarkingPolicyVersionId = markingPolicy.PolicyId,
+            ScoreConversionSnapshotJson = AssessmentScoreConversionSnapshot
+                .Capture(scoreConversionAtStart)
+                .Serialize(),
             PolicySnapshotJson = JsonSupport.Serialize(new
             {
                 markingPolicy = markingPolicy.Document,
@@ -561,6 +570,8 @@ public sealed class ListeningLearnerService(
         await db.SaveChangesAsync(ct);
         // Lock the policy only after the candidate attempt is durable.
         await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
+        if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
+            await conversionResolver.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
         return AttemptDto(attempt, new Dictionary<string, string?>());
     }
 
@@ -818,14 +829,18 @@ public sealed class ListeningLearnerService(
         }
 
         var review = BuildReview(attempt, source);
-        var conversion = await (scoreConversionService ?? new AssessmentScoreConversionService(db)).ResolveAsync(
+        var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
+        var conversion = await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+            conversionResolver,
             Subtest,
             review.RawScore,
+            attempt.ScoreConversionSnapshotJson,
+            legacyTableId: null,
             scopeKey: "default",
-            cancellationToken: ct);
+            ct);
         if (conversion.TableId is not null && conversion.IsAvailable)
         {
-            await (scoreConversionService ?? new AssessmentScoreConversionService(db)).MarkUsedAsync(conversion.TableId, ct);
+            await conversionResolver.MarkUsedAsync(conversion.TableId, ct);
         }
         var score = new ListeningScoreDto(
             review.RawScore,
@@ -1184,6 +1199,12 @@ public sealed class ListeningLearnerService(
                 "listening_marking_policy_unavailable",
                 "Listening attempts are unavailable until an owner-approved marking policy is effective.");
         }
+        var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
+        var scoreConversionAtStart = await conversionResolver.ResolveAsync(
+            Subtest,
+            rawScore: 0,
+            scopeKey: "default",
+            cancellationToken: ct);
         var questionVersionMap = await db.ListeningQuestions.AsNoTracking()
             .Where(q => q.PaperId == source.Id)
             .ToDictionaryAsync(q => q.Id, q => q.Version, StringComparer.Ordinal, ct);
@@ -1191,6 +1212,11 @@ public sealed class ListeningLearnerService(
         {
             Id = relationalAttemptId,
             MarkingPolicyVersionId = markingPolicy.PolicyId,
+            ScoreConversionTableId = scoreConversionAtStart.TableId,
+            ScoreConversionTableVersionKey = scoreConversionAtStart.TableVersionKey,
+            ScoreConversionSnapshotJson = AssessmentScoreConversionSnapshot
+                .Capture(scoreConversionAtStart)
+                .Serialize(),
             UserId = userId,
             PaperId = source.Id,
             StartedAt = now,
@@ -1238,6 +1264,8 @@ public sealed class ListeningLearnerService(
         await db.SaveChangesAsync(ct);
         // Lock the policy only after the candidate attempt is durable.
         await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
+        if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
+            await conversionResolver.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
         return RelationalAttemptDto(attempt, new Dictionary<string, string?>());
     }
 

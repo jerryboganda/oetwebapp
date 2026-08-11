@@ -7,11 +7,9 @@ using OetLearner.Api.Services.Listening;
 namespace OetLearner.Api.Tests.Listening;
 
 /// <summary>
-/// Listening V2 — mission-critical raw→scaled invariant test. The new
-/// <see cref="ListeningGradingService"/> MUST route every conversion through
-/// <see cref="OetScoring.OetRawToScaled"/>. This test seeds an attempt with
-/// known rawScore, grades it, and asserts the persisted scaledScore equals
-/// what <c>OetScoring</c> returns for that raw.
+/// Listening V2 — mission-critical score-conversion guard. Without a complete
+/// owner-approved table, grading must preserve the raw score while withholding
+/// a scaled score rather than applying a formula fallback.
 /// </summary>
 public class ListeningGradingServiceTests
 {
@@ -21,7 +19,7 @@ public class ListeningGradingServiceTests
             .Options);
 
     [Fact]
-    public async Task GradeAsync_routes_raw_to_scaled_via_OetScoring()
+    public async Task GradeAsync_without_owner_table_withholds_scaled_score()
     {
         await using var db = NewDb();
         var now = DateTimeOffset.UtcNow;
@@ -108,19 +106,18 @@ public class ListeningGradingServiceTests
         var grader = new ListeningGradingService(db);
         var result = await grader.GradeAsync(attempt.Id, CancellationToken.None);
 
-        // Mission-critical: scaledScore MUST equal OetScoring.OetRawToScaled(rawScore).
-        var expectedScaled = OetScoring.OetRawToScaled(result.RawScore);
-        Assert.Equal(expectedScaled, result.ScaledScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("score_table_not_configured", result.ScoreConversionErrorCode);
         Assert.Equal(1, result.RawScore);
         Assert.Equal(1, result.MaxRawScore);
 
         var reloaded = await db.ListeningAttempts.FirstAsync(a => a.Id == "att-1");
         Assert.Equal(ListeningAttemptStatus.Submitted, reloaded.Status);
-        Assert.Equal(expectedScaled, reloaded.ScaledScore);
+        Assert.Null(reloaded.ScaledScore);
     }
 
     [Fact]
-    public async Task GradeAsync_zero_correct_returns_zero_scaled()
+    public async Task GradeAsync_zero_correct_preserves_raw_only_without_owner_table()
     {
         await using var db = NewDb();
         var now = DateTimeOffset.UtcNow;
@@ -166,7 +163,8 @@ public class ListeningGradingServiceTests
 
         var result = await new ListeningGradingService(db).GradeAsync("att-0", CancellationToken.None);
         Assert.Equal(0, result.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(0), result.ScaledScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("score_table_not_configured", result.ScoreConversionErrorCode);
     }
 
     [Theory]
@@ -259,7 +257,8 @@ public class ListeningGradingServiceTests
         var result = await new ListeningGradingService(db).GradeAsync(attempt.Id, CancellationToken.None);
 
         Assert.Equal(expectedRawScore, result.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(expectedRawScore), result.ScaledScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("score_table_not_configured", result.ScoreConversionErrorCode);
     }
 
     // Part B/C grading MUST key on the option LETTER/position (OptionKey), not on
@@ -429,13 +428,14 @@ public class ListeningGradingServiceTests
 
         Assert.Equal(2, result.RawScore);
         Assert.Equal(2, result.MaxRawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(2), result.ScaledScore);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal("score_table_not_configured", result.ScoreConversionErrorCode);
         Assert.Equal(reason, result.Reason);
 
         var attempt = await db.ListeningAttempts.SingleAsync(a => a.Id == seeded.AttemptId);
         Assert.Equal(originalSubmittedAt, attempt.SubmittedAt);
         Assert.Equal(2, attempt.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(2), attempt.ScaledScore);
+        Assert.Null(attempt.ScaledScore);
         Assert.Contains("\"questionId\":\"q-override-wrong\"", attempt.HumanScoreOverridesJson);
         Assert.Contains(reason, attempt.HumanScoreOverridesJson);
 
@@ -541,7 +541,7 @@ public class ListeningGradingServiceTests
             Status = submitted ? ListeningAttemptStatus.Submitted : ListeningAttemptStatus.InProgress,
             Mode = ListeningAttemptMode.Exam,
             RawScore = submitted ? 1 : null,
-            ScaledScore = submitted ? OetScoring.OetRawToScaled(1) : null,
+            ScaledScore = null,
             MaxRawScore = 2,
             LastQuestionVersionMapJson = "{\"q-override-wrong\":1,\"q-override-correct\":1}",
         };

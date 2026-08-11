@@ -388,12 +388,14 @@ public sealed class ListeningGradingService
         // ── MISSION-CRITICAL ── raw→scaled MUST go through the owner-approved
         // versioned lookup table. Inline math and interpolation are forbidden.
         // ListeningScoringPathAuditTest source-scans for it on CI.
-        var conversion = await _scoreConversion.ResolveAsync(
+        var conversion = await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+            _scoreConversion,
             Subtest,
             rawCorrect,
-            scopeKey: "default",
-            tableId: attempt.ScoreConversionTableId,
-            cancellationToken: ct);
+            attempt.ScoreConversionSnapshotJson,
+            attempt.ScoreConversionTableId,
+            "default",
+            ct);
         if (conversion.TableId is not null && conversion.IsAvailable)
         {
             await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);

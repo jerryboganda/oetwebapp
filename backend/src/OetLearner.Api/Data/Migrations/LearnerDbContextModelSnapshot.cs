@@ -2332,6 +2332,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("ScoreConversionSnapshotJson")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
                     b.Property<string>("Mode")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -11266,6 +11270,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("ScoreConversionSnapshotJson")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -17147,6 +17155,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("ScoreConversionTableVersionKey")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ScoreConversionSnapshotJson")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<int?>("ScoreOverrideRaw")
                         .HasColumnType("integer");

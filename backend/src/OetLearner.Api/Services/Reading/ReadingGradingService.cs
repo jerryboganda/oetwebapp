@@ -219,12 +219,14 @@ public sealed class ReadingGradingService(
                 "default",
                 raw,
                 "subset_practice_no_conversion")
-            : await _scoreConversion.ResolveAsync(
+            : await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+                _scoreConversion,
                 "reading",
                 raw,
-                scopeKey: "default",
-                tableId: attempt.ScoreConversionTableId,
-                cancellationToken: ct);
+                attempt.ScoreConversionSnapshotJson,
+                attempt.ScoreConversionTableId,
+                "default",
+                ct);
         if (conversion.TableId is not null && conversion.IsAvailable)
         {
             await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);
@@ -513,14 +515,26 @@ public sealed class ReadingGradingService(
 
         // STRICT spelling: normalise + collapse whitespace + (optional)
         // smart-quote / hyphen / unit folding, then compare. NO Levenshtein
-        // and NO synonyms for Part A — real OET answers are copied
-        // word-for-word from the text. Case-insensitivity is policy-gated.
-        var nc = Normalise(ApplyTextNormalization(correct, policy), policy.ShortAnswerNormalisation);
-        var nu = Normalise(ApplyTextNormalization(user, policy), policy.ShortAnswerNormalisation);
+        // or inferred synonyms are allowed. Explicitly authored variants are
+        // the only additional accepted answers, and the owner policy controls
+        // whether those variants are active for this attempt.
+        var candidates = new List<string> { correct };
+        if (policy.ShortAnswerAcceptSynonyms)
+        {
+            ParseLabeledSynonyms(q.AcceptedSynonymsJson, out var globalSynonyms, out _);
+            if (globalSynonyms is not null)
+                candidates.AddRange(globalSynonyms);
+        }
 
-        var ok = policy.PartACaseInsensitive
-            ? string.Equals(nu, nc, StringComparison.OrdinalIgnoreCase)
-            : string.Equals(nu, nc, StringComparison.Ordinal);
+        var nu = Normalise(ApplyTextNormalization(user, policy), policy.ShortAnswerNormalisation);
+        var caseInsensitive = !q.CaseSensitive && policy.PartACaseInsensitive;
+        var ok = candidates.Any(candidate =>
+        {
+            var nc = Normalise(ApplyTextNormalization(candidate, policy), policy.ShortAnswerNormalisation);
+            return caseInsensitive
+                ? string.Equals(nu, nc, StringComparison.OrdinalIgnoreCase)
+                : string.Equals(nu, nc, StringComparison.Ordinal);
+        });
         return (ok, ok ? q.Points : 0);
     }
 

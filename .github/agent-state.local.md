@@ -4,16 +4,16 @@ Last updated: 2026-08-11
 
 ## Current checkpoint
 
-- Governed Listening/Reading conformance hardening is on `7c677c486044be9dc9955d1183e5aeb5cfcfec08` on `main` and `origin/main`.
+- Governed Listening/Reading conformance hardening is on `7c677c486044be9dc9955d1183e5aeb5cfcfec08`; the current uncommitted follow-up adds attempt-start score-table snapshots and explicit Reading Part A variant coverage.
 - Build & Deploy run `31453183628` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
 - Public post-deploy checks returned HTTP 200 for API live/readiness; readiness reported database, migrations, stuck jobs, and storage all `ok`. The app root, `/listening`, and `/reading` returned HTTP 307 redirects to their sign-in routes on `app.oetwithdrhesham.co.uk`.
-- Fixed policy locking to occur only after durable attempt creation; governed attempts now fail closed on missing/malformed marking-policy snapshots; learner, mock, analytics, tutor, expert, and background LR projections no longer synthesize scaled scores from raw accuracy.
+- Fixed policy locking to occur only after durable attempt creation; governed attempts now fail closed on missing/malformed marking-policy snapshots; learner, mock, analytics, tutor, expert, and background LR projections no longer synthesize scaled scores from raw accuracy. Reading Part A now consumes only explicitly authored variants under the immutable attempt policy, and full/legacy Listening and Reading attempts pin score-table selection at start.
 
 ## Validation and remaining boundary
 
-- `git diff --check` and staged diff checks passed. Targeted ESLint on the touched mock-result pages and `lib/reading-pathway-api.ts` passed with one pre-existing `setState`-in-effect warning in the Reading page. Host-wide TypeScript and filtered backend test commands exceeded their local time limits without diagnostics; GitHub Actions web/API image builds and migration generation passed for the exact SHA.
+- `git diff --check` passed. The focused filtered backend test and API build both stalled on the Windows host beyond their time limits without compiler/test diagnostics, after which only the orphaned processes created by those checks were stopped. The new migration/model references, forbidden LR formula-path scan, and explicit staging scope remain clean; GitHub Actions is the compile, migration, and image-deploy gate.
 - Owner-controlled release data remains required: complete approved Listening and Reading score tables, normalization profile, practice/mock lock mode, approved rationale/evidence content, pathway/pass thresholds, graph legal/style sign-off, and peak timed-attempt concurrency target.
-- LR-05 now has explicit Listening and Reading selection-preservation assertions. Acceptance evidence still needs authenticated end-to-end/mobile evidence. Do not claim complete PDF acceptance until that boundary and owner approvals are supplied.
+- LR-05 now has explicit Listening and Reading selection-preservation assertions. The new LR-03/LR-04/LR-08 focused tests are present but await CI execution. Acceptance evidence still needs authenticated end-to-end/mobile evidence. Do not claim complete PDF acceptance until that boundary and owner approvals are supplied.
 - Preserve untracked `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
 
 ## Outcome
@@ -43,10 +43,10 @@ Last updated: 2026-08-11
 
 ## Next step
 
-Run the v1.1 focused CI/build and migration/deploy workflow after explicit-path
-staging, then verify production health, migration presence, and deployed SHA on
-the VPS. Preserve unrelated dirty work and do not approve a candidate release
-gate without owner calibration evidence.
+Stage only the scoped Listening/Reading files, commit and push `main`, then
+verify the v1.1 build/migration/deploy workflow, production health, migration
+presence, and deployed SHA. Preserve unrelated dirty work and do not approve a
+candidate release gate without owner calibration evidence.
 
 # Current Task - OET Speaking booking workflow PDF implementation
 
