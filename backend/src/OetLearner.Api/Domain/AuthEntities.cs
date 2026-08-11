@@ -207,6 +207,14 @@ public static class AdminPermissions
     public const string ContentPublish = "content:publish";
     public const string ContentEditorReview = "content:editor_review";
     public const string ContentPublisherApproval = "content:publisher_approval";
+    /// <summary>Read access to Listening/Reading scoring governance without candidate PII.</summary>
+    public const string AssessmentGovernanceRead = "assessment:governance_read";
+    /// <summary>Create drafts for score tables, marking policies, rationales, and re-mark jobs.</summary>
+    public const string AssessmentGovernanceWrite = "assessment:governance_write";
+    /// <summary>Approve owner-controlled governance artifacts and re-mark jobs.</summary>
+    public const string AssessmentGovernanceApprove = "assessment:governance_approve";
+    /// <summary>Execute an approved controlled re-mark job.</summary>
+    public const string AssessmentGovernanceExecute = "assessment:governance_execute";
     public const string BillingRead = "billing:read";
 
     /// <summary>
@@ -254,6 +262,8 @@ public static class AdminPermissions
     [
         ContentRead, ContentWrite, ContentPublish,
         ContentEditorReview, ContentPublisherApproval,
+        AssessmentGovernanceRead, AssessmentGovernanceWrite,
+        AssessmentGovernanceApprove, AssessmentGovernanceExecute,
         BillingRead, BillingWrite,
         BillingRefundWrite, BillingCatalogWrite, BillingSubscriptionWrite,
         LearnerRead, LearnerWrite,

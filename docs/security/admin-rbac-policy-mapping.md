@@ -19,6 +19,10 @@ Scope: granular admin authorization policies registered in `backend/src/OetLearn
 - `AdminContentEditorReview`: requires `content:editor_review`, `content:publish`, or `system_admin`.
 - `AdminContentPublisherApproval`: requires `content:publisher_approval`, `content:publish`, or `system_admin`.
 - `AdminContentPublishRequestsRead`: requires `content:editor_review`, `content:publisher_approval`, `content:publish`, or `system_admin`.
+- `AdminAssessmentGovernanceRead`: requires `assessment:governance_read` or `system_admin`.
+- `AdminAssessmentGovernanceWrite`: requires `assessment:governance_write` or `system_admin`.
+- `AdminAssessmentGovernanceApprove`: requires `assessment:governance_approve` or `system_admin`.
+- `AdminAssessmentGovernanceExecute`: requires `assessment:governance_execute` or `system_admin`.
 - `AdminBillingRead`: requires `billing:read` or `system_admin`.
 - `AdminBillingWrite`: requires `billing:write` or `system_admin`.
 - `AdminBillingRefundWrite`: requires `billing:refund_write`, `billing:write`, or `system_admin`.
@@ -71,6 +75,14 @@ Scope: granular admin authorization policies registered in `backend/src/OetLearn
 - Audit/system policy: `AdminSystemAdmin`.
 - Existing tests: admin dashboard and audit read paths have partial coverage.
 - Remaining launch evidence: add least-privilege tests for audit export and review queue mutations.
+
+### Listening/Reading Assessment Governance
+
+- The score-table, marking-policy, rationale, and controlled re-mark APIs are
+  isolated under `/v1/admin/assessment-governance`.
+- Content-author permissions do not grant access to these endpoints. Draft
+  creation, owner approval, and re-mark execution use separate permissions;
+  `system_admin` remains the explicit break-glass override.
 
 ## Production Dev-Auth Guard
 

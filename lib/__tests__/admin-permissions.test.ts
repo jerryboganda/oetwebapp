@@ -100,10 +100,10 @@ describe('sidebarPermissionMap', () => {
     expect(sidebarPermissionMap['/admin/content/papers/import']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/generation']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/scoring-system']).toEqual([
-      AdminPermission.ContentRead,
-      AdminPermission.ContentWrite,
-      AdminPermission.ContentPublish,
+      AdminPermission.AssessmentGovernanceRead,
     ]);
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/content/scoring-system')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.AssessmentGovernanceRead], '/admin/content/scoring-system')).toBe(true);
     expect(sidebarPermissionMap['/admin/content/result-templates']).toEqual([
       AdminPermission.ContentRead,
       AdminPermission.ContentWrite,

@@ -349,3 +349,12 @@ an owner-controlled value that must not be invented in code.
   (15 tests), and `cbla-fidelity.test.tsx` passed (20 tests). The untracked,
   user-owned `pdf-policy-release*` copies were excluded from these checks and
   were not modified.
+
+## Assessment-governance role boundary
+
+- Score tables, marking-policy versions, approved rationales, and controlled
+  re-mark jobs are isolated behind dedicated assessment-governance read, write,
+  approve, and execute permissions. Content-author permissions alone do not
+  grant access; `system_admin` is the only break-glass override.
+- The admin scoring-system route uses the dedicated governance-read permission,
+  matching the backend `/v1/admin/assessment-governance` policy boundary.

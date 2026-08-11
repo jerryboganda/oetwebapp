@@ -763,6 +763,18 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminContentPublishRequestsRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "content:editor_review", "content:publisher_approval", "content:publish", "system_admin")));
+    options.AddPolicy("AdminAssessmentGovernanceRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:governance_read", "system_admin")));
+    options.AddPolicy("AdminAssessmentGovernanceWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:governance_write", "system_admin")));
+    options.AddPolicy("AdminAssessmentGovernanceApprove", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:governance_approve", "system_admin")));
+    options.AddPolicy("AdminAssessmentGovernanceExecute", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "assessment:governance_execute", "system_admin")));
     options.AddPolicy("AdminBillingRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));

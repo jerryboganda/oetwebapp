@@ -19,7 +19,7 @@ public static class AssessmentGovernanceEndpoints
     public static IEndpointRouteBuilder MapAssessmentGovernanceEndpoints(this IEndpointRouteBuilder app)
     {
         var admin = app.MapGroup("/v1/admin/assessment-governance")
-            .RequireAuthorization("AdminContentRead")
+            .RequireAuthorization("AdminAssessmentGovernanceRead")
             .RequireRateLimiting("PerUser");
 
         admin.MapGet("/score-tables", async (
@@ -97,7 +97,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={assessment} scope={scopeKey} version={table.VersionKey}");
             await db.SaveChangesAsync(ct);
             return Results.Created($"/v1/admin/assessment-governance/score-tables/{table.Id}", ProjectTable(table));
-        }).WithAdminWrite("AdminContentWrite");
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
         admin.MapPost("/score-tables/{id}/effective", async (
             string id,
@@ -145,7 +145,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={table.Assessment} scope={table.ScopeKey} version={table.VersionKey}");
             await db.SaveChangesAsync(ct);
             return Results.Ok(ProjectTable(table));
-        }).WithAdminWrite("AdminContentPublish");
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
 
         admin.MapGet("/marking-policies", async (
             string? assessment,
@@ -204,7 +204,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={assessment} scope={scopeKey} version={policy.VersionKey}");
             await db.SaveChangesAsync(ct);
             return Results.Created($"/v1/admin/assessment-governance/marking-policies/{policy.Id}", ProjectPolicy(policy));
-        }).WithAdminWrite("AdminContentWrite");
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
         admin.MapPost("/marking-policies/{id}/effective", async (
             string id,
@@ -242,7 +242,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={policy.Assessment} scope={policy.ScopeKey} version={policy.VersionKey}");
             await db.SaveChangesAsync(ct);
             return Results.Ok(ProjectPolicy(policy));
-        }).WithAdminWrite("AdminContentPublish");
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
 
         admin.MapGet("/rationales", async (
             string? assessment,
@@ -312,7 +312,7 @@ public static class AssessmentGovernanceEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Created($"/v1/admin/assessment-governance/rationales/{rationale.Id}",
                 new { rationale.Id, rationale.Assessment, rationale.QuestionRevisionId, status = rationale.Status.ToString() });
-        }).WithAdminWrite("AdminContentWrite");
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
         admin.MapPost("/rationales/{id}/effective", async (
             string id,
@@ -333,7 +333,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={rationale.Assessment}; questionRevisionId={rationale.QuestionRevisionId}");
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { rationale.Id, status = rationale.Status.ToString(), rationale.ApprovedByUserId });
-        }).WithAdminWrite("AdminContentPublish");
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
 
         admin.MapGet("/re-mark-jobs", async (
             string? assessment,
@@ -436,7 +436,7 @@ public static class AssessmentGovernanceEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Created($"/v1/admin/assessment-governance/re-mark-jobs/{job.Id}",
                 new { job.Id, status = job.Status.ToString() });
-        }).WithAdminWrite("AdminContentWrite");
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
         admin.MapPost("/re-mark-jobs/{id}/approve", async (
             string id,
@@ -457,7 +457,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={job.Assessment}; attemptId={job.AttemptId}");
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { job.Id, status = job.Status.ToString(), job.ApprovedByUserId });
-        }).WithAdminWrite("AdminContentPublish");
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
 
         admin.MapPost("/re-mark-jobs/{id}/execute", async (
             string id,
@@ -532,7 +532,7 @@ public static class AssessmentGovernanceEndpoints
                 $"assessment={job.Assessment}; attemptId={job.AttemptId}; questionRevisionId={job.QuestionRevisionId}");
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { job.Id, status = job.Status.ToString(), affectedAttemptIds = job.AffectedAttemptIdsJson, result });
-        }).WithAdminWrite("AdminContentWrite");
+        }).WithAdminWrite("AdminAssessmentGovernanceExecute");
         return app;
     }
 

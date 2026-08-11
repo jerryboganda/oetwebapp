@@ -79,6 +79,15 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/video-library/collections", "GET", "AdminContentRead")]
     [InlineData("/v1/admin/video-library/collections/{collectionId}", "DELETE", "AdminSystemAdmin")]
     [InlineData("/v1/admin/video-library/collections/videos/{bunnyVideoId}/bunny-delete", "POST", "AdminSystemAdmin")]
+    [InlineData("/v1/admin/assessment-governance/score-tables", "GET", "AdminAssessmentGovernanceRead")]
+    [InlineData("/v1/admin/assessment-governance/score-tables", "POST", "AdminAssessmentGovernanceWrite")]
+    [InlineData("/v1/admin/assessment-governance/score-tables/{id}/effective", "POST", "AdminAssessmentGovernanceApprove")]
+    [InlineData("/v1/admin/assessment-governance/marking-policies", "GET", "AdminAssessmentGovernanceRead")]
+    [InlineData("/v1/admin/assessment-governance/marking-policies", "POST", "AdminAssessmentGovernanceWrite")]
+    [InlineData("/v1/admin/assessment-governance/marking-policies/{id}/effective", "POST", "AdminAssessmentGovernanceApprove")]
+    [InlineData("/v1/admin/assessment-governance/rationales", "GET", "AdminAssessmentGovernanceRead")]
+    [InlineData("/v1/admin/assessment-governance/re-mark-jobs/{id}/approve", "POST", "AdminAssessmentGovernanceApprove")]
+    [InlineData("/v1/admin/assessment-governance/re-mark-jobs/{id}/execute", "POST", "AdminAssessmentGovernanceExecute")]
     public void SensitiveAdminRoutes_UseExpectedGranularPolicies(string routePattern, string method, string policy)
     {
         using var client = _factory.CreateClient();
