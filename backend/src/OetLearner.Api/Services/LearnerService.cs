@@ -113,6 +113,7 @@ public partial class LearnerService(
         string? AttemptId,
         string? SubtestCode,
         string? ScoreRange,
+        int? ScaledScore,
         string? CriterionScoresJson,
         string? ScoreConversionTableVersionKey,
         bool? ScoreConversionPassed);
@@ -120,6 +121,7 @@ public partial class LearnerService(
     private sealed record ProgressEvaluationRow(
         string SubtestCode,
         string? ScoreRange,
+        int? ScaledScore,
         string CriterionScoresJson,
         DateTimeOffset? GeneratedAt,
         string? ScoreConversionTableVersionKey,
@@ -151,6 +153,7 @@ public partial class LearnerService(
         string AttemptId,
         string SubtestCode,
         string? ScoreRange,
+        int? ScaledScore,
         string? ScoreConversionTableVersionKey,
         bool? ScoreConversionPassed);
 
@@ -967,7 +970,7 @@ public partial class LearnerService(
                 todaysTasks = todaysTasks.Select(StudyPlanItemDto),
                 latestEvaluatedSubmission = evidence.EvaluationId is null || evidence.AttemptId is null
                     ? null
-                    : new { evaluationId = evidence.EvaluationId, attemptId = evidence.AttemptId, subtest = evidence.SubtestCode, scoreRange = GovernedScoreRange(evidence.SubtestCode, evidence.ScoreRange, evidence.ScoreConversionTableVersionKey, evidence.ScoreConversionPassed), route = AttemptFeedbackRoute(evidence.SubtestCode!, evidence.EvaluationId) },
+                    : new { evaluationId = evidence.EvaluationId, attemptId = evidence.AttemptId, subtest = evidence.SubtestCode, scoreRange = GovernedScoreRange(evidence.SubtestCode, evidence.ScoreRange, evidence.ScaledScore, evidence.ScoreConversionTableVersionKey, evidence.ScoreConversionPassed), route = AttemptFeedbackRoute(evidence.SubtestCode!, evidence.EvaluationId) },
                 weakCriteria = evidence.EvaluationId is null
                     ? new List<Dictionary<string, object?>>()
                     : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evidence.CriterionScoresJson, []),
@@ -1085,6 +1088,7 @@ public partial class LearnerService(
                     evaluation == null ? null : evaluation.AttemptId,
                     evaluation == null ? null : evaluation.SubtestCode,
                     evaluation == null ? null : evaluation.ScoreRange,
+                    evaluation == null ? null : evaluation.ScaledScore,
                     evaluation == null ? null : evaluation.CriterionScoresJson,
                     evaluation == null ? null : evaluation.ScoreConversionTableVersionKey,
                     evaluation == null ? null : evaluation.ScoreConversionPassed))
@@ -1394,6 +1398,7 @@ public partial class LearnerService(
             .Select(evaluation => new ProgressEvaluationRow(
                 evaluation.SubtestCode,
                 evaluation.ScoreRange,
+                evaluation.ScaledScore,
                 evaluation.CriterionScoresJson,
                 evaluation.GeneratedAt,
                 evaluation.ScoreConversionTableVersionKey,
@@ -1418,7 +1423,7 @@ public partial class LearnerService(
                 {
                     criterionCode,
                     criterionLabel = CriterionLabelFromCode(criterionCode),
-                    score = IsGovernedScoreAvailable(parsed.Evaluation.SubtestCode, parsed.Evaluation.ScoreConversionTableVersionKey, parsed.Evaluation.ScoreConversionPassed)
+                    score = IsGovernedScoreAvailable(parsed.Evaluation.SubtestCode, parsed.Evaluation.ScaledScore, parsed.Evaluation.ScoreConversionTableVersionKey, parsed.Evaluation.ScoreConversionPassed)
                         ? ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString())
                         : (int?)null,
                     generatedAt = parsed.Evaluation.GeneratedAt,
@@ -1453,8 +1458,8 @@ public partial class LearnerService(
 
         return new
         {
-            trend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
-            subtestTrend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
+            trend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScaledScore, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
+            subtestTrend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScaledScore, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
             criterionTrend,
             completion = new[]
             {
@@ -1612,6 +1617,7 @@ public partial class LearnerService(
                 scoreEstimate = GovernedScoreRange(
                     eval?.SubtestCode ?? attempt.SubtestCode,
                     eval?.ScoreRange,
+                    eval?.ScaledScore,
                     eval?.ScoreConversionTableVersionKey,
                     eval?.ScoreConversionPassed),
                 reviewStatus = review is null ? "not_requested" : ToReviewRequestState(review.State),
@@ -1809,8 +1815,8 @@ public partial class LearnerService(
         return new
         {
             canCompare = true,
-            left = new { attemptId = left.Id, evaluationId = leftEval?.Id, scoreRange = GovernedScoreRange(left.SubtestCode, leftEval?.ScoreRange, leftEval?.ScoreConversionTableVersionKey, leftEval?.ScoreConversionPassed), subtest = left.SubtestCode },
-            right = new { attemptId = right.Id, evaluationId = rightEval?.Id, scoreRange = GovernedScoreRange(right.SubtestCode, rightEval?.ScoreRange, rightEval?.ScoreConversionTableVersionKey, rightEval?.ScoreConversionPassed), subtest = right.SubtestCode },
+            left = new { attemptId = left.Id, evaluationId = leftEval?.Id, scoreRange = GovernedScoreRange(left.SubtestCode, leftEval?.ScoreRange, leftEval?.ScaledScore, leftEval?.ScoreConversionTableVersionKey, leftEval?.ScoreConversionPassed), subtest = left.SubtestCode },
+            right = new { attemptId = right.Id, evaluationId = rightEval?.Id, scoreRange = GovernedScoreRange(right.SubtestCode, rightEval?.ScoreRange, rightEval?.ScaledScore, rightEval?.ScoreConversionTableVersionKey, rightEval?.ScoreConversionPassed), subtest = right.SubtestCode },
             summary = "The more recent submission shows stronger structure and slightly improved score confidence.",
             comparisonGroupId = left.ComparisonGroupId ?? right.ComparisonGroupId
         };
@@ -6974,8 +6980,11 @@ public partial class LearnerService(
         {
             await conversionResolver.MarkUsedAsync(conversion.TableId, cancellationToken);
         }
-        var scaledScore = conversion.ConvertedScore;
-        var grade = conversion.Grade ?? "—";
+        var hasApprovedConversion = conversion.ConvertedScore.HasValue
+            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+            && conversion.Passed.HasValue;
+        var scaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
+        var grade = hasApprovedConversion ? conversion.Grade ?? "—" : "—";
         var scoreDisplay = scaledScore is int converted
             ? $"{rawScore} / {maxRawScore} \u2022 {converted} / 500 \u2022 Grade {grade}"
             : $"{rawScore} / {maxRawScore} \u2022 Practice score unavailable ({conversion.ErrorCode ?? "score_conversion_unavailable"})";
@@ -6997,12 +7006,12 @@ public partial class LearnerService(
             RawScore = rawScore,
             MaxRawScore = maxRawScore,
             ScaledScore = scaledScore,
-            ScoreConversionTableVersionKey = conversion.TableVersionKey,
-            ScoreConversionGrade = conversion.Grade,
-            ScoreConversionPassed = conversion.Passed,
+            ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null,
+            ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null,
+            ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null,
             GradeRange = scaledScore is null ? "Practice score unavailable" : $"Grade {grade}",
             ConfidenceBand = ConfidenceBand.High,
-            StrengthsJson = JsonSupport.Serialize(conversion.Passed is true
+            StrengthsJson = JsonSupport.Serialize(hasApprovedConversion && conversion.Passed is true
                 ? new[] { $"Your {ToDisplaySubtest(subtest)} raw score is at or above the OET Grade B practice threshold.", "Your answer flow remained controlled under time pressure." }
                 : new[] { $"You completed the {ToDisplaySubtest(subtest)} attempt and now have item-level evidence to review." }),
             IssuesJson = JsonSupport.Serialize(incorrectItems
@@ -7020,9 +7029,9 @@ public partial class LearnerService(
                     maxRawScore,
                     scaledScore,
                     grade,
-                    passed = conversion.Passed,
-                    scoreConversionTableVersionKey = conversion.TableVersionKey,
-                    scoreConversionErrorCode = conversion.ErrorCode,
+                    passed = hasApprovedConversion ? conversion.Passed : null,
+                    scoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null,
+                    scoreConversionErrorCode = hasApprovedConversion ? conversion.ErrorCode : "score_conversion_unavailable",
                     scoreDisplay,
                     confidenceBand = "high",
                     explanation = "Objective score graded from the authored answer key."
@@ -9862,17 +9871,21 @@ public partial class LearnerService(
 
     private static bool IsGovernedScoreAvailable(
         string? subtestCode,
+        int? scaledScore,
         string? scoreConversionTableVersionKey,
         bool? scoreConversionPassed)
         => !IsListeningOrReading(subtestCode)
-            || (!string.IsNullOrWhiteSpace(scoreConversionTableVersionKey) && scoreConversionPassed.HasValue);
+            || (scaledScore.HasValue
+                && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
+                && scoreConversionPassed.HasValue);
 
     private static string? GovernedScoreRange(
         string? subtestCode,
         string? scoreRange,
+        int? scaledScore,
         string? scoreConversionTableVersionKey,
         bool? scoreConversionPassed)
-        => IsGovernedScoreAvailable(subtestCode, scoreConversionTableVersionKey, scoreConversionPassed)
+        => IsGovernedScoreAvailable(subtestCode, scaledScore, scoreConversionTableVersionKey, scoreConversionPassed)
             ? scoreRange
             : null;
 
@@ -13098,6 +13111,7 @@ public partial class LearnerService(
                     AvgMid = g.Select(e => GovernedScoreRange(
                             e.SubtestCode,
                             e.ScoreRange,
+                            e.ScaledScore,
                             e.ScoreConversionTableVersionKey,
                             e.ScoreConversionPassed))
                         .Select(ParseScoreRangeMid)
@@ -13277,6 +13291,7 @@ public partial class LearnerService(
                 .Select(e => ParseScoreRangeMid(GovernedScoreRange(
                     e.SubtestCode,
                     e.ScoreRange,
+                    e.ScaledScore,
                     e.ScoreConversionTableVersionKey,
                     e.ScoreConversionPassed)))
                 .Where(s => s.HasValue)
@@ -13293,6 +13308,7 @@ public partial class LearnerService(
                 {
                     e.SubtestCode,
                     e.ScoreRange,
+                    e.ScaledScore,
                     e.ScoreConversionTableVersionKey,
                     e.ScoreConversionPassed
                 })
@@ -13302,6 +13318,7 @@ public partial class LearnerService(
                 .Select(e => ParseScoreRangeMid(GovernedScoreRange(
                     e.SubtestCode,
                     e.ScoreRange,
+                    e.ScaledScore,
                     e.ScoreConversionTableVersionKey,
                     e.ScoreConversionPassed)))
                 .Where(s => s.HasValue)
@@ -13578,6 +13595,7 @@ public partial class LearnerService(
             {
                 e.SubtestCode,
                 e.ScoreRange,
+                e.ScaledScore,
                 e.ScoreConversionTableVersionKey,
                 e.ScoreConversionPassed
             })
@@ -13592,6 +13610,7 @@ public partial class LearnerService(
                     var scores = g.Select(e => ParseScoreRangeMid(GovernedScoreRange(
                             e.SubtestCode,
                             e.ScoreRange,
+                            e.ScaledScore,
                             e.ScoreConversionTableVersionKey,
                             e.ScoreConversionPassed)))
                         .Where(score => score.HasValue)

@@ -262,7 +262,11 @@ public sealed class ReadingTutorService(
                 scopeKey: "default",
                 tableId: attempt.ScoreConversionTableId,
                 cancellationToken: ct);
-            scaledToStore = conversion.ConvertedScore;
+            scaledToStore = conversion.ConvertedScore.HasValue
+                && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+                && conversion.Passed.HasValue
+                ? conversion.ConvertedScore
+                : null;
         }
         else
             scaledToStore = null;

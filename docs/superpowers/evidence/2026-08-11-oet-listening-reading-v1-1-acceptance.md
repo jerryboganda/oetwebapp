@@ -112,6 +112,10 @@ an owner-controlled value that must not be invented in code.
   the same three-field conversion gate, including idempotent existing-result
   responses and submit responses. Focused Reading result/review execution
   remains pending.
+- Remaining legacy Listening submit, expert re-mark, generic objective submit,
+  mock-result, background-report, analytics-export, and client result paths now
+  apply the same explicit conversion-decision gate and clear stale scaled values
+  when conversion evidence is unavailable. Focused execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

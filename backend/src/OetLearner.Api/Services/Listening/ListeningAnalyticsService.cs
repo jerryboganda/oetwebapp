@@ -467,6 +467,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             ?? throw new KeyNotFoundException($"Listening attempt {attemptId} not found.");
         var legacyEvaluations = await LoadEvaluationExportsAsync(attemptId, ct);
         var scaledScore = legacyEvaluations
+            .Where(HasApprovedConversion)
             .Select(evaluation => new
             {
                 evaluation.GeneratedAt,

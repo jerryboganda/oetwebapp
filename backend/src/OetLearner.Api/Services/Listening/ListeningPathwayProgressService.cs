@@ -126,7 +126,8 @@ public sealed class ListeningPathwayProgressService
                     && StageMatches(stage, a.Mode, a.ScopeJson)
                     && (stage == "diagnostic"
                         || (a.ScaledScore.HasValue
-                            && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey))))
+                            && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
+                            && a.ScoreConversionPassed.HasValue)))
                 .OrderByDescending(a => a.ScaledScore ?? 0)
                 .ThenByDescending(a => a.SubmittedAt ?? DateTimeOffset.MinValue)
                 .FirstOrDefault();
@@ -140,7 +141,10 @@ public sealed class ListeningPathwayProgressService
                     => ListeningPathwayStageStatus.Completed,
                 (true, _) when IsOwnerPassingStage(stage)
                     => ListeningPathwayStageStatus.InProgress,
-                (true, _) when qualifying.ScaledScore is int scaled
+                (true, _) when stage == "diagnostic"
+                    => ListeningPathwayStageStatus.Completed,
+                (true, _) when HasApprovedScore(qualifying.ScaledScore, qualifying.ScoreConversionTableVersionKey, qualifying.ScoreConversionPassed)
+                    && qualifying.ScaledScore is int scaled
                     && scaled >= ScaledThresholdFor(stage)
                     => ListeningPathwayStageStatus.Completed,
                 (true, _) => ListeningPathwayStageStatus.InProgress,
@@ -173,10 +177,13 @@ public sealed class ListeningPathwayProgressService
                 && qualifying is not null)
             {
                 consumedAttemptIds.Add(qualifying.Id);
-                if (row.AttemptId != qualifying.Id || row.ScaledScore != qualifying.ScaledScore)
+                var approvedScaled = HasApprovedScore(qualifying.ScaledScore, qualifying.ScoreConversionTableVersionKey, qualifying.ScoreConversionPassed)
+                    ? qualifying.ScaledScore
+                    : null;
+                if (row.AttemptId != qualifying.Id || row.ScaledScore != approvedScaled)
                 {
                     row.AttemptId = qualifying.Id;
-                    row.ScaledScore = qualifying.ScaledScore;
+                    row.ScaledScore = approvedScaled;
                     row.UpdatedAt = now;
                 }
             }
@@ -216,6 +223,11 @@ public sealed class ListeningPathwayProgressService
 
     private static bool IsOwnerPassingStage(string stage)
         => stage is "fullpaper_paper" or "fullpaper_cbt" or "exam_simulation";
+
+    private static bool HasApprovedScore(int? scaledScore, string? scoreConversionTableVersionKey, bool? scoreConversionPassed)
+        => scaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
+            && scoreConversionPassed.HasValue;
 
     /// <summary>
     /// Practice stages may use their existing progression bar only after an

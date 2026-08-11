@@ -231,7 +231,9 @@ export default function ListeningReviewPage() {
         {!loading && review ? (
           <>
             {(() => {
-              const hasApprovedConversion = review.scaledScore != null && review.scoreConversionTableVersionKey != null;
+              const hasApprovedConversion = review.scaledScore != null
+                && review.scoreConversionTableVersionKey != null
+                && review.passed != null;
               return (
                 <>
             <ResultsScorePanel

@@ -1637,7 +1637,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             section.FeedbackJson,
             new Dictionary<string, object?>());
         return evidence.TryGetValue("scoreConversionTableVersionKey", out var key)
-            && !string.IsNullOrWhiteSpace(key?.ToString());
+            && !string.IsNullOrWhiteSpace(key?.ToString())
+            && evidence.TryGetValue("scoreConversionPassed", out var passed)
+            && bool.TryParse(passed?.ToString(), out _);
     }
 
     private static string FormatMockRawScore(MockSectionAttempt section)

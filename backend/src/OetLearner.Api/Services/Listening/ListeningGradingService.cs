@@ -153,10 +153,7 @@ public sealed class ListeningGradingService
 
         var result = await GradeAttemptAsync(attempt, refreshSubmittedAt: false, ct);
         var grade = result.ScoreConversionGrade ?? "—";
-        if (result.ScaledScore is not null)
-        {
-            await RefreshLatestEvaluationAsync(result, grade, actorId, normalizedReason, ct);
-        }
+        await RefreshLatestEvaluationAsync(result, grade, actorId, normalizedReason, ct);
 
         _db.AuditEvents.Add(new AuditEvent
         {
@@ -451,10 +448,13 @@ public sealed class ListeningGradingService
             await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);
         }
         attempt.ScoreConversionTableId = conversion.TableId;
-        attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
-        attempt.ScoreConversionGrade = conversion.Grade;
-        attempt.ScoreConversionPassed = conversion.Passed;
-        attempt.ScaledScore = conversion.ConvertedScore;
+        var hasApprovedConversion = conversion.ConvertedScore.HasValue
+            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+            && conversion.Passed.HasValue;
+        attempt.ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null;
+        attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
+        attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
+        attempt.ScaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
         if (refreshSubmittedAt || attempt.SubmittedAt is null)
         {
             attempt.SubmittedAt = now;
@@ -468,10 +468,10 @@ public sealed class ListeningGradingService
             RawScore: rawCorrect,
             MaxRawScore: attempt.MaxRawScore,
             ScaledScore: attempt.ScaledScore,
-            ScoreConversionTableVersionKey: attempt.ScoreConversionTableVersionKey,
+            ScoreConversionTableVersionKey: hasApprovedConversion ? attempt.ScoreConversionTableVersionKey : null,
             ScoreConversionErrorCode: conversion.ErrorCode,
-            ScoreConversionGrade: conversion.Grade,
-            ScoreConversionPassed: conversion.Passed);
+            ScoreConversionGrade: hasApprovedConversion ? conversion.Grade : null,
+            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null);
     }
 
     private async Task RefreshLatestEvaluationAsync(
@@ -487,15 +487,10 @@ public sealed class ListeningGradingService
             .FirstOrDefaultAsync(ct);
         if (evaluation is null) return;
 
-        if (result.ScaledScore is not int scaledScore)
-        {
-            return;
-        }
-
         var passed = result.ScoreConversionPassed;
         var scoreDisplay = FormatScoreDisplay(result, grade);
         evaluation.ScoreRange = scoreDisplay;
-        evaluation.GradeRange = $"Grade {grade}";
+        evaluation.GradeRange = result.ScaledScore.HasValue ? $"Grade {grade}" : "Practice score unavailable";
         evaluation.RawScore = result.RawScore;
         evaluation.MaxRawScore = result.MaxRawScore;
         evaluation.ScaledScore = result.ScaledScore;
@@ -509,8 +504,8 @@ public sealed class ListeningGradingService
                 criterionCode = "listening_accuracy",
                 rawScore = result.RawScore,
                 maxRawScore = result.MaxRawScore,
-                scaledScore,
-                grade,
+                scaledScore = result.ScaledScore,
+                grade = result.ScaledScore.HasValue ? grade : "—",
                 passed,
                 scoreDisplay,
                 humanOverride = new { by = actorId, reason }

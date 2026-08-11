@@ -843,8 +843,8 @@ public static class LearnerEndpoints
                 paperTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper"),
                 rawScore = a.RawScore ?? 0,
                 maxRawScore = a.MaxRawScore,
-                scaledScore = a.ScaledScore,
-                gradeLetter = a.ScoreConversionGrade ?? "—",
+                scaledScore = HasApprovedReadingScore(a) ? a.ScaledScore : null,
+                gradeLetter = HasApprovedReadingScore(a) ? a.ScoreConversionGrade ?? "—" : "—",
                 a.SubmittedAt,
                 route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
             })
@@ -894,7 +894,7 @@ public static class LearnerEndpoints
                     lastAttempt.StartedAt,
                     lastAttempt.SubmittedAt,
                     rawScore = lastAttempt.RawScore,
-                    scaledScore = lastAttempt.ScaledScore,
+                    scaledScore = HasApprovedReadingScore(lastAttempt) ? lastAttempt.ScaledScore : null,
                     route = lastAttempt.Status == ReadingAttemptStatus.Submitted
                         ? $"/reading/paper/{p.Id}/results?attemptId={lastAttempt.Id}"
                         : $"/reading/paper/{p.Id}?attemptId={lastAttempt.Id}",
@@ -1064,6 +1064,12 @@ public static class LearnerEndpoints
     private static bool IsCanonicalReadingScoreAttempt(ReadingAttempt attempt)
         => attempt.Mode is ReadingAttemptMode.Exam or ReadingAttemptMode.Learning
             && attempt.MaxRawScore == OetScoring.ListeningReadingRawMax;
+
+    private static bool HasApprovedReadingScore(ReadingAttempt attempt)
+        => IsCanonicalReadingScoreAttempt(attempt)
+            && attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
 
     private static (DateTimeOffset PartADeadlineAt, DateTimeOffset PartBCDeadlineAt) ResolveReadingAttemptDeadlines(
         ReadingAttempt attempt,

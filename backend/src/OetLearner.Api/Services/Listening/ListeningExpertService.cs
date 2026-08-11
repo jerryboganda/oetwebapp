@@ -252,7 +252,7 @@ public sealed class ListeningExpertService(
             SubmittedAt: a.SubmittedAt,
             RawScore: a.RawScore,
             MaxRawScore: a.MaxRawScore,
-            ScaledScore: a.ScaledScore,
+            ScaledScore: HasOwnerConvertedScore(a) ? a.ScaledScore : null,
             HasExpertFeedback: feedbackAttemptIds.Contains(a.Id)
         )).ToList();
 
@@ -425,7 +425,7 @@ public sealed class ListeningExpertService(
             SubmittedAt: attempt.SubmittedAt,
             RawScore: attempt.RawScore,
             MaxRawScore: attempt.MaxRawScore,
-            ScaledScore: attempt.ScaledScore);
+            ScaledScore: HasOwnerConvertedScore(attempt) ? attempt.ScaledScore : null);
 
         return new ListeningExpertReviewBundle(meta, answerItems, existing is null ? null : MapFeedback(existing));
     }
@@ -518,10 +518,13 @@ public sealed class ListeningExpertService(
                 tableId: attempt.ScoreConversionTableId,
                 cancellationToken: ct);
             attempt.ScoreConversionTableId = conversion.TableId;
-            attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
-            attempt.ScoreConversionGrade = conversion.Grade;
-            attempt.ScoreConversionPassed = conversion.Passed;
-            attempt.ScaledScore = conversion.ConvertedScore;
+            var hasApprovedConversion = conversion.ConvertedScore.HasValue
+                && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+                && conversion.Passed.HasValue;
+            attempt.ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null;
+            attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
+            attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
+            attempt.ScaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
 
             // B1: emit an audit row for every override so the missing
             // ExpertReviewAssignment model is compensated by traceability.
@@ -563,6 +566,11 @@ public sealed class ListeningExpertService(
     }
 
     // ── Get existing feedback ─────────────────────────────────────────────────
+
+    private static bool HasOwnerConvertedScore(ListeningAttempt attempt)
+        => attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue;
 
     public async Task<ListeningExpertFeedbackDto?> GetFeedbackAsync(
         string expertId, string attemptId, CancellationToken ct)

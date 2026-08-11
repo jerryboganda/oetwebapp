@@ -926,6 +926,7 @@ public sealed class MockService(
             attempt.ScaledScore,
             attempt.ScoreConversionTableVersionKey,
             attempt.ScoreConversionGrade,
+            attempt.ScoreConversionPassed,
             "reading_attempt");
     }
 
@@ -948,6 +949,7 @@ public sealed class MockService(
             attempt.ScaledScore,
             attempt.ScoreConversionTableVersionKey,
             attempt.ScoreConversionGrade,
+            attempt.ScoreConversionPassed,
             "listening_attempt");
     }
 
@@ -993,6 +995,7 @@ public sealed class MockService(
         int? scaledScore,
         string? scoreConversionTableVersionKey,
         string? scoreConversionGrade,
+        bool? scoreConversionPassed,
         string evidenceSource)
     {
         if (!rawScore.HasValue)
@@ -1000,7 +1003,9 @@ public sealed class MockService(
             throw ApiException.Conflict("content_attempt_not_graded", "The submitted section evidence has not been graded yet.");
         }
 
-        if (!scaledScore.HasValue || string.IsNullOrWhiteSpace(scoreConversionTableVersionKey))
+        if (!scaledScore.HasValue
+            || string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
+            || !scoreConversionPassed.HasValue)
         {
             throw ApiException.Conflict(
                 "content_attempt_scaled_unavailable",
@@ -1016,6 +1021,7 @@ public sealed class MockService(
             scaled,
             scoreConversionGrade,
             scoreConversionTableVersionKey.Trim(),
+            scoreConversionPassed.Value,
             evidenceSource);
     }
 
@@ -1029,6 +1035,7 @@ public sealed class MockService(
             evidence["evidenceSource"] = canonicalEvidence.EvidenceSource;
             evidence["contentAttemptId"] = canonicalEvidence.ContentAttemptId;
             evidence["scoreConversionTableVersionKey"] = canonicalEvidence.ScoreConversionTableVersionKey;
+            evidence["scoreConversionPassed"] = canonicalEvidence.ScoreConversionPassed;
         }
 
         return evidence;
@@ -1041,6 +1048,7 @@ public sealed class MockService(
         int ScaledScore,
         string? Grade,
         string ScoreConversionTableVersionKey,
+        bool ScoreConversionPassed,
         string EvidenceSource);
 
     public async Task<object> SubmitMockAttemptAsync(string userId, string mockAttemptId, CancellationToken ct)
@@ -2760,7 +2768,9 @@ public sealed class MockService(
             section.FeedbackJson,
             new Dictionary<string, object?>());
         return evidence.TryGetValue("scoreConversionTableVersionKey", out var key)
-            && !string.IsNullOrWhiteSpace(key?.ToString());
+            && !string.IsNullOrWhiteSpace(key?.ToString())
+            && evidence.TryGetValue("scoreConversionPassed", out var passed)
+            && bool.TryParse(passed?.ToString(), out _);
     }
 
     private static object ProjectAttemptSummary(MockAttempt attempt) => new
@@ -2886,8 +2896,13 @@ public sealed class MockService(
         var perModuleReadiness = subTests.Select(st =>
         {
             var name = StringValue(st, "name") ?? StringValue(st, "subtest") ?? "Mock";
-            var score = IntValue(st, "scaledScore") ?? ParseScore(StringValue(st, "score"));
             var governedScore = name.Trim().ToLowerInvariant() is "reading" or "listening";
+            var section = governedScore
+                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, name, StringComparison.OrdinalIgnoreCase))
+                : null;
+            var score = governedScore
+                ? section is not null && IsOwnerConvertedSection(section) ? section.ScaledScore : null
+                : IntValue(st, "scaledScore") ?? ParseScore(StringValue(st, "score"));
             var advisory = !governedScore && score.HasValue
                 ? OetScoring.AdvisoryTier(score.Value)
                 : null;
@@ -2895,7 +2910,7 @@ public sealed class MockService(
             {
                 subtest = name,
                 scaledScore = score,
-                grade = governedScore ? StringValue(st, "grade") : score.HasValue ? OetScoring.OetGradeLetterFromScaled(score.Value) : null,
+                grade = governedScore ? score.HasValue ? section!.Grade : null : score.HasValue ? OetScoring.OetGradeLetterFromScaled(score.Value) : null,
                 rag = governedScore ? (score.HasValue ? "owner-converted" : "pending") : advisory?.Tier ?? "pending",
                 message = governedScore
                     ? (score.HasValue
@@ -2911,8 +2926,16 @@ public sealed class MockService(
         {
             subtest = StringValue(st, "name") ?? StringValue(st, "subtest") ?? "Mock",
             rawScore = StringValue(st, "rawScore") ?? "N/A",
-            scaledScore = IntValue(st, "scaledScore"),
-            grade = StringValue(st, "grade"),
+            scaledScore = IsGovernedSubtest(st)
+                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, StringValue(st, "name") ?? StringValue(st, "subtest"), StringComparison.OrdinalIgnoreCase)) is { } section && IsOwnerConvertedSection(section)
+                    ? section.ScaledScore
+                    : null
+                : IntValue(st, "scaledScore"),
+            grade = IsGovernedSubtest(st)
+                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, StringValue(st, "name") ?? StringValue(st, "subtest"), StringComparison.OrdinalIgnoreCase)) is { } section && IsOwnerConvertedSection(section)
+                    ? section.Grade
+                    : null
+                : StringValue(st, "grade"),
             state = StringValue(st, "state") ?? "completed"
         }).ToArray();
         payload["timingAnalysis"] = sections.Select(section => new
@@ -3038,6 +3061,10 @@ public sealed class MockService(
         if (!payload.TryGetValue("subTests", out var raw) || raw is null) return [];
         return JsonSupport.Deserialize(JsonSupport.Serialize(raw), new List<Dictionary<string, object?>>());
     }
+
+    private static bool IsGovernedSubtest(Dictionary<string, object?> subtest)
+        => (StringValue(subtest, "name") ?? StringValue(subtest, "subtest") ?? string.Empty)
+            .Trim().ToLowerInvariant() is "reading" or "listening";
 
     private static (string Subtest, string Criterion, string Description) ReadWeakestCriterion(Dictionary<string, object?> payload)
     {

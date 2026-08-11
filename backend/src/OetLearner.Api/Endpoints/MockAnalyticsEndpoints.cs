@@ -318,6 +318,7 @@ public static class MockAnalyticsEndpoints
                 s.State,
                 s.RawScore,
                 s.ScaledScore,
+                s.FeedbackJson,
                 s.StartedAt,
                 s.CompletedAt,
             })
@@ -345,7 +346,10 @@ public static class MockAnalyticsEndpoints
             : (double?)null;
 
         var rawScores = rows.Where(r => r.RawScore.HasValue).Select(r => (double)r.RawScore!.Value).ToList();
-        var scaledScores = rows.Where(r => r.ScaledScore.HasValue).Select(r => (double)r.ScaledScore!.Value).ToList();
+        var scaledScores = rows
+            .Where(r => r.ScaledScore.HasValue && HasApprovedSectionConversion(r.FeedbackJson))
+            .Select(r => (double)r.ScaledScore!.Value)
+            .ToList();
         var completionSeconds = rows
             .Where(r => r.StartedAt.HasValue && r.CompletedAt.HasValue && r.CompletedAt.Value > r.StartedAt.Value)
             .Select(r => (r.CompletedAt!.Value - r.StartedAt!.Value).TotalSeconds)
@@ -358,6 +362,25 @@ public static class MockAnalyticsEndpoints
             AverageRawScore: rawScores.Count > 0 ? Math.Round(rawScores.Average(), 1) : null,
             AverageScaledScore: scaledScores.Count > 0 ? Math.Round(scaledScores.Average(), 1) : null,
             AverageCompletionSeconds: completionSeconds.Count > 0 ? Math.Round(completionSeconds.Average(), 0) : null);
+    }
+
+    private static bool HasApprovedSectionConversion(string? feedbackJson)
+    {
+        if (string.IsNullOrWhiteSpace(feedbackJson)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(feedbackJson);
+            var root = document.RootElement;
+            return root.TryGetProperty("scoreConversionTableVersionKey", out var key)
+                && key.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(key.GetString())
+                && root.TryGetProperty("scoreConversionPassed", out var passed)
+                && passed.ValueKind is JsonValueKind.True or JsonValueKind.False;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     // -----------------------------------------------------------------------

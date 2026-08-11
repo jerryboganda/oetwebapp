@@ -876,12 +876,16 @@ public sealed class ListeningLearnerService(
         {
             await conversionResolver.MarkUsedAsync(conversion.TableId, ct);
         }
-        var score = new ListeningScoreDto(
+        var score = ApplyScoreConversionGate(new ListeningScoreDto(
             review.RawScore,
             review.MaxRawScore,
             conversion.ConvertedScore,
             conversion.Grade ?? "—",
-            conversion.Passed);
+            conversion.Passed), conversion.TableVersionKey);
+        var hasApprovedConversion = HasApprovedScoreConversion(
+            conversion.TableVersionKey,
+            score.ScaledScore,
+            score.Passed);
 
         attempt.State = AttemptState.Completed;
         attempt.SubmittedAt = submitNow;
@@ -903,9 +907,9 @@ public sealed class ListeningLearnerService(
             RawScore = score.RawScore,
             MaxRawScore = score.MaxRawScore,
             ScaledScore = score.ScaledScore,
-            ScoreConversionTableVersionKey = conversion.TableVersionKey,
-            ScoreConversionGrade = conversion.Grade,
-            ScoreConversionPassed = conversion.Passed,
+            ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null,
+            ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null,
+            ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null,
             State = AsyncState.Completed,
             ScoreRange = FormatScoreDisplay(score),
             GradeRange = $"Grade {score.Grade}",

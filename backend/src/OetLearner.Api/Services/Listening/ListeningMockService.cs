@@ -494,8 +494,11 @@ public sealed class ListeningMockService : IListeningMockService
                 legacyTableId: null,
                 scopeKey: "default",
                 cancellationToken: ct);
-        int? scaledScore = conversion.ConvertedScore;
-        var gradeLabel = conversion.Grade ?? "Scaled score unavailable";
+        var hasApprovedConversion = conversion.ConvertedScore.HasValue
+            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+            && conversion.Passed.HasValue;
+        int? scaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
+        var gradeLabel = hasApprovedConversion ? conversion.Grade ?? "—" : "Scaled score unavailable";
         int? predictedLow = null;
         int? predictedHigh = null;
 
@@ -547,8 +550,8 @@ public sealed class ListeningMockService : IListeningMockService
             SubmittedAt: session.CompletedAt ?? _clock.GetUtcNow(),
             DeadlineAt: GetSessionDeadlineAt(session, metadata),
             TimedOut: timedOut,
-            ScoreConversionTableVersionKey: conversion.TableVersionKey,
-            ScoreConversionErrorCode: conversion.ErrorCode,
+            ScoreConversionTableVersionKey: hasApprovedConversion ? conversion.TableVersionKey : null,
+            ScoreConversionErrorCode: hasApprovedConversion ? conversion.ErrorCode : "score_conversion_unavailable",
             MarkingPolicyVersionKey: metadata.MarkingPolicyVersionKey);
     }
 
