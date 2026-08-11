@@ -521,6 +521,13 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
+        var listeningPolicy = await ResolveListeningPolicyAsync(ct);
+        var startedAt = DateTimeOffset.UtcNow;
+        var deadlineAt = IsExamMode(normalizedMode)
+            ? startedAt
+                .AddMinutes(Math.Max(1, listeningPolicy.FullPaperTimerMinutes))
+                .AddSeconds(Math.Max(0, listeningPolicy.GracePeriodSeconds))
+            : (DateTimeOffset?)null;
 
         // Listening test-credit allowance (legacy / JSON-backed paper path).
         // Keep this after every start gate, including the owner-controlled
@@ -544,7 +551,7 @@ public sealed class ListeningLearnerService(
             Context = source.SourceKind,
             Mode = normalizedMode,
             State = AttemptState.InProgress,
-            StartedAt = DateTimeOffset.UtcNow,
+            StartedAt = startedAt,
             DeviceType = "web",
             ComparisonGroupId = $"listening-{source.Id}",
             AnswersJson = "{}",
@@ -557,6 +564,14 @@ public sealed class ListeningLearnerService(
                 markingPolicy = markingPolicy.Document,
                 markingPolicyVersionKey = markingPolicy.PolicyVersionKey,
                 markingPolicyErrorCode = markingPolicy.ErrorCode,
+                listeningPolicy = new
+                {
+                    listeningPolicy.Id,
+                    listeningPolicy.FullPaperTimerMinutes,
+                    listeningPolicy.GracePeriodSeconds,
+                    listeningPolicy.OnExpirySubmitPolicy,
+                },
+                deadlineAt,
             })
         };
         db.Attempts.Add(attempt);
@@ -591,7 +606,7 @@ public sealed class ListeningLearnerService(
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
-        EnsureAttemptCanMutate(attempt);
+        await EnsureGenericAttemptCanMutateAsync(attempt, ct);
         var source = await ResolveSourceAsync(attempt.ContentId, ct);
         if (!source.Questions.Any(q => string.Equals(q.Id, questionId, StringComparison.Ordinal)))
         {
@@ -671,7 +686,7 @@ public sealed class ListeningLearnerService(
         // them). Persist the same monotonic cursor under a reserved AnswersJson
         // key, applying identical forward-only validation.
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
-        EnsureAttemptCanMutate(attempt);
+        await EnsureGenericAttemptCanMutateAsync(attempt, ct);
 
         var answers = DeserializeAnswers(attempt.AnswersJson);
         var currentGeneric = ReadGenericSectionCursor(answers);
@@ -778,8 +793,10 @@ public sealed class ListeningLearnerService(
         {
             return new { attemptId = attempt.Id, attempt.ElapsedSeconds, attempt.LastClientSyncAt };
         }
-        EnsureAttemptCanMutate(attempt);
-        attempt.ElapsedSeconds = request.ElapsedSeconds;
+        await EnsureGenericAttemptCanMutateAsync(attempt, ct);
+        attempt.ElapsedSeconds = Math.Max(
+            request.ElapsedSeconds,
+            (int)Math.Max(0, (DateTimeOffset.UtcNow - attempt.StartedAt).TotalSeconds));
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
         if (!string.IsNullOrWhiteSpace(request.DeviceType)) attempt.DeviceType = request.DeviceType;
         await db.SaveChangesAsync(ct);
@@ -816,7 +833,10 @@ public sealed class ListeningLearnerService(
             return BuildReview(attempt, source, existing);
         }
 
-        if (finalAnswers is { Count: > 0 })
+        var submitNow = DateTimeOffset.UtcNow;
+        var genericDeadlineAt = ReadGenericDeadline(attempt);
+        var timedOut = genericDeadlineAt is { } deadline && submitNow > deadline;
+        if (!timedOut && finalAnswers is { Count: > 0 })
         {
             ApplyFinalLegacyAnswers(attempt, source, finalAnswers);
         }
@@ -843,9 +863,16 @@ public sealed class ListeningLearnerService(
             conversion.Passed);
 
         attempt.State = AttemptState.Completed;
-        attempt.SubmittedAt = DateTimeOffset.UtcNow;
+        attempt.SubmittedAt = submitNow;
         attempt.CompletedAt = attempt.SubmittedAt;
-        attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
+        attempt.LastClientSyncAt = submitNow;
+        var effectiveEndAt = timedOut && genericDeadlineAt.HasValue
+            ? genericDeadlineAt.Value
+            : submitNow;
+        attempt.ElapsedSeconds = (int)Math.Clamp(
+            (effectiveEndAt - attempt.StartedAt).TotalSeconds,
+            0,
+            int.MaxValue);
 
         var evaluation = new Evaluation
         {
@@ -2828,7 +2855,7 @@ public sealed class ListeningLearnerService(
         attempt.CompletedAt,
         attempt.ElapsedSeconds,
         attempt.LastClientSyncAt,
-        expiresAt = (DateTimeOffset?)null,
+        expiresAt = ReadGenericDeadline(attempt),
         // Strip reserved navigation keys (e.g. the one-way section cursor) so
         // they never leak into the player's answer map or get re-submitted as a
         // bogus answer. The cursor is surfaced separately via advance-section.
@@ -3215,11 +3242,42 @@ public sealed class ListeningLearnerService(
         return passedAt is { } at && at.AddMilliseconds(ListeningSessionService.AudioCheckTtlMs) >= now;
     }
 
-    private static void EnsureAttemptCanMutate(Attempt attempt)
+    private static Task EnsureGenericAttemptCanMutateAsync(
+        Attempt attempt,
+        CancellationToken ct)
     {
         if (attempt.State == AttemptState.Completed)
         {
             throw ApiException.Conflict("listening_attempt_locked", "This Listening attempt has already been submitted.");
+        }
+
+        var deadlineAt = ReadGenericDeadline(attempt);
+        if (deadlineAt is DateTimeOffset deadline && DateTimeOffset.UtcNow > deadline)
+        {
+            throw ApiException.Validation(
+                "listening_attempt_deadline_passed",
+                "This Listening attempt deadline has passed and answers can no longer be changed.");
+        }
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    private static DateTimeOffset? ReadGenericDeadline(Attempt attempt)
+    {
+        if (string.IsNullOrWhiteSpace(attempt.PolicySnapshotJson)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(attempt.PolicySnapshotJson);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("deadlineAt", out var deadline)
+                && deadline.ValueKind == JsonValueKind.String
+                && deadline.TryGetDateTimeOffset(out var parsed)
+                    ? parsed
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

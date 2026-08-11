@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
@@ -102,6 +104,96 @@ public sealed class ListeningStartGovernanceTests
         var snapshot = await credit.GetSnapshotAsync("governance-learner", 20, CancellationToken.None);
         Assert.Equal(1, snapshot.ListeningTestsRemaining);
         Assert.Empty(await db.Attempts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task JsonBackedExam_ExposesServerDeadlineAndRejectsLateAnswerWrites()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+        db.Users.Add(new LearnerUser
+        {
+            Id = "deadline-learner",
+            AuthAccountId = "deadline-auth",
+            DisplayName = "Deadline Learner",
+            Email = "deadline@example.test",
+            Role = ApplicationUserRoles.Learner,
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "deadline-listening-paper",
+            SubtestCode = "listening",
+            Title = "Deadline Listening Paper",
+            Slug = "deadline-listening-paper",
+            AppliesToAllProfessions = true,
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 45,
+            Status = ContentStatus.Published,
+            ExtractedTextJson = """
+                {
+                  "listeningQuestions": [
+                    { "id": "q-deadline", "number": 1, "partCode": "A1", "type": "short_answer", "text": "Dose: ____", "correctAnswer": "five" }
+                  ]
+                }
+                """,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
+        {
+            Id = "listening-policy-deadline",
+            Assessment = "listening",
+            ScopeKey = "default",
+            VersionKey = "deadline-v1",
+            PolicyJson = "{}",
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = now.AddMinutes(-1),
+            CreatedByUserId = "owner",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var service = new ListeningLearnerService(
+            db,
+            new AllowAllContentEntitlementService());
+        var started = await service.StartAttemptAsync(
+            "deadline-learner",
+            "deadline-listening-paper",
+            "exam",
+            null,
+            forceNewAttempt: true,
+            CancellationToken.None);
+        using var startedJson = JsonDocument.Parse(JsonSerializer.Serialize(started));
+        Assert.Equal(JsonValueKind.String, startedJson.RootElement.GetProperty("expiresAt").ValueKind);
+
+        var attempt = await db.Attempts.SingleAsync(a => a.UserId == "deadline-learner");
+        attempt.PolicySnapshotJson = JsonSerializer.Serialize(new
+        {
+            deadlineAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+        });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ApiException>(() => service.SaveAnswerAsync(
+            "deadline-learner",
+            attempt.Id,
+            "q-deadline",
+            new ListeningAnswerSaveRequest("five"),
+            CancellationToken.None));
+
+        var review = await service.SubmitAsync(
+            "deadline-learner",
+            attempt.Id,
+            new Dictionary<string, string?> { ["q-deadline"] = "five" },
+            CancellationToken.None);
+        Assert.Contains("\"rawScore\":0", JsonSerializer.Serialize(review));
     }
 
     private sealed class AllowAllContentEntitlementService : IContentEntitlementService
