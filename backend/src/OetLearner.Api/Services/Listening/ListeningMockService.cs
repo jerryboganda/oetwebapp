@@ -552,7 +552,8 @@ public sealed class ListeningMockService : IListeningMockService
             TimedOut: timedOut,
             ScoreConversionTableVersionKey: hasApprovedConversion ? conversion.TableVersionKey : null,
             ScoreConversionErrorCode: hasApprovedConversion ? conversion.ErrorCode : "score_conversion_unavailable",
-            MarkingPolicyVersionKey: metadata.MarkingPolicyVersionKey);
+            MarkingPolicyVersionKey: metadata.MarkingPolicyVersionKey,
+            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null);
     }
 
     private static MockSessionMetadata ReadSessionMetadata(ListeningPracticeSession session)

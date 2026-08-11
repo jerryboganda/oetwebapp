@@ -82,7 +82,11 @@ export interface ListeningGradingResult {
   attemptId: string;
   rawScore: number;
   maxRawScore: number;
-  scaledScore: number;
+  scaledScore: number | null;
+  scoreConversionTableVersionKey: string | null;
+  scoreConversionErrorCode: string | null;
+  scoreConversionGrade: string | null;
+  scoreConversionPassed: boolean | null;
 }
 
 export interface ListeningPathwayStageView {

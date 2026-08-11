@@ -178,6 +178,8 @@ export interface MockResultDto {
   rawScore: number;
   scaledScore: number | null;
   grade: string | null;
+  scoreConversionTableVersionKey: string | null;
+  scoreConversionPassed: boolean | null;
   sectionBreakdown: Record<string, number>;
   skillBreakdown: Record<string, number>;
   timeMap: Record<string, number>;
@@ -375,6 +377,8 @@ interface RawMockResultDto {
   totalQuestions?: number | null;
   durationSeconds?: number | null;
   scaledScore?: number | null;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionPassed?: boolean | null;
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -507,7 +511,10 @@ export const startMock = (mockTemplateId: string) =>
 
 export const getMockResults = (sessionId: string) =>
   api<RawMockResultDto>(`/v1/reading-pathway/mocks/sessions/${encodeURIComponent(sessionId)}/results`).then((raw) => {
-    const scaledScore = raw.scaledScore ?? null;
+    const hasApprovedConversion = raw.scaledScore != null
+      && raw.scoreConversionTableVersionKey != null
+      && raw.scoreConversionPassed != null;
+    const scaledScore = hasApprovedConversion ? raw.scaledScore! : null;
     const timeMap: Record<string, number> = raw.durationSeconds === null || raw.durationSeconds === undefined
       ? {}
       : { total: raw.durationSeconds };
@@ -517,6 +524,8 @@ export const getMockResults = (sessionId: string) =>
       rawScore: raw.score ?? 0,
       scaledScore,
       grade: scaledScore === null ? null : gradeFromScaled(scaledScore),
+      scoreConversionTableVersionKey: hasApprovedConversion ? raw.scoreConversionTableVersionKey! : null,
+      scoreConversionPassed: hasApprovedConversion ? raw.scoreConversionPassed! : null,
       sectionBreakdown: {},
       skillBreakdown: {},
       timeMap,

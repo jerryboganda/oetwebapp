@@ -12,6 +12,8 @@ interface MockResult {
   rawScore: number;
   scaledScore: number | null;
   gradeLabel: string;
+  scoreConversionTableVersionKey?: string | null;
+  scoreConversionPassed?: boolean | null;
 }
 
 export default function ListeningMockResultsPage() {
@@ -66,8 +68,16 @@ export default function ListeningMockResultsPage() {
       </p>
       {(() => {
         const scaledScore = result.scaledScore;
-        const hasConversion = scaledScore !== null;
-  const gradeTone: 'success' | 'warning' | 'danger' | 'info' = !hasConversion ? 'info' : result.gradeLabel === 'A' || result.gradeLabel === 'B' ? 'success' : result.gradeLabel === 'C' ? 'warning' : 'danger';
+        const hasConversion = scaledScore !== null
+          && result.scoreConversionTableVersionKey != null
+          && result.scoreConversionPassed != null;
+        const gradeTone: 'success' | 'warning' | 'danger' | 'info' = !hasConversion
+          ? 'info'
+          : result.gradeLabel === 'A' || result.gradeLabel === 'B'
+            ? 'success'
+            : result.gradeLabel === 'C'
+              ? 'warning'
+              : 'danger';
         return (
       <ResultsScorePanel
         eyebrow="Listening mock"

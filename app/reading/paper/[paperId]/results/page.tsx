@@ -198,7 +198,9 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
   const raw = review?.attempt.rawScore ?? 0;
   const scaled = review?.attempt.scaledScore ?? null;
-  const hasApprovedConversion = scaled !== null && review?.attempt.scoreConversionTableVersionKey != null;
+  const hasApprovedConversion = scaled !== null
+    && review?.attempt.scoreConversionTableVersionKey != null
+    && review?.attempt.passed != null;
 
   const partTotals = (review?.partBreakdown ?? []).reduce(
     (acc, part) => ({

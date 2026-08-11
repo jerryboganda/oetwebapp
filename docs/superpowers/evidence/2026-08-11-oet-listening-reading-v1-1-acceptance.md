@@ -36,6 +36,12 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- The Reading paper result and legacy Listening mock result surfaces now require
+  an explicit persisted score-conversion table key and pass decision before
+  rendering a converted score or grade. Legacy Reading mock normalization also
+  drops unproven scaled values back to raw-only evidence, and the Listening mock
+  contract now carries the conversion decision for the same fail-closed client
+  rule. Focused execution remains pending.
 - The active legacy/diagnostic Listening player now uses the shared encrypted
   offline answer queue with deterministic per-attempt/question keys, server-wins
   reconciliation, conflict messaging, and reconnect auto-sync. Submission and

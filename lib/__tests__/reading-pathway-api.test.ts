@@ -135,7 +135,7 @@ describe('reading-pathway-api', () => {
     });
   });
 
-  it('adapts mock results from the backend session result route', async () => {
+  it('keeps legacy mock results raw when conversion provenance is absent', async () => {
     mockFetchWithTimeout.mockResolvedValue(jsonResponse({
       score: 31,
       totalQuestions: 42,
@@ -149,9 +149,29 @@ describe('reading-pathway-api', () => {
     expect(result).toMatchObject({
       sessionId: 'mock-session',
       rawScore: 31,
+      scaledScore: null,
+      grade: null,
+      scoreConversionTableVersionKey: null,
+      scoreConversionPassed: null,
+      timeMap: { total: 3500 },
+    });
+  });
+
+  it('accepts a mock conversion only with table and pass provenance', async () => {
+    mockFetchWithTimeout.mockResolvedValue(jsonResponse({
+      score: 31,
+      totalQuestions: 42,
+      scaledScore: 363,
+      scoreConversionTableVersionKey: 'reading-owner-v1',
+      scoreConversionPassed: false,
+      durationSeconds: 3500,
+    }));
+
+    await expect(api.getMockResults('mock-session')).resolves.toMatchObject({
       scaledScore: 363,
       grade: 'B',
-      timeMap: { total: 3500 },
+      scoreConversionTableVersionKey: 'reading-owner-v1',
+      scoreConversionPassed: false,
     });
   });
 });

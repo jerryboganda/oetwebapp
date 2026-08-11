@@ -311,7 +311,8 @@ public sealed record MockResultResponse(
     bool TimedOut = false,
     string? ScoreConversionTableVersionKey = null,
     string? ScoreConversionErrorCode = null,
-    string? MarkingPolicyVersionKey = null);
+    string? MarkingPolicyVersionKey = null,
+    bool? ScoreConversionPassed = null);
 
 /// <summary>Hero block of the analytics dashboard (§19.2).</summary>
 public sealed record ListeningDashboardDto(
