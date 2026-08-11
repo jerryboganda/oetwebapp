@@ -19,6 +19,9 @@ Last updated: 2026-08-11
   in-flight queue and flushes it with authenticated `keepalive` requests on
   tab hide/pagehide, while final submit remains the server-authoritative
   durable path.
+- Reading now has the same server-only lifecycle flush for its 400 ms answer
+  debounce, with elapsed-time accounting suppressed for duplicate in-flight
+  requests and pending values reconciled on resume/submit.
 - Scoped frontend ESLint passed with zero errors (the player retains its
   existing React Compiler/hooks warnings). The focused Windows .NET
   event-logging test timed out after 124 seconds without diagnostics. Actions

@@ -1085,9 +1085,11 @@ export const saveReadingAnswer = (
   questionId: string,
   userAnswerJson: string,
   elapsedMs?: number | null,
+  options?: Pick<RequestInit, 'keepalive'>,
 ) =>
   api<void>(`/v1/reading-papers/attempts/${attemptId}/answers/${questionId}`, {
     method: 'PUT',
+    ...options,
     body: JSON.stringify(
       elapsedMs != null && elapsedMs > 0
         ? { userAnswerJson, elapsedMs: Math.floor(elapsedMs) }

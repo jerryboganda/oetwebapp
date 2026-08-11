@@ -39,6 +39,12 @@ import { deriveDeliveryMode, deliveryModeToReadingPresentation } from '@/lib/moc
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
+type PendingReadingAnswer = {
+  attemptId: string;
+  valueJson: string;
+  inFlight: boolean;
+};
+
 type ReadingSectionCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
 
 const SECTION_LABELS: Record<ReadingSectionCode, string> = {
@@ -204,6 +210,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [partTransitionAcknowledged, setPartTransitionAcknowledged] = useState(false);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Latest debounced answer values awaiting the server. This is an in-flight
+  // queue only; the attempt row remains the durable source of truth.
+  const pendingAnswersRef = useRef<Record<string, PendingReadingAnswer>>({});
   const autoSubmitTriggered = useRef(false);
   const warnedMiniTest2min = useRef(false);
   const warnedMiniTest1min = useRef(false);
@@ -222,6 +231,59 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
    * also resets the timer so backgrounded tabs do not inflate timings.
    */
   const questionFocusStartedAt = useRef<Record<string, number>>({});
+
+  const flushPendingReadingAnswers = useCallback((keepalive = false) => {
+    const now = Date.now();
+    Object.entries(pendingAnswersRef.current).forEach(([questionId, pending]) => {
+      clearTimeout(saveTimers.current[questionId]);
+      const focusedAt = questionFocusStartedAt.current[questionId];
+      const elapsedMs = pending.inFlight || focusedAt == null || now <= focusedAt
+        ? null
+        : Math.min(now - focusedAt, 14_400_000);
+      pending.inFlight = true;
+      setSaveState('saving');
+      void saveReadingAnswer(pending.attemptId, questionId, pending.valueJson, elapsedMs, { keepalive })
+        .then(() => {
+          const current = pendingAnswersRef.current[questionId];
+          if (
+            current?.attemptId === pending.attemptId
+            && current.valueJson === pending.valueJson
+          ) {
+            delete pendingAnswersRef.current[questionId];
+            dirtyQuestionIds.current.delete(questionId);
+            questionFocusStartedAt.current[questionId] = Date.now();
+            setSaveState('saved');
+          } else if (current) {
+            current.inFlight = false;
+            setSaveState('saving');
+          }
+        })
+        .catch(() => {
+          const current = pendingAnswersRef.current[questionId];
+          if (current?.attemptId === pending.attemptId && current.valueJson === pending.valueJson) {
+            current.inFlight = false;
+            setSaveState('error');
+          }
+        });
+    });
+  }, []);
+
+  // Flush before backgrounding, navigation, or unmount so the debounce window
+  // cannot erase the last typed answer. The keepalive request stays owned by
+  // the authenticated API client and never stores answers in browser storage.
+  useEffect(() => {
+    const flush = () => flushPendingReadingAnswers(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [flushPendingReadingAnswers]);
 
   useReadingBrowserZoomGuard();
 
@@ -330,6 +392,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         // R08 — hydrate persisted rule-out / highlight marks for this attempt.
         setInitialAnnotationsJson(saved.annotationsJson);
         dirtyQuestionIds.current.clear();
+        pendingAnswersRef.current = {};
       }
     } catch (err) {
       setError(readErrorMessage(err, 'Failed to load Reading paper.'));
@@ -568,6 +631,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       warnedMiniTest2min.current = false;
       warnedMiniTest1min.current = false;
       dirtyQuestionIds.current.clear();
+      pendingAnswersRef.current = {};
       setTimingNotice(null);
       setActivePart('A');
     } catch (err) {
@@ -602,6 +666,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     const elapsedMs = focusedAt != null && nowTs > focusedAt
       ? Math.min(nowTs - focusedAt, 14_400_000)
       : null;
+    const pending = pendingAnswersRef.current[questionId];
+    if (pending && pending.attemptId === attempt.attemptId && pending.valueJson === valueJson) {
+      pending.inFlight = true;
+    }
     try {
       await saveReadingAnswer(attempt.attemptId, questionId, valueJson, elapsedMs);
       // Reset the focus timestamp so the next save only counts the delta
@@ -609,8 +677,20 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       // the visibilitychange handler also resets this entry.
       questionFocusStartedAt.current[questionId] = Date.now();
       dirtyQuestionIds.current.delete(questionId);
+      if (
+        pendingAnswersRef.current[questionId]?.attemptId === attempt.attemptId
+        && pendingAnswersRef.current[questionId]?.valueJson === valueJson
+      ) {
+        delete pendingAnswersRef.current[questionId];
+      }
       setSaveState('saved');
     } catch (err) {
+      if (
+        pendingAnswersRef.current[questionId]?.attemptId === attempt.attemptId
+        && pendingAnswersRef.current[questionId]?.valueJson === valueJson
+      ) {
+        pendingAnswersRef.current[questionId].inFlight = false;
+      }
       setSaveState('error');
       setError(readErrorMessage(err, 'Autosave failed.'));
     }
@@ -622,6 +702,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     const json = JSON.stringify(value);
     setAnswers((prev) => ({ ...prev, [question.id]: json }));
     dirtyQuestionIds.current.add(question.id);
+    pendingAnswersRef.current[question.id] = {
+      attemptId: attempt.attemptId,
+      valueJson: json,
+      inFlight: false,
+    };
     setSaveState('saving');
     if (saveTimers.current[question.id]) clearTimeout(saveTimers.current[question.id]);
     const activeDeadlineMs = new Date(activePart === 'A' ? attempt.partADeadlineAt : attempt.partBCDeadlineAt).getTime();
@@ -674,6 +759,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       answersToFlush.forEach(([questionId]) => {
         questionFocusStartedAt.current[questionId] = Date.now();
         dirtyQuestionIds.current.delete(questionId);
+        delete pendingAnswersRef.current[questionId];
       });
       // R08 — land any debounced rule-out / highlight edits before grading.
       await annotations.flush();
