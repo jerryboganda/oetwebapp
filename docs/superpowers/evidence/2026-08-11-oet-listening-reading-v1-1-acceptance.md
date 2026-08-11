@@ -16,7 +16,7 @@ an owner-controlled value that must not be invented in code.
 | LR-05 | Strikethrough is not a selected MCQ answer | Candidate selection remains a server-validated option key and annotation metadata is separate in `ListeningLearnerService`; `tests/unit/listening/BCQuestionRenderer.test.tsx` and `app/reading/paper/[paperId]/page.test.tsx` assert rule-out leaves the radio answer unchecked | Implemented; focused UI regression passed |
 | LR-06 | Reading Part A locks at the authoritative 15-minute deadline | `backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
 | LR-07 | Reading B+C share one authoritative 45-minute timer | `ReadingAttemptService`, `ReadingLearnerEndpoints`, `tests/e2e/reading/part-a-lock.spec.ts` | Implemented; deployed browser verification pending |
-| LR-08 | Raw score is reproducible from stored response/key version | `ListeningAttempt.LastQuestionVersionMapJson`, `ListeningAnswer.QuestionVersionSnapshot`, `ReadingAttempt.PaperRevisionId`, `backend/tests/OetLearner.Api.Tests/Assessment/AssessmentScoreConversionServiceTests.cs` | Implemented fail-closed revision guard; focused reproducibility test pending |
+| LR-08 | Raw score is reproducible from stored response/key version | `ListeningAttempt.LastQuestionVersionMapJson`, `ListeningAnswer.QuestionVersionSnapshot`, `ReadingAttempt.PaperRevisionId`, governed `MarkingPolicyVersionId`/snapshot guards, `backend/tests/OetLearner.Api.Tests/Assessment/AssessmentScoreConversionServiceTests.cs` | Implemented fail-closed revision and policy-snapshot guards; focused reproducibility test pending |
 | LR-09 | No answer/rationale is visible before final submission | `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs`, `tests/e2e/listening/listening-answer-key-not-exposed.spec.ts` | Implemented; deployed browser verification pending |
 | LR-10 | Result has raw/part/converted/graph/review/disclosure contracts | `components/domain/results/score-conversion-evidence.tsx`, `app/listening/results/[id]/page.tsx`, `app/reading/paper/[paperId]/results/page.tsx`, `app/reading/paper/[paperId]/results/page.test.tsx` | Implemented; deployed responsive verification pending |
 | LR-11 | Refresh/reconnect restores answers without extra time | `ReadingAttemptService`, `ListeningLearnerService`, server deadline fields and idempotent submit paths | Implemented in source; focused reconnect test pending |
@@ -36,11 +36,22 @@ an owner-controlled value that must not be invented in code.
 
 ## Deployment evidence
 
-- Commit `5cea31bfa5f0700579cd91950e36d6a61c46cc2a` is on `main` and
+- Commit `7c677c486044be9dc9955d1183e5aeb5cfcfec08` is on `main` and
   `origin/main`.
-- Actions run `31441030497` completed successfully for that exact SHA,
+- Actions run `31453183628` completed successfully for that exact SHA,
   including API/web/backup images, production migration, and blue/green
   deployment.
-- Post-deploy public checks returned HTTP 200 for API live/readiness and the
-  app, Listening, and Reading routes through their sign-in redirects. API
+- Post-deploy public checks returned HTTP 200 for API live/readiness. API
   readiness reported database, migrations, stuck jobs, and storage all `ok`.
+  `https://app.oetwithdrhesham.co.uk/`, `/listening`, and `/reading` returned
+  HTTP 307 redirects to the sign-in route with the requested `next` path.
+
+## Latest conformance hardening
+
+- Policy versions are locked only after a Listening/Reading attempt is
+  durably created; failed starts no longer consume an owner policy version.
+- Governed graders reject missing or malformed marking-policy snapshots rather
+  than resolving mutable current settings.
+- Legacy learner, mock, analytics, tutor, expert, and background LR surfaces
+  now expose raw-only evidence when no owner-approved conversion row exists;
+  no raw-to-scaled formula fallback remains in the audited LR paths.

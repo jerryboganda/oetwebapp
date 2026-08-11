@@ -4,14 +4,14 @@ Last updated: 2026-08-11
 
 ## Current checkpoint
 
-- Conformance implementation plus LR-05 regression evidence is on `5cea31bfa` (`5cea31bfa5f0700579cd91950e36d6a61c46cc2a`) on both `main` and `origin/main`.
-- Build & Deploy run `31441030497` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
-- Public post-deploy checks for the exact SHA returned HTTP 200 for API live/readiness and the app, Listening, and Reading routes through their sign-in redirects. API readiness reported database, migrations, stuck jobs, and storage all `ok`.
-- Tightened deterministic boundaries: published Listening/Reading content is immutable, relational attempt question/key revisions are captured and checked fail-closed, controlled re-marking is audited, and Listening Part A AI is post-submit tutor advisory only with approved rationale evidence and no lenient `acceptable` verdict.
+- Governed Listening/Reading conformance hardening is on `7c677c486044be9dc9955d1183e5aeb5cfcfec08` on `main` and `origin/main`.
+- Build & Deploy run `31453183628` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
+- Public post-deploy checks returned HTTP 200 for API live/readiness; readiness reported database, migrations, stuck jobs, and storage all `ok`. The app root, `/listening`, and `/reading` returned HTTP 307 redirects to their sign-in routes on `app.oetwithdrhesham.co.uk`.
+- Fixed policy locking to occur only after durable attempt creation; governed attempts now fail closed on missing/malformed marking-policy snapshots; learner, mock, analytics, tutor, expert, and background LR projections no longer synthesize scaled scores from raw accuracy.
 
 ## Validation and remaining boundary
 
-- `git diff --check` passed before the final commits. Focused frontend ESLint and Reading results tests passed previously; the focused LR-05 Vitest run (`tests/unit/listening/BCQuestionRenderer.test.tsx` plus `app/reading/paper/[paperId]/page.test.tsx`) passed 58/58. Local full TypeScript validation is blocked by duplicate globals in unrelated untracked `pdf-policy-release` and `pdf-policy-release2`; local backend build timed out without diagnostics. GitHub Actions is the authoritative compile/deploy gate and passed.
+- `git diff --check` and staged diff checks passed. Targeted ESLint on the touched mock-result pages and `lib/reading-pathway-api.ts` passed with one pre-existing `setState`-in-effect warning in the Reading page. Host-wide TypeScript and filtered backend test commands exceeded their local time limits without diagnostics; GitHub Actions web/API image builds and migration generation passed for the exact SHA.
 - Owner-controlled release data remains required: complete approved Listening and Reading score tables, normalization profile, practice/mock lock mode, approved rationale/evidence content, pathway/pass thresholds, graph legal/style sign-off, and peak timed-attempt concurrency target.
 - LR-05 now has explicit Listening and Reading selection-preservation assertions. Acceptance evidence still needs authenticated end-to-end/mobile evidence. Do not claim complete PDF acceptance until that boundary and owner approvals are supplied.
 - Preserve untracked `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
