@@ -87,7 +87,8 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
 
         var approvedExamAttempts = examAttempts
             .Where(a => a.ScaledScore.HasValue
-                && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey))
+                && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
+                && a.ScoreConversionPassed.HasValue)
             .ToList();
         var bestScaled = approvedExamAttempts
             .Select(a => a.ScaledScore)

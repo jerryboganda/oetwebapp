@@ -115,7 +115,8 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
                 .Select(group => group.OrderByDescending(e => e.GeneratedAt).First()))
             {
-                if (string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)) continue;
+                if (string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
+                    || !evaluation.ScoreConversionPassed.HasValue) continue;
                 var scaled = TryReadScaled(evaluation.CriterionScoresJson);
                 if (scaled.HasValue && (bestScaled is null || scaled.Value > bestScaled.Value))
                     bestScaled = scaled.Value;
@@ -125,6 +126,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
         foreach (var relationalAttempt in relationalAttempts)
         {
             if (!string.IsNullOrWhiteSpace(relationalAttempt.ScoreConversionTableVersionKey)
+                && relationalAttempt.ScoreConversionPassed.HasValue
                 && relationalAttempt.ScaledScore is int scaled
                 && (bestScaled is null || scaled > bestScaled.Value))
                 bestScaled = scaled;

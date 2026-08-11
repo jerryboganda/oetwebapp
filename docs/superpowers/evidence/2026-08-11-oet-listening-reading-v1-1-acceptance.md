@@ -100,6 +100,10 @@ an owner-controlled value that must not be invented in code.
   versions, and hides legacy snapshots without conversion provenance. The
   estimator UI carries the persistent `AI Practice Score — not an official OET
   result.` disclosure. Focused browser/API execution remains pending.
+- Listening and Reading pathway `bestScaledScore` values now also require an
+  explicit persisted conversion decision, preventing pathway branching or
+  milestone display from relying on table-key-only metadata. Focused pathway
+  execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation
