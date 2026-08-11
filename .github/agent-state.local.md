@@ -22,12 +22,18 @@ Last updated: 2026-08-11
 - Reading now has the same server-only lifecycle flush for its 400 ms answer
   debounce, with elapsed-time accounting suppressed for duplicate in-flight
   requests and pending values reconciled on resume/submit.
+- Commit `7573ab6df` adds an explicit learner-contract regression: an attached
+  Listening answer-key asset must not appear as a URL or media identifier in
+  the learner session projection. The existing projection already omitted the
+  URL; the test now protects that boundary with a real attached answer-key
+  asset.
 - Scoped frontend ESLint passed with zero errors (the player retains its
   existing React Compiler/hooks warnings). The focused Windows .NET
-  event-logging test timed out after 124 seconds without diagnostics. Actions
-  run `31497993311` built web/backup successfully; API publish failed only in
-  committed Speaking files, so migration/deploy were skipped and this slice
-  is pushed but not live.
+  learner-contract test reached compilation but was blocked by the unrelated
+  dirty Speaking file `SpeakingSimulationV11Contracts.cs` (`CS1002` / `CS1513`).
+  Actions run `31500029557` is running for `7573ab6df`; build-backup has passed
+  while API/web image builds remain in progress. Production status is not yet
+  claimed for this commit.
 - Governed Listening/Reading conformance hardening plus attempt-start score-table snapshots and explicit Reading Part A variant coverage is on `c4ed2e55b9b47aeedccb601b16c0b4580630ad48` on `main` and `origin/main`.
 - Build & Deploy run `31487883204` completed successfully for that exact SHA: web, API, backup, off-box migration SQL generation/application, and blue/green deployment all passed. The VPS reported live on blue with green retained for rollback.
 - Build & Deploy run `31453183628` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
@@ -36,7 +42,11 @@ Last updated: 2026-08-11
 
 ## Validation and remaining boundary
 
-- `git diff --check` passed. The focused filtered backend test and API build both stalled on the Windows host beyond their time limits without compiler/test diagnostics, after which only the orphaned processes created by those checks were stopped. The new migration/model references, forbidden LR formula-path scan, and explicit staging scope remain clean. GitHub Actions run `31487883204` is the authoritative compile, migration, and image-deploy gate; public live/readiness checks returned 200 and readiness was fully `ok`.
+- `git diff --check` passed for the shipped learner-contract protection. The
+  focused filtered backend test reached compiler diagnostics and was blocked by
+  the unrelated dirty Speaking syntax errors (`CS1002`, `CS1513`), so no local
+  green test claim is made. GitHub Actions run `31500029557` is the current
+  authoritative compile, migration, and image-deploy gate for `7573ab6df`.
 - Owner-controlled release data remains required: complete approved Listening and Reading score tables, normalization profile, practice/mock lock mode, approved rationale/evidence content, pathway/pass thresholds, graph legal/style sign-off, and peak timed-attempt concurrency target.
 - LR-05 now has explicit Listening and Reading selection-preservation assertions. The new LR-03/LR-04/LR-08 focused tests are present but await CI execution. Acceptance evidence still needs authenticated end-to-end/mobile evidence. Do not claim complete PDF acceptance until that boundary and owner approvals are supplied.
 - Preserve untracked `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
