@@ -6947,7 +6947,7 @@ public partial class LearnerService(
             subtest,
             rawScore,
             attempt.ScoreConversionSnapshotJson,
-            tableId: null,
+            legacyTableId: null,
             scopeKey: "default",
             cancellationToken: cancellationToken);
         if (conversion.TableId is not null && conversion.IsAvailable)
