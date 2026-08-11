@@ -19,7 +19,7 @@ an owner-controlled value that must not be invented in code.
 | LR-08 | Raw score is reproducible from stored response/key version | `ContentPaperService` assigns bounded Reading/Listening `PublishedRevisionId` values; `ListeningAttempt.LastQuestionVersionMapJson`, `ListeningAnswer.QuestionVersionSnapshot`, `ReadingAttempt.PaperRevisionId`, governed `MarkingPolicyVersionId`/snapshot guards, legacy `Attempt` capture in `LearnerService.CreateAttemptAsync`, attempt-start `AssessmentScoreConversionSnapshot`, migration `20260902090000_AddAssessmentScoreConversionAttemptSnapshots`, and `backend/tests/OetLearner.Api.Tests/Assessment/AssessmentScoreConversionServiceTests.cs` | Implemented fail-closed revision, policy-snapshot, and score-table selection guards; focused backend run pending |
 | LR-09 | No answer/rationale is visible before final submission | `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs`, `tests/e2e/listening/listening-answer-key-not-exposed.spec.ts` | Implemented; deployed browser verification pending |
 | LR-10 | Result has raw/part/converted/graph/review/disclosure contracts | `components/domain/results/score-conversion-evidence.tsx`, `components/domain/results/score-band-graph.tsx`, `components/domain/results/score-band-graph.test.tsx`, `app/listening/results/[id]/page.tsx`, `app/reading/paper/[paperId]/results/page.tsx`, `app/reading/paper/[paperId]/results/page.test.tsx` | Implemented; graph test passed; deployed responsive verification pending |
-| LR-11 | Refresh/reconnect restores answers without extra time | `ReadingAttemptService`, `ListeningLearnerService`, server deadline fields and idempotent submit paths | Implemented in source; focused reconnect test pending |
+| LR-11 | Refresh/reconnect restores answers without extra time | `ReadingAttemptService`, `ListeningLearnerService`, server deadline fields and idempotent submit paths; `app/listening/player/[id]/page.tsx` and `lib/mobile/offline-sync.ts` now encrypt, queue, and server-wins reconcile transiently offline Listening answers | Implemented in source; focused reconnect test pending |
 | LR-12 | AI failure cannot delay/change deterministic result | `backend/src/OetLearner.Api/Services/Reading/ReadingExplanationService.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningExplanationService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Endpoints/ListeningLearnerEndpoints.cs`, `components/domain/results/grounded-listening-ai-explanation.tsx`, grounded usage gateway; blank/unanswered responses fail closed and AI remains advisory-only | Implemented; deterministic Reading/Listening gateway-failure tests added; short execution pending |
 | LR-13 | MCQ publication rejects duplicate options and zero/multiple correct options | `ListeningStructureService`, `ReadingStructureService`, `ContentPaperService`, explicit duplicate/zero/multiple-correct authoring regression tests | Implemented; shared paper publish now hard-blocks invalid Reading/Listening MCQ payloads; focused execution pending |
 | LR-14 | Key change uses controlled auditable re-mark | `AssessmentGovernanceEndpoints`, `ReadingGradingService.RegradeSubmittedAsync`, `ListeningGradingService.RegradeWithKeyAsync`; original/updated result snapshots retained on the job | Implemented; focused re-mark test pending |
@@ -36,6 +36,11 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- The active legacy/diagnostic Listening player now uses the shared encrypted
+  offline answer queue with deterministic per-attempt/question keys, server-wins
+  reconciliation, conflict messaging, and reconnect auto-sync. Submission and
+  timer state remain online/server-authoritative; focused reconnect execution is
+  still pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

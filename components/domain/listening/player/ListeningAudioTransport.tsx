@@ -24,7 +24,7 @@ export interface ListeningAudioTransportProps {
   /** Disables the play/pause button while the FSM is in preview phase. */
   isPreviewPhase: boolean;
   audioState: 'idle' | 'buffering' | 'ready' | 'error';
-  saveState: 'idle' | 'saving' | 'saved' | 'error';
+  saveState: 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
   answeredCount: number;
   totalQuestions: number;
   /** Optional whole-attempt countdown (seconds). `null` hides the chip. */
@@ -117,9 +117,13 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
         )}
         {saveState === 'saving'
           ? 'Saving'
-          : saveState === 'error'
-            ? 'Save issue'
-            : `${answeredCount}/${totalQuestions} saved`}
+          : saveState === 'offline-saved'
+            ? 'Saved offline'
+            : saveState === 'conflict'
+              ? 'Sync conflict'
+              : saveState === 'error'
+                ? 'Save issue'
+                : `${answeredCount}/${totalQuestions} saved`}
       </div>
 
       {attemptSecondsRemaining !== null ? (

@@ -48,7 +48,16 @@ import { ListeningIntroCard } from '@/components/domain/listening/player/Listeni
 import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
 import { ListeningSectionStepper } from '@/components/domain/listening/player/ListeningSectionStepper';
 import { ListeningPreviewBanner, ListeningReviewBanner } from '@/components/domain/listening/player/ListeningPhaseBanner';
-import { completeMockSection, fetchAuthorizedObjectUrl } from '@/lib/api';
+import { ApiError, completeMockSection, fetchAuthorizedObjectUrl } from '@/lib/api';
+import {
+  enableAutoSync,
+  markAttemptConflict,
+  markAttemptSynced,
+  queueOfflineAttempt,
+  syncPendingAttempts,
+  type OfflineAttempt,
+} from '@/lib/mobile/offline-sync';
+import { reconcileOfflineAnswer, type OfflineAnswerPayload } from '@/lib/mobile/offline-answer-reconciliation';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
 import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
 import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
@@ -63,6 +72,7 @@ type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic'
 type PendingListeningAnswer = {
   attemptId: string;
   value: string;
+  baseValue: string | null;
   eventLogged: boolean;
 };
 
@@ -75,6 +85,11 @@ function formatTime(seconds: number) {
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function isNetworkInterruption(error: unknown): boolean {
+  return (error instanceof ApiError && error.status === 0)
+    || (typeof navigator !== 'undefined' && !navigator.onLine);
 }
 
 function formatMilliseconds(value: number | null | undefined) {
@@ -198,6 +213,8 @@ function PlayerContent() {
   // The server remains the durable source of truth; this is only an in-flight
   // queue, not a second answer store.
   const pendingAnswersRef = useRef<Record<string, PendingListeningAnswer>>({});
+  const serverAnswersRef = useRef<Record<string, string | null>>({});
+  const answerBaseValuesRef = useRef<Record<string, string | null>>({});
   // C8e — last-known forward-only audio time. onTimeUpdate keeps this in sync;
   // onSeeking snaps backwards seeks back to this value in exam mode.
   const lastKnownTimeRef = useRef<number>(0);
@@ -269,7 +286,7 @@ function PlayerContent() {
   // viewer's blob-fetch). We resolve the current section's URL to an authorized
   // blob URL here and feed THAT to the element. Null while resolving / absent.
   const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error'>('idle');
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -349,7 +366,15 @@ function PlayerContent() {
           setAudioValidityHeld(true);
           setIntegrityWarning('This Listening attempt is on hold because audio playback failed and has been flagged for administrator review. Do not replay the scored audio.');
         }
-        setAnswers(Object.fromEntries(Object.entries(data.attempt?.answers ?? {}).map(([key, value]) => [key, value ?? ''])));
+        const restoredAnswers = Object.fromEntries(
+          Object.entries(data.attempt?.answers ?? {}).map(([key, value]) => [key, value ?? '']),
+        );
+        setAnswers(restoredAnswers);
+        serverAnswersRef.current = Object.fromEntries(
+          Object.entries(data.attempt?.answers ?? {}).map(([key, value]) => [key, value ?? null]),
+        );
+        answerBaseValuesRef.current = {};
+        pendingAnswersRef.current = {};
         analytics.track('task_started', { subtest: 'listening', taskId: id, attemptId: data.attempt?.attemptId, mode });
       })
       .catch((err) => {
@@ -487,6 +512,8 @@ function PlayerContent() {
           && current?.value === pending.value;
         if (matchesLatest) {
           delete pendingAnswersRef.current[questionId];
+          serverAnswersRef.current[questionId] = pending.value;
+          delete answerBaseValuesRef.current[questionId];
           setSaveState('saved');
         } else if (current) {
           // A newer keystroke is already queued; do not show the older
@@ -494,8 +521,33 @@ function PlayerContent() {
           setSaveState('saving');
         }
       })
-      .catch(() => {
-        if (pendingAnswersRef.current[questionId]?.value === pending.value) setSaveState('error');
+      .catch((error) => {
+        const current = pendingAnswersRef.current[questionId];
+        if (current?.attemptId !== pending.attemptId || current.value !== pending.value) return;
+        if (isNetworkInterruption(error)) {
+          void queueOfflineAttempt(
+            'listening-answer',
+            pending.attemptId,
+            {
+              questionId,
+              value: pending.value,
+              baseValue: pending.baseValue,
+            } satisfies OfflineAnswerPayload,
+            { id: `listening-answer:${encodeURIComponent(pending.attemptId)}:${encodeURIComponent(questionId)}` },
+          )
+            .then(() => {
+              const latest = pendingAnswersRef.current[questionId];
+              if (latest?.attemptId === pending.attemptId && latest.value === pending.value) {
+                delete pendingAnswersRef.current[questionId];
+                setSaveState('offline-saved');
+              } else if (latest) {
+                setSaveState('saving');
+              }
+            })
+            .catch(() => setSaveState('error'));
+          return;
+        }
+        setSaveState('error');
       });
   }, [logAttemptEvent]);
 
@@ -522,6 +574,64 @@ function PlayerContent() {
       window.removeEventListener('pagehide', flush);
     };
   }, [attempt?.attemptId, flushPendingAnswers, hasStarted]);
+
+  const reconcilePendingOfflineAnswer = useCallback(async (queued: OfflineAttempt): Promise<boolean> => {
+    if (!attempt || !id || queued.subtest !== 'listening-answer' || queued.contentId !== attempt.attemptId) return false;
+    const payload = queued.payload as Partial<OfflineAnswerPayload>;
+    if (typeof payload.questionId !== 'string' || typeof payload.value !== 'string') return false;
+
+    const latest = await getListeningSession(id, { mode, attemptId: attempt.attemptId });
+    if (latest.attempt?.requiresAdminReview) {
+      await markAttemptConflict(queued.id);
+      setAudioValidityHeld(true);
+      setIntegrityWarning('This Listening attempt is on hold because audio playback failed and has been flagged for administrator review. Do not replay the scored audio.');
+      return true;
+    }
+
+    const serverValue = latest.attempt?.answers?.[payload.questionId] ?? null;
+    const decision = reconcileOfflineAnswer(serverValue, {
+      questionId: payload.questionId,
+      value: payload.value,
+      baseValue: typeof payload.baseValue === 'string' ? payload.baseValue : null,
+    });
+
+    if (decision === 'already-synced') {
+      await markAttemptSynced(queued.id);
+      serverAnswersRef.current[payload.questionId] = payload.value;
+      delete answerBaseValuesRef.current[payload.questionId];
+      setSaveState('saved');
+      return true;
+    }
+
+    if (decision === 'conflict') {
+      await markAttemptConflict(queued.id);
+      serverAnswersRef.current[payload.questionId] = serverValue;
+      delete answerBaseValuesRef.current[payload.questionId];
+      setAnswers((current) => current[payload.questionId] === payload.value
+        ? { ...current, [payload.questionId]: serverValue ?? '' }
+        : current);
+      setSaveState('conflict');
+      return true;
+    }
+
+    try {
+      await listeningV2Api.saveAnswer(attempt.attemptId, payload.questionId, payload.value);
+      await markAttemptSynced(queued.id);
+      serverAnswersRef.current[payload.questionId] = payload.value;
+      delete answerBaseValuesRef.current[payload.questionId];
+      setSaveState('saved');
+      return true;
+    } catch (error) {
+      if (isNetworkInterruption(error)) return false;
+      throw error;
+    }
+  }, [attempt, id, mode]);
+
+  useEffect(() => {
+    if (!attempt) return;
+    void syncPendingAttempts(reconcilePendingOfflineAnswer).catch(() => undefined);
+    return enableAutoSync(reconcilePendingOfflineAnswer);
+  }, [attempt, reconcilePendingOfflineAnswer]);
 
   const pauseAudio = useCallback(() => {
     const audio = audioRef.current;
@@ -682,6 +792,15 @@ function PlayerContent() {
     setStartError(null);
     try {
       const started = await ensureAttempt();
+      const restoredAnswers = Object.fromEntries(
+        Object.entries(started.answers ?? {}).map(([key, value]) => [key, value ?? '']),
+      );
+      setAnswers(restoredAnswers);
+      serverAnswersRef.current = Object.fromEntries(
+        Object.entries(started.answers ?? {}).map(([key, value]) => [key, value ?? null]),
+      );
+      answerBaseValuesRef.current = {};
+      pendingAnswersRef.current = {};
       if (strictReadinessRequired) {
         if (!readinessSnapshot?.audioOk) {
           throw new Error('Complete the audio readiness check before starting this strict Listening attempt.');
@@ -765,9 +884,15 @@ function PlayerContent() {
     if (!currentAttempt) return;
     clearTimeout(saveTimers.current[questionId]);
     const previous = pendingAnswersRef.current[questionId];
+    if (!Object.prototype.hasOwnProperty.call(answerBaseValuesRef.current, questionId)) {
+      answerBaseValuesRef.current[questionId] = serverAnswersRef.current[questionId] ?? null;
+    }
     pendingAnswersRef.current[questionId] = {
       attemptId: currentAttempt.attemptId,
       value,
+      baseValue: previous?.attemptId === currentAttempt.attemptId
+        ? previous.baseValue
+        : answerBaseValuesRef.current[questionId] ?? null,
       eventLogged: previous?.attemptId === currentAttempt.attemptId && previous.value === value
         ? previous.eventLogged
         : false,
@@ -1704,6 +1829,17 @@ function PlayerContent() {
             {audioState === 'buffering' ? (
               <InlineAlert variant="warning">
                 Audio buffering has halted playback. Do not replay or seek; playback will continue when the stream is ready.
+              </InlineAlert>
+            ) : null}
+
+            {saveState === 'offline-saved' ? (
+              <InlineAlert variant="info">
+                Your latest Listening answer is encrypted and saved on this device. It will reconcile with the server when the connection returns.
+              </InlineAlert>
+            ) : null}
+            {saveState === 'conflict' ? (
+              <InlineAlert variant="warning">
+                A newer Listening answer is already saved on the server. Your offline answer was not applied.
               </InlineAlert>
             ) : null}
 

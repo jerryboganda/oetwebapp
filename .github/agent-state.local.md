@@ -948,3 +948,18 @@ dirty work in the main checkout.
   slice; no long local validation, CI/CD, push, or deployment was started.
 - Preserve the four untracked user-owned paths above. Owner release inputs and
   authenticated deployed browser/mobile acceptance remain unresolved.
+
+# Latest LR coding checkpoint - 2026-08-12 (player reconnect reconciliation)
+
+- Extended the active `app/listening/player/[id]/page.tsx` route with the shared
+  encrypted offline answer queue, deterministic attempt/question queue keys,
+  server-confirmed base values, reconnect auto-sync, and server-wins conflict
+  handling. Offline submission and timer state are intentionally not queued;
+  the server remains authoritative for scoring and deadlines.
+- Updated `ListeningAudioTransport` to distinguish saved-offline and sync-conflict
+  states, with learner-facing notices for both.
+- Only bounded source searches and `git diff --check` were run for this slice;
+  no long local validation, CI/CD, push, or deployment was started. Focused
+  reconnect execution remains pending.
+- Preserve the four untracked user-owned paths above. Owner release inputs and
+  authenticated deployed browser/mobile acceptance remain unresolved.
