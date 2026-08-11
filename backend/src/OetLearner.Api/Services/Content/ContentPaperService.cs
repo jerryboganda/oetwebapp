@@ -799,39 +799,6 @@ public sealed class ContentPaperService(
             EnforceRequiredAssetRoles(paper);
         }
 
-        // Section 12 hard invariant — a malformed MCQ must never reach a
-        // published paper. The remaining rule-conformance findings stay
-        // advisory under the existing owner policy, but duplicate options and
-        // zero/multiple correct options are publication blockers.
-        if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
-        {
-            var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
-            await RecordPublishConformanceWarningsAsync(
-                paper,
-                report.Issues.Select(i => $"[{i.Severity}] {i.Message}"),
-                adminId,
-                ct);
-            ThrowIfMcqPublicationInvalid(
-                "Reading",
-                report.Issues
-                    .Where(i => i.Code == "question_payload_invalid")
-                    .Select(i => (i.Code, i.Message)));
-        }
-        else if (isListening)
-        {
-            var report = await new ListeningStructureService(db).ValidatePaperAsync(paper.Id, ct);
-            await RecordPublishConformanceWarningsAsync(
-                paper,
-                report.Issues.Select(i => $"[{i.Severity}] {i.Message}"),
-                adminId,
-                ct);
-            ThrowIfMcqPublicationInvalid(
-                "Listening",
-                report.Issues
-                    .Where(i => i.Code == "listening_mcq_shape")
-                    .Select(i => (i.Code, i.Message)));
-        }
-
         // Decision 2 — publishing is NEVER blocked on broader rule-conformance grounds.
         // Structural problems (e.g. a 4-option Part B, a non-canonical shape)
         // are recorded as a NON-BLOCKING conformance-warning audit and surfaced
@@ -842,9 +809,19 @@ public sealed class ContentPaperService(
         // paper) must also never block publishing. Wrap it defensively: if the
         // check can't run, publish proceeds and the conformance dashboard simply
         // lacks fresh warnings for this revision.
+        ReadingValidationReport? readingReport = null;
+        ListeningValidationReport? listeningReport = null;
         try
         {
-            if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            {
+                readingReport = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            }
+            else if (isListening)
+            {
+                listeningReport = await new ListeningStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            }
+            else if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
             {
                 var report = SpeakingContentStructure.Validate(paper);
                 await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
@@ -858,6 +835,37 @@ public sealed class ContentPaperService(
         catch (Exception)
         {
             // Advisory only — never block the publish on a conformance-check failure.
+        }
+
+        // Section 12 hard invariant — a malformed MCQ must never reach a
+        // published paper. The remaining rule-conformance findings stay
+        // advisory under the existing owner policy, but duplicate options and
+        // zero/multiple correct options are publication blockers.
+        if (readingReport is not null)
+        {
+            await RecordPublishConformanceWarningsAsync(
+                paper,
+                readingReport.Issues.Select(i => $"[{i.Severity}] {i.Message}"),
+                adminId,
+                ct);
+            ThrowIfMcqPublicationInvalid(
+                "Reading",
+                readingReport.Issues
+                    .Where(i => i.Code == "question_payload_invalid")
+                    .Select(i => (i.Code, i.Message)));
+        }
+        else if (listeningReport is not null)
+        {
+            await RecordPublishConformanceWarningsAsync(
+                paper,
+                listeningReport.Issues.Select(i => $"[{i.Severity}] {i.Message}"),
+                adminId,
+                ct);
+            ThrowIfMcqPublicationInvalid(
+                "Listening",
+                listeningReport.Issues
+                    .Where(i => i.Code == "listening_mcq_shape")
+                    .Select(i => (i.Code, i.Message)));
         }
 
         var now = DateTimeOffset.UtcNow;
