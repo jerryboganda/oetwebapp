@@ -21,6 +21,10 @@ describe('AppDownloadPromo', () => {
     });
 
     expect(screen.getAllByRole('link')).toHaveLength(4);
+    if (variant === 'modal') {
+      expect(screen.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'app-download-modal-title');
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    }
     expect(screen.queryByText('Download for')).not.toBeInTheDocument();
     expect(screen.queryByText('Download directly')).not.toBeInTheDocument();
     expect(screen.queryByText('iOS app')).not.toBeInTheDocument();

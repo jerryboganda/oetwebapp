@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
@@ -64,43 +65,7 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
   }
 
   if (variant === 'modal') {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-teal-500/30 bg-slate-900 p-6 text-white shadow-2xl">
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute right-4 top-4 rounded-full bg-slate-800 p-1.5 text-slate-400 transition hover:bg-slate-700 hover:text-white"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-
-          <div className="flex flex-col items-center text-center">
-            <div className="mb-4 flex h-14 items-center justify-center rounded-2xl bg-teal-500/10 px-3 text-teal-400 ring-1 ring-teal-500/30">
-              <PlatformIconCluster className="gap-2" />
-            </div>
-
-            <h3 className="text-xl font-bold text-white">Get the OET with Dr Hesham App</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Course videos are available exclusively through our official applications. Download the app on your preferred platform for secure video playback and offline study.
-            </p>
-
-            <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-6" />
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-5 text-xs text-slate-400 underline underline-offset-4 transition hover:text-white"
-            >
-              Continue on Web (Browsing &amp; Practice)
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <PostLoginAppModalContent onClose={onClose} />;
   }
 
   return (
@@ -121,6 +86,62 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
 
       <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-4" />
     </div>
+  );
+}
+
+function PostLoginAppModalContent({ onClose }: { onClose?: () => void }) {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
+
+  if (!portalTarget) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="app-download-modal-title"
+    >
+      <div className="relative mx-auto flex min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-teal-500/30 bg-slate-900 text-white shadow-2xl">
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-2 top-2 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-slate-800 text-slate-300 shadow-md transition hover:bg-slate-700 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        )}
+
+        <div className="min-h-0 overflow-y-auto p-4 pt-16 sm:p-6 sm:pt-16">
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-4 flex h-14 items-center justify-center rounded-2xl bg-teal-500/10 px-3 text-teal-400 ring-1 ring-teal-500/30">
+              <PlatformIconCluster className="gap-2" />
+            </div>
+
+            <h3 id="app-download-modal-title" className="text-xl font-bold text-white">Get the OET with Dr Hesham App</h3>
+            <p className="mt-2 max-w-prose text-sm leading-6 text-slate-300">
+              Course videos are available exclusively through our official applications. Download the app on your preferred platform for secure video playback and offline study.
+            </p>
+
+            <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-6 grid-cols-1 min-[400px]:grid-cols-2" />
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-5 text-xs text-slate-400 underline underline-offset-4 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300"
+            >
+              Continue on Web (Browsing &amp; Practice)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    portalTarget,
   );
 }
 
