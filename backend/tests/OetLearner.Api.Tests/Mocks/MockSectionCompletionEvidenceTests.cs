@@ -29,7 +29,10 @@ public class MockSectionCompletionEvidenceTests
             SubmittedAt = now,
             LastActivityAt = now,
             RawScore = 30,
+            ScaledScore = 350,
             MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-reading-v1",
+            ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();
 
@@ -55,7 +58,7 @@ public class MockSectionCompletionEvidenceTests
         Assert.Equal(AttemptState.Completed, section.State);
         Assert.Equal(30, section.RawScore);
         Assert.Equal(42, section.RawScoreMax);
-        Assert.Equal(OetScoring.OetRawToScaled(30), section.ScaledScore);
+        Assert.Equal(350, section.ScaledScore);
         Assert.Equal("B", section.Grade);
     }
 
@@ -75,7 +78,10 @@ public class MockSectionCompletionEvidenceTests
             SubmittedAt = now,
             LastActivityAt = now,
             RawScore = 30,
+            ScaledScore = 350,
             MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-reading-v1",
+            ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();
 
@@ -244,7 +250,7 @@ public class MockSectionCompletionEvidenceTests
         Assert.Equal(AttemptState.Completed, section.State);
         Assert.Equal(30, section.RawScore);
         Assert.Equal(42, section.RawScoreMax);
-        Assert.Equal(OetScoring.OetRawToScaled(30), section.ScaledScore);
+        Assert.Equal(350, section.ScaledScore);
         Assert.Equal("B", section.Grade);
     }
 

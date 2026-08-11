@@ -16,6 +16,9 @@ Last updated: 2026-08-12
   projections now ignore scaled values lacking an owner conversion-table
   version. Full/exam readiness requires `ScoreConversionPassed == true`; an
   explicit regression fixture protects the unapproved-score path.
+- Reading/Listening mock completion and report adapters now require canonical
+  owner conversion metadata, carry the table version through mock evidence,
+  and withhold formula-derived grades/readiness/booking labels when absent.
 - No long-running validation, CI/CD, deployment, or push was run by request.
   Remaining evidence boundary is compile/test execution plus owner-provided
   score tables and authenticated production acceptance.

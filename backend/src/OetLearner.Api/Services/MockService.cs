@@ -119,6 +119,7 @@ public sealed class MockService(
             })
             .ToList();
         var latestReport = reportItems.FirstOrDefault();
+        var latestReportHasGovernedScore = latestReport is not null && ContainsGovernedScore(latestReport);
         var activeReservations = await db.MockReviewReservations.AsNoTracking()
             .Where(x => x.UserId == userId && (x.State == MockReviewReservationState.Reserved || x.State == MockReviewReservationState.PartiallyConsumed))
             .ToListAsync(ct);
@@ -196,10 +197,12 @@ public sealed class MockService(
                 title = latestReport is null ? "Start a full OET mock" : "Review the next full mock",
                 rationale = latestReport is null
                     ? "Choose a published bundle to capture a clean baseline across OET sections."
-                    : $"Your latest report scored {latestReport.GetValueOrDefault("overallScore")?.ToString() ?? "an updated"} overall. Run another mock to confirm the gains.",
+                    : latestReportHasGovernedScore
+                        ? "Your latest report contains Reading/Listening evidence. Review owner-approved per-assessment results before planning the next mock."
+                        : $"Your latest report scored {latestReport.GetValueOrDefault("overallScore")?.ToString() ?? "an updated"} overall. Run another mock to confirm the gains.",
                 route = firstFullRoute,
-                latestOverallScore = latestReport?.GetValueOrDefault("overallScore")?.ToString(),
-                latestOverallGrade = latestReport?.GetValueOrDefault("overallGrade")?.ToString(),
+                latestOverallScore = latestReportHasGovernedScore ? null : latestReport?.GetValueOrDefault("overallScore")?.ToString(),
+                latestOverallGrade = latestReportHasGovernedScore ? null : latestReport?.GetValueOrDefault("overallGrade")?.ToString(),
                 trend = ExtractReportTrend(latestReport),
                 readiness = BuildReadinessAdvisory(latestReport)
             },
@@ -765,12 +768,18 @@ public sealed class MockService(
         section.CompletedAt = now;
         section.ContentAttemptId = canonicalEvidence?.ContentAttemptId
             ?? (string.IsNullOrWhiteSpace(request.ContentAttemptId) ? section.ContentAttemptId : request.ContentAttemptId.Trim());
-        section.RawScore = canonicalEvidence?.RawScore ?? request.RawScore ?? section.RawScore;
-        section.RawScoreMax = canonicalEvidence?.RawScoreMax ?? request.RawScoreMax ?? section.RawScoreMax;
-        section.ScaledScore = canonicalEvidence?.ScaledScore ?? ResolveScaledScore(request.ScaledScore);
-        section.Grade = canonicalEvidence?.Grade ?? (string.IsNullOrWhiteSpace(request.Grade)
-            ? section.Grade
-            : request.Grade);
+        var governedScore = section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening";
+        section.RawScore = canonicalEvidence?.RawScore
+            ?? (governedScore ? null : request.RawScore ?? section.RawScore);
+        section.RawScoreMax = canonicalEvidence?.RawScoreMax
+            ?? (governedScore ? null : request.RawScoreMax ?? section.RawScoreMax);
+        section.ScaledScore = canonicalEvidence?.ScaledScore
+            ?? (governedScore ? null : ResolveScaledScore(request.ScaledScore));
+        section.Grade = canonicalEvidence is not null
+            ? canonicalEvidence.Grade
+            : governedScore
+                ? null
+                : string.IsNullOrWhiteSpace(request.Grade) ? section.Grade : request.Grade;
         section.FeedbackJson = JsonSupport.Serialize(BuildSectionEvidencePayload(request.Evidence, canonicalEvidence));
 
         await ConsumeReservationForSectionAsync(userId, attempt, section, request.ReviewTurnaroundOption, now, ct);
@@ -910,7 +919,14 @@ public sealed class MockService(
         var attempt = await db.ReadingAttempts.AsNoTracking().FirstOrDefaultAsync(x =>
             x.Id == attemptId && x.UserId == userId && x.PaperId == paperId && x.Status == ReadingAttemptStatus.Submitted,
             ct) ?? throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
-        return BuildCanonicalEvidence(attempt.Id, attempt.RawScore, attempt.MaxRawScore, attempt.ScaledScore, "reading_attempt");
+        return BuildCanonicalEvidence(
+            attempt.Id,
+            attempt.RawScore,
+            attempt.MaxRawScore,
+            attempt.ScaledScore,
+            attempt.ScoreConversionTableVersionKey,
+            attempt.ScoreConversionGrade,
+            "reading_attempt");
     }
 
     private async Task<CanonicalSectionEvidence> ResolveListeningEvidenceAsync(
@@ -925,7 +941,14 @@ public sealed class MockService(
         var attempt = await db.ListeningAttempts.AsNoTracking().FirstOrDefaultAsync(x =>
             x.Id == attemptId && x.UserId == userId && x.PaperId == paperId && x.Status == ListeningAttemptStatus.Submitted,
             ct) ?? throw ApiException.NotFound("content_attempt_not_found", "The submitted section evidence was not found for this learner and paper.");
-        return BuildCanonicalEvidence(attempt.Id, attempt.RawScore, attempt.MaxRawScore, attempt.ScaledScore, "listening_attempt");
+        return BuildCanonicalEvidence(
+            attempt.Id,
+            attempt.RawScore,
+            attempt.MaxRawScore,
+            attempt.ScaledScore,
+            attempt.ScoreConversionTableVersionKey,
+            attempt.ScoreConversionGrade,
+            "listening_attempt");
     }
 
     private async Task<bool> OwnsLegacySectionEvidenceAsync(
@@ -968,6 +991,8 @@ public sealed class MockService(
         int? rawScore,
         int rawScoreMax,
         int? scaledScore,
+        string? scoreConversionTableVersionKey,
+        string? scoreConversionGrade,
         string evidenceSource)
     {
         if (!rawScore.HasValue)
@@ -975,7 +1000,7 @@ public sealed class MockService(
             throw ApiException.Conflict("content_attempt_not_graded", "The submitted section evidence has not been graded yet.");
         }
 
-        if (!scaledScore.HasValue)
+        if (!scaledScore.HasValue || string.IsNullOrWhiteSpace(scoreConversionTableVersionKey))
         {
             throw ApiException.Conflict(
                 "content_attempt_scaled_unavailable",
@@ -984,7 +1009,14 @@ public sealed class MockService(
 
         var scaled = scaledScore.Value;
         var max = rawScoreMax > 0 ? rawScoreMax : 42;
-        return new CanonicalSectionEvidence(contentAttemptId, rawScore.Value, max, scaled, OetScoring.OetGradeLetterFromScaled(scaled), evidenceSource);
+        return new CanonicalSectionEvidence(
+            contentAttemptId,
+            rawScore.Value,
+            max,
+            scaled,
+            scoreConversionGrade,
+            scoreConversionTableVersionKey.Trim(),
+            evidenceSource);
     }
 
     private static Dictionary<string, object?> BuildSectionEvidencePayload(
@@ -996,6 +1028,7 @@ public sealed class MockService(
         {
             evidence["evidenceSource"] = canonicalEvidence.EvidenceSource;
             evidence["contentAttemptId"] = canonicalEvidence.ContentAttemptId;
+            evidence["scoreConversionTableVersionKey"] = canonicalEvidence.ScoreConversionTableVersionKey;
         }
 
         return evidence;
@@ -1006,7 +1039,8 @@ public sealed class MockService(
         int RawScore,
         int RawScoreMax,
         int ScaledScore,
-        string Grade,
+        string? Grade,
+        string ScoreConversionTableVersionKey,
         string EvidenceSource);
 
     public async Task<object> SubmitMockAttemptAsync(string userId, string mockAttemptId, CancellationToken ct)
@@ -1401,7 +1435,12 @@ public sealed class MockService(
             : await db.ReviewRequests.AsNoTracking()
                 .Where(x => reviewAttemptIds.Contains(x.AttemptId))
                 .ToListAsync(ct);
-        var scored = reports.Select(x => ParsePayloadOverallScore(x.PayloadJson)).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+        var scored = reports
+            .Where(x => !ContainsGovernedScore(x.PayloadJson))
+            .Select(x => ParsePayloadOverallScore(x.PayloadJson))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .ToList();
         var average = scored.Count == 0 ? (double?)null : Math.Round(scored.Average(), 1);
 
         return new
@@ -1447,7 +1486,9 @@ public sealed class MockService(
                 mockAttemptId = x.attempt.Id,
                 reportId = x.report.Id,
                 generatedAt = x.report.GeneratedAt,
-                score = ParsePayloadOverallScore(x.report.PayloadJson),
+                score = ContainsGovernedScore(x.report.PayloadJson)
+                    ? null
+                    : ParsePayloadOverallScore(x.report.PayloadJson),
                 weakest = ReadWeakestCriterion(JsonSupport.Deserialize(x.report.PayloadJson, new Dictionary<string, object?>()))
             })
             .Where(x => !x.score.HasValue || OetScoring.AdvisoryTier(x.score.Value).Tier is "red" or "amber")
@@ -2707,9 +2748,20 @@ public sealed class MockService(
         completedAt = section.CompletedAt,
         rawScore = section.RawScore,
         rawScoreMax = section.RawScoreMax,
-        scaledScore = section.ScaledScore,
-        grade = section.Grade
+        scaledScore = IsOwnerConvertedSection(section) ? section.ScaledScore : section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening" ? null : section.ScaledScore,
+        grade = IsOwnerConvertedSection(section) ? section.Grade : section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening" ? null : section.Grade
     };
+
+    private static bool IsOwnerConvertedSection(MockSectionAttempt section)
+    {
+        var governedScore = section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening";
+        if (!governedScore) return true;
+        var evidence = JsonSupport.Deserialize<Dictionary<string, object?>>(
+            section.FeedbackJson,
+            new Dictionary<string, object?>());
+        return evidence.TryGetValue("scoreConversionTableVersionKey", out var key)
+            && !string.IsNullOrWhiteSpace(key?.ToString());
+    }
 
     private static object ProjectAttemptSummary(MockAttempt attempt) => new
     {
@@ -2835,17 +2887,22 @@ public sealed class MockService(
         {
             var name = StringValue(st, "name") ?? StringValue(st, "subtest") ?? "Mock";
             var score = IntValue(st, "scaledScore") ?? ParseScore(StringValue(st, "score"));
-            var advisory = score.HasValue
+            var governedScore = name.Trim().ToLowerInvariant() is "reading" or "listening";
+            var advisory = !governedScore && score.HasValue
                 ? OetScoring.AdvisoryTier(score.Value)
                 : null;
             return new
             {
                 subtest = name,
                 scaledScore = score,
-                grade = score.HasValue ? OetScoring.OetGradeLetterFromScaled(score.Value) : null,
-                rag = advisory?.Tier ?? "pending",
-                message = advisory?.Message ?? "Awaiting scored evidence or teacher review.",
-                passThreshold = advisory?.PassThreshold
+                grade = governedScore ? StringValue(st, "grade") : score.HasValue ? OetScoring.OetGradeLetterFromScaled(score.Value) : null,
+                rag = governedScore ? (score.HasValue ? "owner-converted" : "pending") : advisory?.Tier ?? "pending",
+                message = governedScore
+                    ? (score.HasValue
+                        ? "Owner-approved conversion is available; no mock-wide pass label is inferred."
+                        : "Awaiting owner-approved score conversion or teacher review.")
+                    : advisory?.Message ?? "Awaiting scored evidence or teacher review.",
+                passThreshold = governedScore ? null : advisory?.PassThreshold
             };
         }).ToArray();
 
@@ -3034,6 +3091,17 @@ public sealed class MockService(
         {
             return new { status = "pending", message = "Wait for scored sections and teacher review before booking the official OET.", route = "/mocks/setup" };
         }
+        if (ReadSubTests(payload).Any(st => (StringValue(st, "name") ?? StringValue(st, "subtest") ?? string.Empty)
+            .Trim().ToLowerInvariant() is "reading" or "listening"))
+        {
+            return new
+            {
+                status = "pending",
+                score,
+                message = "Use the owner-approved per-assessment pass labels before booking the official OET; no mock-wide pass claim is inferred.",
+                route = "/billing/exam-booking"
+            };
+        }
         var advisory = OetScoring.AdvisoryTier(score.Value);
         return new
         {
@@ -3087,6 +3155,13 @@ public sealed class MockService(
         return ParseScore(payload.TryGetValue("overallScore", out var raw) ? raw?.ToString() : null);
     }
 
+    private static bool ContainsGovernedScore(string payloadJson)
+        => ContainsGovernedScore(JsonSupport.Deserialize(payloadJson, new Dictionary<string, object?>()));
+
+    private static bool ContainsGovernedScore(Dictionary<string, object?> payload)
+        => ReadSubTests(payload).Any(st => (StringValue(st, "name") ?? StringValue(st, "subtest") ?? string.Empty)
+            .Trim().ToLowerInvariant() is "reading" or "listening");
+
     private static string NormalizeSubtestOrDefault(string? value)
     {
         var normalized = value?.Trim().ToLowerInvariant();
@@ -3125,9 +3200,9 @@ public sealed class MockService(
     }
 
     /// <summary>
-    /// Builds a lightweight readiness advisory object for the Mock Center based on the latest report's
-    /// overall scaled score. Anchors on OET pass thresholds (350 = B grade) per docs/SCORING.md.
-    /// Returns null when no scored report exists yet.
+    /// Builds a lightweight readiness advisory object for the Mock Center.
+    /// Reading/Listening reports remain pending here because a mock-wide score
+    /// cannot inherit an owner pass label from a shared numeric threshold.
     /// </summary>
     private static object? BuildReadinessAdvisory(Dictionary<string, object?>? latestReport)
     {
@@ -3135,8 +3210,18 @@ public sealed class MockService(
         if (!latestReport.TryGetValue("overallScore", out var scoreRaw) || scoreRaw is null) return null;
         if (!int.TryParse(scoreRaw.ToString(), out var overall)) return null;
 
-        // Canonical OET pass anchor = 350/500 (docs/SCORING.md). Tiering is advisory copy only and is
-        // centralised in OetScoring.AdvisoryTier — never compare scaled scores to 350/300/400 inline.
+        if (ReadSubTests(latestReport).Any(st => (StringValue(st, "name") ?? StringValue(st, "subtest") ?? string.Empty)
+            .Trim().ToLowerInvariant() is "reading" or "listening"))
+        {
+            return new
+            {
+                tier = "pending",
+                message = "Owner-approved per-assessment pass labels are required; no mock-wide pass claim is inferred.",
+                passThreshold = (int?)null,
+                overallScore = overall,
+            };
+        }
+
         var advisory = OetScoring.AdvisoryTier(overall);
         return new
         {

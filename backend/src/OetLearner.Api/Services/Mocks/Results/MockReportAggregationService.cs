@@ -76,7 +76,8 @@ public sealed record MockSectionResolvedResult(
     string? Grade,
     string EvidenceSource,
     string? ReviewRequestId = null,
-    string? ReviewState = null);
+    string? ReviewState = null,
+    string? ScoreConversionTableVersionKey = null);
 
 public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
 {
@@ -115,14 +116,17 @@ public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "authoritative_attempt_not_found");
         }
 
-        var scaled = attempt.ScaledScore;
+        var approvedConversion = attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey);
+        var scaled = approvedConversion ? attempt.ScaledScore : null;
         return new MockSectionResolvedResult(
             attempt.SubmittedAt is null ? "in_progress" : scaled.HasValue ? "completed" : "pending_score",
             attempt.RawScore,
             attempt.MaxRawScore > 0 ? attempt.MaxRawScore : 42,
             scaled,
-            attempt.ScoreConversionGrade,
-            "reading_attempt");
+            approvedConversion ? attempt.ScoreConversionGrade : null,
+            "reading_attempt",
+            ScoreConversionTableVersionKey: approvedConversion ? attempt.ScoreConversionTableVersionKey : null);
     }
 }
 
@@ -163,14 +167,17 @@ public sealed class ListeningMockSectionResultAdapter : IMockSectionResultAdapte
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "authoritative_attempt_not_found");
         }
 
-        var scaled = attempt.ScaledScore;
+        var approvedConversion = attempt.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey);
+        var scaled = approvedConversion ? attempt.ScaledScore : null;
         return new MockSectionResolvedResult(
             attempt.SubmittedAt is null ? "in_progress" : scaled.HasValue ? "completed" : "pending_score",
             attempt.RawScore,
             attempt.MaxRawScore > 0 ? attempt.MaxRawScore : 42,
             scaled,
-            attempt.ScoreConversionGrade,
-            "listening_attempt");
+            approvedConversion ? attempt.ScoreConversionGrade : null,
+            "listening_attempt",
+            ScoreConversionTableVersionKey: approvedConversion ? attempt.ScoreConversionTableVersionKey : null);
     }
 }
 
@@ -183,7 +190,8 @@ public sealed class LegacyMockSectionResultAdapter : IMockSectionResultAdapter
 
     public static MockSectionResolvedResult ResolveLegacy(MockSectionAttempt section, string source)
     {
-        var scaled = section.ScaledScore;
+        var governedScore = section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening";
+        var scaled = governedScore ? null : section.ScaledScore;
         var status = section.State == AttemptState.Completed
             ? scaled.HasValue ? "completed" : "pending_score"
             : "not_completed";
@@ -193,8 +201,9 @@ public sealed class LegacyMockSectionResultAdapter : IMockSectionResultAdapter
             section.RawScore,
             section.RawScoreMax,
             scaled,
-            section.Grade,
-            source);
+            governedScore ? null : section.Grade,
+            source,
+            ScoreConversionTableVersionKey: null);
     }
 }
 
@@ -266,7 +275,8 @@ public sealed class MockSectionResultResolver(IEnumerable<IMockSectionResultAdap
             resultStatus = resolved.ResultStatus,
             evidenceSource = resolved.EvidenceSource,
             reviewRequestId = resolved.ReviewRequestId,
-            reviewState = resolved.ReviewState
+            reviewState = resolved.ReviewState,
+            scoreConversionTableVersionKey = resolved.ScoreConversionTableVersionKey
         });
 
         return resolved;
@@ -329,6 +339,7 @@ public sealed class MockReportAggregationService(
             var review = reviewRequests.FirstOrDefault(x => x.AttemptId == section.ContentAttemptId);
             var state = review is null ? resolved.ResultStatus : ReviewStateForReport(review.State);
             var scaled = resolved.ScaledScore;
+            var governedScore = subtest.Trim().ToLowerInvariant() is "reading" or "listening";
             return new
             {
                 id = subtest.Trim().ToLowerInvariant(),
@@ -336,7 +347,7 @@ public sealed class MockReportAggregationService(
                 score = scaled?.ToString() ?? (state is "queued" or "in_review" ? "Pending review" : "Pending"),
                 rawScore = FormatMockRawScore(resolved, subtest),
                 scaledScore = scaled,
-                grade = scaled is null ? null : OetScoring.OetGradeLetterFromScaled(scaled.Value),
+                grade = scaled is null ? null : governedScore ? resolved.Grade : OetScoring.OetGradeLetterFromScaled(scaled.Value),
                 state,
                 evidenceSource = resolved.EvidenceSource,
                 contentPaperTitle = row.bundleSection.ContentPaper?.Title,
@@ -369,15 +380,22 @@ public sealed class MockReportAggregationService(
         var proctoringEvents = await db.MockProctoringEvents.AsNoTracking().Where(x => x.MockAttemptId == mockAttempt.Id).ToListAsync(ct);
         var perModuleReadiness = subTests.Select(x =>
         {
-            var advisory = x.scaledScore.HasValue ? OetScoring.AdvisoryTier(x.scaledScore.Value) : null;
+            var governedScore = x.id is "reading" or "listening";
+            var advisory = !governedScore && x.scaledScore.HasValue ? OetScoring.AdvisoryTier(x.scaledScore.Value) : null;
             return new
             {
                 subtest = x.name,
                 scaledScore = x.scaledScore,
                 grade = x.grade,
-                rag = advisory?.Tier ?? "pending",
-                message = advisory?.Message ?? "Awaiting scored evidence or teacher review.",
-                passThreshold = advisory?.PassThreshold
+                rag = governedScore
+                    ? (x.scaledScore.HasValue ? "owner-converted" : "pending")
+                    : advisory?.Tier ?? "pending",
+                message = governedScore
+                    ? (x.scaledScore.HasValue
+                        ? "Owner-approved conversion is available; no mock-wide pass label is inferred."
+                        : "Awaiting owner-approved score conversion or teacher review.")
+                    : advisory?.Message ?? "Awaiting scored evidence or teacher review.",
+                passThreshold = governedScore ? null : advisory?.PassThreshold
             };
         }).ToArray();
         var timingAnalysis = sections.Select(x => new
@@ -420,7 +438,9 @@ public sealed class MockReportAggregationService(
                 ? MockReleasePolicies.AfterTeacherMarking
                 : ReadString(config, "releasePolicy"),
             overallScore = overall?.ToString() ?? "Pending",
-            overallGrade = overall is null ? null : OetScoring.OetGradeLetterFromScaled(overall.Value),
+            overallGrade = overall is null || subTests.Any(x => x.id is "reading" or "listening")
+                ? null
+                : OetScoring.OetGradeLetterFromScaled(overall.Value),
             summary = BuildMockReportSummary(overall, subTests.Count(x => x.state is "queued" or "in_review")),
             subTests,
             weakestCriterion,
@@ -445,7 +465,9 @@ public sealed class MockReportAggregationService(
                 completed = reviewRequests.Count(x => x.State == ReviewRequestState.Completed),
                 pending = reviewRequests.Count(x => x.State is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment)
             },
-            bookingAdvice = BuildMockBookingAdvice(overall),
+            bookingAdvice = BuildMockBookingAdvice(
+                overall,
+                subTests.Any(x => x.id is "reading" or "listening")),
             retakeAdvice = new
             {
                 recommendedWindowDays = 7,
@@ -558,9 +580,19 @@ public sealed class MockReportAggregationService(
             : "The report is waiting for scored section evidence before calculating an advisory overall score.";
     }
 
-    private static object BuildMockBookingAdvice(int? overall)
+    private static object BuildMockBookingAdvice(int? overall, bool containsGovernedScore)
     {
         if (!overall.HasValue) return new { status = "pending", message = "Wait for scored sections and teacher review before booking the official OET.", route = "/mocks/setup" };
+        if (containsGovernedScore)
+        {
+            return new
+            {
+                status = "pending",
+                score = overall.Value,
+                message = "Use the owner-approved per-assessment pass labels before booking the official OET; no mock-wide pass claim is inferred.",
+                route = "/exam-booking"
+            };
+        }
         var advisory = OetScoring.AdvisoryTier(overall.Value);
         return new
         {

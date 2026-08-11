@@ -38,7 +38,10 @@ public class MockSectionResultResolverTests
             SubmittedAt = now,
             LastActivityAt = now,
             RawScore = 30,
+            ScaledScore = 350,
             MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-reading-v1",
+            ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();
 
@@ -47,10 +50,10 @@ public class MockSectionResultResolverTests
 
         Assert.Equal(30, resolved.RawScore);
         Assert.Equal(42, resolved.RawScoreMax);
-        Assert.Equal(OetScoring.OetRawToScaled(30), resolved.ScaledScore);
+        Assert.Equal(350, resolved.ScaledScore);
         Assert.Equal("reading_attempt", resolved.EvidenceSource);
         Assert.Equal(30, sectionAttempt.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(30), sectionAttempt.ScaledScore);
+        Assert.Equal(350, sectionAttempt.ScaledScore);
         Assert.Equal("reading_attempt", ReadFeedbackSource(sectionAttempt.FeedbackJson));
     }
 
@@ -78,7 +81,10 @@ public class MockSectionResultResolverTests
             SubmittedAt = now,
             LastActivityAt = now,
             RawScore = 30,
+            ScaledScore = 350,
             MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-reading-v1",
+            ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();
 
@@ -86,10 +92,10 @@ public class MockSectionResultResolverTests
         var resolved = await resolver.ResolveAsync(new MockSectionResultContext(db, mockAttempt, sectionAttempt, bundleSection), CancellationToken.None);
 
         Assert.Equal(30, resolved.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(30), resolved.ScaledScore);
+        Assert.Equal(350, resolved.ScaledScore);
         Assert.Equal("listening_attempt", resolved.EvidenceSource);
         Assert.Equal(30, sectionAttempt.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(30), sectionAttempt.ScaledScore);
+        Assert.Equal(350, sectionAttempt.ScaledScore);
         Assert.Equal("listening_attempt", ReadFeedbackSource(sectionAttempt.FeedbackJson));
     }
 

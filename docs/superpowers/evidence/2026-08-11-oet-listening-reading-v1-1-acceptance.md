@@ -69,6 +69,11 @@ an owner-controlled value that must not be invented in code.
   readiness requires the persisted owner `ScoreConversionPassed` flag, and
   pathway milestones use owner-approved conversion evidence rather than a
   formula or numeric pass fallback. Focused pathway execution remains pending.
+- Reading/Listening mock completion now requires canonical evidence with an
+  owner conversion-table version; mock result adapters, per-module readiness,
+  booking advice, and Mock Center projections withhold formula-derived grade
+  or pass labels when that metadata is absent. Focused mock execution remains
+  pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation
