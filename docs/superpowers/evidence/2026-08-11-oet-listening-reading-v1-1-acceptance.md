@@ -369,3 +369,7 @@ an owner-controlled value that must not be invented in code.
   normalization, replay, lock, or technical-guidance values. A policy draft
   now requires explicit owner-supplied JSON, and the backend remains the
   fail-closed completeness gate before approval.
+- Added a dedicated responsive learner-surface Playwright check covering the
+  canonical Listening player and Reading paper routes on desktop and mobile
+  learner projects. It asserts route health and rejects document or element
+  overflow beyond the viewport; execution remains pending by request.
