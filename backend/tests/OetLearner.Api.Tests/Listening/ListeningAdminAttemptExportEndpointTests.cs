@@ -76,6 +76,37 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
     }
 
     [Fact]
+    public async Task Admin_attempt_export_audit_preserves_audio_review_hold()
+    {
+        var attemptId = $"attempt-{Guid.NewGuid():N}";
+        await SeedRelationalAttemptAsync(attemptId);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt = await db.ListeningAttempts.SingleAsync(a => a.Id == attemptId);
+            attempt.RequiresAdminReview = true;
+            attempt.AdminReviewReason = "audio_playback_error";
+            attempt.AdminReviewFlaggedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        using var client = CreateAdminClient();
+        var response = await client.GetAsync($"/v1/admin/listening/attempts/{attemptId}/export");
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+        Assert.True(root.GetProperty("requiresAdminReview").GetBoolean());
+        Assert.Equal("audio_playback_error", root.GetProperty("adminReviewReason").GetString());
+
+        await using var auditScope = _factory.Services.CreateAsyncScope();
+        var auditDb = auditScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var audit = await auditDb.AuditEvents.AsNoTracking()
+            .SingleAsync(e => e.Action == "ListeningAttemptExported" && e.ResourceId == attemptId);
+        Assert.Contains("audio_playback_error", audit.Details, StringComparison.Ordinal);
+        Assert.Contains("requiresAdminReview", audit.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Admin_attempt_export_filters_evaluations_to_listening()
     {
         var attemptId = $"attempt-{Guid.NewGuid():N}";

@@ -60,6 +60,9 @@ public static class ListeningAdminAnalyticsEndpoints
                         export.PaperId,
                         AnswerCount = export.Answers.Count,
                         EvaluationCount = export.Evaluations.Count,
+                        export.RequiresAdminReview,
+                        export.AdminReviewReason,
+                        export.AdminReviewFlaggedAt,
                     }),
                 });
                 await db.SaveChangesAsync(ct);

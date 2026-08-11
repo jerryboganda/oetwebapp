@@ -44,6 +44,9 @@ an owner-controlled value that must not be invented in code.
 - The same player transport now visibly disables playback and seeking while an
   audio-validity hold is active; a focused component regression covers the
   administrator-review state.
+- The admin Listening export audit event now records the audio-review hold
+  status, reason, and timestamp alongside the exported attempt evidence; a
+  focused endpoint regression covers that audit boundary.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

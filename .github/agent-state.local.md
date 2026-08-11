@@ -960,6 +960,8 @@ dirty work in the main checkout.
   states, with learner-facing notices for both.
 - The transport now visibly disables playback and seeking during an active
   audio-validity hold; added a focused component regression for that state.
+- The admin Listening export audit event now carries the hold status, reason,
+  and timestamp, with a focused endpoint regression for the audit boundary.
 - Only bounded source searches and `git diff --check` were run for this slice;
   no long local validation, CI/CD, push, or deployment was started. Focused
   reconnect execution remains pending.
