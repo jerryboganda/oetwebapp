@@ -58,6 +58,12 @@ an owner-controlled value that must not be invented in code.
   `350/500` constants. It derives pass anchors only from a complete effective
   owner table and otherwise returns an explicit unavailable state; the UI shows
   raw-score guidance without an unsupported scaled pass claim.
+- Listening learner, admin, and teacher analytics now consume only persisted
+  scaled results carrying an owner conversion-table version and explicit
+  `ScoreConversionPassed` value. When no approved result exists, scaled
+  aggregates and pass percentages are `null`, and the learner action plan/UI
+  state that conversion is unavailable instead of inferring the shared 350
+  threshold.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

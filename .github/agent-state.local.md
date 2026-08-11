@@ -1,6 +1,20 @@
 # Current Task - OET Speaking AI Simulation Assessment Specification v1.1
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
+
+## 2026-08-12 Listening analytics owner-table hardening
+
+- `ListeningAnalyticsService` no longer derives student/admin/teacher pass
+  status from `OetScoring.ScaledPassGradeB`. It aggregates scaled scores only
+  when the stored evaluation/attempt has an owner conversion-table version and
+  explicit `ScoreConversionPassed`; unavailable conversion returns nullable
+  pass/percentage state rather than a guessed claim.
+- Listening learner/admin analytics types and UI now render owner-table
+  passing/not-passing/unavailable states. Focused analytics fixtures preserve
+  the approved conversion metadata boundary.
+- No long-running validation, CI/CD, deployment, or push was run by request.
+  Remaining evidence boundary is compile/test execution plus owner-provided
+  score tables and authenticated production acceptance.
 
 ## Current implementation checkpoint
 

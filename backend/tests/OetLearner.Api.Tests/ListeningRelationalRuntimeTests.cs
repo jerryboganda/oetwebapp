@@ -770,6 +770,8 @@ public class ListeningRelationalRuntimeTests
             RawScore = 34,
             ScaledScore = 420,
             MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-v1",
+            ScoreConversionPassed = true,
             PolicySnapshotJson = "{}",
         };
         db.ListeningAttempts.Add(attempt);

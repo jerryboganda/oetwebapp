@@ -22,8 +22,8 @@ public class ListeningClassAnalyticsServiceTests
         var now = DateTimeOffset.UtcNow;
         SeedClass(db, ownerUserId: "teacher-1", classId: "class-1", "learner-1", "learner-2");
         db.ListeningAttempts.AddRange(
-            NewAttempt("attempt-1", "learner-1", scaledScore: 350, now),
-            NewAttempt("attempt-2", "learner-2", scaledScore: 300, now),
+            NewAttempt("attempt-1", "learner-1", scaledScore: 350, now, scoreConversionPassed: true),
+            NewAttempt("attempt-2", "learner-2", scaledScore: 300, now, scoreConversionPassed: false),
             NewAttempt("attempt-outsider", "learner-outsider", scaledScore: 500, now));
         await db.SaveChangesAsync();
 
@@ -77,11 +77,11 @@ public class ListeningClassAnalyticsServiceTests
             NewLegacyAttempt("legacy-old-member", "learner-legacy", "paper-legacy", outOfWindow),
             NewLegacyAttempt("legacy-outsider", "learner-outsider", "paper-outsider", now));
         db.Evaluations.AddRange(
-            NewEvaluation("eval-legacy-member", "legacy-member", 360, now),
+            NewEvaluation("eval-legacy-member", "legacy-member", 360, now, scoreConversionPassed: true),
             NewEvaluation("eval-legacy-old-member", "legacy-old-member", 500, outOfWindow),
             NewEvaluation("eval-legacy-outsider", "legacy-outsider", 500, now));
         db.ListeningAttempts.AddRange(
-            NewAttempt("relational-member", "learner-relational", scaledScore: 340, now, paperId: "paper-relational"),
+            NewAttempt("relational-member", "learner-relational", scaledScore: 340, now, paperId: "paper-relational", scoreConversionPassed: false),
             NewAttempt("relational-old-member", "learner-relational", scaledScore: 500, outOfWindow, paperId: "paper-relational"),
             NewAttempt("relational-outsider", "learner-outsider", scaledScore: 500, now, paperId: "paper-outsider"));
         await db.SaveChangesAsync();
@@ -407,7 +407,8 @@ public class ListeningClassAnalyticsServiceTests
         string id,
         string attemptId,
         int scaledScore,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool? scoreConversionPassed = null)
         => new()
         {
             Id = id,
@@ -422,6 +423,8 @@ public class ListeningClassAnalyticsServiceTests
             ModelExplanationSafe = "test",
             LearnerDisclaimer = "test",
             LastTransitionAt = now,
+            ScoreConversionTableVersionKey = scoreConversionPassed.HasValue ? "test-listening-v1" : null,
+            ScoreConversionPassed = scoreConversionPassed,
         };
 
     private sealed class SqlCaptureInterceptor : DbCommandInterceptor
@@ -453,7 +456,8 @@ public class ListeningClassAnalyticsServiceTests
         string userId,
         int scaledScore,
         DateTimeOffset now,
-        string? paperId = null)
+        string? paperId = null,
+        bool? scoreConversionPassed = null)
         => new()
         {
             Id = id,
@@ -467,5 +471,7 @@ public class ListeningClassAnalyticsServiceTests
             RawScore = null,
             ScaledScore = scaledScore,
             MaxRawScore = OetLearner.Api.Services.OetScoring.ListeningReadingRawMax,
+            ScoreConversionTableVersionKey = scoreConversionPassed.HasValue ? "test-listening-v1" : null,
+            ScoreConversionPassed = scoreConversionPassed,
         };
 }

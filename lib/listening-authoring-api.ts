@@ -689,7 +689,7 @@ export interface ListeningStudentAnalytics {
   completedAttempts: number;
   bestScaledScore: number | null;
   averageScaledScore: number | null;
-  likelyPassing: boolean;
+  likelyPassing: boolean | null;
   partBreakdown: ListeningPartBreakdown[];
   weaknesses: ListeningTopWeakness[];
   actionPlan: ListeningActionPlanItem[];
@@ -726,7 +726,7 @@ export interface ListeningAdminAnalytics {
   days: number;
   completedAttempts: number;
   averageScaledScore: number | null;
-  percentLikelyPassing: number;
+  percentLikelyPassing: number | null;
   classPartAverages: ListeningPartBreakdown[];
   hardestQuestions: ListeningHardestQuestion[];
   distractorHeat: ListeningDistractorHeat[];

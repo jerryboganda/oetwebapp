@@ -92,8 +92,12 @@ export default function ListeningAnalyticsPage() {
                   icon={<TrendingUp />}
                   label="Best score"
                   value={data.bestScaledScore ?? '-'}
-                  hint={data.likelyPassing ? 'Above 350' : 'Keep drilling'}
-                  tone={data.likelyPassing ? 'success' : 'warning'}
+                  hint={data.likelyPassing === true
+                    ? 'Owner table: passing'
+                    : data.likelyPassing === false
+                      ? 'Owner table: not passing'
+                      : 'Owner table: unavailable'}
+                  tone={data.likelyPassing === true ? 'success' : data.likelyPassing === false ? 'warning' : 'info'}
                 />
                 <StatCard
                   icon={<Activity />}
@@ -186,5 +190,4 @@ export default function ListeningAnalyticsPage() {
     </LearnerDashboardShell>
   );
 }
-
 

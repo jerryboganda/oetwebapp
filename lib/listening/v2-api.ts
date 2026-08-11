@@ -235,7 +235,7 @@ export interface ListeningTeacherAnalyticsDto {
   days: number;
   completedAttempts: number;
   averageScaledScore: number | null;
-  percentLikelyPassing: number;
+  percentLikelyPassing: number | null;
   classPartAverages: ListeningPartBreakdownDto[];
   hardestQuestions: ListeningHardestQuestionDto[];
   distractorHeat: ListeningTeacherDistractorHeatDto[];

@@ -49,7 +49,7 @@ public sealed record ListeningStudentAnalyticsDto(
     int CompletedAttempts,
     int? BestScaledScore,
     int? AverageScaledScore,
-    bool LikelyPassing,
+    bool? LikelyPassing,
     IReadOnlyList<ListeningPartBreakdownDto> PartBreakdown,
     IReadOnlyList<ListeningTopWeaknessDto> Weaknesses,
     IReadOnlyList<ListeningActionPlanItemDto> ActionPlan);
@@ -77,7 +77,7 @@ public sealed record ListeningAdminAnalyticsDto(
     int Days,
     int CompletedAttempts,
     int? AverageScaledScore,
-    double PercentLikelyPassing,
+    double? PercentLikelyPassing,
     IReadOnlyList<ListeningPartBreakdownDto> ClassPartAverages,
     IReadOnlyList<ListeningHardestQuestionDto> HardestQuestions,
     IReadOnlyList<ListeningDistractorHeatDto> DistractorHeat,
@@ -100,7 +100,7 @@ public sealed record ListeningTeacherAnalyticsDto(
     int Days,
     int CompletedAttempts,
     int? AverageScaledScore,
-    double PercentLikelyPassing,
+    double? PercentLikelyPassing,
     IReadOnlyList<ListeningPartBreakdownDto> ClassPartAverages,
     IReadOnlyList<ListeningHardestQuestionDto> HardestQuestions,
     IReadOnlyList<ListeningTeacherDistractorHeatDto> DistractorHeat);
@@ -189,7 +189,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
                 CompletedAttempts: 0,
                 BestScaledScore: null,
                 AverageScaledScore: null,
-                LikelyPassing: false,
+                LikelyPassing: null,
                 PartBreakdown: [],
                 Weaknesses: [],
                 ActionPlan: new[]
@@ -238,16 +238,22 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .Where(e => allAttemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 
-        var scaledByAttempt = evals
-            .Select(e => (e.AttemptId, Scaled: TryReadScaled(e)))
-            .Where(x => x.Scaled.HasValue)
-            .ToDictionary(x => x.AttemptId, x => x.Scaled!.Value);
+        var conversionByAttempt = evals
+            .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
+            .Select(group => group.OrderByDescending(e => e.GeneratedAt).First())
+            .Where(HasApprovedConversion)
+            .ToDictionary(
+                evaluation => evaluation.AttemptId,
+                evaluation => (Scaled: TryReadScaled(evaluation)!.Value, Passed: evaluation.ScoreConversionPassed!.Value),
+                StringComparer.Ordinal);
 
         foreach (var relationalAttempt in relationalAttempts)
         {
-            if (relationalAttempt.ScaledScore is int scaled)
+            if (HasApprovedConversion(relationalAttempt))
             {
-                scaledByAttempt[relationalAttempt.Id] = scaled;
+                conversionByAttempt[relationalAttempt.Id] = (
+                    relationalAttempt.ScaledScore!.Value,
+                    relationalAttempt.ScoreConversionPassed!.Value);
             }
         }
 
@@ -334,9 +340,11 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .Select(kv => new ListeningTopWeaknessDto(kv.Key, ErrorTypeLabel(kv.Key), kv.Value))
             .ToList();
 
-        int? best = scaledByAttempt.Count == 0 ? null : scaledByAttempt.Values.Max();
-        int? avg = scaledByAttempt.Count == 0 ? null : (int)Math.Round(scaledByAttempt.Values.Average());
-        var passing = (best ?? 0) >= OetScoring.ScaledPassGradeB;
+        int? best = conversionByAttempt.Count == 0 ? null : conversionByAttempt.Values.Max(x => x.Scaled);
+        int? avg = conversionByAttempt.Count == 0 ? null : (int)Math.Round(conversionByAttempt.Values.Average(x => x.Scaled));
+        bool? passing = conversionByAttempt.Count == 0
+            ? null
+            : conversionByAttempt.Values.Any(x => x.Passed);
 
         var plan = BuildStudentActionPlan(weaknesses, partBreakdown, passing);
 
@@ -353,7 +361,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
     private static IReadOnlyList<ListeningActionPlanItemDto> BuildStudentActionPlan(
         IReadOnlyList<ListeningTopWeaknessDto> weaknesses,
         IReadOnlyList<ListeningPartBreakdownDto> parts,
-        bool passing)
+        bool? passing)
     {
         var plan = new List<ListeningActionPlanItemDto>();
         if (weaknesses.Count > 0)
@@ -378,10 +386,16 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
         }
 
         plan.Add(new ListeningActionPlanItemDto(
-            Headline: passing ? "Maintain exam readiness" : "Take one more full mock",
-            Detail: passing
-                ? "Your best scaled score is at or above 350. Keep one full mock per week to maintain stamina under one-play conditions."
-                : "Score consistency comes from repetition under exam constraints. Schedule one full Listening mock per week.",
+            Headline: passing is true
+                ? "Maintain exam readiness"
+                : passing is false
+                    ? "Take one more full mock"
+                    : "Keep practising while score conversion is pending",
+            Detail: passing is true
+                ? "The effective owner conversion table marks a recent attempt as passing. Keep one full mock per week to maintain stamina under one-play conditions."
+                : passing is false
+                    ? "The effective owner conversion table does not mark a recent attempt as passing. Schedule one full Listening mock per week."
+                    : "Raw performance is available, but an effective owner conversion result is not. Continue practising without an inferred scaled pass claim.",
             Route: "/mocks"));
 
         return plan;
@@ -654,27 +668,31 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .Where(e => allAttemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 
-        var scaledByAttempt = evals
-            .Select(e => new { e.AttemptId, e.GeneratedAt, Scaled = TryReadScaled(e) })
-            .Where(x => x.Scaled.HasValue)
-            .GroupBy(x => x.AttemptId, StringComparer.Ordinal)
+        var conversionByAttempt = evals
+            .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
+            .Select(group => group.OrderByDescending(e => e.GeneratedAt).First())
+            .Where(HasApprovedConversion)
             .ToDictionary(
-                group => group.Key,
-                group => group.OrderByDescending(x => x.GeneratedAt).First().Scaled!.Value,
+                evaluation => evaluation.AttemptId,
+                evaluation => (Scaled: TryReadScaled(evaluation)!.Value, Passed: evaluation.ScoreConversionPassed!.Value),
                 StringComparer.Ordinal);
         foreach (var relationalAttempt in relationalAttempts)
         {
-            if (relationalAttempt.ScaledScore is int scaledScore)
+            if (HasApprovedConversion(relationalAttempt))
             {
                 // Relational Listening V2 attempts are the source of truth when both legacy
                 // Evaluation rows and the normalized attempt row have a scaled score.
-                scaledByAttempt[relationalAttempt.Id] = scaledScore;
+                conversionByAttempt[relationalAttempt.Id] = (
+                    relationalAttempt.ScaledScore!.Value,
+                    relationalAttempt.ScoreConversionPassed!.Value);
             }
         }
 
-        var scaled = scaledByAttempt.Values.ToList();
+        var scaled = conversionByAttempt.Values.Select(x => x.Scaled).ToList();
         int? avgScaled = scaled.Count == 0 ? null : (int)Math.Round(scaled.Average());
-        var percentPassing = scaled.Count == 0 ? 0 : Math.Round(100.0 * scaled.Count(OetScoring.IsListeningReadingPassByScaled) / scaled.Count, 1);
+        var percentPassing = conversionByAttempt.Count == 0
+            ? null
+            : Math.Round(100.0 * conversionByAttempt.Values.Count(x => x.Passed) / conversionByAttempt.Count, 1);
 
         // Per-part class averages
         var partAgg = new Dictionary<string, (int earned, int max)>(StringComparer.OrdinalIgnoreCase);
@@ -855,13 +873,23 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             Days: days,
             CompletedAttempts: 0,
             AverageScaledScore: null,
-            PercentLikelyPassing: 0,
+            PercentLikelyPassing: null,
             ClassPartAverages: [],
             HardestQuestions: [],
             DistractorHeat: [],
             CommonMisspellings: []);
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private static bool HasApprovedConversion(Evaluation evaluation)
+        => !string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
+            && evaluation.ScoreConversionPassed.HasValue
+            && TryReadScaled(evaluation).HasValue;
+
+    private static bool HasApprovedConversion(ListeningAttempt attempt)
+        => !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+            && attempt.ScoreConversionPassed.HasValue
+            && attempt.ScaledScore.HasValue;
 
     private static string NormalizePartKey(string? raw)
     {

@@ -148,7 +148,7 @@ export default function ListeningAnalyticsPage() {
               label="% Likely Passing"
               value={formatPercent(analytics.percentLikelyPassing)}
               icon={<Target className="h-4 w-4" />}
-              tone={analytics.percentLikelyPassing >= 50 ? 'success' : 'warning'}
+              tone={analytics.percentLikelyPassing == null ? 'default' : analytics.percentLikelyPassing >= 50 ? 'success' : 'warning'}
             />
             <KpiTile label="Hardest Items" value={analytics.hardestQuestions.length} icon={<Headphones className="h-4 w-4" />} tone="default" />
           </KpiStrip>
