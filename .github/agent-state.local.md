@@ -967,3 +967,16 @@ dirty work in the main checkout.
   reconnect execution remains pending.
 - Preserve the four untracked user-owned paths above. Owner release inputs and
   authenticated deployed browser/mobile acceptance remain unresolved.
+
+# Latest LR coding checkpoint - 2026-08-12 (controlled re-mark intake)
+
+- LR-14 re-mark job creation now validates that the submitted attempt belongs
+  to the requested assessment, the question revision belongs to that paper,
+  and both stored key snapshots are JSON objects with an explicit answer or
+  accepted-variant field. Invalid jobs are rejected before entering the audit
+  queue; the original/updated result snapshots remain retained on completion.
+- Only bounded source inspection and `git diff --check` are intended for this
+  slice; no long local validation, CI/CD, push, or deployment was started.
+- Focused re-mark execution and authenticated deployed acceptance remain
+  pending. Preserve the four untracked user-owned paths above and the owner
+  release gates listed in the acceptance matrix.

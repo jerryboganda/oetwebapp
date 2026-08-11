@@ -377,20 +377,41 @@ public static class AssessmentGovernanceEndpoints
                 || string.IsNullOrWhiteSpace(request.QuestionRevisionId)
                 || string.IsNullOrWhiteSpace(request.Reason))
                 return Results.BadRequest(new { error = "remark_job_fields_required" });
-            if (!IsValidJson(request.OriginalKeySnapshotJson)
-                || !IsValidJson(request.NewKeySnapshotJson))
+            if (!IsValidKeySnapshot(request.OriginalKeySnapshotJson)
+                || !IsValidKeySnapshot(request.NewKeySnapshotJson))
                 return Results.BadRequest(new { error = "remark_key_snapshot_invalid_json" });
 
             var attemptId = request.AttemptId.Trim();
-            var submitted = assessment == "reading"
-                ? await db.ReadingAttempts.AnyAsync(x => x.Id == attemptId && x.Status == ReadingAttemptStatus.Submitted, ct)
-                : await db.ListeningAttempts.AnyAsync(x => x.Id == attemptId && x.Status == ListeningAttemptStatus.Submitted, ct);
-            if (!submitted) return Results.NotFound(new { error = "submitted_attempt_not_found" });
+            var paperId = assessment == "reading"
+                ? await db.ReadingAttempts
+                    .Where(x => x.Id == attemptId && x.Status == ReadingAttemptStatus.Submitted)
+                    .Select(x => x.PaperId)
+                    .SingleOrDefaultAsync(ct)
+                : await db.ListeningAttempts
+                    .Where(x => x.Id == attemptId && x.Status == ListeningAttemptStatus.Submitted)
+                    .Select(x => x.PaperId)
+                    .SingleOrDefaultAsync(ct);
+            if (paperId is null)
+                return Results.NotFound(new { error = "submitted_attempt_not_found" });
+
+            var questionRevisionId = request.QuestionRevisionId.Trim();
+            var questionExists = assessment == "reading"
+                ? await (
+                    from question in db.ReadingQuestions
+                    join part in db.ReadingParts on question.ReadingPartId equals part.Id
+                    where question.Id == questionRevisionId && part.PaperId == paperId
+                    select question.Id)
+                    .AnyAsync(ct)
+                : await db.ListeningQuestions.AnyAsync(
+                    question => question.Id == questionRevisionId && question.PaperId == paperId,
+                    ct);
+            if (!questionExists)
+                return Results.NotFound(new { error = "remark_question_revision_not_found" });
 
             var active = await db.AssessmentReMarkJobs.AnyAsync(x =>
                 x.Assessment == assessment
                 && x.AttemptId == attemptId
-                && x.QuestionRevisionId == request.QuestionRevisionId.Trim()
+                && x.QuestionRevisionId == questionRevisionId
                 && x.Status != AssessmentGovernanceStatus.Completed
                 && x.Status != AssessmentGovernanceStatus.Retired, ct);
             if (active) return Results.Conflict(new { error = "remark_job_already_open" });
@@ -401,7 +422,7 @@ public static class AssessmentGovernanceEndpoints
                 Id = $"lr-remark-{Guid.NewGuid():N}",
                 Assessment = assessment,
                 AttemptId = attemptId,
-                QuestionRevisionId = request.QuestionRevisionId.Trim(),
+                QuestionRevisionId = questionRevisionId,
                 Reason = request.Reason.Trim(),
                 OriginalKeySnapshotJson = request.OriginalKeySnapshotJson,
                 NewKeySnapshotJson = request.NewKeySnapshotJson,
@@ -515,13 +536,18 @@ public static class AssessmentGovernanceEndpoints
         return app;
     }
 
-    private static bool IsValidJson(string? value)
+    private static bool IsValidKeySnapshot(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return false;
         try
         {
             using var document = JsonDocument.Parse(value);
-            return document.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
+            var root = document.RootElement;
+            return root.TryGetProperty("correctAnswerJson", out _)
+                || root.TryGetProperty("correctAnswer", out _)
+                || root.TryGetProperty("acceptedSynonymsJson", out _)
+                || root.TryGetProperty("acceptedVariants", out _);
         }
         catch (JsonException)
         {
