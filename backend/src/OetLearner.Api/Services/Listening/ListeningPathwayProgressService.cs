@@ -25,7 +25,7 @@ public sealed class ListeningPathwayProgressService
         _clock = clock;
     }
 
-    /// <summary>The 12 canonical stages, in unlock order.</summary>
+    /// <summary>The canonical computer-based stages, in unlock order.</summary>
     public static readonly IReadOnlyList<string> PathwayStages = new[]
     {
         "diagnostic",
@@ -37,7 +37,6 @@ public sealed class ListeningPathwayProgressService
         "drill_partC",
         "minitest_partA",
         "minitest_partBC",
-        "fullpaper_paper",
         "fullpaper_cbt",
         "exam_simulation",
     };
@@ -210,7 +209,6 @@ public sealed class ListeningPathwayProgressService
                 => mode is ListeningAttemptMode.Drill or ListeningAttemptMode.Learning,
             "minitest_partA" or "minitest_partBC"
                 => mode is ListeningAttemptMode.MiniTest or ListeningAttemptMode.Learning,
-            "fullpaper_paper" => mode == ListeningAttemptMode.Paper,
             "fullpaper_cbt" => mode == ListeningAttemptMode.Exam,
             "exam_simulation" => mode is ListeningAttemptMode.Home or ListeningAttemptMode.Exam,
             _ => false,
@@ -222,7 +220,7 @@ public sealed class ListeningPathwayProgressService
     }
 
     private static bool IsOwnerPassingStage(string stage)
-        => stage is "fullpaper_paper" or "fullpaper_cbt" or "exam_simulation";
+        => stage is "fullpaper_cbt" or "exam_simulation";
 
     private static bool HasApprovedScore(int? scaledScore, string? scoreConversionTableVersionKey, bool? scoreConversionPassed)
         => scaledScore.HasValue

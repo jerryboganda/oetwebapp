@@ -154,6 +154,21 @@ an owner-controlled value that must not be invented in code.
   projection (actor, timestamp, reason) for Reading and Listening; Listening
   Part A bulk edits also require and display the reason before saving. Focused
   execution and deployed admin verification remain pending.
+
+## Latest computer-only delivery checkpoint - 2026-08-12
+
+- Reading paper presentation is now fail-closed at the policy service and
+  database default. Existing persisted enablement is reset by the migration;
+  the admin control and learner preview now report computer-based delivery
+  only, while the legacy contract field remains false for compatibility.
+- Listening paper simulation is rejected at the learner mode boundary,
+  historical paper attempts are not resumed through the learner session or
+  FSM policy paths, the paper pathway launch target is removed, and learner
+  briefing/pathway copy no longer advertises paper mode.
+- Bounded validation passed: `pnpm exec vitest run
+  "app/reading/paper/[paperId]/page.test.tsx" --reporter=dot` (3 files,
+  30 tests), plus `git diff --check`. Local backend compilation, deployment,
+  and authenticated desktop/mobile acceptance remain pending.
 - `0a5867199` adds the branded practice score-band graph with approved-table-only conversion, raw-only fallback, the 350 reference marker, and the persistent non-official-result disclosure.
 - `4bdffbc97` normalizes the score-graph source file ending.
 - `831da6795` rejects blank/unanswered stored responses before grounded AI explanation generation.

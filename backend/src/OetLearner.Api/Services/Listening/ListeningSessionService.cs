@@ -110,7 +110,7 @@ public sealed class ListeningSessionService
 
         // WS2 — strict Listening exams (Exam / OET@Home, OneWayLocks) require a
         // passed sound-check from the Listening flow before the learner can
-        // leave intro. Practice / Learning / Paper / Diagnostic modes stay
+        // leave intro. Practice / Learning / Diagnostic modes stay
         // ungated. Mirrors the audio sound-check gate above but reads the
         // learner's LearnerListeningProfile.AudioCheckPassedAt instead of the
         // per-attempt readiness snapshot.

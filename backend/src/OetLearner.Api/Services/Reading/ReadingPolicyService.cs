@@ -87,6 +87,10 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
                 row = await db.ReadingPolicies.AsNoTracking().FirstAsync(p => p.Id == "global", ct);
             }
         }
+        // OET Listening/Reading v1.1 is computer-based only. The legacy
+        // persisted flag remains in the contract for compatibility, but must
+        // never be allowed to re-enable a learner paper presentation.
+        row.AllowPaperReadingMode = false;
         cache.Set(GlobalCacheKey, row, CacheTtl);
         return row;
     }
@@ -131,7 +135,7 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
             AllowMultipleConcurrentAttempts: g.AllowMultipleConcurrentAttempts,
             AllowPausingAttempt: g.AllowPausingAttempt,
             AllowResumeAfterExpiry: g.AllowResumeAfterExpiry,
-            AllowPaperReadingMode: g.AllowPaperReadingMode,
+            AllowPaperReadingMode: false,
             FontScaleUserControl: g.FontScaleUserControl,
             HighContrastMode: g.HighContrastMode,
             ScreenReaderOptimised: g.ScreenReaderOptimised,
@@ -188,7 +192,8 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         row.FontScaleUserControl = next.FontScaleUserControl;
         row.HighContrastMode = next.HighContrastMode;
         row.ScreenReaderOptimised = next.ScreenReaderOptimised;
-        row.AllowPaperReadingMode = next.AllowPaperReadingMode;
+        // Computer-based delivery is an invariant, not an admin option.
+        row.AllowPaperReadingMode = false;
         row.ExtraTimeApprovalWorkflow = next.ExtraTimeApprovalWorkflow;
         row.RequireFreshAuthForSubmit = next.RequireFreshAuthForSubmit;
         row.AllowMultipleConcurrentAttempts = next.AllowMultipleConcurrentAttempts;

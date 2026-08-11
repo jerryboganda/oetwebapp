@@ -314,15 +314,9 @@ export default function AdminReadingGlobalPolicyPage() {
                   />
                   Screen reader optimised mode
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-border text-primary"
-                    checked={formData.allowPaperReadingMode}
-                    onChange={(e) => setField('allowPaperReadingMode', e.target.checked)}
-                  />
-                  Allow paper reading mode (print layout)
-                </label>
+                <p className="text-sm text-muted">
+                  Reading delivery is computer-based only. Paper presentation is permanently disabled by the platform policy.
+                </p>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -421,4 +415,3 @@ export default function AdminReadingGlobalPolicyPage() {
     </AdminSettingsLayout>
   );
 }
-

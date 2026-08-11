@@ -802,7 +802,9 @@ public class ReadingPolicy
     public bool FontScaleUserControl { get; set; } = true;
     public bool HighContrastMode { get; set; } = true;
     public bool ScreenReaderOptimised { get; set; } = true;
-    public bool AllowPaperReadingMode { get; set; } = true;
+    // The v1.1 specification is computer-based only. Keep the legacy column
+    // for schema/API compatibility, but it is permanently disabled.
+    public bool AllowPaperReadingMode { get; set; } = false;
     public bool ExtraTimeApprovalWorkflow { get; set; } = true;
 
     // §8 — Security + integrity

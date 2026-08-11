@@ -17670,7 +17670,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("AllowPaperReadingMode")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("AllowPausingAttempt")
                         .HasColumnType("boolean");

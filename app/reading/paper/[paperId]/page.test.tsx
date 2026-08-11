@@ -168,13 +168,13 @@ describe('Reading paper player page', () => {
     expect(screen.getByRole('button', { name: /clear paper/i })).toBeInTheDocument();
   });
 
-  it('falls back to computer delivery when paper mode is disabled by policy', async () => {
+  it('keeps computer delivery for legacy paper-presentation URL hints', async () => {
     mockSearchParams.current = new URLSearchParams('presentation=paper&attemptId=attempt-1');
     mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ allowPaperReadingMode: false }));
 
     await renderPlayer();
 
-    expect(await screen.findByText(/paper simulation is disabled by the current reading policy/i)).toBeInTheDocument();
+    expect(screen.queryByText(/paper simulation is disabled by the current reading policy/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/paper-based reading simulation/i)).not.toBeInTheDocument();
     expect(screen.getByRole('tabpanel', { name: /part a/i })).toBeInTheDocument();
   });

@@ -897,7 +897,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         modelBuilder.Entity<ReadingPolicy>()
             .Property(x => x.AllowPaperReadingMode)
-            .HasDefaultValue(true);
+            .HasDefaultValue(false);
         modelBuilder.Entity<NotificationPreference>().HasIndex(x => x.AuthAccountId).IsUnique();
         modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
         // NOTE: dropped fluent (NotificationEventId, Channel, AttemptedAt) and Endpoint-unique here

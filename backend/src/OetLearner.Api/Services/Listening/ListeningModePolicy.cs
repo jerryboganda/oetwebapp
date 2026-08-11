@@ -38,7 +38,7 @@ public interface IListeningModePolicy
     /// <summary>R09 — transcript visible while reviewing answers.</summary>
     bool TranscriptVisibleOnReview { get; }
 
-    /// <summary>R07 — paper-mode free navigation across all parts.</summary>
+    /// <summary>Whether the current mode permits navigation beyond the active section.</summary>
     bool FreeNavigation { get; }
 
     /// <summary>R10 — audio sound check required before <c>intro→a1_preview</c>.
@@ -52,8 +52,7 @@ public interface IListeningModePolicy
     /// <summary>OET-Home only — fullscreen + tab-focus telemetry.</summary>
     bool FullscreenEnforced { get; }
 
-    /// <summary>R07.3 — paper mode kicks in a banner at this remaining-time
-    /// threshold for the all-parts final review window. Null in CBT modes.</summary>
+    /// <summary>Legacy review-window contract. Always null for computer-based modes.</summary>
     int? FinalReviewAllPartsMs { get; }
 }
 
@@ -72,23 +71,6 @@ internal sealed record CbtModePolicy : IListeningModePolicy
     public bool AnnotationsPersistOnAdvance => true;
     public bool FullscreenEnforced => false;
     public int? FinalReviewAllPartsMs => null;
-}
-
-internal sealed record PaperModePolicy : IListeningModePolicy
-{
-    public string Mode => "Paper";
-    public bool OneWayLocks => false;
-    public bool ConfirmDialogRequired => false;
-    public bool UnansweredWarningRequired => true;
-    public bool AudioPauseAllowed => false;
-    public bool AudioSeekAllowed => false;
-    public bool ReplayAllowed => false;
-    public bool TranscriptVisibleOnReview => false;
-    public bool FreeNavigation => true;
-    public bool RequiresTechReadiness => false;
-    public bool AnnotationsPersistOnAdvance => true;
-    public bool FullscreenEnforced => false;
-    public int? FinalReviewAllPartsMs => ListeningPolicyDefaults.FinalReviewAllPartsMsPaper;
 }
 
 internal sealed record OetHomeModePolicy : IListeningModePolicy
@@ -163,10 +145,18 @@ public sealed class ListeningModePolicyResolver
         [ListeningAttemptMode.MiniTest] = new LearningModePolicy(),
         [ListeningAttemptMode.ErrorBank] = new LearningModePolicy(),
         [ListeningAttemptMode.Home] = new OetHomeModePolicy(),
-        [ListeningAttemptMode.Paper] = new PaperModePolicy(),
         [ListeningAttemptMode.Diagnostic] = new DiagnosticModePolicy(),
     };
 
     public IListeningModePolicy For(ListeningAttemptMode mode)
-        => _byMode.TryGetValue(mode, out var p) ? p : _byMode[ListeningAttemptMode.Exam];
+    {
+        if (mode == ListeningAttemptMode.Paper)
+        {
+            throw ApiException.Validation(
+                "listening_paper_mode_disabled",
+                "Listening is computer-based only; paper simulation is not supported.");
+        }
+
+        return _byMode.TryGetValue(mode, out var p) ? p : _byMode[ListeningAttemptMode.Exam];
+    }
 }

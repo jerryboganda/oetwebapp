@@ -68,14 +68,19 @@ public sealed class ListeningLearnerService(
         var attempts = contentIds.Count == 0
             ? new List<Attempt>()
             : await db.Attempts.AsNoTracking()
-                .Where(a => a.UserId == userId && a.SubtestCode == Subtest && contentIds.Contains(a.ContentId))
+                .Where(a => a.UserId == userId
+                    && a.SubtestCode == Subtest
+                    && contentIds.Contains(a.ContentId)
+                    && a.Mode != "paper")
                 .OrderByDescending(a => a.LastClientSyncAt ?? a.SubmittedAt ?? a.StartedAt)
                 .ToListAsync(ct);
 
         var relationalAttempts = paperIds.Count == 0
             ? new List<ListeningAttempt>()
             : await db.ListeningAttempts.AsNoTracking()
-                .Where(a => a.UserId == userId && paperIds.Contains(a.PaperId))
+                .Where(a => a.UserId == userId
+                    && paperIds.Contains(a.PaperId)
+                    && a.Mode != ListeningAttemptMode.Paper)
                 .OrderByDescending(a => a.LastActivityAt)
                 .ToListAsync(ct);
 
@@ -370,6 +375,12 @@ public sealed class ListeningLearnerService(
                     throw ApiException.Validation("listening_attempt_mismatch", "This attempt does not belong to the requested Listening paper.");
                 }
             }
+
+            if (relationalAttempt?.Mode == ListeningAttemptMode.Paper
+                || string.Equals(attempt?.Mode, "paper", StringComparison.OrdinalIgnoreCase))
+            {
+                throw PaperModeDisabled();
+            }
         }
         else
         {
@@ -428,22 +439,20 @@ public sealed class ListeningLearnerService(
                 autosave = true,
                 transcriptPolicy = "per_item_post_attempt",
                 // Phase 9 tail: presentation hints so the player can render
-                // the correct chrome (kiosk on home, printable booklet on
-                // paper). The graded-integrity invariants stay encoded in
-                // onePlayOnly / canScrub / canPause above.
+                // the correct computer-based chrome. The graded-integrity
+                // invariants stay encoded in onePlayOnly / canScrub / canPause.
                 presentationStyle = effectiveMode switch
                 {
                     "home" => "kiosk_fullscreen",
-                    "paper" => "printable_booklet",
                     "exam" => "exam_standard",
                     "diagnostic" => "diagnostic",
                     _ => "practice"
                 },
                 integrityLockRequired = effectiveMode == "home",
-                printableBooklet = effectiveMode == "paper",
-                freeNavigation = effectiveMode is "paper" or "diagnostic",
+                printableBooklet = false,
+                freeNavigation = effectiveMode == "diagnostic",
                 unansweredWarningRequired = IsExamMode(effectiveMode),
-                finalReviewAllPartsSeconds = effectiveMode == "paper" ? 120 : (int?)null
+                finalReviewAllPartsSeconds = (int?)null
             },
             scoring = new
             {
@@ -1305,7 +1314,7 @@ public sealed class ListeningLearnerService(
                 onePlayOnly = true,
                 presentationStyle = normalizedMode == "home"
                     ? "kiosk_fullscreen"
-                    : normalizedMode == "paper" ? "printable_booklet" : normalizedMode,
+                    : normalizedMode,
             }),
             ScopeJson = ListeningAttemptScope.Build(normalizedMode, source.SourceKind, normalizedPathwayStage),
         };
@@ -1666,7 +1675,9 @@ public sealed class ListeningLearnerService(
     private static ListeningAttemptMode ToRelationalMode(string mode) => mode switch
     {
         "home" => ListeningAttemptMode.Home,
-        "paper" => ListeningAttemptMode.Paper,
+        // Paper mode is a retained historical enum value only; NormalizeMode
+        // rejects new requests before this mapper can be reached.
+        "paper" => ListeningAttemptMode.Exam,
         "diagnostic" => ListeningAttemptMode.Diagnostic,
         "practice" => ListeningAttemptMode.Learning,
         _ => ListeningAttemptMode.Exam,
@@ -1675,7 +1686,7 @@ public sealed class ListeningLearnerService(
     private static string ToApiMode(ListeningAttemptMode mode) => mode switch
     {
         ListeningAttemptMode.Home => "home",
-        ListeningAttemptMode.Paper => "paper",
+        ListeningAttemptMode.Paper => "exam",
         ListeningAttemptMode.Learning => "practice",
         ListeningAttemptMode.Drill => "practice",
         ListeningAttemptMode.MiniTest => "practice",
@@ -3480,8 +3491,6 @@ public sealed class ListeningLearnerService(
     ///   <c>exam</c>     — one-play, no scrub, no pause. Standard CBT-style.
     ///   <c>home</c>     — OET@Home: kiosk full-screen + integrity prompt;
     ///                     timer + one-play behave like <c>exam</c>.
-    ///   <c>paper</c>    — paper-simulation: printable booklet UI; timer +
-    ///                     one-play behave like <c>exam</c>.
     ///   <c>diagnostic</c> — fixed-form placement attempt for the pathway.
     ///
     /// Anything else collapses to <c>practice</c> so a malformed query
@@ -3491,11 +3500,15 @@ public sealed class ListeningLearnerService(
     private static string NormalizeMode(string? mode)
     {
         var normalized = (mode ?? "practice").Trim().ToLowerInvariant();
+        if (normalized == "paper")
+        {
+            throw PaperModeDisabled();
+        }
+
         return normalized switch
         {
             "exam" => "exam",
             "home" => "home",
-            "paper" => "paper",
             "diagnostic" => "diagnostic",
             _ => "practice",
         };
@@ -3520,7 +3533,12 @@ public sealed class ListeningLearnerService(
     /// (one-play, no pause, no scrub). <c>practice</c> is the only non-exam
     /// mode.</summary>
     private static bool IsExamMode(string normalizedMode)
-        => normalizedMode is "exam" or "home" or "paper" or "diagnostic";
+        => normalizedMode is "exam" or "home" or "diagnostic";
+
+    private static ApiException PaperModeDisabled()
+        => ApiException.Validation(
+            "listening_paper_mode_disabled",
+            "Listening is computer-based only; paper simulation is not supported.");
 
     private static string RelationalAttemptRoute(ListeningAttempt attempt)
     {

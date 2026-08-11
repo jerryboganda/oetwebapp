@@ -3,7 +3,7 @@
 // Phase 9 of LISTENING-MODULE-PLAN.md
 // ─────────────────────────────────────────────────────────────────────────────
 // Pre-flight Listening test-rules lesson. This is a learner-facing briefing
-// that loads before someone enters paper-mode (or any first attempt at a real
+// that loads before someone enters a computer-based mode (or any first attempt at a real
 // Listening mock) so they go in knowing exactly how the OET Listening sub-
 // test works: one play, no negative marking, MCQ + gap-fill item types, exam-
 // integrity rules, and recommended in-test strategy.
@@ -61,7 +61,7 @@ export default function ListeningTestRulesPage() {
         <LearnerPageHero
           eyebrow="Listening Test Rules"
           title="How the OET Listening sub-test works"
-          description="A two-minute brief covering exam timing, item types, and the rules you must follow in paper mode. Read this before your first real attempt."
+          description="A two-minute brief covering exam timing, item types, and the computer-based rules you must follow. Read this before your first real attempt."
         />
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -69,9 +69,9 @@ export default function ListeningTestRulesPage() {
             icon={Timer}
             title={`One play. ${numberWord(rules.questionCount)} questions. ~${rules.durationMinutes} minutes.`}
             points={[
-              'You hear the audio ONCE. There is no rewind in paper mode.',
+              'You hear the audio ONCE. There is no rewind during the computer-based attempt.',
               `Three parts: A (${rules.partA.items} short-answers, ${rules.partA.extracts} consultations), B (${rules.partB.items} MCQs, workplace extracts), C (${rules.partC.items} MCQs, ${rules.partC.extracts} presentations).`,
-              'You write answers on the question paper as you listen, then transfer them at the end (in real OET).',
+              'Enter answers directly in the computer-based player while you listen.',
             ]}
           />
           <RuleCard
@@ -105,10 +105,10 @@ export default function ListeningTestRulesPage() {
           />
           <RuleCard
             icon={ShieldCheck}
-            title="Exam integrity (paper mode)"
+            title="Exam integrity (computer mode)"
             points={[
-              'Once you enter paper mode the audio plays end-to-end and answers cannot be revised after submit.',
-              'Headphones recommended. Do not switch tabs; paper mode flags loss-of-focus.',
+              'Once you start the computer-based attempt the audio plays end-to-end and answers cannot be revised after submit.',
+              'Headphones recommended. Do not switch tabs; the exam flow records loss-of-focus.',
               'Transcripts are NOT shown during the attempt. They unlock per-item in your post-attempt review.',
             ]}
             tone="amber"
@@ -132,7 +132,7 @@ export default function ListeningTestRulesPage() {
               accent: 'indigo',
               eyebrow: 'Ready?',
               title: 'Start your Listening attempt',
-              description: 'Choose home mode for relaxed practice with replay, or paper mode to simulate the real exam (one-play, no replay).',
+              description: 'Choose computer-based practice or exam mode. The real-exam flow is one-play with no replay.',
               primaryAction: { label: 'Open Listening Home', href: '/listening' },
               secondaryAction: { label: 'View Mocks', href: '/mocks' },
             }}

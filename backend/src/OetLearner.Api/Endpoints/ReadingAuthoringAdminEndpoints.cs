@@ -581,7 +581,10 @@ public static class ReadingAuthoringAdminEndpoints
             paper.Title,
             paper.Slug,
             paper.SubtestCode,
-            allowPaperReadingMode = true,
+            // The learner product is computer-based only. Keep the source
+            // assets available to authorized authoring preview code, but do
+            // not advertise a learner paper presentation.
+            allowPaperReadingMode = false,
             questionPaperAssets,
         },
         parts = structure.Parts.Select(part => new

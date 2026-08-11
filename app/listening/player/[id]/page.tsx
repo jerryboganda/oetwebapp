@@ -67,7 +67,7 @@ import { useListeningAnnotations, type ListeningQuestionAnnotation } from '@/hoo
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
-type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
+type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'diagnostic';
 
 type PendingListeningAnswer = {
   attemptId: string;
@@ -130,9 +130,10 @@ function derivePlayerMode({
   deliveryMode: string;
   strictTimer: string;
 }): ListeningPlayerMode {
-  if (rawMode === 'exam' || rawMode === 'home' || rawMode === 'paper' || rawMode === 'diagnostic') return rawMode;
+  if (rawMode === 'exam' || rawMode === 'home' || rawMode === 'diagnostic') return rawMode;
+  if (rawMode === 'paper') return 'exam';
   const normalizedDelivery = deliveryMode.trim().toLowerCase();
-  if (normalizedDelivery === 'paper') return 'paper';
+  if (normalizedDelivery === 'paper') return 'exam';
   const normalizedMockMode = mockMode.trim().toLowerCase();
   const normalizedStrictness = strictness.trim().toLowerCase();
   const strictLaunch = normalizedMockMode === 'exam'
@@ -1014,7 +1015,7 @@ function PlayerContent() {
     // 2026-05-27 audit fix — Listening rules L-R05.9 / L-R05.10.
     // During the final 2-minute review window (FSM state `c2_final_review`)
     // the candidate may only see / modify C2 answers. Even if a future code
-    // path widens `currentSectionIndex` or `allPartsReviewEnabled` for paper
+    // path widens `currentSectionIndex` or all-section review
     // mode, this guard keeps CBT exam mode strictly scoped to C2.
     if (strictServerState?.state === 'c2_final_review' && session?.modePolicy?.onePlayOnly) {
       sections = sections.filter((code) => code === 'C2');
@@ -1024,13 +1025,10 @@ function PlayerContent() {
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
   const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
   const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;
-  // WS3 — paper/booklet simulation. When the server marks this attempt as a
-  // printable booklet (mode === 'paper' / presentationStyle ===
-  // 'printable_booklet'), the answer surface is the ListeningPaperSimulation
-  // booklet instead of the inline renderer map. Audio + FSM stay untouched.
-  const paperBookletActive = mode === 'paper'
-    || session?.modePolicy.mode === 'paper'
-    || session?.modePolicy.presentationStyle === 'printable_booklet';
+  // The v1.1 learner product is computer-based only. The legacy booklet
+  // renderer remains compiled for historical fixtures, but is unreachable
+  // from a server-issued session.
+  const paperBookletActive = false;
   const paperFinalReviewSeconds = session?.modePolicy.finalReviewAllPartsSeconds ?? null;
   const paperFinalReviewActive = allPartsReviewEnabled
     && paperFinalReviewSeconds !== null
@@ -1943,7 +1941,7 @@ function PlayerContent() {
                     <InlineAlert variant="info" data-testid="listening-paper-final-review-banner">
                       {paperFinalReviewActive
                         ? `Final ${formatTime(paperFinalReviewSeconds ?? 0)} all-parts review: every part remains editable. Use the section buttons to check any answer before the timer ends.`
-                        : 'Paper simulation keeps all parts editable for all-parts review.'}
+                        : 'All sections remain available for the computer-based review flow.'}
                       {' '}
                       {unansweredQuestionNumbers.length > 0
                         ? `Still unanswered: ${unansweredQuestionList}.`
@@ -1951,7 +1949,7 @@ function PlayerContent() {
                     </InlineAlert>
                   ) : null}
 
-                  {/* Question jumper — intra-section in CBT, all-parts in paper mode.
+                  {/* Question jumper — intra-section in the computer-based flow.
                       In-flow (NOT sticky) so it never floats over the questions as a
                       translucent overlay on scroll (owner directive 2026-07-05). */}
                   {navigationQuestions.length > 1 ? (
@@ -2216,14 +2214,14 @@ function PlayerContent() {
           </motion.div>
         )}
 
-        {/* WS3 — when the paper simulation is mounted it owns print (toolbar
+        {/* Legacy print fallback; computer-based sessions never set printableBooklet.
             Print button + beforeprint/afterprint 1:1 scaling), so this legacy
             answer-number list is superseded. It remains as a fallback for any
             other printableBooklet surface where the booklet is not rendered. */}
         {session.modePolicy.printableBooklet && !paperBookletActive ? (
           <div className="hidden print:block print:p-6">
             <h1 className="text-2xl font-bold text-navy">{session.paper.title}</h1>
-            <p className="mt-2 text-sm text-muted">Listening paper-mode answer sheet</p>
+            <p className="mt-2 text-sm text-muted">Listening answer sheet</p>
             <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3">
               {session.questions.map((question) => (
                 <div key={`print-${question.id}`} className="flex items-end gap-3 border-b border-border pb-2 text-sm">

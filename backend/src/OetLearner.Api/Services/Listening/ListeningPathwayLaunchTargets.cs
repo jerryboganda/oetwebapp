@@ -31,7 +31,6 @@ public static class ListeningPathwayLaunchTargets
         "foundation_partA" or "foundation_partB" or "foundation_partC"
             or "drill_partA" or "drill_partB" or "drill_partC"
             or "minitest_partA" or "minitest_partBC" => "practice",
-        "fullpaper_paper" => "paper",
         "fullpaper_cbt" => "exam",
         "exam_simulation" => "home",
         _ => null,

@@ -25,8 +25,7 @@ const STAGE_META: Record<string, { label: string; focus: string }> = {
   drill_partC: { label: 'Drill - Part C', focus: 'Track argument structure across longer audio.' },
   minitest_partA: { label: 'Mini-Test - Part A', focus: 'Part A timing with strict marking.' },
   minitest_partBC: { label: 'Mini-Test - Parts B+C', focus: 'MCQ stamina before full papers.' },
-  fullpaper_paper: { label: 'Full Paper (paper mode)', focus: 'Free-navigation paper simulation.' },
-  fullpaper_cbt: { label: 'Full Paper (CBT mode)', focus: 'One-play computer-based timing and locks.' },
+  fullpaper_cbt: { label: 'Full Paper (computer mode)', focus: 'One-play computer-based timing and locks.' },
   exam_simulation: { label: 'OET@Home exam simulation', focus: 'Final rehearsal with strict home-mode constraints.' },
 };
 
