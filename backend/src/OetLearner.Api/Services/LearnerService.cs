@@ -113,13 +113,17 @@ public partial class LearnerService(
         string? AttemptId,
         string? SubtestCode,
         string? ScoreRange,
-        string? CriterionScoresJson);
+        string? CriterionScoresJson,
+        string? ScoreConversionTableVersionKey,
+        bool? ScoreConversionPassed);
 
     private sealed record ProgressEvaluationRow(
         string SubtestCode,
-        string ScoreRange,
+        string? ScoreRange,
         string CriterionScoresJson,
-        DateTimeOffset? GeneratedAt);
+        DateTimeOffset? GeneratedAt,
+        string? ScoreConversionTableVersionKey,
+        bool? ScoreConversionPassed);
 
     private sealed record ProgressTotalsRow(
         string AccountStatus,
@@ -145,7 +149,10 @@ public partial class LearnerService(
     private sealed record ComparisonEvaluationRow(
         string Id,
         string AttemptId,
-        string ScoreRange);
+        string SubtestCode,
+        string? ScoreRange,
+        string? ScoreConversionTableVersionKey,
+        bool? ScoreConversionPassed);
 
     private sealed record WritingHomeEvaluationRow(
         Evaluation Evaluation,
@@ -960,7 +967,7 @@ public partial class LearnerService(
                 todaysTasks = todaysTasks.Select(StudyPlanItemDto),
                 latestEvaluatedSubmission = evidence.EvaluationId is null || evidence.AttemptId is null
                     ? null
-                    : new { evaluationId = evidence.EvaluationId, attemptId = evidence.AttemptId, subtest = evidence.SubtestCode, scoreRange = evidence.ScoreRange, route = AttemptFeedbackRoute(evidence.SubtestCode!, evidence.EvaluationId) },
+                    : new { evaluationId = evidence.EvaluationId, attemptId = evidence.AttemptId, subtest = evidence.SubtestCode, scoreRange = GovernedScoreRange(evidence.SubtestCode, evidence.ScoreRange, evidence.ScoreConversionTableVersionKey, evidence.ScoreConversionPassed), route = AttemptFeedbackRoute(evidence.SubtestCode!, evidence.EvaluationId) },
                 weakCriteria = evidence.EvaluationId is null
                     ? new List<Dictionary<string, object?>>()
                     : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evidence.CriterionScoresJson, []),
@@ -1078,7 +1085,9 @@ public partial class LearnerService(
                     evaluation == null ? null : evaluation.AttemptId,
                     evaluation == null ? null : evaluation.SubtestCode,
                     evaluation == null ? null : evaluation.ScoreRange,
-                    evaluation == null ? null : evaluation.CriterionScoresJson))
+                    evaluation == null ? null : evaluation.CriterionScoresJson,
+                    evaluation == null ? null : evaluation.ScoreConversionTableVersionKey,
+                    evaluation == null ? null : evaluation.ScoreConversionPassed))
             .SingleAsync(cancellationToken);
     }
 
@@ -1386,7 +1395,9 @@ public partial class LearnerService(
                 evaluation.SubtestCode,
                 evaluation.ScoreRange,
                 evaluation.CriterionScoresJson,
-                evaluation.GeneratedAt))
+                evaluation.GeneratedAt,
+                evaluation.ScoreConversionTableVersionKey,
+                evaluation.ScoreConversionPassed))
             .ToListAsync(cancellationToken);
 
         var evaluations = recentEvaluations
@@ -1407,7 +1418,9 @@ public partial class LearnerService(
                 {
                     criterionCode,
                     criterionLabel = CriterionLabelFromCode(criterionCode),
-                    score = ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString()),
+                    score = IsGovernedScoreAvailable(parsed.Evaluation.SubtestCode, parsed.Evaluation.ScoreConversionTableVersionKey, parsed.Evaluation.ScoreConversionPassed)
+                        ? ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString())
+                        : null,
                     generatedAt = parsed.Evaluation.GeneratedAt,
                     subtest = parsed.Evaluation.SubtestCode
                 };
@@ -1440,8 +1453,8 @@ public partial class LearnerService(
 
         return new
         {
-            trend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = x.ScoreRange, generatedAt = x.GeneratedAt }),
-            subtestTrend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = x.ScoreRange, generatedAt = x.GeneratedAt }),
+            trend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
+            subtestTrend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
             criterionTrend,
             completion = new[]
             {
@@ -1596,7 +1609,11 @@ public partial class LearnerService(
                 taskName = content?.Title ?? "Removed practice item",
                 subtest = content?.SubtestCode ?? attempt.SubtestCode,
                 attemptDate = attempt.SubmittedAt ?? attempt.StartedAt,
-                scoreEstimate = eval?.ScoreRange,
+                scoreEstimate = GovernedScoreRange(
+                    eval?.SubtestCode ?? attempt.SubtestCode,
+                    eval?.ScoreRange,
+                    eval?.ScoreConversionTableVersionKey,
+                    eval?.ScoreConversionPassed),
                 reviewStatus = review is null ? "not_requested" : ToReviewRequestState(review.State),
                 evaluationId = eval?.Id,
                 state = ToApiState(attempt.State),
@@ -1781,7 +1798,10 @@ public partial class LearnerService(
             .Select(evaluation => new ComparisonEvaluationRow(
                 evaluation.Id,
                 evaluation.AttemptId,
-                evaluation.ScoreRange))
+                evaluation.SubtestCode,
+                evaluation.ScoreRange,
+                evaluation.ScoreConversionTableVersionKey,
+                evaluation.ScoreConversionPassed))
             .ToListAsync(cancellationToken);
         var leftEval = evaluations.FirstOrDefault(evaluation => evaluation.AttemptId == left.Id);
         var rightEval = evaluations.FirstOrDefault(evaluation => evaluation.AttemptId == right.Id);
@@ -1789,8 +1809,8 @@ public partial class LearnerService(
         return new
         {
             canCompare = true,
-            left = new { attemptId = left.Id, evaluationId = leftEval?.Id, scoreRange = leftEval?.ScoreRange, subtest = left.SubtestCode },
-            right = new { attemptId = right.Id, evaluationId = rightEval?.Id, scoreRange = rightEval?.ScoreRange, subtest = right.SubtestCode },
+            left = new { attemptId = left.Id, evaluationId = leftEval?.Id, scoreRange = GovernedScoreRange(left.SubtestCode, leftEval?.ScoreRange, leftEval?.ScoreConversionTableVersionKey, leftEval?.ScoreConversionPassed), subtest = left.SubtestCode },
+            right = new { attemptId = right.Id, evaluationId = rightEval?.Id, scoreRange = GovernedScoreRange(right.SubtestCode, rightEval?.ScoreRange, rightEval?.ScoreConversionTableVersionKey, rightEval?.ScoreConversionPassed), subtest = right.SubtestCode },
             summary = "The more recent submission shows stronger structure and slightly improved score confidence.",
             comparisonGroupId = left.ComparisonGroupId ?? right.ComparisonGroupId
         };
@@ -7063,12 +7083,14 @@ public partial class LearnerService(
             .ToList();
         var rawScore = evaluation.RawScore ?? ObjectiveRawScore(questions, answers);
         var maxRawScore = evaluation.MaxRawScore ?? OetScoring.ListeningReadingRawMax;
-        var scaledScore = evaluation.ScaledScore;
-        var grade = evaluation.ScoreConversionGrade ?? "—";
-        var scoreDisplay = evaluation.ScoreRange
-            ?? (scaledScore is int converted
-                ? $"{rawScore} / {maxRawScore} \u2022 {converted} / 500 \u2022 Grade {grade}"
-                : $"{rawScore} / {maxRawScore} \u2022 Practice score unavailable");
+        var hasApprovedConversion = evaluation.ScaledScore.HasValue
+            && !string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
+            && evaluation.ScoreConversionPassed.HasValue;
+        var scaledScore = hasApprovedConversion ? evaluation.ScaledScore : null;
+        var grade = hasApprovedConversion ? evaluation.ScoreConversionGrade ?? "—" : "—";
+        var scoreDisplay = scaledScore is int converted
+            ? $"{rawScore} / {maxRawScore} \u2022 {converted} / 500 \u2022 Grade {grade}"
+            : $"{rawScore} / {maxRawScore} \u2022 Practice score unavailable (score_conversion_unavailable)";
         var errorClusters = ObjectiveErrorClusters(content.SubtestCode, itemReview);
         return new
         {
@@ -7081,11 +7103,11 @@ public partial class LearnerService(
             rawScore,
             maxRawScore,
             scaledScore,
-            scoreConversionTableVersionKey = evaluation.ScoreConversionTableVersionKey,
-            scoreConversionErrorCode = scaledScore is null ? "score_conversion_unavailable" : null,
+            scoreConversionTableVersionKey = hasApprovedConversion ? evaluation.ScoreConversionTableVersionKey : null,
+            scoreConversionErrorCode = hasApprovedConversion ? null : "score_conversion_unavailable",
             grade,
-            passed = evaluation.ScoreConversionPassed,
-            gradeRange = scaledScore is null ? "Practice score unavailable" : $"Grade {grade}",
+            passed = hasApprovedConversion ? evaluation.ScoreConversionPassed : null,
+            gradeRange = hasApprovedConversion ? $"Grade {grade}" : "Practice score unavailable",
             state = ToAsyncState(evaluation.State),
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
@@ -9811,6 +9833,20 @@ public partial class LearnerService(
         return int.TryParse(digits, out var value) ? value : 0;
     }
 
+    private static double? ParseScoreRangeMid(string? scoreRange)
+    {
+        if (string.IsNullOrWhiteSpace(scoreRange)) return null;
+        var parts = scoreRange.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 2
+            && double.TryParse(parts[0], out var low)
+            && double.TryParse(parts[1], out var high))
+        {
+            return (low + high) / 2.0;
+        }
+
+        return double.TryParse(scoreRange.Trim(), out var single) ? single : null;
+    }
+
     private static string ScoreRangeToGrade(string? scoreRange)
     {
         var score = ParseCriterionScore(scoreRange);
@@ -9823,6 +9859,25 @@ public partial class LearnerService(
             _ => "D"
         };
     }
+
+    private static bool IsGovernedScoreAvailable(
+        string? subtestCode,
+        string? scoreConversionTableVersionKey,
+        bool? scoreConversionPassed)
+        => !IsListeningOrReading(subtestCode)
+            || (!string.IsNullOrWhiteSpace(scoreConversionTableVersionKey) && scoreConversionPassed.HasValue);
+
+    private static string? GovernedScoreRange(
+        string? subtestCode,
+        string? scoreRange,
+        string? scoreConversionTableVersionKey,
+        bool? scoreConversionPassed)
+        => IsGovernedScoreAvailable(subtestCode, scoreConversionTableVersionKey, scoreConversionPassed)
+            ? scoreRange
+            : null;
+
+    private static bool IsListeningOrReading(string? subtestCode)
+        => subtestCode?.Trim().ToLowerInvariant() is "listening" or "reading";
 
     private static string ToAsyncState(AsyncState state) => state switch
     {
@@ -13040,24 +13095,30 @@ public partial class LearnerService(
                 .Select(g => new
                 {
                     SubtestCode = g.Key,
-                    AvgMid = g.Average(e =>
-                    {
-                        var parts = e.ScoreRange?.Split('-');
-                        return parts?.Length == 2 && double.TryParse(parts[0], out var lo) && double.TryParse(parts[1], out var hi)
-                            ? (lo + hi) / 2.0 : 0;
-                    })
+                    AvgMid = g.Select(e => GovernedScoreRange(
+                            e.SubtestCode,
+                            e.ScoreRange,
+                            e.ScoreConversionTableVersionKey,
+                            e.ScoreConversionPassed))
+                        .Select(ParseScoreRangeMid)
+                        .Where(score => score.HasValue)
+                        .Select(score => (double?)score!.Value)
+                        .Average()
                 })
+                .Where(g => g.AvgMid.HasValue)
                 .OrderBy(g => g.AvgMid)
                 .FirstOrDefault();
 
-            if (weakSubtest is not null && weakSubtest.AvgMid < OetScoring.ScaledPassGradeB)
+            if (weakSubtest is not null
+                && weakSubtest.AvgMid is double weakAverage
+                && weakAverage < OetScoring.ScaledPassGradeB)
             {
                 actions.Add(new
                 {
                     type = "weak_area_practice",
                     priority = "medium",
                     title = $"Practice {weakSubtest.SubtestCode} — your weakest area",
-                    subtitle = $"Average score: {weakSubtest.AvgMid:F0}/500",
+                    subtitle = $"Average score: {weakAverage:F0}/500",
                     actionUrl = $"/practice/{weakSubtest.SubtestCode}",
                     subtestCode = weakSubtest.SubtestCode
                 });
@@ -13213,12 +13274,11 @@ public partial class LearnerService(
             if (userEvals.Count == 0) continue;
 
             var userAvg = userEvals
-                .Select(e =>
-                {
-                    var parts = e.ScoreRange?.Split('-');
-                    return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
-                        ? (lo + hi) / 2.0 : (double?)null;
-                })
+                .Select(e => ParseScoreRangeMid(GovernedScoreRange(
+                    e.SubtestCode,
+                    e.ScoreRange,
+                    e.ScoreConversionTableVersionKey,
+                    e.ScoreConversionPassed)))
                 .Where(s => s.HasValue)
                 .Select(s => s!.Value)
                 .ToList();
@@ -13229,16 +13289,21 @@ public partial class LearnerService(
             // Get all users' average scores for this subtest (cohort comparison)
             var allScores = await db.Evaluations
                 .Where(e => e.SubtestCode == subtest && e.GeneratedAt >= DateTimeOffset.UtcNow.AddDays(-90))
-                .Select(e => e.ScoreRange)
+                .Select(e => new
+                {
+                    e.SubtestCode,
+                    e.ScoreRange,
+                    e.ScoreConversionTableVersionKey,
+                    e.ScoreConversionPassed
+                })
                 .ToListAsync(ct);
 
             var allAverages = allScores
-                .Select(sr =>
-                {
-                    var parts = sr?.Split('-');
-                    return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
-                        ? (lo + hi) / 2.0 : (double?)null;
-                })
+                .Select(e => ParseScoreRangeMid(GovernedScoreRange(
+                    e.SubtestCode,
+                    e.ScoreRange,
+                    e.ScoreConversionTableVersionKey,
+                    e.ScoreConversionPassed)))
                 .Where(s => s.HasValue)
                 .Select(s => s!.Value)
                 .OrderBy(s => s)
@@ -13509,7 +13574,13 @@ public partial class LearnerService(
             .AsNoTracking()
             .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && a.UserId == userId)
                 && e.GeneratedAt >= DateTimeOffset.UtcNow.AddDays(-30))
-            .Select(e => new { e.SubtestCode, e.ScoreRange })
+            .Select(e => new
+            {
+                e.SubtestCode,
+                e.ScoreRange,
+                e.ScoreConversionTableVersionKey,
+                e.ScoreConversionPassed
+            })
             .ToListAsync(ct);
 
         var subtestScores = recentEvals
@@ -13518,11 +13589,14 @@ public partial class LearnerService(
                 g => g.Key,
                 g =>
                 {
-                    var scores = g.Select(e =>
-                    {
-                        var parts = e.ScoreRange?.Split('-');
-                        return parts?.Length == 2 && int.TryParse(parts[0], out var lo) ? lo : 300;
-                    }).ToList();
+                    var scores = g.Select(e => ParseScoreRangeMid(GovernedScoreRange(
+                            e.SubtestCode,
+                            e.ScoreRange,
+                            e.ScoreConversionTableVersionKey,
+                            e.ScoreConversionPassed)))
+                        .Where(score => score.HasValue)
+                        .Select(score => score!.Value)
+                        .ToList();
                     return scores.Count > 0 ? scores.Average() : 300.0;
                 });
 

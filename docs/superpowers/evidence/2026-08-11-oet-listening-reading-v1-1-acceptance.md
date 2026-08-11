@@ -90,6 +90,11 @@ an owner-controlled value that must not be invented in code.
   with the non-official-result disclosure; mock client readiness and color
   helpers exclude Reading/Listening-bearing reports from mock-wide pass logic
   and use persisted owner grades when available.
+- Legacy learner dashboard evidence, progress/comparison trends, submissions,
+  weak-area actions, and interleaved-practice prioritization now suppress
+  Reading/Listening score ranges unless the evaluation has owner conversion
+  metadata and an explicit pass decision. Focused legacy-surface execution
+  remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation
