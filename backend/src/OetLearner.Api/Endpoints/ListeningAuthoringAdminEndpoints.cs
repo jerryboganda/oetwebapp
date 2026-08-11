@@ -16,6 +16,7 @@ namespace OetLearner.Api.Endpoints;
 ///   GET  /v1/admin/papers/{id}/listening/structure   — load authored 42-item map
 ///   PUT  /v1/admin/papers/{id}/listening/structure   — replace authored 42-item map
 ///   GET  /v1/admin/papers/{id}/listening/validate    — publish-gate report
+///   GET  /v1/admin/papers/{id}/listening/preview-structure — answer-key-free preview
 ///
 /// All routes require <c>AdminContentWrite</c>. Structure/extract writes remain
 /// JSON-compatible for admin editing and can be projected into the relational
@@ -88,6 +89,39 @@ public static class ListeningAuthoringAdminEndpoints
         {
             var report = await svc.ValidatePaperAsync(paperId, ct);
             return Results.Ok(report);
+        });
+
+        // Section 12: candidate preview must be projected without the answer
+        // key. The marking preview continues to use the admin structure route,
+        // which is permission-protected and intentionally carries answers.
+        group.MapGet("/preview-structure", async (
+            string paperId,
+            IListeningAuthoringService svc,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.AsNoTracking()
+                .Where(p => p.Id == paperId)
+                .Select(p => new { p.Id, p.Title, p.SubtestCode, p.EstimatedDurationMinutes })
+                .FirstOrDefaultAsync(ct);
+            if (paper is null) return Results.NotFound();
+
+            var structure = await svc.GetStructureAsync(paperId, ct);
+            return Results.Ok(new
+            {
+                paper,
+                counts = structure.Counts,
+                questions = structure.Questions.Select(q => new
+                {
+                    q.Id,
+                    q.Number,
+                    q.PartCode,
+                    q.Type,
+                    q.Stem,
+                    options = q.Options ?? Array.Empty<string>(),
+                    q.Points,
+                }),
+            });
         });
 
         group.MapGet("/structure", async (

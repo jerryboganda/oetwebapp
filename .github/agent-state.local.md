@@ -888,6 +888,10 @@ dirty work in the main checkout.
   zero/multiple correct options) while preserving the broader advisory policy.
   Added `ContentPaperServiceTests.Publish_rejects_reading_mcq_with_duplicate_options`;
   only `git diff --check` has been run for this slice.
+- Added the Listening Section 12 pre-publish preview surface: an admin-only
+  server projection omits correct answers/accepted variants/explanations, while
+  the same page provides a separate answer-key marking view from the protected
+  authoring endpoint. Focused UI/API execution remains pending.
 - Preserve `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and
   `pdf-policy-release2/`. Owner tables, normalization/lock policy, rationale
   library, thresholds/labels, graph approval, load evidence, and authenticated

@@ -227,6 +227,32 @@ export const replaceListeningStructure = (
 export const validateListeningStructure = (paperId: string) =>
   api<ListeningValidationReport>(`/v1/admin/papers/${paperId}/listening/validate`);
 
+export interface ListeningCandidatePreviewQuestion {
+  id: string;
+  number: number;
+  partCode: string;
+  type: string;
+  stem: string;
+  options: string[];
+  points: number;
+}
+
+export interface ListeningCandidatePreview {
+  paper: {
+    id: string;
+    title: string;
+    subtestCode: string;
+    estimatedDurationMinutes: number;
+  };
+  counts: ListeningValidationCounts;
+  questions: ListeningCandidatePreviewQuestion[];
+}
+
+/** Candidate-safe projection for the pre-publish preview. It never returns
+ * correctAnswer, acceptedAnswers, explanations, or distractor metadata. */
+export const getListeningCandidatePreview = (paperId: string) =>
+  api<ListeningCandidatePreview>(`/v1/admin/papers/${paperId}/listening/preview-structure`);
+
 /**
  * Per-question PATCH body. Every field is optional; absent (undefined) fields
  * are left untouched on the existing row. Maps onto

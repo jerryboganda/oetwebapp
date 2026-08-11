@@ -38,6 +38,10 @@ an owner-controlled value that must not be invented in code.
 
 - `ddebd85be` adds encrypted offline autosave reconciliation with server-wins conflict handling; submission and timer state are never queued offline.
 - `abe859e2f` adds grounded post-submit Listening and Reading explanations sourced from stored answers and authored rationale/transcript evidence, with usage attribution and advisory-only UI contracts.
+- The Listening admin authoring flow now includes an answer-key-free
+  `preview-structure` projection plus a separate marking preview console for
+  the Section 12 candidate/marking review gate; focused UI/API execution is
+  still pending.
 - `0a5867199` adds the branded practice score-band graph with approved-table-only conversion, raw-only fallback, the 350 reference marker, and the persistent non-official-result disclosure.
 - `4bdffbc97` normalizes the score-graph source file ending.
 - `831da6795` rejects blank/unanswered stored responses before grounded AI explanation generation.
