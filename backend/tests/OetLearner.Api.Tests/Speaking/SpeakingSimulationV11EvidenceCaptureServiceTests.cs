@@ -20,7 +20,8 @@ public sealed class SpeakingSimulationV11EvidenceCaptureServiceTests
     public void Source_turn_parser_preserves_word_confidence_and_interruption()
     {
         var turns = SpeakingSimulationV11EvidenceCaptureService.ParseSourceTurns(
-            """[
+            """
+[
                 {
                   "speaker": "candidate",
                   "startMs": 10,
@@ -30,7 +31,8 @@ public sealed class SpeakingSimulationV11EvidenceCaptureServiceTests
                   "interrupted": true,
                   "words": [{"word":"concerned","confidence":0.74}]
                 }
-            ]""");
+]
+""");
 
         var turn = Assert.Single(turns);
         Assert.Equal("candidate", turn.Speaker);

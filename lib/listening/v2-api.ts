@@ -118,11 +118,10 @@ export const listeningV2Api = {
     userAnswer: string | null,
     options?: Pick<RequestInit, 'keepalive'>,
   ) {
-    return apiClient.put<void>(
-      `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(questionId)}`,
-      { userAnswer },
-      options,
-    );
+    const path = `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(questionId)}`;
+    return options === undefined
+      ? apiClient.put<void>(path, { userAnswer })
+      : apiClient.put<void>(path, { userAnswer }, options);
   },
   submit(attemptId: string, answers?: Record<string, string | null>) {
     return apiClient.post<ListeningReviewDto>(
