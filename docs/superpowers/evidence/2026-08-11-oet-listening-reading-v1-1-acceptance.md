@@ -123,3 +123,29 @@ an owner-controlled value that must not be invented in code.
 - Legacy learner, mock, analytics, tutor, expert, and background LR surfaces
   now expose raw-only evidence when no owner-approved conversion row exists;
   no raw-to-scaled formula fallback remains in the audited LR paths.
+
+## Final exact current checkpoint
+
+- Commit `428f9b27583d5ea336d92710cc6e4e7a56932ec5` is on `main` and
+  `origin/main`. The gap-closure workflow filter now includes the Listening
+  Part A spelling, Listening grading, scoring-path, learner-leak, Reading
+  grading, score-conversion, and Reading authoring regression classes.
+- Build & Deploy run `31516273755` completed successfully for that exact SHA:
+  web/API/backup images, off-box migration SQL generation and application, and
+  blue/green deployment all passed. The VPS reported
+  `AUTO_DEPLOY_DONE: live on green (previous slot blue kept for rollback)`;
+  target-slot router and public web/API verification also passed.
+- Independent checks at `2026-08-11T17:22:41Z` returned HTTP 200 for API live,
+  API readiness, and web health; the app root, `/listening`, and `/reading`
+  returned HTTP 307 to sign-in. Readiness at `2026-08-11T17:22:46Z` reported
+  database, migrations, stuck_jobs, and storage all `ok`.
+- Widened clean-runner gap-closure run `31516282588` passed frontend
+  type-check, Vitest, and lint. Its backend scope compiled and ran 293 tests:
+  211 passed and 82 failed. The failures are dominated by tests that start
+  Reading/Listening attempts without an owner-effective marking policy, plus
+  legacy test expectations for unconfigured score conversion/default
+  normalization and one technical-guidance fixture. No owner score table,
+  normalization profile, or policy was invented to force those tests green.
+- The current implementation is therefore deployed and fail-closed, but the
+  PDF acceptance is not fully closed until owner-controlled release inputs and
+  authenticated desktop/mobile acceptance evidence are supplied.

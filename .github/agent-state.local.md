@@ -2,6 +2,27 @@
 
 Last updated: 2026-08-11
 
+## Latest exact release checkpoint
+
+- `428f9b27583d5ea336d92710cc6e4e7a56932ec5` is on `main` and
+  `origin/main`; Build & Deploy run `31516273755` completed successfully,
+  including image builds, off-box migration generation/application, and
+  blue/green deployment. The VPS reported live on green with blue retained
+  for rollback.
+- Independent checks at `2026-08-11T17:22:41Z` returned 200 for API live,
+  API readiness, and web health, and 307 for `/`, `/listening`, and `/reading`;
+  readiness at `17:22:46Z` reported database, migrations, stuck_jobs, and
+  storage `ok`.
+- Widened LR gap-closure run `31516282588`: frontend type-check/Vitest/lint
+  passed; backend ran 293 tests with 211 passed and 82 failed. Failures are
+  principally expected fail-closed starts without owner-effective marking
+  policy, plus legacy unconfigured-conversion/default-normalization fixture
+  expectations. Do not seed owner data to mask these failures.
+- Remaining blockers are owner-provided score tables, normalization/spacing
+  profile, practice/mock lock mode, rationale/evidence library, thresholds and
+  labels, graph legal/style approval, concurrency target/load evidence, and
+  authenticated desktop/mobile acceptance evidence.
+
 ## Current checkpoint
 
 ### Latest exact-slice checkpoint
