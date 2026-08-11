@@ -77,7 +77,14 @@ export default function ScoreEstimatorPage() {
         });
         setToast({ variant: 'success', message: `${subtestCode} prediction updated.` });
       } else {
-        setToast({ variant: 'error', message: result.reason === 'insufficient_data' ? 'Need at least 2 completed evaluations.' : 'Cannot compute prediction.' });
+        const message = result.reason === 'insufficient_data'
+          ? 'Need at least 2 completed evaluations.'
+          : result.reason === 'score_conversion_unavailable'
+            ? 'Reading and Listening predictions require owner-approved score conversion.'
+            : result.reason === 'score_conversion_table_mismatch'
+              ? 'Predictions are paused until evaluations use one approved conversion table.'
+              : 'Cannot compute prediction.';
+        setToast({ variant: 'error', message });
       }
     } catch {
       setToast({ variant: 'error', message: 'Failed to compute prediction.' });
@@ -116,6 +123,10 @@ export default function ScoreEstimatorPage() {
         description="AI-powered predictions based on your practice history and improvement trends."
         icon={<TrendingUp className="w-7 h-7" />}
       />
+
+      <InlineAlert variant="info" title="AI Practice Score">
+        AI Practice Score — not an official OET result. Reading and Listening predictions appear only after owner-approved score conversion is available.
+      </InlineAlert>
 
       {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
 
@@ -201,7 +212,7 @@ export default function ScoreEstimatorPage() {
           <Card className="p-5 bg-primary/10 border-primary/30">
             <LearnerSurfaceSectionHeader
               icon={<Target className="w-5 h-5" />}
-              title="Overall OET Prediction"
+              title="Overall AI Practice Score"
             />
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div>

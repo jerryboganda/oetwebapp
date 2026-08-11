@@ -95,6 +95,11 @@ an owner-controlled value that must not be invented in code.
   Reading/Listening score ranges unless the evaluation has owner conversion
   metadata and an explicit pass decision. Focused legacy-surface execution
   remains pending.
+- The score-estimator service now refuses Reading/Listening prediction inputs
+  without persisted owner-approved scaled scores, refuses mixed conversion-table
+  versions, and hides legacy snapshots without conversion provenance. The
+  estimator UI carries the persistent `AI Practice Score — not an official OET
+  result.` disclosure. Focused browser/API execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

@@ -18,6 +18,7 @@ public class PredictionService(LearnerDbContext db)
         var latest = snapshots
             .GroupBy(p => new { p.ExamTypeCode, p.SubtestCode })
             .Select(g => g.First())
+            .Where(HasApprovedScoreConversion)
             .OrderBy(p => p.SubtestCode);
 
         return latest.Select(MapSnapshot);
@@ -32,6 +33,9 @@ public class PredictionService(LearnerDbContext db)
 
         if (snapshot == null)
             return new { available = false };
+
+        if (!HasApprovedScoreConversion(snapshot))
+            return new { available = false, reason = "score_conversion_unavailable" };
 
         return new { available = true, prediction = MapSnapshot(snapshot) };
     }
@@ -50,9 +54,32 @@ public class PredictionService(LearnerDbContext db)
         if (evaluations.Count < 2)
             return new { available = false, reason = "insufficient_data", minimumRequired = 2 };
 
+        var isGovernedSubtest = IsListeningOrReading(subtestCode);
+        string? scoreConversionTableVersionKey = null;
+        if (isGovernedSubtest)
+        {
+            if (evaluations.Any(e => !e.e.ScaledScore.HasValue
+                                     || string.IsNullOrWhiteSpace(e.e.ScoreConversionTableVersionKey)
+                                     || !e.e.ScoreConversionPassed.HasValue))
+            {
+                return new { available = false, reason = "score_conversion_unavailable" };
+            }
+
+            var conversionVersions = evaluations
+                .Select(e => e.e.ScoreConversionTableVersionKey!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (conversionVersions.Count != 1)
+            {
+                return new { available = false, reason = "score_conversion_table_mismatch" };
+            }
+
+            scoreConversionTableVersionKey = conversionVersions[0];
+        }
+
         // Parse score ranges — format "300-350" or single number
         var scores = evaluations
-            .Select(e => ParseMidScore(e.ScoreRange))
+            .Select(e => isGovernedSubtest ? e.e.ScaledScore!.Value : ParseMidScore(e.e.ScoreRange))
             .Where(s => s > 0)
             .ToList();
 
@@ -94,7 +121,9 @@ public class PredictionService(LearnerDbContext db)
             recentAverage = Math.Round(recentAvg, 1),
             trend = Math.Round(trend, 1),
             standardDeviation = Math.Round(stdDev, 1),
-            trendDirection = trend > 5 ? "improving" : trend < -5 ? "declining" : "stable"
+            trendDirection = trend > 5 ? "improving" : trend < -5 ? "declining" : "stable",
+            scoreConversionTableVersionKey,
+            scoreConversionApproved = isGovernedSubtest ? true : (bool?)null
         };
 
         await StorePredictionAsync(userId, examTypeCode, subtestCode, low, high, JsonSupport.Serialize(factors), ct);
@@ -159,4 +188,28 @@ public class PredictionService(LearnerDbContext db)
         evaluationCount = p.EvaluationCount,
         computedAt = p.ComputedAt
     };
+
+    private static bool HasApprovedScoreConversion(PredictionSnapshot snapshot)
+    {
+        if (!IsListeningOrReading(snapshot.SubtestCode))
+            return true;
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(snapshot.FactorsJson ?? "{}");
+            var root = document.RootElement;
+            return root.TryGetProperty("scoreConversionTableVersionKey", out var version)
+                   && version.ValueKind == System.Text.Json.JsonValueKind.String
+                   && !string.IsNullOrWhiteSpace(version.GetString())
+                   && root.TryGetProperty("scoreConversionApproved", out var approved)
+                   && approved.ValueKind == System.Text.Json.JsonValueKind.True;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsListeningOrReading(string? subtestCode)
+        => subtestCode?.Trim().ToLowerInvariant() is "listening" or "reading";
 }
