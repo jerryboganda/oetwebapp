@@ -79,6 +79,10 @@ an owner-controlled value that must not be invented in code.
   version and pass decision are present; missing metadata is null/unavailable,
   and scaled-score overrides fail closed without owner conversion evidence.
   Focused Reading analytics/tutor execution remains pending.
+- Mock admin aggregate readiness and pass-prediction calculations now exclude
+  reports containing Reading/Listening modules, so a mock-wide numeric average
+  cannot become an unapproved assessment pass claim. Focused admin analytics
+  execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

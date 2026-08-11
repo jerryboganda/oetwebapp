@@ -486,6 +486,7 @@ public static class MockAnalyticsEndpoints
         var scores = new List<int>(rows.Count);
         foreach (var row in rows)
         {
+            if (ContainsGovernedScore(row.PayloadJson)) continue;
             var parsed = TryReadOverallScore(row.PayloadJson);
             if (parsed.HasValue) scores.Add(parsed.Value);
         }
@@ -531,6 +532,38 @@ public static class MockAnalyticsEndpoints
         }
     }
 
+    private static bool ContainsGovernedScore(string payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            if (!doc.RootElement.TryGetProperty("subTests", out var subTests)
+                || subTests.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var subTest in subTests.EnumerateArray())
+            {
+                var id = subTest.TryGetProperty("id", out var idProperty) && idProperty.ValueKind == JsonValueKind.String
+                    ? idProperty.GetString()
+                    : subTest.TryGetProperty("subtest", out var subtestProperty) && subtestProperty.ValueKind == JsonValueKind.String
+                        ? subtestProperty.GetString()
+                        : subTest.TryGetProperty("name", out var nameProperty) && nameProperty.ValueKind == JsonValueKind.String
+                            ? nameProperty.GetString()
+                            : null;
+                if (id?.Trim().ToLowerInvariant() is "reading" or "listening") return true;
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed report payloads are not eligible for aggregate score claims.
+        }
+
+        return false;
+    }
+
     // -----------------------------------------------------------------------
     // Phase 8a — pass prediction (recent-cohort aggregate)
     // -----------------------------------------------------------------------
@@ -570,7 +603,9 @@ public static class MockAnalyticsEndpoints
             .GroupBy(a => a.Id)
             .ToDictionary(g => g.Key, g => g.First().Profession ?? "unknown", StringComparer.Ordinal);
 
-        // Tally pass/borderline-pass verdicts via the AdvisoryTier ladder.
+        // Tally pass/borderline-pass verdicts only for reports without a
+        // governed Reading/Listening module. Their mock-wide overall score
+        // is not a permitted source of an assessment pass claim.
         // We derive a numeric pass-rate in [0,1] from MockReport.overallScore
         // alone — the full MockPassPredictionService is not safe to invoke
         // 500× per request, but this matches the same Grade-B threshold the
@@ -581,6 +616,7 @@ public static class MockAnalyticsEndpoints
 
         foreach (var row in reportRows)
         {
+            if (ContainsGovernedScore(row.PayloadJson)) continue;
             var overall = TryReadOverallScore(row.PayloadJson);
             if (!overall.HasValue) continue;
 

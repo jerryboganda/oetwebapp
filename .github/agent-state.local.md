@@ -1037,3 +1037,14 @@ dirty work in the main checkout.
   Reading analytics/tutor execution and authenticated deployed acceptance
   remain pending. Preserve the four untracked user-owned paths above and the
   owner release gates listed in the acceptance matrix.
+
+# Latest LR coding checkpoint - 2026-08-12 (mock aggregate conversion gate)
+
+- Mock admin average-readiness and pass-prediction aggregates now exclude
+  reports containing Reading/Listening modules, preventing mock-wide numeric
+  averages from becoming unapproved assessment pass claims.
+- Only bounded source searches and `git diff --check` were run for this slice;
+  no long local validation, CI/CD, push, or deployment was started. Focused
+  admin analytics execution and authenticated deployed acceptance remain
+  pending. Preserve the four untracked user-owned paths above and the owner
+  release gates listed in the acceptance matrix.
