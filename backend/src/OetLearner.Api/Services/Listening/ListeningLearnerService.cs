@@ -1263,6 +1263,7 @@ public sealed class ListeningLearnerService(
             Status = ListeningAttemptStatus.InProgress,
             Mode = relationalMode,
             MaxRawScore = Math.Clamp(source.Questions.Sum(q => q.Points), 1, CanonicalRawMax),
+            PaperRevisionId = source.PaperRevisionId,
             // The published question revision is immutable for the lifetime of
             // an attempt. Keep the exact version map so a concurrent authoring
             // edit is rejected during grading instead of silently grading a
@@ -1924,7 +1925,8 @@ public sealed class ListeningLearnerService(
             Extracts: extracts,
             UsesRelationalStructure: usesRelationalStructure,
             QuestionPaperUrlByPart: questionPaperByPart,
-            AudioUrlByPart: audioUrlBySection);
+            AudioUrlByPart: audioUrlBySection,
+            PaperRevisionId: paper.PublishedRevisionId);
     }
 
     private static ListeningSource BuildLegacySource(ContentItem item)
@@ -3777,7 +3779,8 @@ public sealed class ListeningLearnerService(
         // section plays its own. The exam player loads audioUrlByPart[section]
         // (falling back to the legacy combined AudioUrl). Empty when no per-section
         // audio is attached and the paper relies on the combined AudioUrl.
-        IReadOnlyDictionary<string, string>? AudioUrlByPart = null);
+        IReadOnlyDictionary<string, string>? AudioUrlByPart = null,
+        string? PaperRevisionId = null);
 
     private sealed record ListeningExtractMetaDto(
         string PartCode,                     // A1 | A2 | B1..B6 | C1 | C2

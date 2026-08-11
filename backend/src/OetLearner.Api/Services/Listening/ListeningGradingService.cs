@@ -49,10 +49,29 @@ public sealed class ListeningGradingService
             throw new UnauthorizedAccessException("Listening attempt does not belong to the current user.");
         }
 
+        await EnsurePublishedPaperRevisionUnchangedAsync(attempt, ct);
         var result = await GradeAttemptAsync(attempt, refreshSubmittedAt: true, ct);
         await _db.SaveChangesAsync(ct);
 
         return result;
+    }
+
+    private async Task EnsurePublishedPaperRevisionUnchangedAsync(
+        ListeningAttempt attempt,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(attempt.PaperRevisionId)) return;
+
+        var currentRevision = await _db.ContentPapers.AsNoTracking()
+            .Where(paper => paper.Id == attempt.PaperId)
+            .Select(paper => paper.PublishedRevisionId)
+            .SingleOrDefaultAsync(ct);
+        if (!string.Equals(attempt.PaperRevisionId, currentRevision, StringComparison.Ordinal))
+        {
+            throw ApiException.Conflict(
+                "listening_paper_revision_changed",
+                "The published Listening paper revision changed after this attempt started. The attempt is held for controlled re-marking.");
+        }
     }
 
     /// <summary>Execute an approved single-question answer-key correction

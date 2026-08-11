@@ -268,6 +268,28 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task RelationalAttempt_PinsPublishedPaperRevisionBeforeGrading()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.PublishedRevisionId = "listening-revision-1";
+        await db.SaveChangesAsync();
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        Assert.Equal("listening-revision-1", attempt.PaperRevisionId);
+
+        paper.PublishedRevisionId = "listening-revision-2";
+        await db.SaveChangesAsync();
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => svc.SubmitAsync(userId, attempt.Id, default));
+        Assert.Equal("listening_paper_revision_changed", error.Code);
+        Assert.Equal(ListeningAttemptStatus.InProgress,
+            (await db.ListeningAttempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id)).Status);
+    }
+
+    [Fact]
     public async Task GetSessionAsync_ExposesPerSectionAudioUrls_AndDropsPartAMode()
     {
         var (db, svc) = Build();
