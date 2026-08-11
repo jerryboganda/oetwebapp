@@ -8,7 +8,6 @@ export interface ScoreBandGraphProps {
   tableVersion?: string | null;
   className?: string;
 }
-
 const PRACTICE_SCORE_LABEL = 'AI Practice Score — not an official OET result.';
 
 /**
@@ -78,4 +77,3 @@ export function ScoreBandGraph({
     </section>
   );
 }
-
