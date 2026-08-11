@@ -865,3 +865,21 @@ Commit only the explicit frontend/rulebook paths, push the exact revision to
 `main`, wait for Build & Deploy, then verify the deployed SHA, health/readiness,
 and blue/green container images on the production VPS. Preserve unrelated
 dirty work in the main checkout.
+
+# Latest LR coding checkpoint - 2026-08-12
+
+- Added explicit LR-13 authoring regressions for Listening relational MCQs with
+  zero and multiple correct options, plus Reading scalar-answer rejection for
+  empty and multiple-answer payloads. The first hosted run exposed only a test
+  fixture mistake (unpersisted seeded options); `d1268602a` corrects the tests
+  to mutate tracked seed entities. Reading LR-13 cases passed in that run;
+  the corrected Listening cases have not been rerun.
+- Added `ListeningReadingExplanationFailureTests` covering deterministic Reading
+  and Listening fallbacks when the grounded AI gateway throws. No score or
+  result path depends on AI output.
+- Local .NET execution previously stalled after 124 seconds; per the current
+  owner instruction, do not start or wait on long CI/CD or full validation runs.
+- Preserve `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and
+  `pdf-policy-release2/`. Owner tables, normalization/lock policy, rationale
+  library, thresholds/labels, graph approval, load evidence, and authenticated
+  browser/mobile acceptance remain unresolved.
