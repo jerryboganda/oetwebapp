@@ -349,6 +349,9 @@ an owner-controlled value that must not be invented in code.
   (15 tests), and `cbla-fidelity.test.tsx` passed (20 tests). The untracked,
   user-owned `pdf-policy-release*` copies were excluded from these checks and
   were not modified.
+- The retained legacy `?mode=paper` browser contract now asserts fail-closed
+  normalization to `mode=exam`; it no longer treats paper free navigation as a
+  supported delivery mode.
 
 ## Assessment-governance role boundary
 
