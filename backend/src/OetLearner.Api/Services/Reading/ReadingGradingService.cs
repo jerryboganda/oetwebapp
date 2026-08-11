@@ -181,6 +181,7 @@ public sealed class ReadingGradingService(
 
         var policy = await ResolvePolicyForAttemptAsync(attempt, ct);
         var details = new List<ReadingAnswerResult>(gradedQuestions.Count);
+        var multipleSelectionIssues = new List<MultipleSelectionIntegrityIssue>();
 
         int raw = 0, correctCount = 0, incorrectCount = 0, unanswered = 0, maxRaw = 0;
         foreach (var q in gradedQuestions)
@@ -198,6 +199,15 @@ public sealed class ReadingGradingService(
                 ? ApplyKeyCorrection(q, keyCorrection.NewKeySnapshotJson)
                 : q;
             var partCode = partCodeByPartId.GetValueOrDefault(q.ReadingPartId, ReadingPartCode.A);
+            if (IsMultipleChoice(gradingQuestion.QuestionType)
+                && TryReadMultipleSelections(answer.UserAnswerJson, out var selections))
+            {
+                multipleSelectionIssues.Add(new MultipleSelectionIntegrityIssue(
+                    q.Id,
+                    q.DisplayOrder,
+                    partCode.ToString(),
+                    selections));
+            }
             var (isCorrect, pts) = GradeOne(gradingQuestion, answer, policy, attempt.Mode, partCode);
             answer.IsCorrect = isCorrect;
             answer.PointsEarned = pts;
@@ -239,6 +249,27 @@ public sealed class ReadingGradingService(
         attempt.Status = ReadingAttemptStatus.Submitted;
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         attempt.LastActivityAt = DateTimeOffset.UtcNow;
+
+        if (multipleSelectionIssues.Count > 0)
+        {
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = attempt.UserId,
+                ActorName = "ReadingGradingService",
+                Action = "reading.mcq.multiple_selection_review_required",
+                ResourceType = "ReadingAttempt",
+                ResourceId = attempt.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    requiresAdminReview = true,
+                    reason = "multiple_selections_for_single_answer_mcq",
+                    attemptId = attempt.Id,
+                    issues = multipleSelectionIssues,
+                }),
+            });
+        }
 
         // P0-F 2026-05 hardening: bump the optimistic-concurrency token so
         // that a concurrent grader running against the same row hits a
@@ -324,6 +355,39 @@ public sealed class ReadingGradingService(
 
     private static bool IsSubsetPracticeMode(ReadingAttemptMode mode)
         => mode is ReadingAttemptMode.Drill or ReadingAttemptMode.MiniTest or ReadingAttemptMode.ErrorBank;
+
+    private static bool IsMultipleChoice(ReadingQuestionType type)
+        => type is ReadingQuestionType.MultipleChoice3
+            or ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.MultipleChoiceFlexible;
+
+    private static bool TryReadMultipleSelections(
+        string? userAnswerJson,
+        out IReadOnlyList<string> selections)
+    {
+        selections = Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(userAnswerJson)) return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(userAnswerJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return false;
+
+            var values = document.RootElement.EnumerateArray()
+                .Select(item => item.ValueKind == JsonValueKind.String
+                    ? item.GetString()
+                    : item.GetRawText())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!.Trim())
+                .ToArray();
+            selections = values;
+            return values.Length > 1;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     // ── Grader strategies ────────────────────────────────────────────────
 
@@ -1151,6 +1215,12 @@ public sealed class ReadingGradingService(
     }
 
     private sealed record KeyCorrection(string QuestionRevisionId, string NewKeySnapshotJson);
+
+    private sealed record MultipleSelectionIntegrityIssue(
+        string QuestionId,
+        int QuestionNumber,
+        string PartCode,
+        IReadOnlyList<string> Selections);
 
     private static ReadingResolvedPolicy ApplyGovernedMarkingPolicy(
         ReadingResolvedPolicy policy,

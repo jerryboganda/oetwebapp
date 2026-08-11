@@ -167,6 +167,102 @@ public class ListeningGradingServiceTests
         Assert.Equal("score_table_not_configured", result.ScoreConversionErrorCode);
     }
 
+    [Fact]
+    public async Task GradeAsync_multiple_selection_mcq_scores_zero_and_creates_admin_review_evidence()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        var paper = new ContentPaper
+        {
+            Id = "paper-mcq-corrupt",
+            SubtestCode = "listening",
+            Title = "MCQ integrity",
+            Slug = "mcq-integrity",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExtractedTextJson = "{}",
+        };
+        var part = new ListeningPart
+        {
+            Id = "part-mcq-corrupt",
+            PaperId = paper.Id,
+            PartCode = ListeningPartCode.B1,
+            MaxRawScore = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var extract = new ListeningExtract
+        {
+            Id = "extract-mcq-corrupt",
+            ListeningPartId = part.Id,
+            DisplayOrder = 0,
+            Kind = ListeningExtractKind.Workplace,
+            Title = "MCQ extract",
+            SpeakersJson = "[]",
+            TranscriptSegmentsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var question = new ListeningQuestion
+        {
+            Id = "question-mcq-corrupt",
+            PaperId = paper.Id,
+            ListeningPartId = part.Id,
+            ListeningExtractId = extract.Id,
+            QuestionNumber = 25,
+            DisplayOrder = 1,
+            Points = 1,
+            QuestionType = ListeningQuestionType.MultipleChoice3,
+            Stem = "Which option?",
+            CorrectAnswerJson = "\"A\"",
+            CreatedAt = now,
+            UpdatedAt = now,
+            Options =
+            [
+                new ListeningQuestionOption { Id = "option-mcq-a", OptionKey = "A", DisplayOrder = 0, Text = "A", IsCorrect = true },
+                new ListeningQuestionOption { Id = "option-mcq-b", OptionKey = "B", DisplayOrder = 1, Text = "B", IsCorrect = false },
+                new ListeningQuestionOption { Id = "option-mcq-c", OptionKey = "C", DisplayOrder = 2, Text = "C", IsCorrect = false },
+            ],
+        };
+        var attempt = new ListeningAttempt
+        {
+            Id = "attempt-mcq-corrupt",
+            UserId = "learner-mcq",
+            PaperId = paper.Id,
+            StartedAt = now,
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.InProgress,
+            MaxRawScore = 1,
+            LastQuestionVersionMapJson = "{\"question-mcq-corrupt\":1}",
+        };
+        var answer = new ListeningAnswer
+        {
+            Id = "answer-mcq-corrupt",
+            ListeningAttemptId = attempt.Id,
+            ListeningQuestionId = question.Id,
+            UserAnswerJson = "[\"A\",\"B\"]",
+        };
+
+        db.ContentPapers.Add(paper);
+        db.ListeningParts.Add(part);
+        db.ListeningExtracts.Add(extract);
+        db.ListeningQuestions.Add(question);
+        db.ListeningAttempts.Add(attempt);
+        db.ListeningAnswers.Add(answer);
+        await db.SaveChangesAsync();
+
+        var result = await new ListeningGradingService(db).GradeAsync(attempt.Id, CancellationToken.None);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.False((await db.ListeningAnswers.SingleAsync(a => a.Id == answer.Id)).IsCorrect);
+        var audit = await db.AuditEvents.SingleAsync(e =>
+            e.Action == "listening.mcq.multiple_selection_review_required");
+        Assert.Contains("requiresAdminReview", audit.Details!);
+        Assert.Contains("A", audit.Details!);
+        Assert.Contains("B", audit.Details!);
+    }
+
     [Theory]
     [InlineData("the   aspirin", 1)]
     [InlineData("aspirin tablets", 0)]

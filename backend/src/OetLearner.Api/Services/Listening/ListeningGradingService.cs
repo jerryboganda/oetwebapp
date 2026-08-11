@@ -271,6 +271,7 @@ public sealed class ListeningGradingService
 
         var rawCorrect = 0;
         var driftedQuestionIds = new List<string>();
+        var multipleSelectionIssues = new List<MultipleSelectionIntegrityIssue>();
         foreach (var q in questions.OrderBy(q => q.QuestionNumber).ThenBy(q => q.DisplayOrder))
         {
             if (!answerByQuestionId.TryGetValue(q.Id, out var ans))
@@ -298,6 +299,14 @@ public sealed class ListeningGradingService
             }
 
             var gradingQuestion = gradingQuestions.First(candidate => candidate.Id == q.Id);
+            if (gradingQuestion.QuestionType == ListeningQuestionType.MultipleChoice3
+                && TryReadMultipleSelections(ans.UserAnswerJson, out var selections))
+            {
+                multipleSelectionIssues.Add(new MultipleSelectionIntegrityIssue(
+                    q.Id,
+                    q.QuestionNumber,
+                    selections));
+            }
             var evaluation = Evaluate(gradingQuestion, ans, paperAnswerMap, normalisation, gradingQuestion.CaseSensitive && markingPolicy.CaseSensitive);
             var isCorrect = evaluation.IsCorrect;
             var distractor = evaluation.Distractor;
@@ -345,6 +354,27 @@ public sealed class ListeningGradingService
             }
 
             if (pinnedVersion != q.Version) driftedQuestionIds.Add(q.Id);
+        }
+
+        if (multipleSelectionIssues.Count > 0)
+        {
+            _db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = attempt.UserId,
+                ActorName = "ListeningGradingService",
+                Action = "listening.mcq.multiple_selection_review_required",
+                ResourceType = "ListeningAttempt",
+                ResourceId = attempt.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    requiresAdminReview = true,
+                    reason = "multiple_selections_for_single_answer_mcq",
+                    attemptId = attempt.Id,
+                    issues = multipleSelectionIssues,
+                }),
+            });
         }
 
         // H9: Emit audit event when version drift is detected so the
@@ -803,6 +833,34 @@ public sealed class ListeningGradingService
         catch { return null; }
     }
 
+    private static bool TryReadMultipleSelections(
+        string? userAnswerJson,
+        out IReadOnlyList<string> selections)
+    {
+        selections = Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(userAnswerJson)) return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(userAnswerJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return false;
+
+            var values = document.RootElement.EnumerateArray()
+                .Select(item => item.ValueKind == JsonValueKind.String
+                    ? item.GetString()
+                    : item.GetRawText())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!.Trim())
+                .ToArray();
+            selections = values;
+            return values.Length > 1;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     private static IEnumerable<string> ParseAccepted(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) yield break;
@@ -921,6 +979,11 @@ public sealed class ListeningGradingService
     }
 
     private sealed record ScoreOverride(string QuestionId, int Override, string? By, string? Reason);
+
+    private sealed record MultipleSelectionIntegrityIssue(
+        string QuestionId,
+        int QuestionNumber,
+        IReadOnlyList<string> Selections);
 }
 
 public sealed record ListeningGradingResult(

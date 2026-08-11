@@ -2627,6 +2627,52 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Multiple_selection_mcq_scores_zero_and_creates_admin_review_evidence()
+    {
+        var (db, structure, _, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var question = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1"
+                && q.Part.PartCode == ReadingPartCode.B
+                && q.QuestionType == ReadingQuestionType.MultipleChoice3);
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "reading-mcq-corrupt",
+            UserId = "learner-1",
+            PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
+            PolicySnapshotJson = "{}",
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "reading-mcq-corrupt-answer",
+            ReadingAttemptId = "reading-mcq-corrupt",
+            ReadingQuestionId = question.Id,
+            UserAnswerJson = "[\"A\",\"B\"]",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("reading-mcq-corrupt", default);
+
+        Assert.Equal(0, result.Answers.Single(a => a.QuestionId == question.Id).PointsEarned);
+        Assert.False(result.Answers.Single(a => a.QuestionId == question.Id).IsCorrect);
+        var audit = await db.AuditEvents.SingleAsync(e =>
+            e.Action == "reading.mcq.multiple_selection_review_required");
+        Assert.Contains("requiresAdminReview", audit.Details!);
+        Assert.Contains("A", audit.Details!);
+        Assert.Contains("B", audit.Details!);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Admin_reading_analytics_aggregates_parts_skills_and_hardest_questions()
     {
         var (db, structure, _, _, _) = Build();
