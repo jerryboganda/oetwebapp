@@ -237,6 +237,10 @@ function PlayerContent() {
   // by `onEnded` and whenever a new section's audio arms (preview/section
   // effects below), so each section logs one audio_started / audio_ended pair.
   const audioStartedLoggedRef = useRef<boolean>(false);
+  // Browser media events can fire repeatedly during one network interruption.
+  // Keep the buffering lifecycle edge-triggered so the audit stream records
+  // one start/end pair per interruption rather than a noisy event per tick.
+  const audioBufferingActiveRef = useRef<boolean>(false);
   const audioResumeInFlightRef = useRef<boolean>(false);
   const applyStrictServerStateRef = useRef<((state: ListeningV2SessionState) => void) | null>(null);
   const strictAdvanceTargetRef = useRef<ListeningFsmState | null>(null);
@@ -1004,6 +1008,7 @@ function PlayerContent() {
     hasReachedEndRef.current = false;
     autoAdvanceInFlightRef.current = false;
     audioStartedLoggedRef.current = false;
+    audioBufferingActiveRef.current = false;
     previewArmedRef.current = false;
     setPhase('audio');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1435,8 +1440,31 @@ function PlayerContent() {
             }
             setAudioState('ready');
           }}
-          onWaiting={() => setAudioState('buffering')}
-          onCanPlay={() => setAudioState('ready')}
+          onWaiting={() => {
+            if (!audioBufferingActiveRef.current) {
+              audioBufferingActiveRef.current = true;
+              logAttemptEvent('audio_buffering_start', currentSection ? { section: currentSection } : undefined);
+            }
+            // The browser has already halted playback while waiting for data.
+            // Keep the UI explicit so a candidate does not try to replay or
+            // seek around a network interruption.
+            setAudioState('buffering');
+          }}
+          onStalled={() => {
+            if (!audioBufferingActiveRef.current) {
+              audioBufferingActiveRef.current = true;
+              logAttemptEvent('audio_buffering_start', currentSection ? { section: currentSection } : undefined);
+            }
+            logAttemptEvent('audio_stalled', currentSection ? { section: currentSection } : undefined);
+            setAudioState('buffering');
+          }}
+          onCanPlay={() => {
+            if (audioBufferingActiveRef.current) {
+              audioBufferingActiveRef.current = false;
+              logAttemptEvent('audio_buffering_end', currentSection ? { section: currentSection } : undefined);
+            }
+            setAudioState('ready');
+          }}
           onPlay={() => {
             // C8e — once the active extract's end has been reached in
             // exam mode, any subsequent play() is immediately re-paused.
@@ -1512,6 +1540,7 @@ function PlayerContent() {
             void autoAdvanceAfterAudio();
           }}
           onError={() => {
+            audioBufferingActiveRef.current = false;
             setAudioState('error');
             setAudioError('Audio failed to load. Reload the audio or return to Listening if the media asset is still processing.');
             // §17.11 — surface the media error into the attempt-event stream.
@@ -1555,6 +1584,12 @@ function PlayerContent() {
               onTogglePlayPause={togglePlayPause}
               onScrub={handleScrub}
             />
+
+            {audioState === 'buffering' ? (
+              <InlineAlert variant="warning">
+                Audio buffering has halted playback. Do not replay or seek; playback will continue when the stream is ready.
+              </InlineAlert>
+            ) : null}
 
             {mockAttemptId ? (
               <InlineAlert variant="info">

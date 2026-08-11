@@ -1097,6 +1097,9 @@ public sealed class ListeningLearnerService(
         // §17.11 attempt-event stream.
         "audio_started",
         "audio_ended",
+        "audio_buffering_start",
+        "audio_buffering_end",
+        "audio_stalled",
         "audio_error",
         "reading_time_started",
         "reading_time_ended",

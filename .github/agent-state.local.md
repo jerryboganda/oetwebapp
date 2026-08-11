@@ -11,12 +11,16 @@ Last updated: 2026-08-11
   and `listening.mcq.multiple_selection_review_required` audit events. A
   multi-selection payload still receives zero credit; the existing admin audit
   log and privileged attempt review are the review surfaces.
+- The current playback slice adds auditable `audio_buffering_start`,
+  `audio_buffering_end`, and `audio_stalled` events for the Listening player,
+  edge-triggered per interruption, plus an explicit halted-playback notice that
+  tells candidates not to replay or seek while buffering.
 - Scoped frontend ESLint passed with zero errors (one existing hooks warning).
-  The focused Windows .NET test commands timed out after 124 seconds without
-  diagnostics. The Actions run `31495758432` built web/backup successfully but
-  API failed only in committed Speaking files, so migration/deploy were
-  skipped; the current integrity slice still needs its own Actions compile
-  gate after push.
+  The focused Windows .NET event-logging test timed out after 124 seconds
+  without diagnostics. The Actions run `31496950954` built web/backup
+  successfully but API failed only in committed Speaking files, so
+  migration/deploy were skipped; this playback slice still needs its own
+  Actions compile gate after push.
 - Governed Listening/Reading conformance hardening plus attempt-start score-table snapshots and explicit Reading Part A variant coverage is on `c4ed2e55b9b47aeedccb601b16c0b4580630ad48` on `main` and `origin/main`.
 - Build & Deploy run `31487883204` completed successfully for that exact SHA: web, API, backup, off-box migration SQL generation/application, and blue/green deployment all passed. The VPS reported live on blue with green retained for rollback.
 - Build & Deploy run `31453183628` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
@@ -57,8 +61,9 @@ Last updated: 2026-08-11
 
 ## Next step
 
-After the current integrity slice is shipped, continue the PDF audit at
-playback/interruption evidence. Owner action
+After the current playback/interruption slice is shipped, continue the PDF
+audit at remaining server-authoritative recovery, admin release, and
+authenticated acceptance evidence. Owner action
 remains: supply the approved score tables, normalization profile,
 practice/mock lock mode, rationale/evidence library, pathway thresholds, graph
 legal/style sign-off, timed-attempt concurrency target, and authenticated
