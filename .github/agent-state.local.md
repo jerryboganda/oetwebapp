@@ -2,6 +2,23 @@
 
 Last updated: 2026-08-11
 
+## Current LR implementation slice
+
+- The Listening v2 technical-readiness endpoint now forwards advisory device
+  labels, screen dimensions, and display scale into the existing service
+  command. The prior endpoint contract silently discarded those JSON fields,
+  so LR-16 telemetry was not actually persisted even though the service and
+  regression test already covered it.
+- `git diff --check` passed. The focused Windows
+  `ListeningV2AdvanceEndpointTests` run timed out after 124 seconds before
+  compiler/test output; do not claim local test success. Hosted CI must compile
+  and execute the regression before release evidence is updated.
+- Preserve the unrelated dirty Speaking work and untracked `.superpowers/`,
+  `pdf-policy-release/`, and `pdf-policy-release2/` paths. The owner-controlled
+  score tables, normalization profile, lock mode, rationale/evidence library,
+  thresholds/labels, graph approval, load target/evidence, and authenticated
+  browser/mobile acceptance remain unresolved.
+
 ## Latest exact release checkpoint
 
 - `428f9b27583d5ea336d92710cc6e4e7a56932ec5` is the implementation slice;

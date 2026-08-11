@@ -24,7 +24,7 @@ an owner-controlled value that must not be invented in code.
 | LR-13 | MCQ publication rejects zero/multiple correct options | `ListeningStructureService`, `ReadingStructureService`, existing authoring validation tests | Implemented; focused release test pending |
 | LR-14 | Key change uses controlled auditable re-mark | `AssessmentGovernanceEndpoints`, `ReadingGradingService.RegradeSubmittedAsync`, `ListeningGradingService.RegradeWithKeyAsync`; original/updated result snapshots retained on the job | Implemented; focused re-mark test pending |
 | LR-15 | Desktop/mobile timer, passage, and controls do not clip | Responsive result/player layouts and existing mobile/desktop route surfaces | Pending dedicated Playwright run |
-| LR-16 | Exam technical requirements are guidance only | `ListeningSessionService.RecordTechReadinessAsync` records Bluetooth, resolution, and scale signals without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Implemented; focused backend run stalled locally; owner style/copy review pending |
+| LR-16 | Exam technical requirements are guidance only | `ListeningV2Endpoints.TechReadinessRequest` now forwards device labels, screen dimensions, and display scale to `ListeningSessionService.RecordTechReadinessAsync`; the service records them without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Implemented; focused backend run stalled locally; hosted regression/deployed browser verification and owner style/copy review pending |
 
 ## Release gates that cannot be guessed
 
@@ -173,3 +173,14 @@ an owner-controlled value that must not be invented in code.
   API readiness, and web health; `/`, `/listening`, and `/reading` returned
   HTTP 307 to sign-in. Readiness at `2026-08-11T17:46:50Z` reported database,
   migrations, stuck_jobs, and storage all `ok`.
+
+## Latest endpoint contract fix
+
+- The Listening v2 technical-readiness endpoint previously deserialized only
+  `audioOk` and `durationMs`, silently dropping the already-supported advisory
+  device, resolution, and display-scale fields. The endpoint now forwards all
+  seven request fields into the existing service command; the strict launch
+  gate remains audio-only.
+- `git diff --check` passed. The focused Windows
+  `ListeningV2AdvanceEndpointTests` run timed out after 124 seconds before
+  producing compiler/test output; hosted CI is required for execution evidence.

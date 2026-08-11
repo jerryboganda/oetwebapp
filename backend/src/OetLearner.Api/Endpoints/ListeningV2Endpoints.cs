@@ -16,7 +16,14 @@ namespace OetLearner.Api.Endpoints;
 public static class ListeningV2Endpoints
 {
     public sealed record AdvanceRequest(string ToState, string? ConfirmToken);
-    public sealed record TechReadinessRequest(bool AudioOk, int DurationMs);
+    public sealed record TechReadinessRequest(
+        bool AudioOk,
+        int DurationMs,
+        string? AudioOutputDeviceLabel = null,
+        string? AudioInputDeviceLabel = null,
+        int? ScreenWidth = null,
+        int? ScreenHeight = null,
+        int? DisplayScalePercent = null);
     public sealed record AudioResumeRequest(int CuePointMs);
     public sealed record SubmitRequest(Dictionary<string, string?>? Answers);
     public sealed record GradeRequest();
@@ -96,7 +103,14 @@ public static class ListeningV2Endpoints
                 return Results.Ok(await session.RecordTechReadinessAsync(
                     attemptId,
                     http.UserId(),
-                    new TechReadinessCommand(req.AudioOk, req.DurationMs),
+                    new TechReadinessCommand(
+                        req.AudioOk,
+                        req.DurationMs,
+                        req.AudioOutputDeviceLabel,
+                        req.AudioInputDeviceLabel,
+                        req.ScreenWidth,
+                        req.ScreenHeight,
+                        req.DisplayScalePercent),
                     ct));
             }
             catch (ArgumentException) { return Results.BadRequest(); }
