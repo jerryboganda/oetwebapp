@@ -507,27 +507,6 @@ public sealed class ListeningLearnerService(
 
         var genericAttemptId = $"la-{Guid.NewGuid():N}";
 
-        // Listening test-credit allowance (legacy / JSON-backed paper path).
-        // Runs last, after every other gate above has passed (mutation
-        // allowed, entitlement, questions-authored, in-progress dedupe), so a
-        // credit is only ever consumed for an attempt that is actually about
-        // to be created. Mirrors ReadingAttemptService.StartInModeAsync's
-        // Gate 6 placement and StartRelationalAttemptAsync below — this is a
-        // separate entity-creation code path (JSON-backed papers resolve
-        // here instead of the relational ListeningAttempt path), so it needs
-        // its own gate to avoid being bypassed. The paper (sample) is the
-        // billing unit: the reference is per-(user, paper), so any part / mode
-        // and any re-attempt of the same paper share one credit. Skipped for
-        // mock sections (billObjectivePractice == false).
-        if (billObjectivePractice && aiPackageCreditService is not null)
-        {
-            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
-                userId, "listening",
-                CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
-                ct);
-            creditResult.EnsureDebited();
-        }
-
         var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
         var markingPolicy = await markingPolicyResolver.ResolveAsync("listening", "default", cancellationToken: ct);
         if (!markingPolicy.IsAvailable || markingPolicy.ErrorCode is not null)
@@ -542,6 +521,20 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
+
+        // Listening test-credit allowance (legacy / JSON-backed paper path).
+        // Keep this after every start gate, including the owner-controlled
+        // marking-policy and score-conversion gates, so an unavailable
+        // governance record can never consume a learner credit.
+        if (billObjectivePractice && aiPackageCreditService is not null)
+        {
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
+                userId, "listening",
+                CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
+                ct);
+            creditResult.EnsureDebited();
+        }
+
         var attempt = new Attempt
         {
             Id = genericAttemptId,
@@ -1173,24 +1166,6 @@ public sealed class ListeningLearnerService(
 
         var relationalAttemptId = $"lat-{Guid.NewGuid():N}";
 
-        // Listening test-credit allowance. Runs last, after every other gate
-        // has passed (entitlement, sound-check, audio-asset existence), so a
-        // credit is only ever consumed for an attempt that is actually about
-        // to be created. Applies uniformly to every mode reaching this
-        // relational path (Exam, Home, Practice, Paper, Diagnostic) — mirrors
-        // ReadingAttemptService.StartInModeAsync's Gate 6 placement. The paper
-        // (sample) is the billing unit: the reference is per-(user, paper), so
-        // any part / mode and any re-attempt of the same paper share one credit.
-        // Skipped for mock sections (billObjectivePractice == false).
-        if (billObjectivePractice && aiPackageCreditService is not null)
-        {
-            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
-                userId, "listening",
-                CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
-                ct);
-            creditResult.EnsureDebited();
-        }
-
         var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
         var markingPolicy = await markingPolicyResolver.ResolveAsync("listening", "default", cancellationToken: ct);
         if (!markingPolicy.IsAvailable || markingPolicy.ErrorCode is not null)
@@ -1205,6 +1180,19 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
+
+        // Listening test-credit allowance. Governance must be resolved before
+        // this debit: failed owner-controlled marking or conversion gates do
+        // not create an attempt and therefore must not consume a credit.
+        if (billObjectivePractice && aiPackageCreditService is not null)
+        {
+            var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
+                userId, "listening",
+                CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
+                ct);
+            creditResult.EnsureDebited();
+        }
+
         var questionVersionMap = await db.ListeningQuestions.AsNoTracking()
             .Where(q => q.PaperId == source.Id)
             .ToDictionaryAsync(q => q.Id, q => q.Version, StringComparer.Ordinal, ct);

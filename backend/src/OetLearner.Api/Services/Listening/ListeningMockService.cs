@@ -5,6 +5,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -99,19 +100,25 @@ public sealed class ListeningMockService : IListeningMockService
     private readonly IListeningSkillScoringService _scoring;
     private readonly TimeProvider _clock;
     private readonly ILogger<ListeningMockService> _logger;
+    private readonly IAssessmentScoreConversionService _scoreConversion;
+    private readonly IAssessmentMarkingPolicyService _markingPolicy;
 
     public ListeningMockService(
         LearnerDbContext db,
         IListeningLearnerGradingService grading,
         IListeningSkillScoringService scoring,
         TimeProvider clock,
-        ILogger<ListeningMockService> logger)
+        ILogger<ListeningMockService> logger,
+        IAssessmentScoreConversionService? scoreConversion = null,
+        IAssessmentMarkingPolicyService? markingPolicy = null)
     {
         _db = db;
         _grading = grading;
         _scoring = scoring;
         _clock = clock;
         _logger = logger;
+        _scoreConversion = scoreConversion ?? new AssessmentScoreConversionService(db);
+        _markingPolicy = markingPolicy ?? new AssessmentMarkingPolicyService(db);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -205,6 +212,25 @@ public sealed class ListeningMockService : IListeningMockService
 
         // ── 4. Create the session row ────────────────────────────────────
         var now = _clock.GetUtcNow();
+        var deadlineAt = now.AddSeconds(Math.Max(1, template.DurationSeconds));
+        var markingPolicyAtStart = await _markingPolicy.ResolveAsync(
+            "listening",
+            "default",
+            cancellationToken: ct);
+        if (!markingPolicyAtStart.IsAvailable || markingPolicyAtStart.ErrorCode is not null)
+        {
+            throw ApiException.Conflict(
+                "listening_marking_policy_unavailable",
+                "Listening mocks are unavailable until an owner-approved marking policy is effective.");
+        }
+        var scoreConversionAtStart = await _scoreConversion.ResolveAsync(
+            "listening",
+            rawScore: 0,
+            scopeKey: "default",
+            cancellationToken: ct);
+        var scoreConversionSnapshot = AssessmentScoreConversionSnapshot
+            .Capture(scoreConversionAtStart)
+            .Serialize();
         var session = new ListeningPracticeSession
         {
             Id = Guid.NewGuid(),
@@ -224,15 +250,27 @@ public sealed class ListeningMockService : IListeningMockService
                 templateTitle = template.Title,
                 durationSeconds = template.DurationSeconds,
                 difficulty = template.Difficulty,
+                deadlineAt,
+                scoreConversionSnapshotJson = scoreConversionSnapshot,
+                scoreConversionTableVersionKey = scoreConversionAtStart.TableVersionKey,
+                markingPolicyVersionId = markingPolicyAtStart.PolicyId,
+                markingPolicyVersionKey = markingPolicyAtStart.PolicyVersionKey,
+                markingPolicy = markingPolicyAtStart.Document,
             }),
         };
         _db.ListeningPracticeSessions.Add(session);
         await _db.SaveChangesAsync(ct);
+        if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
+        {
+            await _scoreConversion.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
+        }
+        await _markingPolicy.MarkUsedAsync(markingPolicyAtStart.PolicyId!, ct);
 
         return new StartMockResponse(
             SessionId: session.Id,
             TotalQuestions: questionIds.Count,
-            DurationSeconds: template.DurationSeconds);
+            DurationSeconds: template.DurationSeconds,
+            DeadlineAt: deadlineAt);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -262,9 +300,11 @@ public sealed class ListeningMockService : IListeningMockService
         }
 
         var now = _clock.GetUtcNow();
+        var metadata = ReadSessionMetadata(session);
+        var timedOut = GetSessionDeadlineAt(session, metadata) is { } deadlineAt && now >= deadlineAt;
 
         // ── 1. Upsert all submitted answers ──────────────────────────────
-        if (request.Answers is not null && request.Answers.Count > 0)
+        if (!timedOut && request.Answers is not null && request.Answers.Count > 0)
         {
             await UpsertAnswersAsync(userId, session.Id, request.Answers, now, ct);
         }
@@ -303,7 +343,9 @@ public sealed class ListeningMockService : IListeningMockService
         session.Score = grading.CorrectCount;
         session.TotalQuestions = MockTotalQuestions;
         session.DurationSeconds = ComputeDurationSeconds(
-            session.StartedAt, now, request.TotalDurationSeconds);
+            session.StartedAt,
+            now,
+            timedOut ? 0 : request.TotalDurationSeconds);
 
         await _db.SaveChangesAsync(ct);
 
@@ -315,7 +357,7 @@ public sealed class ListeningMockService : IListeningMockService
         // ── 6. Refresh readiness on the learner profile ─────────────────
         await RefreshReadinessAsync(userId, ct);
 
-        return await BuildResultResponseAsync(userId, session, grading, ct);
+        return await BuildResultResponseAsync(userId, session, grading, timedOut, ct);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -358,8 +400,12 @@ public sealed class ListeningMockService : IListeningMockService
         // Persisted attempts already carry IsCorrect flags from the submit
         // path, so we only roll up the session-level buckets here.
         var grading = await _grading.GradeSessionAsync(attempts, questionsById, ct);
+        var metadata = ReadSessionMetadata(session);
+        var timedOut = GetSessionDeadlineAt(session, metadata) is { } deadlineAt
+            && session.CompletedAt is { } completedAt
+            && completedAt >= deadlineAt;
 
-        return await BuildResultResponseAsync(userId, session, grading, ct);
+        return await BuildResultResponseAsync(userId, session, grading, timedOut, ct);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -428,12 +474,28 @@ public sealed class ListeningMockService : IListeningMockService
         string userId,
         ListeningPracticeSession session,
         DiagnosticGradingResult grading,
+        bool timedOut,
         CancellationToken ct)
     {
         // ── Scoring ─────────────────────────────────────────────────────
         var rawScore = ClampInt(grading.CorrectCount, 0, MockTotalQuestions);
-        int? scaledScore = null;
-        const string gradeLabel = "Scaled score unavailable";
+        var metadata = ReadSessionMetadata(session);
+        var conversion = string.IsNullOrWhiteSpace(metadata.ScoreConversionSnapshotJson)
+            ? AssessmentScoreConversionResult.Unavailable(
+                "listening",
+                "default",
+                rawScore,
+                "score_conversion_snapshot_missing")
+            : await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+                _scoreConversion,
+                "listening",
+                rawScore,
+                metadata.ScoreConversionSnapshotJson,
+                legacyTableId: null,
+                scopeKey: "default",
+                cancellationToken: ct);
+        int? scaledScore = conversion.ConvertedScore;
+        var gradeLabel = conversion.Grade ?? "Scaled score unavailable";
         int? predictedLow = null;
         int? predictedHigh = null;
 
@@ -482,8 +544,48 @@ public sealed class ListeningMockService : IListeningMockService
             AccentChart: accents,
             PredictedScoreLow: predictedLow,
             PredictedScoreHigh: predictedHigh,
-            SubmittedAt: session.CompletedAt ?? _clock.GetUtcNow());
+            SubmittedAt: session.CompletedAt ?? _clock.GetUtcNow(),
+            DeadlineAt: GetSessionDeadlineAt(session, metadata),
+            TimedOut: timedOut,
+            ScoreConversionTableVersionKey: conversion.TableVersionKey,
+            ScoreConversionErrorCode: conversion.ErrorCode,
+            MarkingPolicyVersionKey: metadata.MarkingPolicyVersionKey);
     }
+
+    private static MockSessionMetadata ReadSessionMetadata(ListeningPracticeSession session)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<MockSessionMetadata>(
+                session.MetadataJson,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                ?? new MockSessionMetadata();
+        }
+        catch (JsonException)
+        {
+            return new MockSessionMetadata();
+        }
+    }
+
+    private static DateTimeOffset? GetSessionDeadlineAt(
+        ListeningPracticeSession session,
+        MockSessionMetadata metadata)
+    {
+        if (metadata.DeadlineAt is { } deadlineAt)
+            return deadlineAt;
+        if (metadata.DurationSeconds is int durationSeconds && durationSeconds > 0)
+            return session.StartedAt.AddSeconds(durationSeconds);
+        return null;
+    }
+
+    private sealed record MockSessionMetadata(
+        DateTimeOffset? DeadlineAt = null,
+        string? ScoreConversionSnapshotJson = null,
+        int? DurationSeconds = null,
+        string? ScoreConversionTableVersionKey = null,
+        string? MarkingPolicyVersionId = null,
+        string? MarkingPolicyVersionKey = null,
+        AssessmentMarkingPolicyDocument? MarkingPolicy = null);
 
     /// <summary>Recompute the learner's readiness score on
     /// LearnerListeningProfile based on the latest skill + accent state. This

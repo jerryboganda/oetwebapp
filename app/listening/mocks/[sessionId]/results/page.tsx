@@ -61,6 +61,9 @@ export default function ListeningMockResultsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
+      <p className="rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted dark:bg-slate-900/50">
+        AI Practice Score — not an official OET result.
+      </p>
       {(() => {
         const hasConversion = result.scaledScore !== null;
   const gradeTone: 'success' | 'warning' | 'danger' | 'info' = !hasConversion ? 'info' : result.gradeLabel === 'A' || result.gradeLabel === 'B' ? 'success' : result.gradeLabel === 'C' ? 'warning' : 'danger';

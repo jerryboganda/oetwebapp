@@ -288,7 +288,8 @@ public sealed record MockTemplateDto(
 public sealed record StartMockResponse(
     Guid SessionId,
     int TotalQuestions,
-    int DurationSeconds);
+    int DurationSeconds,
+    DateTimeOffset? DeadlineAt = null);
 
 /// <summary>Bulk submission of all 42 mock answers (§9.3).</summary>
 public sealed record MockSubmitRequest(
@@ -305,7 +306,12 @@ public sealed record MockResultResponse(
     IReadOnlyList<AccentProgressDto> AccentChart,
     int? PredictedScoreLow,
     int? PredictedScoreHigh,
-    DateTimeOffset SubmittedAt);
+    DateTimeOffset SubmittedAt,
+    DateTimeOffset? DeadlineAt = null,
+    bool TimedOut = false,
+    string? ScoreConversionTableVersionKey = null,
+    string? ScoreConversionErrorCode = null,
+    string? MarkingPolicyVersionKey = null);
 
 /// <summary>Hero block of the analytics dashboard (§19.2).</summary>
 public sealed record ListeningDashboardDto(
@@ -335,4 +341,3 @@ public sealed record CalendarHeatmapDto(IReadOnlyList<CalendarDay> Days);
 
 /// <summary>One day of question-attempt activity.</summary>
 public sealed record CalendarDay(DateOnly Date, int QuestionsAttempted);
-
