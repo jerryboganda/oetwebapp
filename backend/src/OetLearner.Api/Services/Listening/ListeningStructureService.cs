@@ -926,6 +926,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var correctAnswer = ReadString(question, "correctAnswer")?.Trim();
         if (!string.Equals(type?.Trim(), "multiple_choice_3", StringComparison.OrdinalIgnoreCase)
             || options.Count != 3
+            || options.Select(option => option.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != options.Count
             || string.IsNullOrWhiteSpace(correctAnswer))
         {
             return false;
@@ -961,6 +962,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 || string.Equals(option.Text.Trim(), normalizedCorrectAnswer, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         return correctOptions == 1
+            && options.All(option => !string.IsNullOrWhiteSpace(option.OptionKey))
+            && options.Select(option => option.OptionKey.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() == options.Count
+            && options.All(option => !string.IsNullOrWhiteSpace(option.Text))
+            && options.Select(option => option.Text.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() == options.Count
             && matchingOptions.Length == 1
             && matchingOptions[0].IsCorrect;
     }

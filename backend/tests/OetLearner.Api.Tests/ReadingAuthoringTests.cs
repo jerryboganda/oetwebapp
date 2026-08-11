@@ -1627,6 +1627,18 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public void ValidatePayload_rejects_duplicate_mcq_option_text()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.MultipleChoice3,
+                "[\"same\",\"same\",\"different\"]",
+                "\"A\"", null));
+
+        Assert.Contains("unique", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ValidatePayload_rejects_unsafe_mcq_option_object_fields()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>

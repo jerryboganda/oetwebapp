@@ -1461,6 +1461,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                     if (type == ReadingQuestionType.MultipleChoiceFlexible && (optionCount < 2 || optionCount > McqLetters.Length))
                         throw new InvalidOperationException($"Flexible MCQ must have between 2 and {McqLetters.Length} options.");
                     EnsureLearnerSafeMcqOptions(options);
+                    EnsureUniqueMcqOptions(options);
                     if (correct.ValueKind != JsonValueKind.String)
                         throw new InvalidOperationException("MCQ CorrectAnswerJson must be a single string letter.");
                     var ans = correct.GetString() ?? string.Empty;
@@ -1576,6 +1577,53 @@ public sealed class ReadingStructureService : IReadingStructureService
                     throw new InvalidOperationException("MCQ option objects may only contain string value, label, text, or title fields.");
                 }
             }
+        }
+    }
+
+    private static void EnsureUniqueMcqOptions(JsonElement options)
+    {
+        var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var option in options.EnumerateArray())
+        {
+            if (option.ValueKind == JsonValueKind.String)
+            {
+                var label = option.GetString()?.Trim();
+                if (string.IsNullOrWhiteSpace(label))
+                    throw new InvalidOperationException("MCQ options must be non-empty and unique.");
+                if (!labels.Add(label))
+                    throw new InvalidOperationException("MCQ options must be non-empty and unique.");
+                continue;
+            }
+
+            string? label = null;
+            string? value = null;
+            string? id = null;
+            foreach (var property in option.EnumerateObject())
+            {
+                if (property.Value.ValueKind != JsonValueKind.String) continue;
+                var text = property.Value.GetString()?.Trim();
+                if (property.Name.Equals("label", StringComparison.OrdinalIgnoreCase)
+                    || property.Name.Equals("text", StringComparison.OrdinalIgnoreCase)
+                    || property.Name.Equals("title", StringComparison.OrdinalIgnoreCase))
+                    label ??= text;
+                else if (property.Name.Equals("value", StringComparison.OrdinalIgnoreCase)
+                    || property.Name.Equals("letter", StringComparison.OrdinalIgnoreCase))
+                    value ??= text;
+                else if (property.Name.Equals("id", StringComparison.OrdinalIgnoreCase))
+                    id ??= text;
+            }
+
+            label ??= value;
+            if (string.IsNullOrWhiteSpace(label))
+                throw new InvalidOperationException("MCQ options must be non-empty and unique.");
+            if (!labels.Add(label))
+                throw new InvalidOperationException("MCQ options must be non-empty and unique.");
+            if (!string.IsNullOrWhiteSpace(value) && !values.Add(value))
+                throw new InvalidOperationException("MCQ option values must be unique.");
+            if (!string.IsNullOrWhiteSpace(id) && !values.Add($"id:{id}"))
+                throw new InvalidOperationException("MCQ option IDs must be unique.");
         }
     }
 

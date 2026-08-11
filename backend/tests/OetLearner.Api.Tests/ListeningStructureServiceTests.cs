@@ -481,6 +481,24 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
+    public async Task JsonMcq_WithDuplicateDistractorText_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var json = BuildQuestionsJson(24, 6, 12);
+        using var doc = JsonDocument.Parse(json);
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        questions[FirstPartBIndex]["options"] = new[] { "A", "A", "C" };
+        questions[FirstPartBIndex]["correctAnswer"] = "C";
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = questions }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_mcq_shape" && i.Severity == "error");
+    }
+
+    [Fact]
     public async Task RelationalMcq_WithCorrectAnswerMismatch_BlocksPublish()
     {
         var (db, svc) = Build();
@@ -529,6 +547,26 @@ public class ListeningStructureServiceTests
             .OrderBy(option => option.DisplayOrder)
             .ToList();
         options[1].IsCorrect = true;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_mcq_shape" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task RelationalMcq_WithDuplicateDistractorText_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
+        var options = db.ChangeTracker.Entries<ListeningQuestionOption>()
+            .Where(entry => entry.Entity.ListeningQuestionId == question.Id)
+            .Select(entry => entry.Entity)
+            .OrderBy(option => option.DisplayOrder)
+            .ToList();
+        options[1].Text = options[2].Text;
         await db.SaveChangesAsync();
 
         var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);

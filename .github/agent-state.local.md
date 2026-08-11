@@ -877,6 +877,10 @@ dirty work in the main checkout.
 - Added `ListeningReadingExplanationFailureTests` covering deterministic Reading
   and Listening fallbacks when the grounded AI gateway throws. No score or
   result path depends on AI output.
+- PDF Section 12 also required duplicate MCQ options to be rejected. Reading
+  now rejects blank/duplicate visible labels and duplicate option values/IDs;
+  Listening JSON and relational validators reject blank/duplicate keys and
+  option text. Focused execution remains pending.
 - Local .NET execution previously stalled after 124 seconds; per the current
   owner instruction, do not start or wait on long CI/CD or full validation runs.
 - Preserve `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and
