@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const {
@@ -148,11 +148,10 @@ const aiPackageRow = {
 };
 
 async function confirmDestructiveAction(phrase: string) {
-  const user = userEvent.setup();
   expect(screen.getByTestId('billing-confirm-action')).toBeDisabled();
-  await user.type(screen.getByTestId('billing-confirm-input'), phrase);
+  fireEvent.change(screen.getByTestId('billing-confirm-input'), { target: { value: phrase } });
   await waitFor(() => expect(screen.getByTestId('billing-confirm-action')).toBeEnabled());
-  await user.click(screen.getByTestId('billing-confirm-action'));
+  fireEvent.click(screen.getByTestId('billing-confirm-action'));
 }
 
 describe('AdminPricingHubPage — destructive pricing controls', () => {
