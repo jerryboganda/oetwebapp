@@ -36,6 +36,19 @@ an owner-controlled value that must not be invented in code.
 
 ## Deployment evidence
 
+- Commit `c4ed2e55b9b47aeedccb601b16c0b4580630ad48` is on `main` and
+  `origin/main`.
+- Actions run `31487883204` completed successfully for that exact SHA,
+  including web/API/backup image builds, off-box migration SQL generation and
+  production application, and blue/green deployment. The VPS reported
+  `AUTO_DEPLOY_DONE: live on blue` with the previous green slot retained for
+  rollback.
+- Post-deploy checks at `2026-08-11T11:52:26Z` returned HTTP 200 for
+  `https://api.oetwithdrhesham.co.uk/health/live` and `/health/ready`.
+  Readiness reported database, migrations, stuck jobs, and storage all `ok`.
+  The app root, `/listening`, and `/reading` returned HTTP 307 redirects to
+  their sign-in routes on `app.oetwithdrhesham.co.uk`.
+
 - Commit `7c677c486044be9dc9955d1183e5aeb5cfcfec08` is on `main` and
   `origin/main`.
 - Actions run `31453183628` completed successfully for that exact SHA,

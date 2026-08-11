@@ -4,14 +4,15 @@ Last updated: 2026-08-11
 
 ## Current checkpoint
 
-- Governed Listening/Reading conformance hardening is on `7c677c486044be9dc9955d1183e5aeb5cfcfec08`; the current uncommitted follow-up adds attempt-start score-table snapshots and explicit Reading Part A variant coverage.
+- Governed Listening/Reading conformance hardening plus attempt-start score-table snapshots and explicit Reading Part A variant coverage is on `c4ed2e55b9b47aeedccb601b16c0b4580630ad48` on `main` and `origin/main`.
+- Build & Deploy run `31487883204` completed successfully for that exact SHA: web, API, backup, off-box migration SQL generation/application, and blue/green deployment all passed. The VPS reported live on blue with green retained for rollback.
 - Build & Deploy run `31453183628` completed successfully for the exact SHA: web, API, backup, production migration, and blue/green deploy all passed.
 - Public post-deploy checks returned HTTP 200 for API live/readiness; readiness reported database, migrations, stuck jobs, and storage all `ok`. The app root, `/listening`, and `/reading` returned HTTP 307 redirects to their sign-in routes on `app.oetwithdrhesham.co.uk`.
 - Fixed policy locking to occur only after durable attempt creation; governed attempts now fail closed on missing/malformed marking-policy snapshots; learner, mock, analytics, tutor, expert, and background LR projections no longer synthesize scaled scores from raw accuracy. Reading Part A now consumes only explicitly authored variants under the immutable attempt policy, and full/legacy Listening and Reading attempts pin score-table selection at start.
 
 ## Validation and remaining boundary
 
-- `git diff --check` passed. The focused filtered backend test and API build both stalled on the Windows host beyond their time limits without compiler/test diagnostics, after which only the orphaned processes created by those checks were stopped. The new migration/model references, forbidden LR formula-path scan, and explicit staging scope remain clean; GitHub Actions is the compile, migration, and image-deploy gate.
+- `git diff --check` passed. The focused filtered backend test and API build both stalled on the Windows host beyond their time limits without compiler/test diagnostics, after which only the orphaned processes created by those checks were stopped. The new migration/model references, forbidden LR formula-path scan, and explicit staging scope remain clean. GitHub Actions run `31487883204` is the authoritative compile, migration, and image-deploy gate; public live/readiness checks returned 200 and readiness was fully `ok`.
 - Owner-controlled release data remains required: complete approved Listening and Reading score tables, normalization profile, practice/mock lock mode, approved rationale/evidence content, pathway/pass thresholds, graph legal/style sign-off, and peak timed-attempt concurrency target.
 - LR-05 now has explicit Listening and Reading selection-preservation assertions. The new LR-03/LR-04/LR-08 focused tests are present but await CI execution. Acceptance evidence still needs authenticated end-to-end/mobile evidence. Do not claim complete PDF acceptance until that boundary and owner approvals are supplied.
 - Preserve untracked `.codex/config.toml`, `.superpowers/`, `pdf-policy-release/`, and `pdf-policy-release2/`; never stage them.
@@ -43,10 +44,11 @@ Last updated: 2026-08-11
 
 ## Next step
 
-Stage only the scoped Listening/Reading files, commit and push `main`, then
-verify the v1.1 build/migration/deploy workflow, production health, migration
-presence, and deployed SHA. Preserve unrelated dirty work and do not approve a
-candidate release gate without owner calibration evidence.
+Owner action remains: supply the approved score tables, normalization profile,
+practice/mock lock mode, rationale/evidence library, pathway thresholds, graph
+legal/style sign-off, timed-attempt concurrency target, and authenticated
+browser/mobile evidence. Preserve unrelated Speaking changes and do not
+approve a candidate release gate without those owner controls.
 
 # Current Task - OET Speaking booking workflow PDF implementation
 
