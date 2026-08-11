@@ -148,10 +148,11 @@ const aiPackageRow = {
 };
 
 async function confirmDestructiveAction(phrase: string) {
+  const user = userEvent.setup();
   expect(screen.getByTestId('billing-confirm-action')).toBeDisabled();
-  await userEvent.type(screen.getByTestId('billing-confirm-input'), phrase);
+  await user.type(screen.getByTestId('billing-confirm-input'), phrase);
   await waitFor(() => expect(screen.getByTestId('billing-confirm-action')).toBeEnabled());
-  await userEvent.click(screen.getByTestId('billing-confirm-action'));
+  await user.click(screen.getByTestId('billing-confirm-action'));
 }
 
 describe('AdminPricingHubPage — destructive pricing controls', () => {
