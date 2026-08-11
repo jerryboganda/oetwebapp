@@ -149,3 +149,15 @@ an owner-controlled value that must not be invented in code.
 - The current implementation is therefore deployed and fail-closed, but the
   PDF acceptance is not fully closed until owner-controlled release inputs and
   authenticated desktop/mobile acceptance evidence are supplied.
+
+## Documentation-only follow-up deployment
+
+- Documentation commit `c88efccf33fccdac8ec9a76d4c06fe9e8579d8e7` is on
+  `main` and `origin/main`. Build & Deploy run `31517340245` completed
+  successfully for that exact SHA; image builds, off-box migration
+  generation/application, and blue/green deployment passed. The VPS reported
+  `AUTO_DEPLOY_DONE: live on blue (previous slot green kept for rollback)`.
+- Independent checks at `2026-08-11T17:36:07Z` returned HTTP 200 for API live,
+  API readiness, and web health; `/`, `/listening`, and `/reading` returned
+  HTTP 307 to sign-in. Readiness at `2026-08-11T17:36:11Z` reported database,
+  migrations, stuck_jobs, and storage all `ok`.

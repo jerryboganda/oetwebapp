@@ -4,14 +4,15 @@ Last updated: 2026-08-11
 
 ## Latest exact release checkpoint
 
-- `428f9b27583d5ea336d92710cc6e4e7a56932ec5` is on `main` and
-  `origin/main`; Build & Deploy run `31516273755` completed successfully,
-  including image builds, off-box migration generation/application, and
-  blue/green deployment. The VPS reported live on green with blue retained
-  for rollback.
-- Independent checks at `2026-08-11T17:22:41Z` returned 200 for API live,
+- `428f9b27583d5ea336d92710cc6e4e7a56932ec5` is the latest implementation
+  slice, and documentation commit `c88efccf33fccdac8ec9a76d4c06fe9e8579d8e7`
+  is on `main` and `origin/main`. Build & Deploy run `31517340245` completed
+  successfully for the exact current SHA, including image builds, off-box
+  migration generation/application, and blue/green deployment. The VPS
+  reported live on blue with green retained for rollback.
+- Independent checks at `2026-08-11T17:36:07Z` returned 200 for API live,
   API readiness, and web health, and 307 for `/`, `/listening`, and `/reading`;
-  readiness at `17:22:46Z` reported database, migrations, stuck_jobs, and
+  readiness at `17:36:11Z` reported database, migrations, stuck_jobs, and
   storage `ok`.
 - Widened LR gap-closure run `31516282588`: frontend type-check/Vitest/lint
   passed; backend ran 293 tests with 211 passed and 82 failed. Failures are
