@@ -19,10 +19,10 @@ namespace OetLearner.Api.Services.Reading;
 // Stages (mutually exclusive — first match wins):
 //   "not_started" — no submitted Reading attempts.
 //   "diagnostic"  — < 1 submitted Exam attempt → take a full diagnostic.
-//   "drilling"    — open error-bank ≥ 5 OR best scaled < 300 → drill weakest skill.
-//   "mini_tests"  — error-bank cleared + best scaled ∈ [300, 350) → mini-tests.
-//   "mock_ready"  — best scaled ≥ 350 + < 1 reading-mock attempt → take a mock.
-//   "exam_ready"  — best mock-section scaled ≥ 350 (last 3 attempts) → ready to book.
+//   "drilling"    — open error-bank ≥ 5 OR approved converted score < 300 → drill weakest skill.
+//   "mini_tests"  — no owner-authored exam pass result yet → mini-tests.
+//   "mock_ready"  — owner-authored exam pass + < 1 reading-mock attempt → take a mock.
+//   "exam_ready"  — owner-authored converted Reading mock pass (last 3 attempts) → ready to book.
 //
 // Recommended action shape: a structured ReadingPathwayAction the FE can pass
 // straight back to the existing practice-start endpoints.
@@ -70,7 +70,13 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 && a.Mode == ReadingAttemptMode.Exam
                 && a.Status == ReadingAttemptStatus.Submitted)
             .OrderByDescending(a => a.SubmittedAt)
-            .Select(a => new { a.ScaledScore, a.SubmittedAt })
+            .Select(a => new
+            {
+                a.ScaledScore,
+                a.SubmittedAt,
+                a.ScoreConversionTableVersionKey,
+                a.ScoreConversionPassed,
+            })
             .ToListAsync(ct);
 
         var practiceAttempts = await db.ReadingAttempts
@@ -79,11 +85,15 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 && a.Mode != ReadingAttemptMode.Exam
                 && a.Status == ReadingAttemptStatus.Submitted, ct);
 
-        var bestScaled = examAttempts
+        var approvedExamAttempts = examAttempts
+            .Where(a => a.ScaledScore.HasValue
+                && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey))
+            .ToList();
+        var bestScaled = approvedExamAttempts
             .Select(a => a.ScaledScore)
-            .Where(s => s.HasValue)
             .DefaultIfEmpty(null)
             .Max();
+        var hasOwnerPassingExam = approvedExamAttempts.Any(a => a.ScoreConversionPassed == true);
 
         // ── Open error bank + weakest skill tag ───────────────────────────
         var openEntries = await db.ReadingErrorBankEntries
@@ -124,21 +134,36 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
             .Select(section => new
             {
                 section.MockAttemptId,
-                section.ScaledScore,
+                section.ContentAttemptId,
             })
             .ToListAsync(ct);
+
+        var mockContentAttemptIds = readingMockEvidence
+            .Select(section => section.ContentAttemptId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var approvedMockAttemptIds = mockContentAttemptIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await db.ReadingAttempts.AsNoTracking()
+                .Where(attempt => mockContentAttemptIds.Contains(attempt.Id)
+                    && attempt.Status == ReadingAttemptStatus.Submitted
+                    && attempt.ScaledScore.HasValue
+                    && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+                    && attempt.ScoreConversionPassed == true)
+                .Select(attempt => attempt.Id)
+                .ToListAsync(ct))
+                .ToHashSet(StringComparer.Ordinal);
 
         var readingMockCount = readingMockEvidence
             .Select(section => section.MockAttemptId)
             .Distinct()
             .Count();
-        var bestRecentMockScaled = readingMockEvidence
-            .Where(section => section.ScaledScore.HasValue)
+        var hasPassingReadingMock = readingMockEvidence
             .Take(3)
-            .Select(section => section.ScaledScore!.Value)
-            .DefaultIfEmpty()
-            .Max();
-        var hasPassingReadingMock = bestRecentMockScaled >= OetScoring.ScaledPassGradeB;
+            .Any(section => section.ContentAttemptId is not null
+                && approvedMockAttemptIds.Contains(section.ContentAttemptId));
 
         // ── A published paper to anchor the recommended action ────────────
         var anchorPaperId = await db.ContentPapers
@@ -185,7 +210,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 PaperId: anchorPaperId,
                 Route: "/reading/practice");
         }
-        else if (bestScaled is int bs2 && bs2 < 350)
+        else if (!hasOwnerPassingExam)
         {
             stage = "mini_tests";
             nextAction = new ReadingPathwayAction(
@@ -246,8 +271,8 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
             new("error_bank_cleared", "Clear error bank",
                 openCount == 0 && (examAttempts.Count > 0 || practiceAttempts > 0),
                 Math.Max(0, 10 - openCount), 10),
-            new("scaled_350", $"Reach {OetScoring.ScaledPassGradeB} scaled in an Exam attempt",
-                bestScaled is int s && OetScoring.IsListeningReadingPassByScaled(s), bestScaled, OetScoring.ScaledPassGradeB),
+            new("scaled_350", "Receive an owner-approved Reading pass",
+                hasOwnerPassingExam, hasOwnerPassingExam ? 1 : 0, 1),
             new("first_mock_pass", "Pass your first Reading mock",
                 hasPassingReadingMock, hasPassingReadingMock ? 1 : 0, 1),
         };

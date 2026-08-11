@@ -64,6 +64,11 @@ an owner-controlled value that must not be invented in code.
   aggregates and pass percentages are `null`, and the learner action plan/UI
   state that conversion is unavailable instead of inferring the shared 350
   threshold.
+- Listening V2 and legacy Listening/Reading pathway projections now ignore
+  scaled values without an owner conversion-table version. Full/exam pathway
+  readiness requires the persisted owner `ScoreConversionPassed` flag, and
+  pathway milestones use owner-approved conversion evidence rather than a
+  formula or numeric pass fallback. Focused pathway execution remains pending.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation

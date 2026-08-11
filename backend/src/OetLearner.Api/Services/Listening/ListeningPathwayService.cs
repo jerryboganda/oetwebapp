@@ -19,18 +19,17 @@ namespace OetLearner.Api.Services.Listening;
 // migrated.
 //
 //   • Completed (`AttemptState.Completed`) Listening attempts.
-//   • Best scaled score across those attempts, read from
-//     `Evaluation.CriterionScoresJson[0].scaledScore` (matches
-//     `ListeningLearnerService.ResolveScoreFromEvaluation`).
+//   • Best scaled score across those attempts, read only from the latest
+//     evaluation/attempt carrying an owner conversion-table version.
 //   • MockAttempts where SubtestCode = "listening" or MockType = "full".
 //
 // Stages (first match wins):
 //   "not_started" — 0 completed Listening attempts.
 //   "diagnostic"  — exactly 1 completed attempt and no scaled score yet.
-//   "drilling"    — best scaled < 300.
-//   "mini_tests"  — best scaled in [300, 350).
-//   "mock_ready"  — best scaled ≥ 350 + 0 listening mocks submitted.
-//   "exam_ready"  — ≥ 1 listening (or full) mock submitted with scaled ≥ 350.
+//   "drilling"    — approved converted score < 300.
+//   "mini_tests"  — no owner-authored pass result yet.
+//   "mock_ready"  — owner-authored pass + 0 listening mocks submitted.
+//   "exam_ready"  — owner-authored pass + ≥ 1 listening (or full) mock submitted.
 //
 // When Phase 2 lands (relational entities + skill-tagged questions + error
 // bank), the drilling branch can switch to a skill-targeted drill code the
@@ -85,7 +84,14 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             .Where(a => a.UserId == userId && a.Status == ListeningAttemptStatus.Submitted)
             .OrderByDescending(a => a.SubmittedAt)
             .Take(50)
-            .Select(a => new { a.Id, a.SubmittedAt, a.ScaledScore })
+            .Select(a => new
+            {
+                a.Id,
+                a.SubmittedAt,
+                a.ScaledScore,
+                a.ScoreConversionTableVersionKey,
+                a.ScoreConversionPassed,
+            })
             .ToListAsync(ct);
 
         // ── Best scaled across those attempts via Evaluation.CriterionScoresJson ──
@@ -95,12 +101,22 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             var attemptIds = completedAttempts.Select(a => a.Id).ToList();
             var evaluations = await db.Evaluations.AsNoTracking()
                 .Where(e => attemptIds.Contains(e.AttemptId))
-                .Select(e => e.CriterionScoresJson)
+                .Select(e => new
+                {
+                    e.AttemptId,
+                    e.GeneratedAt,
+                    e.CriterionScoresJson,
+                    e.ScoreConversionTableVersionKey,
+                    e.ScoreConversionPassed,
+                })
                 .ToListAsync(ct);
 
-            foreach (var json in evaluations)
+            foreach (var evaluation in evaluations
+                .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
+                .Select(group => group.OrderByDescending(e => e.GeneratedAt).First()))
             {
-                var scaled = TryReadScaled(json);
+                if (string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)) continue;
+                var scaled = TryReadScaled(evaluation.CriterionScoresJson);
                 if (scaled.HasValue && (bestScaled is null || scaled.Value > bestScaled.Value))
                     bestScaled = scaled.Value;
             }
@@ -108,9 +124,13 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
 
         foreach (var relationalAttempt in relationalAttempts)
         {
-            if (relationalAttempt.ScaledScore is int scaled && (bestScaled is null || scaled > bestScaled.Value))
+            if (!string.IsNullOrWhiteSpace(relationalAttempt.ScoreConversionTableVersionKey)
+                && relationalAttempt.ScaledScore is int scaled
+                && (bestScaled is null || scaled > bestScaled.Value))
                 bestScaled = scaled;
         }
+
+        var hasOwnerPassingScore = await HasOwnerPassingListeningScoreAsync(userId, ct);
 
         var submittedAttemptCount = completedAttempts.Count + relationalAttempts.Count;
 
@@ -164,7 +184,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 PaperId: anchorPaperId,
                 Route: "/listening");
         }
-        else if (bestScaled is int bs2 && bs2 < OetScoring.ScaledPassGradeB)
+        else if (!hasOwnerPassingScore)
         {
             stage = "mini_tests";
             nextAction = new ListeningPathwayAction(
@@ -212,10 +232,10 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 submittedAttemptCount >= 1, submittedAttemptCount, 1),
             new("practice_streak_5", "Complete 5 Listening attempts",
                 submittedAttemptCount >= 5, Math.Min(submittedAttemptCount, 5), 5),
-            new("scaled_300", "Reach 300 scaled",
+            new("scaled_300", "Reach 300 on an approved converted score",
                 bestScaled is int s1 && s1 >= 300, bestScaled, 300),
-            new("scaled_350", "Reach 350 scaled (Grade B)",
-                bestScaled is int s2 && s2 >= OetScoring.ScaledPassGradeB, bestScaled, OetScoring.ScaledPassGradeB),
+            new("scaled_350", "Receive an owner-approved Listening pass",
+                hasOwnerPassingScore, hasOwnerPassingScore ? 1 : 0, 1),
             new("first_mock_pass", "Pass a Listening mock",
                 listeningMockCount >= 1, listeningMockCount, 1),
         };
@@ -228,6 +248,38 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             SubmittedListeningMockAttempts: listeningMockCount,
             NextAction: nextAction,
             Milestones: milestones);
+    }
+
+    private async Task<bool> HasOwnerPassingListeningScoreAsync(string userId, CancellationToken ct)
+    {
+        var legacyAttemptIds = await db.Attempts.AsNoTracking()
+            .Where(a => a.UserId == userId
+                && a.SubtestCode == Subtest
+                && a.State == AttemptState.Completed)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+        if (legacyAttemptIds.Count > 0)
+        {
+            var legacyEvaluations = await db.Evaluations.AsNoTracking()
+                .Where(e => legacyAttemptIds.Contains(e.AttemptId))
+                .Select(e => new { e.AttemptId, e.GeneratedAt, e.ScoreConversionTableVersionKey, e.ScoreConversionPassed, e.ScaledScore })
+                .ToListAsync(ct);
+            if (legacyEvaluations
+                .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
+                .Select(group => group.OrderByDescending(e => e.GeneratedAt).First())
+                .Any(e => !string.IsNullOrWhiteSpace(e.ScoreConversionTableVersionKey)
+                    && e.ScaledScore.HasValue
+                    && e.ScoreConversionPassed == true))
+            {
+                return true;
+            }
+        }
+
+        return await db.ListeningAttempts.AsNoTracking().AnyAsync(a => a.UserId == userId
+            && a.Status == ListeningAttemptStatus.Submitted
+            && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
+            && a.ScaledScore.HasValue
+            && a.ScoreConversionPassed == true, ct);
     }
 
     /// <summary>

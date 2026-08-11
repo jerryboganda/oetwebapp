@@ -75,6 +75,31 @@ public class ListeningPathwayProgressServiceTests
     }
 
     [Fact]
+    public async Task RecomputeAsync_ignores_scaled_score_without_owner_conversion()
+    {
+        await using var db = NewDb();
+        var attempt = NewAttempt(
+            id: "unapproved-score",
+            userId: "learner-unapproved-score",
+            mode: ListeningAttemptMode.Learning,
+            scaledScore: 500,
+            submittedAt: DateTimeOffset.UtcNow);
+        attempt.ScoreConversionTableVersionKey = null;
+        attempt.ScoreConversionPassed = null;
+        db.ListeningAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        await new ListeningPathwayProgressService(db, TimeProvider.System)
+            .RecomputeAsync("learner-unapproved-score", CancellationToken.None);
+
+        var foundationPartA = await db.ListeningPathwayProgress.SingleAsync(
+            row => row.UserId == "learner-unapproved-score" && row.StageCode == "foundation_partA");
+        Assert.Equal(ListeningPathwayStageStatus.Unlocked, foundationPartA.Status);
+        Assert.Null(foundationPartA.AttemptId);
+        Assert.Null(foundationPartA.ScaledScore);
+    }
+
+    [Fact]
     public async Task RecomputeAsync_completes_diagnostic_and_unlocks_next_stage()
     {
         await using var db = NewDb();
@@ -416,6 +441,8 @@ public class ListeningPathwayProgressServiceTests
             RawScore = null,
             ScaledScore = scaledScore,
             MaxRawScore = OetLearner.Api.Services.OetScoring.ListeningReadingRawMax,
+            ScoreConversionTableVersionKey = scaledScore.HasValue ? "test-listening-v1" : null,
+            ScoreConversionPassed = scaledScore.HasValue && scaledScore.Value >= 350,
             ScopeJson = scopeJson,
         };
 }

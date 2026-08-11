@@ -12,6 +12,10 @@ Last updated: 2026-08-12
 - Listening learner/admin analytics types and UI now render owner-table
   passing/not-passing/unavailable states. Focused analytics fixtures preserve
   the approved conversion metadata boundary.
+- Listening V2 pathway recomputation and legacy Listening/Reading pathway
+  projections now ignore scaled values lacking an owner conversion-table
+  version. Full/exam readiness requires `ScoreConversionPassed == true`; an
+  explicit regression fixture protects the unapproved-score path.
 - No long-running validation, CI/CD, deployment, or push was run by request.
   Remaining evidence boundary is compile/test execution plus owner-provided
   score tables and authenticated production acceptance.

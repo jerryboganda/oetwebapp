@@ -74,7 +74,17 @@ public sealed class ListeningPathwayProgressService
         // Pull the small set of completed Listening attempts in one round trip.
         var submitted = await _db.ListeningAttempts
             .Where(a => a.UserId == userId && a.Status == ListeningAttemptStatus.Submitted)
-            .Select(a => new { a.Id, a.Mode, a.PaperId, a.ScopeJson, a.ScaledScore, a.SubmittedAt })
+            .Select(a => new
+            {
+                a.Id,
+                a.Mode,
+                a.PaperId,
+                a.ScopeJson,
+                a.ScaledScore,
+                a.ScoreConversionTableVersionKey,
+                a.ScoreConversionPassed,
+                a.SubmittedAt,
+            })
             .ToListAsync(ct);
 
         var existing = await _db.ListeningPathwayProgress
@@ -112,7 +122,11 @@ public sealed class ListeningPathwayProgressService
 
             // Find the qualifying attempt for this stage.
             var qualifying = submitted
-                .Where(a => !consumedAttemptIds.Contains(a.Id) && StageMatches(stage, a.Mode, a.ScopeJson))
+                .Where(a => !consumedAttemptIds.Contains(a.Id)
+                    && StageMatches(stage, a.Mode, a.ScopeJson)
+                    && (stage == "diagnostic"
+                        || (a.ScaledScore.HasValue
+                            && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey))))
                 .OrderByDescending(a => a.ScaledScore ?? 0)
                 .ThenByDescending(a => a.SubmittedAt ?? DateTimeOffset.MinValue)
                 .FirstOrDefault();
@@ -121,7 +135,13 @@ public sealed class ListeningPathwayProgressService
             {
                 (false, _) => ListeningPathwayStageStatus.Locked,
                 (true, null) => ListeningPathwayStageStatus.Unlocked,
-                (true, _) when (qualifying.ScaledScore ?? 0) >= ScaledThresholdFor(stage)
+                (true, _) when IsOwnerPassingStage(stage)
+                    && qualifying.ScoreConversionPassed is true
+                    => ListeningPathwayStageStatus.Completed,
+                (true, _) when IsOwnerPassingStage(stage)
+                    => ListeningPathwayStageStatus.InProgress,
+                (true, _) when qualifying.ScaledScore is int scaled
+                    && scaled >= ScaledThresholdFor(stage)
                     => ListeningPathwayStageStatus.Completed,
                 (true, _) => ListeningPathwayStageStatus.InProgress,
             };
@@ -194,12 +214,17 @@ public sealed class ListeningPathwayProgressService
         return !scopedStage.HasScope || string.Equals(scopedStage.Stage, stage, StringComparison.Ordinal);
     }
 
-    /// <summary>Per-stage scaled-score completion threshold. Anchored to
-    /// <c>OetScoring</c> band (350 = pass).</summary>
+    private static bool IsOwnerPassingStage(string stage)
+        => stage is "fullpaper_paper" or "fullpaper_cbt" or "exam_simulation";
+
+    /// <summary>
+    /// Practice stages may use their existing progression bar only after an
+    /// approved conversion exists. Full-paper and exam stages use the
+    /// owner-authored Passed value instead of a numeric pass fallback.
+    /// </summary>
     internal static int ScaledThresholdFor(string stage) => stage switch
     {
         "diagnostic" => 0,                  // attempt counts as completion
-        "fullpaper_paper" or "fullpaper_cbt" or "exam_simulation" => OetScoring.ScaledPassGradeB,
         _ => 300,                           // foundation/drill/minitest bar
     };
 }
