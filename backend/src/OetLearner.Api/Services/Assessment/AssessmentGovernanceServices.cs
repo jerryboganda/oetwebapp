@@ -132,7 +132,9 @@ public sealed record AssessmentScoreConversionSnapshot(
             if (!AssessmentScoreTableValidator.IsSupportedAssessment(snapshot.Assessment)
                 || string.IsNullOrWhiteSpace(snapshot.ScopeKey)
                 || (string.IsNullOrWhiteSpace(snapshot.TableId)
-                    && string.IsNullOrWhiteSpace(snapshot.ErrorCode)))
+                    && string.IsNullOrWhiteSpace(snapshot.ErrorCode))
+                || (!string.IsNullOrWhiteSpace(snapshot.TableId)
+                    && string.IsNullOrWhiteSpace(snapshot.TableVersionKey)))
             {
                 throw new InvalidOperationException("assessment_score_conversion_snapshot_invalid");
             }
@@ -198,12 +200,19 @@ public static class AssessmentScoreConversionSnapshotResolver
                 tableVersionKey: snapshot.TableVersionKey);
         }
 
-        return await resolver.ResolveAsync(
+        var resolved = await resolver.ResolveAsync(
             snapshot.Assessment,
             rawScore,
             snapshot.ScopeKey,
             snapshot.TableId,
             cancellationToken);
+        if (resolved.IsAvailable
+            && !string.Equals(resolved.TableVersionKey, snapshot.TableVersionKey, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("assessment_score_conversion_snapshot_version_mismatch");
+        }
+
+        return resolved;
     }
 }
 

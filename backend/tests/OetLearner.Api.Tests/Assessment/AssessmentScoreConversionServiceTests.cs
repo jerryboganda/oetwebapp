@@ -143,6 +143,43 @@ public sealed class AssessmentScoreConversionServiceTests
     }
 
     [Fact]
+    public void Pinned_attempt_snapshot_requires_table_version_provenance()
+    {
+        var snapshot = new AssessmentScoreConversionSnapshot(
+            "reading", "default", "table-reading-v1", null, null).Serialize();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            AssessmentScoreConversionSnapshot.Parse(snapshot));
+
+        Assert.Equal("assessment_score_conversion_snapshot_invalid", ex.Message);
+    }
+
+    [Fact]
+    public async Task Pinned_attempt_snapshot_rejects_table_version_mutation()
+    {
+        await using var db = NewDb();
+        var table = CreateEffectiveTable("table-reading-pinned", "reading", "v1");
+        db.AssessmentScoreConversionTables.Add(table);
+        await db.SaveChangesAsync();
+
+        var snapshot = new AssessmentScoreConversionSnapshot(
+            "reading", "default", table.Id, table.VersionKey, null).Serialize();
+        table.VersionKey = "mutated";
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+                new AssessmentScoreConversionService(db),
+                "reading",
+                rawScore: 30,
+                snapshotJson: snapshot,
+                legacyTableId: null,
+                scopeKey: "default"));
+
+        Assert.Equal("assessment_score_conversion_snapshot_version_mismatch", ex.Message);
+    }
+
+    [Fact]
     public async Task MarkUsed_locks_effective_table_for_future_auditability()
     {
         await using var db = NewDb();
