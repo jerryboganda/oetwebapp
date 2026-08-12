@@ -370,8 +370,13 @@ public sealed class MockReportAggregationService(
         // Listening sections. R&L-only mocks are unaffected and release instantly.
         var hasProductiveSection = subTests.Any(x => x.id is "writing" or "speaking");
         var productivePending = subTests.Any(x => (x.id is "writing" or "speaking") && !x.scaledScore.HasValue);
+        var governedConversionPending = subTests.Any(x =>
+            (x.id is "reading" or "listening")
+            && (!x.scaledScore.HasValue
+                || string.IsNullOrWhiteSpace(x.scoreConversionTableVersionKey)
+                || !x.scoreConversionPassed.HasValue));
         var availableScores = subTests.Where(x => x.scaledScore.HasValue).Select(x => x.scaledScore!.Value).ToList();
-        var overall = (productivePending || availableScores.Count == 0)
+        var overall = (productivePending || governedConversionPending || availableScores.Count == 0)
             ? (int?)null
             : (int)Math.Round(availableScores.Average(), MidpointRounding.AwayFromZero);
         var weakest = subTests.Where(x => x.scaledScore.HasValue).OrderBy(x => x.scaledScore).FirstOrDefault();

@@ -2938,6 +2938,19 @@ public sealed class MockService(
                 : StringValue(st, "grade"),
             state = StringValue(st, "state") ?? "completed"
         }).ToArray();
+        var governedConversionPending = subTests.Any(st =>
+        {
+            if (!IsGovernedSubtest(st)) return false;
+            var subtest = StringValue(st, "name") ?? StringValue(st, "subtest") ?? string.Empty;
+            var section = sections.FirstOrDefault(x => string.Equals(x.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase));
+            return section is null || !IsOwnerConvertedSection(section);
+        });
+        if (governedConversionPending)
+        {
+            payload["overallScore"] = "Pending";
+            payload["overallGrade"] = null;
+            payload["summary"] = "The mock-wide score is waiting for owner-approved Reading/Listening conversion evidence.";
+        }
         payload["timingAnalysis"] = sections.Select(section => new
         {
             sectionId = section.Id,

@@ -1455,7 +1455,10 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             .Where(x => x.scaledScore.HasValue)
             .Select(x => x.scaledScore!.Value)
             .ToList();
-        var overall = availableScores.Count == 0
+        var governedConversionPending = subTests.Any(x =>
+            (x.id is "reading" or "listening")
+            && !x.scaledScore.HasValue);
+        var overall = governedConversionPending || availableScores.Count == 0
             ? (int?)null
             : (int)Math.Round(availableScores.Average(), MidpointRounding.AwayFromZero);
         var weakest = subTests

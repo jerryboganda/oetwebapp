@@ -105,6 +105,10 @@ an owner-controlled value that must not be invented in code.
   governed Reading/Listening exclusion through
   `MockAssessmentEvidenceGuard`; governed reports return pending conversion
   evidence instead of a mock-wide readiness or pass claim.
+- Mock report aggregation, legacy report enrichment, and the retained background
+  builder now withhold the mock-wide overall score while any Reading/Listening
+  module lacks owner-approved conversion evidence, preventing a partial mean
+  from being presented as a completed mock result.
 - The legacy background mock-report builder is aligned with the same governed
   score gate, withholding Reading/Listening formula grades, mock-wide grade,
   and booking pass advice when owner conversion evidence is absent.
