@@ -340,7 +340,7 @@ public sealed class ListeningMockService : IListeningMockService
                     attempt.Id, attempt.ListeningQuestionId);
                 continue;
             }
-            await _grading.GradeAttemptAsync(attempt, question, ct);
+            await _grading.GradeAttemptAsync(attempt, question, ct, metadata.MarkingPolicy);
         }
 
         var grading = await _grading.GradeSessionAsync(attempts, questionsById, ct);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Listening;
 
@@ -13,9 +14,10 @@ namespace OetLearner.Api.Services.Listening;
 // and must remain untouched (the sealed class is referenced by audit tests).
 //
 // Reference: OET_LISTENING_MODULE_PATHWAY.md §26.5 — grading is 100%
-// deterministic, no AI calls. Part A gap-fill uses spelling tolerance via
-// Levenshtein ≤ 1 against canonical / accepted variants. Part B/C MCQ uses
-// exact key match. Aggregate scoring rolls up to L1..L8 sub-skill scores
+// deterministic, no AI calls. Part A gap-fill awards credit only for the
+// canonical answer or explicitly authored accepted variants. A bounded
+// near-spelling check is diagnostic-only and never awards a mark. Part B/C
+// MCQ uses exact key match. Aggregate scoring rolls up to L1..L8 sub-skill scores
 // (0–10) and 4 accent bucket scores (0–100).
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -23,9 +25,11 @@ public interface IListeningLearnerGradingService
 {
     /// <summary>Grade a single ListeningQuestionAttempt against the question's
     /// canonical answer. Sets IsCorrect, IsSpellingCorrectMeaningWrong,
-    /// IsMeaningCorrectSpellingWrong on the attempt entity. Does not persist.</summary>
+    /// IsMeaningCorrectSpellingWrong on the attempt entity. The immutable
+    /// marking-policy snapshot controls text normalization. Does not persist.</summary>
     Task<GradingResult> GradeAttemptAsync(ListeningQuestionAttempt attempt,
-        ListeningQuestion question, CancellationToken ct);
+        ListeningQuestion question, CancellationToken ct,
+        AssessmentMarkingPolicyDocument? markingPolicy = null);
 
     /// <summary>Grade an entire diagnostic session — iterates all attempts,
     /// returns aggregate score + per-sub-skill + per-accent breakdowns.</summary>
@@ -61,9 +65,8 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
 
     private const decimal MissingSkillNeutralBaseline = 5.0m;
 
-    // Levenshtein cap — protects against pathological inputs in the DP table.
-    // Real Part A answers fit comfortably inside 64 chars; anything longer is
-    // either junk or a paste error and is truncated before comparison.
+    // Near-spelling classification cap — protects against pathological inputs
+    // in the diagnostic-only DP table. It can never award credit.
     private const int MaxLevenshteinLength = 64;
 
     private readonly ILogger<ListeningLearnerGradingService> _logger;
@@ -76,7 +79,8 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
     public Task<GradingResult> GradeAttemptAsync(
         ListeningQuestionAttempt attempt,
         ListeningQuestion question,
-        CancellationToken ct)
+        CancellationToken ct,
+        AssessmentMarkingPolicyDocument? markingPolicy = null)
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(attempt);
@@ -101,10 +105,10 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
         return question.QuestionType switch
         {
             ListeningQuestionType.MultipleChoice3 => Task.FromResult(GradeMcq(attempt, question)),
-            // FillInBlank grades identically to ShortAnswer (spelling-tolerant
-            // canonical + accepted-variants compare).
-            ListeningQuestionType.ShortAnswer => Task.FromResult(GradeShortAnswer(attempt, question)),
-            ListeningQuestionType.FillInBlank => Task.FromResult(GradeShortAnswer(attempt, question)),
+            // FillInBlank grades identically to ShortAnswer: exact canonical
+            // or explicit accepted-variant comparison only.
+            ListeningQuestionType.ShortAnswer => Task.FromResult(GradeShortAnswer(attempt, question, markingPolicy)),
+            ListeningQuestionType.FillInBlank => Task.FromResult(GradeShortAnswer(attempt, question, markingPolicy)),
             _ => Task.FromResult(GradeUnsupported(attempt, question)),
         };
     }
@@ -252,24 +256,28 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Short-answer grader (Part A) — spelling-tolerant
+    // Short-answer grader (Part A) — strict canonical/variant matching
     // ─────────────────────────────────────────────────────────────────────
 
-    private static GradingResult GradeShortAnswer(ListeningQuestionAttempt attempt, ListeningQuestion question)
+    private static GradingResult GradeShortAnswer(
+        ListeningQuestionAttempt attempt,
+        ListeningQuestion question,
+        AssessmentMarkingPolicyDocument? markingPolicy)
     {
+        var policy = markingPolicy ?? new AssessmentMarkingPolicyDocument();
         var canonical = TryReadString(question.CorrectAnswerJson);
-        var synonyms = ParseSynonyms(question.AcceptedSynonymsJson);
+        var acceptedVariants = ParseSynonyms(question.AcceptedSynonymsJson);
 
         // Prefer LearnerAnswer (verbatim free-text). Fall back to
         // SelectedOption because the legacy MCQ field is reused for Part A
         // by some learner clients.
         var raw = attempt.LearnerAnswer ?? attempt.SelectedOption ?? string.Empty;
-        var caseSensitive = question.CaseSensitive;
+        var caseSensitive = question.CaseSensitive && policy.CaseSensitive;
 
-        var userNorm = Normalize(raw, caseSensitive);
-        var candidates = BuildCandidates(canonical, synonyms);
+        var userNorm = Normalize(raw, caseSensitive, policy);
+        var candidates = BuildCandidates(canonical, acceptedVariants);
         var candidateNorms = candidates
-            .Select(c => Normalize(c, caseSensitive))
+            .Select(c => Normalize(c, caseSensitive, policy))
             .Where(s => s.Length > 0)
             .ToList();
 
@@ -293,13 +301,11 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
             return new GradingResult(false, false, false, canonical);
         }
 
-        // 3) Off-by-1 Levenshtein against canonical → spelling-wrong but
-        // meaning-correct. We test the canonical only (not synonyms) because
-        // synonyms are already accepted variants, so an off-by-1 against
-        // them would either be a degenerate near-duplicate or junk.
+        // 3) A bounded near-spelling classification is retained for learning
+        // analytics only. It is not a tolerance path and the mark remains zero.
         if (canonical is not null)
         {
-            var canonicalNorm = Normalize(canonical, caseSensitive);
+            var canonicalNorm = Normalize(canonical, caseSensitive, policy);
             if (canonicalNorm.Length > 0 && Levenshtein(userNorm, canonicalNorm) <= 1)
             {
                 attempt.IsCorrect = false;
@@ -339,15 +345,21 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
     // for the trim+collapse+case-fold strategy (the Listening V2 default).
     // ─────────────────────────────────────────────────────────────────────
 
-    private static string Normalize(string? value, bool caseSensitive)
+    private static string Normalize(
+        string? value,
+        bool caseSensitive,
+        AssessmentMarkingPolicyDocument policy)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
 
-        // Trim leading/trailing whitespace.
-        var trimmed = value.Trim();
+        var trimmed = policy.TrimLeadingTrailingWhitespace ? value.Trim() : value;
         if (trimmed.Length == 0) return string.Empty;
 
-        // Collapse internal runs of whitespace to a single space.
+        if (!policy.CollapseInternalWhitespace)
+            return caseSensitive ? trimmed : trimmed.ToLowerInvariant();
+
+        // Collapse internal runs of whitespace only when the captured policy
+        // explicitly permits it.
         Span<char> buffer = trimmed.Length <= 256
             ? stackalloc char[trimmed.Length]
             : new char[trimmed.Length];

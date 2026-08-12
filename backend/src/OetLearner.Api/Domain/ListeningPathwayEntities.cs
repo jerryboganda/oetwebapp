@@ -9,7 +9,7 @@ namespace OetLearner.Api.Domain;
 // 5-stage learning pathway: onboarding → diagnostic → foundation →
 // practice → mastery. Mirrors the Reading pathway (ReadingPathwayEntities.cs)
 // but for Listening: 8 sub-skills L1..L8, 4 target accents, audio-first UX,
-// note-taking + spelling tolerance, accent-aware diagnostic and roadmap.
+// note-taking + strict spelling-miss analytics, accent-aware diagnostic and roadmap.
 //
 // Naming convention: types are *not* prefixed `Listening*` unless they would
 // otherwise collide with an existing Listening entity (e.g. `ListeningPracticeSession`
@@ -137,7 +137,7 @@ public class ListeningQuestionAttempt
     /// <summary>For MCQ: "A"/"B"/"C". For Part A gap-fill: free text up to 256 chars.</summary>
     [MaxLength(256)] public string? SelectedOption { get; set; }
     /// <summary>Verbatim learner text for Part A — preserved alongside SelectedOption
-    /// so spelling-tolerance analytics can be replayed.</summary>
+    /// so strict spelling-miss analytics can be replayed.</summary>
     public string? LearnerAnswer { get; set; }
     public bool IsCorrect { get; set; }
     public bool IsUnknown { get; set; }   // "I don't know" answer in diagnostic

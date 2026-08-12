@@ -200,6 +200,11 @@ an owner-controlled value that must not be invented in code.
   allows replay. Malformed or legacy snapshots remain strict. Focused policy
   unit coverage was added; backend execution and deployed browser verification
   remain pending.
+- The legacy Listening mock grader now consumes that same immutable marking
+  policy for text normalization. Credit remains limited to the canonical answer
+  or explicitly authored variants; near-spelling classification is diagnostic
+  only and remains zero-credit. Focused policy tests were added; backend
+  execution and deployed mock verification remain pending.
 - Reading now has a source-level scoring-path audit matching the Listening
   audit: Reading services must not reference the legacy raw-to-scaled helper
   and the governed grader must use `IAssessmentScoreConversionService`.
