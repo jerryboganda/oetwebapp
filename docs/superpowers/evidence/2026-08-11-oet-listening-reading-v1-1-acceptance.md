@@ -24,7 +24,7 @@ an owner-controlled value that must not be invented in code.
 | LR-13 | MCQ publication rejects duplicate options and zero/multiple correct options | `ListeningStructureService`, `ReadingStructureService`, `ContentPaperService`, explicit duplicate/zero/multiple-correct authoring regression tests | Implemented; shared paper publish now hard-blocks invalid Reading/Listening MCQ payloads; focused execution pending |
 | LR-14 | Key change uses controlled auditable re-mark | `AssessmentGovernanceEndpoints` validates submitted-attempt ownership, question-revision ownership, and semantic key-snapshot shape before queueing; `ReadingGradingService.RegradeSubmittedAsync`, `ListeningGradingService.RegradeWithKeyAsync`; original/updated result snapshots retained on the job | Implemented; focused re-mark test pending |
 | LR-15 | Desktop/mobile timer, passage, and controls do not clip | Responsive result/player layouts and existing mobile/desktop route surfaces; `tests/e2e/responsive/listening-reading-layout.spec.ts` checks the canonical Listening and Reading learner routes for document overflow and clipped elements across desktop/mobile learner projects | Pending dedicated Playwright run |
-| LR-16 | Exam technical requirements are guidance only | `ListeningV2Endpoints.TechReadinessRequest` now forwards device labels, screen dimensions, and display scale to `ListeningSessionService.RecordTechReadinessAsync`; the service records them without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Hosted regression passed on exact release SHA; deployed browser verification and owner style/copy review pending |
+| LR-16 | Exam technical requirements are guidance only | `ListeningV2Endpoints.TechReadinessRequest` forwards device labels, screen dimensions, display scale, client shell/app version, parsed browser version, and Network Information observations to `ListeningSessionService.RecordTechReadinessAsync`; the service records them without rejecting; `TechReadinessDto.TechnicalRequirementsGuidanceOnly`; `lib/listening/tech-readiness-probe.ts`; candidate guidance in `ListeningIntroCard` and `app/exam-guide`; `ListeningV2AdvanceEndpointTests.Technical_guidance_signals_are_recorded_without_blocking_strict_readiness` | Source and focused frontend contract tests pass; hosted regression passed on exact release SHA; deployed browser verification and owner style/copy review pending |
 
 ## Release gates that cannot be guessed
 
@@ -255,6 +255,12 @@ an owner-controlled value that must not be invented in code.
   the audio sound check remains a strict preflight, while Bluetooth/wireless
   labels, resolution, display scale, VPN, and similar signals are recorded for
   guidance/audit and cannot block an AI practice launch.
+- Listening readiness telemetry now also records a bounded client shell/device
+  type, native app version when available, parsed browser name/version, and
+  Network Information API quality observations (effective type, downlink, RTT,
+  and save-data). Raw user-agent strings are not sent, and none of these
+  guidance observations can block the audio-only strict launch gate. Focused
+  frontend probe/API contract execution passed: 4 files, 26 tests.
 - Legacy learner, mock, analytics, tutor, expert, and background LR surfaces
   now expose raw-only evidence when no owner-approved conversion row exists;
   no raw-to-scaled formula fallback remains in the audited LR paths.

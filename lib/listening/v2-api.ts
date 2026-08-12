@@ -61,6 +61,14 @@ export interface TechReadinessResult {
   bluetoothAudioDetected?: boolean;
   resolutionMeetsMinimum?: boolean;
   displayScaleAcceptable?: boolean;
+  deviceType?: string | null;
+  appVersion?: string | null;
+  browserName?: string | null;
+  browserVersion?: string | null;
+  networkEffectiveType?: string | null;
+  networkDownlinkMbps?: number | null;
+  networkRttMs?: number | null;
+  networkSaveData?: boolean | null;
   technicalRequirementsGuidanceOnly?: boolean;
 }
 
@@ -76,6 +84,18 @@ export interface TechReadinessProbe {
   screenHeight?: number | null;
   /** window.devicePixelRatio * 100 (a coarse proxy for display-scale guidance). */
   displayScalePercent?: number | null;
+  /** Client shell type, e.g. web, desktop, android, or ios. */
+  deviceType?: string | null;
+  /** Installed native-shell version; null for a plain browser. */
+  appVersion?: string | null;
+  /** Parsed browser identity; raw user-agent strings are never sent. */
+  browserName?: string | null;
+  browserVersion?: string | null;
+  /** Network Information API observations used for troubleshooting only. */
+  networkEffectiveType?: string | null;
+  networkDownlinkMbps?: number | null;
+  networkRttMs?: number | null;
+  networkSaveData?: boolean | null;
 }
 
 export interface ListeningGradingResult {

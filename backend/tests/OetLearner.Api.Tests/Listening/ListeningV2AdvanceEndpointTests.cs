@@ -137,6 +137,14 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
                 screenWidth = 1366,
                 screenHeight = 768,
                 displayScalePercent = 150,
+                deviceType = "web",
+                appVersion = "web",
+                browserName = "Chrome",
+                browserVersion = "128.0.0",
+                networkEffectiveType = "4g",
+                networkDownlinkMbps = 12.5,
+                networkRttMs = 48,
+                networkSaveData = false,
             });
 
         response.EnsureSuccessStatusCode();
@@ -147,6 +155,13 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         Assert.True(result.BluetoothAudioDetected);
         Assert.False(result.ResolutionMeetsMinimum);
         Assert.False(result.DisplayScaleAcceptable);
+        Assert.Equal("web", result.DeviceType);
+        Assert.Equal("Chrome", result.BrowserName);
+        Assert.Equal("128.0.0", result.BrowserVersion);
+        Assert.Equal("4g", result.NetworkEffectiveType);
+        Assert.Equal(12.5, result.NetworkDownlinkMbps);
+        Assert.Equal(48, result.NetworkRttMs);
+        Assert.False(result.NetworkSaveData);
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -155,6 +170,9 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         Assert.Contains("Bluetooth Headphones", attempt.TechReadinessJson, StringComparison.Ordinal);
         Assert.Contains("1366", attempt.TechReadinessJson, StringComparison.Ordinal);
         Assert.Contains("150", attempt.TechReadinessJson, StringComparison.Ordinal);
+        Assert.Contains("Chrome", attempt.TechReadinessJson, StringComparison.Ordinal);
+        Assert.Contains("4g", attempt.TechReadinessJson, StringComparison.Ordinal);
+        Assert.Contains("12.5", attempt.TechReadinessJson, StringComparison.Ordinal);
     }
 
     [Fact]

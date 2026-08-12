@@ -242,11 +242,19 @@ public sealed class ListeningSessionService
             AudioOk: cmd.AudioOk,
             DurationMs: cmd.DurationMs,
             CheckedAt: now,
-            AudioOutputDeviceLabel: cmd.AudioOutputDeviceLabel,
-            AudioInputDeviceLabel: cmd.AudioInputDeviceLabel,
+            AudioOutputDeviceLabel: NormalizeTelemetry(cmd.AudioOutputDeviceLabel, 256),
+            AudioInputDeviceLabel: NormalizeTelemetry(cmd.AudioInputDeviceLabel, 256),
             ScreenWidth: cmd.ScreenWidth,
             ScreenHeight: cmd.ScreenHeight,
-            DisplayScalePercent: cmd.DisplayScalePercent);
+            DisplayScalePercent: cmd.DisplayScalePercent,
+            DeviceType: NormalizeTelemetry(cmd.DeviceType, 32),
+            AppVersion: NormalizeTelemetry(cmd.AppVersion, 64),
+            BrowserName: NormalizeTelemetry(cmd.BrowserName, 64),
+            BrowserVersion: NormalizeTelemetry(cmd.BrowserVersion, 64),
+            NetworkEffectiveType: NormalizeTelemetry(cmd.NetworkEffectiveType, 32),
+            NetworkDownlinkMbps: NormalizeNonNegative(cmd.NetworkDownlinkMbps),
+            NetworkRttMs: NormalizeNonNegative(cmd.NetworkRttMs),
+            NetworkSaveData: cmd.NetworkSaveData);
 
         attempt.TechReadinessJson = JsonSerializer.Serialize(snapshot, JsonOptions);
         attempt.LastActivityAt = now;
@@ -264,8 +272,16 @@ public sealed class ListeningSessionService
             {
                 audioOk = cmd.AudioOk,
                 durationMs = cmd.DurationMs,
-                outputDevice = cmd.AudioOutputDeviceLabel,
-                inputDevice = cmd.AudioInputDeviceLabel,
+                outputDevice = snapshot.AudioOutputDeviceLabel,
+                inputDevice = snapshot.AudioInputDeviceLabel,
+                deviceType = snapshot.DeviceType,
+                appVersion = snapshot.AppVersion,
+                browserName = snapshot.BrowserName,
+                browserVersion = snapshot.BrowserVersion,
+                networkEffectiveType = snapshot.NetworkEffectiveType,
+                networkDownlinkMbps = snapshot.NetworkDownlinkMbps,
+                networkRttMs = snapshot.NetworkRttMs,
+                networkSaveData = snapshot.NetworkSaveData,
                 bluetoothDetected,
                 resolutionOk,
                 scaleOk,
@@ -285,6 +301,14 @@ public sealed class ListeningSessionService
             BluetoothAudioDetected: bluetoothDetected,
             ResolutionMeetsMinimum: resolutionOk,
             DisplayScaleAcceptable: scaleOk,
+            DeviceType: snapshot.DeviceType,
+            AppVersion: snapshot.AppVersion,
+            BrowserName: snapshot.BrowserName,
+            BrowserVersion: snapshot.BrowserVersion,
+            NetworkEffectiveType: snapshot.NetworkEffectiveType,
+            NetworkDownlinkMbps: snapshot.NetworkDownlinkMbps,
+            NetworkRttMs: snapshot.NetworkRttMs,
+            NetworkSaveData: snapshot.NetworkSaveData,
             TechnicalRequirementsGuidanceOnly: true);
     }
 
@@ -605,6 +629,19 @@ public sealed class ListeningSessionService
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
         return attempt.AnnotationsJson;
     }
+
+    private static string? NormalizeTelemetry(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim();
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
+    private static double? NormalizeNonNegative(double? value)
+        => value is double v && double.IsFinite(v) && v >= 0 ? v : null;
+
+    private static int? NormalizeNonNegative(int? value)
+        => value is int v && v >= 0 ? v : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -626,7 +663,15 @@ public sealed record TechReadinessCommand(
     string? AudioInputDeviceLabel = null,
     int? ScreenWidth = null,
     int? ScreenHeight = null,
-    int? DisplayScalePercent = null);
+    int? DisplayScalePercent = null,
+    string? DeviceType = null,
+    string? AppVersion = null,
+    string? BrowserName = null,
+    string? BrowserVersion = null,
+    string? NetworkEffectiveType = null,
+    double? NetworkDownlinkMbps = null,
+    int? NetworkRttMs = null,
+    bool? NetworkSaveData = null);
 
 public sealed record TechReadinessSnapshot(
     bool AudioOk,
@@ -636,7 +681,15 @@ public sealed record TechReadinessSnapshot(
     string? AudioInputDeviceLabel = null,
     int? ScreenWidth = null,
     int? ScreenHeight = null,
-    int? DisplayScalePercent = null);
+    int? DisplayScalePercent = null,
+    string? DeviceType = null,
+    string? AppVersion = null,
+    string? BrowserName = null,
+    string? BrowserVersion = null,
+    string? NetworkEffectiveType = null,
+    double? NetworkDownlinkMbps = null,
+    int? NetworkRttMs = null,
+    bool? NetworkSaveData = null);
 
 public sealed record TechReadinessDto(
     bool AudioOk,
@@ -648,6 +701,14 @@ public sealed record TechReadinessDto(
     bool BluetoothAudioDetected = false,
     bool ResolutionMeetsMinimum = true,
     bool DisplayScaleAcceptable = true,
+    string? DeviceType = null,
+    string? AppVersion = null,
+    string? BrowserName = null,
+    string? BrowserVersion = null,
+    string? NetworkEffectiveType = null,
+    double? NetworkDownlinkMbps = null,
+    int? NetworkRttMs = null,
+    bool? NetworkSaveData = null,
     bool TechnicalRequirementsGuidanceOnly = true);
 
 /// <summary>

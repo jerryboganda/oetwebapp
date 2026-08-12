@@ -23,7 +23,15 @@ public static class ListeningV2Endpoints
         string? AudioInputDeviceLabel = null,
         int? ScreenWidth = null,
         int? ScreenHeight = null,
-        int? DisplayScalePercent = null);
+        int? DisplayScalePercent = null,
+        string? DeviceType = null,
+        string? AppVersion = null,
+        string? BrowserName = null,
+        string? BrowserVersion = null,
+        string? NetworkEffectiveType = null,
+        double? NetworkDownlinkMbps = null,
+        int? NetworkRttMs = null,
+        bool? NetworkSaveData = null);
     public sealed record AudioResumeRequest(int CuePointMs);
     public sealed record SubmitRequest(Dictionary<string, string?>? Answers);
     public sealed record GradeRequest();
@@ -110,7 +118,15 @@ public static class ListeningV2Endpoints
                         req.AudioInputDeviceLabel,
                         req.ScreenWidth,
                         req.ScreenHeight,
-                        req.DisplayScalePercent),
+                        req.DisplayScalePercent,
+                        req.DeviceType,
+                        req.AppVersion,
+                        req.BrowserName,
+                        req.BrowserVersion,
+                        req.NetworkEffectiveType,
+                        req.NetworkDownlinkMbps,
+                        req.NetworkRttMs,
+                        req.NetworkSaveData),
                     ct));
             }
             catch (ArgumentException) { return Results.BadRequest(); }

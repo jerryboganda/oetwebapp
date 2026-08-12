@@ -16,6 +16,7 @@
  */
 
 import type { TechReadinessProbe } from './v2-api';
+import { resolveClientIdentity } from '@/lib/client-version';
 
 export interface BuildProbeOptions {
   audioOk: boolean;
@@ -24,10 +25,34 @@ export interface BuildProbeOptions {
 
 /** Run the probe; safe to call inside an effect during exam start-up. */
 export async function buildTechReadinessProbe(options: BuildProbeOptions): Promise<TechReadinessProbe> {
+  const clientIdentity = await resolveClientIdentity();
   const base: TechReadinessProbe = {
     audioOk: options.audioOk,
     durationMs: options.durationMs,
+    deviceType: clientIdentity.platform,
+    appVersion: clientIdentity.version,
   };
+
+  if (typeof navigator !== 'undefined') {
+    const browser = parseBrowserIdentity(navigator.userAgent);
+    base.browserName = browser.name;
+    base.browserVersion = browser.version;
+
+    const connection = (navigator as Navigator & {
+      connection?: {
+        effectiveType?: string;
+        downlink?: number;
+        rtt?: number;
+        saveData?: boolean;
+      };
+    }).connection;
+    if (connection) {
+      base.networkEffectiveType = connection.effectiveType ?? null;
+      base.networkDownlinkMbps = finiteNonNegative(connection.downlink);
+      base.networkRttMs = finiteNonNegativeInteger(connection.rtt);
+      base.networkSaveData = connection.saveData ?? null;
+    }
+  }
 
   // Devices — only if the browser supports the modern enumerate API.
   if (typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
@@ -52,6 +77,30 @@ export async function buildTechReadinessProbe(options: BuildProbeOptions): Promi
   }
 
   return base;
+}
+
+export function parseBrowserIdentity(userAgent: string): { name: string | null; version: string | null } {
+  const candidates: Array<[string, RegExp]> = [
+    ['Edge', /(?:Edg|Edge)\/([\d.]+)/i],
+    ['Opera', /(?:OPR|Opera)\/([\d.]+)/i],
+    ['Chrome', /(?:Chrome|CriOS)\/([\d.]+)/i],
+    ['Firefox', /(?:Firefox|FxiOS)\/([\d.]+)/i],
+    ['Safari', /Version\/([\d.]+).*Safari\//i],
+  ];
+  for (const [name, pattern] of candidates) {
+    const match = userAgent.match(pattern);
+    if (match?.[1]) return { name, version: match[1] };
+  }
+  return { name: null, version: null };
+}
+
+function finiteNonNegative(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function finiteNonNegativeInteger(value: number | undefined): number | null {
+  const normalized = finiteNonNegative(value);
+  return normalized === null ? null : Math.round(normalized);
 }
 
 function pickLabel(devices: MediaDeviceInfo[], kind: MediaDeviceKind): string | null {
