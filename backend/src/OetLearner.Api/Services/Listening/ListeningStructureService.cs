@@ -18,8 +18,8 @@ namespace OetLearner.Api.Services.Listening;
 //   ───────────────
 //   Total  = 42 items  (scaled conversion is resolved from the governed table)
 //
-// Any sub-section may use any of the 3 content types (MCQ / fill-in-the-blank /
-// free-text). Audio for a sub-section is either an uploaded ContentPaperAsset
+// Part A uses typed responses; Part B and Part C use three-option MCQs. Audio
+// for a sub-section is either an uploaded ContentPaperAsset
 // (Role=Audio, Part=<code>) or a TTS-synthesised extract; the publish gate
 // requires one of the two for every sub-section that carries questions.
 //

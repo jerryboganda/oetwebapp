@@ -11,8 +11,9 @@ namespace OetLearner.Api.Tests;
 /// Unit tests for <see cref="ListeningStructureService"/> — the publish-gate
 /// validator that enforces the canonical OET Listening shape
 /// (Part A = 24, Part B = 6 across six independent sub-sections B1..B6 with one
-/// item each, Part C = 12 → 42 items). Any sub-section may use any of the three
-/// content types; audio for a sub-section comes from an uploaded ContentPaperAsset
+/// item each, Part C = 12 → 42 items). Part A uses typed responses and Parts B/C
+/// typed responses in Part A and three-option MCQs in Parts B/C; audio for a
+/// sub-section comes from an uploaded ContentPaperAsset
 /// (Role=Audio, Part=&lt;code&gt;) or a TTS-synthesised extract.
 /// </summary>
 public class ListeningStructureServiceTests
@@ -566,11 +567,12 @@ public class ListeningStructureServiceTests
     {
         var (db, svc) = Build();
         var seed = await SeedCanonicalRelationalAsync(db);
+        await db.SaveChangesAsync();
         var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
-        var options = db.ChangeTracker.Entries<ListeningQuestionOption>()
-            .Where(entry => entry.Entity.ListeningQuestionId == question.Id)
-            .Select(entry => entry.Entity)
-            .ToList();
+        var options = await db.Set<ListeningQuestionOption>()
+            .Where(option => option.ListeningQuestionId == question.Id)
+            .OrderBy(option => option.DisplayOrder)
+            .ToListAsync();
         foreach (var option in options) option.IsCorrect = false;
         await db.SaveChangesAsync();
 
@@ -585,12 +587,16 @@ public class ListeningStructureServiceTests
     {
         var (db, svc) = Build();
         var seed = await SeedCanonicalRelationalAsync(db);
+        // Persist the relational projection before querying its options. The
+        // helper intentionally returns a mutable graph, but InMemory's
+        // change-tracker enumeration is not a reliable relationship query
+        // boundary until the added option rows have been saved.
+        await db.SaveChangesAsync();
         var question = seed.Questions.First(q => q.QuestionType == ListeningQuestionType.MultipleChoice3);
-        var options = db.ChangeTracker.Entries<ListeningQuestionOption>()
-            .Where(entry => entry.Entity.ListeningQuestionId == question.Id)
-            .Select(entry => entry.Entity)
+        var options = await db.Set<ListeningQuestionOption>()
+            .Where(option => option.ListeningQuestionId == question.Id)
             .OrderBy(option => option.DisplayOrder)
-            .ToList();
+            .ToListAsync();
         options[1].IsCorrect = true;
         await db.SaveChangesAsync();
 
