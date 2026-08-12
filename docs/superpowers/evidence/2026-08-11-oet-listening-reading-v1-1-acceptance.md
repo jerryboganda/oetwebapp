@@ -101,6 +101,10 @@ an owner-controlled value that must not be invented in code.
   reports containing Reading/Listening modules, so a mock-wide numeric average
   cannot become an unapproved assessment pass claim. Focused admin analytics
   execution remains pending.
+- Learner mock trend and per-report pass-prediction services now apply the same
+  governed Reading/Listening exclusion through
+  `MockAssessmentEvidenceGuard`; governed reports return pending conversion
+  evidence instead of a mock-wide readiness or pass claim.
 - The legacy background mock-report builder is aligned with the same governed
   score gate, withholding Reading/Listening formula grades, mock-wide grade,
   and booking pass advice when owner conversion evidence is absent.
