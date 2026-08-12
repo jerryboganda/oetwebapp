@@ -193,6 +193,9 @@ an owner-controlled value that must not be invented in code.
   scale and hides the 350 reference marker until an owner-approved conversion
   exists; no client formula represents an unapproved scaled result. The
   focused graph regression covers both approved and raw-only states.
+- Reading now has a source-level scoring-path audit matching the Listening
+  audit: Reading services must not reference the legacy raw-to-scaled helper
+  and the governed grader must use `IAssessmentScoreConversionService`.
 - Reading paper presentation is now fail-closed at the policy service and
   database default. Existing persisted enablement is reset by the migration;
   the admin control and learner preview now report computer-based delivery
