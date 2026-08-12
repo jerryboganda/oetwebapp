@@ -966,9 +966,10 @@ function SubSectionAudio({
     );
   }
 
-  // One-play: once the audio ends, replay is disabled for graded exams. The
-  // native controls stay visible (so the candidate can adjust volume) but a
-  // replay attempt is blocked by snapping the playhead back to the end.
+  // One-play: graded exams hide native media controls entirely. Replay is
+  // blocked by snapping any post-completion seek back to the end; volume and
+  // playback state remain governed by the exam surface rather than browser
+  // media controls.
   const blockReplay = onePlayOnly && hasPlayedToEnd;
 
   return (

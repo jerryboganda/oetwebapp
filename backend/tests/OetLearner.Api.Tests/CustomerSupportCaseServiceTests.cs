@@ -30,10 +30,12 @@ public sealed class CustomerSupportCaseServiceTests
         Assert.Equal("TICKET-100", supportCase.ExternalTicketId);
         Assert.Equal("learner-1", candidate.CandidateUserId);
         Assert.Equal("candidate@example.test", candidate.Email);
-        Assert.DoesNotContain("assessment", await db.AuditEvents
+        var auditDetails = await db.AuditEvents
             .Where(x => x.ResourceId == supportCase.Id)
             .Select(x => x.Details)
-            .ToListAsync());
+            .ToListAsync();
+        Assert.All(auditDetails, details =>
+            Assert.DoesNotContain("assessment", details ?? string.Empty, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(2, await db.AuditEvents.CountAsync(x => x.ResourceId == supportCase.Id));
     }
 
