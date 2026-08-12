@@ -527,6 +527,24 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
+    public async Task JsonMcq_WithBlankOption_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var json = BuildQuestionsJson(24, 6, 12);
+        using var doc = JsonDocument.Parse(json);
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        questions[FirstPartBIndex]["options"] = new[] { "A", "B", " " };
+        questions[FirstPartBIndex]["correctAnswer"] = "A";
+        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = questions }));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_mcq_shape" && i.Severity == "error");
+    }
+
+    [Fact]
     public async Task JsonMcq_WithDuplicateDistractorText_BlocksPublish()
     {
         var (db, svc) = Build();

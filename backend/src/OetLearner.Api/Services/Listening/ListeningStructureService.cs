@@ -1165,6 +1165,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var correctAnswer = ReadString(question, "correctAnswer")?.Trim();
         if (!string.Equals(type?.Trim(), expectedType, StringComparison.OrdinalIgnoreCase)
             || options.Count != 3
+            || options.Any(string.IsNullOrWhiteSpace)
             || options.Select(option => option.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != options.Count
             || string.IsNullOrWhiteSpace(correctAnswer))
         {
@@ -1316,8 +1317,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             var list = JsonSerializer.Deserialize<List<string?>>(JsonSerializer.Serialize(raw));
             return list?
-                .Where(option => !string.IsNullOrWhiteSpace(option))
-                .Select(option => option!.Trim())
+                .Select(option => option?.Trim() ?? string.Empty)
                 .ToArray() ?? Array.Empty<string>();
         }
         catch (JsonException) { return Array.Empty<string>(); }
