@@ -7,6 +7,7 @@ export function useTimer(
   direction: 'up' | 'down' = 'up',
   onExpire?: () => void,
   storageKey?: string,
+  nowMs: () => number = Date.now,
 ) {
   const key = storageKey ? `${STORAGE_KEY_PREFIX}${storageKey}` : null;
 
@@ -24,6 +25,7 @@ export function useTimer(
   const [isPaused, setIsPaused] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(elapsed);
+  const timerStartedAtRef = useRef<number | null>(null);
 
   // keep ref in sync
   useEffect(() => {
@@ -42,9 +44,11 @@ export function useTimer(
 
   const startTimer = useCallback(() => {
     clearTimer();
+    timerStartedAtRef.current = nowMs() - elapsedRef.current * 1000;
     intervalRef.current = setInterval(() => {
       setElapsed((prev) => {
-        const next = prev + 1;
+        const startedAt = timerStartedAtRef.current ?? (nowMs() - prev * 1000);
+        const next = Math.max(prev, Math.floor((nowMs() - startedAt) / 1000));
         if (key && typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem(key, String(next));
         }
@@ -55,7 +59,7 @@ export function useTimer(
         return next;
       });
     }, 1000);
-  }, [clearTimer, direction, initialSeconds, key, onExpire]);
+  }, [clearTimer, direction, initialSeconds, key, nowMs, onExpire]);
 
   useEffect(() => {
     if (!isPaused && !isExpired) {
@@ -68,6 +72,7 @@ export function useTimer(
   const pause = useCallback(() => {
     setIsPaused(true);
     clearTimer();
+    timerStartedAtRef.current = null;
   }, [clearTimer]);
 
   const resume = useCallback(() => {

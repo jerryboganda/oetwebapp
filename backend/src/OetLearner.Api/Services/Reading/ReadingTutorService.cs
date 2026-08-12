@@ -170,6 +170,9 @@ public sealed record ReadingPrivilegedAttemptReview(
     string UserId,
     string Status,
     string Mode,
+    bool RequiresAdminReview,
+    string? AdminReviewReason,
+    int InvalidCount,
     DateTimeOffset StartedAt,
     DateTimeOffset? SubmittedAt,
     int? GradedRawScore,
@@ -196,6 +199,7 @@ public sealed record ReadingPrivilegedSection(
     double? AccuracyPercent,
     int CorrectCount,
     int IncorrectCount,
+    int InvalidCount,
     int UnansweredCount);
 
 public sealed record ReadingPrivilegedQuestion(
@@ -207,6 +211,7 @@ public sealed record ReadingPrivilegedQuestion(
     string? SkillTag,
     object? UserAnswer,
     bool? IsCorrect,
+    bool IsInvalid,
     int PointsEarned,
     int MaxPoints,
     object? CorrectAnswer,
@@ -393,18 +398,21 @@ public sealed class ReadingTutorService(
         var questions = new List<ReadingPrivilegedQuestion>();
         var sections = new List<ReadingPrivilegedSection>();
         var flagged = new List<string>();
+        var invalidCount = 0;
 
         foreach (var part in parts)
         {
             var partCode = part.PartCode.ToString();
-            int rawScore = 0, maxRaw = 0, correct = 0, incorrect = 0, unanswered = 0;
+            int rawScore = 0, maxRaw = 0, correct = 0, incorrect = 0, invalid = 0, unanswered = 0;
 
             foreach (var q in part.Questions.OrderBy(q => q.DisplayOrder))
             {
                 maxRaw += q.Points;
                 answersByQuestion.TryGetValue(q.Id, out var answer);
 
+                var isInvalid = ReadingGradingService.IsIntegrityReviewReason(answer?.MissReason);
                 if (answer is null) unanswered++;
+                else if (isInvalid) { invalid++; invalidCount++; }
                 else if (answer.IsCorrect == true) { correct++; rawScore += answer.PointsEarned; }
                 else incorrect++;
 
@@ -419,6 +427,7 @@ public sealed class ReadingTutorService(
                     SkillTag: q.SkillTag,
                     UserAnswer: ParseJson(answer?.UserAnswerJson),
                     IsCorrect: answer?.IsCorrect,
+                    IsInvalid: isInvalid,
                     PointsEarned: answer?.PointsEarned ?? 0,
                     MaxPoints: q.Points,
                     CorrectAnswer: ParseJson(q.CorrectAnswerJson),
@@ -437,11 +446,12 @@ public sealed class ReadingTutorService(
                 PartCode: partCode,
                 RawScore: rawScore,
                 MaxRawScore: maxRaw,
-                AccuracyPercent: maxRaw > 0
-                    ? Math.Round(100.0 * correct / part.Questions.Count, 1, MidpointRounding.AwayFromZero)
+                AccuracyPercent: part.Questions.Count - invalid - unanswered > 0
+                    ? Math.Round(100.0 * correct / (part.Questions.Count - invalid - unanswered), 1, MidpointRounding.AwayFromZero)
                     : null,
                 CorrectCount: correct,
                 IncorrectCount: incorrect,
+                InvalidCount: invalid,
                 UnansweredCount: unanswered));
         }
 
@@ -459,6 +469,9 @@ public sealed class ReadingTutorService(
             UserId: attempt.UserId,
             Status: attempt.Status.ToString(),
             Mode: attempt.Mode.ToString(),
+            RequiresAdminReview: attempt.RequiresAdminReview,
+            AdminReviewReason: attempt.AdminReviewReason,
+            InvalidCount: invalidCount,
             StartedAt: attempt.StartedAt,
             SubmittedAt: attempt.SubmittedAt,
             GradedRawScore: attempt.RawScore,
@@ -482,7 +495,9 @@ public sealed class ReadingTutorService(
     }
 
     private static bool HasOwnerConvertedScore(ReadingAttempt attempt)
-        => attempt.ScaledScore.HasValue
+        => !attempt.RequiresAdminReview
+            && attempt.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
+            && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
 
@@ -609,6 +624,8 @@ public sealed class ReadingTutorService(
     public async Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsForExpertAsync(
         string expertUserId, string? assignedToUserId, CancellationToken ct)
     {
+        await EnsureActiveExpertAsync(expertUserId, ct);
+
         var query = db.ReadingAssignments.AsNoTracking()
             .Where(a => a.AssignedByUserId == expertUserId)
             .AsQueryable();
@@ -652,7 +669,7 @@ public sealed class ReadingTutorService(
 
     public async Task<bool> CanExpertAccessAttemptAsync(string attemptId, string expertUserId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(expertUserId)) return false;
+        await EnsureActiveExpertAsync(expertUserId, ct);
 
         return await (
             from attempt in db.ReadingAttempts.AsNoTracking()
@@ -669,6 +686,21 @@ public sealed class ReadingTutorService(
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private async Task EnsureActiveExpertAsync(string expertUserId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(expertUserId))
+            throw ApiException.Forbidden("expert_profile_not_found", "Expert profile not found.");
+
+        var expert = await db.ExpertUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == expertUserId, ct);
+        if (expert is null)
+            throw ApiException.Forbidden("expert_profile_not_found", "Expert profile not found.");
+
+        if (!expert.IsActive)
+            throw ApiException.Forbidden("account_suspended", "This expert account is not available.");
+    }
 
     private static ReadingAssignmentDto ToDto(ReadingAssignment a) => new(
         a.Id, a.AssignedByUserId, a.AssignedToUserId, a.PaperId, a.Kind, a.ScopeJson,

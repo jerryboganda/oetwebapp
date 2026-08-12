@@ -13,7 +13,7 @@
 
 import type { OetStatementOfResults } from '@/components/domain/OetStatementOfResultsCard';
 import type { MockReport } from '@/lib/mock-data';
-import { OET_SCALED_MAX, OET_SCALED_MIN } from '@/lib/scoring';
+import { OET_LR_RAW_MAX, OET_SCALED_MAX, OET_SCALED_MIN } from '@/lib/scoring';
 
 export interface OetSorAdapterInputs {
   report: MockReport;
@@ -61,7 +61,9 @@ function isGovernedSubtest(subtest: MockReport['subTests'][number]): boolean {
 function hasApprovedConversion(subtest: MockReport['subTests'][number] | undefined): boolean {
   if (!subtest || subtest.scaledScore == null) return false;
   if (!isGovernedSubtest(subtest)) return true;
-  return typeof subtest.scoreConversionTableVersionKey === 'string'
+  const rawMaximum = subtest.rawScore.match(/\/\s*(\d+)\s*$/)?.[1];
+  return rawMaximum === String(OET_LR_RAW_MAX)
+    && typeof subtest.scoreConversionTableVersionKey === 'string'
     && subtest.scoreConversionTableVersionKey.trim().length > 0
     && typeof subtest.scoreConversionPassed === 'boolean';
 }

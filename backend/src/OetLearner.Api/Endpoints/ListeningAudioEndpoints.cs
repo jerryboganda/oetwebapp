@@ -58,7 +58,11 @@ public static class ListeningAudioEndpoints
                     try
                     {
                         var result = await storage.OpenReadWithMetadataAsync(key, ct);
-                        return Results.Stream(result.Stream, MimeFor(ext), enableRangeProcessing: true);
+                        // Do not expose byte-range responses. This route is also the
+                        // content-addressed fallback for scored Listening audio, and
+                        // range processing would provide a server-side seek path
+                        // that bypasses the exam player's forward-only audio lock.
+                        return Results.Stream(result.Stream, MimeFor(ext), enableRangeProcessing: false);
                     }
                     catch (FileNotFoundException)
                     {

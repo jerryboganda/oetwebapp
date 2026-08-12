@@ -58,8 +58,10 @@ import {
 } from '@/lib/mobile/offline-sync';
 import { reconcileOfflineAnswer, type OfflineAnswerPayload } from '@/lib/mobile/offline-answer-reconciliation';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
+import { correctedNowMs, readServerClockOffsetMs } from '@/lib/server-clock';
 import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
 import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
+import { submitAudioCheck } from '@/lib/listening-pathway-api';
 import { presentationModeFromSession } from '@/lib/listening/modes';
 import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
 import { useListeningAnnotations, type ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
@@ -215,6 +217,7 @@ function PlayerContent() {
   const pendingAnswersRef = useRef<Record<string, PendingListeningAnswer>>({});
   const serverAnswersRef = useRef<Record<string, string | null>>({});
   const answerBaseValuesRef = useRef<Record<string, string | null>>({});
+  const serverClockOffsetMs = useRef(0);
   // C8e — last-known forward-only audio time. onTimeUpdate keeps this in sync;
   // onSeeking snaps backwards seeks back to this value in exam mode.
   const lastKnownTimeRef = useRef<number>(0);
@@ -260,6 +263,7 @@ function PlayerContent() {
   const audioResumeInFlightRef = useRef<boolean>(false);
   const applyStrictServerStateRef = useRef<((state: ListeningV2SessionState) => void) | null>(null);
   const strictAdvanceTargetRef = useRef<ListeningFsmState | null>(null);
+  const autoPlayNextPartBQuestionRef = useRef(false);
   // Tracks the attempt id whose strict-resume FSM state has already been
   // hydrated from the server. The hydration effect below also re-runs whenever
   // `applyStrictServerState` changes identity (it depends on `sectionsInPaper`,
@@ -272,6 +276,10 @@ function PlayerContent() {
   const [attempt, setAttempt] = useState<ListeningAttemptDto | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loadingTask, setLoadingTask] = useState(true);
+
+  const syncServerClock = useCallback((serverNow: string | null | undefined) => {
+    serverClockOffsetMs.current = readServerClockOffsetMs(serverNow);
+  }, []);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
@@ -309,8 +317,10 @@ function PlayerContent() {
   const [reviewSecondsRemaining, setReviewSecondsRemaining] = useState(0);
   const [questionZoomPercent, setQuestionZoomPercent] = useState(100);
   const [strictServerState, setStrictServerState] = useState<ListeningV2SessionState | null>(null);
+  const strictServerStateRef = useRef<ListeningV2SessionState | null>(null);
   const [showNextConfirm, setShowNextConfirm] = useState(false);
-  // C8d — whole-attempt 40-minute countdown driven by attempt.expiresAt.
+  const [currentPartBQuestionIndex, setCurrentPartBQuestionIndex] = useState(0);
+  // C8d — whole-attempt policy-defined countdown driven by attempt.expiresAt.
   const [attemptSecondsRemaining, setAttemptSecondsRemaining] = useState<number | null>(null);
   // C8c — tracks which extracts have been listened-to-completion so the
   // section panel can render a checkmark next to each.
@@ -361,6 +371,7 @@ function PlayerContent() {
       .then((data) => {
         if (cancelled || !data) return;
         setSession(data);
+        syncServerClock(data.serverNow ?? data.attempt?.serverNow);
         setAttempt(data.attempt);
         if (data.attempt?.requiresAdminReview) {
           setAudioValidityHeld(true);
@@ -405,7 +416,7 @@ function PlayerContent() {
       cancelled = true;
       Object.values(timers).forEach(clearTimeout);
     };
-  }, [attemptIdFromRoute, id, mode, pathwayStage]);
+  }, [attemptIdFromRoute, id, mode, pathwayStage, syncServerClock]);
 
   // R08 — hydrate the learner's saved rule-out / highlight marks once the
   // attempt id is known (resume or fresh start). The V1 session DTO doesn't
@@ -438,9 +449,9 @@ function PlayerContent() {
   }, [attempt?.attemptId, hasStarted, isSubmitting, progress]);
 
   const logIntegrityEvent = useCallback((eventType: ListeningIntegrityEventType, details?: string) => {
-    if (!attempt?.attemptId || !session?.modePolicy.integrityLockRequired) return;
+    if (!attempt?.attemptId || !session?.modePolicy.technicalGuidanceTelemetryEnabled) return;
     void recordListeningIntegrityEvent(attempt.attemptId, eventType, details).catch(() => undefined);
-  }, [attempt?.attemptId, session?.modePolicy.integrityLockRequired]);
+  }, [attempt?.attemptId, session?.modePolicy.technicalGuidanceTelemetryEnabled]);
 
   // §17.11 — attempt-event stream. Unlike `logIntegrityEvent` (gated to
   // OET@Home integrity-lock attempts), these audio-lifecycle / reading-time /
@@ -740,13 +751,10 @@ function PlayerContent() {
   }, [attempt?.attemptId, seekAudioTo, strictReadinessRequired]);
 
   useEffect(() => {
-    if (!attempt?.attemptId || !hasStarted || !session?.modePolicy.integrityLockRequired) return;
+    if (!attempt?.attemptId || !hasStarted || !session?.modePolicy.technicalGuidanceTelemetryEnabled) return;
 
     const onFullscreenChange = () => {
-      if (!document.fullscreenElement) {
-        setIntegrityWarning('Full-screen was exited. This has been recorded for the OET@Home attempt.');
-        logIntegrityEvent('fullscreen_exit');
-      }
+      logIntegrityEvent(document.fullscreenElement ? 'fullscreen_enter' : 'fullscreen_exit');
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') logIntegrityEvent('page_hidden');
@@ -765,12 +773,13 @@ function PlayerContent() {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
     };
-  }, [attempt?.attemptId, hasStarted, logIntegrityEvent, session?.modePolicy.integrityLockRequired]);
+  }, [attempt?.attemptId, hasStarted, logIntegrityEvent, session?.modePolicy.technicalGuidanceTelemetryEnabled]);
 
   const ensureAttempt = async () => {
     if (!session) throw new Error('Listening session is not ready.');
     if (attempt) return attempt;
     const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage, mockAttemptId, mockSectionId });
+    syncServerClock(started.serverNow);
     setAttempt(started);
     if (id && mockAttemptId && mockSectionId && !attemptIdFromRoute) {
       const nextParams = new URLSearchParams(searchParams?.toString());
@@ -791,6 +800,12 @@ function PlayerContent() {
     setIsStarting(true);
     setStartError(null);
     try {
+      if (strictReadinessRequired) {
+        const audioCheck = await submitAudioCheck({ outcome: 'clear' });
+        if (!audioCheck.success) {
+          throw new Error('The audio readiness check was not accepted. Please retry the check before starting.');
+        }
+      }
       const started = await ensureAttempt();
       const restoredAnswers = Object.fromEntries(
         Object.entries(started.answers ?? {}).map(([key, value]) => [key, value ?? '']),
@@ -814,15 +829,6 @@ function PlayerContent() {
         });
         await listeningV2Api.recordTechReadiness(started.attemptId, probe);
         await advanceStrictStart(started.attemptId);
-      }
-      if (session.modePolicy.integrityLockRequired && rootRef.current && !document.fullscreenElement) {
-        try {
-          await rootRef.current.requestFullscreen();
-          void recordListeningIntegrityEvent(started.attemptId, 'fullscreen_enter', 'entered_before_audio').catch(() => undefined);
-        } catch {
-          setIntegrityWarning('Full-screen could not be started by this browser. This has been recorded for the OET@Home attempt.');
-          void recordListeningIntegrityEvent(started.attemptId, 'fullscreen_request_failed').catch(() => undefined);
-        }
       }
       setHasStarted(true);
       const nextParams = new URLSearchParams({ attemptId: started.attemptId, mode: started.mode });
@@ -1022,10 +1028,23 @@ function PlayerContent() {
     return sections;
   }, [sectionGroups, focusParam, strictServerState?.state, session?.modePolicy?.onePlayOnly]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
+  useEffect(() => {
+    setCurrentPartBQuestionIndex(0);
+  }, [currentSection]);
   const currentExtracts = currentSection
-    ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
+    ? extracts
+      .filter((extract) => {
+        const partCode = extract.partCode.toUpperCase();
+        return partCode === currentSection || (currentSection === 'B' && partCode.startsWith('B'));
+      })
+      .sort((a, b) => a.displayOrder - b.displayOrder)
     : [];
-  const visibleExtracts = currentExtracts;
+  const activePartBQuestion = currentSection === 'B'
+    ? (sectionGroups?.B?.[currentPartBQuestionIndex] ?? null)
+    : null;
+  const visibleExtracts = currentSection === 'B'
+    ? (currentExtracts[currentPartBQuestionIndex] ? [currentExtracts[currentPartBQuestionIndex]] : [])
+    : currentExtracts;
   // Learner-facing question-paper PDF for the current section. Per-part map is
   // keyed by uppercased part/section code; resolve exact section code first,
   // then fall back to the parent part letter (mirrors the Reading PDF viewer).
@@ -1061,11 +1080,15 @@ function PlayerContent() {
   const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
   const currentSectionAudioEnded = currentSection ? endedSections.has(currentSection) : false;
   const activeExtract = visibleExtracts[0] ?? null;
-  // Per-section files have their own timeline, so the authored cue windows
-  // (offsets into the old combined file) don't apply — the whole file is the
-  // section. Drop them so we never seek to a stale offset or force-pause mid-file.
-  const currentExtractWindows = usingPerSectionAudio ? [] : currentExtracts.filter((extract) => (
-    extract.audioStartMs != null
+  // Part B is six independent short extracts in one forward-only sequence.
+  // Its per-section audio file therefore still uses the authored cue window for
+  // the active question; dropping those cues would expose all six questions at
+  // once and allow one long playback to bypass the Part B contract.
+  const currentExtractWindows = currentExtracts.filter((extract) => (
+    (currentSection === 'B'
+      ? extract.partCode === activeExtract?.partCode && extract.displayOrder === activeExtract?.displayOrder
+      : !usingPerSectionAudio)
+    && extract.audioStartMs != null
     && extract.audioEndMs != null
     && extract.audioEndMs > extract.audioStartMs
   ));
@@ -1076,10 +1099,12 @@ function PlayerContent() {
     ? Math.max(...currentExtractWindows.map((extract) => extract.audioEndMs!))
     : null;
   const activeAudioStartMs = usingPerSectionAudio
-    ? null
+    && currentSection !== 'B'
+      ? null
     : currentSectionAudioStartMs;
   const activeAudioEndMs = usingPerSectionAudio
-    ? null
+    && currentSection !== 'B'
+      ? null
     : currentSectionAudioEndMs;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
@@ -1091,9 +1116,14 @@ function PlayerContent() {
   // Exam-mode gate on opening the review window: per-section audio waits for the
   // section's own file to end; the legacy combined-file model waits for all cue
   // windows to be crossed (or has no window to gate on).
-  const audioGateSatisfied = usingPerSectionAudio
-    ? currentSectionAudioEnded
-    : (allCurrentExtractsCompleted || currentSectionAudioEndMs == null);
+  const partBQuestionAudioEnded = currentSection === 'B'
+    && activeExtract != null
+    && completedExtractIds.has(`${activeExtract.partCode}-${activeExtract.displayOrder}`);
+  const audioGateSatisfied = currentSection === 'B'
+    ? partBQuestionAudioEnded
+    : usingPerSectionAudio
+      ? currentSectionAudioEnded
+      : (allCurrentExtractsCompleted || currentSectionAudioEndMs == null);
   const canOpenReviewWindow = Boolean(
     currentSection
     && (session?.modePolicy.canScrub !== false || audioGateSatisfied),
@@ -1108,6 +1138,7 @@ function PlayerContent() {
   }, [session?.paper.audioUrl, session?.paper.audioUrlByPart]);
 
   const applyStrictServerState = useCallback((state: ListeningV2SessionState) => {
+    strictServerStateRef.current = state;
     setStrictServerState(state);
     const position = listeningPositionForState(state.state);
     if (!position) return;
@@ -1187,6 +1218,18 @@ function PlayerContent() {
     setAudioError(null);
     try {
       const state = await advanceStrictTransition(activeAttemptId, toState);
+      const fromState = strictServerStateRef.current?.state;
+      const fromPosition = fromState ? listeningPositionForState(fromState) : null;
+      const toPosition = listeningPositionForState(toState);
+      if (fromPosition && toPosition && fromPosition.section !== toPosition.section) {
+        logAttemptEvent('section_transition', {
+          from: fromPosition.section,
+          to: toPosition.section,
+          fromState,
+          toState,
+          reason: 'server-transition-applied',
+        });
+      }
       applyStrictServerState(state);
       return true;
     } catch (err) {
@@ -1196,7 +1239,7 @@ function PlayerContent() {
       strictAdvanceTargetRef.current = null;
       setIsAdvancingPhase(false);
     }
-  }, [applyStrictServerState, attempt?.attemptId, attemptIdFromRoute, strictReadinessRequired]);
+  }, [applyStrictServerState, attempt?.attemptId, attemptIdFromRoute, logAttemptEvent, strictReadinessRequired]);
 
   // 1-second countdown during review windows.
   useEffect(() => {
@@ -1239,6 +1282,14 @@ function PlayerContent() {
     // reviewSecondsRemaining===0) sees the new section's currentSection on
     // re-render and immediately calls advanceFromReview again — which on
     // the last section triggers handleSubmit and skips the section entirely.
+    const nextSection = sectionsInPaper[currentSectionIndex + 1];
+    if (currentSection && nextSection) {
+      logAttemptEvent('section_transition', {
+        from: currentSection,
+        to: nextSection,
+        reason: 'local-transition-applied',
+      });
+    }
     setPhase('audio');
     setReviewSecondsRemaining(0);
     setCurrentSectionIndex((value) => value + 1);
@@ -1261,19 +1312,11 @@ function PlayerContent() {
     advanceToNextSection();
   };
 
-  // Auto-advance when countdown hits zero.
-  useEffect(() => {
-    if (phase === 'review' && reviewSecondsRemaining === 0 && hasStarted && currentSection !== null) {
-      void advanceFromReview();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, reviewSecondsRemaining, hasStarted, currentSection]);
-
-  // Audio is non-pausable, so a section completing is the advance trigger.
-  // Legacy single-file (cue-point) papers never fire the <audio> `ended` event
-  // mid-paper — a section is "done" once all its extracts cross their
-  // audioEndMs. When that happens, jump straight to the next section.
-  // Per-section-audio papers advance via the <audio> onEnded handler instead.
+  // Audio completion opens a review/confirmation state. It must never silently
+  // cross an irreversible section boundary, including when the configured
+  // review window is zero; §5.4 requires an explicit candidate confirmation.
+  // Legacy single-file (cue-point) papers do not fire `<audio> ended` at a
+  // section boundary, so the active cue completion calls this same handler.
   useEffect(() => {
     if (phase !== 'audio' || !hasStarted) return;
     if (usingPerSectionAudio) return;
@@ -1310,7 +1353,7 @@ function PlayerContent() {
     })();
   }, [advanceStrictPhaseIfNeeded, logAttemptEvent, phase, previewSecondsRemaining, hasStarted, currentSection]);
 
-  // C8d — whole-attempt 40-minute countdown. Driven by attempt.expiresAt.
+  // C8d — whole-attempt policy-defined countdown. Driven by attempt.expiresAt.
   // Auto-submits in exam/home modes (canScrub === false) when the timer
   // hits zero. Practice mode just shows "Time up" without submitting.
   useEffect(() => {
@@ -1320,7 +1363,7 @@ function PlayerContent() {
       return;
     }
     const compute = () => {
-      const remaining = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000));
+      const remaining = Math.max(0, Math.floor((Date.parse(expiresAt) - correctedNowMs(serverClockOffsetMs.current)) / 1000));
       setAttemptSecondsRemaining(remaining);
       return remaining;
     };
@@ -1437,45 +1480,61 @@ function PlayerContent() {
     }
   };
 
-  // Audio is non-pausable in every mode, so a section's audio reaching its end
-  // is the sole advance trigger — there is no manual "Next" / review window.
-  // Fired from the <audio> `onEnded` handler. Idempotent via
+  const advancePartBQuestion = async () => {
+    if (audioValidityHeld || currentSection !== 'B' || !partBQuestionAudioEnded) return;
+    const nextIndex = currentPartBQuestionIndex + 1;
+    const hasNextQuestion = nextIndex < (sectionGroups?.B?.length ?? 0);
+    if (!hasNextQuestion) {
+      await confirmNextFromAudio();
+      return;
+    }
+    autoPlayNextPartBQuestionRef.current = true;
+    hasReachedEndRef.current = false;
+    allowedPauseRef.current = true;
+    pauseAudio();
+    setIsPlaying(false);
+    setCurrentPartBQuestionIndex(nextIndex);
+  };
+
+  // Part B uses one shared audio asset with authored cue windows. After the
+  // candidate confirms the irreversible Next action, begin the next extract
+  // from its cue without exposing a pause/replay control.
+  useEffect(() => {
+    if (!autoPlayNextPartBQuestionRef.current || currentSection !== 'B' || phase !== 'audio') return;
+    autoPlayNextPartBQuestionRef.current = false;
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (activeAudioStartMs != null) seekAudioTo(activeAudioStartMs / 1000);
+    audio.play().catch(handlePlaybackFailure);
+  }, [activeAudioStartMs, currentPartBQuestionIndex, currentSection, phase, seekAudioTo]);
+
+  // Audio is non-pausable in every mode. Part B advances between its six
+  // cue-bounded extracts only through the explicit irreversible Next action;
+  // other sections open an explicit finish confirmation when their audio
+  // reaches its end. This is fired from the <audio> `onEnded` handler. Idempotent via
   // `autoAdvanceInFlightRef` (reset when the section changes).
   const autoAdvanceAfterAudio = async () => {
     if (audioValidityHeld) return;
     if (!currentSection) return;
     if (autoAdvanceInFlightRef.current) return;
-    autoAdvanceInFlightRef.current = true;
-    if (isLastSection) {
-      // Terminal: submit and leave the latch set (no section change will reset
-      // it) so a near-simultaneous cue-end + file-`ended` can't double-submit.
-      void handleSubmit();
+    if (currentSection === 'B') {
+      setAudioValidityHeld(true);
+      setIntegrityWarning('Part B audio is missing a valid cue boundary for each short extract. This attempt has been halted and flagged for administrator review.');
+      logIntegrityEvent('part_b_extract_boundary_missing');
       return;
     }
+    autoAdvanceInFlightRef.current = true;
     try {
-      const nextSection = sectionsInPaper[currentSectionIndex + 1];
-      if (!nextSection) return;
       if (strictServerNavigationActive) {
-        // Strict server FSM is linear (a1_audio → a1_review → a2_preview). Hop
-        // through the section's review state (skipped for Part B, which has
-        // none) before the next section's preview so the confirm-token FSM
-        // stays in sync. `applyStrictServerState` (inside the helper) drives
-        // local phase/section, so we must NOT also call advanceToNextSection.
         const reviewState = listeningStateForPosition(currentSection, 'review');
         if (reviewState) {
           const advancedReview = await advanceStrictPhaseIfNeeded(reviewState);
           if (!advancedReview) return;
+          return;
         }
-        const nextState = listeningStateForPosition(nextSection, 'preview');
-        if (nextState) {
-          const advancedPreview = await advanceStrictPhaseIfNeeded(nextState);
-          if (!advancedPreview) return;
-        }
-        return;
       }
-      // Non-strict (practice / learning): no server FSM — advance locally. The
-      // currentSection effect re-enters the next section's reading window.
-      advanceToNextSection();
+      setPhase('review');
+      setReviewSecondsRemaining(currentSectionReviewSeconds);
     } finally {
       autoAdvanceInFlightRef.current = false;
     }
@@ -1549,9 +1608,16 @@ function PlayerContent() {
       .sort((a, b) => a - b)
     : [];
   const currentSectionUnansweredList = formatQuestionNumberList(currentSectionUnansweredNumbers);
-  const navigationQuestions = currentSection ? sectionGroups?.[currentSection] ?? [] : [];
+  const navigationQuestions = currentSection === 'B'
+    ? (activePartBQuestion ? [activePartBQuestion] : [])
+    : currentSection ? sectionGroups?.[currentSection] ?? [] : [];
   const visibleQuestionSections = currentSection
-    ? [{ section: currentSection, questions: sectionGroups?.[currentSection] ?? [] }]
+    ? [{
+      section: currentSection,
+      questions: currentSection === 'B'
+        ? (activePartBQuestion ? [activePartBQuestion] : [])
+        : sectionGroups?.[currentSection] ?? [],
+    }]
     : [];
   const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
   // Wave 3 — resolve presentation skin from server-issued policy. The skin
@@ -1645,14 +1711,30 @@ function PlayerContent() {
             programmaticSeekTargetRef.current = null;
           }}
           onLoadedMetadata={() => {
-            if (!audioRef.current) return;
-            setDuration(audioRef.current.duration);
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (session?.modePolicy.onePlayOnly) {
+              audio.defaultPlaybackRate = 1;
+              audio.playbackRate = 1;
+            }
+            setDuration(audio.duration);
             const startMs = activeAudioStartMs;
             const endMs = activeAudioEndMs;
             if ((phase === 'audio' || phase === 'preview') && startMs != null && endMs != null && endMs > startMs) {
               seekAudioTo(startMs / 1000);
             }
             setAudioState('ready');
+          }}
+          onRateChange={() => {
+            const audio = audioRef.current;
+            if (!audio || !session?.modePolicy.onePlayOnly || audio.playbackRate === 1) return;
+            const requestedRate = Number(audio.playbackRate);
+            logAttemptEvent(
+              'audio_speed_change_blocked',
+              { requestedRate: Number.isFinite(requestedRate) ? requestedRate : null },
+            );
+            audio.defaultPlaybackRate = 1;
+            audio.playbackRate = 1;
           }}
           onWaiting={() => {
             if (!audioBufferingActiveRef.current) {
@@ -1721,6 +1803,12 @@ function PlayerContent() {
             const audio = audioRef.current;
             const allowedProgrammaticPause = allowedPauseRef.current;
             allowedPauseRef.current = false;
+            if (audioStartedLoggedRef.current && !hasReachedEndRef.current) {
+              logAttemptEvent('audio_stopped', {
+                section: currentSection ?? undefined,
+                reason: allowedProgrammaticPause ? 'programmatic' : 'pause',
+              });
+            }
             if (shouldResumeAfterBlockedPause({
               canPause: session?.modePolicy.canPause !== false,
               phase,
@@ -1755,8 +1843,8 @@ function PlayerContent() {
             // §17.11 — close the audio run and arm the next section's start.
             logAttemptEvent('audio_ended', currentSection ? { section: currentSection } : undefined);
             audioStartedLoggedRef.current = false;
-            // Audio is non-pausable, so reaching the end is the advance signal:
-            // jump straight to the next section (or submit on the last).
+            // Audio completion opens the explicit finish confirmation/review
+            // state; it must not silently lock and cross the boundary.
             void autoAdvanceAfterAudio();
           }}
           onError={() => {
@@ -1799,9 +1887,27 @@ function PlayerContent() {
               answeredCount={answeredCount}
               totalQuestions={session.questions.length}
               attemptSecondsRemaining={attemptSecondsRemaining}
+              warningThresholdsSeconds={session.modePolicy.countdownWarningsSeconds}
               onTogglePlayPause={togglePlayPause}
               onScrub={handleScrub}
             />
+
+            {session.modePolicy.screenReaderOptimised ? (
+              <p
+                data-testid="listening-screen-reader-status"
+                className="sr-only"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {phase === 'preview' && currentSection
+                  ? `${LISTENING_SECTION_LABEL[currentSection]} reading time has started.`
+                  : phase === 'review' && currentSection
+                    ? `${LISTENING_SECTION_LABEL[currentSection]} review window is open.`
+                    : currentSection
+                      ? `${LISTENING_SECTION_LABEL[currentSection]} audio and questions are active.`
+                      : 'Listening attempt active.'}
+              </p>
+            ) : null}
 
             {audioState === 'buffering' ? (
               <InlineAlert variant="warning">
@@ -2071,20 +2177,35 @@ function PlayerContent() {
 
             <div className="flex items-center justify-between gap-3 pt-4">
               <p className="text-xs text-muted">
-                Audio plays once per section and cannot be paused, scrubbed, or replayed. The next section starts automatically when the audio ends.
+              {currentSection === 'B'
+                ? 'Part B shows one question at a time. Each short extract plays once; after it ends, Next is irreversible.'
+                : 'Audio plays once per section and cannot be paused, scrubbed, or replayed. When it ends, confirm the irreversible boundary before the next section opens.'}
               </p>
+              {currentSection === 'B' && phase === 'audio' && partBQuestionAudioEnded && !audioValidityHeld ? (
+                <Button
+                  variant="primary"
+                  onClick={() => setShowNextConfirm(true)}
+                  disabled={isAdvancingPhase}
+                >
+                  {currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Next question' : 'Finish Part B'}
+                </Button>
+              ) : null}
             </div>
 
             {/* Forward-only lock confirmation */}
             <Modal
               open={showNextConfirm}
               onClose={() => setShowNextConfirm(false)}
-              title={phase === 'review' ? 'Lock this section and continue?' : currentSectionReviewSeconds > 0 ? 'Open review window?' : 'Lock Part B and continue?'}
+              title={currentSection === 'B'
+                ? currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Continue to the next Part B question?' : 'Lock Part B and continue?'
+                : phase === 'review' ? 'Lock this section and continue?' : currentSectionReviewSeconds > 0 ? 'Open review window?' : 'Lock Part B and continue?'}
               size="sm"
             >
               <div className="space-y-4">
                 <p className="text-sm text-muted">
-                  {phase === 'review'
+                  {currentSection === 'B'
+                    ? `This will permanently lock question ${activePartBQuestion?.number ?? ''}. You will not be able to return to it. ${currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'The next short extract will start automatically.' : 'Part C will open next.'}`
+                    : phase === 'review'
                     ? `This will permanently lock ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'}. You will not be able to return to it at any point.`
                     : currentSectionReviewSeconds > 0
                       ? `Starts the ${currentSectionReviewSeconds}-second review window for ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'}. Answer boxes stay editable for this section only during the window.`
@@ -2101,14 +2222,18 @@ function PlayerContent() {
                     disabled={isAdvancingPhase}
                     onClick={async () => {
                       setShowNextConfirm(false);
-                      if (phase === 'review') {
+                      if (currentSection === 'B') {
+                        await advancePartBQuestion();
+                      } else if (phase === 'review') {
                         await advanceFromReview();
                       } else {
                         await confirmNextFromAudio();
                       }
                     }}
                   >
-                    {phase === 'review' ? 'Lock & continue' : currentSectionReviewSeconds > 0 ? 'Open review window' : 'Lock & continue'}
+                    {currentSection === 'B'
+                      ? currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Lock & start next' : 'Lock & continue'
+                      : phase === 'review' ? 'Lock & continue' : currentSectionReviewSeconds > 0 ? 'Open review window' : 'Lock & continue'}
                   </Button>
                 </div>
               </div>

@@ -128,6 +128,7 @@ public sealed class ListeningMockService : IListeningMockService
     private readonly ILogger<ListeningMockService> _logger;
     private readonly IAssessmentScoreConversionService _scoreConversion;
     private readonly IAssessmentMarkingPolicyService _markingPolicy;
+    private readonly IListeningPolicyService? _listeningPolicy;
 
     public ListeningMockService(
         LearnerDbContext db,
@@ -136,7 +137,8 @@ public sealed class ListeningMockService : IListeningMockService
         TimeProvider clock,
         ILogger<ListeningMockService> logger,
         IAssessmentScoreConversionService? scoreConversion = null,
-        IAssessmentMarkingPolicyService? markingPolicy = null)
+        IAssessmentMarkingPolicyService? markingPolicy = null,
+        IListeningPolicyService? listeningPolicy = null)
     {
         _db = db;
         _grading = grading;
@@ -145,6 +147,7 @@ public sealed class ListeningMockService : IListeningMockService
         _logger = logger;
         _scoreConversion = scoreConversion ?? new AssessmentScoreConversionService(db);
         _markingPolicy = markingPolicy ?? new AssessmentMarkingPolicyService(db);
+        _listeningPolicy = listeningPolicy;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -278,9 +281,14 @@ public sealed class ListeningMockService : IListeningMockService
         var scoreConversionSnapshot = AssessmentScoreConversionSnapshot
             .Capture(scoreConversionAtStart)
             .Serialize();
+        var listeningPolicy = _listeningPolicy is not null
+            ? await _listeningPolicy.GetGlobalAsync(ct)
+            : await _db.ListeningPolicies.AsNoTracking()
+                .FirstOrDefaultAsync(policy => policy.Id == "global", ct);
         var audioTransport = ListeningAudioTransportPolicy.FromPolicy(
             "practice",
-            markingPolicyAtStart.Document);
+            markingPolicyAtStart.Document,
+            listeningPolicy?.LearningReplayAllowed);
         var session = new ListeningPracticeSession
         {
             Id = Guid.NewGuid(),
@@ -306,6 +314,13 @@ public sealed class ListeningMockService : IListeningMockService
                 markingPolicyVersionId = markingPolicyAtStart.PolicyId,
                 markingPolicyVersionKey = markingPolicyAtStart.PolicyVersionKey,
                 markingPolicy = markingPolicyAtStart.Document,
+                countdownWarningsSeconds = listeningPolicy is null
+                    ? Array.Empty<int>()
+                    : ListeningPolicyService.ParseCountdownWarnings(listeningPolicy.CountdownWarningsJson),
+                learningReplayAllowed = listeningPolicy?.LearningReplayAllowed,
+                shortAnswerNormalisation = listeningPolicy?.ShortAnswerNormalisation,
+                shortAnswerAcceptSynonyms = listeningPolicy?.ShortAnswerAcceptSynonyms,
+                screenReaderOptimised = listeningPolicy?.ScreenReaderOptimised,
                 audioLockMode = audioTransport.LockMode,
                 canPause = audioTransport.CanPause,
                 canScrub = audioTransport.CanScrub,
@@ -388,7 +403,13 @@ public sealed class ListeningMockService : IListeningMockService
                     attempt.Id, attempt.ListeningQuestionId);
                 continue;
             }
-            await _grading.GradeAttemptAsync(attempt, question, ct, metadata.MarkingPolicy);
+            await _grading.GradeAttemptAsync(
+                attempt,
+                question,
+                ct,
+                metadata.MarkingPolicy,
+                metadata.ShortAnswerNormalisation,
+                metadata.ShortAnswerAcceptSynonyms);
         }
 
         var grading = await _grading.GradeSessionAsync(attempts, questionsById, ct);
@@ -549,13 +570,159 @@ public sealed class ListeningMockService : IListeningMockService
                 legacyTableId: null,
                 scopeKey: "default",
                 cancellationToken: ct);
-        var hasApprovedConversion = conversion.ConvertedScore.HasValue
+        var hasApprovedConversion = session.TotalQuestions == MockTotalQuestions
+            && conversion.ConvertedScore.HasValue
             && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
             && conversion.Passed.HasValue;
         int? scaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
         var gradeLabel = hasApprovedConversion ? conversion.Grade ?? "—" : "Scaled score unavailable";
         int? predictedLow = null;
         int? predictedHigh = null;
+
+        var sessionQuestionIds = JsonSerializer.Deserialize<List<string>>(session.QuestionIdsJson)
+            ?? [];
+        var persistedAttempts = await _db.ListeningQuestionAttempts.AsNoTracking()
+            .Where(attempt => attempt.UserId == userId && attempt.PracticeSessionId == session.Id)
+            .ToListAsync(ct);
+        var latestAttemptByQuestionId = persistedAttempts
+            .GroupBy(attempt => attempt.ListeningQuestionId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(attempt => attempt.AttemptedAt).First(),
+                StringComparer.Ordinal);
+        var persistedQuestions = await _db.ListeningQuestions.AsNoTracking()
+            .Where(question => sessionQuestionIds.Contains(question.Id))
+            .ToListAsync(ct);
+        var partIds = persistedQuestions
+            .Select(question => question.ListeningPartId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var partCodes = await _db.ListeningParts.AsNoTracking()
+            .Where(part => partIds.Contains(part.Id))
+            .ToDictionaryAsync(part => part.Id, part => part.PartCode, StringComparer.Ordinal, ct);
+        var persistedRows = persistedQuestions
+            .Select(question =>
+            {
+                var hasPartCode = partCodes.TryGetValue(question.ListeningPartId, out var partCode);
+                latestAttemptByQuestionId.TryGetValue(question.Id, out var attempt);
+                var answered = attempt is not null
+                    && !attempt.IsUnknown
+                    && !string.IsNullOrWhiteSpace(attempt.LearnerAnswer ?? attempt.SelectedOption);
+                return new
+                {
+                    Part = hasPartCode ? NormalizeMockPart(partCode) : null,
+                    Section = hasPartCode ? NormalizeMockSection(partCode) : null,
+                    question.Points,
+                    Answered = answered,
+                    Correct = answered && attempt!.IsCorrect,
+                    TimeSeconds = Math.Max(0, attempt?.TimeSpentSeconds ?? 0),
+                };
+            })
+            .Where(item => item.Part is not null && item.Section is not null)
+            .ToList();
+        var partStats = persistedRows
+            .GroupBy(item => item.Part!, StringComparer.Ordinal)
+            .OrderBy(group => group.Key)
+            .Select(group =>
+            {
+                var rows = group.ToList();
+                return new
+                {
+                    Response = new MockPartBreakdownResponse(
+                        PartCode: group.Key,
+                        RawScore: rows.Where(row => row.Correct).Sum(row => row.Points),
+                        MaxRawScore: rows.Sum(row => row.Points),
+                        CorrectCount: rows.Count(row => row.Correct),
+                        IncorrectCount: rows.Count(row => row.Answered && !row.Correct),
+                        UnansweredCount: rows.Count(row => !row.Answered),
+                        AccuracyPercentage: rows.Count == 0
+                            ? 0m
+                            : Math.Round(rows.Count(row => row.Correct) * 100m / rows.Count, 1)),
+                };
+            })
+            .ToList();
+        var mockTimeSections = persistedRows
+            .GroupBy(row => row.Section!, StringComparer.Ordinal)
+            .OrderBy(group => group.Key)
+            .Select(group => new MockTimeUsedSectionResponse(
+                group.Key,
+                ToMilliseconds(group.Sum(row => (long)row.TimeSeconds))))
+            .ToList();
+        var summedMockSeconds = persistedRows.Sum(row => (long)row.TimeSeconds);
+        var mockTotalMilliseconds = session.DurationSeconds is > 0
+            ? ToMilliseconds(session.DurationSeconds.Value)
+            : ToMilliseconds(summedMockSeconds);
+        var persistedQuestionById = persistedQuestions
+            .ToDictionary(question => question.Id, StringComparer.Ordinal);
+        var itemReview = new List<MockReviewItemResponse>(sessionQuestionIds.Count);
+        foreach (var questionId in sessionQuestionIds)
+        {
+            if (!persistedQuestionById.TryGetValue(questionId, out var question)
+                || !partCodes.TryGetValue(question.ListeningPartId, out var partCode))
+            {
+                continue;
+            }
+
+            latestAttemptByQuestionId.TryGetValue(question.Id, out var answer);
+            var learnerAnswer = answer?.LearnerAnswer ?? answer?.SelectedOption;
+            var isUnanswered = answer is null
+                || answer.IsUnknown
+                || string.IsNullOrWhiteSpace(learnerAnswer);
+            var isCorrect = !isUnanswered && answer!.IsCorrect;
+            var errorCategory = isUnanswered
+                ? "unanswered"
+                : isCorrect
+                    ? null
+                    : answer!.IsSpellingCorrectMeaningWrong
+                        ? "spelling_correct_meaning_wrong"
+                        : answer.IsMeaningCorrectSpellingWrong
+                            ? "meaning_correct_spelling_wrong"
+                            : ClassifyMockListeningError(question, answer, metadata);
+            itemReview.Add(new MockReviewItemResponse(
+                QuestionId: question.Id,
+                PartCode: NormalizeMockSection(partCode),
+                Number: question.QuestionNumber,
+                QuestionType: question.QuestionType.ToString(),
+                Stem: question.Stem,
+                LearnerAnswer: isUnanswered ? null : learnerAnswer,
+                CorrectAnswer: TryReadString(question.CorrectAnswerJson),
+                IsCorrect: isCorrect,
+                IsUnanswered: isUnanswered,
+                PointsEarned: isCorrect ? question.Points : 0,
+                MaxPoints: question.Points,
+                ErrorCategory: errorCategory,
+                Explanation: question.ExplanationMarkdown,
+                Evidence: question.TranscriptEvidenceText,
+                EvidenceStartMilliseconds: question.TranscriptEvidenceStartMs,
+                EvidenceEndMilliseconds: question.TranscriptEvidenceEndMs));
+        }
+        itemReview = MockResultReviewOrdering.Prioritize(itemReview);
+        var errorSummary = itemReview
+            .Where(item => !string.IsNullOrWhiteSpace(item.ErrorCategory))
+            .GroupBy(item => item.ErrorCategory!, StringComparer.Ordinal)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => new MockErrorSummaryResponse(
+                ErrorCategory: group.Key,
+                Count: group.Count(),
+                QuestionIds: group.Select(item => item.QuestionId).ToList()))
+            .ToList();
+        var nextStep = MockNextStepRouteResolver.BuildListening(itemReview);
+        var routesByCategory = errorSummary.ToDictionary(
+            summary => summary.ErrorCategory,
+            summary => itemReview.FirstOrDefault(item => item.ErrorCategory == summary.ErrorCategory) is { } item
+                ? MockNextStepRouteResolver.Listening(item.ErrorCategory)
+                : "/listening/practice",
+            StringComparer.Ordinal);
+        await MockStudyPlanService.SeedRemediationItemsAsync(
+            _db,
+            userId,
+            "listening",
+            errorSummary,
+            "/listening/practice",
+            routesByCategory,
+            session.Id.ToString("N"),
+            ct);
 
         // ── Skill radar — pull rolling rows + overlay this mock's baseline ─
         var (skillRows, accentRows) = await _scoring.GetScoresAsync(userId, ct);
@@ -608,7 +775,72 @@ public sealed class ListeningMockService : IListeningMockService
             ScoreConversionTableVersionKey: hasApprovedConversion ? conversion.TableVersionKey : null,
             ScoreConversionErrorCode: hasApprovedConversion ? conversion.ErrorCode : "score_conversion_unavailable",
             MarkingPolicyVersionKey: metadata.MarkingPolicyVersionKey,
-            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null);
+            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null,
+            DurationSeconds: session.DurationSeconds,
+            PartBreakdown: partStats.Select(part => part.Response).ToList(),
+            TimeUsed: new MockTimeUsedResponse(mockTotalMilliseconds, mockTimeSections),
+            ItemReview: itemReview,
+            ErrorSummary: errorSummary,
+            NextStep: nextStep,
+            StudyPlanRoute: errorSummary.Count > 0 ? "/study-plan" : null,
+            TotalQuestions: session.TotalQuestions);
+    }
+
+    private static string NormalizeMockSection(ListeningPartCode partCode)
+        => partCode switch
+        {
+            ListeningPartCode.A1 => "A1",
+            ListeningPartCode.A2 => "A2",
+            ListeningPartCode.C1 => "C1",
+            ListeningPartCode.C2 => "C2",
+            _ => "B",
+        };
+
+    private static string NormalizeMockPart(ListeningPartCode partCode)
+        => partCode switch
+        {
+            ListeningPartCode.A1 or ListeningPartCode.A2 => "A",
+            ListeningPartCode.C1 or ListeningPartCode.C2 => "C",
+            _ => "B",
+        };
+
+    private static int? ToMilliseconds(long seconds)
+    {
+        if (seconds <= 0) return null;
+        return seconds >= int.MaxValue / 1000L
+            ? int.MaxValue
+            : (int)(seconds * 1000L);
+    }
+
+    private static string ClassifyMockListeningError(
+        ListeningQuestion question,
+        ListeningQuestionAttempt answer,
+        MockSessionMetadata metadata)
+    {
+        ListeningMockQuestionSnapshot? snapshot = null;
+        var hasSnapshot = metadata.QuestionSnapshots is not null
+            && metadata.QuestionSnapshots.TryGetValue(question.Id, out snapshot);
+        if (question.QuestionType == ListeningQuestionType.MultipleChoice3)
+        {
+            if (hasSnapshot
+                && snapshot is not null
+                && snapshot.Options.FirstOrDefault(option => string.Equals(
+                    option.OptionKey,
+                    answer.SelectedOption,
+                    StringComparison.OrdinalIgnoreCase)) is { DistractorCategory: { } category })
+            {
+                return category.ToString().Replace('_', ' ').ToLowerInvariant();
+            }
+
+            return "distractor";
+        }
+
+        return hasSnapshot && snapshot is not null
+            ? MockErrorCategoryClassifier.ClassifyTyped(
+                answer.LearnerAnswer ?? answer.SelectedOption,
+                TryReadString(snapshot.CorrectAnswerJson),
+                snapshot.SubSkillTagsCsv)
+            : "detail";
     }
 
     private static MockSessionMetadata ReadSessionMetadata(ListeningPracticeSession session)
@@ -804,6 +1036,8 @@ public sealed class ListeningMockService : IListeningMockService
         string? MarkingPolicyVersionId = null,
         string? MarkingPolicyVersionKey = null,
         AssessmentMarkingPolicyDocument? MarkingPolicy = null,
+        string? ShortAnswerNormalisation = null,
+        bool? ShortAnswerAcceptSynonyms = null,
         IReadOnlyDictionary<string, ListeningMockQuestionSnapshot>? QuestionSnapshots = null);
 
     /// <summary>Recompute the learner's readiness score on

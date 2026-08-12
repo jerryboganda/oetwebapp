@@ -30,4 +30,21 @@ describe('ScoreBandGraph', () => {
     expect(screen.getByTestId('score-band-graph')).not.toHaveTextContent('350 reference');
     expect(screen.getByRole('img', { name: /raw practice score 25 out of 42/i })).toBeInTheDocument();
   });
+
+  it('withholds conversion for a subset maximum even when metadata is present', () => {
+    render(
+      <ScoreBandGraph
+        rawScore={6}
+        maxRawScore={10}
+        scaledScore={380}
+        passed={true}
+        grade="B"
+        tableVersion="stale-v1"
+      />,
+    );
+
+    expect(screen.getByTestId('score-band-graph')).toHaveTextContent('Scaled score unavailable');
+    expect(screen.getByTestId('score-band-graph')).toHaveTextContent('Raw scale · 10');
+    expect(screen.getByTestId('score-band-graph')).not.toHaveTextContent('380/500');
+  });
 });

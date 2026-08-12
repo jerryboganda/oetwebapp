@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -317,6 +318,7 @@ public static class MockAnalyticsEndpoints
             {
                 s.State,
                 s.RawScore,
+                s.RawScoreMax,
                 s.ScaledScore,
                 s.FeedbackJson,
                 s.StartedAt,
@@ -347,7 +349,9 @@ public static class MockAnalyticsEndpoints
 
         var rawScores = rows.Where(r => r.RawScore.HasValue).Select(r => (double)r.RawScore!.Value).ToList();
         var scaledScores = rows
-            .Where(r => r.ScaledScore.HasValue && HasApprovedSectionConversion(r.FeedbackJson))
+            .Where(r => r.RawScoreMax == OetScoring.ListeningReadingRawMax
+                && r.ScaledScore.HasValue
+                && HasApprovedSectionConversion(r.FeedbackJson))
             .Select(r => (double)r.ScaledScore!.Value)
             .ToList();
         var completionSeconds = rows

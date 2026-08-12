@@ -51,7 +51,16 @@ public sealed record MockSessionResultResponse(
     int Score,
     int TotalQuestions,
     int? DurationSeconds,
-    int? ScaledScore);
+    int? ScaledScore,
+    IReadOnlyList<MockPartBreakdownResponse>? PartBreakdown = null,
+    MockTimeUsedResponse? TimeUsed = null,
+    IReadOnlyList<MockReviewItemResponse>? ItemReview = null,
+    IReadOnlyList<MockErrorSummaryResponse>? ErrorSummary = null,
+    MockNextStepResponse? NextStep = null,
+    string? StudyPlanRoute = null,
+    string? ScoreConversionTableVersionKey = null,
+    bool? ScoreConversionPassed = null,
+    string? ScoreConversionGrade = null);
 
 public sealed record SubmitDiagnosticRequest(
     Guid SessionId,
@@ -69,8 +78,14 @@ public sealed record LessonProgressRequest(
     int? QuizScore);
 
 public sealed record PostCommentRequest(string Body);
-public sealed record PassageQnaRequest(string PassageId, string Message, List<ChatMessageDto> History);
+public sealed record PassageQnaRequest(string AttemptId, string PassageId, string Message, List<ChatMessageDto> History);
 public sealed record ChatMessageDto(string Role, string Content);  // role: "user"|"assistant"
+public sealed record PassageQnaResponse(
+    string Reply,
+    IReadOnlyList<ChatMessageDto> History,
+    bool Grounded,
+    bool AdvisoryOnly,
+    bool MarksUnaffected);
 
 public sealed record ReadingProfileResponse(
     string UserId,

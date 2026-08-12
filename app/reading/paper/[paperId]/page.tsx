@@ -36,6 +36,7 @@ import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import { readingPublicDisplayNumber } from '@/lib/reading-display-number';
 import { completeMockSection } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
+import { correctedNowMs, readServerClockOffsetMs } from '@/lib/server-clock';
 import {
   enableAutoSync,
   markAttemptConflict,
@@ -89,6 +90,7 @@ interface ActiveAttempt {
   partBCTimerPausedAt: string | null;
   partBCPausedSeconds: number;
   partABreakMaxSeconds: number;
+  serverNow: string;
   status: ReadingAttemptStatus;
   /** Phase 3: which practice mode this attempt is running under. */
   mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
@@ -227,6 +229,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const warnedMiniTest2min = useRef(false);
   const warnedMiniTest1min = useRef(false);
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
+  const serverClockOffsetMs = useRef(0);
   const timingState = useRef({ partALocked: false, partBCWindowEnded: false, paperExpired: false, breakPending: false });
   /**
    * Phase 1 closure — wall-clock timestamp (ms) at which the currently
@@ -241,6 +244,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
    * also resets the timer so backgrounded tabs do not inflate timings.
    */
   const questionFocusStartedAt = useRef<Record<string, number>>({});
+
+  const syncServerClock = useCallback((serverNow: string | null | undefined) => {
+    serverClockOffsetMs.current = readServerClockOffsetMs(serverNow);
+    setNowMs(correctedNowMs(serverClockOffsetMs.current));
+  }, []);
 
   const flushPendingReadingAnswers = useCallback((keepalive = false) => {
     const now = Date.now();
@@ -364,7 +372,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    const interval = setInterval(() => setNowMs(correctedNowMs(serverClockOffsetMs.current)), 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -388,6 +396,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
       if (resumeAttemptId) {
         const saved = await getReadingAttempt(resumeAttemptId);
+        syncServerClock(saved.serverNow);
         const restoredAnswers = Object.fromEntries(
           saved.answers.map((answer) => [answer.readingQuestionId, answer.userAnswerJson]),
         );
@@ -425,7 +434,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     } finally {
       setLoading(false);
     }
-  }, [paperId, resumeAttemptId]);
+  }, [paperId, resumeAttemptId, syncServerClock]);
 
   useEffect(() => {
     void load();
@@ -574,7 +583,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // Practice modes ignore the Part-A hard lock, but their own timer still
   // controls autosave, input locking, and auto-submit.
   const partALocked = !isPracticeMode
-    && Boolean(attempt && nowMs > partADeadlineMs);
+    && Boolean(attempt && nowMs >= partADeadlineMs);
   const breakPending = Boolean(
     attempt?.mode === 'Exam'
     && attempt.partABreakAvailable
@@ -582,8 +591,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     && !attempt.partABreakResumed
     && nowMs < breakWindowEndsAtMs,
   );
-  const partBCWindowEnded = Boolean(attempt && !breakPending && nowMs > partBCDeadlineMs);
-  const paperExpired = Boolean(attempt && nowMs > overallDeadlineMs);
+  const partBCWindowEnded = Boolean(attempt && !breakPending && nowMs >= partBCDeadlineMs);
+  const paperExpired = Boolean(attempt && nowMs >= overallDeadlineMs);
   const attemptInputsLocked = breakPending || partBCWindowEnded || paperExpired;
 
   /**
@@ -641,6 +650,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     setContentLockedMessage(null);
     try {
       const started = await startReadingAttempt(paperId, { mockAttemptId, mockSectionId });
+      syncServerClock(started.serverNow);
       setAttempt(fromStartedAttempt(started));
       if (mockAttemptId && mockSectionId && !resumeAttemptId) {
         const nextParams = new URLSearchParams(search?.toString());
@@ -759,7 +769,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     setSaveState('saving');
     if (saveTimers.current[question.id]) clearTimeout(saveTimers.current[question.id]);
     const activeDeadlineMs = new Date(activePart === 'A' ? attempt.partADeadlineAt : attempt.partBCDeadlineAt).getTime();
-    if (activeDeadlineMs - Date.now() <= 5000) {
+    if (activeDeadlineMs - correctedNowMs(serverClockOffsetMs.current) <= 5000) {
       void persistAnswer(question.id, json);
       return;
     }
@@ -934,6 +944,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     setError(null);
     try {
       const resumed = await resumeReadingBreak(attempt.attemptId);
+      syncServerClock(resumed.serverNow);
       setAttempt((current) => current ? {
         ...current,
         deadlineAt: resumed.deadlineAt,
@@ -944,6 +955,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         partBCTimerPausedAt: resumed.partBCTimerPausedAt,
         partBCPausedSeconds: resumed.partBCPausedSeconds,
         partABreakMaxSeconds: resumed.partABreakMaxSeconds,
+        serverNow: resumed.serverNow,
       } : current);
       setActivePart('B');
       setTimingNotice('Break ended. Parts B and C are now active.');
@@ -953,7 +965,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     } catch (err) {
       setError(readErrorMessage(err, 'Failed to resume. Please try again.'));
     }
-  }, [attempt]);
+  }, [attempt, syncServerClock]);
 
   useEffect(() => {
     if (!attempt || attempt.status !== 'InProgress' || !partBCWindowEnded || autoSubmitTriggered.current) return;
@@ -2065,6 +2077,7 @@ function fromStartedAttempt(started: ReadingAttemptStarted): ActiveAttempt {
     partBCTimerPausedAt: started.partBCTimerPausedAt,
     partBCPausedSeconds: started.partBCPausedSeconds,
     partABreakMaxSeconds: started.partABreakMaxSeconds,
+    serverNow: started.serverNow,
     status: 'InProgress',
     // The /attempts/{id} POST returns the full canonical attempt; mode is
     // always Exam at this entry point. Practice modes are launched via the

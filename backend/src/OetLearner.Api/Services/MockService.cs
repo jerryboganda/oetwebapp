@@ -1012,12 +1012,18 @@ public sealed class MockService(
                 "The submitted section has a raw score but no owner-approved scaled conversion yet.");
         }
 
+        if (rawScoreMax != OetScoring.ListeningReadingRawMax)
+        {
+            throw ApiException.Conflict(
+                "content_attempt_scaled_unavailable",
+                "Only a complete 42-question Listening or Reading attempt can provide owner-approved scaled conversion.");
+        }
+
         var scaled = scaledScore.Value;
-        var max = rawScoreMax > 0 ? rawScoreMax : 42;
         return new CanonicalSectionEvidence(
             contentAttemptId,
             rawScore.Value,
-            max,
+            rawScoreMax,
             scaled,
             scoreConversionGrade,
             scoreConversionTableVersionKey.Trim(),
@@ -2196,8 +2202,9 @@ public sealed class MockService(
     /// </summary>
     /// <summary>
     /// Resolve the effective admin permission set for <paramref name="adminId"/>.
-    /// Mirrors <c>AdminService.GetEffectivePermissionsAsync</c>: an admin with
-    /// no explicit grants is treated as a system admin (backward compat).
+    /// Legacy accounts without an AdminUser role record retain the old
+    /// implicit system-admin behavior; a role-managed account marked
+    /// unassigned remains empty after revocation.
     /// </summary>
     private async Task<HashSet<string>> GetEffectiveAdminPermissionsAsync(string adminId, CancellationToken ct)
     {
@@ -2207,7 +2214,12 @@ public sealed class MockService(
             .Select(g => g.Permission)
             .ToListAsync(ct);
         var perms = new HashSet<string>(grants, StringComparer.OrdinalIgnoreCase);
-        if (perms.Count == 0)
+        var catalogRole = await db.AdminUsers
+            .AsNoTracking()
+            .Where(user => user.Id == adminId)
+            .Select(user => user.Role)
+            .SingleOrDefaultAsync(ct);
+        if (perms.Count == 0 && !string.Equals(catalogRole, "unassigned", StringComparison.OrdinalIgnoreCase))
         {
             perms.Add(AdminPermissions.SystemAdmin);
         }

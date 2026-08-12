@@ -49,7 +49,10 @@ public interface IListeningModePolicy
     /// <summary>R08 — annotations (highlights, strikethroughs) survive section advance.</summary>
     bool AnnotationsPersistOnAdvance { get; }
 
-    /// <summary>OET-Home only — fullscreen + tab-focus telemetry.</summary>
+    /// <summary>
+    /// Reserved for an explicitly owner-approved exam-rehearsal mode. The
+    /// current practice and OET@Home flows keep fullscreen advisory only.
+    /// </summary>
     bool FullscreenEnforced { get; }
 
     /// <summary>Legacy review-window contract. Always null for computer-based modes.</summary>
@@ -86,7 +89,9 @@ internal sealed record OetHomeModePolicy : IListeningModePolicy
     public bool FreeNavigation => false;
     public bool RequiresTechReadiness => true;
     public bool AnnotationsPersistOnAdvance => true;
-    public bool FullscreenEnforced => true;
+    // The specification makes fullscreen a guidance signal unless the owner
+    // explicitly approves a dedicated exam-rehearsal mode.
+    public bool FullscreenEnforced => false;
     public int? FinalReviewAllPartsMs => null;
 }
 

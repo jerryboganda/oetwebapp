@@ -56,8 +56,10 @@ public static class ListeningLearnerEndpoints
         // becomes a public scaled-score or pass claim.
         app.MapGet("/v1/listening-papers/policy/test-rules", async (
             LearnerDbContext db,
+            IListeningPolicyService listeningPolicy,
             CancellationToken ct) =>
         {
+            var policy = await listeningPolicy.GetGlobalAsync(ct);
             var now = DateTimeOffset.UtcNow;
             var effectiveTables = await db.AssessmentScoreConversionTables
                 .AsNoTracking()
@@ -93,7 +95,7 @@ public static class ListeningLearnerEndpoints
             return Results.Ok(new
             {
                 questionCount = AssessmentScoreTableValidator.RawMaximum,
-                durationMinutes = 40,
+                durationMinutes = Math.Max(1, policy.FullPaperTimerMinutes),
                 partA = new { items = 24, extracts = 2, itemType = "short-answer" },
                 partB = new { items = 6, extracts = 6, itemType = "mcq-3-option" },
                 partC = new { items = 12, extracts = 2, itemType = "mcq-3-option" },
@@ -312,7 +314,7 @@ public static class ListeningLearnerEndpoints
             .RequireRateLimiting("PerUserWrite")
             .WithName("AdvanceListeningPaperSection")
             .WithSummary("Advance the one-way Listening section cursor")
-            .WithDescription("Stores a monotonic sectionCursor on the attempt; rejects any request that would move it backwards (server-side one-way enforcement).");
+            .WithDescription("Stores a monotonic sectionCursor on the attempt; rejects backward moves and forward skips (server-side one-way enforcement).");
 
         group.MapPost("/attempts/{attemptId}/integrity-events", async (
             string attemptId,
@@ -391,6 +393,54 @@ public static class ListeningLearnerEndpoints
                 });
             }
         }).RequireRateLimiting("PerUser");
+
+        // Grounded post-submit candidate Q&A. The service derives all answer,
+        // rationale, and transcript evidence from the owned attempt; the
+        // caller cannot supply or replace marking evidence.
+        group.MapPost("/attempts/{attemptId}/questions/{questionId}/ai-qna", async (
+            string attemptId,
+            string questionId,
+            ListeningQuestionQnaRequest request,
+            HttpContext http,
+            IListeningQuestionQnaService qnaService,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var response = await qnaService.AskAsync(
+                    http.UserId(), attemptId, questionId, request, ct);
+                return Results.Ok(response);
+            }
+            catch (ListeningQuestionQnaUnavailableException ex)
+            {
+                return Results.Conflict(new
+                {
+                    code = "grounded_ai_unavailable",
+                    error = ex.Message,
+                    message = "Grounded Listening Q&A is unavailable until the submitted evidence and AI pathway are ready.",
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "grounded_ai_not_ready",
+                    error = ex.Message,
+                    message = ex.Message,
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { code = "invalid_request", error = ex.Message });
+            }
+        })
+            .RequireRateLimiting("PerUser")
+            .WithName("AskListeningQuestionGroundedAi")
+            .WithSummary("Ask grounded advisory AI about a submitted Listening question");
 
         group.MapGet("/attempts/{attemptId}/review", async (
             string attemptId,

@@ -43,7 +43,7 @@ export const SECTION_DEFAULTS: Record<
   Exclude<WizardStep, 'bundle' | 'review'>,
   { order: number; minutes: number }
 > = {
-  listening: { order: 1, minutes: 40 },
+  listening: { order: 1, minutes: 45 },
   reading: { order: 2, minutes: 60 },
   writing: { order: 3, minutes: 45 },
   speaking: { order: 4, minutes: 20 },

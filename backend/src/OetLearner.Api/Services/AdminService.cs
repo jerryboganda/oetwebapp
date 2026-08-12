@@ -134,8 +134,15 @@ public partial class AdminService(
             .Select(g => g.Permission)
             .ToListAsync(ct);
         var perms = new HashSet<string>(grants, StringComparer.OrdinalIgnoreCase);
-        // Backward compat: admins with no explicit grants are treated as system_admin
-        if (perms.Count == 0)
+        // Preserve the legacy implicit system-admin behavior only for accounts
+        // that predate the explicit AdminUser role catalog. A role-managed
+        // account marked unassigned must remain empty after revocation.
+        var catalogRole = await db.AdminUsers
+            .AsNoTracking()
+            .Where(user => user.Id == adminId)
+            .Select(user => user.Role)
+            .SingleOrDefaultAsync(ct);
+        if (perms.Count == 0 && !string.Equals(catalogRole, "unassigned", StringComparison.OrdinalIgnoreCase))
             perms.Add(AdminPermissions.SystemAdmin);
         return perms;
     }

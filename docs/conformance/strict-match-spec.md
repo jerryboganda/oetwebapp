@@ -18,10 +18,9 @@ It intentionally overrides Listening **R02.5** (examiner minor-variant discretio
 
 Normalization pipeline, applied identically to the candidate AND to each authored answer-key entry:
 
-1. **ApplyTextNormalization** — fold smart quotes → ASCII; apply the policy's existing hyphen/unit normalization hooks (e.g. `38.5°C`). No semantic change.
-2. **Trim** leading/trailing whitespace.
-3. **CollapseWhitespace** — every internal whitespace run → a single space.
-4. **Compare** with `Ordinal` (when `caseSensitive`) or `OrdinalIgnoreCase` (default). OET accepts any letter case, so case-insensitive is the default and is NOT a spelling relaxation.
+1. **Trim** leading/trailing whitespace.
+2. **CollapseWhitespace** — every internal whitespace run → a single space only when the captured owner-approved profile enables it.
+3. **Compare** with `Ordinal` (when `caseSensitive`) or `OrdinalIgnoreCase` (when the captured profile is case-insensitive). No punctuation, hyphen, number, or unit rewriting is performed.
 
 **Accept iff** the normalized candidate equals the normalized form of the correct answer **or any authored alternate** in the answer key.
 

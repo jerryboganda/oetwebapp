@@ -609,10 +609,12 @@ export interface ListeningExpertAttemptSummary {
   paperId: string;
   paperTitle: string;
   submittedAt: string;
-  rawScore: number;
-  scaledScore: number;
+  rawScore: number | null;
+  scaledScore: number | null;
   maxRawScore: number;
   hasFeedback: boolean;
+  requiresAdminReview?: boolean;
+  adminReviewReason?: string | null;
 }
 
 /**
@@ -640,7 +642,9 @@ export interface ListeningExpertMyReviewSummary {
 export interface ListeningExpertOptionAnalysisItem {
   key: string; // 'A' | 'B' | 'C'
   text: string;
-  isCorrect: boolean;
+  isCorrect: boolean | null;
+  isInvalid?: boolean;
+  missReason?: string | null;
   distractorCategory: string | null; // too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword | out_of_scope
   whyWrong: string | null;
 }
@@ -676,9 +680,12 @@ export interface ListeningExpertBundle {
   learnerDisplayName: string;
   paperTitle: string;
   submittedAt: string;
-  rawScore: number;
-  scaledScore: number;
+  rawScore: number | null;
+  scaledScore: number | null;
   maxRawScore: number;
+  requiresAdminReview?: boolean;
+  adminReviewReason?: string | null;
+  invalidCount?: number;
   answers: ListeningExpertAnswerItem[];
   partANotes?: ListeningExpertPartANote[] | null;
   existingFeedback?: {

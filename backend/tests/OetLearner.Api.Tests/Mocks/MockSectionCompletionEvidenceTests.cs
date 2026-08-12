@@ -33,6 +33,7 @@ public class MockSectionCompletionEvidenceTests
             MaxRawScore = 42,
             ScoreConversionTableVersionKey = "test-listening-reading-v1",
             ScoreConversionGrade = "B",
+            ScoreConversionPassed = true,
         });
         await db.SaveChangesAsync();
 
@@ -63,6 +64,50 @@ public class MockSectionCompletionEvidenceTests
     }
 
     [Fact]
+    public async Task ReadingSectionCompletion_RejectsSubsetConversionEvidence()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedMockSection(db, "mock-reading-subset", "section-reading-subset", "bundle-section-reading-subset", "learner-1", "reading", "paper-reading-subset", now);
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "reading-attempt-subset",
+            UserId = "learner-1",
+            PaperId = "paper-reading-subset",
+            Status = ReadingAttemptStatus.Submitted,
+            StartedAt = now.AddMinutes(-10),
+            SubmittedAt = now,
+            LastActivityAt = now,
+            RawScore = 5,
+            ScaledScore = 350,
+            MaxRawScore = 10,
+            ScoreConversionTableVersionKey = "stale-v1",
+            ScoreConversionGrade = "B",
+            ScoreConversionPassed = true,
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MockService(db);
+        await service.BindSectionContentAttemptIfRequestedAsync(
+            "learner-1",
+            "mock-reading-subset",
+            "section-reading-subset",
+            "reading-attempt-subset",
+            "reading",
+            "paper-reading-subset",
+            CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.CompleteMockSectionAsync(
+            "learner-1",
+            "mock-reading-subset",
+            "section-reading-subset",
+            CompletionRequest("reading-attempt-subset"),
+            CancellationToken.None));
+
+        Assert.Equal("content_attempt_scaled_unavailable", ex.ErrorCode);
+    }
+
+    [Fact]
     public async Task ReadingSectionCompletion_RejectsUnboundSubmittedReadingAttempt()
     {
         await using var db = NewDb();
@@ -82,6 +127,7 @@ public class MockSectionCompletionEvidenceTests
             MaxRawScore = 42,
             ScoreConversionTableVersionKey = "test-listening-reading-v1",
             ScoreConversionGrade = "B",
+            ScoreConversionPassed = true,
         });
         await db.SaveChangesAsync();
 

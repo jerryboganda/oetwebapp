@@ -17182,6 +17182,13 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("DeadlineAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("AdminReviewFlaggedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AdminReviewReason")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTimeOffset>("LastActivityAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -17191,6 +17198,9 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<int>("MaxRawScore")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("RequiresAdminReview")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Mode")
                         .HasColumnType("integer");

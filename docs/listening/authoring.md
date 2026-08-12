@@ -16,8 +16,10 @@ A Listening paper has a fixed 5-part / 42-question shape:
 | C1 | 31–36 | Interview / presentation (~6 min) | `MultipleChoice3` | 6 |
 | C2 | 37–42 | Interview / presentation (~6 min) | `MultipleChoice3` | 6 |
 
-Total: 42 raw points. Map to scaled via `OetScoring.OetRawToScaled` — never
-inline math (see `ListeningScoringPathAuditTest`).
+Total: 42 raw points. A scaled score and pass status are produced only from a
+complete, owner-approved, versioned conversion table captured with the
+attempt. Until that table exists, retain and display raw evidence only; never
+use formula or interpolation fallbacks.
 
 ## Authoring surfaces
 

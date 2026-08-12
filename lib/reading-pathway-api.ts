@@ -12,7 +12,7 @@ import { apiClient } from './api';
 import { env } from './env';
 import { ensureFreshAccessToken } from './auth-client';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
-import { oetGradeFromScaled } from './scoring';
+import { OET_LR_RAW_MAX } from './scoring';
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -176,13 +176,60 @@ export interface AnswerResultDto {
 export interface MockResultDto {
   sessionId: string;
   rawScore: number;
+  totalQuestions: number | null;
   scaledScore: number | null;
   grade: string | null;
   scoreConversionTableVersionKey: string | null;
   scoreConversionPassed: boolean | null;
+  scoreConversionGrade: string | null;
   sectionBreakdown: Record<string, number>;
+  partBreakdown: Array<{
+    partCode: string;
+    rawScore: number;
+    maxRawScore: number;
+    correctCount: number;
+    incorrectCount: number;
+    unansweredCount: number;
+    accuracyPercentage: number;
+  }>;
   skillBreakdown: Record<string, number>;
   timeMap: Record<string, number>;
+  timeUsed: {
+    totalMilliseconds: number | null;
+    sections: Array<{
+      sectionCode: string;
+      elapsedMilliseconds: number | null;
+    }>;
+  };
+  itemReview: Array<{
+    questionId: string;
+    partCode: string;
+    number: number;
+    questionType: string;
+    stem: string | null;
+    learnerAnswer: string | null;
+    correctAnswer: string | null;
+    isCorrect: boolean;
+    isUnanswered: boolean;
+    pointsEarned: number;
+    maxPoints: number;
+    errorCategory: string | null;
+    explanation: string | null;
+    evidence: string | null;
+    evidenceStartMilliseconds: number | null;
+    evidenceEndMilliseconds: number | null;
+  }>;
+  errorSummary: Array<{
+    errorCategory: string;
+    count: number;
+    questionIds: string[];
+  }>;
+  nextStep: {
+    title: string;
+    description: string;
+    route: string;
+  } | null;
+  studyPlanRoute: string | null;
 }
 
 // ── Vocabulary DTOs ───────────────────────────────────────────────────────────
@@ -335,6 +382,14 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface PassageQnaResponse {
+  reply: string;
+  history: ChatMessage[];
+  grounded: boolean;
+  advisoryOnly: boolean;
+  marksUnaffected: boolean;
+}
+
 interface RawDailyPlanItemDto {
   id: string;
   itemType: string;
@@ -379,6 +434,52 @@ interface RawMockResultDto {
   scaledScore?: number | null;
   scoreConversionTableVersionKey?: string | null;
   scoreConversionPassed?: boolean | null;
+  scoreConversionGrade?: string | null;
+  partBreakdown?: Array<{
+    partCode: string;
+    rawScore: number;
+    maxRawScore: number;
+    correctCount: number;
+    incorrectCount: number;
+    unansweredCount: number;
+    accuracyPercentage: number;
+  }> | null;
+  timeUsed?: {
+    totalMilliseconds: number | null;
+    sections: Array<{
+      sectionCode: string;
+      elapsedMilliseconds: number | null;
+    }>;
+  } | null;
+  itemReview?: Array<{
+    questionId: string;
+    partCode: string;
+    number: number;
+    questionType: string;
+    stem: string | null;
+    learnerAnswer: string | null;
+    correctAnswer: string | null;
+    isCorrect: boolean;
+    isUnanswered: boolean;
+    pointsEarned: number;
+    maxPoints: number;
+    errorCategory: string | null;
+    explanation: string | null;
+    evidence: string | null;
+    evidenceStartMilliseconds?: number | null;
+    evidenceEndMilliseconds?: number | null;
+  }> | null;
+  errorSummary?: Array<{
+    errorCategory: string;
+    count: number;
+    questionIds: string[];
+  }> | null;
+  nextStep?: {
+    title: string;
+    description: string;
+    route: string;
+  } | null;
+  studyPlanRoute?: string | null;
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -511,7 +612,8 @@ export const startMock = (mockTemplateId: string) =>
 
 export const getMockResults = (sessionId: string) =>
   api<RawMockResultDto>(`/v1/reading-pathway/mocks/sessions/${encodeURIComponent(sessionId)}/results`).then((raw) => {
-    const hasApprovedConversion = raw.scaledScore != null
+    const hasApprovedConversion = raw.totalQuestions === OET_LR_RAW_MAX
+      && raw.scaledScore != null
       && raw.scoreConversionTableVersionKey != null
       && raw.scoreConversionPassed != null;
     const scaledScore = hasApprovedConversion ? raw.scaledScore! : null;
@@ -522,13 +624,28 @@ export const getMockResults = (sessionId: string) =>
     return {
       sessionId,
       rawScore: raw.score ?? 0,
+      totalQuestions: raw.totalQuestions ?? null,
       scaledScore,
-      grade: scaledScore === null ? null : gradeFromScaled(scaledScore),
+      grade: hasApprovedConversion ? raw.scoreConversionGrade ?? null : null,
       scoreConversionTableVersionKey: hasApprovedConversion ? raw.scoreConversionTableVersionKey! : null,
       scoreConversionPassed: hasApprovedConversion ? raw.scoreConversionPassed! : null,
-      sectionBreakdown: {},
+      scoreConversionGrade: hasApprovedConversion ? raw.scoreConversionGrade ?? null : null,
+      sectionBreakdown: Object.fromEntries((raw.partBreakdown ?? []).map((part) => [part.partCode, part.rawScore])),
+      partBreakdown: raw.partBreakdown ?? [],
       skillBreakdown: {},
       timeMap,
+      timeUsed: raw.timeUsed ?? {
+        totalMilliseconds: timeMap.total == null ? null : timeMap.total * 1000,
+        sections: ['A', 'B', 'C'].map((sectionCode) => ({ sectionCode, elapsedMilliseconds: null })),
+      },
+      itemReview: (raw.itemReview ?? []).map((item) => ({
+        ...item,
+        evidenceStartMilliseconds: item.evidenceStartMilliseconds ?? null,
+        evidenceEndMilliseconds: item.evidenceEndMilliseconds ?? null,
+      })),
+      errorSummary: raw.errorSummary ?? [],
+      nextStep: raw.nextStep ?? null,
+      studyPlanRoute: raw.studyPlanRoute ?? null,
     };
   });
 
@@ -656,13 +773,14 @@ export const postComment = (questionId: string, body: string) =>
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 export const askAiAboutPassage = (
+  attemptId: string,
   passageId: string,
   message: string,
   history: ChatMessage[],
 ) =>
-  api<{ reply: string; history: ChatMessage[] }>('/v1/reading-pathway/ai/passage-qna', {
+  api<PassageQnaResponse>('/v1/reading-pathway/ai/passage-qna', {
     method: 'POST',
-    body: JSON.stringify({ passageId, message, history }),
+    body: JSON.stringify({ attemptId, passageId, message, history }),
   });
 
 function mapDailyPlan(items: RawDailyPlanItemDto[]): DailyPlanDto {
@@ -708,10 +826,6 @@ function skillName(code: string): string {
     case 'S8': return 'Timing';
     default: return code;
   }
-}
-
-function gradeFromScaled(score: number): string {
-  return oetGradeFromScaled(score);
 }
 
 function dailyPlanTitle(item: RawDailyPlanItemDto): string {

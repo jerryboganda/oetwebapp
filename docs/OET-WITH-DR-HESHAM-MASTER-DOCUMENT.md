@@ -112,7 +112,7 @@ OET has four sub-tests. The platform models each one canonically — these shape
 
 | Sub-test | Structure the platform enforces | Timing | Raw → scaled |
 |---|---|---|---|
-| **Listening** | Part A: 24 short-answer note-completion items (A1 Q1–12, A2 Q13–24) · Part B: 6 three-option MCQs (B1–B6, one each) · Part C: 12 three-option MCQs (C1 Q31–36, C2 Q37–42). **Total 42** | 40 min (API/test-rules) with per-section preview windows: A1 30 s, A2 30 s, B 30 s, C1 90 s, C2 90 s | `30/42 ≡ 350/500`, piecewise linear, 42 → 500 |
+| **Listening** | Part A: 24 short-answer note-completion items (A1 Q1–12, A2 Q13–24) · Part B: 6 three-option MCQs (B1–B6, one each) · Part C: 12 three-option MCQs (C1 Q31–36, C2 Q37–42). **Total 42** | Approximately 45–50 minutes including transitions; the authoritative default timer is 45 minutes, with per-section preview windows: A1 30 s, A2 30 s, B 30 s, C1 90 s, C2 90 s | `30/42 ≡ 350/500`, piecewise linear, 42 → 500 |
 | **Reading** | Part A: 4 texts, 20 items (matching / short answer / sentence completion) · Part B: 6 extracts, 6 MCQs · Part C: 2 long articles, 16 MCQs. **Total 42 across 12 texts** | Part A **15 min hard-locked**; optional 10-min break; Parts B+C share **45 min**. Total 60 min | Same `30/42 ≡ 350/500` anchor |
 | **Writing** | One profession-specific letter from case notes. Six official criteria: Purpose /3, Content /7, Conciseness & Clarity /7, Genre & Style /7, Organisation & Layout /7, Language /7. **Raw max 38** | 5 min reading (locked) + 40 min writing = **45 min** | `raw × 500 / 38`; **country-aware pass mark** (see §8.3) |
 | **Speaking** | Unscored warm-up, then **two role-plays**, each 3 min preparation + 5 min discussion, against an interlocutor playing patient/carer/relative/colleague | ~20 min total | 4 linguistic criteria (0–6) + 5 clinical-communication criteria (0–3), weighted 55/45 → 0–500 |
@@ -1291,7 +1291,7 @@ The platform is **in production and serving learners**. This section is the hone
 
 | Issue | Impact |
 |---|---|
-| Listening duration is stated three ways (45 min on the hub, 40 min in the API, 90 s/sub-section fallback in the paper player) | Learner-visible confusion |
+| Listening duration previously diverged between the hub, API, and paper-player fallback | Resolved for the computer-only path by deriving the public policy duration from `ListeningPolicy.FullPaperTimerMinutes`; paper simulation remains out of scope |
 | Writing V2 emits a raw total and a hand-rolled band but **not** a 0–500 scaled score or the country-aware pass/fail — the canonical `lib/scoring.ts` writing path is currently unused | Country is collected in onboarding but not applied on the V2 result surface |
 | `"B+"` appears in the Writing band ladder; the official OET set is A, B, C+, C, D, E | Terminology mismatch |
 | Two disconnected Writing review systems — the learner request page feeds one, the tutor queue reads the other | Requested reviews may not reach the tutor queue |

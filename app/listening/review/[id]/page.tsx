@@ -11,11 +11,16 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
+import { GroundedListeningQuestionQna } from '@/components/domain/results/grounded-listening-question-qna';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
+import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
+import { ListeningPartBreakdown } from '@/components/domain/results/listening-part-breakdown';
+import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
 import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
+import { hasApprovedListeningConversion } from '@/lib/listening-result-display';
 import { getListeningExpertFeedback } from '@/lib/expert-listening-api';
 import type { ListeningExpertBundle } from '@/lib/types/expert';
 
@@ -231,43 +236,64 @@ export default function ListeningReviewPage() {
         {!loading && review ? (
           <>
             {(() => {
-              const hasApprovedConversion = review.scaledScore != null
-                && review.scoreConversionTableVersionKey != null
-                && review.passed != null;
+              const hasApprovedConversion = hasApprovedListeningConversion(review);
               return (
                 <>
+            <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
+              AI Practice Score — not an official OET result.
+            </p>
             <ResultsScorePanel
               eyebrow="Listening review"
               icon={Headphones}
               title={review.paper.title}
-              subtitle={review.scoreDisplay
-                ?? `${review.rawScore}/${review.maxRawScore} raw${typeof review.scaledScore === 'number' ? ` · ${review.scaledScore}/500 scaled` : ''}`}
+              subtitle={hasApprovedConversion && review.scoreDisplay
+                ? review.scoreDisplay
+                : `${review.rawScore}/${review.maxRawScore} raw${hasApprovedConversion ? ` · ${review.scaledScore}/500 scaled` : ''}`}
               gaugeValue={review.maxRawScore > 0 ? (review.rawScore / review.maxRawScore) * 100 : 0}
               gaugeLabel="Accuracy"
               gaugeColor={hasApprovedConversion ? (review.passed ? 'var(--color-success)' : 'var(--color-warning)') : 'var(--color-primary)'}
               grade={hasApprovedConversion ? { label: `Grade ${review.grade}`, tone: review.passed ? 'success' : 'warning' } : null}
-              stats={[
+               stats={[
                 { label: 'Correct', value: review.correctCount, tone: 'success', icon: <CheckCircle2 /> },
                 { label: 'Incorrect', value: review.incorrectCount, tone: 'danger', icon: <XCircle /> },
                 { label: 'Unanswered', value: review.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
                 {
-                  label: 'Scaled',
-                  value: hasApprovedConversion ? `${review.scaledScore}/500` : '—',
+                  label: hasApprovedConversion ? 'Scaled' : 'Raw',
+                  value: hasApprovedConversion ? `${review.scaledScore}/500` : `${review.rawScore}/${review.maxRawScore}`,
                   tone: 'info',
                   icon: <Target />,
-                },
-              ]}
-            />
+                 },
+               ]}
+               chartSlot={(
+                 <ScoreBandGraph
+                   rawScore={review.rawScore}
+                   maxRawScore={review.maxRawScore}
+                   scaledScore={hasApprovedConversion ? review.scaledScore : null}
+                   passed={hasApprovedConversion ? review.passed : null}
+                   grade={hasApprovedConversion ? review.grade : null}
+                   tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
+                 />
+               )}
+             />
 
             <ScoreConversionEvidence
               assessment="Listening"
               rawScore={review.rawScore}
               maxRawScore={review.maxRawScore}
-              scaledScore={review.scaledScore}
-              passed={review.passed}
-              grade={review.grade}
-              tableVersion={review.scoreConversionTableVersionKey}
+              scaledScore={hasApprovedConversion ? review.scaledScore : null}
+              passed={hasApprovedConversion ? review.passed : null}
+              grade={hasApprovedConversion ? review.grade : null}
+              tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
               errorCode={review.scoreConversionErrorCode}
+            />
+            <ListeningPartBreakdown items={review.itemReview} />
+            <TimeUsedSummary
+              totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
+              sections={(review.timeUsed?.sections ?? []).map((section) => ({
+                label: section.sectionCode,
+                milliseconds: section.elapsedMilliseconds,
+              }))}
+              description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
             />
             <p className="mt-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
               This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
@@ -450,6 +476,10 @@ export default function ListeningReviewPage() {
                       attemptId={attemptId ?? ''}
                       questionId={question.questionId}
                       unanswered={unanswered}
+                    />
+                    <GroundedListeningQuestionQna
+                      attemptId={attemptId ?? ''}
+                      questionId={question.questionId}
                     />
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                       {question.speakerAttitude ? (

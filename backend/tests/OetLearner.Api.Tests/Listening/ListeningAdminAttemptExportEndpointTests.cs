@@ -87,6 +87,31 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
             attempt.RequiresAdminReview = true;
             attempt.AdminReviewReason = "audio_playback_error";
             attempt.AdminReviewFlaggedAt = DateTimeOffset.UtcNow;
+            db.ListeningParts.Add(new ListeningPart
+            {
+                Id = "part-export",
+                PaperId = "paper-export",
+                PartCode = ListeningPartCode.B,
+                MaxRawScore = 6,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            db.ListeningQuestions.Add(new ListeningQuestion
+            {
+                Id = "question-export",
+                PaperId = "paper-export",
+                ListeningPartId = "part-export",
+                QuestionNumber = 1,
+                DisplayOrder = 0,
+                Points = 1,
+                QuestionType = ListeningQuestionType.MultipleChoice3,
+                Stem = "Export review question",
+                CorrectAnswerJson = "\"B\"",
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            var answer = await db.ListeningAnswers.SingleAsync(a => a.ListeningAttemptId == attemptId);
+            answer.IsCorrect = null;
             await db.SaveChangesAsync();
         }
 
@@ -97,6 +122,9 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
         var root = document.RootElement;
         Assert.True(root.GetProperty("requiresAdminReview").GetBoolean());
         Assert.Equal("audio_playback_error", root.GetProperty("adminReviewReason").GetString());
+        var answer = Assert.Single(root.GetProperty("answers").EnumerateArray());
+        Assert.True(answer.GetProperty("isInvalid").GetBoolean());
+        Assert.True(answer.GetProperty("missReason").ValueKind == JsonValueKind.Null);
 
         await using var auditScope = _factory.Services.CreateAsyncScope();
         var auditDb = auditScope.ServiceProvider.GetRequiredService<LearnerDbContext>();

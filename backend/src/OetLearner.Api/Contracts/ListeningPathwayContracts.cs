@@ -54,6 +54,22 @@ public class AudioCheckResponse
     public DateTimeOffset? AudioCheckPassedAt { get; set; }
 }
 
+/// <summary>
+/// Post-submit, question-scoped Listening Q&amp;A. The attempt and question
+/// identifiers are route parameters so the server can derive all assessment
+/// evidence from the owned submitted attempt.
+/// </summary>
+public sealed record ListeningQuestionQnaRequest(
+    string Message,
+    List<ChatMessageDto> History);
+
+public sealed record ListeningQuestionQnaResponse(
+    string Reply,
+    IReadOnlyList<ChatMessageDto> History,
+    bool Grounded,
+    bool AdvisoryOnly,
+    bool MarksUnaffected);
+
 /// <summary>Returned when a learner begins the 23-question diagnostic (§6.1).</summary>
 public class StartDiagnosticResponse
 {
@@ -312,7 +328,15 @@ public sealed record MockResultResponse(
     string? ScoreConversionTableVersionKey = null,
     string? ScoreConversionErrorCode = null,
     string? MarkingPolicyVersionKey = null,
-    bool? ScoreConversionPassed = null);
+    bool? ScoreConversionPassed = null,
+    int? DurationSeconds = null,
+    IReadOnlyList<MockPartBreakdownResponse>? PartBreakdown = null,
+    MockTimeUsedResponse? TimeUsed = null,
+    IReadOnlyList<MockReviewItemResponse>? ItemReview = null,
+    IReadOnlyList<MockErrorSummaryResponse>? ErrorSummary = null,
+    MockNextStepResponse? NextStep = null,
+    string? StudyPlanRoute = null,
+    int? TotalQuestions = null);
 
 /// <summary>Hero block of the analytics dashboard (§19.2).</summary>
 public sealed record ListeningDashboardDto(

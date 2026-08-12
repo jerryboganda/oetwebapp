@@ -62,11 +62,11 @@ public class ListeningModePolicyTests
     }
 
     [Fact]
-    public void HomeMode_EnforcesFullscreen()
+    public void HomeMode_KeepsFullscreenAdvisory()
     {
         var policy = _resolver.For(ListeningAttemptMode.Home);
 
-        Assert.True(policy.FullscreenEnforced);
+        Assert.False(policy.FullscreenEnforced);
         Assert.True(policy.OneWayLocks);
         Assert.False(policy.AudioPauseAllowed);
         Assert.False(policy.AudioSeekAllowed);

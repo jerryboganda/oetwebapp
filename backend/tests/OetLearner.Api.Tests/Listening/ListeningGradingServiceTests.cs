@@ -326,7 +326,7 @@ public class ListeningGradingServiceTests
         var result = await new ListeningGradingService(db).GradeAsync(attempt.Id, CancellationToken.None);
 
         Assert.Equal(0, result.RawScore);
-        Assert.False((await db.ListeningAnswers.SingleAsync(a => a.Id == answer.Id)).IsCorrect);
+        Assert.Null((await db.ListeningAnswers.SingleAsync(a => a.Id == answer.Id)).IsCorrect);
         var audit = await db.AuditEvents.SingleAsync(e =>
             e.Action == "listening.mcq.multiple_selection_review_required");
         Assert.Contains("requiresAdminReview", audit.Details!);
@@ -467,6 +467,33 @@ public class ListeningGradingServiceTests
     }
 
     [Fact]
+    public void Evaluate_short_answer_synonyms_require_explicit_policy_opt_in()
+    {
+        var question = new ListeningQuestion
+        {
+            Id = "q-short-answer-policy",
+            QuestionType = ListeningQuestionType.ShortAnswer,
+            CorrectAnswerJson = "\"five\"",
+            AcceptedSynonymsJson = "[\"5\"]",
+            CaseSensitive = false,
+        };
+        var answer = new ListeningAnswer
+        {
+            Id = "a-short-answer-policy",
+            ListeningQuestionId = question.Id,
+            UserAnswerJson = "\"5\"",
+        };
+
+        var disabled = ListeningGradingService.Evaluate(
+            question, answer, normalisation: "trim_only", acceptSynonyms: false);
+        var enabled = ListeningGradingService.Evaluate(
+            question, answer, normalisation: "trim_only", acceptSynonyms: true);
+
+        Assert.False(disabled.IsCorrect);
+        Assert.True(enabled.IsCorrect);
+    }
+
+    [Fact]
     public async Task GradeAsync_rejects_attempt_owned_by_different_user()
     {
         await using var db = NewDb();
@@ -555,6 +582,28 @@ public class ListeningGradingServiceTests
                 CancellationToken.None));
 
         Assert.Equal("listening_override_reviewer_not_assigned", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ApplyScoreOverrideAsync_rejects_inactive_assigned_reviewer()
+    {
+        await using var db = NewDb();
+        var seeded = await SeedOverrideAttemptAsync(db, submitted: true);
+        var reviewer = await db.ExpertUsers.SingleAsync(expert => expert.Id == "expert-1");
+        reviewer.IsActive = false;
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            new ListeningGradingService(db).ApplyScoreOverrideAsync(
+                seeded.AttemptId,
+                seeded.WrongQuestionId,
+                overrideValue: 1,
+                actorId: "expert-1",
+                actorName: "Expert One",
+                reason: "Accepted spelling variant authored after review.",
+                CancellationToken.None));
+
+        Assert.Equal("account_suspended", ex.ErrorCode);
     }
 
     [Fact]
@@ -781,6 +830,25 @@ public class ListeningGradingServiceTests
             AssignedAt = now,
             ClaimState = ExpertAssignmentState.Claimed,
         });
+        db.ExpertUsers.AddRange(
+            new ExpertUser
+            {
+                Id = "expert-1",
+                Role = ApplicationUserRoles.Expert,
+                DisplayName = "Expert One",
+                Email = "expert1@test.com",
+                IsActive = true,
+                CreatedAt = now,
+            },
+            new ExpertUser
+            {
+                Id = "expert-2",
+                Role = ApplicationUserRoles.Expert,
+                DisplayName = "Expert Two",
+                Email = "expert2@test.com",
+                IsActive = true,
+                CreatedAt = now,
+            });
         await db.SaveChangesAsync();
 
         return new SeededOverrideAttempt(attempt.Id, wrongQuestion.Id, submittedAt);

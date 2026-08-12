@@ -62,7 +62,8 @@ export const listeningSessionFixture: ListeningSessionDto = {
     autosave: true,
     transcriptPolicy: 'after_submit',
     presentationStyle: 'exam_standard',
-    integrityLockRequired: true,
+    integrityLockRequired: false,
+    technicalGuidanceTelemetryEnabled: true,
     printableBooklet: false,
   },
   scoring: {

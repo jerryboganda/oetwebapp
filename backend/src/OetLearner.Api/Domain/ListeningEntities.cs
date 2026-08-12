@@ -683,7 +683,7 @@ public class ListeningPolicy
     public bool ShowPastAttempts { get; set; } = true;
 
     // §2 — Timer
-    /// <summary>Whole-paper timer (Listening is graded as a single ~40 min
+    /// <summary>Whole-paper timer (Listening is graded as a single ~45 min
     /// run with no Part-A hard lock — same as the real exam).</summary>
     public int FullPaperTimerMinutes { get; set; } = 45;
     public int GracePeriodSeconds { get; set; } = 10;

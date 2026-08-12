@@ -118,7 +118,7 @@ vi.mock('motion/react', () => {
 
 import ListeningPlayer from '../page';
 
-function makeSession(mode: 'exam' | 'practice' = 'exam') {
+function makeSession(mode: 'exam' | 'practice' = 'exam', screenReaderOptimised = true) {
   return {
     paper: {
       id: 'lp-001',
@@ -158,6 +158,7 @@ function makeSession(mode: 'exam' | 'practice' = 'exam') {
       onePlayOnly: mode === 'exam',
       autosave: true,
       transcriptPolicy: 'per_item_post_attempt',
+      screenReaderOptimised,
     },
     scoring: { maxRawScore: 42, passRawScore: 30, passScaledScore: 350 },
     readiness: { objectiveReady: true, questionCount: 42, audioAvailable: true, missingReason: null },
@@ -265,6 +266,17 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
     vi.useRealTimers();
   });
 
+  it('renders the policy-controlled live status region without announcing timer ticks', async () => {
+    mockGetListeningSession.mockResolvedValue(makeSession('exam', true));
+
+    render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('listening-screen-reader-status')).toHaveTextContent(/audio and questions are active/i);
+    });
+    expect(screen.getByTestId('listening-screen-reader-status')).toHaveAttribute('aria-live', 'polite');
+  });
+
   it('calls listeningV2Api.audioResume when the audio element resumes after a pause in exam mode', async () => {
     mockGetListeningSession.mockResolvedValue(makeSession('exam'));
     mockAudioResume.mockResolvedValue({
@@ -291,6 +303,9 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
     (audio as unknown as { __ct?: number }).__ct = 30;
 
     act(() => {
+      fireEvent.play(audio);
+    });
+    act(() => {
       fireEvent.pause(audio);
     });
     act(() => {
@@ -301,6 +316,93 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
       expect(mockAudioResume).toHaveBeenCalledTimes(1);
     });
     expect(mockAudioResume).toHaveBeenCalledWith('attempt-1', 30_000);
+    expect(mockRecordIntegrity.mock.calls.some(([, eventType]) => eventType === 'audio_stopped')).toBe(true);
+  });
+
+  it('resets a playback-rate change and records the blocked speed event', async () => {
+    mockGetListeningSession.mockResolvedValue(makeSession('exam'));
+
+    const { container } = render(<ListeningPlayer />);
+    const audio = await waitFor(() => {
+      const el = container.querySelector('audio');
+      if (!el) throw new Error('audio element not yet mounted');
+      return el as HTMLAudioElement;
+    });
+
+    Object.defineProperty(audio, 'playbackRate', { configurable: true, writable: true, value: 1 });
+    Object.defineProperty(audio, 'defaultPlaybackRate', { configurable: true, writable: true, value: 1 });
+    audio.playbackRate = 1.5;
+    fireEvent.rateChange(audio);
+
+    expect(audio.playbackRate).toBe(1);
+    expect(mockRecordIntegrity.mock.calls.some(([, eventType, details]) => (
+      eventType === 'audio_speed_change_blocked' && details.includes('"requestedRate":1.5')
+    ))).toBe(true);
+  });
+
+  it('keeps practice playback speed changes available', async () => {
+    mockGetListeningSession.mockResolvedValue(makeSession('practice'));
+
+    const { container } = render(<ListeningPlayer />);
+    const audio = await waitFor(() => {
+      const el = container.querySelector('audio');
+      if (!el) throw new Error('audio element not yet mounted');
+      return el as HTMLAudioElement;
+    });
+
+    Object.defineProperty(audio, 'playbackRate', { configurable: true, writable: true, value: 1 });
+    audio.playbackRate = 1.5;
+    fireEvent.rateChange(audio);
+
+    expect(audio.playbackRate).toBe(1.5);
+    expect(mockRecordIntegrity.mock.calls.some(([, eventType]) => eventType === 'audio_speed_change_blocked')).toBe(false);
+  });
+
+  it('records a section_transition after the strict server applies a cross-section advance', async () => {
+    const session = makeSession('exam');
+    mockGetListeningSession.mockResolvedValue({
+      ...session,
+      paper: {
+        ...session.paper,
+        extracts: [
+          ...session.paper.extracts,
+          {
+            partCode: 'A2', displayOrder: 1, kind: 'consultation', title: 'Extract 2',
+            accentCode: 'en-GB', speakers: [], audioStartMs: 12_000, audioEndMs: 240_000,
+          },
+        ],
+      },
+      questions: [
+        ...session.questions,
+        { id: 'q-2', number: 13, partCode: 'A2', text: 'Q13?', type: 'short_answer', options: [], points: 1 },
+      ],
+    });
+    mockV2GetState.mockResolvedValue(makeV2State('a1_review'));
+    mockV2Advance.mockResolvedValue({
+      outcome: 'applied',
+      state: makeV2State('a2_preview'),
+      confirmToken: null,
+      confirmTokenTtlMs: null,
+      rejectionReason: null,
+      rejectionDetail: null,
+    });
+
+    render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('listening-review-banner')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lock & continue' }));
+
+    await waitFor(() => {
+      expect(mockV2Advance).toHaveBeenCalledWith('attempt-1', 'a2_preview', null);
+    });
+    expect(mockRecordIntegrity.mock.calls.some(([, eventType, details]) => (
+      eventType === 'section_transition'
+      && details.includes('"from":"A1"')
+      && details.includes('"to":"A2"')
+    ))).toBe(true);
   });
 
   it('uses the server mode policy for resume validation when the route has no mode query', async () => {

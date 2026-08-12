@@ -26,7 +26,10 @@ export function ScoreBandGraph({
   tableVersion,
   className,
 }: ScoreBandGraphProps) {
-  const hasConversion = scaledScore !== null && tableVersion != null && passed != null;
+  const hasConversion = maxRawScore === 42
+    && scaledScore !== null
+    && tableVersion != null
+    && passed != null;
   const boundedScore = hasConversion
     ? Math.min(500, Math.max(0, scaledScore ?? 0))
     : 0;

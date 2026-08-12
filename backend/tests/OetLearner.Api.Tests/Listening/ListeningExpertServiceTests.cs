@@ -14,8 +14,24 @@ public class ListeningExpertServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options);
 
-    private static ListeningExpertService CreateService(LearnerDbContext db) =>
-        new(db, NullLogger<ListeningExpertService>.Instance);
+    private static ListeningExpertService CreateService(LearnerDbContext db)
+    {
+        if (!db.ExpertUsers.Any(expert => expert.Id == "expert-1"))
+        {
+            db.ExpertUsers.Add(new ExpertUser
+            {
+                Id = "expert-1",
+                Role = ApplicationUserRoles.Expert,
+                DisplayName = "Listening Expert",
+                Email = "expert@test.com",
+                IsActive = true,
+                CreatedAt = Now,
+            });
+            db.SaveChanges();
+        }
+
+        return new(db, NullLogger<ListeningExpertService>.Instance);
+    }
 
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
@@ -61,6 +77,31 @@ public class ListeningExpertServiceTests
         Mode = ListeningAttemptMode.Exam,
     };
 
+    private static void SeedListeningAssignment(
+        LearnerDbContext db, string attemptId, string expertId = "expert-1")
+    {
+        var reviewId = $"review-{attemptId}-{expertId}";
+        db.ReviewRequests.Add(new ReviewRequest
+        {
+            Id = reviewId,
+            AttemptId = attemptId,
+            SubtestCode = "listening",
+            State = ReviewRequestState.Submitted,
+            TurnaroundOption = "standard",
+            PaymentSource = "credits",
+            CreatedAt = Now,
+        });
+        db.ExpertReviewAssignments.Add(new ExpertReviewAssignment
+        {
+            Id = $"assignment-{attemptId}-{expertId}",
+            ReviewRequestId = reviewId,
+            AssignedReviewerId = expertId,
+            AssignedBy = "test",
+            AssignedAt = Now,
+            ClaimState = ExpertAssignmentState.Assigned,
+        });
+    }
+
     [Fact]
     public async Task SubmitFeedbackAsync_WithRawScoreOverride_RecalculatesScaledViaOetScoring()
     {
@@ -69,6 +110,7 @@ public class ListeningExpertServiceTests
         db.Set<ContentPaper>().Add(SeedPaper());
         db.Users.Add(SeedUser());
         db.ListeningAttempts.Add(SeedAttempt());
+        SeedListeningAssignment(db, "attempt-1");
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);
@@ -97,6 +139,7 @@ public class ListeningExpertServiceTests
         db.Set<ContentPaper>().Add(SeedPaper());
         db.Users.Add(SeedUser());
         db.ListeningAttempts.Add(SeedAttempt(rawScore: 30, scaledScore: 350));
+        SeedListeningAssignment(db, "attempt-1");
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);
@@ -136,6 +179,7 @@ public class ListeningExpertServiceTests
                 userId: user.Id,
                 rawScore: 20 + i,
                 scaledScore: OetScoring.OetRawToScaled(20 + i)));
+            SeedListeningAssignment(db, $"attempt-{i}");
         }
         await db.SaveChangesAsync();
 
@@ -167,6 +211,8 @@ public class ListeningExpertServiceTests
         db.Users.AddRange(alice, bob);
         db.ListeningAttempts.Add(SeedAttempt(id: "attempt-alice", userId: alice.Id));
         db.ListeningAttempts.Add(SeedAttempt(id: "attempt-bob", userId: bob.Id));
+        SeedListeningAssignment(db, "attempt-alice");
+        SeedListeningAssignment(db, "attempt-bob");
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);
@@ -204,7 +250,13 @@ public class ListeningExpertServiceTests
         await using var db = NewDb();
         db.Set<ContentPaper>().Add(SeedPaper());
         db.Users.Add(SeedUser());
-        db.ListeningAttempts.Add(SeedAttempt());
+        var seededAttempt = SeedAttempt();
+        seededAttempt.RequiresAdminReview = true;
+        seededAttempt.AdminReviewReason = "multiple_selections_for_single_answer_mcq";
+        seededAttempt.ScoreConversionTableVersionKey = "test-listening-v1";
+        seededAttempt.ScoreConversionPassed = true;
+        db.ListeningAttempts.Add(seededAttempt);
+        SeedListeningAssignment(db, "attempt-1");
 
         var part = new ListeningPart
         {
@@ -274,7 +326,7 @@ public class ListeningExpertServiceTests
             ListeningAttemptId = "attempt-1",
             ListeningQuestionId = question.Id,
             UserAnswerJson = "\"A\"",
-            IsCorrect = false,
+            IsCorrect = null,
             PointsEarned = 0,
             SelectedDistractorCategory = ListeningDistractorCategory.TooStrong,
             AnsweredAt = Now,
@@ -288,6 +340,11 @@ public class ListeningExpertServiceTests
 
         // Assert
         var item = Assert.Single(bundle.Answers);
+        Assert.True(bundle.Attempt.RequiresAdminReview);
+        Assert.Equal("multiple_selections_for_single_answer_mcq", bundle.Attempt.AdminReviewReason);
+        Assert.Equal(1, bundle.Attempt.InvalidCount);
+        Assert.Null(bundle.Attempt.ScaledScore);
+        Assert.True(item.IsInvalid);
         Assert.Equal("too_strong", item.SelectedDistractorCategory);
         Assert.Equal("doubtful", item.SpeakerAttitude);
 
@@ -321,6 +378,7 @@ public class ListeningExpertServiceTests
         db.Set<ContentPaper>().Add(SeedPaper());
         db.Users.Add(SeedUser());
         db.ListeningAttempts.Add(SeedAttempt());
+        SeedListeningAssignment(db, "attempt-1");
 
         var part = new ListeningPart
         {
@@ -381,6 +439,7 @@ public class ListeningExpertServiceTests
         db.Set<ContentPaper>().Add(SeedPaper());
         db.Users.Add(SeedUser());
         db.ListeningAttempts.Add(SeedAttempt());
+        SeedListeningAssignment(db, "attempt-1");
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);
@@ -400,5 +459,121 @@ public class ListeningExpertServiceTests
         Assert.Equal(0, attempt.RawScore);
         Assert.Equal(OetScoring.OetRawToScaled(0), attempt.ScaledScore);
         Assert.Equal(0, attempt.ScaledScore);
+    }
+
+    [Fact]
+    public async Task ExpertAccess_IsLimitedToActiveListeningAssignment()
+    {
+        await using var db = NewDb();
+        db.Set<ContentPaper>().Add(SeedPaper());
+        var assignedLearner = SeedUser("user-assigned");
+        var otherLearner = SeedUser("user-other");
+        db.Users.AddRange(assignedLearner, otherLearner);
+        db.ListeningAttempts.AddRange(
+            SeedAttempt("attempt-assigned", userId: assignedLearner.Id),
+            SeedAttempt("attempt-other", userId: otherLearner.Id));
+        SeedListeningAssignment(db, "attempt-assigned");
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+        var page = await svc.GetAttemptsPagedAsync(
+            "expert-1", 1, 20, null, null, null, CancellationToken.None);
+
+        var visible = Assert.Single(page.Items);
+        Assert.Equal("attempt-assigned", visible.AttemptId);
+
+        var request = new ListeningExpertFeedbackRequest(
+            OverallFeedback: "Should not be accepted.",
+            PerQuestionFeedback: null,
+            RecommendedAreas: null,
+            RawScoreOverride: null,
+            ScoreOverrideReason: null);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => svc.SubmitFeedbackAsync(
+            "expert-1", "attempt-other", request, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetMyReviewsAsync_hides_feedback_after_assignment_is_revoked()
+    {
+        await using var db = NewDb();
+        db.Set<ContentPaper>().Add(SeedPaper());
+        db.Users.Add(SeedUser());
+        db.ListeningAttempts.Add(SeedAttempt());
+        SeedListeningAssignment(db, "attempt-1");
+        db.ListeningExpertFeedbacks.Add(new ListeningExpertFeedback
+        {
+            Id = "feedback-1",
+            AttemptId = "attempt-1",
+            ExpertId = "expert-1",
+            OverallFeedbackMarkdown = "Reviewed.",
+            SubmittedAt = Now,
+        });
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+        var visible = await svc.GetMyReviewsPagedAsync(
+            "expert-1", 1, 20, CancellationToken.None);
+        Assert.Single(visible.Items);
+
+        db.ExpertReviewAssignments.RemoveRange(db.ExpertReviewAssignments);
+        await db.SaveChangesAsync();
+
+        var revoked = await svc.GetMyReviewsPagedAsync(
+            "expert-1", 1, 20, CancellationToken.None);
+        Assert.Empty(revoked.Items);
+    }
+
+    [Fact]
+    public async Task GetMyReviewsAsync_hides_feedback_for_non_submitted_attempts()
+    {
+        await using var db = NewDb();
+        db.Set<ContentPaper>().Add(SeedPaper());
+        db.Users.Add(SeedUser());
+        db.ListeningAttempts.Add(SeedAttempt());
+        SeedListeningAssignment(db, "attempt-1");
+        db.ListeningExpertFeedbacks.Add(new ListeningExpertFeedback
+        {
+            Id = "feedback-in-progress",
+            AttemptId = "attempt-1",
+            ExpertId = "expert-1",
+            OverallFeedbackMarkdown = "Reviewed.",
+            SubmittedAt = Now,
+        });
+        await db.SaveChangesAsync();
+
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.Id == "attempt-1");
+        attempt.Status = ListeningAttemptStatus.InProgress;
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+        var reviews = await svc.GetMyReviewsPagedAsync(
+            "expert-1", 1, 20, CancellationToken.None);
+
+        Assert.Empty(reviews.Items);
+    }
+
+    [Fact]
+    public async Task InactiveExpertCannotReadListeningReviewData()
+    {
+        await using var db = NewDb();
+        db.ExpertUsers.Add(new ExpertUser
+        {
+            Id = "expert-1",
+            Role = ApplicationUserRoles.Expert,
+            DisplayName = "Listening Expert",
+            Email = "expert@test.com",
+            IsActive = false,
+            CreatedAt = Now,
+        });
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => svc.GetAttemptsPagedAsync(
+            "expert-1", 1, 20, null, null, null, CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, error.StatusCode);
+        Assert.Equal("account_suspended", error.ErrorCode);
     }
 }

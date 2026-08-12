@@ -38,6 +38,8 @@ public sealed class ListeningExplanationService(
     ILogger<ListeningExplanationService>? logger = null)
     : IListeningExplanationService
 {
+    private const string PromptTemplateId = "listening.explanation.v1";
+
     public async Task<ListeningExplanationDto> GetSubmittedAttemptExplanationAsync(
         string userId,
         string attemptId,
@@ -134,6 +136,7 @@ public sealed class ListeningExplanationService(
                 Model = string.Empty,
                 Temperature = 0.2,
                 FeatureCode = AiFeatureCodes.ListeningExplanation,
+                PromptTemplateId = PromptTemplateId,
                 UserId = userId,
             }, ct);
             return TryParse(result.Completion, lang)

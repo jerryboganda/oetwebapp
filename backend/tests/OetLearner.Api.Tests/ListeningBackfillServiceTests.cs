@@ -193,6 +193,42 @@ public class ListeningBackfillServiceTests
     }
 
     [Fact]
+    public async Task Backfill_preserves_invalid_points_and_extra_options_for_publish_gate()
+    {
+        var (db, svc) = Build();
+        var payload = JsonSerializer.Serialize(new
+        {
+            listeningQuestions = new[]
+            {
+                new
+                {
+                    id = "invalid-question",
+                    number = 1,
+                    partCode = "A1",
+                    type = "multiple_choice_3",
+                    text = "Invalid authored item",
+                    points = 0,
+                    options = new[] { "A", "B", "C", "D" },
+                    correctAnswer = "A",
+                },
+            },
+        });
+        var paper = await AddPaperAsync(db, payload);
+
+        var report = await svc.BackfillPaperAsync(paper.Id, "admin-1", default);
+
+        Assert.True(report.Success);
+        var question = await db.ListeningQuestions.SingleAsync(q => q.PaperId == paper.Id);
+        Assert.Equal(0, question.Points);
+        var options = await db.ListeningQuestionOptions
+            .Where(option => option.ListeningQuestionId == question.Id)
+            .OrderBy(option => option.DisplayOrder)
+            .ToListAsync();
+        Assert.Equal(4, options.Count);
+        Assert.Equal(new[] { "A", "B", "C", "D" }, options.Select(option => option.OptionKey));
+    }
+
+    [Fact]
     public async Task Backfill_RefusesWhenRelationalAttemptsExist_AndAnswerKeyChanges()
     {
         var (db, svc) = Build();

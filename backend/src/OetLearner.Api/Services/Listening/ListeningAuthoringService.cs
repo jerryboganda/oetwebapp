@@ -1393,7 +1393,7 @@ public sealed class ListeningAuthoringService(
         }
 
         var number = int.TryParse(Read("number"), out var n) ? n : 0;
-        var points = int.TryParse(Read("points"), out var p) ? Math.Max(1, p) : 1;
+        var points = int.TryParse(Read("points"), out var p) ? p : 1;
 
         return new ListeningAuthoredQuestion(
             Id: Read("id") ?? $"lq-{number}",
@@ -1427,9 +1427,11 @@ public sealed class ListeningAuthoringService(
             ? (partCode.StartsWith('A') ? "short_answer" : "multiple_choice_3")
             : q.Type.Trim();
 
-        // Part B/C are MCQ-3; trim any excess option payload before relational projection.
+        // Part B/C are MCQ-3. Preserve the authored option count here so an
+        // invalid four-option payload reaches the publish validator unchanged;
+        // silently dropping an authored distractor would alter the answer-key
+        // content before the fail-closed MCQ gate can reject it.
         var options = (q.Options ?? []).Select(o => o ?? string.Empty).ToList();
-        if (type == "multiple_choice_3" && options.Count > 3) options = options.Take(3).ToList();
 
         var accepted = (q.AcceptedAnswers ?? [])
             .Where(a => !string.IsNullOrWhiteSpace(a))
@@ -1450,7 +1452,10 @@ public sealed class ListeningAuthoringService(
             SkillTag = string.IsNullOrWhiteSpace(q.SkillTag) ? null : q.SkillTag.Trim(),
             TranscriptExcerpt = string.IsNullOrWhiteSpace(q.TranscriptExcerpt) ? null : q.TranscriptExcerpt.Trim(),
             DistractorExplanation = string.IsNullOrWhiteSpace(q.DistractorExplanation) ? null : q.DistractorExplanation.Trim(),
-            Points = Math.Max(1, q.Points),
+            // Preserve authored mark values exactly. The structural publish
+            // validator owns the one-mark invariant; coercing 0 or negative
+            // values here would hide an invalid paper from that gate.
+            Points = q.Points,
             OptionDistractorWhy = NormalizeNullableStringList(q.OptionDistractorWhy, options.Count),
             OptionDistractorCategory = NormalizeDistractorCategoryList(q.OptionDistractorCategory, options.Count),
             SpeakerAttitude = NormalizeSpeakerAttitude(q.SpeakerAttitude),
@@ -1825,7 +1830,7 @@ public sealed class ListeningAuthoringService(
         ListeningQuestion row, ListeningAuthoredQuestion patched)
     {
         row.Stem = patched.Stem;
-        row.Points = Math.Max(1, patched.Points);
+        row.Points = patched.Points;
         row.SkillTag = patched.SkillTag;
         row.ExplanationMarkdown = patched.Explanation;
         row.TranscriptEvidenceText = patched.TranscriptExcerpt;

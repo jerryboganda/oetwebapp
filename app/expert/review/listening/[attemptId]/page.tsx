@@ -240,6 +240,21 @@ function MetadataCard({
         })}
       </p>
 
+      {(bundle.requiresAdminReview || (bundle.invalidCount ?? 0) > 0) && (
+        <div
+          className="mt-3 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+          data-testid="listening-expert-admin-review-warning"
+        >
+          <p className="font-bold uppercase tracking-widest">Admin review required</p>
+          <p className="mt-1">
+            Automated scoring is not authoritative for {bundle.invalidCount ?? 0} invalid answer(s).
+          </p>
+          {bundle.adminReviewReason && (
+            <p className="mt-1">Reason: {humaniseTag(bundle.adminReviewReason)}</p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl border border-border bg-muted p-3 text-center text-sm">
         <div>
           <p className="text-xs text-muted">Raw</p>
@@ -254,8 +269,8 @@ function MetadataCard({
         <div>
           <p className="text-xs text-muted">Correct</p>
           <p className="font-bold text-navy">
-            {bundle.answers.filter((a) => a.isCorrect).length}/
-            {bundle.answers.length}
+            {bundle.answers.filter((a) => a.isCorrect && !a.isInvalid).length}/
+            {Math.max(0, bundle.answers.length - (bundle.invalidCount ?? bundle.answers.filter((a) => a.isInvalid).length))}
           </p>
         </div>
       </div>
@@ -346,7 +361,9 @@ function QuestionCard({
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
-          {item.isCorrect ? (
+          {item.isInvalid ? (
+            <XCircle className="h-4 w-4 text-warning" />
+          ) : item.isCorrect ? (
             <CheckCircle2 className="h-4 w-4 text-success" />
           ) : (
             <XCircle className="h-4 w-4 text-danger" />
@@ -358,10 +375,10 @@ function QuestionCard({
               Q{item.questionNumber}
             </span>
             <Badge
-              variant={item.isCorrect ? 'success' : 'danger'}
+              variant={item.isInvalid ? 'warning' : item.isCorrect ? 'success' : 'danger'}
               className="text-[10px]"
             >
-              {item.isCorrect ? 'Correct' : 'Incorrect'}
+              {item.isInvalid ? 'Invalid — review' : item.isCorrect ? 'Correct' : 'Incorrect'}
             </Badge>
           </div>
           <p className="mt-1 text-sm font-medium text-navy line-clamp-2">
@@ -371,9 +388,7 @@ function QuestionCard({
             <div>
               <span className="font-semibold text-muted">Your answer: </span>
               <span
-                className={
-                  item.isCorrect ? 'text-success' : 'text-danger'
-                }
+                className={item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}
               >
                 {item.userAnswer ?? 'N/A'}
               </span>
@@ -385,6 +400,12 @@ function QuestionCard({
           </div>
 
           {/* WORK-STREAM 7a — distractor taxonomy + Part C speaker-attitude */}
+          {item.isInvalid && (
+            <p className="mt-2 text-xs font-bold uppercase tracking-widest text-warning">
+              This answer is held for administrator review; automated correctness is unavailable.
+            </p>
+          )}
+
           {(item.selectedDistractorCategory || item.speakerAttitude) && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {item.selectedDistractorCategory && (

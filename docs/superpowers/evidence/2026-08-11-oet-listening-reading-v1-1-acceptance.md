@@ -1,6 +1,339 @@
 # OET Listening and Reading v1.1 acceptance evidence
 
+# Latest LR coding checkpoint - 2026-08-12 (Mock conversion projection hard lock)
+
+- Reading and Listening mock-section adapters now require the authoritative
+  attempt max score to be exactly 42 before forwarding scaled/table/pass
+  evidence into mock reports. Added a subset Reading resolver regression for
+  stale conversion metadata; focused mock resolver command exited 0 with
+  silent runner output.
+- No long validation, audit, CI/CD, push, deployment, or live acceptance was
+  run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening conversion projection hard lock)
+
+- Listening analytics, expert review, pathway, and pathway-progress
+  projections now require the canonical 42-item maximum before treating
+  persisted scaled/table/pass metadata as approved conversion evidence.
+- Focused Listening analytics/expert backend command exited 0 with silent
+  runner output. No long validation, audit, CI/CD, push, deployment, or live
+  acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening subset conversion server hard lock)
+
+- Listening grading and learner score reconstruction now require the
+  canonical 42-item maximum before exposing owner-table scaled scores. The
+  guard covers relational attempts, persisted evaluations, and legacy JSON
+  score rows; subset/stale metadata remains raw-only in learner projections.
+- Focused Reading subset and Listening no-table grading regressions exited 0
+  with silent runner output. No long validation, audit, CI/CD, push,
+  deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading subset conversion server hard lock)
+
+- Reading grading now refuses owner-table scaled conversion for Drill,
+  MiniTest, and ErrorBank attempts even when an effective table exists, and
+  clears conversion table metadata for those raw-only results without marking
+  the owner table as used.
+- Reading learner endpoint, analytics, tutor, and pathway projections now
+  require the canonical 42-item max before exposing converted score evidence.
+  Added an effective-table regression to prove subset mode—not table absence—
+  keeps conversion unavailable. Focused backend test exited 0 with silent
+  runner output; scoped `git diff --check` passed. No long validation, audit,
+  CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening/Reading subset-result conversion hard lock)
+
+- Listening results/transcript review and Reading paper results now require
+  the complete 42-item paper before displaying owner-table scaled score, grade,
+  or pass evidence. Subset practice attempts remain raw-only even if
+  conversion fields leak into an API payload; malformed conversion fields fail
+  closed.
+- Added `hasApprovedListeningConversion` coverage and strengthened the Reading
+  subset regression. Focused Vitest passed 10/10 with nested worktree copies
+  excluded; targeted ESLint passed with 0 errors and 4 existing warnings. No
+  long validation, audit, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Canonical Listening paper stop telemetry parity)
+
+- The strict `/listening/paper/[paperId]` route now emits the shared
+  `audio_stopped` event for normal pauses and programmatic cue-boundary stops,
+  matching the newer `/listening/player/[id]` route and preserving the
+  existing `audio_ended` event.
+- No long validation, audit, CI/CD, push, deployment, or live acceptance was
+  run for this slice.
+
 Source: `C:\Users\Dr Faisal Maqsood PC\Downloads\OET_Listening_and_Reading_AI_System_Specification_v1.1.pdf`.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading Exam Part-A hard-lock enforcement)
+
+- Reading Exam answer persistence now hard-locks Part A at the server-owned
+  deadline regardless of the configurable practice `PartATimerStrictness`
+  value. This removes a client/server bypass where `soft_warn` or `disabled`
+  could keep accepting scored Exam answers after the 15-minute boundary.
+- Added `ReadingAuthoringTests.Exam_part_a_lock_cannot_be_relaxed_by_policy_strictness`.
+  Focused `dotnet test` exited 0 with silent runner output. No full validation,
+  audit, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening mode-copy parity)
+
+- Candidate-facing Listening intro guidance now follows the server mode policy:
+  strict one-play modes describe irreversible forward-only audio, while
+  Practice Mode describes policy-controlled pause/scrub/replay and review
+  navigation instead of claiming exam locks.
+- Focused player component suite passed 41/41 across 3 files; touched ESLint
+  reported no errors or warnings; scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Player preflight persistence parity)
+
+- The `/listening/player/[id]` strict start flow now persists the passed
+  pathway audio-check outcome before requesting attempt creation. This aligns
+  the visible player sound check with the server-authoritative
+  `AudioCheckPassedAt` gate and matches the canonical Listening paper flow.
+- Single-file ESLint completed with 0 errors and 16 existing warnings; source
+  assertions and scoped `git diff --check` passed. No full validation, CI/CD,
+  push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Legacy Listening start-gate parity)
+
+- The legacy JSON-backed Listening start path now enforces the same server-side
+  strict sound-check and complete scored-audio gates as relational papers.
+  Added a JSON-authored regression fixture for direct exam-start bypasses.
+- Focused `ListeningAudioCheckGateTests` command exited 0; scoped `git diff
+  --check` passed. No full validation, CI/CD, push, deployment, or live
+  acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening playback-stop telemetry)
+
+- Added the missing PDF-required `audio_stopped` event to the shared client /
+  server integrity-event contract. The player records a stop timestamp and
+  whether the pause was programmatic or a normal pause, while preserving the
+  existing blocked-pause resume protocol. The exact touched audio-resume test
+  passed 1/1. The broader file still has one unrelated Part-B auto-submit
+  failure, and duplicate `pdf-policy-release*` copies fail import resolution;
+  targeted ESLint completed with 0 errors and 16 existing warnings. Focused
+  source assertions and scoped diff checks passed. No full validation, CI/CD,
+  push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening sound-check volume)
+
+- Added the PDF-required candidate-facing sound-check volume control before
+  scored content. The selected volume is applied only to the short probe or
+  generated tone; scored-audio integrity verification and fail-closed startup
+  behavior remain unchanged. The focused `TechReadinessCheck` test passed 1/1,
+  targeted ESLint completed cleanly, and focused source assertions plus scoped
+  diff checks passed. No full validation, CI/CD, push, deployment, or live
+  acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening audio integrity fail-closed)
+
+- Closed a concrete P0 deviation in the scored-audio readiness gate. A failed
+  scored-audio integrity check now exposes Retry only; the prior
+  `Continue anyway` bypass and unused skip prop were removed, so the attempt
+  cannot proceed after an integrity failure. Added
+  `components/domain/listening/TechReadinessCheck.test.tsx`; the focused test
+  passed 1/1. Targeted ESLint completed cleanly, and focused source assertions
+  plus scoped diff checks passed. No full validation, CI/CD, push, deployment,
+  or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening preview disclosure regression)
+
+- The focused Listening preview regression now proves that candidate mode hides
+  transcript evidence, distractor explanations/categories, and speaker attitude,
+  while protected marking mode renders those authored fields. The bounded Vitest
+  command again produced no output and was stopped; targeted ESLint completed
+  with 0 errors and the same 2 existing setState-in-effect warnings. Focused
+  source assertions and scoped diff checks passed. No full validation, CI/CD,
+  push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening playback-speed hard lock)
+
+- Scored Listening audio now forces 1x playback at metadata load and resets
+  browser, OS, or programmatic playback-rate changes immediately. Blocked rate
+  changes are recorded as `audio_speed_change_blocked` telemetry through the
+  always-on attempt-event stream. The root-only focused Vitest run (stale
+  `pdf-policy-release/**` copies excluded) passed the new speed-lock regression
+  and 9/10 tests; the existing Part B end-cue test still times out waiting for
+  `mockSubmit` at line 656. Scoped source assertions and `git diff --check`
+  passed; touched-file ESLint timed out at the bounded 30-second limit. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Canonical Listening speed telemetry parity)
+
+- The canonical `/listening/paper/[paperId]` strict route now forces 1x
+  playback at metadata load and records `audio_speed_change_blocked` with the
+  requested rate before resetting any browser or programmatic speed change.
+  Practice-mode playback policy remains unchanged.
+- Scoped source assertions and `git diff --check` passed. No full validation,
+  CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading MCQ corruption hold parity)
+
+- Reading single-answer MCQ payloads containing multiple selected options now
+  set a durable administrator-review hold, record the reason/timestamp and
+  audit event, withhold all converted-score evidence, and reject further
+  learner answer writes or submission until review. Learner attempt/review
+  projections expose the hold reason without exposing conversion metadata.
+- Added the Reading attempt schema migration and focused grading regression.
+  Scoped `git diff --check` passed; the focused `dotnet test` exceeded the
+  bounded 40-second window without output and was stopped. No full validation,
+  CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening full candidate preview)
+
+- The Listening learner-safe authoring preview now projects only ready primary
+  QuestionPaper and Audio assets and renders them through the authenticated
+  learner viewers. Answer-key assets and marking fields remain outside the
+  candidate projection; the audio card is explicitly authoring-only and does
+  not create a scored attempt. Candidate typed and MCQ controls are local-only
+  preview interactions and never submit an attempt. The candidate preview also
+  exposes section selection and a local extract countdown when authored timing
+  exists; it never changes authoritative attempt time.
+- Marking mode now shows protected accepted variants, approved rationale,
+  transcript evidence, validation status, speaker attitude, and per-option
+  distractor authoring metadata when authored, while candidate mode remains
+  answer-key-free. The focused Vitest rerun was stopped after it produced no
+  output within the bounded check window; the focused file had passed 4/4
+  before these latest marking-only metadata assertions were added. The
+  route-level source assertion and scoped diff check passed; targeted ESLint
+  completed with 0 errors and 2 existing setState-in-effect warnings. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Independent Reading preview failure paths)
+
+- Reading candidate-safe and protected marking preview requests now settle
+  independently in both directions. A failure in either projection no longer
+  hides the other available view, and candidate mode continues to exclude
+  answer keys, rationale, and accepted variants.
+- The existing focused Reading preview regression now covers both failure
+  directions; the targeted Vitest invocation passed 3 files and 12 tests.
+  No full validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Independent Listening preview failure paths)
+
+- Listening candidate-safe and admin marking preview requests now settle
+  independently in both directions. A failure in either projection no longer
+  hides the other available view, and each mode reports its own bounded
+  failure state without mixing answer-key data into candidate mode.
+- Added `app/admin/content/listening/[paperId]/preview/page.test.tsx`; its three
+  focused tests prove the learner-safe extract projection hides answer-key
+  fields and that either projection remains available when the other fails.
+- The focused Vitest file passed 3/3, and scoped diff checks passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening authoring preview context)
+
+- The answer-key-free Listening candidate preview now includes authored
+  extract context, speaker roles, accent, section limit, and audio cue-window
+  metadata alongside the learner-safe question projection. Correct answers,
+  accepted variants, rationales, and distractor metadata remain excluded;
+  marking preview remains on the protected admin structure projection.
+- Targeted ESLint passed with one pre-existing React setState-in-effect warning
+  on the existing data-loading effect; no full test/build, CI/CD, push,
+  deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Grounded Q&A reply rendering)
+
+- Grounded Reading passage Q&A and Listening question Q&A now render the
+  returned advisory reply in the learner result/review panels. The UI keeps
+  the explicit marks-unaffected disclosure, shows the current reply exactly
+  once, and preserves the server-side evidence/authorization gates.
+- Added `components/domain/results/grounded-qna.test.tsx`; the focused Vitest
+  file passed 2/2 tests. No full test/build, CI/CD, push, deployment, or live
+  acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading grounded candidate Q&A UI)
+
+- Reading submitted review items now carry only the linked passage identifier,
+  and the learner result surface exposes grounded passage Q&A beside each
+  item. The existing server service still requires ownership of a submitted
+  attempt pinned to the current published Reading revision and fails closed
+  when the passage or rulebook evidence is unavailable.
+- This slice has only bounded source assertions and scoped diff checks; no full
+  test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening grounded candidate Q&A)
+
+- Listening now exposes a post-submit question-scoped Q&A route and learner
+  results/review UI. It derives the owned submitted attempt, current published paper revision, question
+  version, effective rationale, and transcript evidence server-side before
+  invoking the grounded gateway. The response is explicitly advisory and
+  marks-unchanged; missing evidence, revision drift, rulebook failure, or
+  gateway failure blocks the answer.
+- The focused service regression covers prompt delimiting and strict JSON
+  reply parsing. This slice has only bounded source assertions and scoped diff
+  checks; no full test/build, CI/CD, push, deployment, or live acceptance was
+  run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening score-override account lifecycle)
+
+- The separate Listening human score-override path now resolves the assigned
+  `ExpertUser` profile before applying an override and fails closed for missing
+  or inactive profiles. Focused grading fixtures include active assigned and
+  unassigned reviewer profiles, with a regression covering the inactive
+  assigned-reviewer `403 account_suspended` contract.
+- This slice has only bounded source assertions and scoped diff checks; no
+  full test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading analytics account lifecycle)
+
+- The expert Reading cohort-analytics endpoint now resolves the authenticated
+  `ExpertUser` profile and fails closed for missing or inactive profiles before
+  querying assigned learner analytics, preserving the existing assignment
+  scope.
+- This slice has only bounded source assertions and scoped diff checks; no
+  full test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening review revocation lifecycle)
+
+- Listening expert “My Reviews” now requires a current non-cancelled,
+  non-failed Listening review assignment for the authenticated expert, rather
+  than exposing feedback solely because the expert historically authored it.
+  A focused regression verifies feedback disappears after assignment revocation.
+- This slice has only bounded source assertions and scoped diff checks; no
+  full test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening review submission lifecycle)
+
+- Listening expert “My Reviews” now also requires the underlying attempt to
+  remain submitted, preventing stale feedback from exposing an in-progress
+  attempt even when an assignment row is still present. A focused regression
+  covers the non-submitted boundary.
+- This slice has only bounded source assertions and scoped diff checks; no
+  full test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading tutor account lifecycle)
+
+- Reading expert assignment listing and attempt-access checks now resolve the
+  authenticated `ExpertUser` profile and fail closed for missing or inactive
+  profiles, matching the Listening expert boundary. Focused regressions cover
+  the inactive-profile `403 account_suspended` contract and keep the existing
+  expert-assignment scope fixture explicit.
+- This slice has only bounded source assertions and scoped diff checks; no
+  full test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening expert account lifecycle)
+
+- All Listening expert read/write entry points now resolve the authenticated
+  expert profile and fail closed when it is missing or inactive. This keeps a
+  previously issued expert-role token from retaining Listening candidate
+  access after account deactivation. A focused regression covers the 403
+  `account_suspended` boundary.
+- This slice has only bounded source assertions and scoped diff checks; no
+  full test/build, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening expert assignment boundary)
+
+- Listening expert attempt lists, review bundles, feedback reads, and feedback
+  writes are now fail-closed to the assigned expert. Access requires a
+  non-cancelled/non-failed Listening `ReviewRequest` with an active
+  `Assigned` or `Claimed` `ExpertReviewAssignment`, and the attempt must be
+  submitted. Existing focused service fixtures now seed explicit assignments;
+  a regression covers cross-candidate list exclusion and feedback denial.
+- Bounded source assertions and scoped `git diff --check` are the intended
+  checks for this slice. No full build/test, CI/CD, push, deployment, or live
+  acceptance was run under the user's lightweight-validation instruction.
 
 This matrix is deliberately evidence-led. `Implemented` means the source path
 contains the guard or UI contract; `Pending verification` means the check still
@@ -20,7 +353,7 @@ an owner-controlled value that must not be invented in code.
 | LR-09 | No answer/rationale is visible before final submission | `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningLearnerService.cs`, `tests/e2e/listening/listening-answer-key-not-exposed.spec.ts` | Implemented; deployed browser verification pending |
 | LR-10 | Result has raw/part/converted/graph/review/disclosure contracts | `components/domain/results/score-conversion-evidence.tsx`, `components/domain/results/score-band-graph.tsx`, `components/domain/results/score-band-graph.test.tsx`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `app/listening/results/[id]/page.tsx`, `app/reading/paper/[paperId]/results/page.tsx`, `app/reading/paper/[paperId]/results/page.test.tsx` | Implemented; primary Listening results now exposes an exact miss category for each wrong typed response, and Reading `number_form` misses render as “Incorrect answer form”; canonical Reading results test passed (7/7) with release-copy directories excluded; deployed responsive verification pending |
 | LR-11 | Refresh/reconnect restores answers without extra time | `ReadingAttemptService`, `ReadingLearnerEndpoints`, `ListeningLearnerService`, server deadline fields and idempotent submit paths; `ReadingAuthoringTests.Resume_endpoint_preserves_persisted_timing_anchors`; `app/listening/player/[id]/page.tsx` and `lib/mobile/offline-sync.ts` now encrypt, queue, and server-wins reconcile transiently offline Listening answers | Implemented in source; focused backend/reconnect execution pending |
-| LR-12 | AI failure cannot delay/change deterministic result | `backend/src/OetLearner.Api/Services/Reading/ReadingExplanationService.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningExplanationService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Endpoints/ListeningLearnerEndpoints.cs`, `components/domain/results/grounded-listening-ai-explanation.tsx`, grounded usage gateway; blank/unanswered responses fail closed and AI remains advisory-only | Implemented; deterministic Reading/Listening gateway-failure tests added; short execution pending |
+| LR-12 | AI failure cannot delay/change deterministic result | `backend/src/OetLearner.Api/Services/Reading/ReadingExplanationService.cs`, `backend/src/OetLearner.Api/Services/Reading/ReadingPassageQnaService.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningExplanationService.cs`, `backend/src/OetLearner.Api/Services/Listening/ListeningQuestionQnaService.cs`, `backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs`, `backend/src/OetLearner.Api/Endpoints/ListeningLearnerEndpoints.cs`, `components/domain/results/grounded-reading-passage-qna.tsx`, `components/domain/results/grounded-listening-ai-explanation.tsx`, `components/domain/results/grounded-listening-question-qna.tsx`, grounded usage gateway; blank/unanswered responses fail closed and AI remains advisory-only | Implemented; deterministic Reading/Listening explanation and Q&A failure paths added; short execution pending |
 | LR-13 | MCQ publication rejects duplicate, blank, and zero/multiple correct options | `ListeningStructureService`, `ReadingStructureService`, `ContentPaperService`, explicit duplicate/blank/zero/multiple-correct authoring regression tests | Implemented; shared paper publish now hard-blocks invalid Reading/Listening MCQ payloads, including legacy JSON blank options; focused execution pending |
 | LR-14 | Key change uses controlled auditable re-mark | `AssessmentGovernanceEndpoints` validates submitted-attempt ownership, question-revision ownership, semantic key-snapshot shape, and exact current-question provenance for the original key before queueing; `ReadingGradingService.RegradeSubmittedAsync`, `ListeningGradingService.RegradeWithKeyAsync`; canonical original/updated result snapshots retained on the job; `ReadingAuthoringTests.ReMark_endpoint_enforces_key_provenance_and_stores_canonical_snapshots` | Implemented; focused re-mark execution pending |
 | LR-15 | Desktop/mobile timer, passage, and controls do not clip | Responsive result/player layouts; shared `components/domain/reading-pdf-viewer.tsx` now fits the default question-paper view to the usable viewport while retaining deliberate zoom scrolling; `tests/e2e/responsive/listening-reading-layout.spec.ts` checks the canonical Listening and Reading learner routes for document overflow and clipped elements across desktop/mobile learner projects | Source fit-to-panel guard implemented; touched-file ESLint passed with four pre-existing warnings; pending dedicated Playwright run |
@@ -36,6 +369,57 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Listening preflight now projects learner-safe candidate identity, profession,
+  selected paper/mode, and server eligibility. Both Listening entry surfaces
+  render the confirmation summary and keep Start disabled when eligibility is
+  false. The canonical route also requires every authored learner section to
+  resolve audio before Start; legacy combined audio remains a valid complete
+  asset, while per-section papers fail closed on incomplete coverage. The
+  readiness check verifies all resolved scored audio assets before the attempt
+  timer can begin. Bounded source assertions passed; build/test and deployed
+  browser verification remain pending.
+- Reading timer guards now use exact `now >= deadline` semantics at the Part A
+  lock, shared B/C lock, submit expiry, and Part A-to-B/C opening boundary on
+  both client and server. Reading learner structure and in-progress attempt
+  projections continue to exclude answer keys, accepted variants, and rationale
+  fields. Bounded source assertions passed; build/test and deployed browser
+  verification remain pending.
+- Canonical Listening buffering/stall events now pause the visible section timer
+  until `canplay` recovery, while audio load failures remain integrity/admin
+  review holds. No client-side deadline or server timestamp is extended by this
+  recovery path. Bounded buffering/timer source assertions and `git diff --check`
+  passed; build/test and deployed browser verification remain pending.
+
+- Built-in admin role changes now revoke the target admin's active refresh
+  sessions in the same save as permission assignment/removal and include the
+  revoked-session count in the audit/result. Backend service permission
+  resolution preserves legacy implicit system-admin behavior only for accounts
+  without a role-catalog record; role-managed `unassigned` accounts remain
+  fail-closed after grant removal. JWT validation now rejects revoked token
+  families regardless of the optional single-active-session setting. `git
+  diff --check` passed; backend compilation/execution and deployed cross-role
+  acceptance remain pending.
+- The anonymous Listening test-rules contract now reads the effective
+  `ListeningPolicy.FullPaperTimerMinutes` instead of advertising a conflicting
+  hardcoded 40-minute duration. This aligns the disclosed timer with the
+  server-authoritative 45-minute default and the supplied specification's
+  approximately 45–50-minute Listening duration. OET content import, mock,
+  authoring, onboarding, and countdown copy/defaults were aligned to the same
+  policy-backed duration; `git diff --check` and focused source assertions
+  remain the bounded verification, with backend compilation/execution and
+  deployment still pending.
+- Listening attempt creation now applies the active per-user accessibility
+  policy to both legacy and relational attempts: `BlockAttempts` fails closed,
+  extra-time entitlements extend the server deadline, expired overrides are
+  ignored, and the effective timer/entitlement are captured in the immutable
+  policy snapshot. The V2 FSM also ignores expired user overrides. A focused
+  regression covers the 20% extra-time deadline; backend execution remains
+  pending under the lightweight-validation instruction.
+- Listening exam-like starts now enforce the owner-configured per-paper
+  attempt cap and cooldown across both legacy and relational attempt stores;
+  practice remains unlimited, while failed eligibility checks occur before
+  credit debit. The focused governance regression also proves a configured cap
+  rejects a forced second start; backend execution remains pending.
 - Primary result feedback now carries the PDF-required error category for each
   wrong typed Listening response, reusing the persisted miss reason/error type
   and fail-closed authored-answer hints. Reading singular/plural and numeric
@@ -223,6 +607,12 @@ an owner-controlled value that must not be invented in code.
   mock-result, background-report, analytics-export, and client result paths now
   apply the same explicit conversion-decision gate and clear stale scaled values
   when conversion evidence is unavailable. Focused execution remains pending.
+- Listening mock conversion now also requires the persisted session question
+  count to equal the canonical 42; Reading and Listening mock result clients
+  preserve the returned raw maximum, and the aggregate report no longer
+  fabricates `/42` when a governed raw maximum is absent. The focused Reading
+  pathway API regression passed (1 file, 7 tests); backend and deployed
+  acceptance remain pending by request.
 - Listening media `audio_error` now durably sets `RequiresAdminReview`,
   `AdminReviewReason`, and `AdminReviewFlaggedAt` on both relational and
   legacy attempts; the admin export includes the hold fields, server mutation
@@ -626,3 +1016,1107 @@ an owner-controlled value that must not be invented in code.
 - Section playback still loads its active source after the strict transition;
   later playback errors remain fail-stop and are surfaced for administrator
   review. Full browser execution was not run in this bounded pass.
+
+## Listening runtime policy snapshot closure
+
+- Listening start now snapshots the owner-editable practice replay and
+  post-submit review visibility controls alongside the marking policy,
+  effective timer, grace, and accessibility values. The active player reads
+  the captured replay decision, and review projections redact correct answers,
+  explanations, distractor analysis, and option correctness according to the
+  captured policy without changing deterministic scores.
+- Existing attempts with no Listening-policy snapshot retain the historical
+  post-submit display defaults; malformed snapshots fail closed. Strict Exam,
+  Home, and Diagnostic modes remain one-play regardless of any mutable replay
+  setting. A focused audio-policy regression covers the admin practice-replay
+  disable path. Backend execution remains pending by the owner's bounded
+  validation instruction.
+- The legacy Listening mock-start path now captures and applies the same
+  practice replay policy, preventing that alternate route from bypassing the
+  admin control.
+- Corrected relational-attempt policy reads to consume their root-level
+  snapshot shape for replay and review visibility; generic nested snapshots
+  remain supported. Added a focused root-shape replay regression.
+- The V2 FSM now captures the resolved session timing/lock/accessibility policy
+  on both attempt shapes and reads that immutable snapshot for state, advance,
+  readiness, and audio-resume operations. Missing legacy snapshots retain the
+  compatibility resolver; present malformed snapshots select strict defaults
+  rather than a newer live policy.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening home history policy)
+
+- `ListeningLearnerService.GetHomeAsync` now resolves the active global/user
+  Listening policy and applies `ShowPastAttempts` to recent results,
+  transcript-backed latest review, and per-paper last-attempt links. In-progress
+  attempts remain visible and resumable when past-attempt display is disabled.
+- No score, normalization, or other owner-controlled value was invented.
+  Bounded source assertions and `git diff --check` remain the only planned
+  checks for this slice; no backend build/test, CI/CD, push, or deployment is
+  being run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening countdown policy)
+
+- Listening now parses the owner-configured `CountdownWarningsJson` into
+  bounded, descending second thresholds, captures them on new generic and
+  relational attempts, and returns the captured thresholds from the session
+  contract so policy edits cannot change an in-flight attempt's display.
+- The learner timer consumes those thresholds instead of hardcoded 30/120
+  second bands; malformed policy JSON fails closed to no configured client
+  warning thresholds while the server deadline remains authoritative. A
+  focused component regression covers the configured thresholds. Backend and
+  frontend execution remain pending under the user's lightweight-validation
+  instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading authoring publish boundary)
+
+- Reading authoring now applies the published-paper mutation gate to every
+  non-read route, matching the existing Listening authoring boundary. Content
+  Authors cannot mutate published Reading papers without `content:publish` or
+  `system_admin`; review transitions additionally require publish permission for
+  `Published` and system-admin permission for emergency overrides. The review
+  permission guard is located on the review-transition endpoint, not the
+  distractor endpoint.
+- Added focused permission regression coverage. Bounded source assertions and
+  scoped `git diff --check` passed. No full build/test, CI/CD, push, deployment,
+  or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening progress score policy)
+
+- Listening home now preserves the chronological `recentResults` list while
+  adding an owner-selected `progressScoreDisplay` projection. `best`,
+  `latest`, `average`, and `first` are supported; unknown values fail closed
+  to `latest`. Best-score ranking uses an approved scaled score when present,
+  otherwise the stored raw-score proportion, and average mode reports only
+  averages of persisted scores.
+- The Listening hero consumes the progress projection and labels the selected
+  mode. Grading, stored result values, and result routes are unchanged. A
+  bounded source assertion and `git diff --check` are the only planned checks;
+  backend/frontend execution, CI/CD, push, and deployment remain unrun.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening short-answer policy)
+
+- Listening attempt snapshots now carry `ShortAnswerNormalisation` and
+  `ShortAnswerAcceptSynonyms` for both generic and relational starts, with the
+  effective policy resolver exposing the same values to the immutable session
+  snapshot and mock-start path.
+- The authoritative V2 grader consumes those captured values. New snapshots
+  require explicit synonym opt-in; malformed captured values receive zero
+  synonym credit and exact matching. Captured normalization may tighten the
+  governed marking policy but cannot loosen it, and the legacy fuzzy name never
+  grants fuzzy credit. Paper-wide wrong-section analysis and accepted-variant
+  audit events use the same synonym decision.
+- Added a focused pure regression for explicit synonym opt-in. Bounded source
+  assertions and `git diff --check` passed. No backend build/test, CI/CD, push,
+  deployment, or live authenticated acceptance was run under the user's
+  lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening screen-reader policy)
+
+- The owner-controlled `ScreenReaderOptimised` setting is now included in the
+  effective Listening policy, captured on generic, relational, and mock starts,
+  and returned by the session `modePolicy` contract.
+- The Listening player renders a conditional, concise `aria-live="polite"`
+  status announcement for section reading, audio, and review transitions. It
+  does not announce every timer tick, avoiding a noisy live-region loop. Missing
+  or malformed captured values fail closed; legacy attempts without the field
+  use the current owner policy for compatibility.
+- A focused player regression was added. Bounded source assertions and
+  `git diff --check` passed; no frontend/backend execution, CI/CD, push,
+  deployment, or live accessibility verification was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening screen-reader policy)
+
+- The owner-controlled `ScreenReaderOptimised` setting is now included in the
+  effective Listening policy, captured on generic, relational, and mock starts,
+  and returned by the session `modePolicy` contract.
+- The Listening player renders a conditional, concise `aria-live="polite"`
+  status announcement for section reading, audio, and review transitions. It
+  does not announce every timer tick, avoiding a noisy live-region loop. Missing
+  or malformed captured values fail closed; legacy attempts without the field
+  use the current owner policy for compatibility.
+- Bounded source assertions and `git diff --check` remain the only checks for
+  this slice; no frontend/backend execution, CI/CD, push, deployment, or live
+  accessibility verification was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening AI extraction policy)
+
+- Both Listening Part A AI extraction entry points now resolve the owner
+  `AiExtractionEnabled` kill-switch before OCR/model spend and reject disabled
+  extraction with a typed conflict.
+- Both paths count every existing extraction draft for the paper and enforce
+  the positive `AiExtractionMaxRetriesPerPaper` cap. Extraction remains a
+  Pending, human-reviewable draft; no auto-approval path was introduced.
+- Added bounded source evidence for the guard and its DI registration; the
+  bounded assertions passed and `git diff --check` passed. No backend
+  build/test, CI/CD, push, deployment, or live policy acceptance was run under
+  the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening AI policy control surface)
+
+- The existing Listening Policy admin page now exposes the AI extraction
+  kill-switch and per-paper extraction cap, with labeled controls and bounded
+  non-negative input handling.
+- Human approval is displayed as a disabled, always-on invariant because both
+  extraction paths stage `Pending` drafts and never auto-publish. The backend
+  rejects negative retry limits and persists human approval as `true` even if
+  an older client submits `false`.
+- Bounded source assertions passed and `git diff --check` passed; no
+  frontend/backend build or test, CI/CD, push, deployment, or live admin
+  acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Strict grader and PDF evidence closure)
+
+- Listening grading now computes case sensitivity from the current captured
+  question/policy inside the question loop, preventing an invalid pre-loop
+  reference while preserving exact typed marking and explicit authored variants.
+- PDF-backed Listening items are consistently exempt from retyped transcript
+  timestamp validation because their source/evidence is the published question
+  PDF; audio-authored items remain fail-closed until transcript evidence is
+  complete.
+- The Reading compatibility smart-quote default is now disabled to match the
+  strict v1.1 identity normalization boundary. Bounded source assertions passed
+  and `git diff --check` passed; no build/test, CI/CD, push, deployment, or live
+  acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Fullscreen guidance boundary)
+
+- The active Listening OET@Home path no longer requests or requires browser
+  fullscreen. The legacy lock flag is disabled, while a separate
+  `technicalGuidanceTelemetryEnabled` field keeps focus/fullscreen events
+  non-blocking and auditable. Intro and skin copy now state that fullscreen is
+  optional; strict audio, timer, and section-lock behavior remains unchanged.
+- Bounded fullscreen-guidance assertions and `git diff --check` passed. No
+  frontend/backend build or test, CI/CD, push, deployment, or live acceptance
+  was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Strict normalization surface)
+
+- Reading grading no longer applies legacy smart-quote, hyphen-spacing, or
+  number/unit rewrites. Those fields remain compatibility-only and are forced
+  off in effective policy snapshots; the admin surface now directs authors to
+  use explicit accepted variants. Only the named exact/trim/collapse profiles
+  can affect comparison.
+- Bounded source assertions and `git diff --check` remain required; no build,
+  test, CI/CD, push, deployment, or live marking acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening policy parity)
+
+- The diagnostic/mock Listening grader now consumes the captured Listening
+  normalization profile and authored-variant flag, including fail-closed
+  handling for invalid profiles and explicit case-insensitive matching.
+- The relational Listening grader now applies the same captured profile and
+  effective case-sensitivity rule, so both user-visible grading paths remain
+  deterministic and policy-pinned.
+- Bounded policy-parity assertions passed and `git diff --check` passed. No
+  frontend/backend build or test, CI/CD, push, deployment, or live acceptance
+  was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading policy parity)
+
+- Reading grading now preserves the captured Reading normalization profile,
+  rejects invalid/legacy profiles by exact matching, and explicitly applies
+  the approved case-insensitive profile wherever short-answer comparisons are
+  made.
+- The bounded source audit confirmed the LR conversion service still resolves
+  only complete owner-approved lookup rows and has no interpolation/formula
+  fallback.
+- Bounded Reading normalization assertions and `git diff --check` passed. No
+  frontend/backend build or test, CI/CD, push, deployment, or live acceptance
+  was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Bounded final audit)
+
+- Targeted `git diff --check` passed across the touched LR grading and
+  extraction services.
+- The source audit found no live Listening/Reading grading call site using the
+  legacy formula methods; the shared legacy definitions remain because they
+  are referenced by existing non-LR/test contracts and were not removed.
+- No full build/test, CI/CD, push, deployment, or live browser/admin
+  acceptance was run, per the user's explicit instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading explanation grounding)
+
+- Reading post-submit explanations now fail closed when the approved Reading
+  rulebook is unavailable; the previous synthetic fallback rulebook was
+  removed. Approved rationale, source evidence, submission, revision, and
+  gateway requirements remain mandatory before explanation generation.
+- Bounded source assertion and `git diff --check` passed. No backend build or
+  test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Invalid normalization fail-closed closure)
+
+- Legacy captured `fuzzy_levenshtein_1` profiles are now treated as invalid in
+  Listening policy snapshots; unknown and legacy fuzzy strategies in both
+  graders fail closed to exact matching. They cannot receive trimming or any
+  other extra normalization, and Levenshtein remains analytics-only.
+- Bounded invalid-normalization assertions passed and `git diff --check`
+  passed. No backend build/test, CI/CD, push, deployment, or live marking
+  acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Durable extraction-start retry ledger)
+
+- Reading and Listening Part A extraction now reserve a durable audit ledger
+  entry before OCR/model execution and count those starts against the owner
+  retry cap. Concurrent or failed provider runs can no longer bypass the cap
+  because no completed draft row exists yet; zero remains explicitly unlimited.
+- Bounded extraction-ledger assertions passed and `git diff --check` passed.
+  No backend build/test, CI/CD, push, deployment, or live admin acceptance was
+  run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Atomic extraction reservation)
+
+- Reading and Listening Part A retry reservations now use serializable
+  database transactions around the count-and-insert operation, preventing
+  concurrent extraction requests from bypassing the owner cap. Listening
+  reserves only after paper/asset/input guards and immediately before OCR.
+- Bounded atomic-reservation assertions passed and `git diff --check` passed.
+  No backend build/test, CI/CD, push, deployment, or live admin acceptance was
+  run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening mock strict-marking disclosure)
+
+- The Listening mock-results route now renders the required strict-marking
+  disclosure alongside its practice-score disclaimer, covering the
+  specification's warning about minor spelling variants and examiner
+  discretion.
+- Bounded source assertions passed and `git diff --check` passed; no frontend
+  build/test, CI/CD, push, deployment, or live result-page acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening Part B/C AI kill-switch)
+
+- Listening Part B/C OCR and Claude imports now resolve the owner Listening
+  policy before any provider call and return the same typed conflict when AI
+  extraction is disabled. The path remains a projection only and requires
+  explicit admin review/save.
+- Bounded source assertions passed and `git diff --check` passed; no backend
+  build/test, CI/CD, push, deployment, or live admin acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening Part B/C extraction cap)
+
+- Projection-only Part B/C AI imports now record a durable
+  `ListeningPartBCExtractionStarted` audit event and enforce the owner
+  `AiExtractionMaxRetriesPerPaper` cap before OCR/model spend. A zero cap keeps
+  the explicit unlimited behavior; the typed retry-limit conflict is reused.
+- Bounded source assertions passed and `git diff --check` passed; no backend
+  build/test, CI/CD, push, deployment, or live admin acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Strict normalization profile closure)
+
+- Listening and Reading graders now correctly collapse internal whitespace for
+  the documented `trim_collapse_case_insensitive` profile while retaining the
+  key's case-sensitivity decision. Both policy services reject empty,
+  unsupported, or fuzzy normalization profiles before persistence.
+- Bounded source assertions passed and `git diff --check` passed; no backend
+  build/test, CI/CD, push, deployment, or live marking acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening mock pass-status display)
+
+- The Listening mock-results surface now displays the approved conversion
+  table's pass status. When no approved conversion exists, pass status remains
+  explicitly unavailable rather than being inferred from raw or linear scores.
+- Bounded source assertions passed and `git diff --check` passed; no frontend
+  build/test, CI/CD, push, deployment, or live result-page acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening duration defaults)
+
+- Production Listening test-rules fallback and mock-authoring default now use
+  45 minutes, matching the server-authoritative default and the specification's
+  approximately 45–50-minute Listening duration.
+- Admin timer copy now describes the same 45–50-minute expectation; the public
+  test-rules endpoint remains policy-backed and does not hard-code a score or
+  duration over the configured policy.
+- Bounded duration assertions and `git diff --check` passed. No frontend or
+  backend build/test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading AI policy control surface)
+
+- The Reading global policy page now exposes the AI extraction kill-switch,
+  always-on human-approval invariant, and bounded per-paper retry cap.
+- Reading policy updates now reject negative retry caps; zero remains the
+  explicit unlimited value, while the existing backend approval invariant is
+  preserved.
+- Bounded source assertions passed and `git diff --check` passed; no
+  frontend/backend build or test, CI/CD, push, deployment, or live admin
+  acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Exact Reading shape and MCQ corruption hold)
+
+- Reading publish validation, AI extraction validation, and admin authoring
+  now enforce Part A Q1-7 matching, Q8-14 short answer, Q15-20 sentence
+  completion; Part B three-option MCQ only; and Part C four-option MCQ only.
+  Text-linked papers also require exactly A=4, B=6, and C=2 text rows,
+  while PDF-only papers remain permitted to defer text extraction.
+- Listening multiple-selected payloads for single-answer MCQs now remain
+  invalid for automated marking, create an administrator-review hold and
+  audit event, and persist no converted score or pass result.
+- Bounded source assertions passed and `git diff --check` passed. No frontend
+  or backend build/test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Legacy Listening MCQ corruption parity)
+
+- The legacy JSON-attempt submission path now scans Part B/C single-answer
+  MCQ payloads for multiple selected options before deterministic marking. It
+  preserves the raw attempt, records an administrator-review audit event,
+  withholds automated evaluation and score conversion, and returns the same
+  conflict used by relational Listening attempts.
+- Bounded source assertions passed and `git diff --check` passed. No backend
+  build/test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Part B one-question forward flow)
+
+- The learner Listening player now renders Part B as one active question at a
+  time, binds the shared Part B audio to the active extract's authored cue
+  window, and exposes an irreversible Next confirmation before starting the
+  next short extract. A Part B audio file without valid per-extract cue
+  boundaries now halts the attempt and raises administrator review instead of
+  silently skipping questions.
+- Bounded source assertions passed and `git diff --check` passed. No frontend
+  build/test, backend build/test, CI/CD, push, deployment, or live acceptance
+  was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening boundary confirmation and API locks)
+
+- The strict Listening paper route now requires an explicit confirmation for
+  every sub-section boundary, including timer expiry, and does not advance the
+  client cursor after a failed server cursor write.
+- Relational and legacy JSON answer saves now enforce the active canonical
+  A1/A2/B/C1/C2 section, reject edits to locked or future sections, and reject
+  cursor jumps that skip a boundary.
+- Bounded source assertions passed and `git diff --check` passed. No frontend
+  or backend build/test, CI/CD, push, deployment, or live acceptance was run
+  under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Canonical Listening preflight gate)
+
+- The canonical strict Listening paper route now runs the audio readiness check
+  before enabling Start, verifies all resolved scored audio assets, records the
+  learner sound-check outcome through `/v1/listening-pathway/audio-check`, and
+  records advisory device/browser/network telemetry on the relational attempt.
+- The missing audio-check endpoint is now mapped server-side; strict attempt
+  creation remains fail-closed until the learner has passed that check.
+- Bounded source assertions passed and `git diff --check` passed. No frontend
+  or backend build/test, CI/CD, push, deployment, or live acceptance was run
+  under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Canonical Listening refresh/reconnect)
+
+- The canonical strict route now restores the server-authoritative section
+  cursor and active Part B question after refresh. Relational and legacy
+  attempts project audio lifecycle state/checkpoints; active audio resumes from
+  the latest persisted checkpoint, while completed audio does not autoplay
+  again.
+- The canonical route now logs audio start/progress/end, buffering/stalls,
+  playback errors, focus/visibility changes, answer changes, and section
+  transitions through the existing integrity-event service. Playback failures
+  remain server-admin-review holds.
+- Bounded refresh/reconnect source assertions passed and `git diff --check`
+  passed. No frontend or backend build/test, CI/CD, push, deployment, or live
+  acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening duplicate-submit winner replay)
+
+- Listening submit idempotency now closes the concurrent loser path for both
+  legacy JSON and relational attempts. The existing durable `(scope, key)`
+  cache remains the replay source; optimistic concurrency now reloads the
+  committed winner, prevents a second legacy evaluation, and returns that
+  winner review to the duplicate request.
+- The existing legacy `Attempt.DraftVersion` column is now an explicit
+  concurrency token and is incremented on submit, including review-hold
+  submits. Relational attempts retain their existing `RowVersion` guard.
+- Bounded source assertions and `git diff --check` passed. No build/test,
+  CI/CD, push, deployment, or live acceptance was run under the user's
+  lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Result-surface disclosure and graph parity)
+
+- Reading mock results now carry the same branded practice-score disclosure
+  and stricter-than-examiner marking disclosure as canonical results.
+- Reading and Listening mock results now expose owner-table conversion
+  evidence and the platform-branded score-band graph. Transcript-backed
+  Listening review now exposes the same graph and practice-result label.
+- TSX parse checks for all three touched result pages, bounded source
+  assertions, and `git diff --check` passed. No full build/test, CI/CD, push,
+  deployment, or live acceptance was run under the user's lightweight-
+  validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening Part A/B/C result breakdown)
+
+- Canonical Listening results and transcript-backed review now render a
+  deterministic Part A/B/C table with correct, incorrect, unanswered, and
+  percentage values derived from the item-level review payload. No client
+  scoring or score conversion is introduced.
+- Touched Listening result/review pages and the shared breakdown component
+  passed bounded TSX parse checks and `git diff --check`. No full build/test,
+  CI/CD, push, deployment, or live acceptance was run under the user's
+  lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Server-clock timer synchronization)
+
+- Reading and Listening learner responses now expose a server timestamp for
+  display-clock correction. Reading deadline comparisons use the corrected
+  server clock; strict and legacy Listening timed displays use the same
+  corrected clock while preserving server-authoritative expiry/grading and the
+  existing audio-buffering hold behavior.
+- Added the shared clock helper and timestamp-aware timer tick path. Bounded
+  TS/TSX parse checks, server-clock source assertions, and `git diff --check`
+  passed. No full build/test, CI/CD, push, deployment, or live acceptance was
+  run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Result timing analytics)
+
+- Reading review responses now expose server-persisted total elapsed time and
+  Part A/B/C timing derived from answer telemetry. Listening review responses
+  expose server-persisted attempt duration plus A1/A2/B/C1/C2 audio durations
+  derived from the saved audio cue timeline. No timing value is fabricated
+  when telemetry is missing or malformed.
+- Canonical Reading results, Listening results, and transcript-backed Listening
+  review now render a shared accessible Time used summary with per-section rows,
+  total, and an explicit Not recorded state for unavailable telemetry.
+- Bounded TS/TSX parse checks, backend contract assertions, and scoped
+  `git diff --check` passed. No full build/test, CI/CD, push, deployment, or
+  live acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock result timing parity)
+
+- Legacy Reading mock results now show the persisted session total and explicit
+  Not recorded Part A/B/C rows because that pathway did not capture per-part
+  telemetry. Legacy Listening mock results now return and display their
+  persisted session duration with explicit Not recorded A1/A2/B/C1/C2 rows.
+- Mock result TS/TSX parsing, backend contract assertions, and scoped
+  `git diff --check` passed. No full build/test, CI/CD, push, deployment, or
+  live acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock targeted next-step routes)
+
+- Mock Reading next steps and remediation study-plan items now deep-link to the
+  existing Part-filtered Error Bank route. Mock Listening next steps and study
+  plan items now map persisted error categories to existing focused drill
+  routes, with deterministic safe fallbacks for unmapped categories.
+- Added `MockNextStepRouteResolver` and focused route-regression coverage. A
+  bounded source assertion and scoped `git diff --check` passed. The focused
+  backend test remains unexecuted; no full build/test, CI/CD, push, deployment,
+  or live acceptance was run under the user's lightweight-validation
+  instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Grounded explanation attribution)
+
+- Reading and Listening submitted-attempt explanation calls now include stable
+  `reading.explanation.v1` and `listening.explanation.v1` prompt-template IDs,
+  allowing AI usage records to attribute the exact explanation prompt version.
+  The obsolete shared-question Reading explanation cache writer was removed so
+  learner-specific generated explanations remain request-scoped and advisory.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  build/test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading authoring release permissions)
+
+- Reading question review transitions now fail closed for Content Authors:
+  entering `Published` requires content-publish/publisher-approval permission,
+  and emergency rollback via `IsAdminOverride` requires `system_admin`.
+  Added focused permission-policy regression coverage for publish, override,
+  and malformed claims.
+- Bounded source assertions and scoped `git diff --check` passed. The focused
+  backend test remains unexecuted; no full build/test, CI/CD, push, deployment,
+  or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening TTS production fail-closed)
+
+- Production startup now rejects `Listening:TtsProvider=stub` instead of
+  warning and allowing silence-generated audio artifacts. The stub remains
+  available only for development/CI pipeline checks; production must select a
+  real provider such as ElevenLabs.
+- Added focused provider normalization/environment-policy regression. Bounded
+  source assertions and scoped `git diff --check` passed. The focused backend
+  test remains unexecuted; no full build/test, CI/CD, push, deployment, or live
+  acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading extraction fail-closed fallback)
+
+- Production `GroundedReadingExtractionAi` failures no longer call the
+  canonical placeholder-manifest generator. They persist an explicitly flagged
+  empty, non-approvable extraction draft, preventing fabricated passages,
+  questions, or answer keys from entering authoring review. The known-manifest
+  extractor remains documented as a test fixture only; production DI remains
+  grounded-gateway based.
+- Added a focused fallback regression. Bounded source assertions and scoped
+  `git diff --check` passed. The focused backend test remains unexecuted; no
+  full build/test, CI/CD, push, deployment, or live acceptance was run under
+  the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Grounded Reading passage Q&A)
+
+- Replaced the Reading pathway passage-Q&A stub with a grounded service. It
+  requires an owned submitted attempt pinned to the current published Reading
+  revision, bounds and role-filters conversation context, sends the passage
+  through the rulebook-grounded gateway, and returns explicit advisory/marks
+  unaffected metadata. Missing evidence, malformed AI output, gateway failure,
+  and pre-submit requests fail closed with a conflict; no deterministic marks
+  are changed.
+- Added the AI task/reply contract, DI registration, TypeScript response type,
+  and focused prompt/parser regressions. Bounded source assertions and scoped
+  `git diff --check` passed. The focused backend test remains unexecuted; no
+  full build/test, CI/CD, push, deployment, or live acceptance was run under
+  the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock error taxonomy parity)
+
+- Legacy Reading and Listening mock diagnostics now share a server-side typed
+  answer classifier for inference, number/plural form, unit, spelling, form,
+  and detail categories. Authored MCQ distractor categories remain preferred;
+  persisted correctness and marks are never modified by the diagnostic path.
+- Added focused classifier regressions. Bounded source assertions and scoped
+  `git diff --check` passed; the new backend tests were not executed. No full
+  build/test, CI/CD, push, deployment, or live acceptance was run under the
+  user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading mock governed score conversion)
+
+- Reading legacy mock start now captures the owner-effective score-conversion
+  snapshot in session metadata and marks an available table used. Reading mock
+  results resolve that pinned snapshot, expose the version/pass fields expected
+  by the result UI, and keep scaled score unavailable when no approved table is
+  available. No raw-to-500 formula or client-side conversion was introduced.
+- Added a focused Reading mock result contract regression. Bounded backend source
+  assertions and scoped `git diff --check` passed; the new backend test was not
+  executed. No full build/test, CI/CD, push, deployment, or live acceptance was
+  run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Reading mock governed grade)
+
+- Reading mock results now expose the owner-authored conversion grade and the
+  API client uses that grade when an approved table is present. The previous
+  scaled-score-to-grade derivation was removed from this result path; no grade
+  is synthesized when conversion is unavailable.
+- Bounded C# source assertions, TypeScript transpile checks, and scoped
+  `git diff --check` passed. No full build/test, CI/CD, push, deployment, or
+  live acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Prioritized mock review)
+
+- Reading and Listening completed mock result payloads now place unanswered
+  items first, then answered mistakes, then correct answers, while preserving
+  the complete session review and original order within each priority group.
+  Persisted `IsCorrect` values remain authoritative.
+- Bounded source assertions, TypeScript transpile checks, and scoped
+  `git diff --check` passed. No full build/test, CI/CD, push, deployment, or
+  live acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Shared mock review ordering)
+
+- Reading and Listening now use the same server-side `MockResultReviewOrdering`
+  helper for unanswered-first, mistake-second, correct-last review ordering.
+  A focused regression covers priority and stable order within each group.
+- Bounded source assertions, TypeScript transpile checks, and scoped
+  `git diff --check` passed. The focused backend regression was added but not
+  executed; no full build/test, CI/CD, push, deployment, or live acceptance was
+  run under the user's lightweight-validation instruction.
+
+## 2026-08-12 — Legacy mock remediation plan bridge
+
+- Completed legacy Reading and Listening mock results now derive editable
+  remediation items from persisted error-summary categories, counts, and
+  question IDs. Items are deduplicated per completed session, link to actual
+  targeted practice routes, and expose `/study-plan` for candidate edits.
+- Scoped touched-source checks, TypeScript/TSX transpile parsing, and
+  `git diff --check` passed. The focused backend contract test is present but
+  unexecuted; full validation, CI/CD, deployment, and live acceptance remain
+  outside the requested lightweight-validation scope.
+
+## 2026-08-12 — Admin editing of mock remediation recommendations
+
+- The admin learner study-plan surface now edits generated remediation items
+  through the existing audited `AdminContentWrite` override route. Title,
+  rationale, due date, duration, section, and learner route are editable; the
+  admin projection includes the persisted rationale/content metadata. The
+  recommendation remains separate from marks and result claims.
+- The override route is covered by the granular authorization inventory.
+  Touched-source checks, TypeScript/TSX transpile parsing, and `git diff --check`
+  passed; backend execution, deployment, and live admin acceptance remain
+  unexecuted under the lightweight-validation instruction.
+
+## 2026-08-12 — Legacy mock part accuracy percentages
+
+- Legacy Reading and Listening mock result breakdowns now expose and render
+  server-derived accuracy percentages for each candidate-facing Part A/B/C
+  row, in addition to raw and outcome counts. This closes the percentage
+  requirement without adding client-side marking or score conversion.
+- Touched-source checks and TypeScript/TSX transpile parsing passed, with
+  `git diff --check`. The focused backend contract test remains unexecuted;
+  backend build/test and live acceptance remain outside the requested scope.
+
+## 2026-08-12 — Reading mock deterministic error taxonomy
+
+- Legacy Reading mock review now derives diagnostic categories from persisted
+  answers plus authored question metadata: distractor categories when keyed,
+  detail, spelling, form, or incorrect-answer. Unanswered and correct results
+  remain deterministic, and no category can change the stored mark.
+- Narrow source checks, TypeScript/TSX transpile parsing, and `git diff --check`
+  passed. Backend execution and deployed acceptance remain pending.
+
+## 2026-08-12 — Listening mock distractor taxonomy
+
+- Legacy Listening MCQ review now derives a post-submit distractor category
+  from the immutable question snapshot's authored option metadata, falling
+  back to `distractor` when the option is untagged. No score or answer decision
+  is changed by this diagnostic projection.
+- Narrow source invariants and `git diff --check` passed; backend execution and
+  deployed acceptance remain pending.
+
+# Latest LR coding checkpoint - 2026-08-12 (Listening Part A/B/C aggregation)
+
+- Listening mock result breakdowns now aggregate the candidate-facing score
+  totals as Part A, Part B, and Part C while retaining A1/A2/B/C1/C2 as the
+  separate timing sections required by the listening flow.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  build/test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Governance lifecycle hardening)
+
+- Assessment score tables, marking-policy versions, and rationale/evidence
+  records now enforce distinct Draft -> InReview -> Approved -> Effective
+  transitions. Effective promotion rejects unapproved records; first use
+  still locks the immutable version. Admin UI/API actions and authorization
+  inventory expose the separate review and approval steps.
+- Targeted TS transpile parsing, backend state-guard assertions, and scoped
+  `git diff --check` passed. No long validation, CI/CD, push, deployment, or
+  live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Release-status projection)
+
+- Added an admin-only fail-closed release-status projection for Listening and
+  Reading. It reports blockers when the effective complete score table,
+  effective marking policy, or effective rationale/evidence library is absent,
+  and surfaces the status in the scoring governance page without inventing
+  owner values.
+- Targeted TS transpile parsing, backend release-status assertions, and scoped
+  `git diff --check` passed. No long validation, CI/CD, push, deployment, or
+  live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Release ambiguity fail-closed)
+
+- The release-status projection now rejects two effective/locked table or
+  marking-policy versions with the same effective timestamp, matching the
+  runtime resolver's ambiguity guard instead of silently selecting one.
+- Bounded backend source assertions, TS transpile parsing, and scoped
+  `git diff --check` passed. No long validation, CI/CD, push, deployment, or
+  live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Release effective-time parity)
+
+- Release readiness now ignores future-dated Effective/Locked records until
+  their `EffectiveFrom` timestamp, matching the runtime score-table and
+  marking-policy resolvers.
+- Bounded source assertions and scoped `git diff --check` passed. No long
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Owner release-gate metadata)
+
+- Marking-policy governance now carries explicit owner release metadata for
+  score-graph legal/style approval, peak concurrent timed-attempt target, and
+  load-evidence URL. Policy approval rejects missing or incomplete metadata;
+  release status reports the same blocker without inventing values. Added a
+  focused contract regression for preservation and default denial.
+- Bounded backend source assertions, TS transpile parsing, and scoped
+  `git diff --check` passed. The focused backend test remains unexecuted; no
+  long validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Release-status refresh parity)
+
+- The scoring governance page now refreshes the consolidated release status
+  after marking-policy, rationale, and re-mark governance reloads as well as
+  after score-table actions, preventing stale Ready/Blocked state after an
+  approval transition.
+- Targeted TS transpile parsing and scoped `git diff --check` passed. No long
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Evidence URL validation)
+
+- Peak-concurrency release evidence now requires an absolute HTTPS URL in
+  addition to graph approval and a positive target. Non-HTTPS placeholders are
+  denied by the release-gate contract; the focused contract source regression
+  covers missing and non-HTTPS denial.
+- Bounded source assertions and scoped `git diff --check` passed. The focused
+  backend test remains unexecuted; no long validation, CI/CD, push,
+  deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock review ordering and contract regression)
+
+- Reading mock item review now follows the immutable session question order,
+  rather than repeating per-part display-order values, and unknown answers are
+  counted as unanswered consistently with Listening. A focused backend
+  contract regression covers candidate-safe JSON item fields and transcript
+  evidence timestamps.
+- Bounded TS parsing, backend source assertions, and scoped `git diff --check`
+  passed. The new backend test was added but not executed; no full build/test,
+  CI/CD, push, deployment, or live acceptance was run under the user's
+  lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock item-review parity)
+
+- Completed legacy Reading and Listening mock results now expose ordered,
+  candidate-safe item review records derived from persisted attempts and
+  authored question keys. The UI shows the learner answer, correct answer,
+  marks, explanation, and Reading passage or Listening transcript evidence;
+  Listening also preserves authored evidence time bounds and persisted
+  spelling/meaning miss flags. Pre-submit routes remain unchanged and no
+  client-side marking was introduced.
+- Mock item-review TS/TSX parsing, backend contract/source assertions, and
+  scoped `git diff --check` passed. No full build/test, CI/CD, push,
+  deployment, or live acceptance was run under the user's lightweight-
+  validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock error-pattern and next-step parity)
+
+- Legacy Reading and Listening mock result APIs now return server-derived
+  error-category counts and a deterministic targeted-practice link based only
+  on persisted completed item review. Both mock result UIs display the pattern
+  summary before the full item review. No AI output, score conversion, pass
+  claim, or client-side marking was added to this path.
+- Bounded TS parsing, backend source assertions, and scoped `git diff --check`
+  passed. The focused backend contract test remains added but unexecuted; no
+  full build/test, CI/CD, push, deployment, or live acceptance was run.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock result breakdown parity)
+
+- Legacy Reading and Listening mock result endpoints now derive candidate-safe
+  Part A/B/C breakdowns from persisted question attempts, including raw score,
+  correct, incorrect, and unanswered counts. Listening preserves A1/A2/B/C1/C2
+  timing sections; Reading preserves A/B/C timing sections. No client scoring
+  or fabricated telemetry was introduced.
+- Mock result TS/TSX parsing, backend contract assertions, and scoped
+  `git diff --check` passed. No full build/test, CI/CD, push, deployment, or
+  live acceptance was run under the user's lightweight-validation instruction.
+
+# Latest LR coding checkpoint - 2026-08-12 (Mock targeted next-step routes)
+
+- Mock Reading next steps and remediation study-plan items now deep-link to the
+  existing Part-filtered Error Bank route. Mock Listening next steps and study
+  plan items now map persisted error categories to existing focused drill
+  routes, with deterministic safe fallbacks for unmapped categories.
+- Added `MockNextStepRouteResolver` and focused route-regression coverage. A
+  bounded source assertion and scoped `git diff --check` passed. The focused
+  backend test remains unexecuted; no full build/test, CI/CD, push, deployment,
+  or live acceptance was run under the user's lightweight-validation
+  instruction.
+# 2026-08-12 Listening section-transition telemetry
+
+- Closed the canonical player telemetry gap for PDF §17.11. Strict server FSM
+  advances now emit one `section_transition` event only when the applied target
+  crosses sections, with from/to sections and FSM states. Local forward-only
+  advances emit the same event with a local-transition reason. Added the client
+  event literal and a focused strict cross-section regression.
+- Focused Vitest passed 1/1 for the new transition regression and 1/1 for the
+  existing audio-resume regression. Targeted ESLint completed with 0 errors and
+  16 existing warnings; source assertions and scoped `git diff --check` passed.
+- No full validation, CI/CD, push, deployment, or live acceptance was run.
+# 2026-08-12 Listening boundary-copy parity
+
+- Corrected candidate-facing Listening copy that incorrectly said the next
+  section opened automatically at audio end. It now states that the player
+  opens an irreversible finish confirmation and only advances after confirmation,
+  matching the enforced lock boundary.
+- Focused Listening player-component Vitest passed 39/39 across 3 collected
+  files. Targeted ESLint completed with 0 errors and 16 existing warnings;
+  boundary-copy assertions and scoped `git diff --check` passed.
+- No full validation, CI/CD, push, deployment, or live acceptance was run.
+# 2026-08-12 Assessment score-table UI coverage
+
+- The admin Listening/Reading score-table editor now rejects non-integer raw or
+  converted values and requires exactly one row for every raw score 0 through
+  42 before submitting a draft. The backend validator remains authoritative;
+  this closes the client-side validation mismatch without inventing values.
+- Targeted ESLint completed with 0 errors and 3 existing warnings; score-table
+  source assertions and scoped `git diff --check` passed. No full validation,
+  CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening practice speed parity
+
+- The canonical Listening player now enforces 1x playback only for server
+  policy modes with `onePlayOnly` enabled. Practice mode no longer resets a
+  learner-selected playback rate, while strict exam/home behavior and blocked
+  speed telemetry remain unchanged.
+- Scoped Vitest passed 2/2 speed-lock regressions; scoped `git diff --check`
+  passed. No full validation, CI/CD, push, deployment, or live acceptance was
+  run.
+
+### 2026-08-12 Reading MCQ invalid-state parity
+
+- Reading single-answer MCQ payloads containing multiple persisted selections
+  are now held as invalid for automated marking: the raw answer is preserved,
+  `IsCorrect` remains null, points and distractor metadata are cleared, and the
+  existing admin-review/conversion fail-closed path remains active. Regression
+  assertions now cover the persisted invalid state.
+- Scoped `git diff --check` passed. The one focused backend test was attempted
+  with a 60-second bound but timed out before producing output; no full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading invalid-review projection
+
+- Submitted Reading review projections now preserve corrupted multiple-choice
+  answers as `isInvalid` with explicit invalid counts. They are excluded from
+  ordinary wrong-answer clusters/counts, shown as `Invalid — admin review`,
+  and do not expose a grounded AI explanation action. The result surface also
+  displays the fail-closed admin-review warning and conversion status.
+- Scoped source assertions and `git diff --check` passed. The focused Reading
+  results Vitest file was attempted with a 30-second bound but timed out before
+  producing output; no full validation, CI/CD, push, deployment, or live
+  acceptance was run.
+
+### 2026-08-12 Listening audio-failure advance hold
+
+- The canonical Listening paper section now receives an explicit audio-failure
+  signal from authenticated-media and media-element load failures. It keeps the
+  section timer paused and disables advance/submit controls after the
+  `audio_error` admin-review event, so a candidate cannot cross a failed audio
+  boundary while the server-side review hold remains authoritative.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading invalid submit-result contract
+
+- Reading submit grading now keeps corrupted single-answer MCQs out of the
+  ordinary `incorrectCount`, exposes `invalidCount`, and marks the affected
+  answer as `isInvalid` in the typed submit contract. The persisted review
+  projection and the immediate submit response therefore share the same
+  fail-closed invalid state.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading invalid Error Bank isolation
+
+- Reading multiple-selection corruption now remains outside the ordinary
+  Error Bank/remediation path. The grader preserves the indeterminate answer
+  for administrator review but does not seed or mutate a learner-error entry;
+  the focused regression asserts that no Error Bank row is created.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading invalid analytics isolation
+
+- Reading cohort/paper analytics now exclude `multiple_selection_review_required`
+  answers from question opportunities, accuracy/difficulty denominators,
+  discrimination groups, time-per-question aggregates, and distractor
+  histograms. The invalid submitted attempt remains visible in attempt-level
+  audit/completion counts, while its indeterminate answer cannot distort
+  learner-performance analytics.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading admin analytics invalid isolation
+
+- The admin Reading analytics endpoint now excludes administrator-review
+  attempts from canonical pass/scaled-score eligibility and excludes their
+  invalid answer rows from question opportunities, unanswered/accuracy
+  denominators, distractor traps, and timing aggregates. Attempt-level totals
+  remain auditable; no raw-to-scaled fallback was introduced.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading privileged invalid-review disclosure
+
+- The privileged Reading attempt review now exposes explicit
+  `requiresAdminReview`, `adminReviewReason`, `invalidCount`, per-section
+  invalid counts, and per-question `isInvalid`. Invalid items are excluded
+  from privileged ordinary-incorrect counts and accuracy denominators, and
+  owner conversion metadata remains unavailable while the review hold is
+  active. The admin UI renders a dedicated warning and invalid-answer state.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening audio-review input freeze
+
+- The same canonical Listening audio-review hold now freezes Part A typed
+  inputs, Part B/C MCQ radios, and the direct advance handler in addition to
+  the section timer and boundary button. This prevents local answer mutation or
+  forward navigation after a failed scored-audio load while the server remains
+  the authoritative hold and persistence boundary.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening invalid-review projection
+
+- Submitted relational Listening reviews now preserve corrupted single-answer
+  MCQs as `isInvalid` when the deterministic answer row has a null correctness
+  state. Invalid items are excluded from ordinary incorrect counts, error
+  clusters, issue/feedback projections, and recall seeding; controlled human
+  overrides clear the invalid state. The result contract exposes invalid and
+  administrator-review counts/reasons, and the candidate UI renders an explicit
+  admin-review warning, excludes invalid items from part accuracy denominators,
+  and suppresses automated answer/explanation/Q&A actions for them.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening analytics/export invalid isolation
+
+- Listening relational admin exports now disclose per-answer `isInvalid` and
+  `missReason` metadata. Student and admin analytics exclude legacy and
+  relational attempts held for administrator review from approved conversions,
+  per-part aggregates, weakness counts, hardest-question tallies, distractor
+  heat, and spelling aggregates while retaining the attempt for audit/completion
+  visibility.
+- Focused regression coverage was added for invalid export disclosure and
+  relational admin-review analytics exclusion. Bounded source assertions and
+  scoped `git diff --check` passed. No full validation, CI/CD, push, deployment,
+  or live acceptance was run.
+
+### 2026-08-12 Listening expert invalid-review disclosure
+
+- Listening expert attempt lists and review bundles now preserve the canonical
+  administrator-review reason, invalid-answer count, and per-answer invalid /
+  miss metadata. Held attempts no longer expose owner-approved scaled scores in
+  expert review or learner home/review projections. The expert UI renders a
+  dedicated hold warning, invalid-answer badges, and excludes invalid answers
+  from the displayed correctness denominator.
+- Focused regression coverage was extended for expert bundle invalid disclosure
+  and assignment-bound review behavior. Bounded source assertions and scoped
+  `git diff --check` passed. No full validation, CI/CD, push, deployment, or
+  live acceptance was run.
+
+### 2026-08-12 Reading and Listening home review-state disclosure
+
+- Reading and Listening learner home projections now disclose the canonical
+  administrator-review hold and reason while suppressing stale scaled scores.
+  Learner cards render an explicit pending-review state instead of treating
+  held attempts as approved results.
+- Focused home regressions cover both relational Listening and canonical
+  Reading projections. Bounded source assertions and scoped `git diff --check`
+  passed. No full validation, CI/CD, push, deployment, or live acceptance was
+  run.
+
+### 2026-08-12 Listening pathway review-state isolation
+
+- Both Listening pathway implementations now exclude attempts held for
+  administrator review from progression qualification, approved scaled-score
+  milestones, owner-pass gates, and stored pathway scores. Held attempts remain
+  auditable as submitted but cannot advance learner progression.
+- Focused regressions cover the 12-stage relational pathway and the legacy
+  course-pathway snapshot. Bounded source assertions and scoped `git diff --check`
+  passed. No full validation, CI/CD, push, deployment, or live acceptance was
+  run.
+
+### 2026-08-12 Computer-based delivery guidance correction
+
+- The learner `/exam-guide` no longer advertises paper-based delivery as a
+  platform mode. It now states the website computer-based/OET@Home-style
+  rehearsal scope and explicitly treats paper-based behaviour as educational
+  guidance only. Listening and Reading copy now matches the specification's
+  42-question structures, Listening duration range, Reading Part A 15-minute
+  lock, and shared 45-minute Parts B+C block.
+- Bounded source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading strict synonym payload validation
+
+- Reading short-answer authoring now rejects accepted-synonym payloads that
+  contain non-string, empty, or whitespace-only entries. This keeps optional
+  answer variants explicit and prevents malformed values from reaching the
+  deterministic marking path.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening scored-audio range lock
+
+- The content-addressed Listening TTS route is used as the scored fallback when
+  a paper has no uploaded section audio. It no longer enables HTTP byte-range
+  processing, preventing a server-side partial-response seek path from bypassing
+  the player’s forward-only audio lock.
+- A focused endpoint regression asserts that a Range request receives the full
+  audio response rather than a partial response. Only bounded source assertions
+  and scoped `git diff --check` are intended; no full validation, CI/CD, push,
+  deployment, or live acceptance was run.
+
+### 2026-08-12 Review-hold reason consistency
+
+- Reading and Listening mutation, submit, and grading guards now preserve the
+  fail-closed administrator-review state while reporting the persisted server
+  reason. Learners are no longer told that malformed-key, unsupported-type, or
+  audio-fault holds are necessarily multiple-selection defects.
+- Bounded source assertions and scoped `git diff --check` were used only. No
+  full validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading grading answer-key integrity hold
+
+- Reading grading now treats invalid question points, malformed answer keys or
+  options, unsupported question types, and invalid accepted-variant payloads as
+  an administrator-review hold. The raw learner answer is preserved, the item
+  receives no automated credit or ordinary wrong-answer classification, score
+  conversion is withheld, and the hold is audited.
+- Learner review, cached grading results, tutor review, analytics, and Error
+  Bank filtering now recognize both the existing multiple-selection hold and
+  the new question-integrity hold. A focused unknown-question regression was
+  added. Bounded source assertions and scoped `git diff --check` passed. No
+  full validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading canonical answer-key completeness
+
+- Reading authoring now rejects empty canonical short-answer values, empty
+  labeled answer maps, and empty labeled answer values before they can enter a
+  published deterministic marking path.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening MCQ option preservation
+
+- Listening authoring no longer silently truncates a multiple-choice payload
+  with more than three options. The authored option set is preserved so the
+  existing exact-shape publish gate can reject the invalid paper without
+  mutating its answer-key content.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening one-mark-per-question publish gate
+
+- Listening structural validation now blocks both relational and JSON papers
+  when any authored question is not worth exactly one mark, even if aggregate
+  Part A/B/C totals still sum to 42. This prevents compensating 0/2-point
+  entries from changing the item-level assessment contract.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening point-value preservation
+
+- Listening authoring no longer coerces zero or negative authored points to one
+  during JSON round-trip, replacement, or relational mirroring. Invalid point
+  values remain visible to the one-mark publish gate instead of being silently
+  rewritten.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading point-value preservation
+
+- Reading authoring no longer coerces zero or negative authored points to one
+  during question creation or update. Invalid point values remain visible to
+  the existing one-mark publish gate instead of being silently rewritten.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Listening runtime/backfill point and option preservation
+
+- Listening backfill, learner projections, attempt max-score initialization,
+  and analytics projections now preserve authored point values instead of
+  coercing zero or negative marks to one. Backfill also preserves extra MCQ
+  options so an invalid option count remains visible to the publish gate rather
+  than being truncated into a valid three-option question.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-12 Reading exam publish-readiness gate
+
+- Full Reading Exam attempts now re-run the structural publish validator before
+  creating an attempt. Incomplete or invalid authored papers are rejected with
+  `reading_paper_not_publish_ready`; subset and learning practice modes retain
+  their controlled practice path.
+- Focused source assertions and scoped `git diff --check` passed. No full
+  validation, CI/CD, push, deployment, or live acceptance was run.
+
+### 2026-08-13 Reading passage Q&A attempt scoping
+
+- Reading grounded passage Q&A now requires the exact submitted attempt ID,
+  learner ownership, matching paper and published revision, and membership of
+  the passage in that attempt's question scope. This prevents a learner from
+  using another submitted attempt on the same paper to request an unrelated
+  passage's grounded content.
+- The result UI and client request now pass the finalized attempt ID, and a
+  focused subset-scope regression covers included versus excluded passages.
+  Only bounded source assertions and scoped `git diff --check` were run; no
+  full validation, CI/CD, push, deployment, or live acceptance was run.

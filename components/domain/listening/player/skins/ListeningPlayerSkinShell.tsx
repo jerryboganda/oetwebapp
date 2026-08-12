@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Maximize2, ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import type { ListeningPresentationMode } from '@/lib/listening/modes';
 
 export interface ListeningPlayerSkinShellProps {
   mode: ListeningPresentationMode;
   /**
-   * When true (default), the Home skin requests fullscreen on first user
-   * interaction. Tests pass
-   * `enableSideEffects={false}` to avoid touching browser globals.
+   * When true (default), the Home skin installs non-blocking guidance
+   * listeners. Tests pass `enableSideEffects={false}` to avoid touching
+   * browser globals.
    */
   enableSideEffects?: boolean;
   children: ReactNode;
@@ -21,7 +21,8 @@ export interface ListeningPlayerSkinShellProps {
  * differences flow from the `mode` prop:
  *
  *   - `computer` → pass-through (no chrome change).
- *   - `home`     → kiosk visuals + fullscreen + paste/context-menu block.
+ *   - `home`     → kiosk visuals + paste/context-menu block; fullscreen is
+ *                  advisory and never requested by this skin.
  *   - computer-based delivery has no printable-booklet skin.
  *
  * Per Wave 3 of the OET Listening gap-fill plan we deliberately *wrap* rather
@@ -35,13 +36,11 @@ export function ListeningPlayerSkinShell({
 }: ListeningPlayerSkinShellProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Home (OET@Home) — kiosk side effects. Wrapped in a single effect so the
-  // unmount cleanup symmetrically reverses every listener.
+  // Home (OET@Home) — non-blocking kiosk guidance side effects. Wrapped in a
+  // single effect so unmount cleanup symmetrically reverses every listener.
   useEffect(() => {
     if (!enableSideEffects || mode !== 'home') return;
     if (typeof document === 'undefined') return;
-
-    const root = rootRef.current ?? document.documentElement;
 
     // Block paste and right-click to mirror the supervised OET@Home runtime.
     const blockEvent = (event: Event) => {
@@ -51,27 +50,9 @@ export function ListeningPlayerSkinShell({
     document.addEventListener('paste', blockEvent);
     document.addEventListener('contextmenu', blockEvent);
 
-    // Request fullscreen on first user interaction; browsers reject
-    // unprompted fullscreen calls outside a user gesture so we listen for
-    // the next click/keydown rather than calling on mount.
-    let triggered = false;
-    const enterFullscreen = () => {
-      if (triggered) return;
-      triggered = true;
-      try {
-        if (root.requestFullscreen && !document.fullscreenElement) {
-          void root.requestFullscreen().catch(() => {/* user dismissed */});
-        }
-      } catch { /* unsupported */ }
-    };
-    document.addEventListener('click', enterFullscreen, { once: true });
-    document.addEventListener('keydown', enterFullscreen, { once: true });
-
     return () => {
       document.removeEventListener('paste', blockEvent);
       document.removeEventListener('contextmenu', blockEvent);
-      document.removeEventListener('click', enterFullscreen);
-      document.removeEventListener('keydown', enterFullscreen);
     };
   }, [enableSideEffects, mode]);
 
@@ -88,11 +69,7 @@ export function ListeningPlayerSkinShell({
       >
         <div className="flex items-center gap-3 border-b border-white/10 bg-navy px-4 py-2 text-sm font-semibold">
           <ShieldAlert className="h-4 w-4 text-warning" aria-hidden="true" />
-          <span>OET@Home kiosk mode. Do not switch tabs or windows.</span>
-          <span className="ml-auto flex items-center gap-1 text-xs uppercase tracking-widest text-white/70">
-            <Maximize2 className="h-3 w-3" aria-hidden="true" />
-            Fullscreen on first interaction
-          </span>
+          <span>OET@Home guidance mode. Keep this test window visible when possible.</span>
         </div>
         <div className="listening-home-surface">
           {children}

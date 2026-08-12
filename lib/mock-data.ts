@@ -403,6 +403,7 @@ export interface ListeningResultQuestion {
   userAnswer: string;
   correctAnswer: string;
   isCorrect: boolean;
+  isInvalid?: boolean;
   explanation: string;
   allowTranscriptReveal: boolean;
   transcriptExcerpt?: string;
@@ -415,6 +416,7 @@ export interface ListeningResult {
   score: number;
   total: number;
   questions: ListeningResultQuestion[];
+  invalidCount?: number;
   recommendedDrill: { id: string; title: string; description: string };
 }
 

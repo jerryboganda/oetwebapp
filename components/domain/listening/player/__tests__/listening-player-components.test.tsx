@@ -4,6 +4,55 @@ import userEvent from '@testing-library/user-event';
 import { ListeningSectionStepper } from '../ListeningSectionStepper';
 import { ListeningPreviewBanner, ListeningReviewBanner } from '../ListeningPhaseBanner';
 import { ListeningAudioTransport } from '../ListeningAudioTransport';
+import { ListeningIntroCard } from '../ListeningIntroCard';
+import { listeningSessionFixture } from '../__stories__/fixture';
+
+const introCardProps = {
+  session: listeningSessionFixture,
+  isExam: true,
+  drillId: null,
+  strictReadinessRequired: true,
+  techReadiness: null,
+  audioUrls: [],
+  isStarting: false,
+  audioError: null,
+  startError: null,
+  onTechReadinessReady: vi.fn(),
+  onStart: vi.fn(),
+};
+
+describe('ListeningIntroCard', () => {
+  it('describes irreversible one-play controls for strict mode', () => {
+    render(<ListeningIntroCard {...introCardProps} />);
+
+    expect(screen.getByText(/Audio plays once per section and cannot be paused/i)).toBeInTheDocument();
+    expect(screen.getByText(/Forward-only:/i)).toBeInTheDocument();
+  });
+
+  it('describes policy-controlled review controls for practice mode', () => {
+    render(
+      <ListeningIntroCard
+        {...introCardProps}
+        isExam={false}
+        strictReadinessRequired={false}
+        session={{
+          ...listeningSessionFixture,
+          modePolicy: {
+            ...listeningSessionFixture.modePolicy,
+            mode: 'practice',
+            canPause: true,
+            canScrub: true,
+            onePlayOnly: false,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/Practice controls:/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Audio plays once per section and cannot be paused/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Forward-only:/i)).not.toBeInTheDocument();
+  });
+});
 
 describe('ListeningSectionStepper', () => {
   it('marks past sections as locked and current as active', () => {
@@ -91,6 +140,28 @@ describe('ListeningAudioTransport', () => {
   it('renders the attempt timer chip when attemptSecondsRemaining is set', () => {
     render(<ListeningAudioTransport {...baseProps} />);
     expect(screen.getByTestId('listening-attempt-timer')).toBeInTheDocument();
+  });
+
+  it('uses owner-configured warning thresholds for the attempt timer', () => {
+    render(
+      <ListeningAudioTransport
+        {...baseProps}
+        attemptSecondsRemaining={45}
+        warningThresholdsSeconds={[300, 60, 15]}
+      />,
+    );
+    expect(screen.getByTestId('listening-attempt-timer').className).toContain('bg-warning/20');
+  });
+
+  it('does not invent warning bands when the policy snapshot is empty', () => {
+    render(
+      <ListeningAudioTransport
+        {...baseProps}
+        attemptSecondsRemaining={45}
+        warningThresholdsSeconds={[]}
+      />,
+    );
+    expect(screen.getByTestId('listening-attempt-timer').className).toContain('bg-white/10');
   });
 
   it('hides the attempt timer chip when attemptSecondsRemaining is null', () => {

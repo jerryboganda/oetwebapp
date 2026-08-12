@@ -8,7 +8,8 @@
 // test works: one play, no negative marking, MCQ + gap-fill item types, exam-
 // integrity rules, and recommended in-test strategy.
 //
-// The numeric constants (42 questions / 40 min / 30-raw pass / 350-scaled
+// The numeric constants (42 questions / approximately 45 min / owner-approved
+// conversion / 350-scaled anchor when configured
 // pass) are fetched from the anonymous-allowed policy endpoint so spec
 // changes don't require a code deploy. The page falls back to baked-in
 // defaults if the fetch fails.
@@ -27,7 +28,7 @@ import { getListeningTestRulesPolicy, type ListeningTestRulesPolicyDto } from '@
 
 const DEFAULT_RULES: ListeningTestRulesPolicyDto = {
   questionCount: 42,
-  durationMinutes: 40,
+  durationMinutes: 45,
   partA: { items: 24, extracts: 2, itemType: 'short-answer' },
   partB: { items: 6, extracts: 6, itemType: 'mcq-3-option' },
   partC: { items: 12, extracts: 2, itemType: 'mcq-3-option' },
@@ -108,7 +109,7 @@ export default function ListeningTestRulesPage() {
             title="Exam integrity (computer mode)"
             points={[
               'Once you start the computer-based attempt the audio plays end-to-end and answers cannot be revised after submit.',
-              'Headphones recommended. Do not switch tabs; the exam flow records loss-of-focus.',
+              'Headphones recommended. Keep the test window visible when possible; focus changes are recorded as non-blocking technical guidance.',
               'Transcripts are NOT shown during the attempt. They unlock per-item in your post-attempt review.',
             ]}
             tone="amber"

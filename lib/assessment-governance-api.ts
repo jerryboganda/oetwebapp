@@ -38,6 +38,27 @@ export type AssessmentScoreConversionTableRequest = {
   rows: AssessmentScoreConversionRowDto[];
 };
 
+export type AssessmentReleaseStatusDto = {
+  assessment: 'listening' | 'reading';
+  scopeKey: string;
+  ready: boolean;
+  blockers: string[];
+  scoreTable: {
+    id: string;
+    versionKey: string;
+    status: AssessmentGovernanceStatus;
+    effectiveFrom: string;
+    rowCount: number;
+  } | null;
+  markingPolicy: {
+    id: string;
+    versionKey: string;
+    status: AssessmentGovernanceStatus;
+    effectiveFrom: string;
+  } | null;
+  rationaleEffectiveCount: number;
+};
+
 export type AssessmentMarkingPolicyDto = {
   id: string;
   assessment: 'listening' | 'reading';
@@ -101,10 +122,31 @@ export function listAssessmentScoreTables(params?: {
   );
 }
 
+export function listAssessmentReleaseStatus(params?: { assessment?: 'listening' | 'reading' }) {
+  const query = params?.assessment ? `?assessment=${encodeURIComponent(params.assessment)}` : '';
+  return apiClient.get<AssessmentReleaseStatusDto[]>(
+    `/v1/admin/assessment-governance/release-status${query}`,
+  );
+}
+
 export function createAssessmentScoreTable(request: AssessmentScoreConversionTableRequest) {
   return apiClient.post<AssessmentScoreConversionTableDto>(
     '/v1/admin/assessment-governance/score-tables',
     request,
+  );
+}
+
+export function submitAssessmentScoreTableForReview(id: string) {
+  return apiClient.post<AssessmentScoreConversionTableDto>(
+    `/v1/admin/assessment-governance/score-tables/${encodeURIComponent(id)}/review`,
+    {},
+  );
+}
+
+export function approveAssessmentScoreTable(id: string) {
+  return apiClient.post<AssessmentScoreConversionTableDto>(
+    `/v1/admin/assessment-governance/score-tables/${encodeURIComponent(id)}/approve`,
+    {},
   );
 }
 
@@ -135,6 +177,20 @@ export function createAssessmentMarkingPolicy(request: AssessmentMarkingPolicyRe
   );
 }
 
+export function submitAssessmentMarkingPolicyForReview(id: string) {
+  return apiClient.post<AssessmentMarkingPolicyDto>(
+    `/v1/admin/assessment-governance/marking-policies/${encodeURIComponent(id)}/review`,
+    {},
+  );
+}
+
+export function approveAssessmentMarkingPolicy(id: string) {
+  return apiClient.post<AssessmentMarkingPolicyDto>(
+    `/v1/admin/assessment-governance/marking-policies/${encodeURIComponent(id)}/approve`,
+    {},
+  );
+}
+
 export function makeAssessmentMarkingPolicyEffective(id: string) {
   return apiClient.post<AssessmentMarkingPolicyDto>(
     `/v1/admin/assessment-governance/marking-policies/${encodeURIComponent(id)}/effective`,
@@ -154,6 +210,20 @@ export function createAssessmentRationale(request: {
   evidenceCount: number;
 }) {
   return apiClient.post<AssessmentRationaleDto>('/v1/admin/assessment-governance/rationales', request);
+}
+
+export function submitAssessmentRationaleForReview(id: string) {
+  return apiClient.post<AssessmentRationaleDto>(
+    `/v1/admin/assessment-governance/rationales/${encodeURIComponent(id)}/review`,
+    {},
+  );
+}
+
+export function approveAssessmentRationale(id: string) {
+  return apiClient.post<AssessmentRationaleDto>(
+    `/v1/admin/assessment-governance/rationales/${encodeURIComponent(id)}/approve`,
+    {},
+  );
 }
 
 export function makeAssessmentRationaleEffective(id: string) {

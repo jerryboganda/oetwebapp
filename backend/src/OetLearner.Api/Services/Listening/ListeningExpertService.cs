@@ -27,7 +27,9 @@ public sealed record ListeningExpertAttemptSummary(
     int? RawScore,
     int MaxRawScore,
     int? ScaledScore,
-    bool HasExpertFeedback);
+    bool HasExpertFeedback,
+    bool RequiresAdminReview = false,
+    string? AdminReviewReason = null);
 
 public sealed record ListeningExpertReviewBundle(
     ListeningExpertAttemptMeta Attempt,
@@ -47,7 +49,10 @@ public sealed record ListeningExpertAttemptMeta(
     DateTimeOffset? SubmittedAt,
     int? RawScore,
     int MaxRawScore,
-    int? ScaledScore);
+    int? ScaledScore,
+    bool RequiresAdminReview = false,
+    string? AdminReviewReason = null,
+    int InvalidCount = 0);
 
 public sealed record ListeningExpertAnswerItem(
     string QuestionId,
@@ -69,7 +74,9 @@ public sealed record ListeningExpertAnswerItem(
     // human authority; these surface evidence-bound metadata alongside the
     // deterministic IsCorrect. Null for MCQ items or not-yet-reviewed answers.
     string? AiVerdict = null,
-    string? AiRationale = null);
+    string? AiRationale = null,
+    bool IsInvalid = false,
+    string? MissReason = null);
 
 /// <summary>Part A consultation note (`notesBody` in the `____` grammar) for one
 /// sub-part, so the dedicated tutor view can render the candidate's answers in
@@ -169,12 +176,24 @@ public sealed class ListeningExpertService(
     public async Task<ListeningExpertAttemptsPagedResponse> GetAttemptsPagedAsync(
         string expertId, int page, int pageSize, string? learnerId, string? paperId, string? search, CancellationToken ct)
     {
+        await EnsureActiveExpertAsync(expertId, ct);
+
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         var query = db.ListeningAttempts
             .AsNoTracking()
-            .Where(a => a.Status == ListeningAttemptStatus.Submitted);
+            .Where(a => a.Status == ListeningAttemptStatus.Submitted
+                && db.ReviewRequests.Any(review =>
+                    review.AttemptId == a.Id
+                    && review.SubtestCode == "listening"
+                    && review.State != ReviewRequestState.Cancelled
+                    && review.State != ReviewRequestState.Failed
+                    && db.ExpertReviewAssignments.Any(assignment =>
+                        assignment.ReviewRequestId == review.Id
+                        && assignment.AssignedReviewerId == expertId
+                        && (assignment.ClaimState == ExpertAssignmentState.Assigned
+                            || assignment.ClaimState == ExpertAssignmentState.Claimed))));
 
         if (!string.IsNullOrWhiteSpace(learnerId))
             query = query.Where(a => a.UserId == learnerId);
@@ -253,7 +272,9 @@ public sealed class ListeningExpertService(
             RawScore: a.RawScore,
             MaxRawScore: a.MaxRawScore,
             ScaledScore: HasOwnerConvertedScore(a) ? a.ScaledScore : null,
-            HasExpertFeedback: feedbackAttemptIds.Contains(a.Id)
+            HasExpertFeedback: feedbackAttemptIds.Contains(a.Id),
+            RequiresAdminReview: a.RequiresAdminReview,
+            AdminReviewReason: a.AdminReviewReason
         )).ToList();
 
         return new ListeningExpertAttemptsPagedResponse(items, total, page, pageSize);
@@ -264,12 +285,27 @@ public sealed class ListeningExpertService(
     public async Task<ListeningExpertMyReviewsPagedResponse> GetMyReviewsPagedAsync(
         string expertId, int page, int pageSize, CancellationToken ct)
     {
+        await EnsureActiveExpertAsync(expertId, ct);
+
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         var query = db.ListeningExpertFeedbacks
             .AsNoTracking()
-            .Where(f => f.ExpertId == expertId);
+            .Where(f => f.ExpertId == expertId
+                && db.ListeningAttempts.Any(attempt =>
+                    attempt.Id == f.AttemptId
+                    && attempt.Status == ListeningAttemptStatus.Submitted)
+                && db.ReviewRequests.Any(review =>
+                    review.AttemptId == f.AttemptId
+                    && review.SubtestCode == "listening"
+                    && review.State != ReviewRequestState.Cancelled
+                    && review.State != ReviewRequestState.Failed
+                    && db.ExpertReviewAssignments.Any(assignment =>
+                        assignment.ReviewRequestId == review.Id
+                        && assignment.AssignedReviewerId == expertId
+                        && (assignment.ClaimState == ExpertAssignmentState.Assigned
+                            || assignment.ClaimState == ExpertAssignmentState.Claimed))));
 
         var total = await query.CountAsync(ct);
 
@@ -327,10 +363,18 @@ public sealed class ListeningExpertService(
     public async Task<ListeningExpertReviewBundle> GetReviewBundleAsync(
         string expertId, string attemptId, CancellationToken ct)
     {
+        await EnsureActiveExpertAsync(expertId, ct);
+
         var attempt = await db.ListeningAttempts
             .AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
             ?? throw new KeyNotFoundException($"Listening attempt '{attemptId}' not found.");
+
+        if (attempt.Status != ListeningAttemptStatus.Submitted
+            || !await CanExpertAccessAttemptAsync(expertId, attemptId, ct))
+        {
+            throw new KeyNotFoundException($"Listening attempt '{attemptId}' not found.");
+        }
 
         // Paper title
         var paper = await db.Set<ContentPaper>()
@@ -391,7 +435,10 @@ public sealed class ListeningExpertService(
             OptionAnalysis: BuildOptionAnalysis(
                 optionsByQuestion.GetValueOrDefault(x.Question.Id)),
             AiVerdict: x.Answer.AiVerdict,
-            AiRationale: x.Answer.AiRationale
+            AiRationale: x.Answer.AiRationale,
+            IsInvalid: x.Question.QuestionType == ListeningQuestionType.MultipleChoice3
+                && x.Answer.IsCorrect is null,
+            MissReason: x.Answer.MissReason?.ToString()
         )).ToList();
 
         // Part A consultation notes (A1/A2) so the tutor can review gap answers in
@@ -425,21 +472,24 @@ public sealed class ListeningExpertService(
             SubmittedAt: attempt.SubmittedAt,
             RawScore: attempt.RawScore,
             MaxRawScore: attempt.MaxRawScore,
-            ScaledScore: HasOwnerConvertedScore(attempt) ? attempt.ScaledScore : null);
+            ScaledScore: HasOwnerConvertedScore(attempt) ? attempt.ScaledScore : null,
+            RequiresAdminReview: attempt.RequiresAdminReview,
+            AdminReviewReason: attempt.AdminReviewReason,
+            InvalidCount: answerItems.Count(item => item.IsInvalid));
 
         return new ListeningExpertReviewBundle(meta, answerItems, existing is null ? null : MapFeedback(existing));
     }
 
     // ── Submit / update feedback ──────────────────────────────────────────────
 
-    // Listening expert review currently uses an OPEN model — every expert can
-    // submit feedback on every submitted attempt; the (attemptId, expertId)
-    // upsert is the only key. There is no ExpertReviewAssignment row for
-    // Listening to gate on. To compensate, EVERY raw-score override emits an
-    // AuditEvent with before→after values so it is fully traceable.
+    // Listening expert review is assignment-bound: an expert may only review
+    // submitted attempts attached to an active Listening review assignment.
+    // Raw-score overrides remain fully traceable through the existing audit row.
     public async Task<ListeningExpertFeedbackDto> SubmitFeedbackAsync(
         string expertId, string attemptId, ListeningExpertFeedbackRequest req, CancellationToken ct)
     {
+        await EnsureActiveExpertAsync(expertId, ct);
+
         // H17: a raw score override must carry a non-empty audit reason.
         if (req.RawScoreOverride.HasValue && string.IsNullOrWhiteSpace(req.ScoreOverrideReason))
         {
@@ -450,6 +500,12 @@ public sealed class ListeningExpertService(
         var attempt = await db.ListeningAttempts
             .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
             ?? throw new KeyNotFoundException($"Listening attempt '{attemptId}' not found.");
+
+        if (attempt.Status != ListeningAttemptStatus.Submitted
+            || !await CanExpertAccessAttemptAsync(expertId, attemptId, ct))
+        {
+            throw new KeyNotFoundException($"Listening attempt '{attemptId}' not found.");
+        }
 
         // Upsert — one feedback row per (attemptId, expertId)
         var existing = await db.ListeningExpertFeedbacks
@@ -517,10 +573,11 @@ public sealed class ListeningExpertService(
                 scopeKey: "default",
                 tableId: attempt.ScoreConversionTableId,
                 cancellationToken: ct);
-            attempt.ScoreConversionTableId = conversion.TableId;
-            var hasApprovedConversion = conversion.ConvertedScore.HasValue
+            var hasApprovedConversion = attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+                && conversion.ConvertedScore.HasValue
                 && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
                 && conversion.Passed.HasValue;
+            attempt.ScoreConversionTableId = hasApprovedConversion ? conversion.TableId : null;
             attempt.ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null;
             attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
             attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
@@ -568,13 +625,19 @@ public sealed class ListeningExpertService(
     // ── Get existing feedback ─────────────────────────────────────────────────
 
     private static bool HasOwnerConvertedScore(ListeningAttempt attempt)
-        => attempt.ScaledScore.HasValue
+        => attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+            && !attempt.RequiresAdminReview
+            && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
 
     public async Task<ListeningExpertFeedbackDto?> GetFeedbackAsync(
         string expertId, string attemptId, CancellationToken ct)
     {
+        await EnsureActiveExpertAsync(expertId, ct);
+
+        if (!await CanExpertAccessAttemptAsync(expertId, attemptId, ct))
+            return null;
         // H16: Filter by expertId — this endpoint is under /expert/ so the
         // calling expert should only retrieve their own feedback row.
         var feedback = await db.ListeningExpertFeedbacks
@@ -587,6 +650,40 @@ public sealed class ListeningExpertService(
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task EnsureActiveExpertAsync(string expertId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(expertId))
+            throw ApiException.Forbidden("expert_profile_not_found", "Expert profile not found.");
+
+        var expert = await db.ExpertUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == expertId, ct);
+        if (expert is null)
+            throw ApiException.Forbidden("expert_profile_not_found", "Expert profile not found.");
+
+        if (!expert.IsActive)
+            throw ApiException.Forbidden("account_suspended", "This expert account is not available.");
+    }
+
+    private Task<bool> CanExpertAccessAttemptAsync(
+        string expertId, string attemptId, CancellationToken ct)
+        => (
+            from review in db.ReviewRequests.AsNoTracking()
+            join assignment in db.ExpertReviewAssignments.AsNoTracking()
+                on review.Id equals assignment.ReviewRequestId
+            where review.AttemptId == attemptId
+                && review.SubtestCode == "listening"
+                && review.State != ReviewRequestState.Cancelled
+                && review.State != ReviewRequestState.Failed
+                && assignment.AssignedReviewerId == expertId
+                && (assignment.ClaimState == ExpertAssignmentState.Assigned
+                    || assignment.ClaimState == ExpertAssignmentState.Claimed)
+                && db.ListeningAttempts.Any(attempt =>
+                    attempt.Id == attemptId
+                    && attempt.Status == ListeningAttemptStatus.Submitted)
+            select review.Id)
+            .AnyAsync(ct);
 
     private static ListeningExpertFeedbackDto MapFeedback(ListeningExpertFeedback f)
     {

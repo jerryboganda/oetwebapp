@@ -116,7 +116,7 @@ export function StepListening() {
         step: 'listening',
         existingPaperId,
         paperTitleSuffix: 'Listening',
-        estimatedDurationMinutes: 40,
+        estimatedDurationMinutes: 45,
         pendingAssets,
       });
       if (items.length > 0) {

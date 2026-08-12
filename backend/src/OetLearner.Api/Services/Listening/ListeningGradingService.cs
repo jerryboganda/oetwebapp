@@ -53,6 +53,8 @@ public sealed class ListeningGradingService
         var result = await GradeAttemptAsync(attempt, refreshSubmittedAt: true, ct);
         await _db.SaveChangesAsync(ct);
 
+        EnsureAttemptNotOnAdminReviewHold(attempt);
+
         return result;
     }
 
@@ -96,6 +98,7 @@ public sealed class ListeningGradingService
             ct,
             new KeyCorrection(questionRevisionId.Trim(), newKeySnapshotJson));
         await _db.SaveChangesAsync(ct);
+        EnsureAttemptNotOnAdminReviewHold(attempt);
         return result;
     }
 
@@ -152,6 +155,11 @@ public sealed class ListeningGradingService
         attempt.HumanScoreOverridesJson = JsonSerializer.Serialize(existing, OverrideJsonOptions);
 
         var result = await GradeAttemptAsync(attempt, refreshSubmittedAt: false, ct);
+        if (attempt.RequiresAdminReview)
+        {
+            await _db.SaveChangesAsync(ct);
+            EnsureAttemptNotOnAdminReviewHold(attempt);
+        }
         var grade = result.ScoreConversionGrade ?? "—";
         await RefreshLatestEvaluationAsync(result, grade, actorId, normalizedReason, ct);
 
@@ -198,6 +206,24 @@ public sealed class ListeningGradingService
         string attemptId,
         CancellationToken ct)
     {
+        var reviewer = await _db.ExpertUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(expert => expert.Id == reviewerId, ct);
+
+        if (reviewer is null)
+        {
+            throw ApiException.Forbidden(
+                "expert_profile_not_found",
+                "Expert profile not found.");
+        }
+
+        if (!reviewer.IsActive)
+        {
+            throw ApiException.Forbidden(
+                "account_suspended",
+                "This expert account is not available.");
+        }
+
         var hasAssignment = await (
             from review in _db.ReviewRequests.AsNoTracking()
             join assignment in _db.ExpertReviewAssignments.AsNoTracking()
@@ -241,9 +267,11 @@ public sealed class ListeningGradingService
         // profile controls whether internal whitespace may be collapsed; the
         // grader never enables fuzzy or synonym inference implicitly.
         var markingPolicy = await ResolveMarkingPolicyAsync(attempt, ct);
-        var normalisation = !markingPolicy.TrimLeadingTrailingWhitespace
-            ? "exact"
-            : markingPolicy.CollapseInternalWhitespace ? "trim_collapse" : "trim_only";
+        var shortAnswerPolicy = ResolveCapturedShortAnswerPolicy(attempt.PolicySnapshotJson);
+        var normalisation = ResolveNormalisation(markingPolicy, shortAnswerPolicy);
+        var acceptSynonyms = shortAnswerPolicy is null
+            ? true // Legacy attempts retain their historical authored-variant behaviour.
+            : shortAnswerPolicy.IsValid && shortAnswerPolicy.AcceptSynonyms;
 
         // Build a paper-wide map: normalisedAnswer → questionId. Powers the
         // WrongSection heuristic — if a learner's answer matches another
@@ -256,7 +284,7 @@ public sealed class ListeningGradingService
             .ToList();
         if (keyCorrection is not null && !questions.Any(q => q.Id == keyCorrection.QuestionRevisionId))
             throw ApiException.NotFound("remark_question_revision_not_found", "The re-mark question is not on this Listening paper.");
-        var paperAnswerMap = BuildPaperAnswerMap(gradingQuestions, normalisation);
+        var paperAnswerMap = BuildPaperAnswerMap(gradingQuestions, normalisation, acceptSynonyms);
 
         // Version-pin map: the relational start path captures every question
         // version. Refuse to grade against a changed or missing live row: the
@@ -316,6 +344,9 @@ public sealed class ListeningGradingService
             }
 
             var gradingQuestion = gradingQuestions.First(candidate => candidate.Id == q.Id);
+            var caseSensitive = gradingQuestion.CaseSensitive
+                && markingPolicy.CaseSensitive
+                && shortAnswerPolicy?.Normalisation != "trim_collapse_case_insensitive";
             if (gradingQuestion.QuestionType == ListeningQuestionType.MultipleChoice3
                 && TryReadMultipleSelections(ans.UserAnswerJson, out var selections))
             {
@@ -323,8 +354,23 @@ public sealed class ListeningGradingService
                     q.Id,
                     q.QuestionNumber,
                     selections));
+                // A single-answer MCQ with multiple persisted selections is
+                // invalid for automated scoring. Preserve the raw payload for
+                // admin review, but never turn the corrupted item into a
+                // deterministic incorrect/correct mark.
+                ans.IsCorrect = null;
+                ans.PointsEarned = 0;
+                ans.SelectedDistractorCategory = null;
+                ans.MissReason = null;
+                continue;
             }
-            var evaluation = Evaluate(gradingQuestion, ans, paperAnswerMap, normalisation, gradingQuestion.CaseSensitive && markingPolicy.CaseSensitive);
+            var evaluation = Evaluate(
+                gradingQuestion,
+                ans,
+                paperAnswerMap,
+                normalisation,
+                caseSensitive,
+                acceptSynonyms);
             var isCorrect = evaluation.IsCorrect;
             var distractor = evaluation.Distractor;
             var missReason = evaluation.MissReason;
@@ -345,7 +391,12 @@ public sealed class ListeningGradingService
             if (ans.IsCorrect == true) rawCorrect += gradingQuestion.Points;
 
             var acceptedVariant = isCorrect
-                ? FindAcceptedVariant(gradingQuestion, ans, normalisation, gradingQuestion.CaseSensitive && markingPolicy.CaseSensitive)
+                ? FindAcceptedVariant(
+                    gradingQuestion,
+                    ans,
+                    normalisation,
+                    caseSensitive,
+                    acceptSynonyms)
                 : null;
             if (acceptedVariant is not null)
             {
@@ -365,7 +416,7 @@ public sealed class ListeningGradingService
                         questionNumber = q.QuestionNumber,
                         acceptedVariant,
                         policyNormalisation = normalisation,
-                        caseSensitive = q.CaseSensitive && markingPolicy.CaseSensitive,
+                        caseSensitive,
                     }),
                 });
             }
@@ -375,6 +426,9 @@ public sealed class ListeningGradingService
 
         if (multipleSelectionIssues.Count > 0)
         {
+            attempt.RequiresAdminReview = true;
+            attempt.AdminReviewReason ??= "multiple_selections_for_single_answer_mcq";
+            attempt.AdminReviewFlaggedAt ??= now;
             _db.AuditEvents.Add(new AuditEvent
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -392,6 +446,30 @@ public sealed class ListeningGradingService
                     issues = multipleSelectionIssues,
                 }),
             });
+
+            // Do not resolve or persist any converted score for an attempt
+            // whose automated MCQ payload is invalid. The attempt is saved as
+            // a review hold by the public method after this return.
+            attempt.ScoreConversionTableId = null;
+            attempt.ScoreConversionTableVersionKey = null;
+            attempt.ScoreConversionGrade = null;
+            attempt.ScoreConversionPassed = null;
+            attempt.ScaledScore = null;
+            if (refreshSubmittedAt || attempt.SubmittedAt is null)
+                attempt.SubmittedAt = now;
+            attempt.LastActivityAt = now;
+            attempt.Status = ListeningAttemptStatus.Submitted;
+            attempt.RowVersion++;
+
+            return new ListeningGradingResult(
+                AttemptId: attempt.Id,
+                RawScore: rawCorrect,
+                MaxRawScore: attempt.MaxRawScore,
+                ScaledScore: null,
+                ScoreConversionTableVersionKey: null,
+                ScoreConversionErrorCode: "multiple_selection_review_required",
+                ScoreConversionGrade: null,
+                ScoreConversionPassed: null);
         }
 
         // H9: Emit audit event when version drift is detected so the
@@ -443,14 +521,15 @@ public sealed class ListeningGradingService
             attempt.ScoreConversionTableId,
             "default",
             ct);
-        if (conversion.TableId is not null && conversion.IsAvailable)
+        var hasApprovedConversion = attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+            && conversion.ConvertedScore.HasValue
+            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+            && conversion.Passed.HasValue;
+        if (hasApprovedConversion && conversion.TableId is not null && conversion.IsAvailable)
         {
             await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);
         }
-        attempt.ScoreConversionTableId = conversion.TableId;
-        var hasApprovedConversion = conversion.ConvertedScore.HasValue
-            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
-            && conversion.Passed.HasValue;
+        attempt.ScoreConversionTableId = hasApprovedConversion ? conversion.TableId : null;
         attempt.ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null;
         attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
         attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
@@ -529,7 +608,8 @@ public sealed class ListeningGradingService
         ListeningAnswer ans,
         IReadOnlyDictionary<string, string>? paperAnswerMap = null,
         string normalisation = DefaultNormalisation,
-        bool? caseSensitiveOverride = null)
+        bool? caseSensitiveOverride = null,
+        bool acceptSynonyms = true)
     {
         switch (q.QuestionType)
         {
@@ -572,7 +652,7 @@ public sealed class ListeningGradingService
             {
                 var user = TryReadString(ans.UserAnswerJson) ?? string.Empty;
                 var canonical = TryReadString(q.CorrectAnswerJson);
-                var accepted = ParseAccepted(q.AcceptedSynonymsJson).ToList();
+                var accepted = acceptSynonyms ? ParseAccepted(q.AcceptedSynonymsJson).ToList() : Array.Empty<string>();
                 var candidates = (canonical is null ? Enumerable.Empty<string>() : new[] { canonical })
                     .Concat(accepted)
                     .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -616,10 +696,11 @@ public sealed class ListeningGradingService
         "exact" => s,
         "trim_only" => s.Trim(),
         "trim_collapse" => CollapseWhitespace(s.Trim()),
-        // Legacy fuzzy policy names are deliberately reduced to exact matching
-        // with trimming only; fuzzy acceptance is never permitted.
-        "fuzzy_levenshtein_1" => s.Trim(),
-        _ => s.Trim(),
+        "trim_collapse_case_insensitive" => CollapseWhitespace(s.Trim()),
+        // Legacy fuzzy and unknown policy names fail closed to exact matching;
+        // neither stale configuration nor malformed snapshots may grant
+        // additional normalization or fuzzy acceptance.
+        _ => s,
     };
 
     private static bool LevenshteinDistanceAtMostOne(string a, string b)
@@ -771,7 +852,8 @@ public sealed class ListeningGradingService
 
     public static IReadOnlyDictionary<string, string> BuildPaperAnswerMap(
         IEnumerable<ListeningQuestion> questions,
-        string normalisation)
+        string normalisation,
+        bool acceptSynonyms = true)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var q in questions)
@@ -780,7 +862,9 @@ public sealed class ListeningGradingService
             // the cross-question answer map driving the WrongSection heuristic.
             if (q.QuestionType is not (ListeningQuestionType.ShortAnswer or ListeningQuestionType.FillInBlank)) continue;
             var canonical = TryReadString(q.CorrectAnswerJson);
-            var accepted = ParseAccepted(q.AcceptedSynonymsJson);
+            var accepted = acceptSynonyms
+                ? ParseAccepted(q.AcceptedSynonymsJson)
+                : Array.Empty<string>();
             foreach (var raw in (canonical is null ? Enumerable.Empty<string>() : new[] { canonical }).Concat(accepted))
             {
                 if (string.IsNullOrWhiteSpace(raw)) continue;
@@ -851,6 +935,69 @@ public sealed class ListeningGradingService
         return new AssessmentMarkingPolicyDocument();
     }
 
+    private sealed record CapturedShortAnswerPolicy(
+        string Normalisation,
+        bool AcceptSynonyms,
+        bool IsValid);
+
+    private static CapturedShortAnswerPolicy? ResolveCapturedShortAnswerPolicy(string? policySnapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(policySnapshotJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
+            var root = document.RootElement;
+            var container = root.TryGetProperty("listeningPolicy", out var nested)
+                && nested.ValueKind == JsonValueKind.Object
+                ? nested
+                : root;
+
+            var hasNormalisation = container.TryGetProperty("shortAnswerNormalisation", out var normalisation)
+                && normalisation.ValueKind == JsonValueKind.String;
+            var hasSynonymFlag = container.TryGetProperty("shortAnswerAcceptSynonyms", out var synonyms)
+                && synonyms.ValueKind is JsonValueKind.True or JsonValueKind.False;
+            if (!hasNormalisation || !hasSynonymFlag)
+                return null;
+
+            var rawNormalisation = normalisation.GetString()?.Trim().ToLowerInvariant();
+            var validNormalisation = rawNormalisation is
+                "exact" or "trim_only" or "trim_collapse" or
+                "trim_collapse_case_insensitive";
+            return new CapturedShortAnswerPolicy(
+                rawNormalisation ?? "exact",
+                synonyms.GetBoolean(),
+                validNormalisation);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string ResolveNormalisation(
+        AssessmentMarkingPolicyDocument markingPolicy,
+        CapturedShortAnswerPolicy? shortAnswerPolicy)
+    {
+        var governed = !markingPolicy.TrimLeadingTrailingWhitespace
+            ? "exact"
+            : markingPolicy.CollapseInternalWhitespace ? "trim_collapse" : "trim_only";
+        if (shortAnswerPolicy is null) return governed;
+        if (!shortAnswerPolicy.IsValid) return "exact";
+
+        // The captured Listening setting is the owner-approved short-answer
+        // profile for this immutable attempt. Legacy fuzzy names are invalid
+        // and therefore fail closed to exact matching.
+        return shortAnswerPolicy.Normalisation switch
+        {
+            "exact" => "exact",
+            "trim_only" => "trim_only",
+            "trim_collapse" or "trim_collapse_case_insensitive" => shortAnswerPolicy.Normalisation,
+            _ => "exact",
+        };
+    }
+
     private static string? TryReadString(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -909,10 +1056,12 @@ public sealed class ListeningGradingService
         ListeningQuestion question,
         ListeningAnswer answer,
         string normalisation,
-        bool caseSensitive)
+        bool caseSensitive,
+        bool acceptSynonyms)
     {
         if (question.QuestionType is not (ListeningQuestionType.ShortAnswer or ListeningQuestionType.FillInBlank))
             return null;
+        if (!acceptSynonyms) return null;
 
         var user = TryReadString(answer.UserAnswerJson) ?? string.Empty;
         var canonical = TryReadString(question.CorrectAnswerJson);
@@ -985,6 +1134,19 @@ public sealed class ListeningGradingService
 
     private static readonly JsonSerializerOptions OverrideJsonOptions =
         new() { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    private static void EnsureAttemptNotOnAdminReviewHold(ListeningAttempt attempt)
+    {
+        if (!attempt.RequiresAdminReview)
+            return;
+
+        var reason = string.IsNullOrWhiteSpace(attempt.AdminReviewReason)
+            ? "review_required"
+            : attempt.AdminReviewReason;
+        throw ApiException.Conflict(
+            "listening_attempt_requires_admin_review",
+            $"This Listening attempt requires administrator review before scoring. Reason: {reason}.");
+    }
 
     private static string? NormalizeOverrideReason(string? reason)
     {

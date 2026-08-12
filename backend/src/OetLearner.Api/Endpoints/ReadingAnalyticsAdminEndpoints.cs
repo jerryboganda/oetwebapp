@@ -59,6 +59,13 @@ public static class ReadingAnalyticsAdminEndpoints
             if (string.IsNullOrWhiteSpace(paperId))
                 return Results.BadRequest(new { error = "paperId is required." });
             var expertUserId = CurrentUserId(http);
+            var expert = await db.ExpertUsers.AsNoTracking()
+                .FirstOrDefaultAsync(expert => expert.Id == expertUserId, ct);
+            if (expert is null)
+                throw ApiException.Forbidden("expert_profile_not_found", "Expert profile not found.");
+            if (!expert.IsActive)
+                throw ApiException.Forbidden("account_suspended", "This expert account is not available.");
+
             var assignedLearners = await db.ReadingAssignments.AsNoTracking()
                 .Where(a => a.AssignedByUserId == expertUserId
                     && a.PaperId == paperId
@@ -164,10 +171,13 @@ public static class ReadingAnalyticsAdminEndpoints
             .GroupBy(q => q.ReadingPartId)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
         var knownQuestionIds = questions.Select(q => q.Id).ToHashSet(StringComparer.Ordinal);
-        var analyticAnswers = answers
+        var metricAnswers = answers
             .Where(a => knownQuestionIds.Contains(a.ReadingQuestionId))
             .ToList();
-        var questionOpportunityMetrics = BuildQuestionOpportunityMetrics(submittedAttempts, questions, partById, analyticAnswers);
+        var analyticAnswers = metricAnswers
+            .Where(answer => !IsInvalidAnswer(answer))
+            .ToList();
+        var questionOpportunityMetrics = BuildQuestionOpportunityMetrics(submittedAttempts, questions, partById, metricAnswers);
         var answersByQuestion = questionOpportunityMetrics.InScopeAnswers
             .GroupBy(a => a.ReadingQuestionId)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
@@ -358,6 +368,9 @@ public static class ReadingAnalyticsAdminEndpoints
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s[..max] + "…");
+
+    private static bool IsInvalidAnswer(ReadingAnswer answer)
+        => ReadingGradingService.IsIntegrityReviewReason(answer.MissReason);
 
     /// <summary>
     /// Phase 2 closure — best-effort lookup of which option key carries a
@@ -677,7 +690,8 @@ public static class ReadingAnalyticsAdminEndpoints
 
     private static bool IsCanonicalScoreEligible(ReadingAttempt attempt)
     {
-        return attempt.Mode is ReadingAttemptMode.Exam or ReadingAttemptMode.Learning
+        return !attempt.RequiresAdminReview
+            && (attempt.Mode is ReadingAttemptMode.Exam or ReadingAttemptMode.Learning)
             && attempt.MaxRawScore == OetScoring.ListeningReadingRawMax;
     }
 
@@ -706,12 +720,22 @@ public static class ReadingAnalyticsAdminEndpoints
 
             var attemptAnswers = answersByAttempt.GetValueOrDefault(attempt.Id) ?? new List<ReadingAnswer>();
             var inScopeQuestionIds = ResolveQuestionScope(attempt, paperQuestionIds, attemptAnswers);
+            var invalidQuestionIds = attemptAnswers
+                .Where(IsInvalidAnswer)
+                .Select(answer => answer.ReadingQuestionId)
+                .ToHashSet(StringComparer.Ordinal);
             foreach (var questionId in inScopeQuestionIds)
             {
-                if (opportunityCountsByQuestion.ContainsKey(questionId)) opportunityCountsByQuestion[questionId]++;
+                if (opportunityCountsByQuestion.ContainsKey(questionId)
+                    && !invalidQuestionIds.Contains(questionId))
+                {
+                    opportunityCountsByQuestion[questionId]++;
+                }
             }
 
-            inScopeAnswers.AddRange(attemptAnswers.Where(answer => inScopeQuestionIds.Contains(answer.ReadingQuestionId)));
+            inScopeAnswers.AddRange(attemptAnswers.Where(answer =>
+                inScopeQuestionIds.Contains(answer.ReadingQuestionId)
+                && !IsInvalidAnswer(answer)));
         }
 
         return new ReadingQuestionOpportunityMetrics(opportunityCountsByQuestion, inScopeAnswers);

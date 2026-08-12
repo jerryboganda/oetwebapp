@@ -343,12 +343,6 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Question numbers must be unique across the paper; {duplicateNumbers} duplicate number group(s) found."));
         }
 
-        if (wrongPartTypes > 0)
-        {
-            warnings.Add(new("listening_part_question_type", "error",
-                $"Listening question types must match the paper: Part A typed responses and Part B/C multiple_choice_3; {wrongPartTypes} item(s) violate this."));
-        }
-
         // 2026-05-27 audit fix — Listening rule L01.1 (contiguous numbering
         // 1..42). The existing duplicate check is necessary but not sufficient;
         // an authored paper could have all-unique numbers but skip 7 and still
@@ -439,6 +433,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_blank_answers", "error",
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
+        }
+
+        var nonUnitPointItems = rows.Count(row => row.Points != 1);
+        if (nonUnitPointItems > 0)
+        {
+            warnings.Add(new("listening_question_points_not_one", "error",
+                $"Every Listening question is worth exactly one mark; {nonUnitPointItems} item(s) have a different mark value."));
         }
 
         // The supplied v1.1 paper fixes the Listening question shape by part:
@@ -576,8 +577,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening skill tag must use the canonical vocabulary; {invalidSkillTags} item(s) have an unsupported value."));
         }
 
-        var invalidEvidence = rows.Count(row => string.IsNullOrWhiteSpace(row.TranscriptEvidenceText)
-            || !HasValidTimingWindow(row.TranscriptEvidenceStartMs, row.TranscriptEvidenceEndMs));
+        var invalidEvidence = rows.Count(row => !IsPdfBackedItem(row.Stem)
+            && (string.IsNullOrWhiteSpace(row.TranscriptEvidenceText)
+                || !HasValidTimingWindow(row.TranscriptEvidenceStartMs, row.TranscriptEvidenceEndMs)));
         if (invalidEvidence > 0)
         {
             warnings.Add(new("listening_transcript_evidence", "error",
@@ -865,6 +867,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var mcqItemsWithBadShape = 0;
         var wrongPartTypes = 0;
         var blankAnswers = 0;
+        var nonUnitPointItems = 0;
         var blankStems = 0;
         var numbers = new Dictionary<int, int>();
         var missingSkillTags = 0;
@@ -894,8 +897,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             if (string.IsNullOrWhiteSpace(skillTag)) missingSkillTags++;
             else if (!ListeningSkillTags.IsValid(skillTag)) invalidSkillTags++;
 
-            if (string.IsNullOrWhiteSpace(ReadString(q, "transcriptEvidenceText") ?? ReadString(q, "transcriptExcerpt"))
-                || !HasValidTimingWindow(TryGetInt(q, "transcriptEvidenceStartMs"), TryGetInt(q, "transcriptEvidenceEndMs")))
+            if (!IsPdfBackedItem(ReadString(q, "stem"))
+                && (string.IsNullOrWhiteSpace(ReadString(q, "transcriptEvidenceText") ?? ReadString(q, "transcriptExcerpt"))
+                    || !HasValidTimingWindow(TryGetInt(q, "transcriptEvidenceStartMs"), TryGetInt(q, "transcriptEvidenceEndMs"))))
             {
                 invalidEvidence++;
             }
@@ -915,6 +919,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             var partCode = (q.GetValueOrDefault("partCode") ?? q.GetValueOrDefault("part"))?.ToString()
                 ?.Trim().ToUpperInvariant() ?? "A";
             var points = TryGetInt(q, "points") ?? 1;
+            if (points != 1) nonUnitPointItems++;
 
             // Any sub-section may use any of the 3 content types — only validate
             // Part B and Part C each use the governed three-option MCQ shape;
@@ -1030,6 +1035,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_blank_answers", "error",
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
+        }
+
+        if (nonUnitPointItems > 0)
+        {
+            warnings.Add(new("listening_question_points_not_one", "error",
+                $"Every Listening question is worth exactly one mark; {nonUnitPointItems} item(s) have a different mark value."));
         }
 
         if (unpublishedStatuses.Count > 0)

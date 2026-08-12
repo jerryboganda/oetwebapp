@@ -108,7 +108,8 @@ export default function ReadingPreviewAsStudentPage() {
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
   const [markingStructure, setMarkingStructure] = useState<ReadingStructureAdminDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
+  const [markingError, setMarkingError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('candidate');
   const [previewStarted, setPreviewStarted] = useState(false);
   const [activePart, setActivePart] = useState<PreviewPartCode>('A');
@@ -120,18 +121,32 @@ export default function ReadingPreviewAsStudentPage() {
     if (!paperId) return;
     let cancelled = false;
     setLoading(true);
-    setError(null);
-    Promise.all([
+    setStructure(null);
+    setMarkingStructure(null);
+    setCandidateError(null);
+    setMarkingError(null);
+    Promise.allSettled([
       getReadingStructureAdminPreview(paperId),
       getReadingStructureAdmin(paperId),
     ])
-      .then(([candidateData, adminData]) => {
+      .then(([candidateResult, markingResult]) => {
         if (cancelled) return;
-        setStructure(candidateData);
-        setMarkingStructure(adminData);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load preview');
+
+        if (candidateResult.status === 'fulfilled') {
+          setStructure(candidateResult.value);
+        } else {
+          setCandidateError(candidateResult.reason instanceof Error
+            ? candidateResult.reason.message
+            : 'Could not load the learner-safe Reading preview.');
+        }
+
+        if (markingResult.status === 'fulfilled') {
+          setMarkingStructure(markingResult.value);
+        } else {
+          setMarkingError(markingResult.reason instanceof Error
+            ? markingResult.reason.message
+            : 'Could not load the protected Reading marking preview.');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -194,7 +209,8 @@ export default function ReadingPreviewAsStudentPage() {
           </InlineAlert>
         ) : null}
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+        {previewMode === 'candidate' && candidateError && <InlineAlert variant="error">{candidateError}</InlineAlert>}
+        {previewMode === 'marking' && markingError && <InlineAlert variant="warning">{markingError}</InlineAlert>}
 
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Reading preview mode">
           <Button
@@ -222,12 +238,11 @@ export default function ReadingPreviewAsStudentPage() {
             <Skeleton variant="card" />
             <Skeleton variant="card" />
           </div>
+        ) : previewMode === 'marking' ? (
+          markingStructure ? <ReadingMarkingPreview structure={markingStructure} /> : (
+            <InlineAlert variant="warning">The protected marking projection is unavailable. No answer key is shown.</InlineAlert>
+          )
         ) : structure ? (
-          previewMode === 'marking' ? (
-            markingStructure ? <ReadingMarkingPreview structure={markingStructure} /> : (
-              <InlineAlert variant="warning">The protected marking projection is unavailable. No answer key is shown.</InlineAlert>
-            )
-          ) : (
           <>
             <div>
               <h2 className="text-lg font-semibold text-admin-fg-strong">{structure.paper.title}</h2>
@@ -375,8 +390,11 @@ export default function ReadingPreviewAsStudentPage() {
               </SettingsSection>
             ))}
           </>
-          )
-        ) : null}
+        ) : (
+          <InlineAlert variant="error">
+            The learner-safe Reading projection is unavailable. No candidate content is shown.
+          </InlineAlert>
+        )}
       </div>
     </AdminSettingsLayout>
   );

@@ -150,6 +150,7 @@ export default function ListeningHome() {
   const activeAttempts = useMemo(() => home?.activeAttempts ?? [], [home]);
   const recentResults = useMemo(() => home?.recentResults ?? [], [home]);
   const latestResult = recentResults[0] ?? null;
+  const progressScoreDisplay = home?.progressScoreDisplay ?? latestResult?.scoreDisplay ?? null;
 
   // Cheap derivation — not memoized because wall-clock time is inherently impure.
   const daysToExam: number | null = (() => {
@@ -168,8 +169,10 @@ export default function ListeningHome() {
       },
       {
         icon: TrendingUp,
-        label: 'Latest result',
-        value: latestResult ? latestResult.scoreDisplay : 'No result yet',
+        label: home?.progressScoreDisplayMode === 'latest' || !home?.progressScoreDisplayMode
+          ? 'Latest result'
+          : `${home.progressScoreDisplayMode} score`,
+        value: progressScoreDisplay ?? 'No result yet',
       },
       {
         icon: CalendarDays,
@@ -182,7 +185,7 @@ export default function ListeningHome() {
               : `${daysToExam} days`,
       },
     ],
-    [homeLoading, papers.length, latestResult, daysToExam],
+    [homeLoading, papers.length, home?.progressScoreDisplayMode, progressScoreDisplay, daysToExam],
   );
 
   if (authLoading) {
@@ -388,7 +391,9 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
       className="block rounded-2xl border border-border bg-surface p-4 text-sm transition-colors hover:border-violet-300"
     >
       <span className="font-semibold text-navy">{result.paperTitle}</span>
-      <span className="mt-1 block text-xs text-muted">{result.scoreDisplay}</span>
+      <span className="mt-1 block text-xs text-muted">
+        {result.requiresAdminReview ? 'Admin review pending' : result.scoreDisplay}
+      </span>
     </Link>
   );
 }

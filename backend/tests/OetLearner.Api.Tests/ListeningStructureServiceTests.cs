@@ -1084,6 +1084,29 @@ public class ListeningStructureServiceTests
             i.Code == "listening_results_calc"
             && i.Severity == "error"
             && i.Message.Contains("authored part marks"));
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_question_points_not_one"
+            && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task EveryQuestionMustBeWorthOneMarkEvenWhenAggregatesStillEqual42()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // Move one mark between two Part-A questions. Aggregate totals remain
+        // canonical, but individual OET Listening items must never carry
+        // compensating 0/2-point values.
+        seed.Questions[0].Points = 2;
+        seed.Questions[1].Points = 0;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_question_points_not_one"
+            && i.Severity == "error");
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1139,6 +1162,9 @@ public class ListeningStructureServiceTests
             i.Code == "listening_results_calc"
             && i.Severity == "error"
             && i.Message.Contains("authored part marks"));
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_question_points_not_one"
+            && i.Severity == "error");
     }
 
     [Fact]

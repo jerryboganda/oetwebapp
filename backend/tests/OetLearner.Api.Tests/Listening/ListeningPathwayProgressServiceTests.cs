@@ -100,6 +100,31 @@ public class ListeningPathwayProgressServiceTests
     }
 
     [Fact]
+    public async Task RecomputeAsync_ignores_admin_review_attempt_even_with_owner_conversion()
+    {
+        await using var db = NewDb();
+        var attempt = NewAttempt(
+            id: "admin-review-score",
+            userId: "learner-admin-review-score",
+            mode: ListeningAttemptMode.Learning,
+            scaledScore: 500,
+            submittedAt: DateTimeOffset.UtcNow);
+        attempt.RequiresAdminReview = true;
+        attempt.AdminReviewReason = "audio_playback_error";
+        db.ListeningAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        await new ListeningPathwayProgressService(db, TimeProvider.System)
+            .RecomputeAsync("learner-admin-review-score", CancellationToken.None);
+
+        var foundationPartA = await db.ListeningPathwayProgress.SingleAsync(
+            row => row.UserId == "learner-admin-review-score" && row.StageCode == "foundation_partA");
+        Assert.Equal(ListeningPathwayStageStatus.Unlocked, foundationPartA.Status);
+        Assert.Null(foundationPartA.AttemptId);
+        Assert.Null(foundationPartA.ScaledScore);
+    }
+
+    [Fact]
     public async Task RecomputeAsync_completes_diagnostic_and_unlocks_next_stage()
     {
         await using var db = NewDb();

@@ -1,0 +1,93 @@
+<h2>How should the "graphical, easy, customizable" wizard be structured?</h2>
+<p class="subtitle">Same underlying feature (presets + module toggles + scope pickers) — three different flows for reaching it. Pick the one that feels right, or tell me to mix pieces.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Access &amp; Allocation (existing card)</div>
+        <div class="mockup-body">
+          <div class="label">Quick presets</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <div class="mock-button" style="background:#2d6cdf;color:#fff">📖 Recalls Only</div>
+            <div class="mock-button">📁 Materials Only</div>
+            <div class="mock-button">🎬 Videos Only</div>
+            <div class="mock-button">✅ Full Access</div>
+            <div class="mock-button">⚙️ Custom</div>
+          </div>
+          <div class="placeholder" style="height:18px">Packages section (unchanged)</div>
+          <div class="placeholder" style="height:18px;margin-top:6px">Module access checkboxes (unchanged)</div>
+          <div class="placeholder" style="height:18px;margin-top:6px">Scope pickers (unchanged)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Preset Bar (in-place)</h3>
+      <p>One row of big preset buttons added to the top of the existing panel. Clicking a preset instantly ticks the right module checkboxes and scrolls to the relevant scope picker below. Nothing moves, nothing new to learn — just faster.</p>
+      <p><strong>Effort:</strong> Small. <strong>Flow:</strong> Still one long page.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Grant Access Wizard — Step 1 of 3</div>
+        <div class="mockup-body">
+          <div style="display:flex;gap:4px;margin-bottom:10px;font-size:11px">
+            <span class="mock-button" style="background:#2d6cdf;color:#fff">① Choose access</span>
+            <span class="mock-button">② Customize</span>
+            <span class="mock-button">③ Review &amp; Save</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="placeholder" style="height:50px">📖 Recalls Only</div>
+            <div class="placeholder" style="height:50px">📁 Materials Only</div>
+            <div class="placeholder" style="height:50px">🎬 Videos Only</div>
+            <div class="placeholder" style="height:50px">✅ Full Access</div>
+          </div>
+          <div class="placeholder" style="height:36px;margin-top:8px;border-style:dashed">⚙️ Start from scratch (Custom)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Guided Multi-Step Wizard</h3>
+      <p>A focused modal/dedicated page with a progress bar: Step 1 pick a preset card, Step 2 shows only the customization that preset needs (e.g. which recall sets, expiry), Step 3 reviews a plain-English summary before Save. The full "everything at once" panel becomes an optional "Advanced" path.</p>
+      <p><strong>Effort:</strong> Medium-large. <strong>Flow:</strong> Most guided, best for non-technical admins.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">User detail page</div>
+        <div class="mockup-body">
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <div class="mock-button" style="background:#2d6cdf;color:#fff">⚡ Quick Grant</div>
+          </div>
+          <div class="placeholder" style="height:14px;width:60%">▾ Advanced (full panel, collapsed)</div>
+          <div class="mockup" style="margin-top:10px;border-style:dashed">
+            <div class="mockup-header">Quick Grant popup</div>
+            <div class="mockup-body">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <div class="mock-button" style="background:#2d6cdf;color:#fff">📖 Recalls Only</div>
+                <div class="mock-button">📁 Materials</div>
+                <div class="mock-button">🎬 Videos</div>
+                <div class="mock-button">✅ Full</div>
+              </div>
+              <div class="placeholder" style="height:16px;margin-top:8px">1-2 fields max, smart defaults</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Hybrid: Quick Grant + Advanced Drawer</h3>
+      <p>A prominent "⚡ Quick Grant" button opens a tiny focused popup: pick a preset card, confirm 1-2 smart defaults, done. The existing full panel stays put underneath, collapsed as "Advanced" for power-user tweaks (multi-plan, per-folder scope, etc).</p>
+      <p><strong>Effort:</strong> Medium. <strong>Flow:</strong> Fast for the 90% case, full power still reachable.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:18px">
+  <p class="label">My recommendation</p>
+  <p>Option C — it gives you the "one click and done" speed you asked for originally, keeps the flow dead simple for the common case, and doesn't hide the granular controls (folder/video/recall-set scoping) that already exist and that you'll likely want for other candidates later.</p>
+</div>

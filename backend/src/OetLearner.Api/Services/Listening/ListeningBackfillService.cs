@@ -182,7 +182,10 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 Id = partId,
                 PaperId = paperId,
                 PartCode = g.Key,
-                MaxRawScore = g.Sum(q => Math.Max(1, q.Points)),
+                // Preserve authored point values exactly. The publish validator
+                // owns the one-mark invariant; coercion here would hide an
+                // invalid paper before that gate can report it.
+                MaxRawScore = g.Sum(q => q.Points),
                 Instructions = null,
                 TimeLimitSeconds = extracts
                     .FirstOrDefault(e => NormalizePartCodeEnum(e.PartCode) == g.Key)?.TimeLimitSeconds,
@@ -268,7 +271,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 ListeningExtractId = extractId,
                 QuestionNumber = q.Number,
                 DisplayOrder = q.Number,
-                Points = Math.Max(1, q.Points),
+                Points = q.Points,
                 QuestionType = q.Type switch
                 {
                     "multiple_choice_3" => ListeningQuestionType.MultipleChoice3,
@@ -294,10 +297,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             // Options exist for Part B/C MCQ items.
             if (q.Type == "multiple_choice_3" && q.Options is { Count: > 0 })
             {
-                var optionLabels = new[] { "A", "B", "C" };
-                for (var i = 0; i < q.Options.Count && i < 3; i++)
+                for (var i = 0; i < q.Options.Count; i++)
                 {
-                    var optionKey = optionLabels[i];
+                    var optionKey = OptionKeyForIndex(i);
                     var optionText = q.Options[i] ?? string.Empty;
                     var isCorrect = string.Equals(
                         q.CorrectAnswer?.Trim(),
@@ -444,7 +446,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 Explanation: GetString(item, "explanation"),
                 SkillTag: GetString(item, "skillTag"),
                 TranscriptExcerpt: GetString(item, "transcriptExcerpt"),
-                Points: Math.Max(1, points),
+                Points: points,
                 OptionDistractorCategory: optionDistractorCategory,
                 OptionDistractorWhy: optionDistractorWhy,
                 SpeakerAttitude: GetString(item, "speakerAttitude"),
@@ -713,10 +715,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 var incomingCorrectKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (incomingQ.Type == "multiple_choice_3" && incomingQ.Options is { Count: > 0 })
                 {
-                    var optionLabels = new[] { "A", "B", "C" };
-                    for (var i = 0; i < incomingQ.Options.Count && i < 3; i++)
+                    for (var i = 0; i < incomingQ.Options.Count; i++)
                     {
-                        var optionKey = optionLabels[i];
+                        var optionKey = OptionKeyForIndex(i);
                         var optionText = incomingQ.Options[i] ?? string.Empty;
                         var isCorrect = string.Equals(
                             incomingQ.CorrectAnswer?.Trim(),
@@ -742,6 +743,24 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
     }
 
     // ── Internal projection records ─────────────────────────────────────
+
+    private static string OptionKeyForIndex(int index)
+    {
+        if (index < 0 || index >= 702)
+            throw new InvalidOperationException("Listening option count exceeds the two-character option-key limit.");
+
+        var value = index + 1;
+        Span<char> buffer = stackalloc char[2];
+        var cursor = buffer.Length;
+        while (value > 0)
+        {
+            value--;
+            buffer[--cursor] = (char)('A' + (value % 26));
+            value /= 26;
+        }
+
+        return new string(buffer[cursor..]);
+    }
 
     private sealed record AuthoredQuestion(
         int Number,

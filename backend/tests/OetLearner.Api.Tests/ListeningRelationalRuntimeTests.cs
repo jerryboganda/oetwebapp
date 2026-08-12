@@ -798,4 +798,76 @@ public class ListeningRelationalRuntimeTests
         Assert.Equal(420, analytics.AverageScaledScore);
         Assert.Equal(100, analytics.PercentLikelyPassing);
     }
+
+    [Fact]
+    public async Task AdminAnalytics_excludes_relational_admin_review_attempt_from_scoring()
+    {
+        var (db, _) = Build();
+        var (_, paperId, _) = await SeedRelationalPaperAsync(db);
+        var now = DateTimeOffset.UtcNow;
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = "rel-attempt-analytics-review",
+            UserId = "learner-1",
+            PaperId = paperId,
+            StartedAt = now.AddMinutes(-30),
+            SubmittedAt = now,
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.Submitted,
+            Mode = ListeningAttemptMode.Exam,
+            RawScore = 42,
+            ScaledScore = 500,
+            MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-v1",
+            ScoreConversionPassed = true,
+            RequiresAdminReview = true,
+            AdminReviewReason = "audio_playback_error",
+            PolicySnapshotJson = "{}",
+        });
+        await db.SaveChangesAsync();
+
+        var analytics = await new ListeningAnalyticsService(db).GetAdminAnalyticsAsync(30, default);
+
+        Assert.Equal(1, analytics.CompletedAttempts);
+        Assert.Null(analytics.AverageScaledScore);
+        Assert.Null(analytics.PercentLikelyPassing);
+        Assert.Empty(analytics.ClassPartAverages);
+        Assert.Empty(analytics.HardestQuestions);
+    }
+
+    [Fact]
+    public async Task Home_discloses_relational_admin_review_hold_without_scaled_score()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+        var now = DateTimeOffset.UtcNow;
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = "rel-home-admin-review",
+            UserId = userId,
+            PaperId = paperId,
+            StartedAt = now.AddMinutes(-30),
+            SubmittedAt = now,
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.Submitted,
+            Mode = ListeningAttemptMode.Exam,
+            RawScore = 42,
+            ScaledScore = 500,
+            MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-v1",
+            ScoreConversionPassed = true,
+            RequiresAdminReview = true,
+            AdminReviewReason = "audio_playback_error",
+            PolicySnapshotJson = "{}",
+        });
+        await db.SaveChangesAsync();
+
+        var home = await svc.GetHomeAsync(userId, default);
+        using var homeDoc = JsonDocument.Parse(JsonSerializer.Serialize(home));
+        var result = Assert.Single(homeDoc.RootElement.GetProperty("recentResults").EnumerateArray());
+
+        Assert.True(result.GetProperty("requiresAdminReview").GetBoolean());
+        Assert.Equal("audio_playback_error", result.GetProperty("adminReviewReason").GetString());
+        Assert.Equal(JsonValueKind.Null, result.GetProperty("scaledScore").ValueKind);
+    }
 }

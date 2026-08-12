@@ -223,4 +223,30 @@ describe('Admin Reading preview', () => {
     expect(screen.getByText('Evidence: Source evidence sentence')).toBeInTheDocument();
     expect(screen.queryByText('SECRET-OPTION')).not.toBeInTheDocument();
   });
+
+  it('keeps the protected marking preview available when the candidate request fails', async () => {
+    mockGetReadingStructureAdminPreview.mockRejectedValue(new Error('Candidate projection unavailable'));
+    const user = userEvent.setup();
+    render(<AdminReadingPreviewPage />);
+
+    expect(await screen.findByText('Candidate projection unavailable')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /marking preview/i }));
+
+    expect(screen.getByRole('region', { name: 'Part A marking preview' })).toBeInTheDocument();
+    expect(screen.getByText('Correct answer: approved answer')).toBeInTheDocument();
+  });
+
+  it('keeps the candidate preview available when the marking request fails', async () => {
+    mockGetReadingStructureAdmin.mockRejectedValue(new Error('Marking projection unavailable'));
+    const user = userEvent.setup();
+    render(<AdminReadingPreviewPage />);
+
+    expect(await screen.findByRole('heading', { name: 'Reading Sample Paper' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /marking preview/i }));
+    expect(screen.getByText('Marking projection unavailable')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /candidate preview/i }));
+    expect(screen.getByRole('region', { name: 'Timed preview console' })).toBeInTheDocument();
+    expect(screen.getAllByText('Safe option A').length).toBeGreaterThan(0);
+  });
 });

@@ -245,7 +245,7 @@ public sealed class ContentBulkImportService(
                     ProfessionId: prof,
                     AppliesToAllProfessions: applyAll,
                     Difficulty: "standard",
-                    EstimatedDurationMinutes: proposal.SubtestCode == "listening" ? 40
+                    EstimatedDurationMinutes: proposal.SubtestCode == "listening" ? 45
                         : proposal.SubtestCode == "reading" ? 60 : 45,
                     CardType: card,
                     LetterType: letter,

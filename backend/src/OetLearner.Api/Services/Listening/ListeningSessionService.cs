@@ -23,6 +23,17 @@ namespace OetLearner.Api.Services.Listening;
 public sealed class ListeningSessionService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly string[] CapturedPolicyProperties =
+    [
+        "previewMsA1", "previewMsA2", "previewMsC1", "previewMsC2",
+        "reviewMsA1", "reviewMsA2", "reviewMsC1", "reviewMsC2FinalCbt", "reviewMsC2FinalPaper",
+        "betweenSectionTransitionMs", "partBQuestionWindowMs", "confirmTokenTtlMs", "techReadinessTtlMs",
+        "finalReviewAllPartsMsPaper", "oneWayLocksEnabled", "confirmDialogRequired",
+        "unansweredWarningRequired", "highlightingEnabledPartA", "highlightingEnabledPartBC",
+        "optionStrikethroughEnabled", "inAppZoomEnabled", "browserZoomAllowed",
+        "annotationsPersistOnAdvance", "techReadinessRequired", "extraTimePct", "accessibilityModeEnabled",
+        "shortAnswerNormalisation", "shortAnswerAcceptSynonyms", "screenReaderOptimised"
+    ];
 
     /// <summary>WS2 — how long a passed pathway sound-check
     /// (<see cref="Domain.LearnerListeningProfile.AudioCheckPassedAt"/>) stays
@@ -38,25 +49,28 @@ public sealed class ListeningSessionService
     private readonly ListeningConfirmTokenService _tokens;
     private readonly ListeningSequenceService _sequences;
     private readonly TimeProvider _clock;
+    private readonly IListeningPolicyService? _policyService;
 
     public ListeningSessionService(
         LearnerDbContext db,
         ListeningModePolicyResolver modes,
         ListeningConfirmTokenService tokens,
         ListeningSequenceService sequences,
-        TimeProvider clock)
+        TimeProvider clock,
+        IListeningPolicyService? policyService = null)
     {
         _db = db;
         _modes = modes;
         _tokens = tokens;
         _sequences = sequences;
         _clock = clock;
+        _policyService = policyService;
     }
 
     public async Task<SessionStateDto> GetStateAsync(string attemptId, string userId, CancellationToken ct)
     {
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
-        var policy = await ResolveEffectivePolicyAsync(userId, ct);
+        var policy = await ResolveEffectivePolicyAsync(attempt, userId, ct);
         var mode = _modes.For(attempt.Mode);
 
         var nav = ParseNavigationState(attempt.NavigationStateJson);
@@ -91,7 +105,7 @@ public sealed class ListeningSessionService
                 $"Attempt {attemptId} is {attempt.Status} and cannot be advanced.");
         }
 
-        var policy = await ResolveEffectivePolicyAsync(userId, ct);
+        var policy = await ResolveEffectivePolicyAsync(attempt, userId, ct);
         var mode = _modes.For(attempt.Mode);
         var nav = ParseNavigationState(attempt.NavigationStateJson)
                   ?? SeedDefaultNavigation(attempt, policy);
@@ -222,7 +236,7 @@ public sealed class ListeningSessionService
             throw new InvalidOperationException($"Attempt {attemptId} is {attempt.Status} and cannot accept readiness updates.");
         }
 
-        var policy = await ResolveEffectivePolicyAsync(userId, ct);
+        var policy = await ResolveEffectivePolicyAsync(attempt, userId, ct);
         var now = _clock.GetUtcNow();
 
         // v1.1 §Technical requirements: real-exam device guidance is advisory
@@ -321,7 +335,7 @@ public sealed class ListeningSessionService
     {
         var attempt = await LoadOwnedAttemptAsync(attemptId, userId, ct);
         EnsureAttemptNotOnAdminReviewHold(attempt);
-        var policy = await ResolveEffectivePolicyAsync(userId, ct);
+        var policy = await ResolveEffectivePolicyAsync(attempt, userId, ct);
         var mode = _modes.For(attempt.Mode);
         var nav = ParseNavigationState(attempt.NavigationStateJson)
                   ?? SeedDefaultNavigation(attempt, policy);
@@ -390,11 +404,69 @@ public sealed class ListeningSessionService
         }
     }
 
-    private async Task<EffectiveListeningPolicy> ResolveEffectivePolicyAsync(string userId, CancellationToken ct)
+    private async Task<EffectiveListeningPolicy> ResolveEffectivePolicyAsync(
+        ListeningAttempt attempt,
+        string userId,
+        CancellationToken ct)
     {
-        var policy = await _db.ListeningPolicies.FirstOrDefaultAsync(p => p.Id == "global", ct);
-        var ovr = await _db.ListeningUserPolicyOverrides.FirstOrDefaultAsync(o => o.UserId == userId, ct);
+        if (TryReadCapturedSessionPolicy(attempt.PolicySnapshotJson, out var captured))
+        {
+            // A present but malformed captured policy must not fall back to a
+            // newer, potentially more permissive live policy. Missing legacy
+            // snapshots retain the compatibility path below.
+            return captured ?? ListeningPolicyResolver.Resolve(null, null);
+        }
+
+        return await ResolveCurrentEffectivePolicyAsync(userId, ct);
+    }
+
+    private async Task<EffectiveListeningPolicy> ResolveCurrentEffectivePolicyAsync(string userId, CancellationToken ct)
+    {
+        var policy = _policyService is not null
+            ? await _policyService.GetGlobalAsync(ct)
+            : await _db.ListeningPolicies.FirstOrDefaultAsync(p => p.Id == "global", ct);
+        var ovr = _policyService is not null
+            ? await _policyService.GetUserOverrideAsync(userId, ct)
+            : await _db.ListeningUserPolicyOverrides.FirstOrDefaultAsync(o => o.UserId == userId, ct);
+        if (ovr?.ExpiresAt is DateTimeOffset expiresAt && expiresAt <= DateTimeOffset.UtcNow)
+            ovr = null;
         return ListeningPolicyResolver.Resolve(policy, ovr);
+    }
+
+    private static bool TryReadCapturedSessionPolicy(
+        string? policySnapshotJson,
+        out EffectiveListeningPolicy? policy)
+    {
+        policy = null;
+        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(policySnapshotJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("effectiveSessionPolicy", out var policyElement))
+            {
+                return false;
+            }
+
+            if (policyElement.ValueKind != JsonValueKind.Object
+                || CapturedPolicyProperties.Any(property => !policyElement.TryGetProperty(property, out _)))
+            {
+                // The captured property is present but incomplete. Treat it as
+                // a strict snapshot rather than falling back to a newer live
+                // policy that could be more permissive.
+                return true;
+            }
+
+            var parsed = JsonSerializer.Deserialize<EffectiveListeningPolicy>(policyElement.GetRawText(), JsonOptions);
+            policy = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            // The property was present but its value was malformed. Returning
+            // true with a null output makes the caller select strict defaults.
+            return policySnapshotJson.Contains("effectiveSessionPolicy", StringComparison.Ordinal);
+        }
     }
 
     private static NavigationState? ParseNavigationState(string? json)

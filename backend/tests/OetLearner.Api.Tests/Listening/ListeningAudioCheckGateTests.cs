@@ -244,7 +244,8 @@ public class ListeningAudioCheckGateTests
     /// guard once the sound-check gate has passed.</summary>
     private static async Task SeedRelationalPaperWithAudioAsync(
         LearnerDbContext db,
-        bool perSectionAudioOnly = false)
+        bool perSectionAudioOnly = false,
+        bool jsonBacked = false)
     {
         var user = new LearnerUser
         {
@@ -296,6 +297,12 @@ public class ListeningAudioCheckGateTests
                 },
             ],
         };
+
+        if (jsonBacked)
+        {
+            paper.ExtractedTextJson = "{\"listeningQuestions\":[{\"id\":\"question-json\",\"number\":1,\"partCode\":\"A1\",\"stem\":\"Patient name?\",\"answer\":\"Smith\"}]}";
+        }
+
         var part = new ListeningPart
         {
             Id = "part-a1",
@@ -324,8 +331,11 @@ public class ListeningAudioCheckGateTests
         db.Users.Add(user);
         db.MediaAssets.Add(media);
         db.ContentPapers.Add(paper);
-        db.ListeningParts.Add(part);
-        db.ListeningQuestions.Add(question);
+        if (!jsonBacked)
+        {
+            db.ListeningParts.Add(part);
+            db.ListeningQuestions.Add(question);
+        }
         await db.SaveChangesAsync();
     }
 
@@ -344,6 +354,21 @@ public class ListeningAudioCheckGateTests
         Assert.Equal(400, ex.StatusCode);
         // No attempt row should have been created.
         Assert.False(await db.ListeningAttempts.AnyAsync());
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_json_backed_exam_rejects_when_no_sound_check()
+    {
+        await using var db = NewDb();
+        await SeedRelationalPaperWithAudioAsync(db, jsonBacked: true);
+        // No profile â€” the legacy JSON-backed route must fail closed too.
+        var svc = new ListeningLearnerService(db, new AllowAllContentEntitlementService());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.StartAttemptAsync(UserId, "paper-1", "exam", null, forceNewAttempt: true, CancellationToken.None));
+
+        Assert.Equal("listening_audio_check_required", ex.ErrorCode);
+        Assert.False(await db.Attempts.AnyAsync());
     }
 
     [Fact]

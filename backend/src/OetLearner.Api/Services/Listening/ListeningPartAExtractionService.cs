@@ -1,3 +1,4 @@
+using System.Data;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -111,8 +112,13 @@ public sealed class ListeningPartAExtractionService(
     IHttpClientFactory httpClientFactory,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
-    ILogger<ListeningPartAExtractionService> logger) : IListeningPartAExtractionService
+    ILogger<ListeningPartAExtractionService> logger,
+    IListeningPolicyService? listeningPolicyService = null) : IListeningPartAExtractionService
 {
+    // Owner policy is checked before any OCR or model call. Every result stays
+    // Pending until an authorised admin explicitly approves it; the extraction
+    // retry cap counts all durable extraction starts for the paper, including
+    // runs that fail before a draft can be persisted.
     public const string AnthropicProviderCode = "anthropic";
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
     // Claude Sonnet 4.6 is the app-wide contextual-understanding model; the
@@ -155,6 +161,8 @@ public sealed class ListeningPartAExtractionService(
 
         var questionBytes = await ReadAssetBytesAsync(questionPaper, ct);
         var answerBytes = await ReadAssetBytesAsync(answerKey, ct);
+
+        await EnsureExtractionAllowedAsync(paperId, adminId, ct);
 
         var questionMarkdown = await ocr.OcrToMarkdownAsync(
             questionBytes, questionPaper.MediaAsset!.MimeType, AiFeatureCodes.OcrListeningPartA, adminId, ct);
@@ -279,6 +287,8 @@ public sealed class ListeningPartAExtractionService(
             throw ApiException.Validation("listening_extract_missing_question_paper",
                 "Upload the Part A question-paper PDF or image to import.");
 
+        await EnsureExtractionAllowedAsync(paperId, adminId, ct);
+
         var questionMarkdown = await ocr.OcrToMarkdownAsync(
             questionBytes, questionMime, AiFeatureCodes.OcrListeningPartA, adminId, ct);
         // Answer key is optional for ad-hoc import: without it the operator fills
@@ -329,6 +339,49 @@ public sealed class ListeningPartAExtractionService(
         await db.SaveChangesAsync(ct);
 
         return BuildDraftDetail(draft);
+    }
+
+    private async Task EnsureExtractionAllowedAsync(string paperId, string adminId, CancellationToken ct)
+    {
+        var policy = listeningPolicyService is not null
+            ? await listeningPolicyService.GetGlobalAsync(ct)
+            : await db.ListeningPolicies.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Id == "global", ct)
+                ?? new ListeningPolicy { Id = "global" };
+
+        if (!policy.AiExtractionEnabled)
+        {
+            throw ApiException.Conflict(
+                "listening_ai_extraction_disabled",
+                "Listening AI extraction is disabled by the owner policy.");
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var attemptedSoFar = await db.AuditEvents.AsNoTracking()
+            .CountAsync(evt => evt.ResourceType == "ContentPaper"
+                && evt.ResourceId == paperId
+                && evt.Action == "ListeningPartAExtractionStarted", ct);
+        if (policy.AiExtractionMaxRetriesPerPaper > 0
+            && attemptedSoFar >= policy.AiExtractionMaxRetriesPerPaper)
+        {
+            throw ApiException.Conflict(
+                "listening_ai_extraction_retry_limit_reached",
+                $"The maximum number of Listening AI extractions ({policy.AiExtractionMaxRetriesPerPaper}) has been reached for this paper.");
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = clock.GetUtcNow(),
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = "ListeningPartAExtractionStarted",
+            ResourceType = "ContentPaper",
+            ResourceId = paperId,
+            Details = "projectionOnly=true",
+        });
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
     }
 
     // ── Approve ──────────────────────────────────────────────────────────────

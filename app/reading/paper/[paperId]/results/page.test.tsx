@@ -53,12 +53,13 @@ describe('Reading paper results page', () => {
   });
 
   it('keeps subset practice attempts out of OET pass evidence', async () => {
-    mockGetReadingAttemptReview.mockResolvedValueOnce(buildReview({ scaledScore: null, rawScore: 6, maxRawScore: 10, gradeLetter: '—' }));
+    mockGetReadingAttemptReview.mockResolvedValueOnce(buildReview({ scaledScore: 350, rawScore: 6, maxRawScore: 10, gradeLetter: 'B' }));
 
     await renderResults();
 
     expect(await screen.findByText('Scaled score unavailable')).toBeInTheDocument();
-    expect(screen.getByText('6/10 practice marks')).toBeInTheDocument();
+    expect(screen.getAllByText('6/10 practice marks').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Owner-table conversion')).not.toBeInTheDocument();
   });
 
   it('shows the stricter-than-examiner marking disclosure', async () => {
@@ -139,6 +140,53 @@ describe('Reading paper results page', () => {
 
     expect(await screen.findByTestId('reading-miss-number_form')).toBeInTheDocument();
     expect(screen.getByText('Incorrect answer form')).toBeInTheDocument();
+  });
+
+  it('renders corrupted multiple-selection answers as invalid admin review', async () => {
+    const review = buildReview({
+      scaledScore: null,
+      rawScore: 0,
+      gradeLetter: '—',
+      items: [{
+        questionId: 'q-b-1',
+        partCode: 'B',
+        displayOrder: 1,
+        questionType: 'MultipleChoice3',
+        stem: 'Choose one answer.',
+        skillTag: 'detail',
+        userAnswer: ['A', 'B'],
+        isCorrect: false,
+        isInvalid: true,
+        pointsEarned: 0,
+        maxPoints: 1,
+        missReason: 'multiple_selection_review_required',
+        correctAnswer: 'A',
+      }],
+    });
+    review.attempt.requiresAdminReview = true;
+    review.attempt.adminReviewReason = 'multiple_selections_for_single_answer_mcq';
+    review.partBreakdown[0] = {
+      ...review.partBreakdown[0],
+      partCode: 'B',
+      rawScore: 0,
+      correctCount: 0,
+      incorrectCount: 0,
+      invalidCount: 1,
+      unansweredCount: 0,
+    };
+    review.skillBreakdown[0] = {
+      ...review.skillBreakdown[0],
+      correctCount: 0,
+      incorrectCount: 0,
+      invalidCount: 1,
+    };
+    mockGetReadingAttemptReview.mockResolvedValueOnce(review);
+
+    await renderResults();
+
+    expect(await screen.findByTestId('reading-admin-review-warning')).toHaveTextContent('invalid for automated marking');
+    expect(screen.getByTestId('reading-review-item-q-b-1')).toHaveTextContent('Invalid — admin review');
+    expect(screen.queryByTestId('reading-grounded-ai')).not.toBeInTheDocument();
   });
 
   it('renders tutor feedback entries when the attempt returns them', async () => {

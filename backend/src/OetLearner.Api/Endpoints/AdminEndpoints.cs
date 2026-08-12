@@ -1989,6 +1989,13 @@ public static class AdminEndpoints
             var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var actorName = http.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
             var grantedAt = DateTimeOffset.UtcNow;
+            var activeSessions = await db.RefreshTokenRecords
+                .Where(token => token.ApplicationUserAccountId == userId && token.RevokedAt == null)
+                .ToListAsync(ct);
+            foreach (var session in activeSessions)
+            {
+                session.RevokedAt = grantedAt;
+            }
             foreach (var permission in role.Permissions.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 db.AdminPermissionGrants.Add(new AdminPermissionGrant
@@ -2011,7 +2018,7 @@ public static class AdminEndpoints
                 Action = "AssignAdminRole",
                 ResourceType = "AdminRole",
                 ResourceId = userId,
-                Details = $"role={role.Id};permissions={string.Join(",", role.Permissions)}"
+                Details = $"role={role.Id};permissions={string.Join(",", role.Permissions)};revokedSessions={activeSessions.Count}"
             });
 
             await db.SaveChangesAsync(ct);
@@ -2037,21 +2044,36 @@ public static class AdminEndpoints
 
             var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var actorName = http.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+            var removedAt = DateTimeOffset.UtcNow;
+            var activeSessions = await db.RefreshTokenRecords
+                .Where(token => token.ApplicationUserAccountId == userId && token.RevokedAt == null)
+                .ToListAsync(ct);
+            foreach (var session in activeSessions)
+            {
+                session.RevokedAt = removedAt;
+            }
             db.AuditEvents.Add(new AuditEvent
             {
                 Id = $"AUD-{Guid.NewGuid():N}",
-                OccurredAt = DateTimeOffset.UtcNow,
+                OccurredAt = removedAt,
                 ActorId = actorId,
                 ActorAuthAccountId = actorId,
                 ActorName = actorName,
                 Action = "RemoveAdminRole",
                 ResourceType = "AdminRole",
                 ResourceId = userId,
-                Details = $"role={roleId};revokedPermissions={string.Join(",", grants.Select(grant => grant.Permission))}"
+                Details = $"role={roleId};revokedPermissions={string.Join(",", grants.Select(grant => grant.Permission))};revokedSessions={activeSessions.Count}"
             });
 
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new { removed = true, userId, roleId, revokedPermissions = grants.Select(grant => grant.Permission).ToArray() });
+            return Results.Ok(new
+            {
+                removed = true,
+                userId,
+                roleId,
+                revokedPermissions = grants.Select(grant => grant.Permission).ToArray(),
+                revokedSessions = activeSessions.Count
+            });
         }).WithAdminWrite("AdminSystemAdmin");
 
         admin.MapGet("/roles/permissions", (LearnerDbContext db, CancellationToken ct) =>

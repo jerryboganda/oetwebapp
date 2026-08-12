@@ -2388,7 +2388,7 @@ public static partial class SeedData
                     new { code = "writing", label = "Writing", duration = 45, isProfessionSpecific = true },
                     new { code = "speaking", label = "Speaking", duration = 20, isProfessionSpecific = true },
                     new { code = "reading", label = "Reading", duration = 60, isProfessionSpecific = false },
-                    new { code = "listening", label = "Listening", duration = 40, isProfessionSpecific = false }
+                    new { code = "listening", label = "Listening", duration = 45, isProfessionSpecific = false }
                 }),
                 CriteriaConfigJson = JsonSupport.Serialize(new object[]
                 {

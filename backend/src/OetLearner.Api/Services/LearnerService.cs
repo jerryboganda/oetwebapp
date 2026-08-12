@@ -1423,7 +1423,7 @@ public partial class LearnerService(
                 {
                     criterionCode,
                     criterionLabel = CriterionLabelFromCode(criterionCode),
-                    score = IsGovernedScoreAvailable(parsed.Evaluation.SubtestCode, parsed.Evaluation.ScaledScore, parsed.Evaluation.ScoreConversionTableVersionKey, parsed.Evaluation.ScoreConversionPassed)
+                    score = IsGovernedScoreAvailable(parsed.Evaluation.SubtestCode, parsed.Evaluation.ScoreRange, parsed.Evaluation.ScaledScore, parsed.Evaluation.ScoreConversionTableVersionKey, parsed.Evaluation.ScoreConversionPassed)
                         ? ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString())
                         : (int?)null,
                     generatedAt = parsed.Evaluation.GeneratedAt,
@@ -6976,13 +6976,13 @@ public partial class LearnerService(
             legacyTableId: null,
             scopeKey: "default",
             cancellationToken: cancellationToken);
-        if (conversion.TableId is not null && conversion.IsAvailable)
-        {
-            await conversionResolver.MarkUsedAsync(conversion.TableId, cancellationToken);
-        }
         var hasApprovedConversion = conversion.ConvertedScore.HasValue
             && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
             && conversion.Passed.HasValue;
+        if (hasApprovedConversion && conversion.TableId is not null && conversion.IsAvailable)
+        {
+            await conversionResolver.MarkUsedAsync(conversion.TableId, cancellationToken);
+        }
         var scaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
         var grade = hasApprovedConversion ? conversion.Grade ?? "—" : "—";
         var scoreDisplay = scaledScore is int converted
@@ -7092,7 +7092,9 @@ public partial class LearnerService(
             .ToList();
         var rawScore = evaluation.RawScore ?? ObjectiveRawScore(questions, answers);
         var maxRawScore = evaluation.MaxRawScore ?? OetScoring.ListeningReadingRawMax;
-        var hasApprovedConversion = evaluation.ScaledScore.HasValue
+        var hasApprovedConversion = (!IsListeningOrReading(subtest)
+                || maxRawScore == OetScoring.ListeningReadingRawMax)
+            && evaluation.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
             && evaluation.ScoreConversionPassed.HasValue;
         var scaledScore = hasApprovedConversion ? evaluation.ScaledScore : null;
@@ -9871,11 +9873,13 @@ public partial class LearnerService(
 
     private static bool IsGovernedScoreAvailable(
         string? subtestCode,
+        string? scoreRange,
         int? scaledScore,
         string? scoreConversionTableVersionKey,
         bool? scoreConversionPassed)
         => !IsListeningOrReading(subtestCode)
-            || (scaledScore.HasValue
+            || (HasCanonicalListeningReadingRawMaximum(scoreRange)
+                && scaledScore.HasValue
                 && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
                 && scoreConversionPassed.HasValue);
 
@@ -9885,9 +9889,17 @@ public partial class LearnerService(
         int? scaledScore,
         string? scoreConversionTableVersionKey,
         bool? scoreConversionPassed)
-        => IsGovernedScoreAvailable(subtestCode, scaledScore, scoreConversionTableVersionKey, scoreConversionPassed)
+        => IsGovernedScoreAvailable(subtestCode, scoreRange, scaledScore, scoreConversionTableVersionKey, scoreConversionPassed)
             ? scoreRange
             : null;
+
+    private static bool HasCanonicalListeningReadingRawMaximum(string? scoreRange)
+    {
+        if (string.IsNullOrWhiteSpace(scoreRange)) return false;
+        var rawSegment = scoreRange.Split('•', 2, StringSplitOptions.TrimEntries)[0];
+        return rawSegment.EndsWith("/ 42", StringComparison.Ordinal)
+            || rawSegment.EndsWith("/42", StringComparison.Ordinal);
+    }
 
     private static bool IsListeningOrReading(string? subtestCode)
         => subtestCode?.Trim().ToLowerInvariant() is "listening" or "reading";

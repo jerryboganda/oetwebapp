@@ -65,10 +65,10 @@ continuously, expiry grabs the last saved state; learner sees a clear
 | Option | Meaning | Default | Alternatives |
 |---|---|---|---|
 | `EnabledQuestionTypes` (global) | Which types authors may use | all 5 enabled | any subset |
-| `ShortAnswerNormalisation` (global) | Match strategy for short-answer items | `trim_collapse_case_insensitive` | `exact`, `trim_only`, `fuzzy_levenshtein_1` |
+| `ShortAnswerNormalisation` (global) | Match strategy for short-answer items | `trim_collapse_case_insensitive` | `exact`, `trim_only`, `trim_collapse` |
 | `ShortAnswerAcceptSynonyms` (global) | **NON-STANDARD MODE.** Respects per-question `AcceptedSynonymsJson`. Real OET Part A answers are copied word-for-word from the text; enabling this fundamentally changes the assessment. Must be clearly disclosed to learners when on. | `false` (OET-faithful) | `true` (non-standard) |
 | `MatchingAllowPartialCredit` (global) | Part A matching: credit for each correct item individually | `true` | `false` (all-or-nothing) |
-| `SentenceCompletionStrictness` (global) | Enforce exact phrase-bank match | `exact_from_bank` | `normalised_match`, `fuzzy_match` |
+| `SentenceCompletionStrictness` (global) | Enforce exact phrase-bank match | `exact_from_bank` | no fuzzy matching |
 | `UnknownTypeFallbackPolicy` (global) | Grader encounters an unknown type | `skip_with_zero` | `fail_grading`, `grade_as_correct` |
 
 **Safe fallback**: when grader hits anything unexpected, default policy
@@ -300,4 +300,3 @@ types: `MatchingTextReference`, `ShortAnswer`, `SentenceCompletion`,
 `WordPool` to `MatchingTextReference`. Pre-existing draft mock bundles
 that carry the legacy strings will fail validation on next save — see
 Risk #2 in the closure plan for the recommended one-shot data migration.
-

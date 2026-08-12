@@ -60,16 +60,18 @@ function SwitchRow({
   onChange,
   label,
   description,
+  disabled = false,
 }: {
   id: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   description?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-start gap-3">
-      <Switch id={id} checked={checked} onCheckedChange={onChange} className="mt-0.5" />
+      <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} className="mt-0.5" />
       <div>
         <Label htmlFor={id} className="text-sm font-medium text-admin-fg-strong">{label}</Label>
         {description && <p className="text-xs text-admin-fg-muted mt-0.5">{description}</p>}
@@ -282,7 +284,7 @@ export default function ListeningPolicyPage() {
         {/* §2 Timer */}
         <SectionCard title="§2 Timer">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <NumericField label="Full paper timer (minutes)" value={policy.fullPaperTimerMinutes} onChange={field('fullPaperTimerMinutes')} description="Whole-paper timer for exam mode (~40 min real OET)" />
+            <NumericField label="Full paper timer (minutes)" value={policy.fullPaperTimerMinutes} onChange={field('fullPaperTimerMinutes')} description="Whole-paper timer for exam mode (approximately 45–50 min real OET)" />
             <NumericField label="Grace period (seconds)" value={policy.gracePeriodSeconds} onChange={field('gracePeriodSeconds')} description="Extra seconds after timer expires before auto-submit" />
             <TextField label="On expiry policy" value={policy.onExpirySubmitPolicy} onChange={field('onExpirySubmitPolicy')} description="auto_submit_graded | abandon | warn_only" />
             <TextField label="Countdown warnings (JSON array, seconds)" value={policy.countdownWarningsJson} onChange={field('countdownWarningsJson')} description='e.g. [300,60,15]' />
@@ -301,15 +303,44 @@ export default function ListeningPolicyPage() {
         {/* §4 Grading */}
         <SectionCard title="§4 Grading">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TextField label="Short answer normalisation" value={policy.shortAnswerNormalisation} onChange={field('shortAnswerNormalisation')} description="trim_collapse_case_insensitive | trim_only | exact" />
+            <TextField label="Short answer normalisation" value={policy.shortAnswerNormalisation} onChange={field('shortAnswerNormalisation')} description="exact | trim_only | trim_collapse | trim_collapse_case_insensitive; fuzzy profiles are rejected" />
             <div className="pt-5">
-              <SwitchRow id="shortAnswerAcceptSynonyms" checked={policy.shortAnswerAcceptSynonyms} onChange={field('shortAnswerAcceptSynonyms')} label="Accept synonyms (non-standard)" description="OET grades on canonical + accepted variants only; default off" />
+              <SwitchRow id="shortAnswerAcceptSynonyms" checked={policy.shortAnswerAcceptSynonyms} onChange={field('shortAnswerAcceptSynonyms')} label="Accept explicitly authored variants (non-standard)" description="Only question-authored variants are considered; no fuzzy or AI rescue; default off" />
             </div>
           </div>
         </SectionCard>
 
-        {/* §5 Review */}
-        <SectionCard title="§5 Review">
+        {/* §5 AI extraction */}
+        <SectionCard title="§5 AI extraction">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <SwitchRow
+                id="aiExtractionEnabled"
+                checked={policy.aiExtractionEnabled}
+                onChange={field('aiExtractionEnabled')}
+                label="Allow AI extraction"
+                description="Kill-switch for Listening Part A OCR and manifest extraction."
+              />
+              <SwitchRow
+                id="aiExtractionRequireHumanApproval"
+                checked
+                onChange={() => undefined}
+                disabled
+                label="Human approval required"
+                description="Always enforced: AI output remains Pending until an authorised admin approves it."
+              />
+            </div>
+            <NumericField
+              label="Maximum extractions per paper"
+              value={policy.aiExtractionMaxRetriesPerPaper}
+              min={0}
+              onChange={(value) => field('aiExtractionMaxRetriesPerPaper')(Math.max(0, Math.floor(value)))}
+              description="Counts all prior drafts; 0 means unlimited."
+            />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="§6 Review">
           <div className="space-y-3">
             <SwitchRow id="showExplanationsAfterSubmit" checked={policy.showExplanationsAfterSubmit} onChange={field('showExplanationsAfterSubmit')} label="Show explanations after submit" />
             <SwitchRow id="showExplanationsOnlyIfWrong" checked={policy.showExplanationsOnlyIfWrong} onChange={field('showExplanationsOnlyIfWrong')} label="Show explanations only if wrong" />
@@ -317,8 +348,8 @@ export default function ListeningPolicyPage() {
           </div>
         </SectionCard>
 
-        {/* §6 Accessibility */}
-        <SectionCard title="§6 Accessibility">
+        {/* §7 Accessibility */}
+        <SectionCard title="§7 Accessibility">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <NumericField label="Default extra time (%)" value={policy.defaultExtraTimePct} onChange={field('defaultExtraTimePct')} description="Global default; 0 means no extra time unless per-user override" />
             <div className="pt-5">
@@ -327,8 +358,8 @@ export default function ListeningPolicyPage() {
           </div>
         </SectionCard>
 
-        {/* §7 Lifecycle */}
-        <SectionCard title="§7 Lifecycle">
+        {/* §8 Lifecycle */}
+        <SectionCard title="§8 Lifecycle">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SwitchRow id="autoExpireWorkerEnabled" checked={policy.autoExpireWorkerEnabled} onChange={field('autoExpireWorkerEnabled')} label="Auto-expire worker enabled" description="Background worker expires stale in-progress attempts" />
             <NumericField label="Auto-expire after (minutes)" value={policy.autoExpireAfterMinutes} onChange={field('autoExpireAfterMinutes')} description="Attempts older than this are auto-expired" />
@@ -336,8 +367,8 @@ export default function ListeningPolicyPage() {
           </div>
         </SectionCard>
 
-        {/* §8 Retention */}
-        <SectionCard title="§8 Retention">
+        {/* §9 Retention */}
+        <SectionCard title="§9 Retention">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <NumericField label="Retain answer rows (days)" value={policy.retainAnswerRowsDays} onChange={field('retainAnswerRowsDays')} />
             <NumericField label="Retain attempt headers (days)" value={policy.retainAttemptHeadersDays} onChange={field('retainAttemptHeadersDays')} />

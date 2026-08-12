@@ -26,10 +26,13 @@ public interface IListeningLearnerGradingService
     /// <summary>Grade a single ListeningQuestionAttempt against the question's
     /// canonical answer. Sets IsCorrect, IsSpellingCorrectMeaningWrong,
     /// IsMeaningCorrectSpellingWrong on the attempt entity. The immutable
-    /// marking-policy snapshot controls text normalization. Does not persist.</summary>
+    /// marking-policy and Listening-policy snapshots control text matching.
+    /// Does not persist.</summary>
     Task<GradingResult> GradeAttemptAsync(ListeningQuestionAttempt attempt,
         ListeningQuestion question, CancellationToken ct,
-        AssessmentMarkingPolicyDocument? markingPolicy = null);
+        AssessmentMarkingPolicyDocument? markingPolicy = null,
+        string? shortAnswerNormalisation = null,
+        bool? shortAnswerAcceptSynonyms = null);
 
     /// <summary>Grade an entire diagnostic session — iterates all attempts,
     /// returns aggregate score + per-sub-skill + per-accent breakdowns.</summary>
@@ -80,7 +83,9 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
         ListeningQuestionAttempt attempt,
         ListeningQuestion question,
         CancellationToken ct,
-        AssessmentMarkingPolicyDocument? markingPolicy = null)
+        AssessmentMarkingPolicyDocument? markingPolicy = null,
+        string? shortAnswerNormalisation = null,
+        bool? shortAnswerAcceptSynonyms = null)
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(attempt);
@@ -107,8 +112,10 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
             ListeningQuestionType.MultipleChoice3 => Task.FromResult(GradeMcq(attempt, question)),
             // FillInBlank grades identically to ShortAnswer: exact canonical
             // or explicit accepted-variant comparison only.
-            ListeningQuestionType.ShortAnswer => Task.FromResult(GradeShortAnswer(attempt, question, markingPolicy)),
-            ListeningQuestionType.FillInBlank => Task.FromResult(GradeShortAnswer(attempt, question, markingPolicy)),
+            ListeningQuestionType.ShortAnswer => Task.FromResult(GradeShortAnswer(
+                attempt, question, markingPolicy, shortAnswerNormalisation, shortAnswerAcceptSynonyms)),
+            ListeningQuestionType.FillInBlank => Task.FromResult(GradeShortAnswer(
+                attempt, question, markingPolicy, shortAnswerNormalisation, shortAnswerAcceptSynonyms)),
             _ => Task.FromResult(GradeUnsupported(attempt, question)),
         };
     }
@@ -262,22 +269,29 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
     private static GradingResult GradeShortAnswer(
         ListeningQuestionAttempt attempt,
         ListeningQuestion question,
-        AssessmentMarkingPolicyDocument? markingPolicy)
+        AssessmentMarkingPolicyDocument? markingPolicy,
+        string? shortAnswerNormalisation,
+        bool? shortAnswerAcceptSynonyms)
     {
         var policy = markingPolicy ?? new AssessmentMarkingPolicyDocument();
         var canonical = TryReadString(question.CorrectAnswerJson);
-        var acceptedVariants = ParseSynonyms(question.AcceptedSynonymsJson);
+        var acceptedVariants = shortAnswerAcceptSynonyms is false
+            ? Array.Empty<string>()
+            : ParseSynonyms(question.AcceptedSynonymsJson);
 
         // Prefer LearnerAnswer (verbatim free-text). Fall back to
         // SelectedOption because the legacy MCQ field is reused for Part A
         // by some learner clients.
         var raw = attempt.LearnerAnswer ?? attempt.SelectedOption ?? string.Empty;
-        var caseSensitive = question.CaseSensitive && policy.CaseSensitive;
+        var normalisation = ResolveNormalisation(shortAnswerNormalisation, policy);
+        var caseSensitive = question.CaseSensitive
+            && policy.CaseSensitive
+            && !string.Equals(normalisation, "trim_collapse_case_insensitive", StringComparison.Ordinal);
 
-        var userNorm = Normalize(raw, caseSensitive, policy);
+        var userNorm = Normalize(raw, caseSensitive, policy, normalisation);
         var candidates = BuildCandidates(canonical, acceptedVariants);
         var candidateNorms = candidates
-            .Select(c => Normalize(c, caseSensitive, policy))
+            .Select(c => Normalize(c, caseSensitive, policy, normalisation))
             .Where(s => s.Length > 0)
             .ToList();
 
@@ -305,7 +319,7 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
         // analytics only. It is not a tolerance path and the mark remains zero.
         if (canonical is not null)
         {
-            var canonicalNorm = Normalize(canonical, caseSensitive, policy);
+            var canonicalNorm = Normalize(canonical, caseSensitive, policy, normalisation);
             if (canonicalNorm.Length > 0 && Levenshtein(userNorm, canonicalNorm) <= 1)
             {
                 attempt.IsCorrect = false;
@@ -348,14 +362,27 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
     private static string Normalize(
         string? value,
         bool caseSensitive,
-        AssessmentMarkingPolicyDocument policy)
+        AssessmentMarkingPolicyDocument policy,
+        string normalisation)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
 
-        var trimmed = policy.TrimLeadingTrailingWhitespace ? value.Trim() : value;
+        var trim = normalisation switch
+        {
+            "exact" => false,
+            "trim_only" or "trim_collapse" or "trim_collapse_case_insensitive" => true,
+            _ => policy.TrimLeadingTrailingWhitespace,
+        };
+        var collapse = normalisation switch
+        {
+            "trim_collapse" or "trim_collapse_case_insensitive" => true,
+            "exact" or "trim_only" => false,
+            _ => policy.CollapseInternalWhitespace,
+        };
+        var trimmed = trim ? value.Trim() : value;
         if (trimmed.Length == 0) return string.Empty;
 
-        if (!policy.CollapseInternalWhitespace)
+        if (!collapse)
             return caseSensitive ? trimmed : trimmed.ToLowerInvariant();
 
         // Collapse internal runs of whitespace only when the captured policy
@@ -379,6 +406,24 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
         }
         var collapsed = new string(buffer[..idx]);
         return caseSensitive ? collapsed : collapsed.ToLowerInvariant();
+    }
+
+    private static string ResolveNormalisation(
+        string? capturedNormalisation,
+        AssessmentMarkingPolicyDocument policy)
+    {
+        if (string.IsNullOrWhiteSpace(capturedNormalisation))
+        {
+            return policy.TrimLeadingTrailingWhitespace
+                ? policy.CollapseInternalWhitespace ? "trim_collapse" : "trim_only"
+                : "exact";
+        }
+
+        var normalisation = capturedNormalisation.Trim().ToLowerInvariant();
+        return normalisation is
+            "exact" or "trim_only" or "trim_collapse" or "trim_collapse_case_insensitive"
+            ? normalisation
+            : "exact";
     }
 
     private static IReadOnlyList<string> BuildCandidates(string? canonical, IReadOnlyList<string> synonyms)

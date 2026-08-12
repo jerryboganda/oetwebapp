@@ -12,14 +12,22 @@ import { Skeleton } from '@/components/admin/ui/skeleton';
 import {
   createAssessmentScoreTable,
   listAssessmentScoreTables,
+  listAssessmentReleaseStatus,
+  submitAssessmentScoreTableForReview,
+  approveAssessmentScoreTable,
   makeAssessmentScoreTableEffective,
   type AssessmentScoreConversionRowDto,
   type AssessmentScoreConversionTableDto,
+  type AssessmentReleaseStatusDto,
   createAssessmentMarkingPolicy,
   listAssessmentMarkingPolicies,
+  submitAssessmentMarkingPolicyForReview,
+  approveAssessmentMarkingPolicy,
   makeAssessmentMarkingPolicyEffective,
   createAssessmentRationale,
   listAssessmentRationales,
+  submitAssessmentRationaleForReview,
+  approveAssessmentRationale,
   makeAssessmentRationaleEffective,
   listAssessmentReMarkJobs,
   createAssessmentReMarkJob,
@@ -72,6 +80,7 @@ export default function AdminScoringSystemPage() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<'listening' | 'reading'>('listening');
   const [scoreTables, setScoreTables] = useState<AssessmentScoreConversionTableDto[]>([]);
+  const [releaseStatus, setReleaseStatus] = useState<AssessmentReleaseStatusDto | null>(null);
   const [scoreTableVersion, setScoreTableVersion] = useState('');
   const [scoreTableJson, setScoreTableJson] = useState('[]');
   const [scoreTableError, setScoreTableError] = useState<string | null>(null);
@@ -114,7 +123,12 @@ export default function AdminScoringSystemPage() {
 
   const reloadScoreTables = useCallback(async () => {
     try {
-      setScoreTables(await listAssessmentScoreTables({ assessment }));
+      const [tables, releaseRows] = await Promise.all([
+        listAssessmentScoreTables({ assessment }),
+        listAssessmentReleaseStatus({ assessment }),
+      ]);
+      setScoreTables(tables);
+      setReleaseStatus(releaseRows[0] ?? null);
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     }
@@ -124,14 +138,16 @@ export default function AdminScoringSystemPage() {
 
   const reloadGovernance = useCallback(async () => {
     try {
-      const [policies, loadedRationales, loadedJobs] = await Promise.all([
+      const [policies, loadedRationales, loadedJobs, releaseRows] = await Promise.all([
         listAssessmentMarkingPolicies({ assessment }),
         listAssessmentRationales({ assessment }),
         listAssessmentReMarkJobs({ assessment }),
+        listAssessmentReleaseStatus({ assessment }),
       ]);
       setMarkingPolicies(policies);
       setRationales(loadedRationales);
       setRemarkJobs(loadedJobs);
+      setReleaseStatus(releaseRows[0] ?? null);
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     }
@@ -169,11 +185,13 @@ export default function AdminScoringSystemPage() {
     }
   }
 
-  async function makeMarkingPolicyEffective(id: string) {
+  async function transitionMarkingPolicy(id: string, action: 'review' | 'approve' | 'effective') {
     setMarkingPolicySaving(true);
     try {
-      await makeAssessmentMarkingPolicyEffective(id);
-      setToast({ variant: 'success', message: 'Marking policy is now effective and locks after first attempt uses it.' });
+      if (action === 'review') await submitAssessmentMarkingPolicyForReview(id);
+      else if (action === 'approve') await approveAssessmentMarkingPolicy(id);
+      else await makeAssessmentMarkingPolicyEffective(id);
+      setToast({ variant: 'success', message: action === 'effective' ? 'Marking policy is now effective and locks after first attempt uses it.' : `Marking policy moved to ${action === 'review' ? 'review' : 'approved'}.` });
       await reloadGovernance();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
@@ -208,11 +226,13 @@ export default function AdminScoringSystemPage() {
       setRationaleSaving(false);
     }
   }
-  async function makeRationaleEffective(id: string) {
+  async function transitionRationale(id: string, action: 'review' | 'approve' | 'effective') {
     setRationaleSaving(true);
     try {
-      await makeAssessmentRationaleEffective(id);
-      setToast({ variant: 'success', message: 'Approved rationale is now effective for grounded explanations.' });
+      if (action === 'review') await submitAssessmentRationaleForReview(id);
+      else if (action === 'approve') await approveAssessmentRationale(id);
+      else await makeAssessmentRationaleEffective(id);
+      setToast({ variant: 'success', message: action === 'effective' ? 'Approved rationale is now effective for grounded explanations.' : `Rationale moved to ${action === 'review' ? 'review' : 'approved'}.` });
       await reloadGovernance();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
@@ -323,7 +343,8 @@ export default function AdminScoringSystemPage() {
       const rows = parsed.map((row, index) => {
         if (!row || typeof row !== 'object') throw new Error(`Row ${index + 1} is not an object.`);
         const candidate = row as Record<string, unknown>;
-        if (typeof candidate.rawScore !== 'number' || typeof candidate.convertedScore !== 'number'
+        if (typeof candidate.rawScore !== 'number' || !Number.isInteger(candidate.rawScore)
+          || typeof candidate.convertedScore !== 'number' || !Number.isInteger(candidate.convertedScore)
           || typeof candidate.grade !== 'string' || !candidate.grade.trim()
           || typeof candidate.passed !== 'boolean') {
           throw new Error(`Row ${index + 1} needs rawScore, convertedScore, grade, and passed.`);
@@ -335,7 +356,14 @@ export default function AdminScoringSystemPage() {
           passed: candidate.passed,
         } satisfies AssessmentScoreConversionRowDto;
       });
-      setScoreTableError(rows.length === 43 ? null : 'The owner table must contain exactly 43 rows covering raw scores 0 through 42.');
+      const rawScores = rows.map((row) => row.rawScore).sort((a, b) => a - b);
+      const coversCanonicalRawRange = rawScores.length === 43
+        && rawScores.every((rawScore, index) => rawScore === index);
+      if (!coversCanonicalRawRange) {
+        setScoreTableError('The owner table must contain exactly one row for every raw score from 0 through 42.');
+        return null;
+      }
+      setScoreTableError(null);
       return rows;
     } catch (e) {
       setScoreTableError((e as Error).message);
@@ -359,7 +387,7 @@ export default function AdminScoringSystemPage() {
       });
       setScoreTableVersion('');
       setScoreTableJson('[]');
-      setToast({ variant: 'success', message: `${assessment} score table draft created. It is not live until made effective.` });
+      setToast({ variant: 'success', message: `${assessment} score table draft created. It requires review and approval before it can become effective.` });
       await reloadScoreTables();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
@@ -368,11 +396,13 @@ export default function AdminScoringSystemPage() {
     }
   }
 
-  async function makeScoreTableEffective(id: string) {
+  async function transitionScoreTable(id: string, action: 'review' | 'approve' | 'effective') {
     setScoreTableSaving(true);
     try {
-      await makeAssessmentScoreTableEffective(id);
-      setToast({ variant: 'success', message: 'Score table is now effective and will be locked after first use.' });
+      if (action === 'review') await submitAssessmentScoreTableForReview(id);
+      else if (action === 'approve') await approveAssessmentScoreTable(id);
+      else await makeAssessmentScoreTableEffective(id);
+      setToast({ variant: 'success', message: action === 'effective' ? 'Score table is now effective and will be locked after first use.' : `Score table moved to ${action === 'review' ? 'review' : 'approved'}.` });
       await reloadScoreTables();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
@@ -407,6 +437,22 @@ export default function AdminScoringSystemPage() {
         description="Owner-approved 0–42 lookup tables only. No interpolation or formula fallback is permitted."
       >
         <div className="space-y-4">
+          {releaseStatus ? (
+            <div
+              className={`rounded-md border px-4 py-3 ${releaseStatus.ready ? 'border-admin-success/40 bg-admin-success/10' : 'border-admin-warning/40 bg-admin-warning/10'}`}
+              role="status"
+              aria-label={`${assessment} release readiness`}
+            >
+              <p className="text-sm font-semibold">
+                {assessment} release readiness: {releaseStatus.ready ? 'Ready' : 'Blocked'}
+              </p>
+              {releaseStatus.blockers.length > 0 ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-admin-fg-muted">
+                  {releaseStatus.blockers.map((blocker) => <li key={blocker}>{blocker.replace(/_/g, ' ')}</li>)}
+                </ul>
+              ) : <p className="mt-1 text-xs text-admin-fg-muted">All currently modeled owner governance records are effective.</p>}
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-sm font-medium">
               Assessment
@@ -475,7 +521,15 @@ export default function AdminScoringSystemPage() {
                     <td className="px-3 py-2">{new Date(table.effectiveFrom).toLocaleString()}</td>
                     <td className="px-3 py-2">
                       {table.status === 'Draft' ? (
-                        <Button size="sm" variant="outline" onClick={() => void makeScoreTableEffective(table.id)} disabled={scoreTableSaving}>
+                        <Button size="sm" variant="outline" onClick={() => void transitionScoreTable(table.id, 'review')} disabled={scoreTableSaving}>
+                          Submit for review
+                        </Button>
+                      ) : table.status === 'InReview' ? (
+                        <Button size="sm" variant="outline" onClick={() => void transitionScoreTable(table.id, 'approve')} disabled={scoreTableSaving}>
+                          Approve
+                        </Button>
+                      ) : table.status === 'Approved' ? (
+                        <Button size="sm" variant="outline" onClick={() => void transitionScoreTable(table.id, 'effective')} disabled={scoreTableSaving}>
                           Make effective
                         </Button>
                       ) : table.hasBeenUsed ? (
@@ -517,6 +571,9 @@ export default function AdminScoringSystemPage() {
                 placeholder={'Paste the complete owner-approved policy JSON, including all required fields.'}
               />
             </div>
+            <p className="text-xs text-admin-fg-muted">
+              Approval also requires an owner-supplied <code>releaseGate</code> with graph legal/style approval, a positive peak timed-attempt target, and evidence URL. No values are guessed by this page.
+            </p>
             <Button onClick={() => void saveMarkingPolicyDraft()} disabled={markingPolicySaving} loading={markingPolicySaving}>
               Create marking policy draft
             </Button>
@@ -532,7 +589,11 @@ export default function AdminScoringSystemPage() {
                       <td className="px-3 py-2"><Badge variant={policy.status === 'Effective' ? 'success' : policy.status === 'Locked' ? 'default' : 'warning'}>{policy.status}</Badge></td>
                       <td className="px-3 py-2">
                         {policy.status === 'Draft' ? (
-                          <Button size="sm" variant="outline" onClick={() => void makeMarkingPolicyEffective(policy.id)} disabled={markingPolicySaving}>Make effective</Button>
+                          <Button size="sm" variant="outline" onClick={() => void transitionMarkingPolicy(policy.id, 'review')} disabled={markingPolicySaving}>Submit for review</Button>
+                        ) : policy.status === 'InReview' ? (
+                          <Button size="sm" variant="outline" onClick={() => void transitionMarkingPolicy(policy.id, 'approve')} disabled={markingPolicySaving}>Approve</Button>
+                        ) : policy.status === 'Approved' ? (
+                          <Button size="sm" variant="outline" onClick={() => void transitionMarkingPolicy(policy.id, 'effective')} disabled={markingPolicySaving}>Make effective</Button>
                         ) : policy.hasBeenUsed ? (
                           <span className="text-xs text-admin-fg-muted">Locked after use</span>
                         ) : null}
@@ -565,7 +626,11 @@ export default function AdminScoringSystemPage() {
                       <td className="px-3 py-2 font-mono">{rationale.questionRevisionId}</td>
                       <td className="px-3 py-2">{rationale.evidenceCount}</td>
                       <td className="px-3 py-2"><Badge variant={rationale.status === 'Effective' ? 'success' : 'warning'}>{rationale.status}</Badge></td>
-                      <td className="px-3 py-2">{rationale.status === 'Draft' ? <Button size="sm" variant="outline" onClick={() => void makeRationaleEffective(rationale.id)} disabled={rationaleSaving}>Make effective</Button> : null}</td>
+                      <td className="px-3 py-2">
+                        {rationale.status === 'Draft' ? <Button size="sm" variant="outline" onClick={() => void transitionRationale(rationale.id, 'review')} disabled={rationaleSaving}>Submit for review</Button> : null}
+                        {rationale.status === 'InReview' ? <Button size="sm" variant="outline" onClick={() => void transitionRationale(rationale.id, 'approve')} disabled={rationaleSaving}>Approve</Button> : null}
+                        {rationale.status === 'Approved' ? <Button size="sm" variant="outline" onClick={() => void transitionRationale(rationale.id, 'effective')} disabled={rationaleSaving}>Make effective</Button> : null}
+                      </td>
                     </tr>
                   ))}
                   {rationales.length === 0 ? <tr><td colSpan={4} className="px-3 py-3 text-admin-fg-muted">No rationale records exist for this assessment.</td></tr> : null}

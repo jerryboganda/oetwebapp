@@ -78,6 +78,8 @@ export interface ListeningHomeResultDto {
   passed: boolean | null;
   scoreConversionTableVersionKey?: string | null;
   scoreConversionErrorCode?: string | null;
+  requiresAdminReview?: boolean;
+  adminReviewReason?: string | null;
   submittedAt: string | null;
   scoreDisplay: string;
   route: string;
@@ -101,6 +103,9 @@ export interface ListeningHomeDto {
   featuredTasks: ListeningHomeTaskDto[];
   activeAttempts: ListeningHomeAttemptDto[];
   recentResults: ListeningHomeResultDto[];
+  /** Owner-selected progress score (best/latest/average/first). */
+  progressScoreDisplay?: string | null;
+  progressScoreDisplayMode?: 'best' | 'latest' | 'average' | 'first';
   partCollections: Array<{ id: string; title: string; description: string; available: boolean; route: string | null }>;
   transcriptBackedReview: {
     title: string;
@@ -208,6 +213,8 @@ export interface ListeningExtractMetadataDto {
 }
 
 export interface ListeningSessionDto {
+  /** Server timestamp used only to correct learner-facing clock display. */
+  serverNow?: string;
   paper: {
     id: string;
     sourceKind: string;
@@ -252,11 +259,17 @@ export interface ListeningSessionDto {
     onePlayOnly: boolean;
     autosave: boolean;
     transcriptPolicy: string;
+    /** Owner-configured whole-attempt warning thresholds, in seconds. */
+    countdownWarningsSeconds?: number[];
+    /** Owner-configured accessibility hint for additional live status text. */
+    screenReaderOptimised?: boolean;
     /** Phase 9 tail — UI hint. Server is the source of truth for integrity
      * invariants (onePlayOnly / canScrub / canPause). */
     presentationStyle?: 'practice' | 'exam_standard' | 'kiosk_fullscreen';
-    /** OET@Home kiosk: full-screen + integrity prompt before audio plays. */
+    /** Legacy compatibility field; current modes never enforce fullscreen. */
     integrityLockRequired?: boolean;
+    /** Non-blocking device/focus/fullscreen guidance telemetry is enabled. */
+    technicalGuidanceTelemetryEnabled?: boolean;
     /** R07/R06 policy hint: learning/diagnostic modes may navigate across sections. */
     freeNavigation?: boolean;
     /** R06.11 policy hint: show exact unanswered numbers before lock/submit. */
@@ -266,6 +279,23 @@ export interface ListeningSessionDto {
     maxRawScore: number;
     passRawScore: number | null;
     passScaledScore: number | null;
+  };
+  preflight?: {
+    candidate: {
+      displayName: string;
+      professionId: string | null;
+      professionLabel: string | null;
+    };
+    selectedTest: {
+      id: string;
+      title: string;
+      mode: ListeningSessionMode;
+    };
+    eligibility: {
+      checkedAtServer: boolean;
+      eligible: boolean;
+      reason: string | null;
+    };
   };
   readiness: {
     objectiveReady: boolean;
@@ -292,11 +322,20 @@ export interface ListeningAttemptDto {
   answers: Record<string, string | null>;
   /**
    * Server-authoritative deadline for this attempt (ISO-8601). Drives the
-   * 40-minute whole-attempt countdown in the player chrome and the
+   * policy-defined whole-attempt countdown in the player chrome and the
    * exam/home auto-submit on expiry. Optional for back-compat with legacy
    * sessions that have not yet been re-projected.
    */
   expiresAt?: string | null;
+  /** Server timestamp used only to correct learner-facing clock display. */
+  serverNow?: string;
+  /** Server-authoritative one-way cursor for the canonical exam surface. */
+  sectionCursor?: number;
+  /** Last persisted scored-audio lifecycle state for refresh/reconnect. */
+  audioPlaybackState?: 'not_started' | 'active' | 'ended';
+  audioResumeAtMs?: number | null;
+  audioPlaybackSection?: string | null;
+  audioQuestionIndex?: number | null;
 }
 
 /**
@@ -324,6 +363,8 @@ export interface ListeningReviewItemDto {
   learnerAnswer: string;
   correctAnswer: string;
   isCorrect: boolean;
+  /** Corrupt multiple-selection MCQ; excluded from ordinary wrong-answer counts. */
+  isInvalid?: boolean;
   pointsEarned: number;
   maxPoints: number;
   /** Author-approved rationale; null means no approved explanation exists. */
@@ -369,6 +410,9 @@ export interface ListeningReviewDto {
   correctCount: number;
   incorrectCount: number;
   unansweredCount: number;
+  invalidCount?: number;
+  requiresAdminReview?: boolean;
+  adminReviewReason?: string | null;
   itemReview: ListeningReviewItemDto[];
   errorClusters: Array<{ errorType: string; label: string; count: number; affectedQuestionIds: string[] }>;
   recommendedNextDrill: ListeningDrillDto;
@@ -388,6 +432,13 @@ export interface ListeningReviewDto {
   strengths: string[];
   issues: string[];
   generatedAt: string | null;
+  timeUsed?: {
+    totalMilliseconds: number | null;
+    sections: Array<{
+      sectionCode: string;
+      elapsedMilliseconds: number | null;
+    }>;
+  } | null;
 }
 
 // Delegates to the shared API client (lib/api.ts) so every listening call
@@ -521,9 +572,9 @@ export const advanceListeningSection = (attemptId: string, toIndex: number) =>
 
 /**
  * Listening attempt / integrity event-type union (spec §17.11). The first
- * group are the OET@Home integrity-lock events recorded only when
- * `modePolicy.integrityLockRequired` is set (window focus/blur, fullscreen,
- * blocked audio gestures). The second group are the §17.11 attempt-event
+ * group are non-blocking technical-guidance events recorded when
+ * `modePolicy.technicalGuidanceTelemetryEnabled` is set (window focus/blur,
+ * fullscreen, blocked audio gestures). The second group are the §17.11 attempt-event
  * stream, recorded for any graded attempt — audio lifecycle, reading-time
  * windows, answer changes, annotations, and the timer auto-submit.
  *
@@ -543,8 +594,10 @@ export type ListeningIntegrityEventType =
   | 'audio_seek_blocked'
   | 'audio_pause_blocked'
   | 'audio_replay_blocked'
+  | 'audio_speed_change_blocked'
   // §17.11 attempt-event stream (recorded for any graded attempt).
   | 'audio_started'
+  | 'audio_stopped'
   | 'audio_ended'
   | 'audio_buffering_start'
   | 'audio_buffering_end'
@@ -555,6 +608,7 @@ export type ListeningIntegrityEventType =
   | 'answer_changed'
   | 'highlight'
   | 'strikethrough'
+  | 'section_transition'
   | 'auto_submit'
   | (string & {});
 
@@ -600,6 +654,32 @@ export const getListeningAttemptAiExplanation = (
   language = 'en',
 ) => api<ListeningGroundedAiExplanationDto>(
   `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/ai-explanation?language=${encodeURIComponent(language)}`,
+);
+
+export interface ListeningQuestionQnaMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ListeningQuestionQnaResponse {
+  reply: string;
+  history: ListeningQuestionQnaMessage[];
+  grounded: true;
+  advisoryOnly: true;
+  marksUnaffected: true;
+}
+
+export const askListeningQuestionGroundedAi = (
+  attemptId: string,
+  questionId: string,
+  message: string,
+  history: ListeningQuestionQnaMessage[] = [],
+) => api<ListeningQuestionQnaResponse>(
+  `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/ai-qna`,
+  {
+    method: 'POST',
+    body: JSON.stringify({ message, history }),
+  },
 );
 
 export function getListeningDrill(drillId: string, options: { paperId?: string; attemptId?: string } = {}) {

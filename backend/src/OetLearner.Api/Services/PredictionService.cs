@@ -58,7 +58,8 @@ public class PredictionService(LearnerDbContext db)
         string? scoreConversionTableVersionKey = null;
         if (isGovernedSubtest)
         {
-            if (evaluations.Any(e => !e.ScaledScore.HasValue
+            if (evaluations.Any(e => e.MaxRawScore != OetScoring.ListeningReadingRawMax
+                                     || !e.ScaledScore.HasValue
                                      || string.IsNullOrWhiteSpace(e.ScoreConversionTableVersionKey)
                                      || !e.ScoreConversionPassed.HasValue))
             {
@@ -123,6 +124,7 @@ public class PredictionService(LearnerDbContext db)
             standardDeviation = Math.Round(stdDev, 1),
             trendDirection = trend > 5 ? "improving" : trend < -5 ? "declining" : "stable",
             scoreConversionTableVersionKey,
+            scoreConversionRawMax = isGovernedSubtest ? OetScoring.ListeningReadingRawMax : (int?)null,
             scoreConversionApproved = isGovernedSubtest ? true : (bool?)null
         };
 
@@ -198,7 +200,10 @@ public class PredictionService(LearnerDbContext db)
         {
             using var document = System.Text.Json.JsonDocument.Parse(snapshot.FactorsJson ?? "{}");
             var root = document.RootElement;
-            return root.TryGetProperty("scoreConversionTableVersionKey", out var version)
+            return root.TryGetProperty("scoreConversionRawMax", out var rawMax)
+                   && rawMax.ValueKind == System.Text.Json.JsonValueKind.Number
+                   && rawMax.GetInt32() == OetScoring.ListeningReadingRawMax
+                   && root.TryGetProperty("scoreConversionTableVersionKey", out var version)
                    && version.ValueKind == System.Text.Json.JsonValueKind.String
                    && !string.IsNullOrWhiteSpace(version.GetString())
                    && root.TryGetProperty("scoreConversionApproved", out var approved)

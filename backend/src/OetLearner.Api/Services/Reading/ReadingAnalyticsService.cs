@@ -161,7 +161,8 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
         var answers = await db.ReadingAnswers.AsNoTracking()
             .Where(a => submittedIds.Contains(a.ReadingAttemptId))
             .ToListAsync(ct);
-        var answersByQuestion = answers.GroupBy(a => a.ReadingQuestionId)
+        var scoredAnswers = answers.Where(a => !IsInvalidAnswer(a)).ToList();
+        var answersByQuestion = scoredAnswers.GroupBy(a => a.ReadingQuestionId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var hardest = new List<ReadingHardestQuestion>();
@@ -206,7 +207,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
         }
 
         // Distractor histogram — only wrong answers with a category set
-        var histogram = answers
+        var histogram = scoredAnswers
             .Where(a => a.IsCorrect != true && a.SelectedDistractorCategory.HasValue)
             .GroupBy(a => new { a.ReadingQuestionId, Category = a.SelectedDistractorCategory!.Value })
             .Select(g => new ReadingDistractorHistogramRow(
@@ -232,7 +233,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
         // take the furthest cumulative timestamp and divide by answered count,
         // then average across submitted attempts.
         var perAttemptTimes = new List<double>();
-        foreach (var grp in answers.GroupBy(a => a.ReadingAttemptId))
+        foreach (var grp in scoredAnswers.GroupBy(a => a.ReadingAttemptId))
         {
             var answered = grp.Count(a => a.TotalElapsedMs.HasValue);
             if (answered == 0) continue;
@@ -272,6 +273,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
         IReadOnlyDictionary<string, string> partCodeById)
     {
         var ranked = submitted
+            .Where(a => !a.RequiresAdminReview)
             .Where(a => a.RawScore.HasValue)
             .OrderByDescending(a => a.RawScore!.Value)
             .Select(a => a.Id)
@@ -345,6 +347,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             : await db.ReadingAnswers.AsNoTracking()
                 .Where(a => bestAttemptIds.Contains(a.ReadingAttemptId))
                 .ToListAsync(ct);
+        var scoredAnswers = answers.Where(a => !IsInvalidAnswer(a)).ToList();
 
         // Part averages across the cohort's best attempts.
         var partAverages = parts
@@ -357,7 +360,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
                     .Select(q => q.Id)
                     .ToHashSet(StringComparer.Ordinal);
                 var maxRaw = questions.Where(q => q.ReadingPartId == part.Id).Sum(q => q.Points);
-                var perAttempt = answers
+                var perAttempt = scoredAnswers
                     .Where(a => partQuestionIds.Contains(a.ReadingQuestionId))
                     .GroupBy(a => a.ReadingAttemptId)
                     .Select(g => new
@@ -375,7 +378,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             .ToList();
 
         // Skill averages across the cohort.
-        var skillAverages = answers
+        var skillAverages = scoredAnswers
             .Select(a => new
             {
                 Answer = a,
@@ -393,7 +396,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
             .ToList();
 
         // Cohort hardest questions + top distractors (best attempts only).
-        var answersByQuestion = answers.GroupBy(a => a.ReadingQuestionId)
+        var answersByQuestion = scoredAnswers.GroupBy(a => a.ReadingQuestionId)
             .ToDictionary(g => g.Key, g => g.ToList());
         var hardest = new List<ReadingHardestQuestion>();
         foreach (var q in questions)
@@ -409,7 +412,7 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
         }
         var hardestTop = hardest.OrderBy(h => h.CorrectRate).Take(10).ToList();
 
-        var topDistractors = answers
+        var topDistractors = scoredAnswers
             .Where(a => a.IsCorrect != true && a.SelectedDistractorCategory.HasValue)
             .GroupBy(a => new { a.ReadingQuestionId, Category = a.SelectedDistractorCategory!.Value })
             .Select(g => new ReadingDistractorHistogramRow(
@@ -466,9 +469,13 @@ public sealed class ReadingAnalyticsService(LearnerDbContext db) : IReadingAnaly
 
     private static bool HasOwnerConvertedScore(ReadingAttempt? a)
         => a is not null
+            && a.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
             && a.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
             && a.ScoreConversionPassed.HasValue;
+
+    private static bool IsInvalidAnswer(ReadingAnswer answer)
+        => ReadingGradingService.IsIntegrityReviewReason(answer.MissReason);
 
     private static int? EffectiveScaled(ReadingAttempt a)
         => !HasOwnerConvertedScore(a)

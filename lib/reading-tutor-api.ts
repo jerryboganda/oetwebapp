@@ -102,6 +102,7 @@ export interface ReadingPrivilegedSection {
   accuracyPercent: number | null;
   correctCount: number;
   incorrectCount: number;
+  invalidCount: number;
   unansweredCount: number;
 }
 
@@ -114,6 +115,7 @@ export interface ReadingPrivilegedQuestion {
   skillTag: string | null;
   userAnswer: unknown;
   isCorrect: boolean | null;
+  isInvalid: boolean;
   pointsEarned: number;
   maxPoints: number;
   correctAnswer: unknown;
@@ -135,6 +137,9 @@ export interface ReadingPrivilegedAttemptReview {
   userId: string;
   status: string;
   mode: string;
+  requiresAdminReview: boolean;
+  adminReviewReason: string | null;
+  invalidCount: number;
   startedAt: string;
   submittedAt: string | null;
   gradedRawScore: number | null;

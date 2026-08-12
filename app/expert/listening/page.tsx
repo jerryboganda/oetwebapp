@@ -187,6 +187,11 @@ export default function ExpertListeningAttemptsPage() {
                       <span className="ml-2 text-xs text-muted">
                         ({item.scaledScore} scaled)
                       </span>
+                      {item.requiresAdminReview && (
+                        <Badge variant="warning" className="ml-2">
+                          Admin review
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {item.hasFeedback ? (

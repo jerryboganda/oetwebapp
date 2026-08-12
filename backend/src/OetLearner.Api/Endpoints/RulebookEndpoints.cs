@@ -217,6 +217,8 @@ public static class RulebookEndpoints
             (RuleKind.Writing, AiTaskMode.Summarise) => AiFeatureCodes.SummarisePassage,
             (RuleKind.Writing, AiTaskMode.GenerateFeedback) => AiFeatureCodes.WritingCoachExplain,
             (RuleKind.Writing, AiTaskMode.GenerateContent) => AiFeatureCodes.AdminContentGeneration,
+            (RuleKind.Reading, AiTaskMode.AnswerReadingPassageQuestion) => AiFeatureCodes.ReadingExplanation,
+            (RuleKind.Listening, AiTaskMode.AnswerListeningQuestion) => AiFeatureCodes.ListeningExplanation,
             (RuleKind.Speaking, AiTaskMode.Score) => AiFeatureCodes.SpeakingGrade,
             (RuleKind.Speaking, AiTaskMode.Coach) => AiFeatureCodes.PronunciationTip,
             (RuleKind.Speaking, AiTaskMode.Correct) => AiFeatureCodes.PronunciationTip,

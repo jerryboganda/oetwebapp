@@ -32,8 +32,8 @@ describe('mockReportToStatementOfResults', () => {
       report: {
         ...base,
         subTests: [
-          { id: 'listening', name: 'Listening', score: '9999', rawScore: '', scaledScore: 9999, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
-          { id: 'reading', name: 'Reading', score: '-50', rawScore: '', scaledScore: -50, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
+          { id: 'listening', name: 'Listening', score: '9999', rawScore: '42/42', scaledScore: 9999, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
+          { id: 'reading', name: 'Reading', score: '-50', rawScore: '0/42', scaledScore: -50, scoreConversionTableVersionKey: 'lr-v1', scoreConversionPassed: true, color: '', bg: '' },
           { id: 'speaking', name: 'Speaking', score: '347', rawScore: '', color: '', bg: '' }, // rounds to 350
           { id: 'writing', name: 'Writing', score: 'abc', rawScore: '', color: '', bg: '' }, // non-numeric -> 0
         ],
@@ -121,5 +121,17 @@ describe('isMockReportStatementOfResultsReady', () => {
           : subtest,
       ),
     })).toBe(false);
+  });
+
+  it('blocks Listening/Reading conversion when the raw maximum is a subset', () => {
+    const report: MockReport = {
+      ...base,
+      subTests: base.subTests.map((subtest) => subtest.id === 'reading'
+        ? { ...subtest, rawScore: '5/10' }
+        : subtest),
+    };
+
+    expect(isMockReportStatementOfResultsReady(report)).toBe(false);
+    expect(mockReportToStatementOfResults({ report }).scores.reading).toBe(0);
   });
 });

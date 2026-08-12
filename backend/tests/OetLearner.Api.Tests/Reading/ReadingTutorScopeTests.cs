@@ -174,4 +174,27 @@ public class ReadingTutorScopeTests
         Assert.False(ReadingFeedbackScopeExtensions.IsValidScope("0"));
         Assert.False(ReadingFeedbackScopeExtensions.IsValidScope("99"));
     }
+
+    [Fact]
+    public async Task ExpertAccess_fails_closed_for_inactive_expert_profile()
+    {
+        var (db, tutor) = Build();
+        db.ExpertUsers.Add(new ExpertUser
+        {
+            Id = "expert-inactive",
+            Role = ApplicationUserRoles.Expert,
+            DisplayName = "Inactive Expert",
+            Email = "inactive-expert@test.com",
+            IsActive = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => tutor.CanExpertAccessAttemptAsync(
+            "attempt-1", "expert-inactive", CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, error.StatusCode);
+        Assert.Equal("account_suspended", error.ErrorCode);
+        await db.DisposeAsync();
+    }
 }

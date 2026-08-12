@@ -356,7 +356,11 @@ function ReadingSecondaryDashboard({
                   <span className="font-semibold text-navy">{result.paperTitle}</span>
                   <span className="mt-1 block text-xs text-muted">
                     {result.rawScore}/{result.maxRawScore}
-                    {result.scaledScore == null ? ' practice' : ` · ${result.scaledScore}/500 · ${result.gradeLetter}`}
+                    {result.requiresAdminReview
+                      ? ' · admin review pending'
+                      : result.scaledScore == null
+                        ? ' practice'
+                        : ` · ${result.scaledScore}/500 · ${result.gradeLetter}`}
                   </span>
                 </Link>
               </li>

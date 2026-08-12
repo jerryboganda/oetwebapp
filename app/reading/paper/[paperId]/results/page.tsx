@@ -3,14 +3,16 @@
 import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, CheckCircle2, FileText, MessageSquare, MinusCircle, RefreshCw, Target, XCircle } from 'lucide-react';
+import { AlertTriangle, BookOpen, CheckCircle2, FileText, MessageSquare, MinusCircle, RefreshCw, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { GroundedReadingPassageQna } from '@/components/domain/results/grounded-reading-passage-qna';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
+import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { formatAnswerValue } from '@/lib/results/format-answer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,7 @@ import { readErrorMessage } from '@/lib/read-error-message';
  * it — never fabricated. Answer keys / explanations are gated server-side.
  */
 type ReviewItem = ReadingAttemptReviewDto['items'][number] & {
+  passageId?: string | null;
   correctAnswer?: string | null;
   explanationMarkdown?: string | null;
   selectedDistractorCategory?: string | null;
@@ -199,7 +202,8 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
   const raw = review?.attempt.rawScore ?? 0;
   const scaled = review?.attempt.scaledScore ?? null;
-  const hasApprovedConversion = scaled !== null
+  const hasApprovedConversion = review?.attempt.maxRawScore === 42
+    && scaled !== null
     && review?.attempt.scoreConversionTableVersionKey != null
     && review?.attempt.passed != null;
 
@@ -207,9 +211,10 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
     (acc, part) => ({
       correct: acc.correct + part.correctCount,
       incorrect: acc.incorrect + part.incorrectCount,
+      invalid: acc.invalid + (part.invalidCount ?? 0),
       unanswered: acc.unanswered + part.unansweredCount,
     }),
-    { correct: 0, incorrect: 0, unanswered: 0 },
+    { correct: 0, incorrect: 0, invalid: 0, unanswered: 0 },
   );
   const gradedItems = partTotals.correct + partTotals.incorrect + partTotals.unanswered;
   const accuracyPct = gradedItems > 0 ? (partTotals.correct / gradedItems) * 100 : 0;
@@ -272,6 +277,13 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
         {review ? (
           <>
+            {review.attempt.requiresAdminReview || partTotals.invalid > 0 ? (
+              <InlineAlert variant="warning" data-testid="reading-admin-review-warning">
+                One or more Reading answers were invalid for automated marking and require administrator review.
+                The affected item is not treated as an ordinary incorrect answer, and no converted score is issued.
+                {review.attempt.adminReviewReason ? ` Reason: ${review.attempt.adminReviewReason}.` : ''}
+              </InlineAlert>
+            ) : null}
             <LearnerPageHero
               eyebrow="Reading Review"
               icon={BookOpen}
@@ -316,6 +328,9 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               stats={[
                 { label: 'Correct', value: partTotals.correct, tone: 'success', icon: <CheckCircle2 /> },
                 { label: 'Incorrect', value: partTotals.incorrect, tone: 'danger', icon: <XCircle /> },
+                ...(partTotals.invalid > 0
+                  ? [{ label: 'Invalid review', value: partTotals.invalid, tone: 'warning' as const, icon: <AlertTriangle /> }]
+                  : []),
                 { label: 'Unanswered', value: partTotals.unanswered, tone: 'warning', icon: <MinusCircle /> },
                 {
                   label: hasApprovedConversion ? 'Scaled' : 'Raw score',
@@ -337,10 +352,10 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 <ScoreBandGraph
                   rawScore={raw}
                   maxRawScore={review.attempt.maxRawScore}
-                  scaledScore={scaled}
-                  passed={review.attempt.passed}
+                  scaledScore={hasApprovedConversion ? scaled : null}
+                  passed={hasApprovedConversion ? review.attempt.passed : null}
                   grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
-                  tableVersion={review.attempt.scoreConversionTableVersionKey}
+                  tableVersion={hasApprovedConversion ? review.attempt.scoreConversionTableVersionKey : null}
                 />
               )}
             />
@@ -349,11 +364,20 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               assessment="Reading"
               rawScore={raw}
               maxRawScore={review.attempt.maxRawScore}
-              scaledScore={scaled}
-              passed={review.attempt.passed}
-              grade={review.attempt.gradeLetter}
-              tableVersion={review.attempt.scoreConversionTableVersionKey}
+              scaledScore={hasApprovedConversion ? scaled : null}
+              passed={hasApprovedConversion ? review.attempt.passed : null}
+              grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
+              tableVersion={hasApprovedConversion ? review.attempt.scoreConversionTableVersionKey : null}
               errorCode={review.attempt.scoreConversionErrorCode}
+            />
+
+            <TimeUsedSummary
+              totalMilliseconds={review.timeUsed?.totalElapsedMs ?? null}
+              sections={(review.timeUsed?.byPart ?? []).map((part) => ({
+                label: `Part ${part.partCode}`,
+                milliseconds: part.totalElapsedMs,
+              }))}
+              description="Time is reported from server-persisted attempt and answer telemetry. Unavailable telemetry is shown as not recorded."
             />
 
             <p
@@ -409,7 +433,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                       ) : null}
                     </div>
                     <p className="mt-1 text-sm text-muted">
-                      {part.correctCount} correct | {part.incorrectCount} wrong | {part.unansweredCount} unanswered
+                      {part.correctCount} correct | {part.incorrectCount} wrong | {(part.invalidCount ?? 0) > 0 ? `${part.invalidCount} invalid review | ` : ''}{part.unansweredCount} unanswered
                     </p>
                   </div>
                 ))}
@@ -431,7 +455,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                       <Badge variant="muted">{skill.totalCount} item(s)</Badge>
                     </div>
                     <p className="mt-2 text-sm text-muted">
-                      {skill.correctCount} correct | {skill.incorrectCount} wrong | {skill.unansweredCount} unanswered
+                      {skill.correctCount} correct | {skill.incorrectCount} wrong | {(skill.invalidCount ?? 0) > 0 ? `${skill.invalidCount} invalid review | ` : ''}{skill.unansweredCount} unanswered
                     </p>
                   </div>
                 ))}
@@ -511,15 +535,18 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 }
 
 function ReviewItemDetails({ attemptId, item }: { attemptId: string; item: ReviewItem }) {
-  const missReason = !item.isCorrect && item.missReason ? missReasonLabel(item.missReason) : null;
-  const distractor = !item.isCorrect && item.selectedDistractorCategory
+  const invalid = item.isInvalid === true;
+  const missReason = invalid
+    ? { title: 'Invalid for automated marking', detail: 'Multiple options were persisted for this single-answer question. An administrator must review it before any converted score can be issued.' }
+    : !item.isCorrect && item.missReason ? missReasonLabel(item.missReason) : null;
+  const distractor = !invalid && !item.isCorrect && item.selectedDistractorCategory
     ? distractorCategoryLabel(item.selectedDistractorCategory)
     : null;
-  const unanswered =
+  const unanswered = !invalid && (
     item.userAnswer === null ||
     item.userAnswer === undefined ||
     item.userAnswer === '' ||
-    (Array.isArray(item.userAnswer) && item.userAnswer.length === 0);
+    (Array.isArray(item.userAnswer) && item.userAnswer.length === 0));
   const timeMs = typeof item.totalElapsedMs === 'number' && item.totalElapsedMs > 0
     ? item.totalElapsedMs
     : typeof item.elapsedMs === 'number' && item.elapsedMs > 0
@@ -532,7 +559,8 @@ function ReviewItemDetails({ attemptId, item }: { attemptId: string; item: Revie
       label={`Part ${item.partCode} · Question ${item.displayOrder}`}
       stem={item.stem}
       isCorrect={item.isCorrect}
-      unanswered={!item.isCorrect && unanswered}
+      invalid={invalid}
+      unanswered={!invalid && !item.isCorrect && unanswered}
       yourAnswer={formatAnswerValue(item.userAnswer)}
       correctAnswer={item.correctAnswer ?? null}
       pointsEarned={item.pointsEarned}
@@ -567,7 +595,8 @@ function ReviewItemDetails({ attemptId, item }: { attemptId: string; item: Revie
           <p className="mt-1 text-sm leading-6 text-navy dark:text-white/90">{item.evidenceSentence}</p>
         </div>
       ) : null}
-      <GroundedReadingExplanation attemptId={attemptId} item={item} unanswered={unanswered} />
+      <GroundedReadingExplanation attemptId={attemptId} item={item} unanswered={unanswered || invalid} />
+      {item.passageId ? <GroundedReadingPassageQna attemptId={attemptId} passageId={item.passageId} /> : null}
     </AnswerComparisonCard>
   );
 }

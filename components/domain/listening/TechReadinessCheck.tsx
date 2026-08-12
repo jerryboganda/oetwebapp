@@ -20,12 +20,12 @@ export interface TechReadinessCheckProps {
   /** Every scored audio asset in the session, not only the sound-check clip. */
   audioUrls?: string[];
   onReady: (result: { audioOk: boolean; durationMs: number }) => void;
-  onSkip?: () => void;
 }
 
-export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady, onSkip }: TechReadinessCheckProps) {
+export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: TechReadinessCheckProps) {
   const [status, setStatus] = useState<ProbeStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [volume, setVolume] = useState(0.7);
   const cleanupRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
 
@@ -42,7 +42,7 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady, onS
     cleanupRef.current?.();
     const startedAt = Date.now();
     try {
-      await playProbe(audioProbeUrl, (cleanup) => {
+      await playProbe(audioProbeUrl, volume, (cleanup) => {
         cleanupRef.current = cleanup;
       });
       await verifyScoredAudioAssets(audioUrls);
@@ -70,6 +70,23 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady, onS
         Before the test begins, we&apos;ll play a short audio clip to confirm your speakers or
         headphones are working. You will not be able to replay the test audio later.
       </p>
+      <label className="mb-4 block max-w-sm text-sm text-muted" htmlFor="listening-sound-check-volume">
+        <span className="mb-2 flex items-center justify-between gap-3">
+          <span className="font-semibold text-navy">Sound-check volume</span>
+          <span>{Math.round(volume * 100)}%</span>
+        </span>
+        <input
+          id="listening-sound-check-volume"
+          aria-label="Sound-check volume"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={volume}
+          onChange={(event) => setVolume(Number(event.target.value))}
+          className="w-full accent-primary"
+        />
+      </label>
       <div className="flex items-center gap-3">
         {status === 'idle' && (
           <Button variant="primary" onClick={runProbe}>
@@ -93,9 +110,6 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady, onS
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={runProbe}>Retry</Button>
-              {onSkip && (
-                <Button variant="ghost" onClick={onSkip}>Continue anyway</Button>
-              )}
             </div>
           </div>
         )}
@@ -152,10 +166,15 @@ async function verifyAudioAsset(url: string) {
   }
 }
 
-async function playProbe(audioProbeUrl: string | undefined, setCleanup: (cleanup: () => void) => void) {
+async function playProbe(
+  audioProbeUrl: string | undefined,
+  volume: number,
+  setCleanup: (cleanup: () => void) => void,
+) {
   if (audioProbeUrl) {
     const audio = new Audio(audioProbeUrl);
     audio.preload = 'auto';
+    audio.volume = Math.max(0, Math.min(1, volume));
     let timeoutId: number | null = null;
     setCleanup(() => {
       if (timeoutId !== null) window.clearTimeout(timeoutId);
@@ -181,7 +200,7 @@ async function playProbe(audioProbeUrl: string | undefined, setCleanup: (cleanup
   const oscillator = context.createOscillator();
   const gain = context.createGain();
   oscillator.frequency.value = 660;
-  gain.gain.value = 0.04;
+  gain.gain.value = 0.04 * Math.max(0, Math.min(1, volume));
   oscillator.connect(gain);
   gain.connect(context.destination);
   setCleanup(() => {

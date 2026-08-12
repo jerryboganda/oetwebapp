@@ -26,10 +26,11 @@ at repo root; for **rollout state** see `PROGRESS-LISTENING-V2.md`.
 
 ## Scoring path — invariant
 
-> Scaled scores ALWAYS go through `OetScoring.OetRawToScaled`.
-> Inline math (`* 350`, `/ 42`, `* 500`, `* 8.33`) anywhere in
-> `backend/src/OetLearner.Api/Services/Listening/` fails CI via
-> [`ListeningScoringPathAuditTest`](../../backend/tests/OetLearner.Api.Tests/Listening/ListeningScoringPathAuditTest.cs).
+> Raw marks are deterministic and stored with the attempt. Scaled scores and
+> pass status come only from a complete, owner-approved, versioned conversion
+> table captured on that attempt. If the table is unavailable, the UI exposes
+> raw evidence and an explicit unavailable state; no formula, interpolation,
+> or synthetic fallback is permitted.
 
 ## Related docs
 

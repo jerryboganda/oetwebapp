@@ -127,11 +127,78 @@ public static class ListeningAuthoringAdminEndpoints
                 .FirstOrDefaultAsync(ct);
             if (paper is null) return Results.NotFound();
 
+            var questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
+                .Where(asset => asset.PaperId == paperId
+                    && asset.Role == PaperAssetRole.QuestionPaper
+                    && asset.IsPrimary
+                    && asset.MediaAsset != null
+                    && asset.MediaAsset.Status == MediaAssetStatus.Ready)
+                .Include(asset => asset.MediaAsset)
+                .OrderBy(asset => asset.DisplayOrder)
+                .ThenBy(asset => asset.Part)
+                .Select(asset => new
+                {
+                    asset.Id,
+                    asset.Part,
+                    title = asset.Title ?? asset.MediaAsset!.OriginalFilename,
+                    downloadPath = $"/v1/media/{asset.MediaAssetId}/content",
+                })
+                .ToListAsync(ct);
+
+            var audioAssets = await db.ContentPaperAssets.AsNoTracking()
+                .Where(asset => asset.PaperId == paperId
+                    && asset.Role == PaperAssetRole.Audio
+                    && asset.IsPrimary
+                    && asset.MediaAsset != null
+                    && asset.MediaAsset.Status == MediaAssetStatus.Ready)
+                .Include(asset => asset.MediaAsset)
+                .OrderBy(asset => asset.DisplayOrder)
+                .ThenBy(asset => asset.Part)
+                .Select(asset => new
+                {
+                    asset.Id,
+                    asset.Part,
+                    title = asset.Title ?? asset.MediaAsset!.OriginalFilename,
+                    durationSeconds = asset.MediaAsset!.DurationSeconds,
+                    downloadPath = $"/v1/media/{asset.MediaAssetId}/content",
+                })
+                .ToListAsync(ct);
+
             var structure = await svc.GetStructureAsync(paperId, ct);
+            var extracts = await svc.GetExtractsAsync(paperId, ct);
             return Results.Ok(new
             {
-                paper,
+                paper = new
+                {
+                    paper.Id,
+                    paper.Title,
+                    paper.SubtestCode,
+                    paper.EstimatedDurationMinutes,
+                    questionPaperAssets,
+                    audioAssets,
+                },
                 counts = structure.Counts,
+                // Learner-safe extract metadata lets authors verify the
+                // candidate-facing context, speakers, and timing without
+                // exposing answer keys, variants, rationales, or distractors.
+                extracts = extracts.Select(extract => new
+                {
+                    extract.PartCode,
+                    extract.DisplayOrder,
+                    extract.Kind,
+                    extract.Title,
+                    extract.AccentCode,
+                    speakers = extract.Speakers.Select(speaker => new
+                    {
+                        speaker.Role,
+                        speaker.Gender,
+                        speaker.Accent,
+                    }),
+                    extract.AudioStartMs,
+                    extract.AudioEndMs,
+                    extract.TimeLimitSeconds,
+                    extract.ContextIntro,
+                }),
                 questions = structure.Questions.Select(q => new
                 {
                     q.Id,

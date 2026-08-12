@@ -496,6 +496,7 @@ public static class ReadingLearnerEndpoints
                     result.ScoreConversionPassed,
                     result.CorrectCount,
                     result.IncorrectCount,
+                    result.InvalidCount,
                     result.UnansweredCount,
                     reviewRoute = string.IsNullOrWhiteSpace(paperId)
                         ? null
@@ -543,6 +544,7 @@ public static class ReadingLearnerEndpoints
             {
                 attempt.Id,
                 attempt.PaperId,
+                serverNow = now,
                 status = attempt.Status.ToString(),
                 mode = attempt.Mode.ToString(),
                 scopeQuestionIds = scopeIds,
@@ -550,6 +552,8 @@ public static class ReadingLearnerEndpoints
                 attempt.DeadlineAt,
                 attempt.SubmittedAt,
                 attempt.RawScore,
+                requiresAdminReview = attempt.RequiresAdminReview,
+                adminReviewReason = attempt.RequiresAdminReview ? attempt.AdminReviewReason : null,
                 scaledScore = hasApprovedConversion ? attempt.ScaledScore : null,
                 attempt.MaxRawScore,
                 partADeadlineAt = partADeadline,
@@ -697,12 +701,14 @@ public static class ReadingLearnerEndpoints
                     .Select(q =>
                     {
                         answers.TryGetValue(q.Id, out var answer);
-                        var isCorrect = answer?.IsCorrect ?? false;
+                        var isInvalid = ReadingGradingService.IsIntegrityReviewReason(answer?.MissReason);
+                        var isCorrect = answer?.IsCorrect == true;
                         var includeExplanation = showExplanations
                             && (!explanationsOnlyIfWrong || !isCorrect);
                         return new ReadingReviewItem
                         {
                             QuestionId = q.Id,
+                            PassageId = q.ReadingTextId,
                             PartCode = part.PartCode.ToString(),
                             DisplayOrder = q.DisplayOrder,
                             QuestionType = q.QuestionType.ToString(),
@@ -710,6 +716,7 @@ public static class ReadingLearnerEndpoints
                             SkillTag = q.SkillTag,
                             UserAnswer = SafeParseJson(answer?.UserAnswerJson),
                             IsCorrect = isCorrect,
+                            IsInvalid = isInvalid,
                             PointsEarned = answer?.PointsEarned ?? 0,
                             MaxPoints = q.Points,
                             CorrectAnswer = showCorrectAnswer ? DecodeCorrectAnswer(q.CorrectAnswerJson) : null,
@@ -727,7 +734,7 @@ public static class ReadingLearnerEndpoints
                 .ToList();
 
             var clusters = items
-                .Where(i => !i.IsCorrect)
+                .Where(i => !i.IsCorrect && !i.IsInvalid)
                 .GroupBy(i => string.IsNullOrWhiteSpace(i.SkillTag) ? i.QuestionType : i.SkillTag)
                 .Select(g => new
                 {
@@ -746,28 +753,65 @@ public static class ReadingLearnerEndpoints
                 .ToList();
 
             var partBreakdown = parts
-                .Select(part =>
-                {
-                    var partCode = part.PartCode.ToString();
-                    var partItems = items.Where(i => i.PartCode == partCode).ToList();
-                    var maxRawScore = part.Questions
-                        .Where(q => scopedQuestionIds is null || scopedQuestionIds.Contains(q.Id))
-                        .Sum(q => q.Points);
+                    .Select(part =>
+                    {
+                        var partCode = part.PartCode.ToString();
+                        var partItems = items.Where(i => i.PartCode == partCode).ToList();
+                        var scoredItems = partItems.Where(i => !i.IsInvalid).ToList();
+                        var maxRawScore = part.Questions
+                            .Where(q => scopedQuestionIds is null || scopedQuestionIds.Contains(q.Id))
+                            .Sum(q => q.Points);
                     return new
                     {
                         partCode,
                         rawScore = partItems.Sum(i => i.PointsEarned),
                         maxRawScore,
                         correctCount = partItems.Count(i => i.IsCorrect),
-                        incorrectCount = partItems.Count(i => !i.IsCorrect && i.UserAnswer is not null),
+                        incorrectCount = partItems.Count(i => !i.IsCorrect && !i.IsInvalid && i.UserAnswer is not null),
+                        invalidCount = partItems.Count(i => i.IsInvalid),
                         unansweredCount = partItems.Count(i => i.UserAnswer is null),
-                        accuracyPercent = partItems.Count > 0
-                            ? Math.Round(100.0 * partItems.Count(i => i.IsCorrect) / partItems.Count, 1)
+                        accuracyPercent = scoredItems.Count > 0
+                            ? Math.Round(100.0 * scoredItems.Count(i => i.IsCorrect) / scoredItems.Count, 1)
                             : 0.0,
                     };
                 })
                 .Where(part => scopedQuestionIds is null || part.maxRawScore > 0)
                 .ToList();
+
+            var recordedPartTimes = partBreakdown
+                .Select(part =>
+                {
+                    var totalElapsedMs = items
+                        .Where(item => item.PartCode == part.partCode)
+                        .Select(item => item.TotalElapsedMs ?? item.ElapsedMs)
+                        .Where(value => value is > 0)
+                        .Select(value => value!.Value)
+                        .Sum(value => (long)value);
+                    return new
+                    {
+                        partCode = part.partCode,
+                        totalElapsedMs = totalElapsedMs > int.MaxValue
+                            ? int.MaxValue
+                            : totalElapsedMs > 0 ? (int?)totalElapsedMs : null,
+                    };
+                })
+                .ToList();
+            int? recordedTotalElapsedMs;
+            if (attempt.TotalElapsedMs is > 0)
+            {
+                recordedTotalElapsedMs = attempt.TotalElapsedMs;
+            }
+            else
+            {
+                var summedPartTime = recordedPartTimes
+                    .Select(part => part.totalElapsedMs)
+                    .Where(value => value is > 0)
+                    .Select(value => value!.Value)
+                    .Sum(value => (long)value);
+                recordedTotalElapsedMs = summedPartTime > int.MaxValue
+                    ? int.MaxValue
+                    : summedPartTime > 0 ? (int?)summedPartTime : null;
+            }
 
             var skillBreakdown = items
                 .GroupBy(i => string.IsNullOrWhiteSpace(i.SkillTag) ? i.QuestionType : i.SkillTag)
@@ -775,7 +819,8 @@ public static class ReadingLearnerEndpoints
                 {
                     label = g.Key,
                     correctCount = g.Count(i => i.IsCorrect),
-                    incorrectCount = g.Count(i => !i.IsCorrect && i.UserAnswer is not null),
+                    incorrectCount = g.Count(i => !i.IsCorrect && !i.IsInvalid && i.UserAnswer is not null),
+                    invalidCount = g.Count(i => i.IsInvalid),
                     unansweredCount = g.Count(i => i.UserAnswer is null),
                     totalCount = g.Count(),
                 })
@@ -818,11 +863,19 @@ public static class ReadingLearnerEndpoints
                     attempt.SubmittedAt,
                     attempt.RawScore,
                     attempt.MaxRawScore,
+                    requiresAdminReview = attempt.RequiresAdminReview,
+                    adminReviewReason = attempt.RequiresAdminReview ? attempt.AdminReviewReason : null,
                     scaledScore = hasApprovedConversion ? attempt.ScaledScore : null,
                     gradeLetter,
                     passed = hasApprovedConversion ? attempt.ScoreConversionPassed : null,
                     scoreConversionTableVersionKey = hasApprovedConversion ? attempt.ScoreConversionTableVersionKey : null,
-                    scoreConversionErrorCode = hasApprovedConversion ? null : "score_conversion_unavailable",
+                    scoreConversionErrorCode = hasApprovedConversion
+                        ? null
+                        : attempt.RequiresAdminReview
+                            ? attempt.Answers.Any(a => a.MissReason == ReadingGradingService.MultipleSelectionReviewReason)
+                                ? ReadingGradingService.MultipleSelectionReviewReason
+                                : ReadingGradingService.QuestionIntegrityReviewReason
+                            : "score_conversion_unavailable",
                     partADeadlineAt = partADeadline,
                     partBCDeadlineAt = partBCDeadline,
                     partABreakAvailable = attempt.Mode == ReadingAttemptMode.Exam,
@@ -849,6 +902,11 @@ public static class ReadingLearnerEndpoints
                 clusters,
                 partBreakdown,
                 skillBreakdown,
+                timeUsed = new
+                {
+                    totalElapsedMs = recordedTotalElapsedMs,
+                    byPart = recordedPartTimes,
+                },
                 feedback,
             });
         });
@@ -1682,7 +1740,9 @@ public static class ReadingLearnerEndpoints
     }
 
     private static bool HasApprovedScoreConversion(ReadingAttempt attempt)
-        => attempt.ScaledScore.HasValue
+        => !attempt.RequiresAdminReview
+            && attempt.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
+            && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
 
@@ -1711,6 +1771,8 @@ public static class ReadingLearnerEndpoints
     private sealed class ReadingReviewItem
     {
         public string QuestionId { get; init; } = default!;
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? PassageId { get; init; }
         public string PartCode { get; init; } = default!;
         public int DisplayOrder { get; init; }
         public string QuestionType { get; init; } = default!;
@@ -1718,6 +1780,7 @@ public static class ReadingLearnerEndpoints
         public string? SkillTag { get; init; }
         public object? UserAnswer { get; init; }
         public bool IsCorrect { get; init; }
+        public bool IsInvalid { get; init; }
         public int PointsEarned { get; init; }
         public int MaxPoints { get; init; }
         // Wave 1 — post-submit review fields. CorrectAnswer / ExplanationMarkdown

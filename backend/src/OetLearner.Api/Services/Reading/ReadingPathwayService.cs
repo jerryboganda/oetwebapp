@@ -72,6 +72,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
             .OrderByDescending(a => a.SubmittedAt)
             .Select(a => new
             {
+                a.MaxRawScore,
                 a.ScaledScore,
                 a.SubmittedAt,
                 a.ScoreConversionTableVersionKey,
@@ -86,7 +87,8 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
                 && a.Status == ReadingAttemptStatus.Submitted, ct);
 
         var approvedExamAttempts = examAttempts
-            .Where(a => a.ScaledScore.HasValue
+            .Where(a => a.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
+                && a.ScaledScore.HasValue
                 && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
                 && a.ScoreConversionPassed.HasValue)
             .ToList();
@@ -150,6 +152,7 @@ public sealed class ReadingPathwayService(LearnerDbContext db) : IReadingPathway
             : (await db.ReadingAttempts.AsNoTracking()
                 .Where(attempt => mockContentAttemptIds.Contains(attempt.Id)
                     && attempt.Status == ReadingAttemptStatus.Submitted
+                    && attempt.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
                     && attempt.ScaledScore.HasValue
                     && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
                     && attempt.ScoreConversionPassed == true)

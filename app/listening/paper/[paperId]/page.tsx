@@ -28,14 +28,19 @@ import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
+import { TechReadinessCheck } from '@/components/domain/listening/TechReadinessCheck';
 import { QuestionPaperPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
+import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
+import { listeningV2Api } from '@/lib/listening/v2-api';
+import { submitAudioCheck } from '@/lib/listening-pathway-api';
 import {
   advanceListeningSection,
   createListeningPaperAnnotation,
   deleteListeningPaperAnnotation,
   getListeningPaperAnnotations,
   getListeningSession,
+  recordListeningIntegrityEvent,
   saveListeningAnswer,
   startListeningAttempt,
   submitListeningAttempt,
@@ -60,6 +65,7 @@ import {
   type ListeningExamSubSection,
 } from '@/lib/listening-exam-sections';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
+import { correctedNowMs, readServerClockOffsetMs } from '@/lib/server-clock';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
 type AnswerSaveResult = 'server' | 'offline';
@@ -131,6 +137,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [techReadiness, setTechReadiness] = useState<{ audioOk: boolean; durationMs: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,9 +152,47 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const dirtyQuestionIds = useRef<Set<string>>(new Set());
   const serverAnswers = useRef<Record<string, string | null>>({});
   const answerBaseValues = useRef<Record<string, string | null>>({});
+  const serverClockOffsetMs = useRef(0);
   // Guards the advance pipeline so a Next-click racing the timer's onExpire
   // cannot fire two advances (and two backend section-cursor writes).
   const advanceInFlight = useRef(false);
+
+  const syncServerClock = useCallback((serverNow: string | null | undefined) => {
+    serverClockOffsetMs.current = readServerClockOffsetMs(serverNow);
+  }, []);
+  const correctedClockNow = useCallback(
+    () => correctedNowMs(serverClockOffsetMs.current),
+    [],
+  );
+
+  const logIntegrityEvent = useCallback((
+    eventType: Parameters<typeof recordListeningIntegrityEvent>[1],
+    details?: Record<string, unknown>,
+  ) => {
+    if (!attempt?.attemptId) return;
+    void recordListeningIntegrityEvent(
+      attempt.attemptId,
+      eventType,
+      details ? JSON.stringify(details) : undefined,
+    ).catch(() => undefined);
+  }, [attempt?.attemptId]);
+
+  useEffect(() => {
+    if (!attempt?.attemptId || typeof document === 'undefined') return;
+    const logVisibility = () => logIntegrityEvent(
+      document.visibilityState === 'hidden' ? 'page_hidden' : 'page_visible',
+    );
+    const onBlur = () => logIntegrityEvent('window_blur');
+    const onFocus = () => logIntegrityEvent('window_focus');
+    document.addEventListener('visibilitychange', logVisibility);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', logVisibility);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [attempt?.attemptId, logIntegrityEvent]);
 
   const subSections = useMemo<ListeningExamSubSection[]>(
     () => (session ? buildListeningExamSubSections(session) : []),
@@ -156,6 +201,18 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const activeSubSection = subSections[currentIndex] ?? null;
   const isLastSection = subSections.length > 0 && currentIndex >= subSections.length - 1;
   const onePlayOnly = session?.modePolicy.onePlayOnly ?? true;
+  const allSectionsAudioReady = subSections.length > 0
+    && subSections.every((subSection) => Boolean(subSection.audioUrl));
+  const scoredAudioUrls = useMemo(() => {
+    const urls = [
+      session?.paper.audioUrl ?? null,
+      ...Object.values(session?.paper.audioUrlByPart ?? {}),
+      ...(session?.paper.extracts ?? []).map((extract) => extract.audioUrl ?? null),
+    ];
+    return [...new Set(urls
+      .filter((url): url is string => Boolean(url?.trim()))
+      .map((url) => url.trim()))];
+  }, [session?.paper.audioUrl, session?.paper.audioUrlByPart, session?.paper.extracts]);
 
   useEffect(() => () => {
     Object.values(saveTimers.current).forEach(clearTimeout);
@@ -191,13 +248,20 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     setLoading(true);
     setError(null);
     setContentLockedMessage(null);
+    setTechReadiness(null);
     try {
       const loaded = await getListeningSession(paperId, {
         mode,
         attemptId: resumeAttemptId || undefined,
       });
       setSession(loaded);
+      syncServerClock(loaded.serverNow ?? loaded.attempt?.serverNow);
       if (loaded.attempt) {
+        const loadedSections = buildListeningExamSubSections(loaded);
+        const loadedCursor = Math.max(0, loaded.attempt.sectionCursor ?? 0);
+        setCurrentIndex(loadedSections.length > 0
+          ? Math.min(loadedCursor, loadedSections.length - 1)
+          : 0);
         setAttempt(loaded.attempt);
         const restored: Record<string, string> = {};
         for (const [questionId, value] of Object.entries(loaded.attempt.answers ?? {})) {
@@ -219,18 +283,30 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     } finally {
       setLoading(false);
     }
-  }, [mode, paperId, resumeAttemptId]);
+  }, [mode, paperId, resumeAttemptId, syncServerClock]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const start = useCallback(async () => {
+    const readiness = techReadiness;
+    if (!readiness?.audioOk) {
+      setError('Complete the audio readiness check before starting this strict Listening attempt.');
+      return;
+    }
     setStarting(true);
     setError(null);
     setContentLockedMessage(null);
     try {
+      await submitAudioCheck({ outcome: 'clear' });
       const started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
+      syncServerClock(started.serverNow);
+      const probe = await buildTechReadinessProbe({
+        audioOk: readiness.audioOk,
+        durationMs: readiness.durationMs,
+      });
+      await listeningV2Api.recordTechReadiness(started.attemptId, probe);
       setAttempt(started);
       const restored: Record<string, string> = {};
       for (const [questionId, value] of Object.entries(started.answers ?? {})) {
@@ -241,7 +317,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
         Object.entries(started.answers ?? {}).map(([questionId, value]) => [questionId, typeof value === 'string' ? value : null]),
       );
       answerBaseValues.current = {};
-      setCurrentIndex(0);
+      setCurrentIndex(Math.max(0, started.sectionCursor ?? 0));
       dirtyQuestionIds.current.clear();
       if (mockAttemptId && mockSectionId && !resumeAttemptId) {
         const next = new URLSearchParams(search?.toString());
@@ -257,7 +333,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     } finally {
       setStarting(false);
     }
-  }, [mockAttemptId, mockSectionId, mode, paperId, resumeAttemptId, router, search]);
+  }, [mockAttemptId, mockSectionId, mode, paperId, resumeAttemptId, router, search, syncServerClock, techReadiness]);
 
   const persistAnswer = useCallback(async (
     questionId: string,
@@ -303,13 +379,14 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
       answerBaseValues.current[question.id] = serverAnswers.current[question.id] ?? null;
     }
     setAnswers((prev) => ({ ...prev, [question.id]: value }));
+    logIntegrityEvent('answer_changed', { questionId: question.id });
     dirtyQuestionIds.current.add(question.id);
     setSaveState('saving');
     if (saveTimers.current[question.id]) clearTimeout(saveTimers.current[question.id]);
     saveTimers.current[question.id] = setTimeout(() => {
       void persistAnswer(question.id, value, answerBaseValues.current[question.id]);
     }, 400);
-  }, [attempt, persistAnswer]);
+  }, [attempt, logIntegrityEvent, persistAnswer]);
 
   // Flush every dirty answer for the section we are leaving (one-way: it can
   // never be edited again, so its answers must land before we advance).
@@ -439,20 +516,25 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
       }
       const nextIndex = currentIndex + 1;
       try {
-        await advanceListeningSection(attempt.attemptId, nextIndex);
+        const advanced = await advanceListeningSection(attempt.attemptId, nextIndex);
+        logIntegrityEvent('section_transition', {
+          from: activeSubSection?.partCode ?? currentIndex,
+          to: subSections[advanced.sectionCursor]?.partCode ?? advanced.sectionCursor,
+        });
+        setCurrentIndex(advanced.sectionCursor);
       } catch (err) {
-        // The server rejects backward moves; a forward move should succeed.
-        // Surface a soft warning but still progress the client cursor so the
-        // candidate is never stuck on a section whose timer already expired.
+        // The server owns the one-way cursor. Never move the client forward
+        // after a failed cursor write, otherwise refresh could expose a section
+        // whose answers are not authoritative on the server.
         setError(readErrorMessage(err, 'Could not record section advance.'));
+        return;
       }
-      setCurrentIndex(nextIndex);
       setSaveState('idle');
     } finally {
       advanceInFlight.current = false;
       setAdvancing(false);
     }
-  }, [attempt, currentIndex, flushPendingAnswers, isLastSection, submit]);
+  }, [activeSubSection?.partCode, attempt, currentIndex, flushPendingAnswers, isLastSection, logIntegrityEvent, subSections, submit]);
 
   if (loading) {
     return <LearnerDashboardShell pageTitle="Listening"><Skeleton className="h-64" /></LearnerDashboardShell>;
@@ -496,7 +578,15 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
             sectionCount={subSections.length}
             audioAvailable={session.paper.audioAvailable}
             audioUnavailableReason={session.paper.audioUnavailableReason}
+            allSectionsAudioReady={allSectionsAudioReady}
+            audioUrls={scoredAudioUrls}
+            techReadiness={techReadiness}
+            preflight={session.preflight}
             starting={starting}
+            onTechReadinessReady={(result) => {
+              setTechReadiness(result);
+              setError(null);
+            }}
             onStart={() => void start()}
           />
         ) : subSections.length === 0 ? (
@@ -532,7 +622,12 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
                 onePlayOnly={onePlayOnly}
                 isLastSection={isLastSection}
                 advancing={advancing || submitting}
+                nowMs={correctedClockNow}
+                resumeAudioState={attempt.audioPlaybackSection === activeSubSection.partCode ? attempt.audioPlaybackState : 'not_started'}
+                resumeAudioAtMs={attempt.audioPlaybackSection === activeSubSection.partCode ? attempt.audioResumeAtMs : null}
+                resumeAudioQuestionIndex={attempt.audioPlaybackSection === activeSubSection.partCode ? attempt.audioQuestionIndex : null}
                 onAnswerChange={setAnswer}
+                onIntegrityEvent={logIntegrityEvent}
                 onAdvance={() => void advance()}
               />
             ) : null}
@@ -548,24 +643,63 @@ function IntroCard({
   sectionCount,
   audioAvailable,
   audioUnavailableReason,
+  allSectionsAudioReady,
+  audioUrls,
+  techReadiness,
+  preflight,
   starting,
+  onTechReadinessReady,
   onStart,
 }: {
   title: string;
   sectionCount: number;
   audioAvailable: boolean;
   audioUnavailableReason: string | null;
+  allSectionsAudioReady: boolean;
+  audioUrls: string[];
+  techReadiness: { audioOk: boolean; durationMs: number } | null;
+  preflight: ListeningSessionDto['preflight'];
   starting: boolean;
+  onTechReadinessReady: (result: { audioOk: boolean; durationMs: number }) => void;
   onStart: () => void;
 }) {
   return (
     <section className="rounded-[20px] border border-border bg-surface px-5 py-8 text-center shadow-sm">
       <Headphones className="mx-auto h-7 w-7 text-info" aria-hidden="true" />
       <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{title}</h1>
+      {preflight ? (
+        <div className="mx-auto mt-5 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left" data-testid="listening-preflight-summary">
+          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-muted">Confirm your test</h2>
+          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Candidate</dt>
+              <dd className="font-semibold text-navy">{preflight.candidate.displayName}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Profession</dt>
+              <dd className="font-semibold text-navy">{preflight.candidate.professionLabel ?? preflight.candidate.professionId ?? 'Not specified'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Selected test</dt>
+              <dd className="font-semibold text-navy">{preflight.selectedTest.title}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Eligibility</dt>
+              <dd className={cn('font-semibold', preflight.eligibility.eligible ? 'text-success' : 'text-danger')}>
+                {preflight.eligibility.eligible ? 'Checked — eligible to start' : preflight.eligibility.reason ?? 'Not eligible to start'}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
       <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted">
-        Each sub-section plays its own audio once and runs its own countdown. When the timer reaches zero
-        the exam moves on automatically — you can never return to a previous sub-section. Use headphones.
+        Each sub-section plays its own audio once and runs its own countdown. When the timer reaches zero,
+        a confirmation is required before the sub-section locks — you can never return to a previous
+        sub-section. Use headphones.
       </p>
+      <div className="mx-auto mt-5 max-w-2xl text-left">
+        <TechReadinessCheck audioUrls={audioUrls} onReady={onTechReadinessReady} />
+      </div>
       <p
         className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
         role="note"
@@ -577,8 +711,20 @@ function IntroCard({
           <InlineAlert variant="warning">{audioUnavailableReason ?? 'Audio is not available for this Listening paper yet.'}</InlineAlert>
         </div>
       ) : null}
+      {audioAvailable && !allSectionsAudioReady ? (
+        <div className="mx-auto mt-4 max-w-2xl">
+          <InlineAlert variant="warning">
+            One or more scored Listening sections does not have a complete audio asset yet. Starting is disabled until the paper is repaired.
+          </InlineAlert>
+        </div>
+      ) : null}
       <div className="mt-5 flex flex-col items-center gap-2">
-        <Button variant="primary" onClick={onStart} loading={starting} disabled={sectionCount === 0}>
+        <Button
+          variant="primary"
+          onClick={onStart}
+          loading={starting}
+          disabled={sectionCount === 0 || !audioAvailable || !allSectionsAudioReady || !techReadiness?.audioOk || preflight?.eligibility.eligible === false}
+        >
           <Play className="h-4 w-4" aria-hidden="true" />
           Start exam
         </Button>
@@ -703,7 +849,12 @@ function ActiveSubSectionPanel({
   onePlayOnly,
   isLastSection,
   advancing,
+  nowMs,
+  resumeAudioState,
+  resumeAudioAtMs,
+  resumeAudioQuestionIndex,
   onAnswerChange,
+  onIntegrityEvent,
   onAdvance,
 }: {
   attemptId: string;
@@ -722,37 +873,82 @@ function ActiveSubSectionPanel({
   onePlayOnly: boolean;
   isLastSection: boolean;
   advancing: boolean;
+  nowMs: () => number;
+  resumeAudioState?: 'not_started' | 'active' | 'ended';
+  resumeAudioAtMs?: number | null;
+  resumeAudioQuestionIndex?: number | null;
   onAnswerChange: (question: ListeningSessionQuestionDto, value: string) => void;
+  onIntegrityEvent: (
+    eventType: Parameters<typeof recordListeningIntegrityEvent>[1],
+    details?: Record<string, unknown>,
+  ) => void;
   onAdvance: () => void;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
-  // Auto-advance when this sub-section's countdown hits zero. Reset is implicit
-  // because the panel is remounted (keyed by attemptId:index) on every advance.
+  const [timerExpired, setTimerExpired] = useState(false);
+  const [audioFailure, setAudioFailure] = useState(false);
+  // The timed flow must stop while scored audio is buffering or stalled. The
+  // server deadline remains authoritative, so this never grants extra time;
+  // it only prevents the client timer from racing ahead while playback is
+  // unavailable.
+  const [audioBuffering, setAudioBuffering] = useState(true);
+  const isPartB = subSection.partCode === 'B';
+  const partBExtracts = isPartB
+    ? (subSection.extracts?.length ? subSection.extracts : subSection.extract ? [subSection.extract] : [])
+    : [];
+  const [partBQuestionIndex, setPartBQuestionIndex] = useState(
+    subSection.partCode === 'B'
+      ? Math.max(0, Math.min(subSection.questions.length - 1, resumeAudioQuestionIndex ?? 0))
+      : 0,
+  );
+  const activePartBQuestion = isPartB ? (subSection.questions[partBQuestionIndex] ?? null) : null;
+  const activePartBExtract = isPartB ? (partBExtracts[partBQuestionIndex] ?? null) : null;
+  const visibleQuestions = isPartB
+    ? (activePartBQuestion ? [activePartBQuestion] : [])
+    : subSection.questions;
+  const [partBExtractEnded, setPartBExtractEnded] = useState(false);
+  const canMoveToNextPartBQuestion = isPartB
+    && !timerExpired
+    && partBQuestionIndex < subSection.questions.length - 1;
+  // Timer expiry opens the same explicit boundary confirmation as the Next
+  // button. Reset is implicit because the panel is remounted on every advance.
   const expiredRef = useRef(false);
   const handleExpire = useCallback(() => {
     if (expiredRef.current) return;
     expiredRef.current = true;
-    onAdvance();
-  }, [onAdvance]);
+    setTimerExpired(true);
+    setShowConfirm(true);
+  }, []);
 
-  const { remaining } = useTimer(
+  useEffect(() => {
+    setPartBExtractEnded(false);
+  }, [partBQuestionIndex]);
+
+  useEffect(() => {
+    setAudioFailure(false);
+  }, [subSection.index, partBQuestionIndex]);
+
+  const { remaining, pause: pauseTimer, resume: resumeTimer } = useTimer(
     subSection.timeLimitSeconds > 0 ? subSection.timeLimitSeconds : LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
     'down',
     handleExpire,
     // Listening-namespaced sessionStorage key so a mid-countdown refresh
     // resumes this sub-section (and never collides with the Reading timer).
     `listening-exam:${attemptId}:${subSection.index}`,
+    nowMs,
   );
 
-  const unansweredInSection = subSection.questions.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
+  useEffect(() => {
+    if (audioBuffering) pauseTimer();
+    else resumeTimer();
+  }, [audioBuffering, pauseTimer, resumeTimer]);
+
+  const unansweredInSection = visibleQuestions.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
 
   const requestAdvance = () => {
-    if (advancing) return;
-    if (isLastSection || unansweredInSection > 0) {
-      setShowConfirm(true);
-      return;
-    }
-    onAdvance();
+    if (advancing || audioFailure) return;
+    if (isPartB && !partBExtractEnded && !timerExpired) return;
+    setShowConfirm(true);
   };
 
   // Part A is note-completion (inline gaps); Part B/C are PDF-backed answer
@@ -771,7 +967,9 @@ function ActiveSubSectionPanel({
   const pdfAssets: ReadingPdfAsset[] = questionPaperUrl
     ? [{ id: assetId, part: subSection.partCode, title: subSection.title, downloadPath: questionPaperUrl }]
     : [];
-  const showPdf = !isPartA && pdfAssets.length > 0;
+  // Part B is a one-question-at-a-time flow; showing the full PDF would
+  // expose the other five questions before their extracts are played.
+  const showPdf = !isPartA && !isPartB && pdfAssets.length > 0;
   const canAnnotate = showPdf && mediaAssetId !== null;
 
   return (
@@ -786,9 +984,19 @@ function ActiveSubSectionPanel({
       <section className="space-y-4 xl:sticky xl:top-4 xl:self-start">
         <SubSectionTimer label={subSection.label} remaining={remaining} />
         <SubSectionAudio
+          key={`${attemptId}:${subSection.index}:${partBQuestionIndex}`}
           attemptId={attemptId}
           subSection={subSection}
-          onePlayOnly={onePlayOnly}
+          cueStartMs={activePartBExtract?.audioStartMs ?? null}
+          cueEndMs={activePartBExtract?.audioEndMs ?? null}
+           onExtractComplete={isPartB ? () => setPartBExtractEnded(true) : undefined}
+           resumeState={resumeAudioState}
+           resumeAtMs={resumeAudioAtMs}
+           questionIndex={isPartB ? partBQuestionIndex : null}
+           onIntegrityEvent={onIntegrityEvent}
+           onBufferingChange={setAudioBuffering}
+           onAudioFailure={() => setAudioFailure(true)}
+           onePlayOnly={onePlayOnly}
         />
         {showPdf ? (
           <QuestionPaperPdfViewer
@@ -807,40 +1015,57 @@ function ActiveSubSectionPanel({
       <section className="rounded-[20px] border border-border bg-surface p-5 shadow-sm" aria-label={`Questions for ${subSection.label}`}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
-          <Badge variant="info">{subSection.questions.length} item{subSection.questions.length === 1 ? '' : 's'}</Badge>
+          <Badge variant="info">
+            {isPartB
+              ? `Question ${partBQuestionIndex + 1} of ${subSection.questions.length}`
+              : `${subSection.questions.length} item${subSection.questions.length === 1 ? '' : 's'}`}
+          </Badge>
         </div>
 
-        {subSection.questions.length === 0 ? (
+        {visibleQuestions.length === 0 ? (
           <p className="text-sm text-muted">This sub-section has no questions — listen, then continue.</p>
         ) : showNotes ? (
           <PartANotesDocument
             partLabel={subSection.label}
             notesBody={notesBody}
-            questions={subSection.questions.map((q) => ({ id: q.id, number: q.number }))}
+            questions={visibleQuestions.map((q) => ({ id: q.id, number: q.number }))}
             answers={answers}
             onAnswerChange={(id, value) => {
-              const q = subSection.questions.find((item) => item.id === id);
+              if (audioFailure) return;
+              const q = visibleQuestions.find((item) => item.id === id);
               if (q) onAnswerChange(q, value);
             }}
+            locked={audioFailure}
             highlightingEnabled={false}
           />
         ) : (
           <div className="space-y-6">
-            {subSection.questions.map((question) => (
+            {visibleQuestions.map((question) => (
               <QuestionItem
                 key={question.id}
                 question={question}
                 value={answers[question.id] ?? ''}
-                onChange={(value) => onAnswerChange(question, value)}
+                disabled={audioFailure}
+                onChange={(value) => {
+                  if (!audioFailure) onAnswerChange(question, value);
+                }}
               />
             ))}
           </div>
         )}
 
         <div className="mt-6 flex items-center justify-end">
-          <Button variant="primary" onClick={requestAdvance} loading={advancing} aria-label={isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}>
+          <Button
+            variant="primary"
+            onClick={requestAdvance}
+            loading={advancing}
+            disabled={audioFailure || (isPartB && !partBExtractEnded && !timerExpired)}
+            aria-label={isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}
+          >
             {isLastSection ? <Send className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}
-            {isLastSection ? 'Submit' : 'Next sub-section'}
+            {canMoveToNextPartBQuestion
+              ? 'Next question'
+              : isLastSection ? 'Submit' : 'Next sub-section'}
           </Button>
         </div>
       </section>
@@ -848,11 +1073,17 @@ function ActiveSubSectionPanel({
       <Modal
         open={showConfirm}
         onClose={() => setShowConfirm(false)}
-        title={isLastSection ? 'Submit Listening attempt?' : 'Move to the next sub-section?'}
+        title={canMoveToNextPartBQuestion
+          ? 'Move to the next Part B question?'
+          : isLastSection ? 'Submit Listening attempt?' : 'Move to the next sub-section?'}
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">
-            {isLastSection
+            {timerExpired
+              ? 'The sub-section timer has ended. Confirm below to save and permanently lock this sub-section.'
+              : canMoveToNextPartBQuestion
+              ? `Question ${activePartBQuestion?.number ?? ''} will be locked. The next short extract will start and you cannot return to this question.`
+              : isLastSection
               ? 'This is the final sub-section. Submitting grades your attempt and you cannot return.'
               : 'You cannot return to this sub-section once you continue. Its audio and answers will be locked.'}
           </p>
@@ -866,10 +1097,27 @@ function ActiveSubSectionPanel({
           <Button variant="ghost" onClick={() => setShowConfirm(false)}>Keep working</Button>
           <Button
             variant="primary"
-            onClick={() => { setShowConfirm(false); onAdvance(); }}
+            onClick={() => {
+              setShowConfirm(false);
+              if (canMoveToNextPartBQuestion) {
+                const nextQuestionIndex = partBQuestionIndex + 1;
+                const nextExtract = partBExtracts[nextQuestionIndex];
+                onIntegrityEvent('audio_started', {
+                  section: subSection.partCode,
+                  cuePointMs: nextExtract?.audioStartMs ?? 0,
+                  questionIndex: nextQuestionIndex,
+                  playbackIntent: 'confirmed_next_question',
+                });
+                setPartBQuestionIndex(nextQuestionIndex);
+                return;
+              }
+              onAdvance();
+            }}
             loading={advancing}
           >
-            {isLastSection ? 'Submit now' : 'Continue'}
+            {canMoveToNextPartBQuestion
+              ? 'Lock & start next'
+              : isLastSection ? 'Submit now' : 'Continue'}
           </Button>
         </div>
       </Modal>
@@ -904,10 +1152,31 @@ function SubSectionTimer({ label, remaining }: { label: string; remaining: numbe
 function SubSectionAudio({
   attemptId,
   subSection,
+  cueStartMs,
+  cueEndMs,
+  onExtractComplete,
+  resumeState = 'not_started',
+  resumeAtMs,
+  questionIndex,
+  onIntegrityEvent,
+  onBufferingChange,
+  onAudioFailure,
   onePlayOnly,
 }: {
   attemptId: string;
   subSection: ListeningExamSubSection;
+  cueStartMs?: number | null;
+  cueEndMs?: number | null;
+  onExtractComplete?: () => void;
+  resumeState?: 'not_started' | 'active' | 'ended';
+  resumeAtMs?: number | null;
+  questionIndex?: number | null;
+  onIntegrityEvent: (
+    eventType: Parameters<typeof recordListeningIntegrityEvent>[1],
+    details?: Record<string, unknown>,
+  ) => void;
+  onBufferingChange: (buffering: boolean) => void;
+  onAudioFailure: () => void;
   onePlayOnly: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -915,10 +1184,18 @@ function SubSectionAudio({
     subSection.audioRequiresAuth ? null : subSection.audioUrl,
   );
   const [audioError, setAudioError] = useState<string | null>(null);
-  const [hasPlayedToEnd, setHasPlayedToEnd] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(true);
+  const [hasPlayedToEnd, setHasPlayedToEnd] = useState(resumeState === 'ended');
   const lastKnownTimeRef = useRef(0);
+  const lastProgressLoggedAtRef = useRef(0);
   const allowedProgrammaticPauseRef = useRef(false);
+  const programmaticSeekTargetRef = useRef<number | null>(null);
   const hasStartedRef = useRef(false);
+
+  const setBuffering = useCallback((buffering: boolean) => {
+    setIsBuffering(buffering);
+    onBufferingChange(buffering);
+  }, [onBufferingChange]);
 
   // Resolve an authenticated media URL into a local blob URL once per section.
   useEffect(() => {
@@ -927,6 +1204,7 @@ function SubSectionAudio({
     let objectUrl: string | null = null;
     setResolvedSrc(null);
     setAudioError(null);
+    setBuffering(true);
     (async () => {
       try {
         const url = await fetchAuthorizedObjectUrl(subSection.audioUrl as string);
@@ -937,14 +1215,24 @@ function SubSectionAudio({
         }
         setResolvedSrc(url);
       } catch (err) {
-        if (!cancelled) setAudioError(err instanceof Error ? err.message : 'Audio could not be loaded.');
+        if (!cancelled) {
+          setBuffering(true);
+          onIntegrityEvent('audio_error', {
+            section: subSection.partCode,
+            questionIndex,
+            playbackValidity: 'admin_review_required',
+            loadFailure: true,
+          });
+          onAudioFailure();
+          setAudioError(err instanceof Error ? err.message : 'Audio could not be loaded.');
+        }
       }
     })();
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [subSection.audioUrl, subSection.audioRequiresAuth]);
+  }, [onAudioFailure, onIntegrityEvent, questionIndex, setBuffering, subSection.audioRequiresAuth, subSection.audioUrl, subSection.partCode]);
 
   // Autoplay as soon as the source is ready. Gesture-chained via the prior
   // Start/Next click, so most browsers allow it; the AbortError that fires when
@@ -953,11 +1241,25 @@ function SubSectionAudio({
     if (!resolvedSrc) return;
     const el = audioRef.current;
     if (!el) return;
+    const cueStart = cueStartMs != null && cueStartMs >= 0 ? cueStartMs / 1000 : null;
+    const resumeAt = resumeState === 'active' && resumeAtMs != null && resumeAtMs >= 0
+      ? resumeAtMs / 1000
+      : null;
+    const initialTime = resumeAt ?? cueStart;
+    if (initialTime != null) {
+      programmaticSeekTargetRef.current = initialTime;
+      el.currentTime = initialTime;
+      lastKnownTimeRef.current = initialTime;
+    }
+    if (resumeState === 'ended') return;
     const result = el.play();
     if (result && typeof result.catch === 'function') {
-      result.catch((err: unknown) => handleAudioPlaybackError(err, setAudioError));
+      result.catch((err: unknown) => {
+        setBuffering(true);
+        handleAudioPlaybackError(err, setAudioError);
+      });
     }
-  }, [resolvedSrc]);
+  }, [cueStartMs, resolvedSrc, resumeAtMs, resumeState]);
 
   if (!subSection.audioUrl) {
     return (
@@ -983,26 +1285,100 @@ function SubSectionAudio({
         <audio
           ref={audioRef}
           src={resolvedSrc}
-          autoPlay
-          controls={!onePlayOnly}
-          controlsList={onePlayOnly ? 'nodownload noplaybackrate nofullscreen noremoteplayback' : undefined}
+          autoPlay={resumeState !== 'ended'}
+          // This route is the strict computer-based exam surface. Browser
+          // media controls remain disabled even if a malformed/legacy session
+          // response reports a permissive transport flag.
+          controls={false}
+          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
           preload="auto"
           className="w-full"
+          onLoadedMetadata={() => {
+            const el = audioRef.current;
+            if (!el || !onePlayOnly) return;
+            el.defaultPlaybackRate = 1;
+            el.playbackRate = 1;
+          }}
           onTimeUpdate={() => {
             const el = audioRef.current;
             if (!el || el.seeking || !onePlayOnly) return;
+            if (cueEndMs != null && el.currentTime * 1000 >= cueEndMs && !hasPlayedToEnd) {
+             allowedProgrammaticPauseRef.current = true;
+             onIntegrityEvent('audio_stopped', {
+                section: subSection.partCode,
+                cuePointMs: Math.round(el.currentTime * 1000),
+                questionIndex,
+                reason: 'programmatic',
+              });
+             hasStartedRef.current = false;
+             setHasPlayedToEnd(true);
+              setBuffering(false);
+             el.pause();
+              onIntegrityEvent('audio_ended', {
+                section: subSection.partCode,
+                cuePointMs: Math.round(el.currentTime * 1000),
+                questionIndex,
+              });
+              onExtractComplete?.();
+              return;
+            }
             if (el.currentTime > lastKnownTimeRef.current) lastKnownTimeRef.current = el.currentTime;
+            if (el.currentTime > 0 && Date.now() - lastProgressLoggedAtRef.current >= 1500) {
+              lastProgressLoggedAtRef.current = Date.now();
+              onIntegrityEvent('audio_progress', {
+                section: subSection.partCode,
+                cuePointMs: Math.round(el.currentTime * 1000),
+                questionIndex,
+              });
+            }
           }}
           onEnded={() => {
+            setBuffering(false);
             hasStartedRef.current = false;
             setHasPlayedToEnd(true);
+            onIntegrityEvent('audio_ended', {
+              section: subSection.partCode,
+              cuePointMs: Math.round((audioRef.current?.currentTime ?? 0) * 1000),
+              questionIndex,
+            });
+            if (cueEndMs != null) onExtractComplete?.();
           }}
-          onError={() => setAudioError('Audio failed to load. The media asset may still be processing.')}
+          onError={() => {
+            setBuffering(true);
+            onIntegrityEvent('audio_error', {
+              section: subSection.partCode,
+              questionIndex,
+              playbackValidity: 'admin_review_required',
+            });
+            onAudioFailure();
+            setAudioError('Audio failed to load. The attempt has been flagged for administrator review; do not replay the scored audio.');
+          }}
+          onWaiting={() => {
+            setBuffering(true);
+            onIntegrityEvent('audio_buffering_start', { section: subSection.partCode, questionIndex });
+          }}
+          onStalled={() => {
+            setBuffering(true);
+            onIntegrityEvent('audio_stalled', { section: subSection.partCode, questionIndex });
+          }}
+          onCanPlay={() => {
+            setBuffering(false);
+            onIntegrityEvent('audio_buffering_end', { section: subSection.partCode, questionIndex });
+          }}
           onRateChange={() => {
             const el = audioRef.current;
-            if (onePlayOnly && el && el.playbackRate !== 1) el.playbackRate = 1;
+            if (!onePlayOnly || !el || el.playbackRate === 1) return;
+            const requestedRate = Number(el.playbackRate);
+            onIntegrityEvent('audio_speed_change_blocked', {
+              section: subSection.partCode,
+              questionIndex,
+              requestedRate: Number.isFinite(requestedRate) ? requestedRate : null,
+            });
+            el.defaultPlaybackRate = 1;
+            el.playbackRate = 1;
           }}
           onPlay={() => {
+            setBuffering(false);
             const el = audioRef.current;
             if (!el || !onePlayOnly) return;
             if (hasPlayedToEnd) {
@@ -1010,10 +1386,27 @@ function SubSectionAudio({
               el.pause();
               return;
             }
+            if (!hasStartedRef.current) {
+              onIntegrityEvent('audio_started', {
+                section: subSection.partCode,
+                cuePointMs: Math.round(el.currentTime * 1000),
+                questionIndex,
+              });
+            }
             hasStartedRef.current = true;
           }}
           onPause={() => {
             const el = audioRef.current;
+            const wasStarted = hasStartedRef.current;
+            const wasProgrammatic = allowedProgrammaticPauseRef.current;
+            if (wasStarted) {
+              onIntegrityEvent('audio_stopped', {
+                section: subSection.partCode,
+                cuePointMs: Math.round((el?.currentTime ?? 0) * 1000),
+                questionIndex,
+                reason: wasProgrammatic ? 'programmatic' : 'pause',
+              });
+            }
             if (!el || !shouldResumeAfterBlockedPause({
               canPause: !onePlayOnly,
               phase: 'audio',
@@ -1027,6 +1420,10 @@ function SubSectionAudio({
           onSeeking={() => {
             const el = audioRef.current;
             if (!el || !onePlayOnly) return;
+            if (programmaticSeekTargetRef.current != null
+              && Math.abs(el.currentTime - programmaticSeekTargetRef.current) < 0.25) {
+              return;
+            }
             const blockedTarget = resolveBlockedSeekTarget({
               canScrub: false,
               requestedTime: el.currentTime,
@@ -1034,6 +1431,9 @@ function SubSectionAudio({
               allowedProgrammaticTarget: null,
             });
             if (blockedTarget !== null) el.currentTime = blockedTarget;
+          }}
+          onSeeked={() => {
+            programmaticSeekTargetRef.current = null;
           }}
         />
       ) : (
@@ -1043,6 +1443,11 @@ function SubSectionAudio({
         </div>
       )}
       {audioError ? <p className="mt-2 text-xs font-semibold text-danger">{audioError}</p> : null}
+      {isBuffering && !audioError ? (
+        <p className="mt-2 text-xs font-semibold text-warning" role="status">
+          Audio is buffering; the section timer is paused until playback is ready.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1050,10 +1455,12 @@ function SubSectionAudio({
 function QuestionItem({
   question,
   value,
+  disabled,
   onChange,
 }: {
   question: ListeningSessionQuestionDto;
   value: string;
+  disabled: boolean;
   onChange: (value: string) => void;
 }) {
   const isMcq = question.type === 'multiple_choice_3';
@@ -1064,9 +1471,9 @@ function QuestionItem({
         <h3 className="mt-2 text-base font-semibold leading-7 text-navy">{question.text}</h3>
       </div>
       {isMcq ? (
-        <McqControl question={question} value={value} onChange={onChange} />
+        <McqControl question={question} value={value} disabled={disabled} onChange={onChange} />
       ) : (
-        <TextAnswerControl value={value} onChange={onChange} />
+        <TextAnswerControl value={value} disabled={disabled} onChange={onChange} />
       )}
     </div>
   );
@@ -1075,10 +1482,12 @@ function QuestionItem({
 function McqControl({
   question,
   value,
+  disabled,
   onChange,
 }: {
   question: ListeningSessionQuestionDto;
   value: string;
+  disabled: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -1092,12 +1501,14 @@ function McqControl({
             className={cn(
               'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
               selected && 'border-primary bg-primary/5',
+              disabled && 'cursor-not-allowed opacity-60',
             )}
           >
             <input
               type="radio"
               name={question.id}
               className="mt-1"
+              disabled={disabled}
               checked={selected}
               onChange={() => onChange(letter)}
             />
@@ -1112,9 +1523,11 @@ function McqControl({
 
 function TextAnswerControl({
   value,
+  disabled,
   onChange,
 }: {
   value: string;
+  disabled: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -1122,6 +1535,7 @@ function TextAnswerControl({
       className="min-h-11 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
       placeholder="Type your answer"
       value={value}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
     />
   );

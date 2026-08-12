@@ -1635,7 +1635,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
     private static bool IsOwnerConvertedSection(MockSectionAttempt section)
     {
-        if (section.SubtestCode.Trim().ToLowerInvariant() is not ("reading" or "listening")) return true;
+        var governedScore = section.SubtestCode.Trim().ToLowerInvariant() is "reading" or "listening";
+        if (!governedScore) return true;
+        if (section.RawScoreMax != OetScoring.ListeningReadingRawMax) return false;
         var evidence = JsonSupport.Deserialize<Dictionary<string, object?>>(
             section.FeedbackJson,
             new Dictionary<string, object?>());

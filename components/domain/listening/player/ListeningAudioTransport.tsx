@@ -2,7 +2,7 @@
 
 // Listening V2 — audio transport bar. Renders play/pause control,
 // scrub-or-progress, save-state indicator, and the optional whole-attempt
-// 40-minute countdown chip. Visual-only; the parent owns the timer & save
+// policy-defined countdown chip. Visual-only; the parent owns the timer & save
 // state. Extracted from the monolithic player so the chrome can be
 // Storybook'd in isolation.
 //
@@ -31,6 +31,8 @@ export interface ListeningAudioTransportProps {
   totalQuestions: number;
   /** Optional whole-attempt countdown (seconds). `null` hides the chip. */
   attemptSecondsRemaining: number | null;
+  /** Owner-configured warning thresholds, in seconds, descending. */
+  warningThresholdsSeconds?: number[];
   onTogglePlayPause: () => void;
   onScrub: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
@@ -56,6 +58,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
     answeredCount,
     totalQuestions,
     attemptSecondsRemaining,
+    warningThresholdsSeconds,
     onTogglePlayPause,
     onScrub,
   } = props;
@@ -67,6 +70,11 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
   // cannot stop it. It stays interactive before playback (to press Play) and
   // is also disabled during the pre-audio reading window.
   const controlDisabled = isHalted || isPreviewPhase || (!canPause && isPlaying);
+  const thresholds = (warningThresholdsSeconds === undefined ? [120, 30] : warningThresholdsSeconds)
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => b - a);
+  const warningThreshold = thresholds[0] ?? -1;
+  const dangerThreshold = thresholds[thresholds.length - 1] ?? -1;
 
   return (
     <div
@@ -139,9 +147,9 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
           className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 font-mono text-sm font-black ${
             attemptSecondsRemaining === 0
               ? 'bg-danger/20 text-danger'
-              : attemptSecondsRemaining <= 30
+              : attemptSecondsRemaining <= dangerThreshold
                 ? 'bg-danger/20 text-danger'
-                : attemptSecondsRemaining <= 120
+                : attemptSecondsRemaining <= warningThreshold
                   ? 'bg-warning/20 text-warning'
                   : 'bg-white/10 text-white'
           }`}

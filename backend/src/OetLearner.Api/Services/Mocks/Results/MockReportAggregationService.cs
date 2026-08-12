@@ -117,7 +117,8 @@ public sealed class ReadingMockSectionResultAdapter : IMockSectionResultAdapter
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "authoritative_attempt_not_found");
         }
 
-        var approvedConversion = attempt.ScaledScore.HasValue
+        var approvedConversion = attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+            && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
         var scaled = approvedConversion ? attempt.ScaledScore : null;
@@ -170,7 +171,8 @@ public sealed class ListeningMockSectionResultAdapter : IMockSectionResultAdapte
             return LegacyMockSectionResultAdapter.ResolveLegacy(context.SectionAttempt, "authoritative_attempt_not_found");
         }
 
-        var approvedConversion = attempt.ScaledScore.HasValue
+        var approvedConversion = attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+            && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
         var scaled = approvedConversion ? attempt.ScaledScore : null;
@@ -578,7 +580,7 @@ public sealed class MockReportAggregationService(
     private static string FormatMockRawScore(MockSectionResolvedResult resolved, string subtestCode)
     {
         if (resolved.RawScore.HasValue && resolved.RawScoreMax.HasValue) return $"{resolved.RawScore}/{resolved.RawScoreMax}";
-        if (resolved.RawScore.HasValue && (subtestCode is "reading" or "listening")) return $"{resolved.RawScore}/42";
+        if (resolved.RawScore.HasValue && (subtestCode is "reading" or "listening")) return $"{resolved.RawScore}/unknown";
         return "N/A";
     }
 

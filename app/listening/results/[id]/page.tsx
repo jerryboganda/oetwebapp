@@ -11,10 +11,14 @@ import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/compone
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
+import { GroundedListeningQuestionQna } from '@/components/domain/results/grounded-listening-question-qna';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
+import { ListeningPartBreakdown } from '@/components/domain/results/listening-part-breakdown';
+import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { getListeningResult, type ListeningReviewDto } from '@/lib/listening-api';
+import { hasApprovedListeningConversion } from '@/lib/listening-result-display';
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -24,7 +28,7 @@ function missReasonChip(item: ListeningReviewDto['itemReview'][number]): {
   label: string;
   hint: string;
 } | null {
-  if (item.isCorrect) return null;
+  if (item.isCorrect || item.isInvalid) return null;
   const reason = (item.missReason ?? item.errorType ?? '').toString().toLowerCase();
   if (!reason) return null;
   switch (reason) {
@@ -98,7 +102,7 @@ function ListeningResultsContent() {
         if (cancelled || !review) return;
         const expanded: Record<string, boolean> = {};
         review.itemReview.forEach((item) => {
-          expanded[item.questionId] = !item.isCorrect;
+          expanded[item.questionId] = !item.isCorrect && item.isInvalid !== true;
         });
         setResult(review);
         setExpandedItems(expanded);
@@ -152,16 +156,16 @@ function ListeningResultsContent() {
     );
   }
 
-  // A full OET Listening paper has 42 items (24 A + 6 B + 12 C). Anything
-  // smaller is a drill / mini-test / starter — applying the official OET
+  // A full OET Listening paper has exactly 42 items (24 A + 6 B + 12 C).
+  // Anything else is a drill / mini-test / starter — applying the official OET
   // grade + owner-table pass label to those produces a misleading "Grade E ·
   // Below Threshold" because the 42-item scaling is hardwired. For non-full
   // papers show a practice-score frame (percent correct, no OET grade letter,
   // no pass/fail badge).
-  const isFullOetPaper = result.maxRawScore >= 42;
-  const hasApprovedConversion = result.scaledScore != null
-    && result.scoreConversionTableVersionKey != null
-    && result.passed != null;
+  const isFullOetPaper = result.maxRawScore === 42;
+  const hasApprovedConversion = hasApprovedListeningConversion(result);
+  const invalidCount = result.invalidCount ?? result.itemReview.filter((item) => item.isInvalid === true).length;
+  const requiresAdminReview = result.requiresAdminReview === true || invalidCount > 0;
   const percentCorrect = result.maxRawScore > 0
     ? Math.round((result.rawScore / result.maxRawScore) * 100)
     : 0;
@@ -169,6 +173,18 @@ function ListeningResultsContent() {
   return (
     <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
       <div className="space-y-5 sm:space-y-8 pb-24">
+        {requiresAdminReview ? (
+          <div
+            data-testid="listening-admin-review-warning"
+            className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning"
+          >
+            <p className="font-black">Listening attempt requires administrator review.</p>
+            <p>
+              Invalid audio or multiple-selection data is not treated as an ordinary incorrect answer and does not receive an automated converted score.
+              {result.adminReviewReason ? ` Reason: ${result.adminReviewReason.replace(/_/g, ' ')}.` : ''}
+            </p>
+          </div>
+        ) : null}
         <MotionSection>
           <ResultsScorePanel
             eyebrow="Listening result"
@@ -185,6 +201,7 @@ function ListeningResultsContent() {
               { label: 'Correct', value: result.correctCount, tone: 'success', icon: <CheckCircle2 /> },
               { label: 'Incorrect', value: result.incorrectCount, tone: 'danger', icon: <XCircle /> },
               { label: 'Unanswered', value: result.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
+              ...(invalidCount > 0 ? [{ label: 'Invalid review', value: invalidCount, tone: 'warning' as const, icon: <AlertTriangle /> }] : []),
               {
                 label: hasApprovedConversion ? 'Scaled' : 'Raw',
                 value: hasApprovedConversion ? `${result.scaledScore}/500` : `${result.rawScore}/${result.maxRawScore}`,
@@ -214,10 +231,10 @@ function ListeningResultsContent() {
               <ScoreBandGraph
                 rawScore={result.rawScore}
                 maxRawScore={result.maxRawScore}
-                scaledScore={result.scaledScore}
-                passed={result.passed}
+                scaledScore={hasApprovedConversion ? result.scaledScore : null}
+                passed={hasApprovedConversion ? result.passed : null}
                 grade={hasApprovedConversion ? result.grade : null}
-                tableVersion={result.scoreConversionTableVersionKey}
+                tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
               />
             )}
           />
@@ -226,11 +243,21 @@ function ListeningResultsContent() {
           assessment="Listening"
           rawScore={result.rawScore}
           maxRawScore={result.maxRawScore}
-          scaledScore={result.scaledScore}
-          passed={result.passed}
-          grade={result.grade}
-          tableVersion={result.scoreConversionTableVersionKey}
+          scaledScore={hasApprovedConversion ? result.scaledScore : null}
+          passed={hasApprovedConversion ? result.passed : null}
+          grade={hasApprovedConversion ? result.grade : null}
+          tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
           errorCode={result.scoreConversionErrorCode}
+        />
+
+        <ListeningPartBreakdown items={result.itemReview} />
+        <TimeUsedSummary
+          totalMilliseconds={result.timeUsed?.totalMilliseconds ?? null}
+          sections={(result.timeUsed?.sections ?? []).map((section) => ({
+            label: section.sectionCode,
+            milliseconds: section.elapsedMilliseconds,
+          }))}
+          description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
         />
 
         <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
@@ -269,14 +296,16 @@ function ListeningResultsContent() {
               const isExpanded = expandedItems[item.questionId];
               const missReason = missReasonChip(item);
               return (
-                <MotionItem key={item.questionId} delayIndex={index} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                  <MotionItem key={item.questionId} delayIndex={index} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                   <button
                     onClick={() => toggleItem(item.questionId)}
                     aria-expanded={isExpanded}
                     className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light sm:p-6"
                   >
                     <div className="mt-0.5 shrink-0">
-                      {item.isCorrect ? (
+                      {item.isInvalid ? (
+                        <AlertTriangle className="h-6 w-6 text-warning" />
+                      ) : item.isCorrect ? (
                         <CheckCircle2 className="h-6 w-6 text-success" />
                       ) : (
                         <XCircle className="h-6 w-6 text-danger" />
@@ -286,7 +315,8 @@ function ListeningResultsContent() {
                       <span className="mb-1 block text-xs font-black uppercase tracking-widest text-muted">
                         Part {item.partCode} / Question {item.number}
                       </span>
-                      <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
+                        <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
+                        {item.isInvalid ? <p className="mt-1 text-xs font-black uppercase tracking-widest text-warning">Invalid — admin review</p> : null}
                     </div>
                     <div className="shrink-0 text-muted">
                       {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -296,15 +326,15 @@ function ListeningResultsContent() {
                   <MotionCollapse open={isExpanded} className="border-t border-border">
                         <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div className={`rounded-xl border p-4 ${item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
-                              <span className={`mb-2 block text-[10px] font-black uppercase tracking-widest ${item.isCorrect ? 'text-success' : 'text-danger'}`}>
+                            <div className={`rounded-xl border p-4 ${item.isInvalid ? 'border-warning/30 bg-warning/10' : item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
+                              <span className={`mb-2 block text-[10px] font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
                                 Your Answer
                               </span>
-                              <p className={`text-sm font-medium ${item.isCorrect ? 'text-success' : 'text-danger'}`}>
+                              <p className={`text-sm font-medium ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
                                 {item.learnerAnswer || 'No answer recorded'}
                               </p>
                             </div>
-                            {!item.isCorrect ? (
+                            {!item.isCorrect && !item.isInvalid ? (
                               <div className="rounded-xl border border-success/30 bg-success/10 p-4">
                                 <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-success">
                                   Correct Answer
@@ -313,6 +343,12 @@ function ListeningResultsContent() {
                               </div>
                             ) : null}
                           </div>
+
+                          {item.isInvalid ? (
+                            <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning">
+                              This multiple-choice response was invalid for automated marking. The original payload is retained for administrator review; no automated explanation or answer correction is provided.
+                            </div>
+                          ) : null}
 
                           {missReason ? (
                             <div
@@ -326,7 +362,7 @@ function ListeningResultsContent() {
                             </div>
                           ) : null}
 
-                          {!item.isCorrect && item.distractorExplanation ? (
+                          {!item.isCorrect && !item.isInvalid && item.distractorExplanation ? (
                             <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
                               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                               <div>
@@ -347,11 +383,20 @@ function ListeningResultsContent() {
                             )}
                           </div>
 
-                          <GroundedListeningAiExplanation
-                            attemptId={id ?? ''}
-                            questionId={item.questionId}
-                            unanswered={!item.learnerAnswer}
-                          />
+                          {!item.isInvalid ? (
+                            <>
+                              <GroundedListeningAiExplanation
+                                attemptId={id ?? ''}
+                                questionId={item.questionId}
+                                unanswered={!item.learnerAnswer}
+                              />
+
+                              <GroundedListeningQuestionQna
+                                attemptId={id ?? ''}
+                                questionId={item.questionId}
+                              />
+                            </>
+                          ) : null}
 
                           {item.transcript?.allowed && item.transcript.excerpt ? (
                             <div className="pt-2">

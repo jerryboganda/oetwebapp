@@ -286,6 +286,8 @@ export interface ReadingAttemptStarted {
   partBCTimerPausedAt: string | null;
   partBCPausedSeconds: number;
   partABreakMaxSeconds: number;
+  /** Server timestamp used only to correct learner-facing clock display. */
+  serverNow: string;
   /** Policy snapshot the backend captured at attempt-start. Drift fix
    *  P0-L 2026-05: previously omitted from this DTO, so the player ignored
    *  the per-user accessibility / rate-limit hints the server already
@@ -303,6 +305,8 @@ export interface ReadingAttemptBreakState {
   partBCTimerPausedAt: string | null;
   partBCPausedSeconds: number;
   partABreakMaxSeconds: number;
+  /** Server timestamp used only to correct learner-facing clock display. */
+  serverNow: string;
 }
 
 export interface ReadingAttemptGraded {
@@ -313,11 +317,13 @@ export interface ReadingAttemptGraded {
   gradeLetter: string;
   correctCount: number;
   incorrectCount: number;
+  invalidCount?: number;
   unansweredCount: number;
   answers: Array<{
     questionId: string;
     questionType: string;
     isCorrect: boolean;
+    isInvalid?: boolean;
     pointsEarned: number;
     maxPoints: number;
     /** Authored source sentence disclosed only in submitted review payloads. */
@@ -353,6 +359,8 @@ export interface ReadingHomePaperDto {
     submittedAt: string | null;
     rawScore: number | null;
     scaledScore: number | null;
+    requiresAdminReview?: boolean;
+    adminReviewReason?: string | null;
     route: string;
   } | null;
 }
@@ -385,6 +393,8 @@ export interface ReadingHomeResultDto {
   maxRawScore: number;
   scaledScore: number | null;
   gradeLetter: string;
+  requiresAdminReview?: boolean;
+  adminReviewReason?: string | null;
   submittedAt: string | null;
   route: string;
 }
@@ -542,6 +552,8 @@ export interface ReadingAttemptReviewDto {
     scaledScore: number | null;
     gradeLetter: string;
     passed: boolean | null;
+    requiresAdminReview?: boolean;
+    adminReviewReason?: string | null;
     scoreConversionTableVersionKey?: string | null;
     scoreConversionErrorCode?: string | null;
     partADeadlineAt: string;
@@ -555,6 +567,7 @@ export interface ReadingAttemptReviewDto {
   };
   items: Array<{
     questionId: string;
+    passageId?: string | null;
     partCode: ReadingPartCode;
     displayOrder: number;
     questionType: ReadingQuestionType;
@@ -562,6 +575,7 @@ export interface ReadingAttemptReviewDto {
     skillTag: string | null;
     userAnswer: unknown;
     isCorrect: boolean;
+    isInvalid?: boolean;
     pointsEarned: number;
     maxPoints: number;
   }>;
@@ -581,12 +595,21 @@ export interface ReadingAttemptReviewDto {
     maxRawScore: number;
     correctCount: number;
     incorrectCount: number;
+    invalidCount?: number;
     unansweredCount: number;
   }>;
+  timeUsed?: {
+    totalElapsedMs: number | null;
+    byPart: Array<{
+      partCode: ReadingPartCode;
+      totalElapsedMs: number | null;
+    }>;
+  } | null;
   skillBreakdown: Array<{
     label: string;
     correctCount: number;
     incorrectCount: number;
+    invalidCount?: number;
     unansweredCount: number;
     totalCount: number;
   }>;
@@ -1143,6 +1166,7 @@ export const getReadingAttempt = (attemptId: string) =>
     partADeadlineAt: string; partBCDeadlineAt: string;
     partABreakAvailable: boolean; partABreakResumed: boolean; partBCTimerPausedAt: string | null;
     partBCPausedSeconds: number; partABreakMaxSeconds: number;
+    serverNow: string;
     answeredCount: number; totalQuestions: number; canResume: boolean;
     answers: Array<{
       readingQuestionId: string; userAnswerJson: string;

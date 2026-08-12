@@ -16,7 +16,7 @@ export const listeningTour: TourDefinition = {
   steps: [
     {
       title: 'Listening at a glance',
-      body: 'Listening is common to every profession. It has three parts — A, B and C — with 42 questions in about 40 minutes.',
+      body: 'Listening is common to every profession. It has three parts — A, B and C — with 42 questions in approximately 45–50 minutes including transitions.',
     },
     {
       target: 'listening-hub',

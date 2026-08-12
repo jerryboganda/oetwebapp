@@ -136,7 +136,8 @@ public sealed record ReadingAttemptStarted(
     bool PartABreakResumed,
     DateTimeOffset? PartBCTimerPausedAt,
     int PartBCPausedSeconds,
-    int PartABreakMaxSeconds);
+    int PartABreakMaxSeconds,
+    DateTimeOffset ServerNow);
 
 public sealed record ReadingAttemptBreakState(
     string AttemptId,
@@ -147,7 +148,8 @@ public sealed record ReadingAttemptBreakState(
     bool PartABreakResumed,
     DateTimeOffset? PartBCTimerPausedAt,
     int PartBCPausedSeconds,
-    int PartABreakMaxSeconds);
+    int PartABreakMaxSeconds,
+    DateTimeOffset ServerNow);
 
 public sealed class ReadingAttemptService(
     LearnerDbContext db,
@@ -286,9 +288,21 @@ public sealed class ReadingAttemptService(
             }
         }
 
-        // Gate 5 DISABLED (product decision): any paper can be attempted,
-        // regardless of structural publish-readiness. Re-enable by restoring
-        // the ReadingStructureService.ValidatePaperAsync IsPublishReady check.
+        // Gate 5: a full Reading exam may only run against a structurally
+        // publish-ready paper. Subset/learning modes remain available for
+        // controlled practice workflows, but the scored 42-item exam path
+        // must never start on incomplete or invalid authored content.
+        if (!isPracticeMode)
+        {
+            var structureReport = await new ReadingStructureService(db)
+                .ValidatePaperAsync(paper.Id, ct);
+            if (!structureReport.IsPublishReady)
+            {
+                throw new ReadingAttemptException(
+                    "reading_paper_not_publish_ready",
+                    "This Reading paper is not available for a full exam until its authored structure passes the publish gate.");
+            }
+        }
 
         var attemptId = Guid.NewGuid().ToString("N");
 
@@ -403,7 +417,8 @@ public sealed class ReadingAttemptService(
             PartABreakResumed: mode != ReadingAttemptMode.Exam,
             PartBCTimerPausedAt: attempt.PartBCTimerPausedAt,
             PartBCPausedSeconds: attempt.PartBCPausedSeconds,
-            PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0);
+            PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0,
+            ServerNow: DateTimeOffset.UtcNow);
     }
 
     private async Task<string> ResolveReadingRulebookVersionAsync(CancellationToken ct)
@@ -460,6 +475,8 @@ public sealed class ReadingAttemptService(
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
             ?? throw new InvalidOperationException("Attempt not found.");
 
+        EnsureAttemptNotOnAdminReviewHold(attempt);
+
         if (attempt.Status != ReadingAttemptStatus.InProgress)
             throw new ReadingAttemptException(
                 "attempt_not_in_progress",
@@ -469,7 +486,7 @@ public sealed class ReadingAttemptService(
 
         // Deadline respected (inclusive of grace period — DeadlineAt already
         // has it baked in).
-        if (attempt.DeadlineAt is DateTimeOffset deadline && now > deadline)
+        if (attempt.DeadlineAt is DateTimeOffset deadline && now >= deadline)
         {
             // Auto-expire on next action — the grader handles idempotency.
             attempt.Status = ReadingAttemptStatus.Expired;
@@ -504,17 +521,20 @@ public sealed class ReadingAttemptService(
         var resolvedPolicy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
         var partADeadline = ResolvePartADeadline(attempt, resolvedPolicy);
         var answerWindowDeadline = ResolveAnswerWindowDeadline(attempt, resolvedPolicy, now);
-        if (now > answerWindowDeadline)
+        if (now >= answerWindowDeadline)
         {
             throw new ReadingAttemptException(
                 "answer_window_closed",
                 "The Reading answer window has ended. Submit grace only allows final grading.");
         }
 
+        // The v1.1 computer-based Exam contract always hard-locks Part A at
+        // its server-owned deadline. PartATimerStrictness remains available
+        // for non-exam practice policy compatibility, but it must never relax
+        // the scored Exam boundary or create a client/server mismatch.
         if (q.Part?.PartCode == ReadingPartCode.A
             && attempt.Mode == ReadingAttemptMode.Exam
-            && string.Equals(resolvedPolicy.PartATimerStrictness, "hard_lock", StringComparison.OrdinalIgnoreCase)
-            && now > partADeadline)
+            && now >= partADeadline)
         {
             throw new ReadingAttemptException(
                 "part_a_locked",
@@ -524,7 +544,7 @@ public sealed class ReadingAttemptService(
         if (q.Part?.PartCode is ReadingPartCode.B or ReadingPartCode.C
             && attempt.Mode == ReadingAttemptMode.Exam)
         {
-            if (now <= partADeadline)
+            if (now < partADeadline)
             {
                 throw new ReadingAttemptException(
                     "part_bc_not_open",
@@ -806,6 +826,8 @@ public sealed class ReadingAttemptService(
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
             ?? throw new InvalidOperationException("Attempt not found.");
 
+        EnsureAttemptNotOnAdminReviewHold(attempt);
+
         // Build the replay key only after ownership is proven. Client keys
         // are namespaced by user + attempt so a guessed/reused header cannot
         // return another learner's cached grading result.
@@ -846,7 +868,7 @@ public sealed class ReadingAttemptService(
 
         // Expired? OnExpirySubmitPolicy decides.
         var resolved = JsonSerializer.Deserialize<ReadingResolvedPolicy>(attempt.PolicySnapshotJson);
-        var expired = attempt.DeadlineAt is DateTimeOffset dl && DateTimeOffset.UtcNow > dl;
+        var expired = attempt.DeadlineAt is DateTimeOffset dl && DateTimeOffset.UtcNow >= dl;
         if (expired && resolved?.OnExpirySubmitPolicy == "auto_submit_abandoned")
         {
             attempt.Status = ReadingAttemptStatus.Abandoned;
@@ -861,6 +883,8 @@ public sealed class ReadingAttemptService(
         }
 
         var result = await grader.GradeAttemptAsync(attemptId, ct);
+
+        EnsureAttemptNotOnAdminReviewHold(attempt);
 
         // Wave 2 — best-effort: fulfil any open assignment that targets this
         // paper for this learner. Never block submit on failure.
@@ -1052,6 +1076,19 @@ public sealed class ReadingAttemptService(
     private static bool IsSubsetMode(ReadingAttemptMode mode)
         => mode is ReadingAttemptMode.Drill or ReadingAttemptMode.MiniTest or ReadingAttemptMode.ErrorBank;
 
+    private static void EnsureAttemptNotOnAdminReviewHold(ReadingAttempt attempt)
+    {
+        if (!attempt.RequiresAdminReview)
+            return;
+
+        var reason = string.IsNullOrWhiteSpace(attempt.AdminReviewReason)
+            ? "review_required"
+            : attempt.AdminReviewReason;
+        throw new ReadingAttemptException(
+            "reading_attempt_requires_admin_review",
+            $"This Reading attempt requires administrator review before scoring. Reason: {reason}.");
+    }
+
     private static bool HasNonEmptyQuestionScope(string? scopeJson)
     {
         if (string.IsNullOrWhiteSpace(scopeJson)) return false;
@@ -1138,7 +1175,7 @@ public sealed class ReadingAttemptService(
             .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
             .AddSeconds(pausedSeconds);
         var deadline = partBCDeadline.AddSeconds(Math.Max(0, policy.GracePeriodSeconds));
-        if (now > deadline)
+        if (now >= deadline)
         {
             attempt.Status = ReadingAttemptStatus.Expired;
             attempt.LastActivityAt = now;
@@ -1178,7 +1215,8 @@ public sealed class ReadingAttemptService(
             PartABreakResumed: true,
             PartBCTimerPausedAt: null,
             PartBCPausedSeconds: pausedSeconds,
-            PartABreakMaxSeconds: PartABreakMaxSeconds);
+            PartABreakMaxSeconds: PartABreakMaxSeconds,
+            ServerNow: DateTimeOffset.UtcNow);
     }
 
     public async Task<int> SweepExpiredAsync(CancellationToken ct)

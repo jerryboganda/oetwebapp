@@ -99,6 +99,45 @@ public class MockSectionResultResolverTests
         Assert.Equal("listening_attempt", ReadFeedbackSource(sectionAttempt.FeedbackJson));
     }
 
+    [Fact]
+    public async Task ReadingAdapter_withholds_stale_conversion_for_subset_attempt()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        var mockAttempt = SeedMockAttempt("mock-reading-subset", "learner-3", "bundle-reading-subset", now);
+        var bundleSection = SeedBundleSection("section-reading-subset", "bundle-reading-subset", "reading", "paper-reading-subset", now);
+        var sectionAttempt = SeedSectionAttempt("section-attempt-reading-subset", mockAttempt.Id, bundleSection, "reading-attempt-subset");
+        db.MockAttempts.Add(mockAttempt);
+        db.MockBundleSections.Add(bundleSection);
+        db.MockSectionAttempts.Add(sectionAttempt);
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "reading-attempt-subset",
+            UserId = "learner-3",
+            PaperId = "paper-reading-subset",
+            Status = ReadingAttemptStatus.Submitted,
+            StartedAt = now.AddMinutes(-10),
+            SubmittedAt = now,
+            LastActivityAt = now,
+            RawScore = 5,
+            ScaledScore = 350,
+            MaxRawScore = 10,
+            ScoreConversionTableVersionKey = "stale-v1",
+            ScoreConversionGrade = "B",
+            ScoreConversionPassed = true,
+        });
+        await db.SaveChangesAsync();
+
+        var resolver = NewResolver();
+        var resolved = await resolver.ResolveAsync(new MockSectionResultContext(db, mockAttempt, sectionAttempt, bundleSection), CancellationToken.None);
+
+        Assert.Equal(5, resolved.RawScore);
+        Assert.Equal(10, resolved.RawScoreMax);
+        Assert.Null(resolved.ScaledScore);
+        Assert.Null(resolved.ScoreConversionTableVersionKey);
+        Assert.Null(resolved.ScoreConversionPassed);
+    }
+
     private static MockSectionResultResolver NewResolver() => new([
         new ReadingMockSectionResultAdapter(),
         new ListeningMockSectionResultAdapter(),

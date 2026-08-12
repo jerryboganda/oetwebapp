@@ -466,6 +466,45 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Exam_start_rejects_structurally_invalid_paper()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "invalid-paper", ContentStatus.Published);
+        await structure.EnsureCanonicalPartsAsync("invalid-paper", default);
+        var policyNow = DateTimeOffset.UtcNow.AddMinutes(-1);
+        db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
+        {
+            Id = "reading-test-policy-invalid-paper",
+            Assessment = "reading",
+            ScopeKey = "default",
+            VersionKey = "reading-test-policy-invalid-paper-v1",
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = policyNow,
+            PolicyJson = JsonSerializer.Serialize(new
+            {
+                trimLeadingTrailingWhitespace = true,
+                collapseInternalWhitespace = false,
+                caseSensitive = true,
+                readingPartAMatchingPartialCredit = false,
+                listeningAudioReplayAllowed = false,
+                audioLockMode = "exam",
+                technicalRequirementsGuidanceOnly = true,
+            }),
+            CreatedByUserId = "test-owner",
+            CreatedAt = policyNow,
+            UpdatedAt = policyNow,
+        });
+        await db.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.StartAsync("u1", "invalid-paper", default));
+
+        Assert.Equal("reading_paper_not_publish_ready", exception.Code);
+        Assert.Empty(await db.ReadingAttempts.ToListAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Learner_structure_endpoint_redacts_answers_explanations_synonyms_and_exposes_question_paper_assets()
     {
         using var factory = new TestWebApplicationFactory();
@@ -1514,6 +1553,47 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Reading_home_discloses_admin_review_hold_without_scaled_score()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var attempt = await db.ReadingAttempts.SingleAsync(row => row.Id == attemptId);
+        attempt.RequiresAdminReview = true;
+        attempt.AdminReviewReason = "multiple_selections_for_single_answer_mcq";
+        await db.SaveChangesAsync();
+
+        var method = typeof(LearnerEndpoints).GetMethod(
+            "GetStructuredReadingHomeAsync",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+        var task = (Task<object>)method!.Invoke(null, new object[]
+        {
+            "u1",
+            db,
+            policy,
+            new ContentEntitlementService(db, new EffectiveEntitlementResolver(db)),
+            CancellationToken.None,
+        })!;
+        var home = await task;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(home, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var result = Assert.Single(doc.RootElement.GetProperty("recentResults").EnumerateArray());
+        Assert.True(result.GetProperty("requiresAdminReview").GetBoolean());
+        Assert.Equal("multiple_selections_for_single_answer_mcq", result.GetProperty("adminReviewReason").GetString());
+        Assert.Equal(JsonValueKind.Null, result.GetProperty("scaledScore").ValueKind);
+
+        var paper = doc.RootElement.GetProperty("papers").EnumerateArray().Single();
+        var lastAttempt = paper.GetProperty("lastAttempt");
+        Assert.True(lastAttempt.GetProperty("requiresAdminReview").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, lastAttempt.GetProperty("scaledScore").ValueKind);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Manifest_json_serializes_reading_enums_as_strings()
     {
         var (db, structure, _, _, _) = Build();
@@ -1626,6 +1706,36 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Authoring_preserves_invalid_points_for_publish_gate()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p =>
+            p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+
+        var question = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 0, ReadingQuestionType.ShortAnswer,
+            "A question", "[]", "\"answer\"", null, false, null, null),
+            "admin", default);
+
+        Assert.Equal(0, question.Points);
+
+        var updated = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            question.Id, partA.Id, null, 1, -1, ReadingQuestionType.ShortAnswer,
+            "A question", "[]", "\"answer\"", null, false, null, null),
+            "admin", default);
+
+        Assert.Equal(-1, updated.Points);
+        var report = await structure.ValidatePaperAsync("p1", default);
+        Assert.Contains(report.Issues, issue =>
+            issue.Code == "question_points_not_one"
+            && issue.TargetId == question.Id
+            && issue.Message.Contains("-1", StringComparison.Ordinal));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public void ValidatePayload_rejects_mismatched_mcq_shape()
     {
         // MCQ3 with 4 options should fail
@@ -1698,6 +1808,52 @@ public class ReadingAuthoringTests
             "[]",
             "\"ORT\"",
             "[\"oral rehydration\",\"oral rehydration therapy\"]");
+    }
+
+    [Theory]
+    [InlineData("[null]")]
+    [InlineData("[123]")]
+    [InlineData("[\"\"]")]
+    [InlineData("[\"   \"]")]
+    public void ValidatePayload_rejects_non_string_or_blank_shortanswer_synonyms(string synonymsJson)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.ShortAnswer,
+                "[]",
+                "\"ORT\"",
+                synonymsJson));
+
+        Assert.Contains("non-empty strings", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidatePayload_rejects_empty_shortanswer_key()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.ShortAnswer,
+                "[]",
+                "\"\"",
+                null));
+
+        Assert.Contains("non-empty", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"label\":\"\"}")]
+    [InlineData("{\"label\":\"   \"}")]
+    public void ValidatePayload_rejects_empty_labeled_shortanswer_key(string correctAnswerJson)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ReadingStructureService.ValidateQuestionPayload(
+                ReadingQuestionType.ShortAnswerLabeled,
+                "[]",
+                correctAnswerJson,
+                null));
+
+        Assert.Contains("answer", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -2387,6 +2543,34 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Exam_part_a_lock_cannot_be_relaxed_by_policy_strictness()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var global = await policy.GetGlobalAsync(default);
+        global.PartATimerStrictness = "disabled";
+        await policy.UpsertGlobalAsync(global, "test-admin", default);
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddMinutes(45);
+        await db.SaveChangesAsync();
+        var partAQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partAQuestion.Id, partAQuestion.CorrectAnswerJson, default));
+
+        Assert.Equal("part_a_locked", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Exam_rejects_BC_answers_until_part_a_break_is_resumed()
     {
         var (db, structure, _, _, attemptSvc) = Build();
@@ -2971,6 +3155,8 @@ public class ReadingAuthoringTests
                 RawScore = 20,
                 ScaledScore = OetScoring.OetRawToScaled(20),
                 MaxRawScore = 42,
+                RequiresAdminReview = true,
+                AdminReviewReason = "multiple_selections_for_single_answer_mcq",
                 PolicySnapshotJson = "{}",
             },
             new ReadingAttempt
@@ -3021,7 +3207,7 @@ public class ReadingAuthoringTests
             new ReadingAnswer { Id = "ans-1", ReadingAttemptId = "a1", ReadingQuestionId = qA.Id, UserAnswerJson = "\"ans1\"", IsCorrect = true, PointsEarned = 1, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-6) },
             new ReadingAnswer { Id = "ans-2", ReadingAttemptId = "a1", ReadingQuestionId = qB.Id, UserAnswerJson = "\"A\"", IsCorrect = false, PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-6) },
             new ReadingAnswer { Id = "ans-3", ReadingAttemptId = "a2", ReadingQuestionId = qA.Id, UserAnswerJson = "\"wrong\"", IsCorrect = false, PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-21) },
-            new ReadingAnswer { Id = "ans-4", ReadingAttemptId = "a2", ReadingQuestionId = qB.Id, UserAnswerJson = "\"A\"", IsCorrect = false, PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-21) },
+            new ReadingAnswer { Id = "ans-4", ReadingAttemptId = "a2", ReadingQuestionId = qB.Id, UserAnswerJson = "[\"A\",\"B\"]", IsCorrect = null, MissReason = "multiple_selection_review_required", PointsEarned = 0, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-21) },
             new ReadingAnswer { Id = "ans-5", ReadingAttemptId = "a4", ReadingQuestionId = qA.Id, UserAnswerJson = "\"ans1\"", IsCorrect = true, PointsEarned = 1, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-26) },
             new ReadingAnswer { Id = "ans-6", ReadingAttemptId = "a5", ReadingQuestionId = qA.Id, UserAnswerJson = "\"ans1\"", IsCorrect = true, PointsEarned = 1, AnsweredAt = DateTimeOffset.UtcNow.AddMinutes(-27) });
         await db.SaveChangesAsync();
@@ -3033,12 +3219,12 @@ public class ReadingAuthoringTests
         Assert.Equal(5, analytics.Summary.TotalAttempts);
         Assert.Equal(4, analytics.Summary.SubmittedAttempts);
         Assert.Equal(1, analytics.Summary.ActiveAttempts);
-        Assert.Equal(50, analytics.Summary.PassRatePercent);
-        Assert.Contains(analytics.PartBreakdown, p => p.PartCode == "B" && p.Opportunities == 12 && p.AccuracyPercent == 0);
+        Assert.Equal(100, analytics.Summary.PassRatePercent);
+        Assert.Contains(analytics.PartBreakdown, p => p.PartCode == "B" && p.Opportunities == 11 && p.AccuracyPercent == 0);
         Assert.Contains(analytics.SkillBreakdown, s => s.Label == "Inference" && s.AccuracyPercent == 0);
         Assert.Contains(analytics.SkillBreakdown, s => s.Label == "Skimming" && s.Opportunities == 4 && s.CorrectCount == 3);
         Assert.Equal(qB.Id, analytics.HardestQuestions.First().QuestionId);
-        Assert.Equal(2, analytics.HardestQuestions.First().Opportunities);
+        Assert.Equal(1, analytics.HardestQuestions.First().Opportunities);
         Assert.Contains(analytics.ActionInsights, insight => insight.Id == "part_b");
         await db.DisposeAsync();
     }
@@ -3413,6 +3599,32 @@ public class ReadingAuthoringTests
         await structure.EnsureCanonicalPartsAsync("p1", default);
         await FullyAuthorPaperAsync(db, structure, "p1");
 
+        // Keep an effective owner table present so this regression proves
+        // subset mode itself blocks conversion; absence of a table must not
+        // be the reason the result happens to remain raw-only.
+        var tableNow = DateTimeOffset.UtcNow.AddMinutes(-1);
+        db.AssessmentScoreConversionTables.Add(new AssessmentScoreConversionTable
+        {
+            Id = "reading-subset-conversion-table",
+            Assessment = "reading",
+            ScopeKey = "default",
+            VersionKey = "reading-subset-v1",
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = tableNow,
+            CreatedByUserId = "test-owner",
+            CreatedAt = tableNow,
+            UpdatedAt = tableNow,
+            Rows = Enumerable.Range(0, 43).Select(raw => new AssessmentScoreConversionRow
+            {
+                Id = $"reading-subset-conversion-row-{raw}",
+                RawScore = raw,
+                ConvertedScore = raw == 0 ? 0 : raw == 42 ? 500 : 350,
+                Grade = raw >= 30 ? "B" : "C",
+                Passed = raw >= 30,
+            }).ToList(),
+        });
+        await db.SaveChangesAsync();
+
         // Pick three Part-A questions to scope a drill against. Authored
         // correct answer for Part A = "ans{i}".
         var partAQuestions = await db.ReadingQuestions
@@ -3448,6 +3660,11 @@ public class ReadingAuthoringTests
 
         var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == run.AttemptId);
         Assert.Null(attempt.ScaledScore);
+        Assert.Null(attempt.ScoreConversionTableId);
+        Assert.Null(attempt.ScoreConversionTableVersionKey);
+        Assert.Null(attempt.ScoreConversionPassed);
+        Assert.False((await db.AssessmentScoreConversionTables
+            .SingleAsync(table => table.Id == "reading-subset-conversion-table")).HasBeenUsed);
         Assert.Equal(3, attempt.MaxRawScore);
         Assert.Equal(2, attempt.RawScore);
         await db.DisposeAsync();
@@ -3993,10 +4210,20 @@ public class ReadingAuthoringTests
             await attemptSvc.SubmitAsync(userId, run.AttemptId, default);
         }
 
+        var invalidRun = await attemptSvc.StartAsync("invalid-analytics", "p1", default);
+        await ResumeExamPartBCAsync(db, attemptSvc, "invalid-analytics", invalidRun.AttemptId);
+        await attemptSvc.SaveAnswerAsync(
+            "invalid-analytics",
+            invalidRun.AttemptId,
+            partCQ.Id,
+            "[\"A\",\"B\"]",
+            default);
+        await attemptSvc.SubmitAsync("invalid-analytics", invalidRun.AttemptId, default);
+
         var analytics = new ReadingAnalyticsService(db);
         var data = await analytics.GetPaperAnalyticsAsync("p1", default);
 
-        Assert.Equal(6, data.SubmittedAttempts);
+        Assert.Equal(7, data.SubmittedAttempts);
         Assert.Contains(data.DistractorHistogram, h =>
             h.QuestionId == partCQ.Id
             && h.Category == ReadingDistractorCategory.Opposite
@@ -4004,6 +4231,7 @@ public class ReadingAuthoringTests
             && h.SelectedCount == 6);
         Assert.Contains(data.RiskLabels, r => r.QuestionId == partCQ.Id && r.Code == "too_hard");
         Assert.Contains(data.HardestQuestions, h => h.QuestionId == partCQ.Id && h.CorrectRate == 0);
+        Assert.Contains(data.HardestQuestions, h => h.QuestionId == partCQ.Id && h.Opportunities == 6);
         await db.DisposeAsync();
     }
 
@@ -4564,6 +4792,27 @@ public class ReadingAuthoringTests
         await SeedPaperAsync(db, "p1");
         await structure.EnsureCanonicalPartsAsync("p1", default);
         await FullyAuthorPaperAsync(db, structure, "p1");
+
+        db.ExpertUsers.AddRange(
+            new ExpertUser
+            {
+                Id = "expert-1",
+                Role = ApplicationUserRoles.Expert,
+                DisplayName = "Expert One",
+                Email = "expert-1@test.com",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            },
+            new ExpertUser
+            {
+                Id = "expert-2",
+                Role = ApplicationUserRoles.Expert,
+                DisplayName = "Expert Two",
+                Email = "expert-2@test.com",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
 
         var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
         await tutor.CreateAssignmentAsync(

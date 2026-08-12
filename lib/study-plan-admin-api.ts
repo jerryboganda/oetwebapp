@@ -184,6 +184,26 @@ export async function forceRegenerateLearnerStudyPlan(userId: string): Promise<u
   return apiClient.post(`/v1/admin/study-plan/${userId}/regenerate`);
 }
 
+export interface StudyPlanItemOverrideRequest {
+  title?: string;
+  rationale?: string;
+  dueDate?: string;
+  durationMinutes?: number;
+  contentRoute?: string;
+  section?: string;
+}
+
+export async function overrideLearnerStudyPlanItem(
+  userId: string,
+  itemId: string,
+  request: StudyPlanItemOverrideRequest,
+): Promise<{ id: string; title: string; dueDate: string; durationMinutes: number }> {
+  return apiClient.post<{ id: string; title: string; dueDate: string; durationMinutes: number }>(
+    `/v1/admin/study-plan/${encodeURIComponent(userId)}/items/${encodeURIComponent(itemId)}/override`,
+    request,
+  );
+}
+
 export function emptyTemplateBody(): StudyPlanTemplateBody {
   return { weeks: [{ weekIndex: 0, label: 'Week 1', days: [] }], checkpoints: [] };
 }

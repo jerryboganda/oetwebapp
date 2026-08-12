@@ -2669,6 +2669,7 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
       userAnswer: itemReview.learnerAnswer ?? '',
       correctAnswer: itemReview.correctAnswer ?? '',
       isCorrect,
+      isInvalid: itemReview.isInvalid === true,
       explanation: itemReview.explanation ?? (isCorrect ? 'Correct.' : 'Review the transcript clue and distractor pattern.'),
       allowTranscriptReveal: Boolean(transcript?.allowed),
       transcriptExcerpt: transcript?.excerpt ?? undefined,
@@ -2686,6 +2687,7 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     score: rawScore,
     total: maxRawScore,
     questions,
+    invalidCount: Number(evaluation.invalidCount ?? questions.filter((question) => question.isInvalid === true).length),
     recommendedDrill: {
       id: recommendedNextDrill.drillId ?? recommendedNextDrill.id ?? 'listening-drill-detail_capture',
       title: recommendedNextDrill.title ?? 'Exact Detail Capture Drill',
@@ -4199,7 +4201,7 @@ export async function fetchSubmissionDetail(submissionId: string): Promise<Submi
   return {
     ...baseDetail,
     strengths: [`${result.score}/${result.total} listening items captured correctly.`],
-    issues: result.questions.filter((question) => !question.isCorrect).map((question) => question.distractorExplanation ?? question.explanation),
+    issues: result.questions.filter((question) => !question.isCorrect && !question.isInvalid).map((question) => question.distractorExplanation ?? question.explanation),
     questionReview: result.questions.map((question) => ({
       id: question.id,
       number: question.number,

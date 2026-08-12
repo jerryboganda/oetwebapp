@@ -59,10 +59,9 @@ public sealed record ReadingResolvedPolicy(
     bool FontScaleUserControl = true,
     bool HighContrastMode = true,
     bool ScreenReaderOptimised = true,
-    // Wave 1 — grading normalisation toggles. Threaded into the grader so
-    // they are insulated by the per-attempt policy snapshot. Defaults match
-    // the OET-faithful ReadingPolicy column defaults.
-    bool NormalizeSmartQuotes = true,
+    // Legacy normalization toggles are retained in the snapshot contract for
+    // backward compatibility, but strict v1.1 marking never applies them.
+    bool NormalizeSmartQuotes = false,
     bool NormalizeHyphenSpacing = false,
     bool NormalizeUnitSpacing = false,
     bool PartACaseInsensitive = true);
@@ -72,6 +71,13 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
 {
     private const string GlobalCacheKey = "reading:policy:global";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
+    private static readonly HashSet<string> AllowedNormalisationProfiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "exact",
+        "trim_only",
+        "trim_collapse",
+        "trim_collapse_case_insensitive",
+    };
 
     public async Task<ReadingPolicy> GetGlobalAsync(CancellationToken ct)
     {
@@ -91,6 +97,11 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         // persisted flag remains in the contract for compatibility, but must
         // never be allowed to re-enable a learner paper presentation.
         row.AllowPaperReadingMode = false;
+        // Legacy text-rewrite toggles are compatibility fields only. The
+        // effective v1.1 marking profile never enables them.
+        row.NormalizeSmartQuotes = false;
+        row.NormalizeHyphenSpacing = false;
+        row.NormalizeUnitSpacing = false;
         cache.Set(GlobalCacheKey, row, CacheTtl);
         return row;
     }
@@ -139,14 +150,26 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
             FontScaleUserControl: g.FontScaleUserControl,
             HighContrastMode: g.HighContrastMode,
             ScreenReaderOptimised: g.ScreenReaderOptimised,
-            NormalizeSmartQuotes: g.NormalizeSmartQuotes,
-            NormalizeHyphenSpacing: g.NormalizeHyphenSpacing,
-            NormalizeUnitSpacing: g.NormalizeUnitSpacing,
+            NormalizeSmartQuotes: false,
+            NormalizeHyphenSpacing: false,
+            NormalizeUnitSpacing: false,
             PartACaseInsensitive: g.PartACaseInsensitive);
     }
 
     public async Task<ReadingPolicy> UpsertGlobalAsync(ReadingPolicy next, string adminId, CancellationToken ct)
     {
+        if (next.AiExtractionMaxRetriesPerPaper < 0)
+            throw ApiException.Validation(
+                "reading_policy_invalid",
+                "AI extraction maximum retries per paper cannot be negative; use 0 for unlimited.");
+        if (string.IsNullOrWhiteSpace(next.ShortAnswerNormalisation)
+            || !AllowedNormalisationProfiles.Contains(next.ShortAnswerNormalisation.Trim()))
+        {
+            throw ApiException.Validation(
+                "reading_policy_invalid",
+                "Short-answer normalisation must be exact, trim_only, trim_collapse, or trim_collapse_case_insensitive; fuzzy matching is not permitted.");
+        }
+
         var row = await db.ReadingPolicies.FirstOrDefaultAsync(p => p.Id == "global", ct);
         if (row is null)
         {
@@ -172,9 +195,11 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         row.MatchingAllowPartialCredit = next.MatchingAllowPartialCredit;
         row.SentenceCompletionStrictness = next.SentenceCompletionStrictness;
         row.UnknownTypeFallbackPolicy = next.UnknownTypeFallbackPolicy;
-        row.NormalizeSmartQuotes = next.NormalizeSmartQuotes;
-        row.NormalizeHyphenSpacing = next.NormalizeHyphenSpacing;
-        row.NormalizeUnitSpacing = next.NormalizeUnitSpacing;
+        // v1.1 strict marking permits only the named normalization profile;
+        // legacy punctuation/unit transforms cannot alter a mark.
+        row.NormalizeSmartQuotes = false;
+        row.NormalizeHyphenSpacing = false;
+        row.NormalizeUnitSpacing = false;
         row.PartACaseInsensitive = next.PartACaseInsensitive;
         row.ShowExplanationsAfterSubmit = next.ShowExplanationsAfterSubmit;
         row.ShowExplanationsOnlyIfWrong = next.ShowExplanationsOnlyIfWrong;

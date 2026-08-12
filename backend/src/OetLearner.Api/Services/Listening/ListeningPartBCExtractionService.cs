@@ -69,8 +69,11 @@ public sealed class ListeningPartBCExtractionService(
     IHttpClientFactory httpClientFactory,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
-    ILogger<ListeningPartBCExtractionService> logger) : IListeningPartBCExtractionService
+    ILogger<ListeningPartBCExtractionService> logger,
+    IListeningPolicyService? listeningPolicyService = null) : IListeningPartBCExtractionService
 {
+    // Owner policy is checked before any OCR or model call. This path returns
+    // a projection only; the admin must still review and save it explicitly.
     private const string AnthropicProviderCode = "anthropic";
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
     private const string DefaultModel = "claude-sonnet-5";
@@ -111,6 +114,11 @@ public sealed class ListeningPartBCExtractionService(
             throw ApiException.Validation("listening_partbc_missing_answer_key",
                 "Upload the answer-key PDF — Part B/C correct options are read from it.");
 
+        // Projection-only Part B/C imports do not create a review draft, so
+        // record each permitted attempt in the existing audit ledger before
+        // spending any OCR or model budget.
+        await EnsureExtractionAllowedAsync(paperId, part, adminId, ct);
+
         // OCR each question document (Part C ships two extracts: C1 + C2) and the key.
         var questionMarkdownParts = new List<string>();
         for (var i = 0; i < questionDocs.Count; i++)
@@ -148,6 +156,51 @@ public sealed class ListeningPartBCExtractionService(
     }
 
     // ── Validation (deterministic; never trust the model) ───────────────────────
+
+    private async Task EnsureExtractionAllowedAsync(
+        string paperId,
+        string part,
+        string adminId,
+        CancellationToken ct)
+    {
+        var policy = listeningPolicyService is not null
+            ? await listeningPolicyService.GetGlobalAsync(ct)
+            : await db.ListeningPolicies.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Id == "global", ct)
+                ?? new ListeningPolicy { Id = "global" };
+
+        if (!policy.AiExtractionEnabled)
+        {
+            throw ApiException.Conflict(
+                "listening_ai_extraction_disabled",
+                "Listening AI extraction is disabled by the owner policy.");
+        }
+
+        var attemptedSoFar = await db.AuditEvents.AsNoTracking()
+            .CountAsync(entry => entry.ResourceType == "ContentPaper"
+                && entry.ResourceId == paperId
+                && entry.Action == "ListeningPartBCExtractionStarted", ct);
+        if (policy.AiExtractionMaxRetriesPerPaper > 0
+            && attemptedSoFar >= policy.AiExtractionMaxRetriesPerPaper)
+        {
+            throw ApiException.Conflict(
+                "listening_ai_extraction_retry_limit_reached",
+                $"The maximum number of Listening AI extractions ({policy.AiExtractionMaxRetriesPerPaper}) has been reached for this paper.");
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = clock.GetUtcNow(),
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = "ListeningPartBCExtractionStarted",
+            ResourceType = "ContentPaper",
+            ResourceId = paperId,
+            Details = JsonSerializer.Serialize(new { part, projectionOnly = true }),
+        });
+        await db.SaveChangesAsync(ct);
+    }
 
     private static (IReadOnlyList<ListeningPartBCAnswer> Answers, IReadOnlyList<string> Warnings)
         ValidateAndProject(string part, IReadOnlyList<BcToolAnswer> raw)

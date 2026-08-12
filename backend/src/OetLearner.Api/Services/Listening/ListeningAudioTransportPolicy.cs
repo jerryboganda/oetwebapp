@@ -20,7 +20,8 @@ public sealed record ListeningAudioTransportPolicy(
 
     public static ListeningAudioTransportPolicy FromPolicy(
         string? mode,
-        AssessmentMarkingPolicyDocument? markingPolicy)
+        AssessmentMarkingPolicyDocument? markingPolicy,
+        bool? learningReplayAllowed = null)
     {
         // The high-stakes computer-based modes are never relaxable by a
         // general practice policy document.
@@ -30,7 +31,8 @@ public sealed record ListeningAudioTransportPolicy(
         if (!string.Equals(lockMode, "practice", StringComparison.Ordinal))
             return Strict;
 
-        var replayAllowed = markingPolicy?.ListeningAudioReplayAllowed == true;
+        var replayAllowed = (learningReplayAllowed ?? markingPolicy?.ListeningAudioReplayAllowed == true)
+            && markingPolicy?.ListeningAudioReplayAllowed == true;
         return new(
             lockMode,
             CanPause: replayAllowed,
@@ -55,7 +57,19 @@ public sealed record ListeningAudioTransportPolicy(
             }
 
             var policy = AssessmentMarkingPolicyDocument.Parse(policyElement.GetRawText());
-            return FromPolicy(mode, policy);
+            var root = document.RootElement;
+            var listeningPolicy = root.TryGetProperty("listeningPolicy", out var nestedPolicy)
+                && nestedPolicy.ValueKind == JsonValueKind.Object
+                ? nestedPolicy
+                : root;
+            bool? learningReplayAllowed = null;
+            if (listeningPolicy.TryGetProperty("learningReplayAllowed", out var replay)
+                && replay.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                learningReplayAllowed = replay.GetBoolean();
+            }
+
+            return FromPolicy(mode, policy, learningReplayAllowed);
         }
         catch (JsonException)
         {

@@ -243,14 +243,45 @@ export interface ListeningCandidatePreviewQuestion {
   points: number;
 }
 
+export interface ListeningCandidatePreviewExtract {
+  partCode: string;
+  displayOrder: number;
+  kind: string;
+  title: string;
+  accentCode: string | null;
+  speakers: Array<{
+    role: string;
+    gender: string | null;
+    accent: string | null;
+  }>;
+  audioStartMs: number | null;
+  audioEndMs: number | null;
+  timeLimitSeconds: number | null;
+  contextIntro: string | null;
+}
+
 export interface ListeningCandidatePreview {
   paper: {
     id: string;
     title: string;
     subtestCode: string;
     estimatedDurationMinutes: number;
+    questionPaperAssets?: Array<{
+      id: string;
+      part: string | null;
+      title: string;
+      downloadPath: string;
+    }>;
+    audioAssets?: Array<{
+      id: string;
+      part: string | null;
+      title: string;
+      durationSeconds: number | null;
+      downloadPath: string;
+    }>;
   };
   counts: ListeningValidationCounts;
+  extracts: ListeningCandidatePreviewExtract[];
   questions: ListeningCandidatePreviewQuestion[];
 }
 

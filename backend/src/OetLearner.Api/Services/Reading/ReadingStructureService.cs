@@ -409,6 +409,15 @@ public sealed class ReadingStructureService : IReadingStructureService
     public async Task<ReadingQuestion> UpsertQuestionAsync(ReadingQuestionUpsert args, string adminId, CancellationToken ct)
     {
         await EnsurePartBelongsToReadingPaperAsync(args.ReadingPartId, ct);
+        var partCode = await db.ReadingParts.AsNoTracking()
+            .Where(part => part.Id == args.ReadingPartId)
+            .Select(part => (ReadingPartCode?)part.PartCode)
+            .SingleAsync(ct);
+        if (partCode is null || !IsQuestionTypeAllowedForPart(partCode.Value, args.QuestionType))
+        {
+            throw new InvalidOperationException(
+                $"Question type {args.QuestionType} is not valid for Reading Part {partCode?.ToString() ?? "unknown"}.");
+        }
         if (!string.IsNullOrWhiteSpace(args.ReadingSectionId))
         {
             var section = await db.ReadingSections.AsNoTracking()
@@ -469,7 +478,10 @@ public sealed class ReadingStructureService : IReadingStructureService
                 ReadingPartId = args.ReadingPartId,
                 ReadingTextId = args.ReadingTextId,
                 DisplayOrder = args.DisplayOrder,
-                Points = Math.Max(1, args.Points),
+                // Preserve authored mark values exactly. The structural publish
+                // validator owns the one-mark invariant; coercing 0 or negative
+                // values here would hide an invalid paper from that gate.
+                Points = args.Points,
                 QuestionType = args.QuestionType,
                 Stem = args.Stem.Trim(),
                 OptionsJson = args.OptionsJson,
@@ -494,7 +506,7 @@ public sealed class ReadingStructureService : IReadingStructureService
             row.ReadingPartId = args.ReadingPartId;
             row.ReadingTextId = args.ReadingTextId;
             row.DisplayOrder = args.DisplayOrder;
-            row.Points = Math.Max(1, args.Points);
+            row.Points = args.Points;
             row.QuestionType = args.QuestionType;
             row.Stem = args.Stem.Trim();
             row.OptionsJson = args.OptionsJson;
@@ -1084,6 +1096,19 @@ public sealed class ReadingStructureService : IReadingStructureService
                 .Where(t => t.ReadingPartId == part.Id)
                 .OrderBy(t => t.DisplayOrder)
                 .ToListAsync(ct);
+            // PDF-only learner delivery may legitimately have no extracted
+            // ReadingText rows. If legacy/text-linked rows are present, they
+            // must still match the v1.1 paper shape exactly: A=4, B=6, C=2.
+            if (texts.Count > 0
+                && CanonicalTextCounts.TryGetValue(part.PartCode, out var expectedTextCount)
+                && texts.Count != expectedTextCount)
+            {
+                issues.Add(new(
+                    Code: $"part_{part.PartCode}_text_count",
+                    Severity: "error",
+                    Message: $"Reading Part {part.PartCode} has {texts.Count} text row(s), expected exactly {expectedTextCount} when text-linked content is present.",
+                    TargetId: part.Id));
+            }
             if (part.TimeLimitMinutes != expectedMinutes)
             {
                 issues.Add(new(
@@ -1182,13 +1207,9 @@ public sealed class ReadingStructureService : IReadingStructureService
                 if (part.PartCode == ReadingPartCode.A)
                 {
                     // Part A type layout — relaxed to match real OET paper
-                    // variation. Sentence-completion always occupies Q15-20; Q1-14
-                    // hold the matching-text-reference block followed by the
-                    // short-answer block. The matching/short boundary varies
-                    // between real papers (6 or 7 matching), so we validate the
-                    // BLOCKS, not a fixed per-position type. Accepted synonyms ARE
-                    // permitted in Part A because official answer keys list real
-                    // spelling variants (e.g. neuroischemic / neuroischaemic).
+                    // v1.1 fixes the Part A sequence: Q1-7 matching, Q8-14
+                    // short answer, and Q15-20 sentence completion. Do not relax
+                    // this into a generic Q1-14 typed block at publish time.
                     if (q.DisplayOrder is < 1 or > 20)
                     {
                         issues.Add(new(
@@ -1199,15 +1220,14 @@ public sealed class ReadingStructureService : IReadingStructureService
                     }
                     else
                     {
-                        var blockOk = q.DisplayOrder <= 14
-                            ? q.QuestionType is ReadingQuestionType.MatchingTextReference or ReadingQuestionType.ShortAnswer
-                            : q.QuestionType is ReadingQuestionType.SentenceCompletion;
+                        var expectedType = ExpectedPartAQuestionType(q.DisplayOrder);
+                        var blockOk = expectedType == q.QuestionType;
                         if (!blockOk)
                         {
                             issues.Add(new(
                                 Code: "part_A_question_sequence",
                                 Severity: "error",
-                                Message: $"Part A question {q.DisplayOrder}: expected matching or short-answer in Q1-14 and sentence-completion in Q15-20, got {q.QuestionType}.",
+                                Message: $"Part A question {q.DisplayOrder}: expected {expectedType}, got {q.QuestionType}.",
                                 TargetId: q.Id));
                         }
                     }
@@ -1385,19 +1405,12 @@ public sealed class ReadingStructureService : IReadingStructureService
         ReadingPartCode.A => questionType is ReadingQuestionType.MatchingTextReference
             or ReadingQuestionType.ShortAnswer
             or ReadingQuestionType.SentenceCompletion,
-        ReadingPartCode.B => questionType is ReadingQuestionType.MultipleChoice3
-            or ReadingQuestionType.MultipleChoice4
-            or ReadingQuestionType.FillInBlank
-            or ReadingQuestionType.ShortAnswer
-            or ReadingQuestionType.SentenceCompletion
-            or ReadingQuestionType.ShortAnswerLabeled
-            or ReadingQuestionType.MultipleChoiceFlexible,
-        ReadingPartCode.C => questionType is ReadingQuestionType.MultipleChoice4
-            or ReadingQuestionType.FillInBlank
-            or ReadingQuestionType.ShortAnswer
-            or ReadingQuestionType.SentenceCompletion
-            or ReadingQuestionType.ShortAnswerLabeled
-            or ReadingQuestionType.MultipleChoiceFlexible,
+        // v1.1 fixes the Reading B/C paper shape: six independent three-option
+        // MCQs in Part B and two eight-question four-option MCQ texts in Part C.
+        // Practice-only question types must not enter a published paper through
+        // the shared structure validator.
+        ReadingPartCode.B => questionType == ReadingQuestionType.MultipleChoice3,
+        ReadingPartCode.C => questionType == ReadingQuestionType.MultipleChoice4,
         _ => false,
     };
 
@@ -1531,6 +1544,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                 {
                     if (correct.ValueKind != JsonValueKind.String)
                         throw new InvalidOperationException("Short-answer CorrectAnswerJson must be a string.");
+                    if (string.IsNullOrWhiteSpace(correct.GetString()))
+                        throw new InvalidOperationException("Short-answer CorrectAnswerJson must be non-empty.");
                     if (!string.IsNullOrWhiteSpace(synonymsJson))
                     {
                         try
@@ -1538,6 +1553,14 @@ public sealed class ReadingStructureService : IReadingStructureService
                             var syns = JsonDocument.Parse(synonymsJson).RootElement;
                             if (syns.ValueKind != JsonValueKind.Array)
                                 throw new InvalidOperationException("AcceptedSynonymsJson must be a JSON array of strings.");
+                            foreach (var synonym in syns.EnumerateArray())
+                            {
+                                if (synonym.ValueKind != JsonValueKind.String
+                                    || string.IsNullOrWhiteSpace(synonym.GetString()))
+                                {
+                                    throw new InvalidOperationException("AcceptedSynonymsJson must contain only non-empty strings.");
+                                }
+                            }
                         }
                         catch (JsonException)
                         {
@@ -1550,10 +1573,14 @@ public sealed class ReadingStructureService : IReadingStructureService
                 {
                     if (correct.ValueKind != JsonValueKind.Object)
                         throw new InvalidOperationException("Labeled short-answer CorrectAnswerJson must be a JSON object.");
+                    if (!correct.EnumerateObject().Any())
+                        throw new InvalidOperationException("Labeled short-answer CorrectAnswerJson must contain at least one answer.");
                     foreach (var prop in correct.EnumerateObject())
                     {
-                        if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.String)
-                            throw new InvalidOperationException("Labeled short-answer answers must be string values keyed by label.");
+                        if (string.IsNullOrWhiteSpace(prop.Name)
+                            || prop.Value.ValueKind != JsonValueKind.String
+                            || string.IsNullOrWhiteSpace(prop.Value.GetString()))
+                            throw new InvalidOperationException("Labeled short-answer answers must be non-empty string values keyed by label.");
                     }
 
                     if (!string.IsNullOrWhiteSpace(synonymsJson))

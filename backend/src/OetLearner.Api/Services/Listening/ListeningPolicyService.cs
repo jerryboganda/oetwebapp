@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -29,6 +30,38 @@ public sealed class ListeningPolicyService(LearnerDbContext db, IMemoryCache cac
 {
     private const string GlobalCacheKey = "ListeningPolicy:global";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
+    private static readonly HashSet<string> AllowedNormalisationProfiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "exact",
+        "trim_only",
+        "trim_collapse",
+        "trim_collapse_case_insensitive",
+    };
+
+    /// <summary>
+    /// Parse the owner-configured whole-attempt countdown warning thresholds.
+    /// Invalid policy JSON fails closed to no client-side warning thresholds;
+    /// the server deadline and expiry behaviour remain authoritative.
+    /// </summary>
+    public static IReadOnlyList<int> ParseCountdownWarnings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<int>();
+        try
+        {
+            var values = JsonSerializer.Deserialize<int[]>(json);
+            return values is null
+                ? Array.Empty<int>()
+                : values
+                    .Where(value => value > 0 && value <= 86_400)
+                    .Distinct()
+                    .OrderByDescending(value => value)
+                    .ToArray();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<int>();
+        }
+    }
 
     public async Task<ListeningPolicy> GetGlobalAsync(CancellationToken ct)
     {
@@ -54,6 +87,18 @@ public sealed class ListeningPolicyService(LearnerDbContext db, IMemoryCache cac
 
     public async Task<ListeningPolicy> UpsertGlobalAsync(ListeningPolicy next, string adminId, CancellationToken ct)
     {
+        if (next.AiExtractionMaxRetriesPerPaper < 0)
+            throw ApiException.Validation(
+                "listening_policy_invalid",
+                "AI extraction maximum retries per paper cannot be negative; use 0 for unlimited.");
+        if (string.IsNullOrWhiteSpace(next.ShortAnswerNormalisation)
+            || !AllowedNormalisationProfiles.Contains(next.ShortAnswerNormalisation.Trim()))
+        {
+            throw ApiException.Validation(
+                "listening_policy_invalid",
+                "Short-answer normalisation must be exact, trim_only, trim_collapse, or trim_collapse_case_insensitive; fuzzy matching is not permitted.");
+        }
+
         var row = await db.ListeningPolicies.FirstOrDefaultAsync(p => p.Id == "global", ct);
         if (row is null)
         {
@@ -84,7 +129,11 @@ public sealed class ListeningPolicyService(LearnerDbContext db, IMemoryCache cac
 
         // §5 AI extraction
         row.AiExtractionEnabled = next.AiExtractionEnabled;
-        row.AiExtractionRequireHumanApproval = next.AiExtractionRequireHumanApproval;
+        // Listening extraction is always staged as Pending and can only be
+        // applied through the explicit admin approval path. Keep this
+        // invariant server-owned even if an older client submits false.
+        row.AiExtractionRequireHumanApproval = true;
+        // 0 means unlimited; negative values were rejected above.
         row.AiExtractionMaxRetriesPerPaper = next.AiExtractionMaxRetriesPerPaper;
 
         // §6 Review

@@ -1446,6 +1446,16 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("```");
                 sb.AppendLine("Never invent passage content. Base every claim on the question stem or passage text supplied by the caller.");
                 break;
+            case AiTaskMode.AnswerReadingPassageQuestion:
+                sb.AppendLine("Return a SINGLE JSON object answering the learner's question about the supplied submitted Reading passage. No extra text outside the JSON block.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"reply\": \"A concise answer supported only by the stored passage and active Reading rules\",");
+                sb.AppendLine("  \"advisoryOnly\": true");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("If the passage does not support the answer, say so. Do not disclose answer keys, alter marks, or provide medical advice.");
+                break;
             case AiTaskMode.GenerateListeningExplanation:
                 sb.AppendLine("Return a SINGLE JSON object explaining why the correct Listening answer is supported by the approved transcript evidence and why the learner's stored answer was wrong. No extra text outside the JSON block.");
                 sb.AppendLine("```json");
@@ -1457,6 +1467,16 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("}");
                 sb.AppendLine("```");
                 sb.AppendLine("Never invent audio or transcript content. Base every claim on the supplied approved rationale, transcript evidence, question, and stored answer.");
+                break;
+            case AiTaskMode.AnswerListeningQuestion:
+                sb.AppendLine("Return a SINGLE JSON object answering the learner's post-submit question about the supplied Listening question and approved evidence. No extra text outside the JSON block.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"reply\": \"A concise answer supported only by the supplied question, answer context, approved rationale, and transcript evidence\",");
+                sb.AppendLine("  \"advisoryOnly\": true");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("If the supplied evidence does not support the answer, say so. Do not invent audio content, change marks, or provide medical advice.");
                 break;
             case AiTaskMode.GenerateReadingStructure:
                 sb.AppendLine("Return a SINGLE JSON object in the exact ReadingStructureManifest shape. Canonical Reading shape: Part A 20 items across 4 texts, Part B 6 three-option MCQ items across 6 texts, Part C 16 four-option MCQ items across 2 texts. Every question MUST cite ≥1 reading rule ID in `skillTag` or explanation text. Never invent a rule ID.");
@@ -1557,12 +1577,14 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             {
                 AiTaskMode.GenerateListeningStructure => "Task: extract the 42-item OET Listening authored structure (Part A 24 short-answer + Part B 6 MCQ + Part C 12 MCQ) from the supplied Question-Paper text + Audio-Script + Answer-Key. Every question must cite ≥1 listening rule ID. Never invent rule IDs. Validate the canonical shape before responding.",
                 AiTaskMode.GenerateListeningExplanation => "Task: explain the submitted Listening answer using only the supplied approved rationale and transcript evidence. Advisory only — do not re-score, alter marks, or infer audio content that is not supplied.",
+                AiTaskMode.AnswerListeningQuestion => "Task: answer a learner's post-submit question about the supplied Listening question using only the approved rationale and transcript evidence. Advisory only — do not re-score, alter marks, or infer audio content that is not supplied.",
                 _ => "Task: respond according to the reply format above."
             },
             RuleKind.Reading => ctx.Task switch
             {
                 AiTaskMode.GenerateReadingStructure => "Task: extract the 42-item OET Reading authored structure (Part A 20 + Part B 6 + Part C 16) from the supplied Reading source text and answer key. Every question must cite ≥1 reading rule ID. Never invent rule IDs. Validate the canonical shape before responding.",
                 AiTaskMode.GenerateReadingExplanation => "Task: explain why the correct answer is correct and why the learner's selected option is a distractor trap. Ground findings in reading rules. Advisory only — do not re-score.",
+                AiTaskMode.AnswerReadingPassageQuestion => "Task: answer a learner's post-submit question about the supplied Reading passage using only the stored passage and active Reading rules. Advisory only — do not disclose answer keys, alter marks, or provide medical advice.",
                 _ => "Task: respond according to the reply format above."
             },
             _ => "Task: respond according to the reply format above."
@@ -1587,7 +1609,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateListeningExplanation, GenerateReadingStructure, GenerateReadingExplanation }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateListeningExplanation, AnswerListeningQuestion, GenerateReadingStructure, GenerateReadingExplanation, AnswerReadingPassageQuestion }
 
 public sealed class AiGroundingContext
 {

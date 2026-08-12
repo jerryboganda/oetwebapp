@@ -57,4 +57,38 @@ public sealed class ListeningAudioTransportPolicyTests
         Assert.False(resolved.CanScrub);
         Assert.True(resolved.OnePlayOnly);
     }
+
+    [Fact]
+    public void Listening_policy_can_disable_practice_replay_even_when_marking_policy_allows_it()
+    {
+        var policy = new AssessmentMarkingPolicyDocument(
+            ListeningAudioReplayAllowed: true,
+            AudioLockMode: "practice");
+
+        var resolved = ListeningAudioTransportPolicy.FromPolicy(
+            "practice",
+            policy,
+            learningReplayAllowed: false);
+
+        Assert.False(resolved.CanPause);
+        Assert.False(resolved.CanScrub);
+        Assert.True(resolved.OnePlayOnly);
+    }
+
+    [Fact]
+    public void Relational_root_policy_snapshot_applies_practice_replay_setting()
+    {
+        var policy = new AssessmentMarkingPolicyDocument(
+            ListeningAudioReplayAllowed: true,
+            AudioLockMode: "practice");
+        var snapshot = JsonSerializer.Serialize(
+            new { markingPolicy = policy, learningReplayAllowed = false },
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+        var resolved = ListeningAudioTransportPolicy.FromSnapshot("practice", snapshot);
+
+        Assert.False(resolved.CanPause);
+        Assert.False(resolved.CanScrub);
+        Assert.True(resolved.OnePlayOnly);
+    }
 }

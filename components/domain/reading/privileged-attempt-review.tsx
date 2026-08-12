@@ -115,6 +115,34 @@ function OverrideBanner({ review }: { review: ReadingPrivilegedAttemptReview }) 
   );
 }
 
+function AdminReviewBanner({ review }: { review: ReadingPrivilegedAttemptReview }) {
+  if (!review.requiresAdminReview && review.invalidCount === 0) return null;
+  return (
+    <div
+      role="alert"
+      data-testid="reading-privileged-admin-review-warning"
+      className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/40"
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <div className="space-y-1">
+          <p className="font-semibold text-amber-900 dark:text-amber-200">
+            Administrator review required ({review.invalidCount} invalid answer{review.invalidCount === 1 ? '' : 's'})
+          </p>
+          <p className="text-amber-800 dark:text-amber-300">
+            Invalid answers are excluded from ordinary accuracy and conversion evidence until a controlled review is completed.
+          </p>
+          {review.adminReviewReason ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              <span className="font-medium">Reason:</span> {review.adminReviewReason}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Score summary ─────────────────────────────────────────────────────────
 
 function ScoreSummary({ review }: { review: ReadingPrivilegedAttemptReview }) {
@@ -162,6 +190,7 @@ function SectionTable({ sections }: { sections: ReadingPrivilegedSection[] }) {
             <th scope="col" className="px-4 py-2.5 text-right">Accuracy</th>
             <th scope="col" className="px-4 py-2.5 text-right">Correct</th>
             <th scope="col" className="px-4 py-2.5 text-right">Incorrect</th>
+            <th scope="col" className="px-4 py-2.5 text-right">Invalid review</th>
             <th scope="col" className="px-4 py-2.5 text-right">Unanswered</th>
           </tr>
         </thead>
@@ -186,6 +215,9 @@ function SectionTable({ sections }: { sections: ReadingPrivilegedSection[] }) {
               <td className="px-4 py-2.5 text-right tabular-nums text-red-700 dark:text-red-400">
                 {section.incorrectCount}
               </td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-amber-700 dark:text-amber-400">
+                {section.invalidCount}
+              </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
                 {section.unansweredCount}
               </td>
@@ -203,6 +235,9 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
   const [open, setOpen] = useState(false);
 
   const statusIcon = useMemo(() => {
+    if (question.isInvalid) {
+      return <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />;
+    }
     if (question.isCorrect === true) {
       return <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />;
     }
@@ -229,6 +264,11 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
             {question.flaggedForReview ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                 <Flag className="h-3 w-3" aria-hidden="true" /> Flagged
+              </span>
+            ) : null}
+            {question.isInvalid ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Invalid — admin review
               </span>
             ) : null}
             {question.answerRevisionCount > 0 ? (
@@ -281,7 +321,14 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
             </div>
           </dl>
 
-          {question.missReason ? (
+          {question.isInvalid ? (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-950/30">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Invalid answer</p>
+              <p className="mt-0.5 text-amber-800 dark:text-amber-300">
+                The persisted answer is indeterminate and requires controlled administrator review; it is not an ordinary incorrect response.
+              </p>
+            </div>
+          ) : question.missReason ? (
             <div className="rounded-lg bg-red-50 px-3 py-2 dark:bg-red-950/30">
               <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">Miss reason</p>
               <p className="mt-0.5 text-red-800 dark:text-red-300">{question.missReason}</p>
@@ -338,6 +385,8 @@ export function PrivilegedAttemptReview({ review, className }: PrivilegedAttempt
           {review.submittedAt ? ` · submitted ${new Date(review.submittedAt).toLocaleString()}` : ''}
         </p>
       </header>
+
+      <AdminReviewBanner review={review} />
 
       <ScoreSummary review={review} />
 

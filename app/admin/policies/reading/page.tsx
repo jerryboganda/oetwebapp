@@ -170,6 +170,7 @@ export default function AdminReadingGlobalPolicyPage() {
                   label="Short answer normalisation"
                   value={formData.shortAnswerNormalisation}
                   onChange={(e) => setField('shortAnswerNormalisation', e.target.value)}
+                  description="exact | trim_only | trim_collapse | trim_collapse_case_insensitive; fuzzy profiles are rejected"
                 />
                 <Input
                   label="Sentence completion strictness"
@@ -183,7 +184,7 @@ export default function AdminReadingGlobalPolicyPage() {
                     checked={formData.shortAnswerAcceptSynonyms}
                     onChange={(e) => setField('shortAnswerAcceptSynonyms', e.target.checked)}
                   />
-                  Accept synonyms for short answers
+                  Accept explicitly authored variants for short answers (non-standard)
                 </label>
                 <label className="flex items-center gap-2 col-span-2 text-sm">
                   <input
@@ -194,33 +195,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   />
                   Allow partial credit for matching questions
                 </label>
-                <label className="flex items-center gap-2 col-span-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-border text-primary"
-                    checked={formData.normalizeSmartQuotes}
-                    onChange={(e) => setField('normalizeSmartQuotes', e.target.checked)}
-                  />
-                  Normalise smart quotes (curly → straight) before matching
-                </label>
-                <label className="flex items-center gap-2 col-span-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-border text-primary"
-                    checked={formData.normalizeHyphenSpacing}
-                    onChange={(e) => setField('normalizeHyphenSpacing', e.target.checked)}
-                  />
-                  Normalise hyphen spacing (e.g. &ldquo;well-being&rdquo; ≈ &ldquo;well being&rdquo;)
-                </label>
-                <label className="flex items-center gap-2 col-span-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-border text-primary"
-                    checked={formData.normalizeUnitSpacing}
-                    onChange={(e) => setField('normalizeUnitSpacing', e.target.checked)}
-                  />
-                  Normalise unit spacing (e.g. &ldquo;5mg&rdquo; ≈ &ldquo;5 mg&rdquo;)
-                </label>
+                <p className="col-span-2 rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-muted">
+                  Strict v1.1 marking does not normalize punctuation, hyphenation, or number/unit
+                  forms. Add any permitted alternate explicitly to the question key.
+                </p>
                 <label className="flex items-center gap-2 col-span-2 text-sm">
                   <input
                     type="checkbox"
@@ -230,6 +208,49 @@ export default function AdminReadingGlobalPolicyPage() {
                   />
                   Part A matching is case-insensitive
                 </label>
+              </div>
+            </SettingsSection>
+
+            {/* AI extraction */}
+            <SettingsSection
+              title="AI extraction"
+              description="Control the Reading PDF-to-manifest pipeline. AI output is always staged for explicit human approval."
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="flex items-start gap-2 col-span-2 text-sm">
+                  <input
+                    type="checkbox"
+                    id="reading-ai-human-approval"
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+                    checked={formData.aiExtractionEnabled}
+                    onChange={(e) => setField('aiExtractionEnabled', e.target.checked)}
+                  />
+                  <span>
+                    <span className="block font-medium">Allow AI extraction</span>
+                    <span className="block text-xs text-muted">Kill-switch for Reading PDF extraction and manifest drafting.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 col-span-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+                    checked
+                    disabled
+                    aria-describedby="reading-ai-human-approval-help"
+                  />
+                  <span>
+                    <span className="block font-medium">Human approval required</span>
+                    <span id="reading-ai-human-approval-help" className="block text-xs text-muted">Always enforced; AI drafts cannot auto-publish into the question bank.</span>
+                  </span>
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  label="Maximum extractions per paper"
+                  value={formData.aiExtractionMaxRetriesPerPaper}
+                  onChange={(e) => setField('aiExtractionMaxRetriesPerPaper', Math.max(0, Math.floor(Number(e.target.value))))}
+                  hint="Counts all prior drafts; 0 means unlimited."
+                />
               </div>
             </SettingsSection>
 

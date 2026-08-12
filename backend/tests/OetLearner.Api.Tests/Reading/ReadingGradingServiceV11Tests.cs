@@ -119,6 +119,220 @@ public sealed class ReadingGradingServiceV11Tests
         }
     }
 
+    [Fact]
+    public async Task Multiple_selection_for_single_answer_mcq_is_held_for_admin_review()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        var paper = new ContentPaper
+        {
+            Id = "reading-paper-v11-multi",
+            SubtestCode = "reading",
+            Title = "Reading multiple-selection hold",
+            Slug = "reading-multiple-selection-hold",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExtractedTextJson = "{}",
+        };
+        var part = new ReadingPart
+        {
+            Id = "reading-part-b-v11-multi",
+            PaperId = paper.Id,
+            PartCode = ReadingPartCode.B,
+            TimeLimitMinutes = 45,
+            MaxRawScore = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var question = new ReadingQuestion
+        {
+            Id = "reading-question-b-v11-multi",
+            ReadingPartId = part.Id,
+            DisplayOrder = 21,
+            Points = 1,
+            QuestionType = ReadingQuestionType.MultipleChoice3,
+            Stem = "Choose one answer",
+            OptionsJson = "[{\"key\":\"A\"},{\"key\":\"B\"},{\"key\":\"C\"}]",
+            CorrectAnswerJson = "\"A\"",
+            ReviewState = ReadingReviewState.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var attempt = new ReadingAttempt
+        {
+            Id = "reading-attempt-v11-multi",
+            UserId = "learner-v11",
+            PaperId = paper.Id,
+            StartedAt = now,
+            LastActivityAt = now,
+            Status = ReadingAttemptStatus.InProgress,
+            Mode = ReadingAttemptMode.Exam,
+            MaxRawScore = 1,
+            PolicySnapshotJson = "{}",
+        };
+        var answer = new ReadingAnswer
+        {
+            Id = "reading-answer-v11-multi",
+            ReadingAttemptId = attempt.Id,
+            ReadingQuestionId = question.Id,
+            UserAnswerJson = "[\"A\",\"B\"]",
+            AnsweredAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        db.ContentPapers.Add(paper);
+        db.ReadingParts.Add(part);
+        db.ReadingQuestions.Add(question);
+        db.ReadingAttempts.Add(attempt);
+        db.ReadingAnswers.Add(answer);
+        db.ReadingPolicies.Add(new ReadingPolicy { Id = "global", UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var grader = new ReadingGradingService(
+            db,
+            new ReadingPolicyService(db, new MemoryCache(new MemoryCacheOptions())),
+            NullLogger<ReadingGradingService>.Instance);
+
+        var result = await grader.GradeAttemptAsync(attempt.Id, CancellationToken.None);
+        var saved = await db.ReadingAttempts.SingleAsync(a => a.Id == attempt.Id);
+        var savedAnswer = await db.ReadingAnswers.SingleAsync(a => a.Id == answer.Id);
+
+        Assert.True(saved.RequiresAdminReview);
+        Assert.Equal("multiple_selections_for_single_answer_mcq", saved.AdminReviewReason);
+        Assert.Null(savedAnswer.IsCorrect);
+        Assert.Equal(0, savedAnswer.PointsEarned);
+        Assert.Null(savedAnswer.SelectedDistractorCategory);
+        Assert.Equal("multiple_selection_review_required", savedAnswer.MissReason);
+        Assert.Null(saved.ScaledScore);
+        Assert.Null(saved.ScoreConversionTableId);
+        Assert.Equal(0, result.IncorrectCount);
+        Assert.Equal(1, result.InvalidCount);
+        Assert.Single(result.Answers);
+        Assert.True(result.Answers[0].IsInvalid);
+        Assert.Empty(await db.ReadingErrorBankEntries
+            .Where(entry => entry.ReadingQuestionId == question.Id)
+            .ToListAsync());
+
+        var tutor = new ReadingTutorService(
+            db,
+            grader,
+            NullLogger<ReadingTutorService>.Instance);
+        var privileged = await tutor.GetPrivilegedReviewAsync(attempt.Id, CancellationToken.None);
+        Assert.NotNull(privileged);
+        Assert.True(privileged!.RequiresAdminReview);
+        Assert.Equal("multiple_selections_for_single_answer_mcq", privileged.AdminReviewReason);
+        Assert.Equal(1, privileged.InvalidCount);
+        Assert.Equal(1, privileged.Sections.Single().InvalidCount);
+        Assert.Equal(0, privileged.Sections.Single().IncorrectCount);
+        Assert.True(privileged.Questions.Single().IsInvalid);
+        Assert.Null(privileged.GradedScaledScore);
+        Assert.Equal("multiple_selection_review_required", result.ScoreConversionErrorCode);
+        Assert.Contains(
+            await db.AuditEvents.ToListAsync(),
+            e => e.Action == "reading.mcq.multiple_selection_review_required");
+    }
+
+    [Fact]
+    public async Task Unknown_question_type_is_held_for_admin_review()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        var paper = new ContentPaper
+        {
+            Id = "reading-paper-v11-integrity",
+            SubtestCode = "reading",
+            Title = "Reading question integrity hold",
+            Slug = "reading-question-integrity-hold",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExtractedTextJson = "{}",
+        };
+        var part = new ReadingPart
+        {
+            Id = "reading-part-v11-integrity",
+            PaperId = paper.Id,
+            PartCode = ReadingPartCode.B,
+            TimeLimitMinutes = 45,
+            MaxRawScore = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var question = new ReadingQuestion
+        {
+            Id = "reading-question-v11-integrity",
+            ReadingPartId = part.Id,
+            DisplayOrder = 21,
+            Points = 1,
+            QuestionType = (ReadingQuestionType)999,
+            Stem = "Corrupt question type",
+            CorrectAnswerJson = "\"A\"",
+            ReviewState = ReadingReviewState.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var attempt = new ReadingAttempt
+        {
+            Id = "reading-attempt-v11-integrity",
+            UserId = "learner-v11",
+            PaperId = paper.Id,
+            StartedAt = now,
+            LastActivityAt = now,
+            Status = ReadingAttemptStatus.InProgress,
+            Mode = ReadingAttemptMode.Exam,
+            MaxRawScore = 1,
+            PolicySnapshotJson = "{}",
+        };
+        var answer = new ReadingAnswer
+        {
+            Id = "reading-answer-v11-integrity",
+            ReadingAttemptId = attempt.Id,
+            ReadingQuestionId = question.Id,
+            UserAnswerJson = "\"A\"",
+            AnsweredAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        db.ContentPapers.Add(paper);
+        db.ReadingParts.Add(part);
+        db.ReadingQuestions.Add(question);
+        db.ReadingAttempts.Add(attempt);
+        db.ReadingAnswers.Add(answer);
+        db.ReadingPolicies.Add(new ReadingPolicy { Id = "global", UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var grader = new ReadingGradingService(
+            db,
+            new ReadingPolicyService(db, new MemoryCache(new MemoryCacheOptions())),
+            NullLogger<ReadingGradingService>.Instance);
+
+        var result = await grader.GradeAttemptAsync(attempt.Id, CancellationToken.None);
+        var saved = await db.ReadingAttempts.SingleAsync(a => a.Id == attempt.Id);
+        var savedAnswer = await db.ReadingAnswers.SingleAsync(a => a.Id == answer.Id);
+
+        Assert.True(saved.RequiresAdminReview);
+        Assert.Equal(ReadingGradingService.QuestionIntegrityReviewReason, saved.AdminReviewReason);
+        Assert.Null(savedAnswer.IsCorrect);
+        Assert.Equal(0, savedAnswer.PointsEarned);
+        Assert.Equal(ReadingGradingService.QuestionIntegrityReviewReason, savedAnswer.MissReason);
+        Assert.Equal(0, result.RawScore);
+        Assert.Equal(0, result.IncorrectCount);
+        Assert.Equal(1, result.InvalidCount);
+        Assert.Null(result.ScaledScore);
+        Assert.Equal(ReadingGradingService.QuestionIntegrityReviewReason, result.ScoreConversionErrorCode);
+        Assert.Empty(await db.ReadingErrorBankEntries
+            .Where(entry => entry.ReadingQuestionId == question.Id)
+            .ToListAsync());
+        Assert.Contains(
+            await db.AuditEvents.ToListAsync(),
+            e => e.Action == "reading.question.integrity_review_required");
+    }
+
     private static LearnerDbContext NewDb() => new(
         new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))

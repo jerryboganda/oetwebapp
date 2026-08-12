@@ -69,6 +69,8 @@ export interface ListeningExamSubSection {
   timeLimitSeconds: number;
   questions: ListeningSessionQuestionDto[];
   extract: ListeningExtractMetadataDto | null;
+  /** All authored extracts in this sub-section; Part B uses one per question. */
+  extracts?: ListeningExtractMetadataDto[];
 }
 
 /**
@@ -113,13 +115,20 @@ export function buildListeningExamSubSections(
   session: Pick<ListeningSessionDto, 'paper' | 'questions'>,
 ): ListeningExamSubSection[] {
   const extractByPart = new Map<ListeningExamPartCode, ListeningExtractMetadataDto>();
+  const extractsByPart = new Map<ListeningExamPartCode, ListeningExtractMetadataDto[]>();
   for (const extract of session.paper.extracts ?? []) {
     const code = normalizeExamPartCode(extract.partCode);
     if (!code) continue;
-    // First-wins within a part code (extracts are pre-ordered by displayOrder),
+    const bucket = extractsByPart.get(code);
+    if (bucket) bucket.push(extract);
+    else extractsByPart.set(code, [extract]);
+    // First-wins within a part code for the section-level audio/title/timer;
     // so Part B's representative extract is B1 — its authored timer drives the
     // single "B" section's countdown.
     if (!extractByPart.has(code)) extractByPart.set(code, extract);
+  }
+  for (const bucket of extractsByPart.values()) {
+    bucket.sort((a, b) => a.displayOrder - b.displayOrder);
   }
 
   const questionsByPart = new Map<ListeningExamPartCode, ListeningSessionQuestionDto[]>();
@@ -144,7 +153,12 @@ export function buildListeningExamSubSections(
 
     // Per-section audio map wins (Part B → the single shared "B" file); fall
     // back to the representative extract's resolved URL for older sessions.
-    const audioUrl = audioByPart[partCode] ?? extract?.audioUrl ?? null;
+    const parentPartCode = partCode.length > 1 ? partCode.slice(0, 1) : partCode;
+    const audioUrl = audioByPart[partCode]
+      ?? audioByPart[parentPartCode]
+      ?? extract?.audioUrl
+      ?? session.paper.audioUrl
+      ?? null;
     const authoredLimit = extract?.timeLimitSeconds ?? null;
     sections.push({
       index: sections.length,
@@ -158,6 +172,7 @@ export function buildListeningExamSubSections(
         : LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
       questions,
       extract,
+      extracts: extractsByPart.get(partCode) ?? (extract ? [extract] : []),
     });
   }
 

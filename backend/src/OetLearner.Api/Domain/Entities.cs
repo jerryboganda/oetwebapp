@@ -339,6 +339,10 @@ public class Attempt
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public int ElapsedSeconds { get; set; }
+    /// <summary>Optimistic-concurrency token for legacy Listening submit and
+    /// draft mutations. The existing column is reused so concurrent submits
+    /// cannot both persist a completed evaluation.</summary>
+    [ConcurrencyCheck]
     public int DraftVersion { get; set; } = 1;
 
     /// <summary>Listening playback failure hold. A media error can invalidate

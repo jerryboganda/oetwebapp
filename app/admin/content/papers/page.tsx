@@ -131,7 +131,7 @@ export default function ContentPapersListPage() {
         title: newTitle.trim(),
         appliesToAllProfessions: newApplyAll,
         professionId: newApplyAll ? null : newProfession,
-        estimatedDurationMinutes: newSubtest === 'listening' ? 40 : newSubtest === 'reading' ? 60 : 45,
+        estimatedDurationMinutes: newSubtest === 'listening' ? 45 : newSubtest === 'reading' ? 60 : 45,
         priority: 0,
         sourceProvenance: newProvenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
       });

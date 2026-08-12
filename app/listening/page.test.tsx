@@ -83,13 +83,19 @@ function buildPaper(overrides?: Partial<{ id: string; title: string; route: stri
   };
 }
 
-function buildHome(papers: ReturnType<typeof buildPaper>[], recentResults: unknown[] = []) {
+function buildHome(
+  papers: ReturnType<typeof buildPaper>[],
+  recentResults: unknown[] = [],
+  progress?: { display: string; mode: 'best' | 'latest' | 'average' | 'first' },
+) {
   return {
     intro: '',
     papers,
     featuredTasks: [],
     activeAttempts: [],
     recentResults,
+    progressScoreDisplay: progress?.display ?? null,
+    progressScoreDisplayMode: progress?.mode ?? 'latest',
     partCollections: [],
     transcriptBackedReview: { title: '', route: null, availableAfterAttempt: false, latestAttemptId: null, latestScoreDisplay: null },
     distractorDrills: [],
@@ -133,5 +139,14 @@ describe('Listening hub — available papers library (Reading parity)', () => {
 
     expect(await screen.findByText('Listening Sample 1')).toBeInTheDocument();
     expect(screen.getByText(/Premium/i)).toBeInTheDocument();
+  });
+
+  it('renders the owner-selected progress score instead of assuming latest', async () => {
+    mockGetListeningHome.mockResolvedValue(
+      buildHome([], [], { display: '18 / 42 • 365 / 500 • Grade B', mode: 'best' }),
+    );
+    render(<ListeningHome />);
+
+    expect(await screen.findByText('best score: 18 / 42 • 365 / 500 • Grade B')).toBeInTheDocument();
   });
 });

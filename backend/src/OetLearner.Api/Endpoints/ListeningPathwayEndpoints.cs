@@ -75,6 +75,26 @@ public static class ListeningPathwayEndpoints
         })
         .WithName("ListeningGetProfile");
 
+        group.MapPost("/audio-check", async (
+            AudioCheckRequest request,
+            HttpContext http,
+            IListeningLearnerPathwayService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            try
+            {
+                return Results.Ok(await svc.SubmitAudioCheckAsync(userId, request, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest("invalid_audio_check", ex.Message);
+            }
+        })
+        .WithName("ListeningSubmitAudioCheck")
+        .WithSummary("Record the learner audio sound check before a strict Listening attempt starts")
+        .RequireRateLimiting("PerUserWrite");
+
         group.MapGet("/lessons", async (
             HttpContext http,
             IListeningLessonService svc,
@@ -789,7 +809,6 @@ public static class ListeningPathwayEndpoints
     private static string ResolveAccentLabel(string code)
         => AccentLabels.TryGetValue(code, out var label) ? label : code;
 }
-
 
 
 

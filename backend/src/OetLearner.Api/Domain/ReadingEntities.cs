@@ -495,6 +495,15 @@ public class ReadingAttempt
 
     public ReadingAttemptStatus Status { get; set; } = ReadingAttemptStatus.InProgress;
 
+    /// <summary>True when the submitted answer payload cannot be scored
+    /// automatically and requires administrator review.</summary>
+    public bool RequiresAdminReview { get; set; }
+
+    [MaxLength(256)]
+    public string? AdminReviewReason { get; set; }
+
+    public DateTimeOffset? AdminReviewFlaggedAt { get; set; }
+
     /// <summary>Raw marks. Null until graded. 42 max on real papers.</summary>
     public int? RawScore { get; set; }
 
@@ -758,7 +767,7 @@ public class ReadingPolicy
     /// <summary>Wave 1 — when true, smart/curly quotes and apostrophes in
     /// both the correct answer and the learner's answer are folded to ASCII
     /// before comparison. OET-faithful and safe; default true.</summary>
-    public bool NormalizeSmartQuotes { get; set; } = true;
+    public bool NormalizeSmartQuotes { get; set; } = false;
 
     /// <summary>Wave 1 — when true, spaces around hyphens are collapsed
     /// (<c>"x - y"</c> → <c>"x-y"</c>) before comparison. Default false to

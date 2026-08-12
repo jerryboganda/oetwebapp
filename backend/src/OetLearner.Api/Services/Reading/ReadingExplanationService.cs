@@ -14,12 +14,10 @@ namespace OetLearner.Api.Services.Reading;
 // Generates or retrieves per-question "why was the correct answer right /
 // why was my selected option wrong" explanations for Reading Module questions.
 //
-// Two-tier strategy:
-//   1. Pre-generated: if the question's ExplanationMarkdown already contains
-//      a JSON payload (prefixed with ":::json"), deserialise and return it.
-//   2. AI-generated: call Claude via the grounded gateway with the Reading
-//      rulebook; cache the result back onto ExplanationMarkdown so subsequent
-//      requests for the same question + wrong option are instant.
+// AI-generated only after submission: call the grounded gateway with the
+// Reading rulebook. Author-approved rationale and source evidence are required
+// before the call; the generated explanation is never written to shared
+// question content.
 //
 // Feature code: reading.explanation.v1 (registered in AiFeatureCodes).
 // ═════════════════════════════════════════════════════════════════════════════
@@ -56,7 +54,7 @@ public sealed class ReadingExplanationService(
     ILogger<ReadingExplanationService>? logger = null)
     : IReadingExplanationService
 {
-    private const string CachePrefix = ":::json\n";
+    private const string PromptTemplateId = "reading.explanation.v1";
 
     // ── AI generation ───────────────────────────────────────────────────────
 
@@ -71,14 +69,17 @@ public sealed class ReadingExplanationService(
         string? userId,
         CancellationToken ct)
     {
-        OetRulebook rulebook;
         try
         {
-            rulebook = rulebookLoader.Load(RuleKind.Reading, ExamProfession.Medicine);
+            // Resolve the approved rulebook before building the grounded
+            // prompt. A synthetic fallback would make an AI explanation look
+            // grounded even when the owner-approved rulebook is unavailable.
+            _ = rulebookLoader.Load(RuleKind.Reading, ExamProfession.Medicine);
         }
         catch (RulebookNotFoundException)
         {
-            rulebook = new OetRulebook { Version = "fallback", Kind = RuleKind.Reading };
+            throw new ReadingGroundedExplanationUnavailableException(
+                "The Reading rulebook is unavailable; grounded explanation is blocked.");
         }
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
@@ -106,6 +107,7 @@ public sealed class ReadingExplanationService(
                 Model = string.Empty,
                 Temperature = 0.2,
                 FeatureCode = AiFeatureCodes.ReadingExplanation,
+                PromptTemplateId = PromptTemplateId,
                 UserId = userId,
             }, ct);
 
@@ -283,65 +285,6 @@ public sealed class ReadingExplanationService(
     }
 
     // ── Cache persistence ───────────────────────────────────────────────────
-
-    private async Task PersistCacheAsync(
-        ReadingQuestion question,
-        string wrongOption,
-        string language,
-        ExplanationDto dto,
-        CancellationToken ct)
-    {
-        try
-        {
-            // Deserialise existing cache (if any) and add / overwrite the new entry.
-            Dictionary<string, ExplanationDto> cache;
-            if (!string.IsNullOrWhiteSpace(question.ExplanationMarkdown)
-                && question.ExplanationMarkdown.StartsWith(CachePrefix, StringComparison.Ordinal))
-            {
-                cache = TryDeserializeCachedExplanations(
-                    question.ExplanationMarkdown[CachePrefix.Length..])
-                    ?? new Dictionary<string, ExplanationDto>(StringComparer.Ordinal);
-            }
-            else
-            {
-                cache = new Dictionary<string, ExplanationDto>(StringComparer.Ordinal);
-            }
-
-            var key = $"{wrongOption.Trim().ToUpperInvariant()}:{language}";
-            cache[key] = dto;
-
-            var newPayload = CachePrefix + JsonSerializer.Serialize(cache);
-
-            // Cap at 4096 chars to match the field constraint. If the serialised
-            // cache would exceed the limit, skip persisting (no data loss — the
-            // original ExplanationMarkdown content is preserved).
-            if (newPayload.Length <= 4096)
-            {
-                question.ExplanationMarkdown = newPayload;
-                await db.SaveChangesAsync(ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Cache write failure is non-fatal; log and continue.
-            logger?.LogWarning(ex,
-                "ReadingExplanationService — failed to persist explanation cache for question '{QuestionId}'.",
-                question.Id);
-        }
-    }
-
-    private static Dictionary<string, ExplanationDto>? TryDeserializeCachedExplanations(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return null;
-        try
-        {
-            return JsonSerializer.Deserialize<Dictionary<string, ExplanationDto>>(json);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 

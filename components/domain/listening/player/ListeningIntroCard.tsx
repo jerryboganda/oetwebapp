@@ -82,6 +82,31 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
       <Volume2 className="mx-auto mb-4 h-9 w-9 text-primary" aria-hidden="true" />
       <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">{modeLabel}</p>
       <h2 className="mb-4 text-2xl font-black text-navy">{session.paper.title}</h2>
+      {session.preflight ? (
+        <div className="mx-auto mb-6 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left" data-testid="listening-preflight-summary">
+          <h3 className="text-xs font-black uppercase tracking-[0.16em] text-muted">Confirm your test</h3>
+          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Candidate</dt>
+              <dd className="font-semibold text-navy">{session.preflight.candidate.displayName}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Profession</dt>
+              <dd className="font-semibold text-navy">{session.preflight.candidate.professionLabel ?? session.preflight.candidate.professionId ?? 'Not specified'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Selected test</dt>
+              <dd className="font-semibold text-navy">{session.preflight.selectedTest.title}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-muted">Eligibility</dt>
+              <dd className={session.preflight.eligibility.eligible ? 'font-semibold text-success' : 'font-semibold text-danger'}>
+                {session.preflight.eligibility.eligible ? 'Checked — eligible to start' : session.preflight.eligibility.reason ?? 'Not eligible to start'}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
       {drillId ? (
         <p className="mx-auto mb-4 max-w-lg text-sm text-muted">
           This launch came from a focused drill route, so listen for the error pattern before
@@ -100,13 +125,24 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
             <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
             <span>Transcript evidence and answer keys stay locked until submit.</span>
           </li>
-          <li className="flex items-start gap-2">
-            <Lock className="h-5 w-5 shrink-0 text-warning" />
-            <span>
-              <strong className="text-navy">Forward-only:</strong> when a section&apos;s audio ends it
-              locks permanently and the next section opens automatically — you cannot return to it.
-            </span>
-          </li>
+          {session.modePolicy.onePlayOnly ? (
+            <li className="flex items-start gap-2">
+              <Lock className="h-5 w-5 shrink-0 text-warning" />
+              <span>
+                <strong className="text-navy">Forward-only:</strong> when a section&apos;s audio ends it
+                opens an irreversible finish confirmation. After you confirm, it locks permanently and
+                the next section opens; you cannot return to it.
+              </span>
+            </li>
+          ) : (
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+              <span>
+                <strong className="text-navy">Practice controls:</strong> this mode follows its
+                server policy for pausing, scrubbing, replaying, and section review navigation.
+              </span>
+            </li>
+          )}
           <li className="flex items-start gap-2">
             <Timer className="h-5 w-5 shrink-0 text-warning" />
             <span>
@@ -133,19 +169,22 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
               </span>
             </li>
           ) : null}
-          <li className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
-            <span className="font-bold text-danger">
-              Audio plays once per section and cannot be paused, scrubbed, or replayed. Each section
-              advances automatically when its audio ends.
-            </span>
-          </li>
-          {session.modePolicy.integrityLockRequired ? (
+          {session.modePolicy.onePlayOnly ? (
             <li className="flex items-start gap-2">
-              <Lock className="h-5 w-5 shrink-0 text-danger" />
+              <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
               <span className="font-bold text-danger">
-                OET@Home: stay in full-screen for the entire test. Leaving full-screen flags an
-                integrity event.
+                Audio plays once per section and cannot be paused, scrubbed, or replayed. Each section
+                requires an irreversible finish confirmation when its audio ends.
+              </span>
+            </li>
+          ) : null}
+          {strictReadinessRequired ? (
+            <li className="flex items-start gap-2">
+              <Lock className="h-5 w-5 shrink-0 text-muted" />
+              <span>
+                <strong className="text-navy">Focus guidance:</strong> keep this test window
+                visible when possible. Full-screen is optional and leaving it does not block the
+                attempt; focus and fullscreen changes may be recorded for technical guidance.
               </span>
             </li>
           ) : null}
@@ -217,6 +256,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
             isStarting ||
             !session.paper.audioAvailable ||
             !session.readiness.objectiveReady ||
+            session.preflight?.eligibility.eligible === false ||
             (strictReadinessRequired && !techReadiness?.audioOk)
           }
           className="gap-2"

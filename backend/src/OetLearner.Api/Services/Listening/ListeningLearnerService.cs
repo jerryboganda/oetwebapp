@@ -19,7 +19,8 @@ public sealed class ListeningLearnerService(
     IAiPackageCreditService? aiPackageCreditService = null,
     ListeningGradingService? gradingService = null,
     IAssessmentScoreConversionService? scoreConversionService = null,
-    IAssessmentMarkingPolicyService? markingPolicyService = null)
+    IAssessmentMarkingPolicyService? markingPolicyService = null,
+    IListeningPolicyService? listeningPolicyService = null)
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
@@ -36,11 +37,17 @@ public sealed class ListeningLearnerService(
     /// question id) ignores it. It is also filtered out of every answered-count.
     /// </summary>
     private const string GenericSectionCursorKey = "__listeningSectionCursor";
+    private const string GenericAudioPlaybackStateKey = "__listeningAudioPlaybackState";
+    private const string GenericAudioResumeMsKey = "__listeningAudioResumeMs";
+    private const string GenericAudioSectionKey = "__listeningAudioSection";
+    private const string GenericAudioQuestionIndexKey = "__listeningAudioQuestionIndex";
 
     public async Task<object> GetHomeAsync(string userId, CancellationToken ct)
     {
         await EnsureLearnerAsync(userId, ct);
         var profession = await GetLearnerProfessionAsync(userId, ct);
+        var (listeningPolicy, _) = await ResolveListeningPolicyAsync(userId, ct);
+        var showPastAttempts = listeningPolicy.ShowPastAttempts;
 
         var papers = await db.ContentPapers.AsNoTracking()
             .Include(p => p.Assets.Where(a => a.IsPrimary))
@@ -164,54 +171,59 @@ public sealed class ListeningLearnerService(
             .Take(3)
             .ToList();
 
-        var recentResults = attempts
-            .Where(a => a.State == AttemptState.Completed)
+        var allResults = attempts
+            .Where(a => showPastAttempts && a.State == AttemptState.Completed)
             .Select(a =>
             {
                 var evaluation = evaluations.FirstOrDefault(e => e.AttemptId == a.Id);
-                var score = ResolveScoreFromEvaluation(evaluation);
-                return new
-                {
-                    attemptId = a.Id,
-                    paperId = a.ContentId,
-                    paperTitle = titleByContentId.GetValueOrDefault(a.ContentId, "Listening paper"),
-                    rawScore = score.RawScore,
-                    maxRawScore = score.MaxRawScore,
-                    scaledScore = score.ScaledScore,
-                    grade = score.Grade,
-                    passed = score.Passed,
-                    submittedAt = a.SubmittedAt,
-                    scoreDisplay = FormatScoreDisplay(score),
-                    route = $"/listening/results/{Uri.EscapeDataString(a.Id)}"
-                };
+                var score = ResolveScoreFromEvaluation(evaluation, a.RequiresAdminReview);
+                return new ListeningHomeResultProjection(
+                    attemptId: a.Id,
+                    paperId: a.ContentId,
+                    paperTitle: titleByContentId.GetValueOrDefault(a.ContentId, "Listening paper"),
+                    rawScore: score.RawScore,
+                    maxRawScore: score.MaxRawScore,
+                    scaledScore: score.ScaledScore,
+                    grade: score.Grade,
+                    passed: score.Passed,
+                    submittedAt: a.SubmittedAt,
+                    scoreDisplay: FormatScoreDisplay(score),
+                    route: $"/listening/results/{Uri.EscapeDataString(a.Id)}",
+                    requiresAdminReview: a.RequiresAdminReview,
+                    adminReviewReason: a.AdminReviewReason);
             })
             .Concat(relationalAttempts
-                .Where(a => a.Status == ListeningAttemptStatus.Submitted)
+                .Where(a => showPastAttempts && a.Status == ListeningAttemptStatus.Submitted)
                 .Select(a =>
                 {
                     var evaluation = evaluations.FirstOrDefault(e => e.AttemptId == a.Id);
                     var score = ResolveScoreFromRelationalAttempt(a, evaluation);
-                    return new
-                    {
-                        attemptId = a.Id,
-                        paperId = a.PaperId,
-                        paperTitle = titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper"),
-                        rawScore = score.RawScore,
-                        maxRawScore = score.MaxRawScore,
-                        scaledScore = score.ScaledScore,
-                        grade = score.Grade,
-                        passed = score.Passed,
-                        submittedAt = a.SubmittedAt,
-                        scoreDisplay = FormatScoreDisplay(score),
-                        route = $"/listening/results/{Uri.EscapeDataString(a.Id)}"
-                    };
+                    return new ListeningHomeResultProjection(
+                        attemptId: a.Id,
+                        paperId: a.PaperId,
+                        paperTitle: titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper"),
+                        rawScore: score.RawScore,
+                        maxRawScore: score.MaxRawScore,
+                        scaledScore: score.ScaledScore,
+                        grade: score.Grade,
+                        passed: score.Passed,
+                        submittedAt: a.SubmittedAt,
+                        scoreDisplay: FormatScoreDisplay(score),
+                        route: $"/listening/results/{Uri.EscapeDataString(a.Id)}",
+                        requiresAdminReview: a.RequiresAdminReview,
+                        adminReviewReason: a.AdminReviewReason);
                 }))
             .OrderByDescending(result => result.submittedAt)
-            .Take(5)
             .ToList();
+        var recentResults = allResults.Take(5).ToList();
+        var progressScoreDisplay = SelectProgressScoreDisplay(allResults, listeningPolicy.BestScoreDisplay);
 
-        var latestCompletedAttempt = attempts.FirstOrDefault(a => a.State == AttemptState.Completed);
-        var latestRelationalAttempt = relationalAttempts.FirstOrDefault(a => a.Status == ListeningAttemptStatus.Submitted);
+        var latestCompletedAttempt = showPastAttempts
+            ? attempts.FirstOrDefault(a => a.State == AttemptState.Completed)
+            : null;
+        var latestRelationalAttempt = showPastAttempts
+            ? relationalAttempts.FirstOrDefault(a => a.Status == ListeningAttemptStatus.Submitted)
+            : null;
         if (latestCompletedAttempt is not null && latestRelationalAttempt is not null
             && (latestCompletedAttempt.CompletedAt ?? latestCompletedAttempt.SubmittedAt ?? DateTimeOffset.MinValue)
                 < (latestRelationalAttempt.SubmittedAt ?? DateTimeOffset.MinValue))
@@ -285,6 +297,11 @@ public sealed class ListeningLearnerService(
             {
                 var lastGeneric = attempts.FirstOrDefault(a => a.ContentId == paper.Id);
                 var lastRelational = relationalAttempts.FirstOrDefault(a => a.PaperId == paper.Id);
+                if (!showPastAttempts)
+                {
+                    if (lastGeneric?.State != AttemptState.InProgress) lastGeneric = null;
+                    if (lastRelational?.Status != ListeningAttemptStatus.InProgress) lastRelational = null;
+                }
                 paperDtos.Add(PaperHomeDto(
                     paper,
                     BuildPaperLastAttemptDto(paper.Id, lastGeneric, lastRelational),
@@ -310,6 +327,8 @@ public sealed class ListeningLearnerService(
             featuredTasks,
             activeAttempts,
             recentResults,
+            progressScoreDisplay,
+            progressScoreDisplayMode = NormalizeBestScoreDisplay(listeningPolicy.BestScoreDisplay),
             partCollections = BuildPartCollections(paperDtos, featuredTasks, papers.FirstOrDefault()?.Id ?? legacyTasks.FirstOrDefault()?.Id),
             transcriptBackedReview = new
             {
@@ -317,9 +336,11 @@ public sealed class ListeningLearnerService(
                 route = latestCompletedAttempt is null && latestRelationalAttempt is null ? null : $"/listening/review/{latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id}",
                 availableAfterAttempt = true,
                 latestAttemptId = latestCompletedAttempt?.Id ?? latestRelationalAttempt?.Id,
-                latestScoreDisplay = latestEvaluation is not null
-                    ? FormatScoreDisplay(ResolveScoreFromEvaluation(latestEvaluation))
-                    : latestRelationalAttempt is null ? null : FormatScoreDisplay(ResolveScoreFromRelationalAttempt(latestRelationalAttempt, null))
+                latestScoreDisplay = latestCompletedAttempt is not null && latestEvaluation is not null
+                    ? FormatScoreDisplay(ResolveScoreFromEvaluation(latestEvaluation, latestCompletedAttempt.RequiresAdminReview))
+                    : latestRelationalAttempt is not null
+                        ? FormatScoreDisplay(ResolveScoreFromRelationalAttempt(latestRelationalAttempt, latestEvaluation))
+                        : null
             },
             distractorDrills = drillGroups,
             drillGroups,
@@ -412,6 +433,19 @@ public sealed class ListeningLearnerService(
         }
 
         var questions = source.Questions.Select(LearnerQuestionDto).ToList();
+        var candidate = await db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new
+            {
+                user.DisplayName,
+                user.ActiveProfessionId,
+                ProfessionLabel = db.Professions
+                    .Where(profession => profession.Id == user.ActiveProfessionId)
+                    .Select(profession => profession.Label)
+                    .FirstOrDefault(),
+            })
+            .SingleOrDefaultAsync(ct);
         var answers = relationalAttempt is not null
             ? await LoadRelationalAnswersAsync(relationalAttempt.Id, ct)
             : attempt is null ? new Dictionary<string, string?>() : DeserializeAnswers(attempt.AnswersJson);
@@ -423,8 +457,40 @@ public sealed class ListeningLearnerService(
             : attempt is not null
                 ? ListeningAudioTransportPolicy.FromSnapshot(effectiveMode, attempt.PolicySnapshotJson)
                 : await ResolveCurrentAudioTransportPolicyAsync(effectiveMode, ct);
+        var countdownWarningsSeconds = await ResolveCountdownWarningsForSessionAsync(
+            userId,
+            relationalAttempt?.PolicySnapshotJson ?? attempt?.PolicySnapshotJson,
+            ct);
+        var screenReaderOptimised = await ResolveScreenReaderOptimisedForSessionAsync(
+            userId,
+            relationalAttempt?.PolicySnapshotJson ?? attempt?.PolicySnapshotJson,
+            ct);
+        var audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl)
+            || source.AudioUrlByPart?.Values.Any(url => !string.IsNullOrWhiteSpace(url)) == true;
+        var allRequiredAudioAvailable = HasAllRequiredAudioAssets(source);
+        var objectiveReady = source.Questions.Count > 0;
+        var preflightEligible = objectiveReady && allRequiredAudioAvailable;
+        string? preflightEligibilityReason = !objectiveReady
+            ? "Structured Listening questions are not ready yet."
+            : !allRequiredAudioAvailable
+                ? "Scored Listening audio is not available yet."
+                : null;
+        if (preflightEligible && relationalAttempt is null && attempt is null)
+        {
+            try
+            {
+                var (policy, _) = await ResolveListeningPolicyAsync(userId, ct);
+                await EnsureAttemptEligibilityAsync(userId, source, normalizedMode, policy, ct);
+            }
+            catch (ApiException ex)
+            {
+                preflightEligible = false;
+                preflightEligibilityReason = ex.Message;
+            }
+        }
         return new
         {
+            serverNow = DateTimeOffset.UtcNow,
             paper = SourceDto(source),
             attempt = relationalAttempt is not null
                 ? RelationalAttemptDto(relationalAttempt, answers)
@@ -439,6 +505,8 @@ public sealed class ListeningLearnerService(
                 canPause = audioTransport.CanPause,
                 canScrub = audioTransport.CanScrub,
                 onePlayOnly = audioTransport.OnePlayOnly,
+                countdownWarningsSeconds,
+                screenReaderOptimised,
                 audioLockMode = audioTransport.LockMode,
                 autosave = true,
                 transcriptPolicy = "per_item_post_attempt",
@@ -452,7 +520,11 @@ public sealed class ListeningLearnerService(
                     "diagnostic" => "diagnostic",
                     _ => "practice"
                 },
-                integrityLockRequired = effectiveMode == "home",
+                // Fullscreen and focus are technical guidance signals. They
+                // must not block an attempt without an explicit owner-approved
+                // exam-rehearsal policy.
+                integrityLockRequired = false,
+                technicalGuidanceTelemetryEnabled = true,
                 printableBooklet = false,
                 freeNavigation = effectiveMode == "diagnostic",
                 unansweredWarningRequired = IsExamMode(effectiveMode),
@@ -467,14 +539,37 @@ public sealed class ListeningLearnerService(
                 passScaledScore = (int?)null,
                 conversionPolicy = "owner_managed_exact_table"
             },
+            preflight = new
+            {
+                candidate = new
+                {
+                    displayName = candidate?.DisplayName ?? "Candidate",
+                    professionId = candidate?.ActiveProfessionId,
+                    professionLabel = candidate?.ProfessionLabel,
+                },
+                selectedTest = new
+                {
+                    id = source.Id,
+                    title = source.Title,
+                    mode = effectiveMode,
+                },
+                eligibility = new
+                {
+                    checkedAtServer = true,
+                    eligible = preflightEligible,
+                    reason = preflightEligibilityReason,
+                },
+            },
             readiness = new
             {
-                objectiveReady = source.Questions.Count > 0,
+                objectiveReady,
                 questionCount = source.Questions.Count,
-                audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl),
-                missingReason = source.Questions.Count == 0
+                audioAvailable,
+                missingReason = !objectiveReady
                     ? "This paper has media assets but no structured Listening question map yet, so graded attempts are disabled."
-                    : null
+                    : !allRequiredAudioAvailable
+                        ? "Scored Listening audio is not available yet."
+                        : null
             }
         };
     }
@@ -522,6 +617,25 @@ public sealed class ListeningLearnerService(
             }
         }
 
+        // Keep the legacy JSON-backed path subject to the same server-owned
+        // strict-start gates as relational papers. The client preflight is
+        // only a convenience; a direct start request must not bypass the
+        // sound check or begin an exam whose scored audio is incomplete.
+        if (normalizedMode is "exam" or "home"
+            && !await HasValidAudioCheckAsync(userId, DateTimeOffset.UtcNow, ct))
+        {
+            throw ApiException.Validation(
+                "listening_audio_check_required",
+                "Pass the Listening sound check before starting this exam. Run the sound check, then return here to begin.");
+        }
+
+        if (IsExamMode(normalizedMode) && !HasAllRequiredAudioAssets(source))
+        {
+            throw ApiException.Conflict(
+                "listening_audio_asset_missing",
+                "This Listening paper does not have complete audio assets for every scored section. Cannot start exam-mode attempt.");
+        }
+
         var genericAttemptId = $"la-{Guid.NewGuid():N}";
 
         var markingPolicyResolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
@@ -538,12 +652,19 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
-        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(normalizedMode, markingPolicy.Document);
-        var listeningPolicy = await ResolveListeningPolicyAsync(ct);
+        var (listeningPolicy, userPolicyOverride) = await ResolveListeningPolicyAsync(userId, ct);
+        EnsureAttemptsAllowed(userPolicyOverride);
+        await EnsureAttemptEligibilityAsync(userId, source, normalizedMode, listeningPolicy, ct);
+        var effectiveSessionPolicy = ListeningPolicyResolver.Resolve(listeningPolicy, userPolicyOverride);
+        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(
+            normalizedMode,
+            markingPolicy.Document,
+            listeningPolicy.LearningReplayAllowed);
+        var fullPaperTimerMinutes = ResolveFullPaperTimerMinutes(listeningPolicy, userPolicyOverride);
         var startedAt = DateTimeOffset.UtcNow;
         var deadlineAt = IsExamMode(normalizedMode)
             ? startedAt
-                .AddMinutes(Math.Max(1, listeningPolicy.FullPaperTimerMinutes))
+                .AddMinutes(fullPaperTimerMinutes)
                 .AddSeconds(Math.Max(0, listeningPolicy.GracePeriodSeconds))
             : (DateTimeOffset?)null;
 
@@ -585,15 +706,25 @@ public sealed class ListeningLearnerService(
                 listeningPolicy = new
                 {
                     listeningPolicy.Id,
-                    listeningPolicy.FullPaperTimerMinutes,
+                    fullPaperTimerMinutes,
+                    extraTimeEntitlementPct = ResolveExtraTimeEntitlementPct(listeningPolicy, userPolicyOverride),
                     listeningPolicy.GracePeriodSeconds,
                     listeningPolicy.OnExpirySubmitPolicy,
+                    countdownWarningsSeconds = ListeningPolicyService.ParseCountdownWarnings(listeningPolicy.CountdownWarningsJson),
+                    listeningPolicy.LearningReplayAllowed,
                     listeningPolicy.LearningEvidenceLoopEnabled,
+                    shortAnswerNormalisation = listeningPolicy.ShortAnswerNormalisation,
+                    listeningPolicy.ShortAnswerAcceptSynonyms,
+                    listeningPolicy.ScreenReaderOptimised,
+                    listeningPolicy.ShowExplanationsAfterSubmit,
+                    listeningPolicy.ShowExplanationsOnlyIfWrong,
+                    listeningPolicy.ShowCorrectAnswerOnReview,
                 },
                 audioLockMode = audioTransport.LockMode,
                 canPause = audioTransport.CanPause,
                 canScrub = audioTransport.CanScrub,
                 onePlayOnly = audioTransport.OnePlayOnly,
+                effectiveSessionPolicy,
                 deadlineAt,
             })
         };
@@ -631,9 +762,31 @@ public sealed class ListeningLearnerService(
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
         await EnsureGenericAttemptCanMutateAsync(attempt, ct);
         var source = await ResolveSourceAsync(attempt.ContentId, ct);
-        if (!source.Questions.Any(q => string.Equals(q.Id, questionId, StringComparison.Ordinal)))
+        var question = source.Questions.FirstOrDefault(q => string.Equals(q.Id, questionId, StringComparison.Ordinal));
+        if (question is null)
         {
             throw ApiException.Validation("listening_question_not_found", "This question does not belong to the Listening attempt.");
+        }
+
+        // Legacy JSON attempts persist the one-way section cursor in the
+        // answer map. Enforce it server-side for both prior and future
+        // sections; only the active section may be edited.
+        if (IsExamMode(attempt.Mode))
+        {
+            var currentCursor = ReadGenericSectionCursor(DeserializeAnswers(attempt.AnswersJson));
+            var questionCursor = ListeningSectionCursorForPartCode(question.PartCode);
+            if (questionCursor < 0 || questionCursor < currentCursor)
+            {
+                throw ApiException.Validation(
+                    "listening_section_locked",
+                    "This Listening section is locked and its answers can no longer be changed.");
+            }
+            if (questionCursor > currentCursor)
+            {
+                throw ApiException.Validation(
+                    "listening_section_not_active",
+                    "This Listening section is not active yet.");
+            }
         }
 
         var answers = DeserializeAnswers(attempt.AnswersJson);
@@ -645,8 +798,8 @@ public sealed class ListeningLearnerService(
 
     /// <summary>
     /// One-way section navigation. Stores a monotonically non-decreasing
-    /// <c>sectionCursor</c> integer, rejecting any request that would move the
-    /// cursor backwards. The client also enforces one-way; this is the
+    /// <c>sectionCursor</c> integer, rejecting backward moves and forward
+    /// skips. The client also enforces one-way; this is the
     /// server-authoritative guard.
     /// <para>
     /// For a relational <see cref="ListeningAttempt"/> the cursor lives in its
@@ -689,6 +842,12 @@ public sealed class ListeningLearnerService(
                     "listening_section_one_way",
                     $"Listening sections advance one-way: cannot move from section {current} back to {requested}.");
             }
+            if (requested > current + 1)
+            {
+                throw ApiException.Validation(
+                    "listening_section_sequence_invalid",
+                    $"Listening sections must advance one boundary at a time; cannot move from section {current} to {requested}.");
+            }
 
             var nowRelational = DateTimeOffset.UtcNow;
             relationalAttempt.NavigationStateJson = WriteSectionCursor(relationalAttempt.NavigationStateJson, requested);
@@ -718,6 +877,12 @@ public sealed class ListeningLearnerService(
             throw ApiException.Validation(
                 "listening_section_one_way",
                 $"Listening sections advance one-way: cannot move from section {currentGeneric} back to {requested}.");
+        }
+        if (requested > currentGeneric + 1)
+        {
+            throw ApiException.Validation(
+                "listening_section_sequence_invalid",
+                $"Listening sections must advance one boundary at a time; cannot move from section {currentGeneric} to {requested}.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -847,7 +1012,7 @@ public sealed class ListeningLearnerService(
         var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
         if (relationalAttempt is not null)
         {
-            EnsureAttemptNotOnAdminReviewHold(relationalAttempt.RequiresAdminReview);
+            EnsureAttemptNotOnAdminReviewHold(relationalAttempt.RequiresAdminReview, relationalAttempt.AdminReviewReason);
             var relationalKey = BuildSubmitIdempotencyKey(userId, relationalAttempt.Id, idempotencyKey);
             var relationalCached = await GetCachedSubmitAsync(relationalKey, ct);
             if (relationalCached is not null) return relationalCached;
@@ -855,7 +1020,7 @@ public sealed class ListeningLearnerService(
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
-        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview, attempt.AdminReviewReason);
         var key = BuildSubmitIdempotencyKey(userId, attempt.Id, idempotencyKey);
         var cached = await GetCachedSubmitAsync(key, ct);
         if (cached is not null) return cached;
@@ -881,6 +1046,48 @@ public sealed class ListeningLearnerService(
             ApplyFinalLegacyAnswers(attempt, source, finalAnswers);
         }
 
+        var legacyAnswers = DeserializeAnswers(attempt.AnswersJson);
+        var multipleSelectionIssues = FindMultipleSelectionMcqAnswers(source, legacyAnswers);
+        if (multipleSelectionIssues.Count > 0)
+        {
+            // Keep the legacy JSON-attempt path aligned with the relational
+            // grader: a single-answer MCQ payload containing more than one
+            // selected option is invalid for automated scoring, not simply an
+            // incorrect answer. Preserve the attempt for administrator review
+            // and never create an automated evaluation or score conversion.
+            attempt.RequiresAdminReview = true;
+            attempt.AdminReviewReason ??= "multiple_selections_for_single_answer_mcq";
+            attempt.AdminReviewFlaggedAt ??= submitNow;
+            attempt.State = AttemptState.Submitted;
+            attempt.SubmittedAt = submitNow;
+            attempt.CompletedAt = null;
+            attempt.LastClientSyncAt = submitNow;
+            attempt.ElapsedSeconds = (int)Math.Clamp(
+                (submitNow - attempt.StartedAt).TotalSeconds,
+                0,
+                int.MaxValue);
+            attempt.DraftVersion++;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = submitNow,
+                ActorId = userId,
+                ActorName = userId,
+                Action = "listening.mcq.multiple_selection_review_required",
+                ResourceType = "Attempt",
+                ResourceId = attempt.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    reason = "multiple_selections_for_single_answer_mcq",
+                    issues = multipleSelectionIssues,
+                }),
+            });
+            await db.SaveChangesAsync(ct);
+            throw ApiException.Conflict(
+                "listening_attempt_requires_admin_review",
+                "This Listening attempt requires administrator review before scoring. Reason: multiple_selections_for_single_answer_mcq.");
+        }
+
         var review = BuildReview(attempt, source);
         var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
         var conversion = await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
@@ -904,7 +1111,8 @@ public sealed class ListeningLearnerService(
         var hasApprovedConversion = HasApprovedScoreConversion(
             conversion.TableVersionKey,
             score.ScaledScore,
-            score.Passed);
+            score.Passed,
+            score.MaxRawScore);
 
         attempt.State = AttemptState.Completed;
         attempt.SubmittedAt = submitNow;
@@ -949,7 +1157,7 @@ public sealed class ListeningLearnerService(
                 }
             }),
             FeedbackItemsJson = JsonSupport.Serialize(review.ItemReview
-                .Where(item => !item.IsCorrect)
+                .Where(item => !item.IsCorrect && !item.IsInvalid)
                 .Select(item => new
                 {
                     feedbackItemId = $"{attempt.Id}-{item.QuestionId}",
@@ -970,7 +1178,34 @@ public sealed class ListeningLearnerService(
         db.Evaluations.Add(evaluation);
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, ct);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
-        await db.SaveChangesAsync(ct);
+        attempt.DraftVersion++;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A concurrent submit already committed the canonical attempt and
+            // evaluation. Reload that winner and return the same review so a
+            // duplicate request never becomes a spurious 409 or writes a
+            // second evaluation.
+            db.ChangeTracker.Clear();
+            var winningAttempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
+            var winningSource = await ResolveSourceAsync(winningAttempt.ContentId, ct);
+            var winningEvaluation = await db.Evaluations.AsNoTracking()
+                .Where(e => e.AttemptId == winningAttempt.Id)
+                .OrderByDescending(e => e.GeneratedAt)
+                .FirstOrDefaultAsync(ct);
+            if (winningAttempt.State != AttemptState.Completed || winningEvaluation is null)
+            {
+                throw ApiException.Conflict(
+                    "listening_submit_concurrent_update",
+                    "This Listening submit is still being finalized. Please retry with the same Idempotency-Key.");
+            }
+
+            var winningReview = BuildReview(winningAttempt, winningSource, winningEvaluation);
+            return await PersistSubmitIdempotencyAsync(key, winningReview, ct) ?? winningReview;
+        }
 
         // Recalls auto-seed: turn wrong free-text listening answers into
         // starred SM-2 cards. Best-effort — failures must never break grading.
@@ -979,7 +1214,7 @@ public sealed class ListeningLearnerService(
             try
             {
                 var wrongFreeText = review.ItemReview
-                    .Where(item => !item.IsCorrect && !string.IsNullOrWhiteSpace(item.CorrectAnswer))
+                    .Where(item => !item.IsCorrect && !item.IsInvalid && !string.IsNullOrWhiteSpace(item.CorrectAnswer))
                     .Select(item => new RecallsListeningSeedItem(
                         QuestionId: item.QuestionId,
                         Type: item.Type,
@@ -1079,6 +1314,8 @@ public sealed class ListeningLearnerService(
         // payload, while still preserving the raw details for forward-compat.
         var cuePointMs = ReadJsonInt(request.Details, "cuePointMs");
         var questionId = ReadJsonProperty(request.Details, "questionId");
+        var section = ReadJsonProperty(request.Details, "section");
+        var questionIndex = ReadJsonInt(request.Details, "questionIndex");
 
         var now = DateTimeOffset.UtcNow;
         var requiresAdminReview = string.Equals(eventType, "audio_error", StringComparison.Ordinal);
@@ -1095,18 +1332,26 @@ public sealed class ListeningLearnerService(
             // §17.11 — audio lifecycle events also append to the per-attempt
             // audio cue timeline (the column already exists). Append, never
             // overwrite, so the full replay log accumulates across sections.
-            if (eventType is "audio_started" or "audio_ended")
+            if (eventType is "audio_started" or "audio_progress" or "audio_ended")
             {
                 relationalAttempt.AudioCueTimelineJson = AppendAudioCueTimelineEntry(
                     relationalAttempt.AudioCueTimelineJson,
                     cue: eventType,
                     atMs: cuePointMs,
-                    occurredAt: request.OccurredAt ?? now);
+                    occurredAt: request.OccurredAt ?? now,
+                    section: section,
+                    questionIndex: questionIndex);
             }
         }
         else if (attempt is not null)
         {
             attempt.LastClientSyncAt = now;
+            if (eventType is "audio_started" or "audio_progress" or "audio_ended")
+            {
+                var answers = DeserializeAnswers(attempt.AnswersJson);
+                SetGenericAudioPlayback(answers, eventType, cuePointMs, section, questionIndex);
+                attempt.AnswersJson = JsonSupport.Serialize(answers);
+            }
             if (requiresAdminReview)
             {
                 attempt.RequiresAdminReview = true;
@@ -1131,6 +1376,8 @@ public sealed class ListeningLearnerService(
                 mode = relationalAttempt is not null ? ToApiMode(relationalAttempt.Mode) : attempt!.Mode,
                 cuePointMs,
                 questionId,
+                section,
+                questionIndex,
                 requiresAdminReview,
                 adminReviewReason = requiresAdminReview ? adminReviewReason : null,
                 request.Details,
@@ -1155,8 +1402,11 @@ public sealed class ListeningLearnerService(
         "audio_seek_blocked",
         "audio_pause_blocked",
         "audio_replay_blocked",
+        "audio_speed_change_blocked",
         // §17.11 attempt-event stream.
         "audio_started",
+        "audio_stopped",
+        "audio_progress",
         "audio_ended",
         "audio_buffering_start",
         "audio_buffering_end",
@@ -1167,6 +1417,7 @@ public sealed class ListeningLearnerService(
         "answer_changed",
         "highlight",
         "strikethrough",
+        "section_transition",
         "auto_submit",
     };
 
@@ -1174,7 +1425,13 @@ public sealed class ListeningLearnerService(
     /// timeline (<c>[{"cue":"audio_started","atMs":1234,"at":"..."}]</c>),
     /// preserving any prior entries. Tolerates a null / malformed existing
     /// column by starting a fresh array.</summary>
-    private static string AppendAudioCueTimelineEntry(string? existingJson, string cue, int? atMs, DateTimeOffset occurredAt)
+    private static string AppendAudioCueTimelineEntry(
+        string? existingJson,
+        string cue,
+        int? atMs,
+        DateTimeOffset occurredAt,
+        string? section,
+        int? questionIndex)
     {
         var entries = new List<JsonElement>();
         if (!string.IsNullOrWhiteSpace(existingJson))
@@ -1197,14 +1454,200 @@ public sealed class ListeningLearnerService(
             }
         }
 
+        // Keep the replay log bounded: only the latest progress checkpoint is
+        // needed to resume the current audio run. Start/end events remain a
+        // complete audit history.
+        if (string.Equals(cue, "audio_progress", StringComparison.Ordinal))
+        {
+            entries = entries
+                .Where(item => !string.Equals(
+                    item.TryGetProperty("cue", out var priorCue) ? priorCue.GetString() : null,
+                    "audio_progress",
+                    StringComparison.Ordinal))
+                .ToList();
+        }
+
         var appended = JsonSerializer.SerializeToElement(new
         {
             cue,
             atMs,
+            section,
+            questionIndex,
             at = occurredAt,
         });
         entries.Add(appended);
         return JsonSerializer.Serialize(entries);
+    }
+
+    private static void SetGenericAudioPlayback(
+        Dictionary<string, string?> answers,
+        string eventType,
+        int? cuePointMs,
+        string? section,
+        int? questionIndex)
+    {
+        answers[GenericAudioPlaybackStateKey] = eventType == "audio_ended" ? "ended" : "active";
+        answers[GenericAudioResumeMsKey] = eventType == "audio_ended"
+            ? null
+            : Math.Max(0, cuePointMs ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        answers[GenericAudioSectionKey] = section;
+        answers[GenericAudioQuestionIndexKey] = questionIndex?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private sealed record AudioPlaybackSnapshot(
+        string State,
+        int? ResumeAtMs,
+        string? Section,
+        int? QuestionIndex);
+
+    private static readonly string[] ListeningSectionCodes = ["A1", "A2", "B", "C1", "C2"];
+
+    private static int? SaturatingMilliseconds(int seconds)
+    {
+        if (seconds <= 0) return null;
+        var milliseconds = (long)seconds * 1000L;
+        return milliseconds >= int.MaxValue ? int.MaxValue : (int)milliseconds;
+    }
+
+    private static int? ElapsedMilliseconds(DateTimeOffset startedAt, DateTimeOffset? endedAt)
+    {
+        if (!endedAt.HasValue || endedAt.Value <= startedAt) return null;
+        var milliseconds = (long)Math.Round((endedAt.Value - startedAt).TotalMilliseconds);
+        return milliseconds <= 0 ? null : milliseconds >= int.MaxValue ? int.MaxValue : (int)milliseconds;
+    }
+
+    // Section values are playback telemetry only. Pair persisted cue positions
+    // for completed runs; never turn missing telemetry into an estimate or a
+    // scoring input.
+    private static IReadOnlyList<ListeningTimeUsedSectionDto> BuildSectionTimeUsed(string? timelineJson)
+    {
+        var totals = ListeningSectionCodes.ToDictionary(code => code, _ => 0L, StringComparer.Ordinal);
+        var openStarts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(timelineJson))
+        {
+            return ListeningSectionCodes
+                .Select(code => new ListeningTimeUsedSectionDto(code, null))
+                .ToList();
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(timelineJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (!item.TryGetProperty("cue", out var cueValue)
+                        || cueValue.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    var cue = cueValue.GetString();
+                    if (cue is not ("audio_started" or "audio_ended")) continue;
+                    if (!item.TryGetProperty("section", out var sectionValue)
+                        || sectionValue.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    var section = NormalizeListeningSection(sectionValue.GetString());
+                    if (section is null
+                        || !item.TryGetProperty("atMs", out var atValue)
+                        || atValue.ValueKind != JsonValueKind.Number
+                        || !atValue.TryGetInt32(out var atMs))
+                    {
+                        continue;
+                    }
+
+                    atMs = Math.Max(0, atMs);
+                    if (cue == "audio_started")
+                    {
+                        openStarts[section] = atMs;
+                        continue;
+                    }
+
+                    if (openStarts.Remove(section, out var startMs) && atMs >= startMs)
+                    {
+                        totals[section] = Math.Min(int.MaxValue, totals[section] + (atMs - startMs));
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // A malformed audit timeline must not make results unloadable.
+        }
+
+        return ListeningSectionCodes
+            .Select(code => new ListeningTimeUsedSectionDto(
+                code,
+                totals[code] > 0 ? (int?)totals[code] : null))
+            .ToList();
+    }
+
+    private static string? NormalizeListeningSection(string? rawSection)
+    {
+        var section = rawSection?.Trim().ToUpperInvariant();
+        if (section is "A1" or "A2" or "C1" or "C2") return section;
+        return section is not null && section.StartsWith("B", StringComparison.Ordinal) ? "B" : null;
+    }
+
+    private static AudioPlaybackSnapshot ReadAudioPlaybackSnapshot(string? timelineJson)
+    {
+        var snapshot = new AudioPlaybackSnapshot("not_started", null, null, null);
+        if (string.IsNullOrWhiteSpace(timelineJson)) return snapshot;
+        try
+        {
+            using var doc = JsonDocument.Parse(timelineJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return snapshot;
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (!item.TryGetProperty("cue", out var cueValue)) continue;
+                var cue = cueValue.GetString();
+                if (cue is not ("audio_started" or "audio_progress" or "audio_ended")) continue;
+                var atMs = item.TryGetProperty("atMs", out var atValue)
+                    && atValue.ValueKind == JsonValueKind.Number
+                    && atValue.TryGetInt32(out var parsedAt)
+                    ? Math.Max(0, parsedAt)
+                    : (int?)null;
+                var section = item.TryGetProperty("section", out var sectionValue)
+                    ? sectionValue.GetString()
+                    : null;
+                var questionIndex = item.TryGetProperty("questionIndex", out var questionValue)
+                    && questionValue.ValueKind == JsonValueKind.Number
+                    && questionValue.TryGetInt32(out var parsedQuestion)
+                    ? Math.Max(0, parsedQuestion)
+                    : (int?)null;
+                snapshot = cue == "audio_ended"
+                    ? new AudioPlaybackSnapshot("ended", null, section, questionIndex)
+                    : new AudioPlaybackSnapshot("active", atMs, section, questionIndex);
+            }
+        }
+        catch (JsonException)
+        {
+            // A malformed audit timeline must never make an attempt unloadable.
+        }
+        return snapshot;
+    }
+
+    private static AudioPlaybackSnapshot ReadGenericAudioPlayback(
+        IReadOnlyDictionary<string, string?> answers)
+    {
+        var state = answers.TryGetValue(GenericAudioPlaybackStateKey, out var rawState)
+            && rawState is "active" or "ended"
+            ? rawState!
+            : "not_started";
+        var resumeAtMs = answers.TryGetValue(GenericAudioResumeMsKey, out var rawMs)
+            && int.TryParse(rawMs, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedMs)
+            ? Math.Max(0, parsedMs)
+            : (int?)null;
+        var questionIndex = answers.TryGetValue(GenericAudioQuestionIndexKey, out var rawQuestion)
+            && int.TryParse(rawQuestion, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedQuestion)
+            ? Math.Max(0, parsedQuestion)
+            : (int?)null;
+        answers.TryGetValue(GenericAudioSectionKey, out var section);
+        return new AudioPlaybackSnapshot(state, state == "active" ? resumeAtMs : null, section, questionIndex);
     }
 
     private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, bool forceNewAttempt, CancellationToken ct, bool billObjectivePractice = true)
@@ -1226,7 +1669,11 @@ public sealed class ListeningLearnerService(
             }
         }
 
-        var policy = await ResolveListeningPolicyAsync(ct);
+        var (policy, userPolicyOverride) = await ResolveListeningPolicyAsync(userId, ct);
+        EnsureAttemptsAllowed(userPolicyOverride);
+        await EnsureAttemptEligibilityAsync(userId, source, normalizedMode, policy, ct);
+        var effectiveSessionPolicy = ListeningPolicyResolver.Resolve(policy, userPolicyOverride);
+        var fullPaperTimerMinutes = ResolveFullPaperTimerMinutes(policy, userPolicyOverride);
         var now = DateTimeOffset.UtcNow;
         var isExamLike = IsExamMode(normalizedMode);
 
@@ -1248,13 +1695,11 @@ public sealed class ListeningLearnerService(
         // H11: Server-verify audio asset exists before allowing exam-mode attempt start.
         // The client shows audioAvailable but a race or stale cache could let a learner
         // start an attempt for a paper whose audio has been deleted or never uploaded.
-        var hasScoredAudio = !string.IsNullOrWhiteSpace(source.AudioUrl)
-            || (source.AudioUrlByPart?.Values.Any(url => !string.IsNullOrWhiteSpace(url)) ?? false);
-        if (isExamLike && !hasScoredAudio)
+        if (isExamLike && !HasAllRequiredAudioAssets(source))
         {
             throw ApiException.Conflict(
                 "listening_audio_asset_missing",
-                "This Listening paper has no audio asset configured. Cannot start exam-mode attempt.");
+                "This Listening paper does not have complete audio assets for every scored section. Cannot start exam-mode attempt.");
         }
 
         var relationalAttemptId = $"lat-{Guid.NewGuid():N}";
@@ -1273,7 +1718,10 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
-        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(normalizedMode, markingPolicy.Document);
+        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(
+            normalizedMode,
+            markingPolicy.Document,
+            policy.LearningReplayAllowed);
 
         // Listening test-credit allowance. Governance must be resolved before
         // this debit: failed owner-controlled marking or conversion gates do
@@ -1303,10 +1751,10 @@ public sealed class ListeningLearnerService(
             PaperId = source.Id,
             StartedAt = now,
             LastActivityAt = now,
-            DeadlineAt = isExamLike ? now.AddMinutes(Math.Max(1, policy.FullPaperTimerMinutes)).AddSeconds(policy.GracePeriodSeconds) : null,
+            DeadlineAt = isExamLike ? now.AddMinutes(fullPaperTimerMinutes).AddSeconds(policy.GracePeriodSeconds) : null,
             Status = ListeningAttemptStatus.InProgress,
             Mode = relationalMode,
-            MaxRawScore = Math.Clamp(source.Questions.Sum(q => q.Points), 1, CanonicalRawMax),
+            MaxRawScore = source.Questions.Sum(q => q.Points),
             PaperRevisionId = source.PaperRevisionId,
             // The published question revision is immutable for the lifetime of
             // an attempt. Keep the exact version map so a concurrent authoring
@@ -1319,15 +1767,27 @@ public sealed class ListeningLearnerService(
                 markingPolicyVersionKey = markingPolicy.PolicyVersionKey,
                 markingPolicyErrorCode = markingPolicy.ErrorCode,
                 policy.Id,
-                policy.FullPaperTimerMinutes,
+                fullPaperTimerMinutes,
+                extraTimeEntitlementPct = ResolveExtraTimeEntitlementPct(policy, userPolicyOverride),
                 policy.GracePeriodSeconds,
                 policy.OnExpirySubmitPolicy,
+                countdownWarningsSeconds = ListeningPolicyService.ParseCountdownWarnings(policy.CountdownWarningsJson),
+                policy.LearningReplayAllowed,
                 policy.LearningEvidenceLoopEnabled,
+                policy.ShortAnswerNormalisation,
+                policy.ShortAnswerAcceptSynonyms,
+                policy.ScreenReaderOptimised,
+                policy.ShowExplanationsAfterSubmit,
+                policy.ShowExplanationsOnlyIfWrong,
+                policy.ShowCorrectAnswerOnReview,
                 mode = normalizedMode,
                 audioLockMode = audioTransport.LockMode,
                 canPause = audioTransport.CanPause,
                 canScrub = audioTransport.CanScrub,
                 onePlayOnly = audioTransport.OnePlayOnly,
+                effectiveSessionPolicy,
+                // Keep the Home visual presentation label for compatibility;
+                // the client must not infer fullscreen enforcement from it.
                 presentationStyle = normalizedMode == "home"
                     ? "kiosk_fullscreen"
                     : normalizedMode,
@@ -1373,15 +1833,24 @@ public sealed class ListeningLearnerService(
         if (attempt.Mode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home)
         {
             var navState = ParseNavigation(attempt.NavigationStateJson);
-            if (navState?.Locks is { Length: > 0 })
+            var currentCursor = navState is not null
+                ? ListeningSectionCursorForPartCode(ListeningFsmTransitions.PartFor(navState.State))
+                : ReadSectionCursor(attempt.NavigationStateJson);
+            if (currentCursor >= 0)
             {
                 var questionPartString = question.PartCode.ToString();
-                if (navState.Locks.Any(lockState =>
-                    string.Equals(ListeningFsmTransitions.PartFor(lockState), questionPartString, StringComparison.Ordinal)))
+                var questionCursor = ListeningSectionCursorForPartCode(questionPartString);
+                if (questionCursor < 0 || currentCursor < 0 || questionCursor < currentCursor)
                 {
                     throw ApiException.Validation(
                         "listening_section_locked",
                         $"Cannot modify answers in part {questionPartString} \u2014 this section is locked in the current exam mode.");
+                }
+                if (questionCursor > currentCursor)
+                {
+                    throw ApiException.Validation(
+                        "listening_section_not_active",
+                        $"Cannot modify answers in part {questionPartString} \u2014 this section is not active yet.");
                 }
             }
         }
@@ -1412,7 +1881,6 @@ public sealed class ListeningLearnerService(
         }
 
         attempt.LastActivityAt = now;
-        attempt.RowVersion++;
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException)
         {
@@ -1504,11 +1972,45 @@ public sealed class ListeningLearnerService(
         var evaluation = CreateEvaluation(attempt.Id, score, review);
         db.Evaluations.Add(evaluation);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, userId, ct);
+        attempt.RowVersion++;
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException)
         {
-            throw ApiException.Conflict("listening_attempt_concurrent_update",
-                "This attempt was modified by another process. Please retry.");
+            // The first concurrent submit owns the committed attempt/evaluation.
+            // Rehydrate that winner and let the idempotency record serve the
+            // exact same result to the losing request.
+            db.ChangeTracker.Clear();
+            var winningAttempt = await TryGetRelationalAttemptOwnedByUserAsync(
+                userId, attempt.Id, asNoTracking: true, ct)
+                ?? throw ApiException.Conflict(
+                    "listening_attempt_concurrent_update",
+                    "This Listening submit is still being finalized. Please retry with the same Idempotency-Key.");
+            var winningSource = await ResolveSourceAsync(winningAttempt.PaperId, ct);
+            var winningEvaluation = await db.Evaluations.AsNoTracking()
+                .Where(e => e.AttemptId == winningAttempt.Id)
+                .OrderByDescending(e => e.GeneratedAt)
+                .FirstOrDefaultAsync(ct);
+            if (winningAttempt.Status != ListeningAttemptStatus.Submitted || winningEvaluation is null)
+            {
+                throw ApiException.Conflict(
+                    "listening_attempt_concurrent_update",
+                    "This Listening submit is still being finalized. Please retry with the same Idempotency-Key.");
+            }
+
+            var winningAnswers = await LoadRelationalAnswersAsync(winningAttempt.Id, ct);
+            var winningAnswerRows = await db.ListeningAnswers.AsNoTracking()
+                .Where(answer => answer.ListeningAttemptId == winningAttempt.Id)
+                .ToListAsync(ct);
+            var winningAnswerByQuestionId = winningAnswerRows
+                .GroupBy(answer => answer.ListeningQuestionId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
+            var winningReview = BuildReview(
+                winningAttempt,
+                winningSource,
+                winningAnswers,
+                winningEvaluation,
+                winningAnswerByQuestionId);
+            return await PersistSubmitIdempotencyAsync(idempotencyKey, winningReview, ct) ?? winningReview;
         }
         var completedReview = BuildReview(
             attempt,
@@ -1542,6 +2044,31 @@ public sealed class ListeningLearnerService(
         attempt.AnswersJson = JsonSupport.Serialize(answers);
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
     }
+
+    private static IReadOnlyList<LegacyMultipleSelectionIntegrityIssue> FindMultipleSelectionMcqAnswers(
+        ListeningSource source,
+        IReadOnlyDictionary<string, string?> answers)
+    {
+        return source.Questions
+            .Where(question => IsMultipleChoiceQuestionType(question.Type))
+            .Select(question =>
+            {
+                var raw = answers.GetValueOrDefault(question.Id);
+                var selections = ReadStringList(raw)
+                    ?.Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Select(value => value.Trim())
+                    .ToArray() ?? Array.Empty<string>();
+                return selections.Length > 1
+                    ? new LegacyMultipleSelectionIntegrityIssue(question.Id, question.Number, selections)
+                    : null;
+            })
+            .Where(issue => issue is not null)
+            .Cast<LegacyMultipleSelectionIntegrityIssue>()
+            .ToArray();
+    }
+
+    private static bool IsMultipleChoiceQuestionType(string? type)
+        => type?.Trim().ToLowerInvariant() is "multiple_choice_3" or "mcq" or "mcq3";
 
     private async Task ApplyFinalRelationalAnswersAsync(
         ListeningAttempt attempt,
@@ -1608,9 +2135,154 @@ public sealed class ListeningLearnerService(
     private static string? DecodeRelationalAnswer(string? json)
         => ReadJsonString(json);
 
-    private async Task<ListeningPolicy> ResolveListeningPolicyAsync(CancellationToken ct)
-        => await db.ListeningPolicies.AsNoTracking().FirstOrDefaultAsync(policy => policy.Id == "global", ct)
-            ?? new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 30 };
+    private async Task<(ListeningPolicy Policy, ListeningUserPolicyOverride? UserOverride)> ResolveListeningPolicyAsync(
+        string userId,
+        CancellationToken ct)
+    {
+        var policy = listeningPolicyService is not null
+            ? await listeningPolicyService.GetGlobalAsync(ct)
+            : await db.ListeningPolicies.AsNoTracking().FirstOrDefaultAsync(row => row.Id == "global", ct)
+                ?? new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 };
+        var userOverride = listeningPolicyService is not null
+            ? await listeningPolicyService.GetUserOverrideAsync(userId, ct)
+            : await db.ListeningUserPolicyOverrides.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.UserId == userId, ct);
+
+        if (userOverride?.ExpiresAt is DateTimeOffset expiresAt && expiresAt <= DateTimeOffset.UtcNow)
+            userOverride = null;
+
+        return (policy, userOverride);
+    }
+
+    private static void EnsureAttemptsAllowed(ListeningUserPolicyOverride? userOverride)
+    {
+        if (userOverride?.BlockAttempts == true)
+        {
+            throw ApiException.Validation(
+                "listening_attempts_blocked",
+                userOverride.Reason ?? "Your account is blocked from starting Listening attempts.");
+        }
+    }
+
+    private static int ResolveFullPaperTimerMinutes(
+        ListeningPolicy policy,
+        ListeningUserPolicyOverride? userOverride)
+    {
+        var extraPct = ResolveExtraTimeEntitlementPct(policy, userOverride);
+        var baseMinutes = Math.Max(1, policy.FullPaperTimerMinutes);
+        return Math.Max(1, (int)Math.Ceiling(baseMinutes * (1m + extraPct / 100m)));
+    }
+
+    private static int ResolveExtraTimeEntitlementPct(
+        ListeningPolicy policy,
+        ListeningUserPolicyOverride? userOverride)
+        => Math.Clamp(userOverride?.ExtraTimeEntitlementPct ?? policy.DefaultExtraTimePct, 0, 100);
+
+    private async Task EnsureAttemptEligibilityAsync(
+        string userId,
+        ListeningSource source,
+        string normalizedMode,
+        ListeningPolicy policy,
+        CancellationToken ct)
+    {
+        // Practice is intentionally unlimited; exam-like modes consume the
+        // owner-configured per-paper allowance and cooldown window.
+        if (!IsExamMode(normalizedMode)
+            || (policy.AttemptsPerPaperPerUser <= 0 && policy.AttemptCooldownMinutes <= 0))
+            return;
+
+        IReadOnlyList<AttemptEligibilityRow> history;
+        if (source.UsesRelationalStructure)
+        {
+            history = await db.ListeningAttempts.AsNoTracking()
+                .Where(attempt => attempt.UserId == userId
+                    && attempt.PaperId == source.Id
+                    && attempt.Status != ListeningAttemptStatus.Abandoned
+                    && (attempt.Mode is ListeningAttemptMode.Exam
+                        or ListeningAttemptMode.Home
+                        or ListeningAttemptMode.Diagnostic))
+                .Select(attempt => new AttemptEligibilityRow(
+                    attempt.StartedAt,
+                    attempt.SubmittedAt,
+                    null))
+                .ToListAsync(ct);
+        }
+        else
+        {
+            history = await db.Attempts.AsNoTracking()
+                .Where(attempt => attempt.UserId == userId
+                    && attempt.ContentId == source.Id
+                    && attempt.SubtestCode == Subtest
+                    && attempt.State != AttemptState.Abandoned
+                    && (attempt.Mode == "exam"
+                        || attempt.Mode == "home"
+                        || attempt.Mode == "diagnostic"))
+                .Select(attempt => new AttemptEligibilityRow(
+                    attempt.StartedAt,
+                    attempt.SubmittedAt,
+                    attempt.CompletedAt))
+                .ToListAsync(ct);
+        }
+
+        if (policy.AttemptsPerPaperPerUser > 0
+            && history.Count >= policy.AttemptsPerPaperPerUser)
+        {
+            throw ApiException.Conflict(
+                "listening_attempt_cap_reached",
+                $"You have reached the attempt cap ({policy.AttemptsPerPaperPerUser}) for this paper.");
+        }
+
+        if (policy.AttemptCooldownMinutes > 0 && history.Count > 0)
+        {
+            var last = history
+                .OrderByDescending(attempt => attempt.SubmittedAt ?? attempt.CompletedAt ?? attempt.StartedAt)
+                .First();
+            var lastAt = last.SubmittedAt ?? last.CompletedAt ?? last.StartedAt;
+            var elapsed = DateTimeOffset.UtcNow - lastAt;
+            if (elapsed.TotalMinutes < policy.AttemptCooldownMinutes)
+            {
+                var remaining = policy.AttemptCooldownMinutes - Math.Floor(elapsed.TotalMinutes);
+                throw ApiException.Conflict(
+                    "listening_attempt_cooldown",
+                    $"Please wait {remaining} minute(s) before retrying this Listening paper.");
+            }
+        }
+    }
+
+    private static bool HasAllRequiredAudioAssets(ListeningSource source)
+    {
+        // A legacy combined asset is the authoritative source for every cue
+        // window, so it satisfies the complete-paper requirement.
+        if (!string.IsNullOrWhiteSpace(source.AudioUrl)) return true;
+
+        var requiredSections = source.Questions
+            .Select(question => NormalizePartCode(question.PartCode))
+            .Concat(source.Extracts.Select(extract => NormalizePartCode(extract.PartCode)))
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code!.StartsWith('B') ? "B" : code)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (requiredSections.Count == 0 || source.AudioUrlByPart is null) return false;
+
+        return requiredSections.All(section =>
+            HasAudioForSection(source.AudioUrlByPart, section));
+    }
+
+    private static bool HasAudioForSection(
+        IReadOnlyDictionary<string, string> audioByPart,
+        string section)
+    {
+        if (audioByPart.TryGetValue(section, out var exact)
+            && !string.IsNullOrWhiteSpace(exact)) return true;
+        var parent = section.Length > 1 ? section[..1] : section;
+        return audioByPart.TryGetValue(parent, out var fallback)
+            && !string.IsNullOrWhiteSpace(fallback);
+    }
+
+    private sealed record AttemptEligibilityRow(
+        DateTimeOffset StartedAt,
+        DateTimeOffset? SubmittedAt,
+        DateTimeOffset? CompletedAt);
 
     private async Task<ListeningAttempt?> TryGetRelationalAttemptOwnedByUserAsync(
         string userId,
@@ -1625,7 +2297,7 @@ public sealed class ListeningLearnerService(
 
     private async Task EnsureRelationalAttemptCanMutateAsync(ListeningAttempt attempt, CancellationToken ct)
     {
-        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview, attempt.AdminReviewReason);
         if (attempt.Status != ListeningAttemptStatus.InProgress)
         {
             throw ApiException.Validation(
@@ -1659,7 +2331,7 @@ public sealed class ListeningLearnerService(
 
     private static void EnsureRelationalAttemptCanSubmit(ListeningAttempt attempt)
     {
-        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview, attempt.AdminReviewReason);
         if (attempt.Status == ListeningAttemptStatus.Expired && attempt.DeadlineAt.HasValue)
         {
             return;
@@ -1761,7 +2433,7 @@ public sealed class ListeningLearnerService(
                 }
             }),
             FeedbackItemsJson = JsonSupport.Serialize(review.ItemReview
-                .Where(item => !item.IsCorrect)
+                .Where(item => !item.IsCorrect && !item.IsInvalid)
                 .Select(item => new
                 {
                     feedbackItemId = $"{attemptId}-{item.QuestionId}",
@@ -2187,6 +2859,20 @@ public sealed class ListeningLearnerService(
         _ => 99,
     };
 
+    private static int ListeningSectionCursorForPartCode(string? raw)
+    {
+        var normalized = NormalizePartCode(raw);
+        return normalized switch
+        {
+            "A1" => 0,
+            "A2" => 1,
+            "B1" or "B2" or "B3" or "B4" or "B5" or "B6" => 2,
+            "C1" => 3,
+            "C2" => 4,
+            _ => -1,
+        };
+    }
+
     private static string NormalizeExtractKind(string? raw, string partCode)
     {
         var normalized = (raw ?? string.Empty).Trim().ToLowerInvariant();
@@ -2240,7 +2926,7 @@ public sealed class ListeningLearnerService(
             AllowTranscriptReveal: true,
             TranscriptExcerpt: question.TranscriptEvidenceText,
             DistractorExplanation: null,
-            Points: Math.Max(1, question.Points),
+            Points: question.Points,
             OptionDistractorWhy: options.Select(option => option.WhyWrongMarkdown).ToList(),
             OptionDistractorCategory: options.Select(option => option.DistractorCategory is null ? null : DistractorCategoryString(option.DistractorCategory.Value)).ToList(),
             SpeakerAttitude: question.SpeakerAttitude is null ? null : SpeakerAttitudeString(question.SpeakerAttitude.Value),
@@ -2580,7 +3266,11 @@ public sealed class ListeningLearnerService(
             ScoreConversionErrorCode: evaluation?.ScaledScore is null ? "score_conversion_unavailable" : null,
             PersistedScoreConversionGrade: evaluation?.ScoreConversionGrade,
             PersistedScoreConversionPassed: evaluation?.ScoreConversionPassed,
-            EvidenceLoopEnabled: ResolveTranscriptEvidencePolicy(attempt.PolicySnapshotJson));
+            EvidenceLoopEnabled: ResolveTranscriptEvidencePolicy(attempt.PolicySnapshotJson),
+            ReviewVisibility: ResolveReviewVisibility(attempt.PolicySnapshotJson),
+            TotalElapsedMilliseconds: attempt.ElapsedSeconds > 0 ? SaturatingMilliseconds(attempt.ElapsedSeconds) : null,
+            RequiresAdminReview: attempt.RequiresAdminReview,
+            AdminReviewReason: attempt.AdminReviewReason);
 
     private ListeningReviewDto BuildReview(
         ListeningAttempt attempt,
@@ -2605,7 +3295,12 @@ public sealed class ListeningLearnerService(
             PersistedScoreConversionGrade: attempt.ScoreConversionGrade,
             PersistedScoreConversionPassed: attempt.ScoreConversionPassed,
             DeterministicAnswers: deterministicAnswers,
-            EvidenceLoopEnabled: ResolveTranscriptEvidencePolicy(attempt.PolicySnapshotJson));
+            EvidenceLoopEnabled: ResolveTranscriptEvidencePolicy(attempt.PolicySnapshotJson),
+            ReviewVisibility: ResolveReviewVisibility(attempt.PolicySnapshotJson),
+            TotalElapsedMilliseconds: ElapsedMilliseconds(attempt.StartedAt, attempt.SubmittedAt ?? attempt.LastActivityAt),
+            AudioCueTimelineJson: attempt.AudioCueTimelineJson,
+            RequiresAdminReview: attempt.RequiresAdminReview,
+            AdminReviewReason: attempt.AdminReviewReason);
 
     private ListeningReviewDto BuildReviewCore(
         string AttemptId,
@@ -2622,7 +3317,12 @@ public sealed class ListeningLearnerService(
         string? PersistedScoreConversionGrade = null,
         bool? PersistedScoreConversionPassed = null,
         IReadOnlyDictionary<string, ListeningAnswer>? DeterministicAnswers = null,
-        bool EvidenceLoopEnabled = false)
+        bool EvidenceLoopEnabled = false,
+        ListeningReviewVisibility? ReviewVisibility = null,
+        int? TotalElapsedMilliseconds = null,
+        string? AudioCueTimelineJson = null,
+        bool RequiresAdminReview = false,
+        string? AdminReviewReason = null)
     {
         var orderedQuestions = Source.Questions.OrderBy(q => q.Number).ToList();
         var items = orderedQuestions
@@ -2633,14 +3333,15 @@ public sealed class ListeningLearnerService(
                 DeterministicAnswers?.GetValueOrDefault(q.Id),
                 EvidenceLoopEnabled))
             .Select(item => ApplyHumanScoreOverride(item, ScoreOverrides))
+            .Select(item => ApplyReviewVisibility(item, ReviewVisibility ?? ListeningReviewVisibility.Strict))
             .ToList();
-        var maxRaw = PersistedMaxRawScore is int persistedMax
-            ? Math.Clamp(persistedMax, 1, CanonicalRawMax)
-            : Math.Clamp(items.Sum(i => i.MaxPoints), 1, CanonicalRawMax);
+        var conversionMaxRaw = PersistedMaxRawScore ?? items.Sum(i => i.MaxPoints);
+        var maxRaw = conversionMaxRaw > 0 ? conversionMaxRaw : CanonicalRawMax;
         var raw = PersistedRawScore is int persistedRaw
             ? Math.Clamp(persistedRaw, 0, maxRaw)
             : Math.Clamp(items.Sum(i => i.PointsEarned), 0, maxRaw);
-        var hasApprovedConversion = HasApprovedScoreConversion(ScoreConversionTableVersionKey, PersistedScaledScore, PersistedScoreConversionPassed);
+        var hasApprovedConversion = !RequiresAdminReview
+            && HasApprovedScoreConversion(ScoreConversionTableVersionKey, PersistedScaledScore, PersistedScoreConversionPassed, conversionMaxRaw);
         var scaled = hasApprovedConversion ? PersistedScaledScore : null;
         var grade = hasApprovedConversion ? PersistedScoreConversionGrade ?? "—" : "—";
         var passed = hasApprovedConversion ? PersistedScoreConversionPassed : null;
@@ -2672,7 +3373,7 @@ public sealed class ListeningLearnerService(
             ScoreConversionErrorCode: hasApprovedConversion ? ScoreConversionErrorCode : "score_conversion_unavailable",
             ScoreDisplay: FormatScoreDisplay(score),
             CorrectCount: items.Count(i => i.IsCorrect),
-            IncorrectCount: items.Count(i => !i.IsCorrect && !string.IsNullOrWhiteSpace(i.LearnerAnswer)),
+            IncorrectCount: items.Count(i => !i.IsCorrect && !i.IsInvalid && !string.IsNullOrWhiteSpace(i.LearnerAnswer)),
             UnansweredCount: items.Count(i => string.IsNullOrWhiteSpace(i.LearnerAnswer)),
             ItemReview: items,
             ErrorClusters: clusters,
@@ -2685,7 +3386,13 @@ public sealed class ListeningLearnerService(
             TranscriptSegments: Source.TranscriptSegments,
             Strengths: BuildStrengths(score.Passed, items),
             Issues: BuildIssues(items),
-            GeneratedAt: Evaluation?.GeneratedAt ?? CompletedAt);
+            GeneratedAt: Evaluation?.GeneratedAt ?? CompletedAt,
+            TimeUsed: new ListeningTimeUsedDto(
+                TotalMilliseconds: TotalElapsedMilliseconds,
+                Sections: BuildSectionTimeUsed(AudioCueTimelineJson)),
+            InvalidCount: items.Count(i => i.IsInvalid),
+            RequiresAdminReview: RequiresAdminReview,
+            AdminReviewReason: AdminReviewReason);
     }
 
     private static ListeningReviewItemDto ReviewItemDto(
@@ -2695,14 +3402,21 @@ public sealed class ListeningLearnerService(
         ListeningAnswer? deterministicAnswer = null,
         bool transcriptEvidenceAllowed = false)
     {
+        var isInvalid = q.QuestionType == ListeningQuestionType.MultipleChoice3
+            && deterministicAnswer is not null
+            && deterministicAnswer.IsCorrect is null;
         var authoredMatch = q.AcceptedAnswers.Any(answer => MatchesObjectiveAnswer(learnerAnswer, answer));
-        var isCorrect = deterministicAnswer?.IsCorrect ?? authoredMatch;
-        var errorType = isCorrect
+        var isCorrect = !isInvalid && (deterministicAnswer?.IsCorrect ?? authoredMatch);
+        var errorType = isInvalid
+            ? null
+            : isCorrect
             ? null
             : deterministicAnswer?.MissReason is ListeningMissReason miss
                 ? MissReasonErrorType(miss)
                 : ObjectiveErrorType(q, learnerAnswer, allQuestions);
-        var pointsEarned = deterministicAnswer is null
+        var pointsEarned = isInvalid
+            ? 0
+            : deterministicAnswer is null
             ? isCorrect ? q.Points : 0
             : Math.Clamp(deterministicAnswer.PointsEarned, 0, Math.Max(0, q.Points));
         var transcript = transcriptEvidenceAllowed && q.AllowTranscriptReveal
@@ -2721,6 +3435,7 @@ public sealed class ListeningLearnerService(
             LearnerAnswer: learnerAnswer ?? string.Empty,
             CorrectAnswer: q.CorrectAnswer,
             IsCorrect: isCorrect,
+            IsInvalid: isInvalid,
             PointsEarned: pointsEarned,
             MaxPoints: q.Points,
             // Never invent rationale text when an older or otherwise
@@ -2738,6 +3453,87 @@ public sealed class ListeningLearnerService(
             TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs,
             ScoreOverride: null,
             MissReason: deterministicAnswer?.MissReason);
+    }
+
+    private static ListeningReviewItemDto ApplyReviewVisibility(
+        ListeningReviewItemDto item,
+        ListeningReviewVisibility visibility)
+    {
+        var showExplanation = visibility.ShowExplanationsAfterSubmit
+            && (!visibility.ShowExplanationsOnlyIfWrong || !item.IsCorrect);
+        return item with
+        {
+            CorrectAnswer = visibility.ShowCorrectAnswerOnReview && !item.IsInvalid ? item.CorrectAnswer : string.Empty,
+            Explanation = showExplanation && !item.IsInvalid ? item.Explanation : null,
+            DistractorExplanation = showExplanation && !item.IsInvalid ? item.DistractorExplanation : null,
+            OptionAnalysis = showExplanation && visibility.ShowCorrectAnswerOnReview && !item.IsInvalid
+                ? item.OptionAnalysis
+                : null,
+        };
+    }
+
+    private static ListeningReviewVisibility ResolveReviewVisibility(string? policySnapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return ListeningReviewVisibility.LegacyDefault;
+        try
+        {
+            using var document = JsonDocument.Parse(policySnapshotJson);
+            var root = document.RootElement;
+            var policy = root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("listeningPolicy", out var nested)
+                && nested.ValueKind == JsonValueKind.Object
+                ? nested
+                : root;
+            return new ListeningReviewVisibility(
+                ReadBoolean(policy, "showExplanationsAfterSubmit", fallback: true),
+                ReadBoolean(policy, "showExplanationsOnlyIfWrong", fallback: false),
+                ReadBoolean(policy, "showCorrectAnswerOnReview", fallback: true));
+        }
+        catch (JsonException)
+        {
+            return ListeningReviewVisibility.Strict;
+        }
+    }
+
+    private static bool ReadBoolean(JsonElement value, string propertyName, bool fallback)
+        => value.ValueKind == JsonValueKind.Object
+            && value.TryGetProperty(propertyName, out var property)
+            && property.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? property.GetBoolean()
+                : fallback;
+
+    private async Task<bool> ResolveScreenReaderOptimisedForSessionAsync(
+        string userId,
+        string? policySnapshotJson,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(policySnapshotJson))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(policySnapshotJson);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) return false;
+                var policy = root.TryGetProperty("listeningPolicy", out var nested)
+                    && nested.ValueKind == JsonValueKind.Object
+                    ? nested
+                    : root;
+                if (policy.TryGetProperty("screenReaderOptimised", out var captured))
+                {
+                    return captured.ValueKind is JsonValueKind.True or JsonValueKind.False
+                        && captured.GetBoolean();
+                }
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        // Legacy attempts without a captured accessibility value retain the
+        // current owner policy; new attempts always carry the immutable value.
+        var (currentPolicy, _) = await ResolveListeningPolicyAsync(userId, ct);
+        return currentPolicy.ScreenReaderOptimised;
     }
 
     private static bool ResolveTranscriptEvidencePolicy(string? policySnapshotJson)
@@ -2795,6 +3591,7 @@ public sealed class ListeningLearnerService(
         return item with
         {
             IsCorrect = isCorrect,
+            IsInvalid = false,
             PointsEarned = isCorrect ? item.MaxPoints : 0,
             ErrorType = isCorrect ? null : item.ErrorType ?? "human_override",
             Explanation = message,
@@ -2837,7 +3634,7 @@ public sealed class ListeningLearnerService(
 
     private static List<ListeningErrorClusterDto> BuildErrorClusters(IReadOnlyCollection<ListeningReviewItemDto> items)
         => items
-            .Where(item => !item.IsCorrect)
+            .Where(item => !item.IsCorrect && !item.IsInvalid)
             .GroupBy(item => item.ErrorType ?? "detail_capture")
             .Select(group => new ListeningErrorClusterDto(
                 ErrorType: group.Key,
@@ -2864,7 +3661,7 @@ public sealed class ListeningLearnerService(
 
     private static List<string> BuildIssues(IReadOnlyCollection<ListeningReviewItemDto> items)
         => items
-            .Where(item => !item.IsCorrect)
+            .Where(item => !item.IsCorrect && !item.IsInvalid)
             .Take(3)
             .Select(item => item.DistractorExplanation ?? item.Explanation)
             .DefaultIfEmpty("Keep using transcript-backed review to maintain accuracy under exam pressure.")
@@ -2938,7 +3735,7 @@ public sealed class ListeningLearnerService(
                 AllowTranscriptReveal: ReadBool(question.GetValueOrDefault("allowTranscriptReveal")) ?? true,
                 TranscriptExcerpt: ReadString(question.GetValueOrDefault("transcriptExcerpt")),
                 DistractorExplanation: ReadString(question.GetValueOrDefault("distractorExplanation")),
-                Points: Math.Max(1, ReadInt(question.GetValueOrDefault("points")) ?? 1),
+                Points: ReadInt(question.GetValueOrDefault("points")) ?? 1,
                 OptionDistractorWhy: ReadStringList(question.GetValueOrDefault("optionDistractorWhy"))
                     ?? ReadStringList(question.GetValueOrDefault("perOptionWhy"))
                     ?? new List<string>(),
@@ -3040,8 +3837,12 @@ public sealed class ListeningLearnerService(
         }).ToList()
     };
 
-    private static object AttemptDto(Attempt attempt, Dictionary<string, string?> answers) => new
+    private static object AttemptDto(Attempt attempt, Dictionary<string, string?> answers)
     {
+        var audio = ReadGenericAudioPlayback(answers);
+        return new
+        {
+        serverNow = DateTimeOffset.UtcNow,
         attemptId = attempt.Id,
         paperId = attempt.ContentId,
         state = ToApiState(attempt.State),
@@ -3059,23 +3860,36 @@ public sealed class ListeningLearnerService(
         // they never leak into the player's answer map or get re-submitted as a
         // bogus answer. The cursor is surfaced separately via advance-section.
         answers = StripReservedAnswerKeys(answers),
-        sectionCursor = ReadGenericSectionCursor(answers)
-    };
+        sectionCursor = ReadGenericSectionCursor(answers),
+        audioPlaybackState = audio.State,
+        audioResumeAtMs = audio.ResumeAtMs,
+        audioPlaybackSection = audio.Section,
+        audioQuestionIndex = audio.QuestionIndex,
+        };
+    }
 
     /// <summary>True for reserved, non-question answer-map keys (currently just
     /// the one-way section cursor). Such keys are persisted in a generic
     /// attempt's <c>AnswersJson</c> but must never be treated as a learner
     /// answer, counted, graded, or echoed back to the player.</summary>
     private static bool IsReservedAnswerKey(string key)
-        => string.Equals(key, GenericSectionCursorKey, StringComparison.Ordinal);
+        => key is GenericSectionCursorKey
+            or GenericAudioPlaybackStateKey
+            or GenericAudioResumeMsKey
+            or GenericAudioSectionKey
+            or GenericAudioQuestionIndexKey;
 
     private static Dictionary<string, string?> StripReservedAnswerKeys(IReadOnlyDictionary<string, string?> answers)
         => answers
             .Where(kv => !IsReservedAnswerKey(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
-    private static object RelationalAttemptDto(ListeningAttempt attempt, Dictionary<string, string?> answers) => new
+    private static object RelationalAttemptDto(ListeningAttempt attempt, Dictionary<string, string?> answers)
     {
+        var audio = ReadAudioPlaybackSnapshot(attempt.AudioCueTimelineJson);
+        return new
+        {
+        serverNow = DateTimeOffset.UtcNow,
         attemptId = attempt.Id,
         paperId = attempt.PaperId,
         state = attempt.Status == ListeningAttemptStatus.Submitted ? "completed" : ToApiState(attempt.Status),
@@ -3089,8 +3903,14 @@ public sealed class ListeningLearnerService(
         adminReviewReason = attempt.AdminReviewReason,
         adminReviewFlaggedAt = attempt.AdminReviewFlaggedAt,
         expiresAt = attempt.DeadlineAt,
-        answers
-    };
+        answers,
+        sectionCursor = ReadSectionCursor(attempt.NavigationStateJson),
+        audioPlaybackState = audio.State,
+        audioResumeAtMs = audio.ResumeAtMs,
+        audioPlaybackSection = audio.Section,
+        audioQuestionIndex = audio.QuestionIndex,
+        };
+    }
 
     private static object? BuildPaperLastAttemptDto(string paperId, Attempt? genericAttempt, ListeningAttempt? relationalAttempt)
     {
@@ -3348,14 +4168,16 @@ public sealed class ListeningLearnerService(
         return normalized.StartsWith("listening-drill-", StringComparison.Ordinal) ? normalized : $"listening-drill-{normalized}";
     }
 
-    private static ListeningScoreDto ResolveScoreFromEvaluation(Evaluation? evaluation)
+    private static ListeningScoreDto ResolveScoreFromEvaluation(Evaluation? evaluation, bool requiresAdminReview = false)
     {
         if (evaluation is not null)
         {
             if (evaluation.RawScore is int persistedRaw)
             {
-                var persistedMax = Math.Clamp(evaluation.MaxRawScore ?? CanonicalRawMax, 1, CanonicalRawMax);
-                var hasApprovedConversion = HasApprovedScoreConversion(evaluation.ScoreConversionTableVersionKey, evaluation.ScaledScore, evaluation.ScoreConversionPassed);
+                var conversionMaxRaw = evaluation.MaxRawScore ?? 0;
+                var persistedMax = conversionMaxRaw > 0 ? conversionMaxRaw : CanonicalRawMax;
+                var hasApprovedConversion = !requiresAdminReview
+                    && HasApprovedScoreConversion(evaluation.ScoreConversionTableVersionKey, evaluation.ScaledScore, evaluation.ScoreConversionPassed, conversionMaxRaw);
                 return new ListeningScoreDto(
                     Math.Clamp(persistedRaw, 0, persistedMax),
                     persistedMax,
@@ -3370,9 +4192,11 @@ public sealed class ListeningLearnerService(
             var scaled = ReadInt(row?.GetValueOrDefault("scaledScore"));
             if (raw.HasValue || scaled.HasValue)
             {
-                var maxRawValue = Math.Clamp(maxRaw ?? CanonicalRawMax, 1, CanonicalRawMax);
+                var conversionMaxRaw = maxRaw ?? 0;
+                var maxRawValue = conversionMaxRaw > 0 ? conversionMaxRaw : CanonicalRawMax;
                 var rawValue = Math.Clamp(raw ?? 0, 0, maxRawValue);
-                var hasApprovedConversion = HasApprovedScoreConversion(evaluation.ScoreConversionTableVersionKey, scaled, evaluation.ScoreConversionPassed);
+                var hasApprovedConversion = !requiresAdminReview
+                    && HasApprovedScoreConversion(evaluation.ScoreConversionTableVersionKey, scaled, evaluation.ScoreConversionPassed, conversionMaxRaw);
                 var approvedScaled = hasApprovedConversion ? scaled : null;
                 var grade = hasApprovedConversion ? evaluation.ScoreConversionGrade ?? "—" : "—";
                 var passed = hasApprovedConversion ? evaluation.ScoreConversionPassed : null;
@@ -3390,14 +4214,15 @@ public sealed class ListeningLearnerService(
 
     private static ListeningScoreDto ApplyScoreConversionGate(ListeningScoreDto score, string? scoreConversionTableVersionKey)
     {
-        if (HasApprovedScoreConversion(scoreConversionTableVersionKey, score.ScaledScore, score.Passed))
+        if (HasApprovedScoreConversion(scoreConversionTableVersionKey, score.ScaledScore, score.Passed, score.MaxRawScore))
             return score;
 
         return new ListeningScoreDto(score.RawScore, score.MaxRawScore, null, "—", null);
     }
 
-    private static bool HasApprovedScoreConversion(string? scoreConversionTableVersionKey, int? scaledScore, bool? passed)
-        => scaledScore.HasValue
+    private static bool HasApprovedScoreConversion(string? scoreConversionTableVersionKey, int? scaledScore, bool? passed, int maxRawScore)
+        => maxRawScore == CanonicalRawMax
+            && scaledScore.HasValue
             && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
             && passed.HasValue;
 
@@ -3405,11 +4230,12 @@ public sealed class ListeningLearnerService(
     {
         if (evaluation is not null)
         {
-            return ResolveScoreFromEvaluation(evaluation);
+            return ResolveScoreFromEvaluation(evaluation, attempt.RequiresAdminReview);
         }
 
         var rawValue = Math.Clamp(attempt.RawScore ?? 0, 0, CanonicalRawMax);
-        var hasApprovedConversion = HasApprovedScoreConversion(attempt.ScoreConversionTableVersionKey, attempt.ScaledScore, attempt.ScoreConversionPassed);
+        var hasApprovedConversion = !attempt.RequiresAdminReview
+            && HasApprovedScoreConversion(attempt.ScoreConversionTableVersionKey, attempt.ScaledScore, attempt.ScoreConversionPassed, attempt.MaxRawScore);
         var scaledValue = hasApprovedConversion ? attempt.ScaledScore : null;
         var grade = hasApprovedConversion ? attempt.ScoreConversionGrade ?? "—" : "—";
         var passed = hasApprovedConversion ? attempt.ScoreConversionPassed : null;
@@ -3465,7 +4291,7 @@ public sealed class ListeningLearnerService(
         Attempt attempt,
         CancellationToken ct)
     {
-        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview);
+        EnsureAttemptNotOnAdminReviewHold(attempt.RequiresAdminReview, attempt.AdminReviewReason);
         if (attempt.State == AttemptState.Completed)
         {
             throw ApiException.Conflict("listening_attempt_locked", "This Listening attempt has already been submitted.");
@@ -3482,13 +4308,16 @@ public sealed class ListeningLearnerService(
         return Task.CompletedTask;
     }
 
-    private static void EnsureAttemptNotOnAdminReviewHold(bool requiresAdminReview)
+    private static void EnsureAttemptNotOnAdminReviewHold(bool requiresAdminReview, string? reason = null)
     {
         if (requiresAdminReview)
         {
+            var reviewReason = string.IsNullOrWhiteSpace(reason)
+                ? "review_required"
+                : reason;
             throw ApiException.Conflict(
                 "listening_attempt_requires_admin_review",
-                "This Listening attempt is on hold because audio playback failed and requires administrator review before scoring.");
+                $"This Listening attempt requires administrator review before scoring. Reason: {reviewReason}.");
         }
     }
 
@@ -3520,9 +4349,57 @@ public sealed class ListeningLearnerService(
     {
         var resolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
         var resolution = await resolver.ResolveAsync("listening", "default", cancellationToken: ct);
+        var listeningPolicy = listeningPolicyService is not null
+            ? await listeningPolicyService.GetGlobalAsync(ct)
+            : await db.ListeningPolicies.AsNoTracking().FirstOrDefaultAsync(row => row.Id == "global", ct);
         return resolution.IsAvailable && resolution.ErrorCode is null
-            ? ListeningAudioTransportPolicy.FromPolicy(mode, resolution.Document)
+            ? ListeningAudioTransportPolicy.FromPolicy(
+                mode,
+                resolution.Document,
+                listeningPolicy?.LearningReplayAllowed)
             : ListeningAudioTransportPolicy.Strict;
+    }
+
+    private async Task<IReadOnlyList<int>> ResolveCountdownWarningsForSessionAsync(
+        string userId,
+        string? policySnapshotJson,
+        CancellationToken ct)
+    {
+        if (TryReadCapturedCountdownWarnings(policySnapshotJson, out var captured))
+            return captured;
+
+        var (policy, _) = await ResolveListeningPolicyAsync(userId, ct);
+        return ListeningPolicyService.ParseCountdownWarnings(policy.CountdownWarningsJson);
+    }
+
+    private static bool TryReadCapturedCountdownWarnings(
+        string? policySnapshotJson,
+        out IReadOnlyList<int> warnings)
+    {
+        warnings = Array.Empty<int>();
+        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(policySnapshotJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            var container = root.TryGetProperty("listeningPolicy", out var nested)
+                && nested.ValueKind == JsonValueKind.Object
+                ? nested
+                : root;
+            if (!container.TryGetProperty("countdownWarningsSeconds", out var value)) return false;
+            if (value.ValueKind != JsonValueKind.Array)
+                return true;
+
+            warnings = ListeningPolicyService.ParseCountdownWarnings(value.GetRawText());
+            return true;
+        }
+        catch (JsonException)
+        {
+            return policySnapshotJson.Contains(
+                "countdownWarningsSeconds", StringComparison.Ordinal);
+        }
     }
 
     private static bool HasAnsweredValue(string? value)
@@ -3554,10 +4431,12 @@ public sealed class ListeningLearnerService(
     /// <summary>
     /// Phase 9 tail: accept the learner-visible Listening modes.
     ///
-    ///   <c>practice</c> — default. Free replay, scrubbable, pause allowed.
+    ///   <c>practice</c> — default. Navigation is permissive, while the
+    ///                     current owner audio policy remains non-pausable.
     ///   <c>exam</c>     — one-play, no scrub, no pause. Standard CBT-style.
-    ///   <c>home</c>     — OET@Home: kiosk full-screen + integrity prompt;
-    ///                     timer + one-play behave like <c>exam</c>.
+    ///   <c>home</c>     — OET@Home guidance skin; fullscreen/focus are
+    ///                     advisory, while timer + one-play behave like
+    ///                     <c>exam</c>.
     ///   <c>diagnostic</c> — fixed-form placement attempt for the pathway.
     ///
     /// Anything else collapses to <c>practice</c> so a malformed query
@@ -3770,6 +4649,56 @@ public sealed class ListeningLearnerService(
         => score.ScaledScore is int scaled
             ? $"{score.RawScore} / {score.MaxRawScore} \u2022 {scaled} / 500 \u2022 Grade {score.Grade}"
             : $"{score.RawScore} / {score.MaxRawScore} \u2022 scaled score unavailable";
+
+    private static string NormalizeBestScoreDisplay(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            "best" => "best",
+            "latest" => "latest",
+            "average" => "average",
+            "first" => "first",
+            _ => "latest",
+        };
+
+    private static string? SelectProgressScoreDisplay(
+        IReadOnlyList<ListeningHomeResultProjection> results,
+        string? configuredMode)
+    {
+        if (results.Count == 0) return null;
+
+        var mode = NormalizeBestScoreDisplay(configuredMode);
+        if (mode == "average")
+        {
+            var averageRaw = results.Average(result => result.rawScore);
+            var averageMax = results.Average(result => result.maxRawScore);
+            var converted = results
+                .Where(result => result.scaledScore.HasValue)
+                .Select(result => result.scaledScore!.Value)
+                .ToList();
+            var average = converted.Count > 0
+                ? $"{averageRaw:0.#} / {averageMax:0.#} \u2022 {converted.Average():0.#} / 500 average"
+                : $"{averageRaw:0.#} / {averageMax:0.#} average \u2022 scaled score unavailable";
+            return average;
+        }
+
+        var selected = mode switch
+        {
+            "first" => results.OrderBy(result => result.submittedAt ?? DateTimeOffset.MaxValue).First(),
+            "best" => results
+                .OrderByDescending(ProgressScoreRank)
+                .ThenByDescending(result => result.submittedAt)
+                .First(),
+            _ => results[0],
+        };
+        return selected.scoreDisplay;
+    }
+
+    private static decimal ProgressScoreRank(ListeningHomeResultProjection result)
+        => result.scaledScore
+            // Raw score is the only honest fallback for ordering when the
+            // owner-approved conversion table is unavailable. Never derive a
+            // synthetic 0-500 value for ranking or display.
+            ?? result.rawScore;
 
     private static string ToApiState(AttemptState state) => state switch
     {
@@ -3997,9 +4926,29 @@ public sealed class ListeningLearnerService(
         int? TranscriptEvidenceStartMs,
         int? TranscriptEvidenceEndMs);
 
+    private sealed record LegacyMultipleSelectionIntegrityIssue(
+        string QuestionId,
+        int QuestionNumber,
+        IReadOnlyList<string> Selections);
+
     private sealed record ListeningAssetReadiness(bool Audio, bool QuestionPaper, bool AnswerKey, bool AudioScript);
 
     private sealed record ListeningScoreDto(int RawScore, int MaxRawScore, int? ScaledScore, string Grade, bool? Passed);
+
+    private sealed record ListeningHomeResultProjection(
+        string attemptId,
+        string paperId,
+        string paperTitle,
+        int rawScore,
+        int maxRawScore,
+        int? scaledScore,
+        string grade,
+        bool? passed,
+        DateTimeOffset? submittedAt,
+        string scoreDisplay,
+        string route,
+        bool requiresAdminReview = false,
+        string? adminReviewReason = null);
 
     internal sealed record ListeningTranscriptSnippetDto(bool Allowed, string? Excerpt, string? DistractorExplanation);
 
@@ -4012,6 +4961,7 @@ public sealed class ListeningLearnerService(
         string LearnerAnswer,
         string CorrectAnswer,
         bool IsCorrect,
+        bool IsInvalid,
         int PointsEarned,
         int MaxPoints,
         string? Explanation,
@@ -4028,6 +4978,18 @@ public sealed class ListeningLearnerService(
         int? TranscriptEvidenceEndMs,
         ListeningHumanScoreOverrideDto? ScoreOverride,
         ListeningMissReason? MissReason = null);
+
+    private sealed record ListeningReviewVisibility(
+        bool ShowExplanationsAfterSubmit,
+        bool ShowExplanationsOnlyIfWrong,
+        bool ShowCorrectAnswerOnReview)
+    {
+        public static ListeningReviewVisibility LegacyDefault { get; } =
+            new(true, false, true);
+
+        public static ListeningReviewVisibility Strict { get; } =
+            new(false, false, false);
+    }
 
     private sealed record ListeningHumanScoreOverride(string QuestionId, int Override, string? By, string? Reason);
 
@@ -4079,7 +5041,19 @@ public sealed class ListeningLearnerService(
         IReadOnlyList<string> Issues,
         DateTimeOffset? GeneratedAt,
         string? ScoreConversionTableVersionKey = null,
-        string? ScoreConversionErrorCode = null);
+        string? ScoreConversionErrorCode = null,
+        ListeningTimeUsedDto? TimeUsed = null,
+        int InvalidCount = 0,
+        bool RequiresAdminReview = false,
+        string? AdminReviewReason = null);
+
+    internal sealed record ListeningTimeUsedDto(
+        int? TotalMilliseconds,
+        IReadOnlyList<ListeningTimeUsedSectionDto> Sections);
+
+    internal sealed record ListeningTimeUsedSectionDto(
+        string SectionCode,
+        int? ElapsedMilliseconds);
 }
 
 public sealed record ListeningAnswerSaveRequest(string? UserAnswer);

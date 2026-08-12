@@ -454,6 +454,23 @@ public sealed class AssessmentMarkingPolicyService(LearnerDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 }
+
+/// <summary>
+/// Owner evidence required before a Listening/Reading policy can be released
+/// as a complete v1.1 assessment. These values are deliberately not inferred
+/// from configuration or runtime telemetry.
+/// </summary>
+public sealed record AssessmentReleaseGateDocument(
+    bool ScoreGraphLegalStyleApproved = false,
+    int PeakConcurrentTimedAttempts = 0,
+    string? PeakConcurrencyEvidenceUrl = null)
+{
+    public bool IsApproved => ScoreGraphLegalStyleApproved
+        && PeakConcurrentTimedAttempts > 0
+        && Uri.TryCreate(PeakConcurrencyEvidenceUrl, UriKind.Absolute, out var evidenceUri)
+        && string.Equals(evidenceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+}
+
 public sealed record AssessmentMarkingPolicyDocument(
     bool TrimLeadingTrailingWhitespace = true,
     bool CollapseInternalWhitespace = false,
@@ -461,7 +478,8 @@ public sealed record AssessmentMarkingPolicyDocument(
     bool ReadingPartAMatchingPartialCredit = false,
     bool ListeningAudioReplayAllowed = false,
     string AudioLockMode = "exam",
-    bool TechnicalRequirementsGuidanceOnly = true)
+    bool TechnicalRequirementsGuidanceOnly = true,
+    AssessmentReleaseGateDocument? ReleaseGate = null)
 {
     private static readonly string[] RequiredProperties =
     [

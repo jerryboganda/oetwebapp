@@ -9,8 +9,8 @@ behaviours unlock and which UI skin is rendered. Mode lives on
 | Real exam | Platform mode | Skin (planned) | Replay | Navigation |
 |---|---|---|---|---|
 | OET on Computer (test centre) | `Exam` | `ComputerSkin` | Disabled | Forward-only, locks per section |
-| OET@Home (remote proctored) | `Home` | `HomeSkin` | Disabled | Forward-only + kiosk fullscreen + paste block |
-| Learning / Drill (practice) | `Learning` / `Drill` / `MiniTest` / `ErrorBank` | `ComputerSkin` | Allowed | Free; transcript loop available |
+| OET@Home (platform guidance mode) | `Home` | `HomeSkin` | Disabled | Forward-only; fullscreen/focus guidance + paste block |
+| Learning / Drill (practice) | `Learning` / `Drill` / `MiniTest` / `ErrorBank` | `ComputerSkin` | Disabled | Free navigation; transcript review after submit |
 | Diagnostic (placement) | `Diagnostic` | `ComputerSkin` | Disabled | Forward-only; routes to pathway recommendation |
 
 Paper-based Listening simulation is out of scope. Legacy paper query values
@@ -19,8 +19,9 @@ fail closed to the computer exam surface and are never sent to the API.
 ## What the modes share
 
 - **Audio source** — same MP3, same transcript timing.
-- **Scoring** — `ListeningGradingService` is mode-agnostic. Raw → scaled
-  always routes through `OetScoring.OetRawToScaled`.
+- **Scoring** — `ListeningGradingService` is mode-agnostic. Raw marks are
+  deterministic; scaled score and pass status come only from a complete,
+  owner-approved, versioned conversion table captured on the attempt.
 - **FSM** — `ListeningFsmTransitions` + `ListeningSessionService`.
   `ListeningModePolicy` adjusts the policy (one-way locks, confirm dialog,
   unanswered warning) per mode.
@@ -37,7 +38,7 @@ supported production skins; no Paper skin or booklet renderer is shipped.
 |---|---|---|---|
 | Audio player visible | Yes | Yes | No (room audio implied) |
 | Scrub allowed | No | No | N/A |
-| Fullscreen required | No | Yes (`requestFullscreen`) | No |
+| Fullscreen required | No | No; guidance only | No |
 | Paste / context-menu blocked | No | Yes | No |
 | Background | Surface | Black distraction-free | Paper-tone |
 | Bubble-sheet style B/C | No | No |
@@ -57,14 +58,16 @@ supported production skins; no Paper skin or booklet renderer is shipped.
 
 ## OET@Home specifics
 
-- Kiosk visual layer only. Real remote proctoring (camera, screen-record,
-  ID verification) is a separate initiative.
-- Paste-block listener mirrors the Speaking proctoring listener at
+- The Home skin is a visual/guidance layer only. Fullscreen is optional and
+  never blocks launch, progress, or submission unless a future dedicated
+  exam-rehearsal policy is explicitly owner-approved.
+- Focus and fullscreen changes are recorded as non-blocking technical guidance
+  telemetry; they do not produce a learner lock or warning state.
+- Paste/context-menu blocking remains a platform interaction safeguard and does
+  not imply remote proctoring. Camera, screen recording, and ID verification
+  are separate initiatives.
+- The paste-block listener mirrors the Speaking proctoring listener at
   [`components/domain/listening/player/`](../../components/domain/listening/player/).
-- `requestFullscreen` is requested at `intro → a1_preview` transition. If
-  the learner exits fullscreen during audio, the session emits a
-  `home.fullscreen.exited` audit event (TODO — wire to existing proctoring
-  log when proctoring lands).
 
 ## Out of scope
 

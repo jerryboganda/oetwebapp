@@ -68,7 +68,7 @@ public sealed class MockSampleSeeder(
     /// <summary>L → R → W → S, with admin-spec time limits.</summary>
     private static readonly (string Subtest, int TimeLimit)[] SectionPlan =
     [
-        ("listening", 40),
+        ("listening", 45),
         ("reading",   60),
         ("writing",   45),
         ("speaking",  20),

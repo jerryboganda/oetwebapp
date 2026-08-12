@@ -77,7 +77,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 && a.State == AttemptState.Completed)
             .OrderByDescending(a => a.SubmittedAt ?? a.CompletedAt)
             .Take(50)
-            .Select(a => new { a.Id, a.SubmittedAt })
+            .Select(a => new { a.Id, a.SubmittedAt, a.MaxRawScore, a.RequiresAdminReview })
             .ToListAsync(ct);
 
         var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
@@ -88,9 +88,11 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
             {
                 a.Id,
                 a.SubmittedAt,
+                a.MaxRawScore,
                 a.ScaledScore,
                 a.ScoreConversionTableVersionKey,
                 a.ScoreConversionPassed,
+                a.RequiresAdminReview,
             })
             .ToListAsync(ct);
 
@@ -106,6 +108,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                     e.AttemptId,
                     e.GeneratedAt,
                     e.CriterionScoresJson,
+                    e.MaxRawScore,
                     e.ScoreConversionTableVersionKey,
                     e.ScoreConversionPassed,
                 })
@@ -115,7 +118,10 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
                 .Select(group => group.OrderByDescending(e => e.GeneratedAt).First()))
             {
-                if (string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
+                if (completedAttempts.FirstOrDefault(a => a.Id == evaluation.AttemptId)?.RequiresAdminReview == true)
+                    continue;
+                if (evaluation.MaxRawScore != OetScoring.ListeningReadingRawMax
+                    || string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
                     || !evaluation.ScoreConversionPassed.HasValue) continue;
                 var scaled = TryReadScaled(evaluation.CriterionScoresJson);
                 if (scaled.HasValue && (bestScaled is null || scaled.Value > bestScaled.Value))
@@ -125,7 +131,9 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
 
         foreach (var relationalAttempt in relationalAttempts)
         {
-            if (!string.IsNullOrWhiteSpace(relationalAttempt.ScoreConversionTableVersionKey)
+            if (!relationalAttempt.RequiresAdminReview
+                && relationalAttempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+                && !string.IsNullOrWhiteSpace(relationalAttempt.ScoreConversionTableVersionKey)
                 && relationalAttempt.ScoreConversionPassed.HasValue
                 && relationalAttempt.ScaledScore is int scaled
                 && (bestScaled is null || scaled > bestScaled.Value))
@@ -257,19 +265,21 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
         var legacyAttemptIds = await db.Attempts.AsNoTracking()
             .Where(a => a.UserId == userId
                 && a.SubtestCode == Subtest
-                && a.State == AttemptState.Completed)
+                && a.State == AttemptState.Completed
+                && !a.RequiresAdminReview)
             .Select(a => a.Id)
             .ToListAsync(ct);
         if (legacyAttemptIds.Count > 0)
         {
             var legacyEvaluations = await db.Evaluations.AsNoTracking()
                 .Where(e => legacyAttemptIds.Contains(e.AttemptId))
-                .Select(e => new { e.AttemptId, e.GeneratedAt, e.ScoreConversionTableVersionKey, e.ScoreConversionPassed, e.ScaledScore })
+                .Select(e => new { e.AttemptId, e.GeneratedAt, e.MaxRawScore, e.ScoreConversionTableVersionKey, e.ScoreConversionPassed, e.ScaledScore })
                 .ToListAsync(ct);
             if (legacyEvaluations
                 .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
                 .Select(group => group.OrderByDescending(e => e.GeneratedAt).First())
-                .Any(e => !string.IsNullOrWhiteSpace(e.ScoreConversionTableVersionKey)
+                .Any(e => e.MaxRawScore == OetScoring.ListeningReadingRawMax
+                    && !string.IsNullOrWhiteSpace(e.ScoreConversionTableVersionKey)
                     && e.ScaledScore.HasValue
                     && e.ScoreConversionPassed == true))
             {
@@ -279,6 +289,8 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
 
         return await db.ListeningAttempts.AsNoTracking().AnyAsync(a => a.UserId == userId
             && a.Status == ListeningAttemptStatus.Submitted
+            && !a.RequiresAdminReview
+            && a.MaxRawScore == OetScoring.ListeningReadingRawMax
             && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
             && a.ScaledScore.HasValue
             && a.ScoreConversionPassed == true, ct);

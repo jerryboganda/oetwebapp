@@ -90,6 +90,29 @@ public class ListeningAudioEndpointTests : IClassFixture<TestWebApplicationFacto
         Assert.Equal(0, storage.LegacyOpenReadCalls);
     }
 
+    [Fact]
+    public async Task RangeRequest_DoesNotExposePartialDiagnosticAudio()
+    {
+        var sha = new string('d', 64);
+        var bytes = new byte[] { 1, 2, 3, 4, 5, 6 };
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            var key = ContentAddressed.PublishedKey("listening/tts", sha, "wav");
+            using var source = new MemoryStream(bytes);
+            await storage.WriteAsync(key, source, CancellationToken.None);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/v1/listening/audio/{sha}.wav");
+        request.Headers.TryAddWithoutValidation("Range", "bytes=0-2");
+        using var client = _factory.CreateClient();
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(bytes, await response.Content.ReadAsByteArrayAsync());
+    }
+
     [Theory]
     [InlineData("not-a-hash.wav")]
     [InlineData("abc.wav")]

@@ -560,11 +560,11 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
             var securityEventLogger = scope.ServiceProvider.GetRequiredService<ISecurityEventLogger>();
 
-            // Security spec §3.1: single active session. Keyed on the refresh-
-            // token FAMILY (survives rotation), not "sid" (changes every
-            // refresh) — see AuthTokenService.SessionFamilyClaimType. Tokens
-            // issued before this claim existed simply have none, so they skip
-            // the check and self-heal within one access-token lifetime.
+            // Revoked refresh-token families must reject their access tokens
+            // too. This is required for explicit admin role/session removal,
+            // independently of the optional single-active-session setting.
+            // The check is keyed on the refresh-token FAMILY (survives
+            // rotation), not "sid" (changes every refresh).
             var sessionFamilyClaim = principal?.FindFirst(AuthTokenService.SessionFamilyClaimType)?.Value;
             var sessionFamilyId = Guid.TryParse(sessionFamilyClaim, out var parsedFamilyId)
                 ? parsedFamilyId
@@ -624,23 +624,14 @@ void ConfigureJwtBearer(JwtBearerOptions options)
 
             if (sessionFamilyId is not null && !accountState.SessionFamilyAlive)
             {
-                var settingsProvider = scope.ServiceProvider.GetRequiredService<OetLearner.Api.Services.Settings.IRuntimeSettingsProvider>();
-                var effective = await settingsProvider.GetAsync(context.HttpContext.RequestAborted);
-                // Trusted-device enforcement also implies single live-session
-                // liveness. Otherwise an old access token could continue to
-                // work until expiry after a newly approved device revoked its
-                // refresh-token family, undermining the anti-sharing rule.
-                if (effective.Security.SingleActiveSessionEnabled || effective.Security.TrustedDeviceRequired)
-                {
-                    await securityEventLogger.TryLogAsync(
-                        authAccountId,
-                        SecurityEventKinds.AuthTokenRejected,
-                        sessionFamilyId: sessionFamilyId,
-                        details: new { reason = "session_revoked" },
-                        cancellationToken: context.HttpContext.RequestAborted);
-                    context.Fail("session_revoked");
-                    return;
-                }
+                await securityEventLogger.TryLogAsync(
+                    authAccountId,
+                    SecurityEventKinds.AuthTokenRejected,
+                    sessionFamilyId: sessionFamilyId,
+                    details: new { reason = "session_revoked" },
+                    cancellationToken: context.HttpContext.RequestAborted);
+                context.Fail("session_revoked");
+                return;
             }
 
             if (string.Equals(accountState.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
@@ -1014,23 +1005,17 @@ if (builder.Configuration.GetValue<bool>("Listening:PartAAiScoring:Enabled"))
 // The full synthesis pipeline (segment concat, SHA-256, IFileStorage write,
 // audit log) is provider-agnostic and lives in ListeningTtsService.
 {
-    var ttsProvider = (builder.Configuration["Listening:TtsProvider"] ?? "stub").Trim().ToLowerInvariant();
+    var ttsProvider = OetLearner.Api.Services.Listening.ListeningTtsProviderPolicy.Normalize(
+        builder.Configuration["Listening:TtsProvider"]);
+    OetLearner.Api.Services.Listening.ListeningTtsProviderPolicy.EnsureAllowedForEnvironment(
+        ttsProvider,
+        builder.Environment.IsProduction());
     switch (ttsProvider)
     {
         case "stub":
             builder.Services.AddSingleton<
                 OetLearner.Api.Services.Listening.IListeningTtsSynthesisProvider,
                 OetLearner.Api.Services.Listening.StubListeningTtsSynthesisProvider>();
-            // Production should not run the silence stub once a real provider is
-            // configured. Warn loudly so the operator sees the gap, but do NOT
-            // crash — other API functionality (auth, content, scoring, etc.) is
-            // unaffected and must remain available.
-            if (builder.Environment.IsProduction())
-            {
-                Console.WriteLine(
-                    "[ProductionProviderSafetyValidator] WARN: Listening:TtsProvider is 'stub'. "
-                    + "Set LISTENING__TTSPROVIDER=elevenlabs before listening TTS features will function.");
-            }
             break;
         case "elevenlabs":
             builder.Services.AddSingleton<
@@ -1636,6 +1621,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IPracticeSelectionSer
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReviewQueueService, OetLearner.Api.Services.Reading.ReviewQueueService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingVocabularyService, OetLearner.Api.Services.Reading.ReadingVocabularyService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExplanationService, OetLearner.Api.Services.Reading.ReadingExplanationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPassageQnaService, OetLearner.Api.Services.Reading.ReadingPassageQnaService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IStreakService, OetLearner.Api.Services.Reading.StreakService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IXpService, OetLearner.Api.Services.Reading.XpService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.ILessonService, OetLearner.Api.Services.Reading.LessonService>();
@@ -1643,6 +1629,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IStrategyService, Oet
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExplanationService,
     OetLearner.Api.Services.Listening.ListeningExplanationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningQuestionQnaService,
+    OetLearner.Api.Services.Listening.ListeningQuestionQnaService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructureService,
     OetLearner.Api.Services.Listening.ListeningStructureService>();
 // Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).

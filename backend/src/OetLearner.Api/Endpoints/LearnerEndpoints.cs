@@ -861,6 +861,8 @@ public static class LearnerEndpoints
                 maxRawScore = a.MaxRawScore,
                 scaledScore = HasApprovedReadingScore(a) ? a.ScaledScore : null,
                 gradeLetter = HasApprovedReadingScore(a) ? a.ScoreConversionGrade ?? "—" : "—",
+                requiresAdminReview = a.RequiresAdminReview,
+                adminReviewReason = a.RequiresAdminReview ? a.AdminReviewReason : null,
                 a.SubmittedAt,
                 route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
             })
@@ -911,6 +913,8 @@ public static class LearnerEndpoints
                     lastAttempt.SubmittedAt,
                     rawScore = lastAttempt.RawScore,
                     scaledScore = HasApprovedReadingScore(lastAttempt) ? lastAttempt.ScaledScore : null,
+                    requiresAdminReview = lastAttempt.RequiresAdminReview,
+                    adminReviewReason = lastAttempt.RequiresAdminReview ? lastAttempt.AdminReviewReason : null,
                     route = lastAttempt.Status == ReadingAttemptStatus.Submitted
                         ? $"/reading/paper/{p.Id}/results?attemptId={lastAttempt.Id}"
                         : $"/reading/paper/{p.Id}?attemptId={lastAttempt.Id}",
@@ -1083,6 +1087,7 @@ public static class LearnerEndpoints
 
     private static bool HasApprovedReadingScore(ReadingAttempt attempt)
         => IsCanonicalReadingScoreAttempt(attempt)
+            && !attempt.RequiresAdminReview
             && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;

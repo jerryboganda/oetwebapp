@@ -21,7 +21,9 @@ public sealed record EffectiveListeningPolicy(
     bool OptionStrikethroughEnabled, bool InAppZoomEnabled,
     bool BrowserZoomAllowed, bool AnnotationsPersistOnAdvance,
     bool TechReadinessRequired,
-    int ExtraTimePct, bool AccessibilityModeEnabled);
+    int ExtraTimePct, bool AccessibilityModeEnabled,
+    string ShortAnswerNormalisation, bool ShortAnswerAcceptSynonyms,
+    bool ScreenReaderOptimised);
 
 public static class ListeningPolicyResolver
 {
@@ -59,6 +61,11 @@ public static class ListeningPolicyResolver
             AnnotationsPersistOnAdvance: B(policy?.AnnotationsPersistOnAdvance, true),
             TechReadinessRequired: B(policy?.TechReadinessRequired, true),
             ExtraTimePct: userOverride?.ExtraTimeEntitlementPct ?? policy?.DefaultExtraTimePct ?? 0,
-            AccessibilityModeEnabled: userOverride?.AccessibilityModeEnabled ?? false);
+            AccessibilityModeEnabled: userOverride?.AccessibilityModeEnabled ?? false,
+            ShortAnswerNormalisation: string.IsNullOrWhiteSpace(policy?.ShortAnswerNormalisation)
+                ? "trim_collapse_case_insensitive"
+                : policy!.ShortAnswerNormalisation.Trim().ToLowerInvariant(),
+            ShortAnswerAcceptSynonyms: policy?.ShortAnswerAcceptSynonyms ?? false,
+            ScreenReaderOptimised: policy?.ScreenReaderOptimised ?? true);
     }
 }

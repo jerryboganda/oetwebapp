@@ -143,6 +143,8 @@ public sealed record ListeningAttemptAnswerExportDto(
     string QuestionId,
     string UserAnswerJson,
     bool? IsCorrect,
+    bool IsInvalid,
+    string? MissReason,
     int PointsEarned,
     string? SelectedDistractorCategory,
     int? QuestionVersionSnapshot,
@@ -238,9 +240,14 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .Where(e => allAttemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 
+        var legacyAdminReviewAttemptIds = attempts
+            .Where(attempt => attempt.RequiresAdminReview)
+            .Select(attempt => attempt.Id)
+            .ToHashSet(StringComparer.Ordinal);
         var conversionByAttempt = evals
             .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
             .Select(group => group.OrderByDescending(e => e.GeneratedAt).First())
+            .Where(evaluation => !legacyAdminReviewAttemptIds.Contains(evaluation.AttemptId))
             .Where(HasApprovedConversion)
             .ToDictionary(
                 evaluation => evaluation.AttemptId,
@@ -263,6 +270,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         foreach (var attempt in attempts)
         {
+            if (attempt.RequiresAdminReview) continue;
             if (!papers.TryGetValue(attempt.ContentId, out var paper)) continue;
             var authored = ParseAuthoredQuestions(paper);
             if (authored.Count == 0) continue;
@@ -294,6 +302,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         foreach (var attempt in relationalAttempts)
         {
+            if (attempt.RequiresAdminReview) continue;
             if (!papers.TryGetValue(attempt.PaperId, out var paper)) continue;
             var authored = relationalAuthoredByPaper.TryGetValue(attempt.PaperId, out var relationalAuthored)
                 ? relationalAuthored
@@ -412,20 +421,28 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .FirstOrDefaultAsync(attempt => attempt.Id == attemptId, ct);
         if (relationalAttempt is not null)
         {
-            var answers = await db.ListeningAnswers.AsNoTracking()
+            var answerRows = await db.ListeningAnswers.AsNoTracking()
                 .Where(answer => answer.ListeningAttemptId == attemptId)
                 .OrderBy(answer => answer.ListeningQuestionId)
+                .ToListAsync(ct);
+            var questionTypes = await db.ListeningQuestions.AsNoTracking()
+                .Where(question => answerRows.Select(answer => answer.ListeningQuestionId).Contains(question.Id))
+                .ToDictionaryAsync(question => question.Id, question => question.QuestionType, ct);
+            var answers = answerRows
                 .Select(answer => new ListeningAttemptAnswerExportDto(
                     answer.Id,
                     answer.ListeningQuestionId,
                     answer.UserAnswerJson,
                     answer.IsCorrect,
+                    questionTypes.GetValueOrDefault(answer.ListeningQuestionId) == ListeningQuestionType.MultipleChoice3
+                        && answer.IsCorrect is null,
+                    answer.MissReason?.ToString(),
                     answer.PointsEarned,
-                    answer.SelectedDistractorCategory == null ? null : answer.SelectedDistractorCategory.ToString(),
+                    answer.SelectedDistractorCategory?.ToString(),
                     answer.QuestionVersionSnapshot,
                     answer.OptionVersionSnapshot,
                     answer.AnsweredAt))
-                .ToListAsync(ct);
+                .ToList();
             var evaluations = await LoadEvaluationExportsAsync(attemptId, ct);
 
             return new ListeningAttemptExportDto(
@@ -467,6 +484,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             ?? throw new KeyNotFoundException($"Listening attempt {attemptId} not found.");
         var legacyEvaluations = await LoadEvaluationExportsAsync(attemptId, ct);
         var scaledScore = legacyEvaluations
+            .Where(_ => !legacyAttempt.RequiresAdminReview)
             .Where(HasApprovedConversion)
             .Select(evaluation => new
             {
@@ -669,9 +687,14 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .Where(e => allAttemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 
+        var legacyAdminReviewAttemptIds = attempts
+            .Where(attempt => attempt.RequiresAdminReview)
+            .Select(attempt => attempt.Id)
+            .ToHashSet(StringComparer.Ordinal);
         var conversionByAttempt = evals
             .GroupBy(e => e.AttemptId, StringComparer.Ordinal)
             .Select(group => group.OrderByDescending(e => e.GeneratedAt).First())
+            .Where(evaluation => !legacyAdminReviewAttemptIds.Contains(evaluation.AttemptId))
             .Where(HasApprovedConversion)
             .ToDictionary(
                 evaluation => evaluation.AttemptId,
@@ -706,6 +729,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         foreach (var attempt in attempts)
         {
+            if (attempt.RequiresAdminReview) continue;
             if (!papers.TryGetValue(attempt.ContentId, out var paper)) continue;
             var authored = ParseAuthoredQuestions(paper);
             if (authored.Count == 0) continue;
@@ -761,6 +785,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
 
         foreach (var attempt in relationalAttempts)
         {
+            if (attempt.RequiresAdminReview) continue;
             if (!papers.TryGetValue(attempt.PaperId, out var paper)) continue;
             var authored = relationalAuthoredByPaper.TryGetValue(attempt.PaperId, out var relationalAuthored)
                 ? relationalAuthored
@@ -883,12 +908,15 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private static bool HasApprovedConversion(Evaluation evaluation)
-        => !string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
+        => evaluation.MaxRawScore == OetScoring.ListeningReadingRawMax
+            && !string.IsNullOrWhiteSpace(evaluation.ScoreConversionTableVersionKey)
             && evaluation.ScoreConversionPassed.HasValue
             && TryReadScaled(evaluation).HasValue;
 
     private static bool HasApprovedConversion(ListeningAttempt attempt)
-        => !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
+        => attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
+            && !attempt.RequiresAdminReview
+            && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue
             && attempt.ScaledScore.HasValue;
 
@@ -947,7 +975,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             Options: options.Select(option => option.Text).ToList(),
             CorrectAnswer: correctAnswer,
             AcceptedAnswers: accepted,
-            Points: Math.Max(1, question.Points));
+            Points: question.Points);
     }
 
     private static void AddAccepted(List<string> accepted, string? answer)
@@ -1027,7 +1055,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
                     Options: getList("options"),
                     CorrectAnswer: correct,
                     AcceptedAnswers: accepted.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-                    Points: Math.Max(1, getInt("points", 1))));
+                    Points: getInt("points", 1)));
             }
             return list;
         }

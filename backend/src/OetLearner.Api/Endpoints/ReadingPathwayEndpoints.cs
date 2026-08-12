@@ -7,6 +7,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
@@ -377,6 +378,7 @@ public static class ReadingPathwayEndpoints
             StartPracticeSessionRequest request,
             HttpContext http,
             IPracticeSelectionService selection,
+            IAssessmentScoreConversionService scoreConversion,
             LearnerDbContext db,
             CancellationToken ct) =>
         {
@@ -389,6 +391,14 @@ public static class ReadingPathwayEndpoints
             var questionIds = await selection.SelectMockQuestionsAsync(userId, request.MockTemplateId.Value, ct);
             if (questionIds.Count == 0)
                 return Results.BadRequest(new { code = "mock_template_unavailable", error = "Mock template is not available.", message = "Mock template is not available." });
+            var scoreConversionAtStart = await scoreConversion.ResolveAsync(
+                "reading",
+                rawScore: 0,
+                scopeKey: "default",
+                cancellationToken: ct);
+            var scoreConversionSnapshot = AssessmentScoreConversionSnapshot
+                .Capture(scoreConversionAtStart)
+                .Serialize();
             var session = new ReadingPracticeSession
             {
                 Id = Guid.NewGuid(),
@@ -397,14 +407,27 @@ public static class ReadingPathwayEndpoints
                 QuestionIdsJson = JsonSerializer.Serialize(questionIds),
                 TotalQuestions = questionIds.Count,
                 StartedAt = DateTimeOffset.UtcNow,
+                MetadataJson = JsonSerializer.Serialize(new
+                {
+                    scoreConversionSnapshotJson = scoreConversionSnapshot,
+                    scoreConversionTableVersionKey = scoreConversionAtStart.TableVersionKey,
+                }),
             };
             db.ReadingPracticeSessions.Add(session);
             await db.SaveChangesAsync(ct);
+            if (questionIds.Count == OetScoring.ListeningReadingRawMax
+                && scoreConversionAtStart.TableId is not null
+                && scoreConversionAtStart.IsAvailable)
+                await scoreConversion.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
             return Results.Ok(new { sessionId = session.Id, questionCount = questionIds.Count, timeLimitMinutes = 60 });
         });
 
         group.MapGet("/mocks/sessions/{sessionId}/results", async (
-            Guid sessionId, HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+            Guid sessionId,
+            HttpContext http,
+            IAssessmentScoreConversionService scoreConversion,
+            LearnerDbContext db,
+            CancellationToken ct) =>
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
@@ -412,14 +435,191 @@ public static class ReadingPathwayEndpoints
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
             if (session is null || session.SessionType != "mock" || session.CompletedAt is null) return Results.NotFound();
 
+            var questionIds = JsonSerializer.Deserialize<List<Guid>>(session.QuestionIdsJson) ?? [];
+            var questionOrderById = questionIds
+                .Select((questionId, index) => new { questionId, index })
+                .ToDictionary(item => item.questionId, item => item.index);
+            var questionIdStrings = questionIds
+                .Select(id => id.ToString())
+                .ToList();
+            var questionParts = await (
+                from question in db.ReadingQuestions.AsNoTracking()
+                join part in db.ReadingParts.AsNoTracking()
+                    on question.ReadingPartId equals part.Id
+                where questionIdStrings.Contains(question.Id)
+                select new
+                {
+                    question.Id,
+                    part.PartCode,
+                    question.Points,
+                    question.DisplayOrder,
+                    question.QuestionType,
+                    question.SkillTag,
+                    question.Stem,
+                    question.CorrectAnswerJson,
+                    question.OptionDistractorsJson,
+                    question.ExplanationMarkdown,
+                    question.EvidenceSentence,
+                }).ToListAsync(ct);
+            var questionAttempts = await db.ReadingQuestionAttempts.AsNoTracking()
+                .Where(attempt => attempt.UserId == userId
+                    && attempt.PracticeSessionId == sessionId
+                    && questionIds.Contains(attempt.ReadingQuestionId))
+                .ToListAsync(ct);
+            var attemptsByQuestionId = questionAttempts
+                .GroupBy(attempt => attempt.ReadingQuestionId)
+                .ToDictionary(group => group.Key, group => group.OrderByDescending(attempt => attempt.AttemptedAt).First());
+            var partBreakdown = questionParts
+                .GroupBy(question => question.PartCode)
+                .OrderBy(group => group.Key)
+                .Select(group =>
+                {
+                    var scored = group.Select(question =>
+                    {
+                        var hasQuestionId = Guid.TryParse(question.Id, out var parsedId);
+                        var answer = hasQuestionId && attemptsByQuestionId.TryGetValue(parsedId, out var saved)
+                            ? saved
+                            : null;
+                        var answered = answer is not null
+                            && !answer.IsUnknown
+                            && !string.IsNullOrWhiteSpace(answer.SelectedOption);
+                        var correct = answered && answer!.IsCorrect;
+                        return new
+                        {
+                            question.Points,
+                            correct,
+                            answered,
+                            timeSeconds = answer?.TimeSpentSeconds ?? 0,
+                        };
+                    }).ToList();
+                    return new MockPartBreakdownResponse(
+                        PartCode: group.Key.ToString(),
+                        RawScore: scored.Where(item => item.correct).Sum(item => item.Points),
+                        MaxRawScore: scored.Sum(item => item.Points),
+                        CorrectCount: scored.Count(item => item.correct),
+                        IncorrectCount: scored.Count(item => item.answered && !item.correct),
+                        UnansweredCount: scored.Count(item => !item.answered),
+                        AccuracyPercentage: scored.Count == 0
+                            ? 0m
+                            : Math.Round(scored.Count(item => item.correct) * 100m / scored.Count, 1));
+                })
+                .ToList();
+            var itemReview = questionParts
+                .OrderBy(question => Guid.TryParse(question.Id, out var parsedId)
+                    && questionOrderById.TryGetValue(parsedId, out var index)
+                    ? index
+                    : int.MaxValue)
+                .ThenBy(question => question.DisplayOrder)
+                .Select(question =>
+                {
+                    var hasQuestionId = Guid.TryParse(question.Id, out var parsedId);
+                    var answer = hasQuestionId && attemptsByQuestionId.TryGetValue(parsedId, out var saved)
+                        ? saved
+                        : null;
+                    var isUnanswered = answer is null
+                        || answer.IsUnknown
+                        || string.IsNullOrWhiteSpace(answer.SelectedOption);
+                    var isCorrect = !isUnanswered && answer!.IsCorrect;
+                    return new MockReviewItemResponse(
+                        QuestionId: question.Id,
+                        PartCode: question.PartCode.ToString(),
+                        Number: question.DisplayOrder,
+                        QuestionType: question.QuestionType.ToString(),
+                        Stem: question.Stem,
+                        LearnerAnswer: isUnanswered ? null : answer!.SelectedOption,
+                        CorrectAnswer: DecodeMockAnswer(question.CorrectAnswerJson),
+                        IsCorrect: isCorrect,
+                        IsUnanswered: isUnanswered,
+                        PointsEarned: isCorrect ? question.Points : 0,
+                        MaxPoints: question.Points,
+                        ErrorCategory: isUnanswered
+                            ? "unanswered"
+                            : isCorrect
+                                ? null
+                                : ClassifyMockReadingError(
+                                    question.QuestionType,
+                                    answer!.SelectedOption,
+                                    DecodeMockAnswer(question.CorrectAnswerJson),
+                                    question.OptionDistractorsJson,
+                                    question.SkillTag),
+                        Explanation: question.ExplanationMarkdown,
+                        Evidence: question.EvidenceSentence);
+                })
+                .ToList();
+            itemReview = MockResultReviewOrdering.Prioritize(itemReview);
+            var errorSummary = itemReview
+                .Where(item => !string.IsNullOrWhiteSpace(item.ErrorCategory))
+                .GroupBy(item => item.ErrorCategory!, StringComparer.Ordinal)
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => group.Key, StringComparer.Ordinal)
+                .Select(group => new MockErrorSummaryResponse(
+                    ErrorCategory: group.Key,
+                    Count: group.Count(),
+                    QuestionIds: group.Select(item => item.QuestionId).ToList()))
+                .ToList();
+            var nextStep = MockNextStepRouteResolver.BuildReading(itemReview);
+            var routesByCategory = errorSummary.ToDictionary(
+                summary => summary.ErrorCategory,
+                summary => MockNextStepRouteResolver.Reading(
+                    itemReview.FirstOrDefault(item => item.ErrorCategory == summary.ErrorCategory)?.PartCode),
+                StringComparer.Ordinal);
+            await MockStudyPlanService.SeedRemediationItemsAsync(
+                db,
+                userId,
+                "reading",
+                errorSummary,
+                "/reading/practice",
+                routesByCategory,
+                sourceKey: sessionId.ToString("N"),
+                ct);
+            var rawScore = session.Score ?? 0;
+            var scoreConversionSnapshot = ReadScoreConversionSnapshot(session.MetadataJson);
+            var conversion = await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
+                scoreConversion,
+                "reading",
+                rawScore,
+                scoreConversionSnapshot,
+                legacyTableId: null,
+                scopeKey: "default",
+                cancellationToken: ct);
+            var hasApprovedConversion = session.TotalQuestions == OetScoring.ListeningReadingRawMax
+                && conversion.ConvertedScore.HasValue
+                && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+                && conversion.Passed.HasValue;
+            var timeSections = partBreakdown
+                .Select(part =>
+                {
+                    var seconds = questionParts
+                        .Where(question => question.PartCode.ToString() == part.PartCode)
+                        .Select(question => Guid.TryParse(question.Id, out var parsedId)
+                            && attemptsByQuestionId.TryGetValue(parsedId, out var saved)
+                            ? (long)Math.Max(0, saved.TimeSpentSeconds)
+                            : 0L)
+                        .Sum();
+                    return new MockTimeUsedSectionResponse(part.PartCode, ToMilliseconds(seconds));
+                })
+                .ToList();
+            var summedSeconds = timeSections
+                .Where(section => section.ElapsedMilliseconds is > 0)
+                .Sum(section => (long)(section.ElapsedMilliseconds!.Value / 1000));
+            var totalMilliseconds = session.DurationSeconds is > 0
+                ? ToMilliseconds(session.DurationSeconds.Value)
+                : ToMilliseconds(summedSeconds);
+
             return Results.Ok(new MockSessionResultResponse(
-                Score: session.Score ?? 0,
+                Score: rawScore,
                 TotalQuestions: session.TotalQuestions ?? 0,
                 DurationSeconds: session.DurationSeconds,
-                // Legacy pathway sessions do not capture a governed conversion
-                // table/version. Return raw evidence only; never synthesize a
-                // scaled score from accuracy.
-                ScaledScore: null));
+                ScaledScore: hasApprovedConversion ? conversion.ConvertedScore : null,
+                PartBreakdown: partBreakdown,
+                TimeUsed: new MockTimeUsedResponse(totalMilliseconds, timeSections),
+                ItemReview: itemReview,
+                ErrorSummary: errorSummary,
+                NextStep: nextStep,
+                StudyPlanRoute: errorSummary.Count > 0 ? "/study-plan" : null,
+                ScoreConversionTableVersionKey: hasApprovedConversion ? conversion.TableVersionKey : null,
+                ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null,
+                ScoreConversionGrade: hasApprovedConversion ? conversion.Grade : null));
         });
 
         // ── §23.5 Lessons + Strategies ────────────────────────────────────────
@@ -742,12 +942,28 @@ public static class ReadingPathwayEndpoints
         group.MapPost("/ai/passage-qna", async (
             PassageQnaRequest request,
             HttpContext http,
+            IReadingPassageQnaService qnaService,
             CancellationToken ct) =>
         {
-            // Stub — real implementation requires AI service integration
-            var __ = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
-            return Results.Ok(new { reply = "AI passage Q&A is being set up. Please try again shortly." });
+            try
+            {
+                return Results.Ok(await qnaService.AskAsync(userId, request, ct));
+            }
+            catch (ReadingPassageQnaUnavailableException ex)
+            {
+                return Results.Conflict(new
+                {
+                    code = "grounded_passage_qna_unavailable",
+                    error = ex.Message,
+                    message = "A grounded passage answer is unavailable; the submitted result and marks are unchanged.",
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { code = "invalid_passage_qna_request", error = ex.Message });
+            }
         });
 
         return app;
@@ -1002,4 +1218,98 @@ public static class ReadingPathwayEndpoints
             .FirstOrDefaultAsync(p => p.UserId == userId, ct);
         return pathway?.TotalWeeks ?? 0;
     }
+
+    private static int? ToMilliseconds(long seconds)
+    {
+        if (seconds <= 0) return null;
+        var milliseconds = seconds >= int.MaxValue / 1000L
+            ? int.MaxValue
+            : seconds * 1000L;
+        return (int)milliseconds;
+    }
+
+    private static string? DecodeMockAnswer(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind switch
+            {
+                JsonValueKind.String => document.RootElement.GetString(),
+                JsonValueKind.Array => string.Join(", ", document.RootElement.EnumerateArray()
+                    .Select(value => value.ValueKind == JsonValueKind.String
+                        ? value.GetString()
+                        : value.GetRawText())),
+                _ => document.RootElement.GetRawText(),
+            };
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
+
+    private static string? ReadScoreConversionSnapshot(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson) || metadataJson == "{}")
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadataJson);
+            if (!document.RootElement.TryGetProperty("scoreConversionSnapshotJson", out var snapshot))
+                return null;
+            if (snapshot.ValueKind != JsonValueKind.String)
+                throw new InvalidOperationException("reading_mock_score_conversion_snapshot_invalid");
+            return snapshot.GetString();
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException("reading_mock_metadata_invalid_json");
+        }
+    }
+
+    private static string ClassifyMockReadingError(
+        ReadingQuestionType questionType,
+        string? learnerAnswer,
+        string? correctAnswer,
+        string? optionDistractorsJson,
+        string? skillTag)
+    {
+        if (questionType is ReadingQuestionType.MultipleChoice3
+            or ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.MultipleChoiceFlexible)
+        {
+            var authoredCategory = ReadMockDistractorCategory(optionDistractorsJson, learnerAnswer);
+            return authoredCategory ?? "distractor";
+        }
+
+        if (questionType == ReadingQuestionType.MatchingTextReference)
+            return "detail";
+        return MockErrorCategoryClassifier.ClassifyTyped(learnerAnswer, correctAnswer, skillTag);
+    }
+
+    private static string? ReadMockDistractorCategory(string? json, string? learnerAnswer)
+    {
+        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(learnerAnswer)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty(learnerAnswer.Trim(), out var category)
+                || category.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var value = category.GetString();
+            return string.IsNullOrWhiteSpace(value) ? null : value.Replace('_', ' ').ToLowerInvariant();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
 }

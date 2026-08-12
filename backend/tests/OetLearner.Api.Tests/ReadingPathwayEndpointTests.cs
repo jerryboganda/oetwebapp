@@ -240,6 +240,25 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
     }
 
     [Fact]
+    public async Task MockResults_WithSubsetTotalQuestions_WithholdScoreConversion()
+    {
+        var userId = NewUserId("mock-subset-conversion");
+        var client = await CreateLearnerClientAsync(userId);
+        var sessionId = Guid.NewGuid();
+        await SeedMockSessionAsync(userId, sessionId, completed: true, totalQuestions: 10);
+
+        var response = await client.GetAsync($"/v1/reading-pathway/mocks/sessions/{sessionId}/results");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(10, json.RootElement.GetProperty("totalQuestions").GetInt32());
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("scaledScore").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("scoreConversionTableVersionKey").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("scoreConversionPassed").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("scoreConversionGrade").ValueKind);
+    }
+
+    [Fact]
     public async Task Lessons_ReturnLessonAndProgressWrappers()
     {
         var userId = NewUserId("lesson-wrapper");
@@ -433,7 +452,11 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
         await db.SaveChangesAsync();
     }
 
-    private async Task SeedMockSessionAsync(string userId, Guid sessionId, bool completed)
+    private async Task SeedMockSessionAsync(
+        string userId,
+        Guid sessionId,
+        bool completed,
+        int totalQuestions = 42)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -444,7 +467,7 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
             UserId = userId,
             SessionType = "mock",
             QuestionIdsJson = JsonSerializer.Serialize(new[] { Guid.NewGuid() }),
-            TotalQuestions = 42,
+            TotalQuestions = totalQuestions,
             StartedAt = DateTimeOffset.UtcNow.AddHours(-1),
             CompletedAt = completed ? DateTimeOffset.UtcNow : null,
             DurationSeconds = completed ? 3600 : null,

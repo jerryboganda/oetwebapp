@@ -24,7 +24,10 @@ export function ScoreConversionEvidence({
   const rawPercent = maxRawScore > 0
     ? Math.min(100, Math.max(0, (rawScore / maxRawScore) * 100))
     : 0;
-  const hasConversion = scaledScore != null && tableVersion != null && passed != null;
+  const hasConversion = maxRawScore === 42
+    && scaledScore != null
+    && tableVersion != null
+    && passed != null;
   const scaledPercent = !hasConversion || scaledScore == null
     ? null
     : Math.min(100, Math.max(0, (scaledScore / 500) * 100));

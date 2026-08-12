@@ -46,8 +46,8 @@ import {
 
 const ALLOWED_TYPES: Record<ReadingPartCode, ReadingQuestionType[]> = {
   A: ['MatchingTextReference', 'ShortAnswer', 'SentenceCompletion'],
-  B: ['MultipleChoice3', 'MultipleChoice4', 'FillInBlank', 'ShortAnswer', 'SentenceCompletion', 'ShortAnswerLabeled', 'MultipleChoiceFlexible'],
-  C: ['MultipleChoice4', 'FillInBlank', 'ShortAnswer', 'SentenceCompletion', 'ShortAnswerLabeled', 'MultipleChoiceFlexible'],
+  B: ['MultipleChoice3'],
+  C: ['MultipleChoice4'],
 };
 
 const TYPE_LABELS: Record<ReadingQuestionType, string> = {

@@ -149,6 +149,7 @@ describe('reading-pathway-api', () => {
     expect(result).toMatchObject({
       sessionId: 'mock-session',
       rawScore: 31,
+      totalQuestions: 42,
       scaledScore: null,
       grade: null,
       scoreConversionTableVersionKey: null,
@@ -164,14 +165,38 @@ describe('reading-pathway-api', () => {
       scaledScore: 363,
       scoreConversionTableVersionKey: 'reading-owner-v1',
       scoreConversionPassed: false,
+      scoreConversionGrade: 'B',
       durationSeconds: 3500,
     }));
 
     await expect(api.getMockResults('mock-session')).resolves.toMatchObject({
+      totalQuestions: 42,
       scaledScore: 363,
       grade: 'B',
       scoreConversionTableVersionKey: 'reading-owner-v1',
       scoreConversionPassed: false,
+    });
+  });
+
+  it('withholds mock conversion provenance for subset totals even when metadata is present', async () => {
+    mockFetchWithTimeout.mockResolvedValue(jsonResponse({
+      score: 8,
+      totalQuestions: 10,
+      scaledScore: 363,
+      scoreConversionTableVersionKey: 'reading-owner-v1',
+      scoreConversionPassed: false,
+      scoreConversionGrade: 'C+',
+      durationSeconds: 600,
+    }));
+
+    await expect(api.getMockResults('subset-session')).resolves.toMatchObject({
+      rawScore: 8,
+      totalQuestions: 10,
+      scaledScore: null,
+      grade: null,
+      scoreConversionTableVersionKey: null,
+      scoreConversionPassed: null,
+      scoreConversionGrade: null,
     });
   });
 });

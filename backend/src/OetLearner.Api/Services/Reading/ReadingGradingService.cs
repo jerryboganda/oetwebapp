@@ -57,7 +57,8 @@ public sealed record ReadingGradingResult(
     string? ScoreConversionTableVersionKey = null,
     string? ScoreConversionErrorCode = null,
     string? ScoreConversionGrade = null,
-    bool? ScoreConversionPassed = null);
+    bool? ScoreConversionPassed = null,
+    int InvalidCount = 0);
 
 public sealed record ReadingAnswerResult(
     string QuestionId,
@@ -65,7 +66,8 @@ public sealed record ReadingAnswerResult(
     bool IsCorrect,
     int PointsEarned,
     int MaxPoints,
-    string? MissReason = null);
+    string? MissReason = null,
+    bool IsInvalid = false);
 
 public sealed class ReadingGradingService(
     LearnerDbContext db,
@@ -73,6 +75,12 @@ public sealed class ReadingGradingService(
     ILogger<ReadingGradingService> logger,
     IAssessmentScoreConversionService? scoreConversion = null) : IReadingGradingService
 {
+    public const string MultipleSelectionReviewReason = "multiple_selection_review_required";
+    public const string QuestionIntegrityReviewReason = "question_integrity_review_required";
+
+    public static bool IsIntegrityReviewReason(string? reason)
+        => reason is MultipleSelectionReviewReason or QuestionIntegrityReviewReason;
+
     private readonly IAssessmentScoreConversionService _scoreConversion =
         scoreConversion ?? new AssessmentScoreConversionService(db);
     public async Task<ReadingGradingResult> GradeAttemptAsync(string attemptId, CancellationToken ct)
@@ -182,12 +190,44 @@ public sealed class ReadingGradingService(
         var policy = await ResolvePolicyForAttemptAsync(attempt, ct);
         var details = new List<ReadingAnswerResult>(gradedQuestions.Count);
         var multipleSelectionIssues = new List<MultipleSelectionIntegrityIssue>();
+        var questionIntegrityIssues = new List<QuestionIntegrityIssue>();
 
-        int raw = 0, correctCount = 0, incorrectCount = 0, unanswered = 0, maxRaw = 0;
+        int raw = 0, correctCount = 0, incorrectCount = 0, invalidCount = 0, unanswered = 0;
+        long maxRawTotal = 0;
         foreach (var q in gradedQuestions)
         {
-            maxRaw += q.Points;
+            maxRawTotal += q.Points;
             ReadingAnswer? answer = answersByQuestionId.GetValueOrDefault(q.Id);
+            var gradingQuestion = keyCorrection?.QuestionRevisionId == q.Id
+                ? ApplyKeyCorrection(q, keyCorrection.NewKeySnapshotJson)
+                : q;
+            var questionIntegrityReason = GetQuestionIntegrityReason(gradingQuestion);
+            if (questionIntegrityReason is not null)
+            {
+                if (answer is not null)
+                {
+                    answer.IsCorrect = null;
+                    answer.PointsEarned = 0;
+                    answer.SelectedDistractorCategory = null;
+                    answer.MissReason = QuestionIntegrityReviewReason;
+                }
+
+                questionIntegrityIssues.Add(new(
+                    q.Id,
+                    q.DisplayOrder,
+                    questionIntegrityReason));
+                invalidCount++;
+                details.Add(new(
+                    q.Id,
+                    q.QuestionType.ToString(),
+                    false,
+                    0,
+                    q.Points,
+                    QuestionIntegrityReviewReason,
+                    IsInvalid: true));
+                continue;
+            }
+
             if (answer is null)
             {
                 unanswered++;
@@ -195,9 +235,6 @@ public sealed class ReadingGradingService(
                 continue;
             }
 
-            var gradingQuestion = keyCorrection?.QuestionRevisionId == q.Id
-                ? ApplyKeyCorrection(q, keyCorrection.NewKeySnapshotJson)
-                : q;
             var partCode = partCodeByPartId.GetValueOrDefault(q.ReadingPartId, ReadingPartCode.A);
             if (IsMultipleChoice(gradingQuestion.QuestionType)
                 && TryReadMultipleSelections(answer.UserAnswerJson, out var selections))
@@ -207,6 +244,25 @@ public sealed class ReadingGradingService(
                     q.DisplayOrder,
                     partCode.ToString(),
                     selections));
+
+                // A single-answer MCQ with multiple persisted selections is
+                // invalid for automated scoring. Preserve the raw payload for
+                // the administrator, but do not persist a normal incorrect
+                // mark or a distractor/miss classification for the item.
+                answer.IsCorrect = null;
+                answer.PointsEarned = 0;
+                answer.SelectedDistractorCategory = null;
+                answer.MissReason = MultipleSelectionReviewReason;
+                invalidCount++;
+                details.Add(new(
+                    q.Id,
+                    q.QuestionType.ToString(),
+                    false,
+                    0,
+                    q.Points,
+                    answer.MissReason,
+                    IsInvalid: true));
+                continue;
             }
             var (isCorrect, pts) = GradeOne(gradingQuestion, answer, policy, attempt.Mode, partCode);
             answer.IsCorrect = isCorrect;
@@ -236,7 +292,7 @@ public sealed class ReadingGradingService(
                         questionNumber = q.DisplayOrder,
                         acceptedVariant,
                         policyNormalisation = policy.ShortAnswerNormalisation,
-                        caseSensitive = q.CaseSensitive,
+                        caseSensitive = EffectiveCaseSensitive(q, policy),
                         policyVersionId = attempt.MarkingPolicyVersionId,
                     }),
                 });
@@ -246,8 +302,24 @@ public sealed class ReadingGradingService(
             details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points, answer.MissReason));
         }
 
+        var maxRaw = maxRawTotal > int.MaxValue
+            ? int.MaxValue
+            : maxRawTotal < int.MinValue
+                ? int.MinValue
+                : (int)maxRawTotal;
         attempt.RawScore = raw;
-        attempt.MaxRawScore = isSubsetPracticeMode ? maxRaw : ReadingStructureService.CanonicalMaxRawScore;
+        attempt.MaxRawScore = maxRaw;
+
+        var requiresAdminReview = multipleSelectionIssues.Count > 0
+            || questionIntegrityIssues.Count > 0;
+        if (requiresAdminReview)
+        {
+            attempt.RequiresAdminReview = true;
+            attempt.AdminReviewReason ??= multipleSelectionIssues.Count > 0
+                ? "multiple_selections_for_single_answer_mcq"
+                : QuestionIntegrityReviewReason;
+            attempt.AdminReviewFlaggedAt ??= DateTimeOffset.UtcNow;
+        }
 
         var conversion = isSubsetPracticeMode
             ? AssessmentScoreConversionResult.Unavailable(
@@ -255,6 +327,14 @@ public sealed class ReadingGradingService(
                 "default",
                 raw,
                 "subset_practice_no_conversion")
+            : requiresAdminReview
+                ? AssessmentScoreConversionResult.Unavailable(
+                    "reading",
+                    "default",
+                    raw,
+                    multipleSelectionIssues.Count > 0
+                        ? MultipleSelectionReviewReason
+                        : QuestionIntegrityReviewReason)
             : await AssessmentScoreConversionSnapshotResolver.ResolveAsync(
                 _scoreConversion,
                 "reading",
@@ -263,15 +343,18 @@ public sealed class ReadingGradingService(
                 attempt.ScoreConversionTableId,
                 "default",
                 ct);
-        if (conversion.TableId is not null && conversion.IsAvailable)
+        var hasApprovedConversion = !requiresAdminReview
+            && !isSubsetPracticeMode
+            && attempt.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
+            && conversion.ConvertedScore.HasValue
+            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
+            && conversion.Passed.HasValue;
+        if (hasApprovedConversion && conversion.TableId is not null && conversion.IsAvailable)
         {
             await _scoreConversion.MarkUsedAsync(conversion.TableId, ct);
         }
-        attempt.ScoreConversionTableId = conversion.TableId;
-        attempt.ScoreConversionTableVersionKey = conversion.TableVersionKey;
-        var hasApprovedConversion = conversion.ConvertedScore.HasValue
-            && !string.IsNullOrWhiteSpace(conversion.TableVersionKey)
-            && conversion.Passed.HasValue;
+        attempt.ScoreConversionTableId = hasApprovedConversion ? conversion.TableId : null;
+        attempt.ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null;
         attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
         attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
         attempt.ScaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
@@ -296,6 +379,27 @@ public sealed class ReadingGradingService(
                     reason = "multiple_selections_for_single_answer_mcq",
                     attemptId = attempt.Id,
                     issues = multipleSelectionIssues,
+                }),
+            });
+        }
+
+        if (questionIntegrityIssues.Count > 0)
+        {
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = attempt.UserId,
+                ActorName = "ReadingGradingService",
+                Action = "reading.question.integrity_review_required",
+                ResourceType = "ReadingAttempt",
+                ResourceId = attempt.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    requiresAdminReview = true,
+                    reason = QuestionIntegrityReviewReason,
+                    attemptId = attempt.Id,
+                    issues = questionIntegrityIssues,
                 }),
             });
         }
@@ -355,9 +459,16 @@ public sealed class ReadingGradingService(
             UnansweredCount: unanswered,
             Answers: details,
             ScoreConversionTableVersionKey: hasApprovedConversion ? conversion.TableVersionKey : null,
-            ScoreConversionErrorCode: hasApprovedConversion ? conversion.ErrorCode : "score_conversion_unavailable",
+            ScoreConversionErrorCode: hasApprovedConversion
+                ? conversion.ErrorCode
+                : requiresAdminReview
+                    ? multipleSelectionIssues.Count > 0
+                        ? MultipleSelectionReviewReason
+                        : QuestionIntegrityReviewReason
+                    : "score_conversion_unavailable",
             ScoreConversionGrade: hasApprovedConversion ? conversion.Grade : null,
-            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null);
+            ScoreConversionPassed: hasApprovedConversion ? conversion.Passed : null,
+            InvalidCount: invalidCount);
     }
 
     private static HashSet<string>? ParseScopeQuestionIds(ReadingAttempt attempt)
@@ -384,6 +495,152 @@ public sealed class ReadingGradingService(
 
     private static bool IsSubsetPracticeMode(ReadingAttemptMode mode)
         => mode is ReadingAttemptMode.Drill or ReadingAttemptMode.MiniTest or ReadingAttemptMode.ErrorBank;
+
+    private static string? GetQuestionIntegrityReason(ReadingQuestion question)
+    {
+        if (question.Points != 1)
+            return "question_points_not_one";
+
+        try
+        {
+            using var correctDocument = JsonDocument.Parse(question.CorrectAnswerJson ?? string.Empty);
+            var correct = correctDocument.RootElement;
+            switch (question.QuestionType)
+            {
+                case ReadingQuestionType.MultipleChoice3:
+                case ReadingQuestionType.MultipleChoice4:
+                case ReadingQuestionType.MultipleChoiceFlexible:
+                    using (var optionsDocument = JsonDocument.Parse(question.OptionsJson ?? string.Empty))
+                    {
+                        if (optionsDocument.RootElement.ValueKind != JsonValueKind.Array)
+                            return "question_options_invalid";
+
+                        var optionCount = optionsDocument.RootElement.GetArrayLength();
+                        var validCount = question.QuestionType switch
+                        {
+                            ReadingQuestionType.MultipleChoice3 => optionCount == 3,
+                            ReadingQuestionType.MultipleChoice4 => optionCount == 4,
+                            _ => optionCount is >= 2 and <= 6,
+                        };
+                        if (!validCount)
+                            return "question_option_count_invalid";
+
+                        if (correct.ValueKind != JsonValueKind.String
+                            || !IsValidMcqLetter(correct.GetString(), optionCount))
+                            return "question_correct_answer_invalid";
+
+                        var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var option in optionsDocument.RootElement.EnumerateArray())
+                        {
+                            var label = ReadOptionLabel(option);
+                            if (string.IsNullOrWhiteSpace(label) || !labels.Add(label))
+                                return "question_options_invalid";
+                        }
+                    }
+                    return null;
+
+                case ReadingQuestionType.MatchingTextReference:
+                    return correct.ValueKind == JsonValueKind.String
+                        && correct.GetString() is ("A" or "B" or "C" or "D")
+                        ? null
+                        : "question_correct_answer_invalid";
+
+                case ReadingQuestionType.ShortAnswer:
+                case ReadingQuestionType.SentenceCompletion:
+                case ReadingQuestionType.FillInBlank:
+                    if (correct.ValueKind != JsonValueKind.String
+                        || string.IsNullOrWhiteSpace(correct.GetString()))
+                        return "question_correct_answer_invalid";
+                    return HasValidAcceptedSynonyms(question.AcceptedSynonymsJson, allowObject: false)
+                        ? null
+                        : "question_accepted_variants_invalid";
+
+                case ReadingQuestionType.ShortAnswerLabeled:
+                {
+                    if (correct.ValueKind != JsonValueKind.Object)
+                        return "question_correct_answer_invalid";
+                    var labeledAnswers = correct.EnumerateObject().ToList();
+                    if (labeledAnswers.Count == 0
+                        || labeledAnswers.Any(prop =>
+                            string.IsNullOrWhiteSpace(prop.Name)
+                            || prop.Value.ValueKind != JsonValueKind.String
+                            || string.IsNullOrWhiteSpace(prop.Value.GetString())))
+                        return "question_correct_answer_invalid";
+                    return HasValidAcceptedSynonyms(question.AcceptedSynonymsJson, allowObject: true)
+                        ? null
+                        : "question_accepted_variants_invalid";
+                }
+
+                default:
+                    return "question_type_unknown";
+            }
+        }
+        catch (JsonException)
+        {
+            return "question_answer_key_invalid";
+        }
+    }
+
+    private static bool IsValidMcqLetter(string? value, int optionCount)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Trim().Length != 1)
+            return false;
+        var index = char.ToUpperInvariant(value.Trim()[0]) - 'A';
+        return index >= 0 && index < optionCount;
+    }
+
+    private static string? ReadOptionLabel(JsonElement option)
+    {
+        if (option.ValueKind == JsonValueKind.String)
+            return option.GetString()?.Trim();
+        if (option.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (var property in option.EnumerateObject())
+        {
+            if (property.Name is not ("id" or "value" or "label" or "text" or "title" or "letter" or "key")
+                || property.Value.ValueKind != JsonValueKind.String)
+                return null;
+        }
+
+        foreach (var property in option.EnumerateObject())
+        {
+            if (property.Name is not ("label" or "text" or "title" or "value" or "letter" or "key")
+                || property.Value.ValueKind != JsonValueKind.String)
+                continue;
+            var value = property.Value.GetString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+        }
+        return null;
+    }
+
+    private static bool HasValidAcceptedSynonyms(string? json, bool allowObject)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return true;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                return document.RootElement.EnumerateArray().All(item =>
+                    item.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(item.GetString()));
+            }
+
+            if (!allowObject || document.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+            return document.RootElement.EnumerateObject().All(property =>
+                !string.IsNullOrWhiteSpace(property.Name)
+                && property.Value.ValueKind == JsonValueKind.Array
+                && property.Value.EnumerateArray().All(item =>
+                    item.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(item.GetString())));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static bool IsMultipleChoice(ReadingQuestionType type)
         => type is ReadingQuestionType.MultipleChoice3
@@ -508,7 +765,7 @@ public sealed class ReadingGradingService(
                 StringsMatch(
                     ApplyTextNormalization(userValue, policy),
                     ApplyTextNormalization(candidate, policy),
-                    q.CaseSensitive,
+                    EffectiveCaseSensitive(q, policy),
                     policy.ShortAnswerNormalisation));
             if (!matched)
                 return (false, 0);
@@ -606,11 +863,11 @@ public sealed class ReadingGradingService(
         var user = ParseJsonString(a.UserAnswerJson);
         if (correct is null || user is null) return (false, 0);
 
-        // STRICT spelling: normalise + collapse whitespace + (optional)
-        // smart-quote / hyphen / unit folding, then compare. NO Levenshtein
-        // or inferred synonyms are allowed. Explicitly authored variants are
-        // the only additional accepted answers, and the owner policy controls
-        // whether those variants are active for this attempt.
+        // STRICT spelling: apply only the captured named normalization profile,
+        // then compare. NO punctuation/unit folding, Levenshtein, or inferred
+        // synonyms are allowed. Explicitly authored variants are the only
+        // additional accepted answers, and the owner policy controls whether
+        // those variants are active for this attempt.
         var candidates = new List<string> { correct };
         if (policy.ShortAnswerAcceptSynonyms)
         {
@@ -620,7 +877,7 @@ public sealed class ReadingGradingService(
         }
 
         var nu = Normalise(ApplyTextNormalization(user, policy), policy.ShortAnswerNormalisation);
-        var caseInsensitive = !q.CaseSensitive && policy.PartACaseInsensitive;
+        var caseInsensitive = !EffectiveCaseSensitive(q, policy);
         var ok = candidates.Any(candidate =>
         {
             var nc = Normalise(ApplyTextNormalization(candidate, policy), policy.ShortAnswerNormalisation);
@@ -657,7 +914,7 @@ public sealed class ReadingGradingService(
             if (StringsMatch(
                     ApplyTextNormalization(user, policy),
                     ApplyTextNormalization(c, policy),
-                    q.CaseSensitive,
+                    EffectiveCaseSensitive(q, policy),
                     policy.ShortAnswerNormalisation))
                 return (true, q.Points);
         }
@@ -694,12 +951,12 @@ public sealed class ReadingGradingService(
                     if (StringsMatch(
                             ApplyTextNormalization(userValue, policy),
                             ApplyTextNormalization(variant, policy),
-                            q.CaseSensitive,
+                            EffectiveCaseSensitive(q, policy),
                             policy.ShortAnswerNormalisation)
                         && !StringsMatch(
                             ApplyTextNormalization(userValue, policy),
                             ApplyTextNormalization(correctValue, policy),
-                            q.CaseSensitive,
+                            EffectiveCaseSensitive(q, policy),
                             policy.ShortAnswerNormalisation))
                     {
                         return variant.Trim();
@@ -720,12 +977,12 @@ public sealed class ReadingGradingService(
             if (StringsMatch(
                     ApplyTextNormalization(user, policy),
                     ApplyTextNormalization(variant, policy),
-                    q.CaseSensitive,
+                    EffectiveCaseSensitive(q, policy),
                     policy.ShortAnswerNormalisation)
                 && !StringsMatch(
                     ApplyTextNormalization(user, policy),
                     ApplyTextNormalization(correct, policy),
-                    q.CaseSensitive,
+                    EffectiveCaseSensitive(q, policy),
                     policy.ShortAnswerNormalisation))
             {
                 return variant.Trim();
@@ -770,11 +1027,21 @@ public sealed class ReadingGradingService(
         "exact" => s,
         "trim_only" => s.Trim(),
         "trim_collapse" => CollapseWhitespace(s.Trim()),
-        // Legacy fuzzy policy names are deliberately reduced to exact matching
-        // with trimming only; fuzzy acceptance is never permitted.
-        "fuzzy_levenshtein_1" => s.Trim(),
-        _ => s.Trim(),
+        "trim_collapse_case_insensitive" => CollapseWhitespace(s.Trim()),
+        // Legacy fuzzy and unknown policy names fail closed to exact matching;
+        // neither stale configuration nor malformed snapshots may grant
+        // additional normalization or fuzzy acceptance.
+        _ => s,
     };
+
+    private static bool EffectiveCaseSensitive(
+        ReadingQuestion question,
+        ReadingResolvedPolicy policy)
+        => question.CaseSensitive
+            && !string.Equals(
+                policy.ShortAnswerNormalisation,
+                "trim_collapse_case_insensitive",
+                StringComparison.OrdinalIgnoreCase);
 
     // R04.2: true when the two normalised answers differ ONLY by a
     // singular/plural inflection (trailing s/es, or y -> ies). Analytics
@@ -852,60 +1119,16 @@ public sealed class ReadingGradingService(
     // ── Wave 1 — text normalisation shared by Part A and B/C grading ─────
 
     /// <summary>
-    /// Applies the policy-gated text-normalisation toggles (smart quotes,
-    /// hyphen spacing, unit spacing) to a single string. Used by BOTH the
-    /// Part A strict-text path and the B/C short-answer path so the same
-    /// rules govern every typed comparison.
+    /// Legacy text-normalisation hook. v1.1 strict marking deliberately leaves
+    /// punctuation, hyphenation, and number/unit forms untouched; allowed
+    /// behavior is controlled only by <see cref="ReadingResolvedPolicy.ShortAnswerNormalisation"/>
+    /// and explicit authored variants.
     /// </summary>
     private static string ApplyTextNormalization(string s, ReadingResolvedPolicy policy)
     {
-        if (string.IsNullOrEmpty(s)) return s ?? string.Empty;
-        var result = s;
-        if (policy.NormalizeSmartQuotes) result = FoldSmartQuotes(result);
-        if (policy.NormalizeHyphenSpacing) result = FoldHyphenSpacing(result);
-        if (policy.NormalizeUnitSpacing) result = FoldUnitSpacing(result);
-        return result;
+        _ = policy;
+        return s ?? string.Empty;
     }
-
-    /// <summary>Maps curly/typographic apostrophes and quotes to their ASCII
-    /// equivalents: ’ ‘ ‛ ` ´ → ' and “ ” „ → ". En/em dashes are left
-    /// untouched (hyphen normalisation handles spacing only).</summary>
-    private static string FoldSmartQuotes(string s)
-    {
-        var sb = new StringBuilder(s.Length);
-        foreach (var ch in s)
-        {
-            switch (ch)
-            {
-                case '\u2019': // ’ right single quote
-                case '\u2018': // ‘ left single quote
-                case '\u201B': // ‛ single high-reversed-9
-                case '`':      // grave accent
-                case '\u00B4': // ´ acute accent
-                    sb.Append('\'');
-                    break;
-                case '\u201C': // “ left double quote
-                case '\u201D': // ” right double quote
-                case '\u201E': // „ low double quote
-                    sb.Append('"');
-                    break;
-                default:
-                    sb.Append(ch);
-                    break;
-            }
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>Collapses whitespace around a hyphen: <c>"x - y"</c> →
-    /// <c>"x-y"</c>.</summary>
-    private static string FoldHyphenSpacing(string s)
-        => System.Text.RegularExpressions.Regex.Replace(s, @"\s*-\s*", "-");
-
-    /// <summary>Removes the space between a number and a following unit /
-    /// percent token: <c>"500 mg"</c> → <c>"500mg"</c>.</summary>
-    private static string FoldUnitSpacing(string s)
-        => System.Text.RegularExpressions.Regex.Replace(s, @"(?<=\d)\s+(?=[A-Za-z%])", "");
 
     /// <summary>
     /// Wave 1 — classify why a graded answer was missed. Returns null for a
@@ -1111,6 +1334,14 @@ public sealed class ReadingGradingService(
             var partCode = await ResolvePartCodeAsync(q, ct);
             byQ.TryGetValue(ans.ReadingQuestionId, out var entry);
 
+            // A corrupted single-answer MCQ is held for administrator review,
+            // not treated as a learner error. Do not seed or mutate the
+            // ordinary Error Bank from an indeterminate mark.
+            if (IsIntegrityReviewReason(ans.MissReason))
+            {
+                continue;
+            }
+
             if (ans.IsCorrect == true)
             {
                 if (entry is { IsResolved: false })
@@ -1188,7 +1419,7 @@ public sealed class ReadingGradingService(
             questions = questions.Where(q => scopeIds?.Contains(q.Id) == true).ToList();
         }
 
-        int correct = 0, wrong = 0, unans = 0;
+        int correct = 0, wrong = 0, invalid = 0, unans = 0;
         var details = new List<ReadingAnswerResult>(questions.Count);
         foreach (var q in questions)
         {
@@ -1198,12 +1429,17 @@ public sealed class ReadingGradingService(
                 details.Add(new(q.Id, q.QuestionType.ToString(), false, 0, q.Points));
                 continue;
             }
+            var isInvalid = IsIntegrityReviewReason(a.MissReason);
             var ok = a.IsCorrect ?? false;
-            if (ok) correct++; else wrong++;
-            details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points, a.MissReason));
+            if (isInvalid) invalid++;
+            else if (ok) correct++;
+            else wrong++;
+            details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points, a.MissReason, isInvalid));
         }
 
-        var hasApprovedConversion = !IsSubsetPracticeMode(attempt.Mode)
+        var hasApprovedConversion = !attempt.RequiresAdminReview
+            && !IsSubsetPracticeMode(attempt.Mode)
+            && attempt.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore
             && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
@@ -1213,9 +1449,23 @@ public sealed class ReadingGradingService(
             raw, attempt.MaxRawScore, scaled, grade,
             correct, wrong, unans, details,
             hasApprovedConversion ? attempt.ScoreConversionTableVersionKey : null,
-            hasApprovedConversion ? null : "score_conversion_unavailable",
+            hasApprovedConversion
+                ? null
+                : attempt.RequiresAdminReview
+                    ? ResolveReviewReason(attempt)
+                    : "score_conversion_unavailable",
             hasApprovedConversion ? attempt.ScoreConversionGrade : null,
-            hasApprovedConversion ? attempt.ScoreConversionPassed : null);
+            hasApprovedConversion ? attempt.ScoreConversionPassed : null,
+            InvalidCount: invalid);
+    }
+
+    private static string ResolveReviewReason(ReadingAttempt attempt)
+    {
+        if (attempt.Answers.Any(a => a.MissReason == MultipleSelectionReviewReason))
+            return MultipleSelectionReviewReason;
+        if (attempt.Answers.Any(a => a.MissReason == QuestionIntegrityReviewReason))
+            return QuestionIntegrityReviewReason;
+        return attempt.AdminReviewReason ?? QuestionIntegrityReviewReason;
     }
 
     private async Task<ReadingResolvedPolicy> ResolvePolicyForAttemptAsync(ReadingAttempt attempt, CancellationToken ct)
@@ -1350,6 +1600,11 @@ public sealed class ReadingGradingService(
         string PartCode,
         IReadOnlyList<string> Selections);
 
+    private sealed record QuestionIntegrityIssue(
+        string QuestionId,
+        int QuestionNumber,
+        string Reason);
+
     private static ReadingResolvedPolicy ApplyGovernedMarkingPolicy(
         ReadingResolvedPolicy policy,
         string snapshotJson)
@@ -1364,12 +1619,8 @@ public sealed class ReadingGradingService(
                 ? element.GetString()
                 : element.GetRawText();
             var marking = AssessmentMarkingPolicyDocument.Parse(policyJson);
-            var normalisation = !marking.TrimLeadingTrailingWhitespace
-                ? "exact"
-                : marking.CollapseInternalWhitespace ? "trim_collapse" : "trim_only";
             return policy with
             {
-                ShortAnswerNormalisation = normalisation,
                 MatchingAllowPartialCredit = marking.ReadingPartAMatchingPartialCredit,
                 PartACaseInsensitive = !marking.CaseSensitive,
             };

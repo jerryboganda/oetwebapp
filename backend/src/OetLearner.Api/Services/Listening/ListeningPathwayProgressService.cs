@@ -79,9 +79,11 @@ public sealed class ListeningPathwayProgressService
                 a.Mode,
                 a.PaperId,
                 a.ScopeJson,
+                a.MaxRawScore,
                 a.ScaledScore,
                 a.ScoreConversionTableVersionKey,
                 a.ScoreConversionPassed,
+                a.RequiresAdminReview,
                 a.SubmittedAt,
             })
             .ToListAsync(ct);
@@ -122,9 +124,11 @@ public sealed class ListeningPathwayProgressService
             // Find the qualifying attempt for this stage.
             var qualifying = submitted
                 .Where(a => !consumedAttemptIds.Contains(a.Id)
+                    && !a.RequiresAdminReview
                     && StageMatches(stage, a.Mode, a.ScopeJson)
                     && (stage == "diagnostic"
-                        || (a.ScaledScore.HasValue
+                        || (a.MaxRawScore == OetScoring.ListeningReadingRawMax
+                            && a.ScaledScore.HasValue
                             && !string.IsNullOrWhiteSpace(a.ScoreConversionTableVersionKey)
                             && a.ScoreConversionPassed.HasValue)))
                 .OrderByDescending(a => a.ScaledScore ?? 0)
@@ -142,7 +146,7 @@ public sealed class ListeningPathwayProgressService
                     => ListeningPathwayStageStatus.InProgress,
                 (true, _) when stage == "diagnostic"
                     => ListeningPathwayStageStatus.Completed,
-                (true, _) when HasApprovedScore(qualifying.ScaledScore, qualifying.ScoreConversionTableVersionKey, qualifying.ScoreConversionPassed)
+                (true, _) when HasApprovedScore(qualifying.MaxRawScore, qualifying.ScaledScore, qualifying.ScoreConversionTableVersionKey, qualifying.ScoreConversionPassed)
                     && qualifying.ScaledScore is int scaled
                     && scaled >= ScaledThresholdFor(stage)
                     => ListeningPathwayStageStatus.Completed,
@@ -176,7 +180,7 @@ public sealed class ListeningPathwayProgressService
                 && qualifying is not null)
             {
                 consumedAttemptIds.Add(qualifying.Id);
-                var approvedScaled = HasApprovedScore(qualifying.ScaledScore, qualifying.ScoreConversionTableVersionKey, qualifying.ScoreConversionPassed)
+                var approvedScaled = HasApprovedScore(qualifying.MaxRawScore, qualifying.ScaledScore, qualifying.ScoreConversionTableVersionKey, qualifying.ScoreConversionPassed)
                     ? qualifying.ScaledScore
                     : null;
                 if (row.AttemptId != qualifying.Id || row.ScaledScore != approvedScaled)
@@ -222,8 +226,9 @@ public sealed class ListeningPathwayProgressService
     private static bool IsOwnerPassingStage(string stage)
         => stage is "fullpaper_cbt" or "exam_simulation";
 
-    private static bool HasApprovedScore(int? scaledScore, string? scoreConversionTableVersionKey, bool? scoreConversionPassed)
-        => scaledScore.HasValue
+    private static bool HasApprovedScore(int maxRawScore, int? scaledScore, string? scoreConversionTableVersionKey, bool? scoreConversionPassed)
+        => maxRawScore == OetScoring.ListeningReadingRawMax
+            && scaledScore.HasValue
             && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
             && scoreConversionPassed.HasValue;
 

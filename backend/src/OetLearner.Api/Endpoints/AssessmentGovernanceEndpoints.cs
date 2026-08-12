@@ -42,6 +42,120 @@ public static class AssessmentGovernanceEndpoints
             return Results.Ok(rows.Select(ProjectTable));
         });
 
+        admin.MapGet("/release-status", async (
+            string? assessment,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var assessments = string.IsNullOrWhiteSpace(assessment)
+                ? new[] { "listening", "reading" }
+                : new[] { AssessmentScoreTableValidator.NormalizeAssessment(assessment) };
+            if (assessments.Any(item => !AssessmentScoreTableValidator.IsSupportedAssessment(item)))
+                return Results.BadRequest(new { error = "assessment_unsupported" });
+
+            var now = DateTimeOffset.UtcNow;
+            var status = new List<object>(assessments.Length);
+            foreach (var currentAssessment in assessments)
+            {
+                var tableCandidates = await db.AssessmentScoreConversionTables
+                    .AsNoTracking()
+                    .Include(x => x.Rows)
+                    .Where(x => x.Assessment == currentAssessment
+                        && x.ScopeKey == "default"
+                        && x.EffectiveFrom <= now
+                        && (x.Status == AssessmentGovernanceStatus.Effective
+                            || x.Status == AssessmentGovernanceStatus.Locked))
+                    .OrderByDescending(x => x.EffectiveFrom)
+                    .ThenByDescending(x => x.VersionKey)
+                    .Take(2)
+                    .ToListAsync(ct);
+                var table = tableCandidates.FirstOrDefault();
+                var tableHasAmbiguousEffectiveVersion = tableCandidates.Count > 1
+                    && tableCandidates[0].EffectiveFrom == tableCandidates[1].EffectiveFrom;
+                var tableValidation = tableHasAmbiguousEffectiveVersion
+                    ? new AssessmentScoreTableValidationResult(false, "score_table_multiple_effective_versions")
+                    : table is null
+                    ? new AssessmentScoreTableValidationResult(false, "score_table_not_effective")
+                    : AssessmentScoreTableValidator.Validate(
+                        currentAssessment,
+                        table.Rows.Select(row => new AssessmentScoreTableRowInput(
+                            row.RawScore, row.ConvertedScore, row.Grade, row.Passed)).ToArray());
+
+                var policyCandidates = await db.AssessmentMarkingPolicyVersions
+                    .AsNoTracking()
+                    .Where(x => x.Assessment == currentAssessment
+                        && x.ScopeKey == "default"
+                        && x.EffectiveFrom <= now
+                        && (x.Status == AssessmentGovernanceStatus.Effective
+                            || x.Status == AssessmentGovernanceStatus.Locked))
+                    .OrderByDescending(x => x.EffectiveFrom)
+                    .ThenByDescending(x => x.VersionKey)
+                    .Take(2)
+                    .ToListAsync(ct);
+                var policy = policyCandidates.FirstOrDefault();
+                var policyHasAmbiguousEffectiveVersion = policyCandidates.Count > 1
+                    && policyCandidates[0].EffectiveFrom == policyCandidates[1].EffectiveFrom;
+                AssessmentMarkingPolicyDocument? policyDocument = null;
+                string? policyError = null;
+                if (policyHasAmbiguousEffectiveVersion)
+                {
+                    policyError = "marking_policy_multiple_effective_versions";
+                }
+                else if (policy is null)
+                {
+                    policyError = "marking_policy_not_effective";
+                }
+                else
+                {
+                    try { policyDocument = AssessmentMarkingPolicyDocument.Parse(policy.PolicyJson); }
+                    catch (InvalidOperationException ex) { policyError = ex.Message; }
+                }
+
+                var rationaleCount = await db.AssessmentRationales
+                    .AsNoTracking()
+                    .CountAsync(x => x.Assessment == currentAssessment
+                        && (x.Status == AssessmentGovernanceStatus.Effective
+                            || x.Status == AssessmentGovernanceStatus.Locked), ct);
+                var blockers = new List<string>();
+                if (!tableValidation.IsValid)
+                    blockers.Add(tableValidation.ErrorCode ?? "score_table_invalid");
+                if (policyError is not null)
+                    blockers.Add(policyError);
+                if (rationaleCount == 0)
+                    blockers.Add("rationale_evidence_library_not_effective");
+                if (policyDocument is { TechnicalRequirementsGuidanceOnly: false })
+                    blockers.Add("technical_requirements_must_remain_guidance_only");
+                if (policyError is null && policyDocument?.ReleaseGate is not { IsApproved: true })
+                    blockers.Add("assessment_release_gate_incomplete");
+
+                status.Add(new
+                {
+                    assessment = currentAssessment,
+                    scopeKey = "default",
+                    ready = blockers.Count == 0,
+                    blockers,
+                    scoreTable = table is null ? null : new
+                    {
+                        table.Id,
+                        table.VersionKey,
+                        status = table.Status.ToString(),
+                        table.EffectiveFrom,
+                        rowCount = table.Rows.Count,
+                    },
+                    markingPolicy = policy is null ? null : new
+                    {
+                        policy.Id,
+                        policy.VersionKey,
+                        status = policy.Status.ToString(),
+                        policy.EffectiveFrom,
+                    },
+                    rationaleEffectiveCount = rationaleCount,
+                });
+            }
+
+            return Results.Ok(status);
+        });
+
         admin.MapPost("/score-tables", async (
             HttpContext http,
             AssessmentScoreConversionTableRequest request,
@@ -99,6 +213,58 @@ public static class AssessmentGovernanceEndpoints
             return Results.Created($"/v1/admin/assessment-governance/score-tables/{table.Id}", ProjectTable(table));
         }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
+        admin.MapPost("/score-tables/{id}/review", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var table = await db.AssessmentScoreConversionTables
+                .Include(x => x.Rows)
+                .SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (table is null) return Results.NotFound();
+            if (table.Status != AssessmentGovernanceStatus.Draft)
+                return Results.Conflict(new { error = "score_table_requires_draft_for_review" });
+
+            table.Status = AssessmentGovernanceStatus.InReview;
+            table.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAudit(db, http, "assessment.score_table.submitted_for_review", table.Id,
+                $"assessment={table.Assessment} scope={table.ScopeKey} version={table.VersionKey}");
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(ProjectTable(table));
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
+
+        admin.MapPost("/score-tables/{id}/approve", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var table = await db.AssessmentScoreConversionTables
+                .Include(x => x.Rows)
+                .SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (table is null) return Results.NotFound();
+            if (table.Status != AssessmentGovernanceStatus.InReview)
+                return Results.Conflict(new { error = "score_table_requires_review_before_approval" });
+
+            var validation = AssessmentScoreTableValidator.Validate(
+                table.Assessment,
+                table.Rows.Select(row => new AssessmentScoreTableRowInput(
+                    row.RawScore, row.ConvertedScore, row.Grade, row.Passed)).ToArray());
+            if (!validation.IsValid)
+                return Results.BadRequest(new { error = validation.ErrorCode });
+
+            var now = DateTimeOffset.UtcNow;
+            table.Status = AssessmentGovernanceStatus.Approved;
+            table.ApprovedAt = now;
+            table.ApprovedByUserId = ActorId(http);
+            table.UpdatedAt = now;
+            AddAudit(db, http, "assessment.score_table.approved", table.Id,
+                $"assessment={table.Assessment} scope={table.ScopeKey} version={table.VersionKey}");
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(ProjectTable(table));
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
+
         admin.MapPost("/score-tables/{id}/effective", async (
             string id,
             HttpContext http,
@@ -111,6 +277,10 @@ public static class AssessmentGovernanceEndpoints
             if (table is null) return Results.NotFound();
             if (table.HasBeenUsed)
                 return Results.Conflict(new { error = "score_table_used_version_is_immutable" });
+            if (table.Status == AssessmentGovernanceStatus.Effective)
+                return Results.Ok(ProjectTable(table));
+            if (table.Status != AssessmentGovernanceStatus.Approved)
+                return Results.Conflict(new { error = "score_table_requires_approval_before_effective" });
 
             var validation = AssessmentScoreTableValidator.Validate(
                 table.Assessment,
@@ -206,6 +376,55 @@ public static class AssessmentGovernanceEndpoints
             return Results.Created($"/v1/admin/assessment-governance/marking-policies/{policy.Id}", ProjectPolicy(policy));
         }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
+        admin.MapPost("/marking-policies/{id}/review", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var policy = await db.AssessmentMarkingPolicyVersions
+                .SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (policy is null) return Results.NotFound();
+            if (policy.Status != AssessmentGovernanceStatus.Draft)
+                return Results.Conflict(new { error = "marking_policy_requires_draft_for_review" });
+
+            policy.Status = AssessmentGovernanceStatus.InReview;
+            policy.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAudit(db, http, "assessment.marking_policy.submitted_for_review", policy.Id,
+                $"assessment={policy.Assessment} scope={policy.ScopeKey} version={policy.VersionKey}");
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(ProjectPolicy(policy));
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
+
+        admin.MapPost("/marking-policies/{id}/approve", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var policy = await db.AssessmentMarkingPolicyVersions
+                .SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (policy is null) return Results.NotFound();
+            if (policy.Status != AssessmentGovernanceStatus.InReview)
+                return Results.Conflict(new { error = "marking_policy_requires_review_before_approval" });
+
+            AssessmentMarkingPolicyDocument parsedPolicy;
+            try { parsedPolicy = AssessmentMarkingPolicyDocument.Parse(policy.PolicyJson); }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+            if (parsedPolicy.ReleaseGate is not { IsApproved: true })
+                return Results.BadRequest(new { error = "assessment_release_gate_incomplete" });
+
+            var now = DateTimeOffset.UtcNow;
+            policy.Status = AssessmentGovernanceStatus.Approved;
+            policy.ApprovedAt = now;
+            policy.ApprovedByUserId = ActorId(http);
+            policy.UpdatedAt = now;
+            AddAudit(db, http, "assessment.marking_policy.approved", policy.Id,
+                $"assessment={policy.Assessment} scope={policy.ScopeKey} version={policy.VersionKey}");
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(ProjectPolicy(policy));
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
+
         admin.MapPost("/marking-policies/{id}/effective", async (
             string id,
             HttpContext http,
@@ -216,6 +435,10 @@ public static class AssessmentGovernanceEndpoints
             if (policy is null) return Results.NotFound();
             if (policy.HasBeenUsed)
                 return Results.Conflict(new { error = "marking_policy_used_version_is_immutable" });
+            if (policy.Status == AssessmentGovernanceStatus.Effective)
+                return Results.Ok(ProjectPolicy(policy));
+            if (policy.Status != AssessmentGovernanceStatus.Approved)
+                return Results.Conflict(new { error = "marking_policy_requires_approval_before_effective" });
 
             var actorId = ActorId(http);
             var now = DateTimeOffset.UtcNow;
@@ -314,6 +537,49 @@ public static class AssessmentGovernanceEndpoints
                 new { rationale.Id, rationale.Assessment, rationale.QuestionRevisionId, status = rationale.Status.ToString() });
         }).WithAdminWrite("AdminAssessmentGovernanceWrite");
 
+        admin.MapPost("/rationales/{id}/review", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var rationale = await db.AssessmentRationales.SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (rationale is null) return Results.NotFound();
+            if (rationale.Status != AssessmentGovernanceStatus.Draft)
+                return Results.Conflict(new { error = "rationale_requires_draft_for_review" });
+
+            rationale.Status = AssessmentGovernanceStatus.InReview;
+            rationale.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAudit(db, http, "assessment.rationale.submitted_for_review", rationale.Id,
+                $"assessment={rationale.Assessment}; questionRevisionId={rationale.QuestionRevisionId}");
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { rationale.Id, status = rationale.Status.ToString(), rationale.ApprovedByUserId });
+        }).WithAdminWrite("AdminAssessmentGovernanceWrite");
+
+        admin.MapPost("/rationales/{id}/approve", async (
+            string id,
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var rationale = await db.AssessmentRationales.SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (rationale is null) return Results.NotFound();
+            if (rationale.Status != AssessmentGovernanceStatus.InReview)
+                return Results.Conflict(new { error = "rationale_requires_review_before_approval" });
+            if (rationale.EvidenceCount <= 0
+                || string.IsNullOrWhiteSpace(rationale.SourceSentence)
+                || string.IsNullOrWhiteSpace(rationale.RationaleText))
+                return Results.BadRequest(new { error = "rationale_incomplete" });
+
+            rationale.Status = AssessmentGovernanceStatus.Approved;
+            rationale.ApprovedByUserId = ActorId(http);
+            rationale.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAudit(db, http, "assessment.rationale.approved", rationale.Id,
+                $"assessment={rationale.Assessment}; questionRevisionId={rationale.QuestionRevisionId}");
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { rationale.Id, status = rationale.Status.ToString(), rationale.ApprovedByUserId });
+        }).WithAdminWrite("AdminAssessmentGovernanceApprove");
+
         admin.MapPost("/rationales/{id}/effective", async (
             string id,
             HttpContext http,
@@ -322,6 +588,10 @@ public static class AssessmentGovernanceEndpoints
         {
             var rationale = await db.AssessmentRationales.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (rationale is null) return Results.NotFound();
+            if (rationale.Status == AssessmentGovernanceStatus.Effective)
+                return Results.Ok(new { rationale.Id, status = rationale.Status.ToString(), rationale.ApprovedByUserId });
+            if (rationale.Status != AssessmentGovernanceStatus.Approved)
+                return Results.Conflict(new { error = "rationale_requires_approval_before_effective" });
             if (rationale.EvidenceCount <= 0
                 || string.IsNullOrWhiteSpace(rationale.SourceSentence)
                 || string.IsNullOrWhiteSpace(rationale.RationaleText))

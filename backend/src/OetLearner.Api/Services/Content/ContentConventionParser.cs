@@ -513,7 +513,7 @@ public sealed class ContentConventionParser : IContentConventionParser
         {
             paper.OfficialShape = paper.SubtestCode switch
             {
-                "listening" => "OET Listening: 40 minutes, 3 parts, 42 questions (24 + 6 + 12).",
+                "listening" => "OET Listening: approximately 45–50 minutes including transitions, 3 parts, 42 questions (24 + 6 + 12).",
                 "reading" => "OET Reading: 60 minutes, 3 parts, 42 questions (20 + 6 + 16).",
                 "writing" => "OET Writing: 45-minute profession-specific formal letter from case notes.",
                 "speaking" => "OET Speaking: approximately 20 minutes; full sub-test uses two 5-minute role plays.",

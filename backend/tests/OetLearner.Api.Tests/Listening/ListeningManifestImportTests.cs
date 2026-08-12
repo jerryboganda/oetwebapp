@@ -386,6 +386,73 @@ public class ListeningManifestImportTests
         Assert.Equal("critical", c.SpeakerAttitude);
     }
 
+    [Fact]
+    public async Task ReplaceStructure_preserves_invalid_mcq_option_count_for_publish_gate()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+
+        await svc.ReplaceStructureAsync(
+            paper.Id,
+            new[]
+            {
+                new ListeningAuthoredQuestion(
+                    Id: "question-25",
+                    Number: 25,
+                    PartCode: "B1",
+                    Type: "multiple_choice_3",
+                    Stem: "Which option is correct?",
+                    Options: new[] { "A", "B", "C", "D" },
+                    CorrectAnswer: "B",
+                    AcceptedAnswers: null,
+                    Explanation: "Because B.",
+                    SkillTag: "gist",
+                    TranscriptExcerpt: "B is supported.",
+                    DistractorExplanation: null,
+                    Points: 1),
+            },
+            "admin-1",
+            default);
+
+        var structure = await svc.GetStructureAsync(paper.Id, default);
+        var question = Assert.Single(structure.Questions);
+        Assert.Equal(4, question.Options!.Count);
+        Assert.Equal(new[] { "A", "B", "C", "D" }, question.Options);
+    }
+
+    [Fact]
+    public async Task ReplaceStructure_preserves_invalid_question_points_for_publish_gate()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+
+        await svc.ReplaceStructureAsync(
+            paper.Id,
+            new[]
+            {
+                new ListeningAuthoredQuestion(
+                    Id: "question-1",
+                    Number: 1,
+                    PartCode: "A1",
+                    Type: "short_answer",
+                    Stem: "What did the patient report?",
+                    Options: null,
+                    CorrectAnswer: "headache",
+                    AcceptedAnswers: null,
+                    Explanation: "The patient reported a headache.",
+                    SkillTag: "specific-detail",
+                    TranscriptExcerpt: "The patient reported a headache.",
+                    DistractorExplanation: null,
+                    Points: 0),
+            },
+            "admin-1",
+            default);
+
+        var structure = await svc.GetStructureAsync(paper.Id, default);
+        var question = Assert.Single(structure.Questions);
+        Assert.Equal(0, question.Points);
+    }
+
     // ── Stub backfill (no-op success) — mirrors ListeningAuthoringServiceTests. ──
     private sealed class RecordingBackfillService : IListeningBackfillService
     {

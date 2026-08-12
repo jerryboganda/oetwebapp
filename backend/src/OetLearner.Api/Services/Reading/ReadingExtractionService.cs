@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -16,9 +17,9 @@ namespace OetLearner.Api.Services.Reading;
 //   1. Admin uploads a PDF (via the existing MediaAsset slice).
 //   2. CreateDraftAsync(paperId, mediaAssetId) calls IReadingExtractionAi
 //      which is the swappable AI seam. When the gateway is unavailable
-//      (no AI:BaseUrl configured, network failure, refusal), we fall back
-//      to a deterministic stub so the admin UI still has something to act
-//      on — the draft is flagged IsStub=true.
+//      (no provider configured, network failure, refusal), we persist an
+//      explicitly flagged, empty non-approvable draft. No synthetic questions
+//      or answer keys are created.
 //   3. ApproveDraftAsync(draftId) re-uses ImportManifestAsync to apply the
 //      manifest to the paper (replaces existing structure).
 //   4. RejectDraftAsync(draftId, reason) records the rejection with audit.
@@ -97,14 +98,10 @@ public sealed class ReadingExtractionService(
         if (!string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Paper is not a Reading paper.");
 
-        var attemptedSoFar = await db.ReadingExtractionDrafts.AsNoTracking()
-            .CountAsync(d => d.PaperId == paperId, ct);
-        if (policy.AiExtractionMaxRetriesPerPaper > 0
-            && attemptedSoFar >= policy.AiExtractionMaxRetriesPerPaper)
-        {
-            throw new InvalidOperationException(
-                $"Max AI extractions ({policy.AiExtractionMaxRetriesPerPaper}) reached for this paper.");
-        }
+        // Count durable starts, not only completed draft rows. The reservation
+        // is written before the provider call so concurrent/failing runs cannot
+        // spend past the owner-configured per-paper retry cap.
+        await ReserveExtractionStartAsync(paperId, mediaAssetId, adminId, policy.AiExtractionMaxRetriesPerPaper, ct);
 
         ReadingExtractionAiResult aiResult;
         try
@@ -171,6 +168,39 @@ public sealed class ReadingExtractionService(
         await db.SaveChangesAsync(ct);
 
         return draft;
+    }
+
+    private async Task ReserveExtractionStartAsync(
+        string paperId,
+        string? mediaAssetId,
+        string adminId,
+        int maxRetriesPerPaper,
+        CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var attemptedSoFar = await db.AuditEvents.AsNoTracking()
+            .CountAsync(e => e.ResourceType == "ContentPaper"
+                && e.ResourceId == paperId
+                && e.Action == "ReadingExtractionStarted", ct);
+        if (maxRetriesPerPaper > 0 && attemptedSoFar >= maxRetriesPerPaper)
+        {
+            throw new InvalidOperationException(
+                $"Max AI extractions ({maxRetriesPerPaper}) reached for this paper.");
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = "ReadingExtractionStarted",
+            ResourceType = "ContentPaper",
+            ResourceId = paperId,
+            Details = JsonSerializer.Serialize(new { mediaAssetId, projectionOnly = true }),
+        });
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
     }
 
     public async Task<ReadingExtractionDraft?> GetDraftAsync(string draftId, CancellationToken ct)
@@ -297,8 +327,9 @@ public sealed class ReadingExtractionService(
 /// Production Reading extraction implementation. It builds a rulebook-grounded
 /// prompt (RuleKind.Reading + GenerateReadingStructure), feeds only extracted
 /// source text and answer-key text into the gateway, and validates the returned
-/// manifest before creating a pending draft. Failures become non-approvable
-/// stub drafts so the admin sees the blocker without applying unsafe content.
+/// manifest before creating a pending draft. Failures become non-approvable,
+/// empty stub drafts so the admin sees the blocker without applying unsafe or
+/// fabricated content.
 /// </summary>
 public sealed class GroundedReadingExtractionAi(
     LearnerDbContext db,
@@ -500,19 +531,11 @@ public sealed class GroundedReadingExtractionAi(
         ReadingPartCode.A => questionType is ReadingQuestionType.MatchingTextReference
             or ReadingQuestionType.ShortAnswer
             or ReadingQuestionType.SentenceCompletion,
-        ReadingPartCode.B => questionType is ReadingQuestionType.MultipleChoice3
-            or ReadingQuestionType.MultipleChoice4
-            or ReadingQuestionType.FillInBlank
-            or ReadingQuestionType.ShortAnswer
-            or ReadingQuestionType.SentenceCompletion
-            or ReadingQuestionType.ShortAnswerLabeled
-            or ReadingQuestionType.MultipleChoiceFlexible,
-        ReadingPartCode.C => questionType is ReadingQuestionType.MultipleChoice4
-            or ReadingQuestionType.FillInBlank
-            or ReadingQuestionType.ShortAnswer
-            or ReadingQuestionType.SentenceCompletion
-            or ReadingQuestionType.ShortAnswerLabeled
-            or ReadingQuestionType.MultipleChoiceFlexible,
+        // Keep AI projection validation identical to the published-paper
+        // validator: Part B is exactly three-option MCQ and Part C is exactly
+        // four-option MCQ. Other question types are not v1.1 paper content.
+        ReadingPartCode.B => questionType == ReadingQuestionType.MultipleChoice3,
+        ReadingPartCode.C => questionType == ReadingQuestionType.MultipleChoice4,
         _ => false,
     };
 
@@ -541,23 +564,38 @@ public sealed class GroundedReadingExtractionAi(
         return s;
     }
 
-    private static async Task<ReadingExtractionAiResult> StubAsync(
+    private static Task<ReadingExtractionAiResult> StubAsync(
         string reason,
         string paperId,
         string? mediaAssetId,
         CancellationToken ct)
     {
-        var stub = await new StubReadingExtractionAi().ExtractAsync(paperId, mediaAssetId, ct);
-        return stub with { StubReason = reason };
+        _ = paperId;
+        _ = mediaAssetId;
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(ReadingExtractionFallback.Create(reason));
+    }
+}
+
+internal static class ReadingExtractionFallback
+{
+    public static ReadingExtractionAiResult Create(string reason)
+    {
+        // A failed provider must never manufacture a canonical-looking paper.
+        // Keep an empty manifest only because the draft contract is non-null;
+        // ReadingExtractionService marks it IsStub and the approval gate rejects it.
+        return new ReadingExtractionAiResult(
+            Manifest: new ReadingStructureManifest(Array.Empty<ReadingPartManifest>()),
+            RawResponseJson: null,
+            IsStub: true,
+            StubReason: reason);
     }
 }
 
 /// <summary>
-/// Default AI implementation. Today this is a deterministic stub: it
-/// returns a canonical 20+6+16 placeholder manifest so the admin UI works
-/// end-to-end without needing AI configured. Swap with a real
-/// <c>IAiGatewayService</c>-backed implementation when the PDF parsing
-/// pipeline lands (Reading kind/task in the gateway).
+/// Test fixture that returns a known canonical manifest. It is intentionally
+/// not registered in production; production uses <see cref="GroundedReadingExtractionAi"/>
+/// and persists empty, non-approvable drafts when extraction is unavailable.
 /// </summary>
 public sealed class StubReadingExtractionAi : IReadingExtractionAi
 {

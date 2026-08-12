@@ -8,6 +8,21 @@ using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Listening;
 
+internal static class ListeningTtsProviderPolicy
+{
+    public static string Normalize(string? configuredProvider)
+        => (configuredProvider ?? "stub").Trim().ToLowerInvariant();
+
+    public static void EnsureAllowedForEnvironment(string provider, bool isProduction)
+    {
+        if (isProduction && string.Equals(provider, "stub", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Listening:TtsProvider='stub' is forbidden in production. Configure a real Listening TTS provider before starting the API.");
+        }
+    }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // ListeningTtsService — Wave 4 of the OET Listening gap-fill plan.
 //

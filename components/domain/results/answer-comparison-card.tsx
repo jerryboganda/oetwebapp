@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CheckCircle2, ChevronDown, Clock, Lightbulb, MinusCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Clock, Lightbulb, MinusCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { formatDurationMs } from '@/lib/results/format-answer';
@@ -9,6 +9,8 @@ export interface AnswerComparisonCardProps {
   label: string;
   stem?: string | null;
   isCorrect: boolean;
+  /** When true, the answer was invalid for automated marking and needs review. */
+  invalid?: boolean;
   /** When true, renders a neutral/amber "not answered" state instead of red. */
   unanswered?: boolean;
   /** Pre-formatted candidate answer (use formatAnswerValue for unknowns). */
@@ -30,36 +32,41 @@ export interface AnswerComparisonCardProps {
   testId?: string;
 }
 
-type ItemState = 'correct' | 'incorrect' | 'unanswered';
+type ItemState = 'correct' | 'incorrect' | 'unanswered' | 'invalid';
 
 const shellTint: Record<ItemState, string> = {
   correct: 'border-success/30 bg-success/10 border-l-4 border-l-success',
   incorrect: 'border-danger/30 bg-danger/10 border-l-4 border-l-danger',
   unanswered: 'border-warning/30 bg-warning/10 border-l-4 border-l-warning',
+  invalid: 'border-warning/40 bg-warning/10 border-l-4 border-l-warning',
 };
 
 const iconColor: Record<ItemState, string> = {
   correct: 'text-success',
   incorrect: 'text-danger',
   unanswered: 'text-warning',
+  invalid: 'text-warning',
 };
 
 const statusMeta: Record<ItemState, { label: string; variant: 'success' | 'danger' | 'warning' }> = {
   correct: { label: 'Correct', variant: 'success' },
   incorrect: { label: 'Incorrect', variant: 'danger' },
   unanswered: { label: 'Not answered', variant: 'warning' },
+  invalid: { label: 'Invalid — admin review', variant: 'warning' },
 };
 
 const yourCellTint: Record<ItemState, string> = {
   correct: 'border-success/30 bg-success/10',
   incorrect: 'border-danger/30 bg-danger/10',
   unanswered: 'border-border bg-background-light',
+  invalid: 'border-warning/40 bg-warning/10',
 };
 
 const yourLabelColor: Record<ItemState, string> = {
   correct: 'text-success',
   incorrect: 'text-danger',
   unanswered: 'text-muted',
+  invalid: 'text-warning',
 };
 
 /**
@@ -71,6 +78,7 @@ export function AnswerComparisonCard({
   label,
   stem,
   isCorrect,
+  invalid = false,
   unanswered = false,
   yourAnswer,
   correctAnswer,
@@ -86,8 +94,14 @@ export function AnswerComparisonCard({
   className,
   testId,
 }: AnswerComparisonCardProps) {
-  const state: ItemState = unanswered ? 'unanswered' : isCorrect ? 'correct' : 'incorrect';
-  const StatusIcon = state === 'correct' ? CheckCircle2 : state === 'unanswered' ? MinusCircle : XCircle;
+  const state: ItemState = invalid ? 'invalid' : unanswered ? 'unanswered' : isCorrect ? 'correct' : 'incorrect';
+  const StatusIcon = state === 'correct'
+    ? CheckCircle2
+    : state === 'unanswered'
+      ? MinusCircle
+      : state === 'invalid'
+        ? AlertTriangle
+        : XCircle;
   const status = statusMeta[state];
   const open = defaultOpen ?? state !== 'correct';
 

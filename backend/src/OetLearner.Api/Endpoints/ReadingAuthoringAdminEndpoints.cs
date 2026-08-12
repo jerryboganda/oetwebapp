@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
@@ -17,6 +18,61 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 public static class ReadingAuthoringAdminEndpoints
 {
+    private static IResult? EnforceReviewTransitionPermission(
+        HttpContext http,
+        ReadingReviewState targetState,
+        bool isAdminOverride)
+    {
+        var permissions = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+
+        // A rollback is an emergency administrative override. It must not be
+        // delegated to ordinary content authors or reviewers, even though the
+        // route itself is also used for normal authoring transitions.
+        if (isAdminOverride
+            && !ReadingAuthoringPermissionPolicy.CanEmergencyOverride(permissions))
+        {
+            return Results.Forbid();
+        }
+
+        // Reaching the Published review state is a release action. Require the
+        // same publish approval permissions as the Listening authoring path so
+        // Content Author cannot self-publish a question.
+        if (targetState == ReadingReviewState.Published
+            && !ReadingAuthoringPermissionPolicy.CanPublish(permissions))
+        {
+            return Results.Forbid();
+        }
+
+        return null;
+    }
+
+    private static async ValueTask<object?> EnforcePublishedPaperMutationAsync(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next)
+    {
+        var http = context.HttpContext;
+        if (HttpMethods.IsGet(http.Request.Method) || HttpMethods.IsHead(http.Request.Method))
+            return await next(context);
+
+        var paperId = http.Request.RouteValues["paperId"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(paperId))
+        {
+            var db = http.RequestServices.GetRequiredService<LearnerDbContext>();
+            var status = await db.ContentPapers.AsNoTracking()
+                .Where(p => p.Id == paperId && p.SubtestCode == "reading")
+                .Select(p => (ContentStatus?)p.Status)
+                .SingleOrDefaultAsync(http.RequestAborted);
+            var permissions = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+            if (status == ContentStatus.Published
+                && !ReadingAuthoringPermissionPolicy.CanMutatePublishedPaper(permissions))
+            {
+                return Results.Forbid();
+            }
+        }
+
+        return await next(context);
+    }
+
     public sealed record AcceptedVariantAuditEntry(
         string Id,
         string ActorId,
@@ -35,7 +91,8 @@ public static class ReadingAuthoringAdminEndpoints
             // exhausted the 30/min window so the validate/structure GETs that follow
             // a bulk save were rejected with 429 ("Failed to load validation data").
             // The surface is already gated to admins by AdminContentWrite.
-            .RequireRateLimiting("PerUser");
+            .RequireRateLimiting("PerUser")
+            .AddEndpointFilter(EnforcePublishedPaperMutationAsync);
 
         // Full structure (admin view — includes correct answers)
         group.MapGet("/structure", async (
@@ -364,6 +421,12 @@ public static class ReadingAuthoringAdminEndpoints
             if (!string.Equals(match, paperId, StringComparison.Ordinal))
                 return Results.BadRequest(new { error = "Question does not belong to this paper." });
 
+            var permissionError = EnforceReviewTransitionPermission(
+                http,
+                dto.ToState,
+                dto.IsAdminOverride);
+            if (permissionError is not null) return permissionError;
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var displayName = http.User.FindFirstValue(ClaimTypes.Name);
             try
@@ -636,6 +699,25 @@ public static class ReadingAuthoringAdminEndpoints
             }),
         }),
     };
+}
+
+internal static class ReadingAuthoringPermissionPolicy
+{
+    public static bool CanEmergencyOverride(string? permissionsClaim)
+        => AdminPermissionEvaluator.HasAny(permissionsClaim, AdminPermissions.SystemAdmin);
+
+    public static bool CanPublish(string? permissionsClaim)
+        => AdminPermissionEvaluator.HasAny(
+            permissionsClaim,
+            AdminPermissions.ContentPublish,
+            AdminPermissions.ContentPublisherApproval,
+            AdminPermissions.SystemAdmin);
+
+    public static bool CanMutatePublishedPaper(string? permissionsClaim)
+        => AdminPermissionEvaluator.HasAny(
+            permissionsClaim,
+            AdminPermissions.ContentPublish,
+            AdminPermissions.SystemAdmin);
 }
 
 public sealed record ReadingExtractionRequestDto(string? MediaAssetId);
