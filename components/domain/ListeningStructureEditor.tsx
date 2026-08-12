@@ -368,9 +368,9 @@ function QuestionRow({
   onUpdateOptionDistractorCategory: (idx: number, value: ListeningDistractorCategory | '') => void;
 }) {
   const isPartC = q.partCode === 'C1' || q.partCode === 'C2';
-  const isMcq = q.type === 'multiple_choice_3' || q.type === 'multiple_choice_4';
-  const requiredType = isPartC ? 'multiple_choice_4' : q.partCode.startsWith('B') ? 'multiple_choice_3' : 'short_answer';
-  const optionLetters = isPartC ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C'];
+  const isMcq = q.type === 'multiple_choice_3';
+  const requiredType = q.partCode.startsWith('B') || isPartC ? 'multiple_choice_3' : 'short_answer';
+  const optionLetters = ['A', 'B', 'C'];
   return (
     <li className="rounded-lg bg-muted p-3">
       <div className="flex items-center gap-3 mb-2">
@@ -381,16 +381,13 @@ function QuestionRow({
             const next = e.target.value as ListeningQuestionType;
             onUpdate({
               type: next,
-              options: next === 'multiple_choice_4'
-                ? (q.options.length === 4 ? q.options : ['', '', '', ''])
-                : next === 'multiple_choice_3'
-                  ? (q.options.length === 3 ? q.options : ['', '', ''])
-                  : [],
+              options: next === 'multiple_choice_3'
+                ? (q.options.length === 3 ? q.options : ['', '', ''])
+                : [],
             });
           }}
-          options={[{ value: requiredType, label: requiredType === 'multiple_choice_4'
-            ? 'Multiple choice (4 options)'
-            : requiredType === 'multiple_choice_3' ? 'Multiple choice (3 options)' : 'Short answer / fill-in-the-blank' }]}
+          options={[{ value: requiredType, label: requiredType === 'multiple_choice_3'
+            ? 'Multiple choice (3 options)' : 'Short answer / fill-in-the-blank' }]}
         />
         <Input
           label="Points"
@@ -424,7 +421,7 @@ function QuestionRow({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
         <Input
-          label={isMcq ? `Correct answer (A-${optionLetters.at(-1)} or full text)` : 'Correct answer'}
+          label={isMcq ? 'Correct answer (A/B/C or full text)' : 'Correct answer'}
           value={q.correctAnswer}
           onChange={(e) => onUpdate({ correctAnswer: e.target.value })}
           placeholder={isMcq ? 'A' : 'lower back'}

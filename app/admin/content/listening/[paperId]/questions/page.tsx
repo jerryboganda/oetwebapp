@@ -45,8 +45,7 @@ type ToastState = { variant: 'success' | 'error'; message: string };
 type PartTab = 'A' | 'B' | 'C';
 
 function allowedTypesForSection(code: ListeningSubSectionCode): ListeningContentType[] {
-  if (code.startsWith('C')) return ['MultipleChoice4'];
-  if (code.startsWith('B')) return ['MultipleChoice3'];
+  if (code.startsWith('C') || code.startsWith('B')) return ['MultipleChoice3'];
   return ['FillInBlank', 'ShortAnswer'];
 }
 
@@ -112,15 +111,13 @@ interface QuestionFormState {
 }
 
 function emptyForm(number: number, section: ListeningSubSectionCode): QuestionFormState {
-  const contentType = section.startsWith('C') ? 'MultipleChoice4'
-    : section.startsWith('B') ? 'MultipleChoice3' : 'ShortAnswer';
+  const contentType = section.startsWith('A') ? 'ShortAnswer' : 'MultipleChoice3';
   return {
     id: null,
     number,
     contentType,
     stem: '',
-    options: contentType === 'MultipleChoice4' ? ['', '', '', '']
-      : contentType === 'MultipleChoice3' ? ['', '', ''] : [],
+    options: contentType === 'MultipleChoice3' ? ['', '', ''] : [],
     correctAnswer: '',
     acceptedAnswers: [],
     explanation: '',
@@ -131,14 +128,13 @@ function emptyForm(number: number, section: ListeningSubSectionCode): QuestionFo
 
 function questionToForm(q: ListeningAuthoredQuestion): QuestionFormState {
   const contentType = wireToContentType(q.type);
-  const isMcq = contentType === 'MultipleChoice3' || contentType === 'MultipleChoice4';
-  const optionCount = contentType === 'MultipleChoice4' ? 4 : 3;
+  const isMcq = contentType === 'MultipleChoice3';
   return {
     id: q.id,
     number: q.number,
     contentType,
     stem: q.stem ?? '',
-    options: isMcq ? (q.options ?? Array(optionCount).fill('')).slice(0, optionCount) : [],
+    options: isMcq ? (q.options ?? ['', '', '']).slice(0, 3) : [],
     correctAnswer: q.correctAnswer ?? '',
     acceptedAnswers: q.acceptedAnswers ?? [],
     explanation: q.explanation ?? '',
@@ -154,7 +150,7 @@ function formToQuestion(
   previous: ListeningAuthoredQuestion | null,
 ): ListeningAuthoredQuestion {
   const type = contentTypeToWire(form.contentType);
-  const isMcq = type === 'multiple_choice_3' || type === 'multiple_choice_4';
+  const isMcq = type === 'multiple_choice_3';
   return {
     ...(previous ?? {}),
     id: form.id ?? `lq-${form.number}`,
@@ -285,12 +281,11 @@ export default function AdminListeningQuestionsPage() {
 
   function handleTypeChange(next: ListeningContentType) {
     if (!form) return;
-    if (next === 'MultipleChoice3' || next === 'MultipleChoice4') {
-      const optionCount = next === 'MultipleChoice4' ? 4 : 3;
+    if (next === 'MultipleChoice3') {
       setForm({
         ...form,
         contentType: next,
-        options: (form.options.length ? form.options : Array(optionCount).fill('')).slice(0, optionCount).concat(Array(optionCount).fill('')).slice(0, optionCount),
+        options: (form.options.length ? form.options : ['', '', '']).slice(0, 3).concat(['', '', '']).slice(0, 3),
         correctAnswer: '',
         acceptedAnswers: [],
       });
@@ -331,15 +326,13 @@ export default function AdminListeningQuestionsPage() {
 
   function validateForm(f: QuestionFormState, section: ListeningSubSectionCode): string | null {
     if (!f.stem.trim()) return 'Question stem is required.';
-    const expectedType = section.startsWith('C') ? 'MultipleChoice4'
-      : section.startsWith('B') ? 'MultipleChoice3' : null;
+    const expectedType = section.startsWith('B') || section.startsWith('C') ? 'MultipleChoice3' : null;
     if (expectedType && f.contentType !== expectedType) {
       return `${section} questions must use ${LISTENING_CONTENT_TYPE_LABELS[expectedType]}.`;
     }
-    if (f.contentType === 'MultipleChoice3' || f.contentType === 'MultipleChoice4') {
-      const optionCount = f.contentType === 'MultipleChoice4' ? 4 : 3;
-      if (f.options.length !== optionCount || f.options.some((o) => !o.trim())) {
-        return `This question needs exactly ${optionCount} non-empty options.`;
+    if (f.contentType === 'MultipleChoice3') {
+      if (f.options.length !== 3 || f.options.some((o) => !o.trim())) {
+        return 'Multiple choice questions need exactly 3 non-empty options.';
       }
       if (!f.correctAnswer.trim()) return 'Select the correct option.';
       if (!f.options.map((o) => o.trim()).includes(f.correctAnswer.trim())) {
@@ -706,7 +699,7 @@ function QuestionEditor({
   onSave: () => void;
   onCancel: () => void;
 }) {
-  const isMcq = form.contentType === 'MultipleChoice3' || form.contentType === 'MultipleChoice4';
+  const isMcq = form.contentType === 'MultipleChoice3';
 
   return (
     <div className="space-y-4">

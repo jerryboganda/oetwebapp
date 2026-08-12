@@ -398,35 +398,6 @@ public class ListeningGradingServiceTests
     }
 
     [Fact]
-    public void Evaluate_Mc4_accepts_the_part_c_d_key()
-    {
-        var question = new ListeningQuestion
-        {
-            Id = "q-mc4",
-            QuestionType = ListeningQuestionType.MultipleChoice4,
-            Points = 1,
-            CorrectAnswerJson = "\"D\"",
-            Options = new List<ListeningQuestionOption>
-            {
-                new() { OptionKey = "A", DisplayOrder = 0, Text = "A", IsCorrect = false },
-                new() { OptionKey = "B", DisplayOrder = 1, Text = "B", IsCorrect = false },
-                new() { OptionKey = "C", DisplayOrder = 2, Text = "C", IsCorrect = false },
-                new() { OptionKey = "D", DisplayOrder = 3, Text = "D", IsCorrect = true },
-            },
-        };
-        var answer = new ListeningAnswer
-        {
-            Id = "a-mc4",
-            ListeningQuestionId = question.Id,
-            UserAnswerJson = System.Text.Json.JsonSerializer.Serialize("D"),
-        };
-
-        var (isCorrect, _, _) = ListeningGradingService.Evaluate(question, answer);
-
-        Assert.True(isCorrect);
-    }
-
-    [Fact]
     public async Task GradeAsync_rejects_attempt_owned_by_different_user()
     {
         await using var db = NewDb();

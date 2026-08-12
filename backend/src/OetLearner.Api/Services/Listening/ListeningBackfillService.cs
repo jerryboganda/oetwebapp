@@ -272,7 +272,6 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 QuestionType = q.Type switch
                 {
                     "multiple_choice_3" => ListeningQuestionType.MultipleChoice3,
-                    "multiple_choice_4" => ListeningQuestionType.MultipleChoice4,
                     "fill_in_blank" => ListeningQuestionType.FillInBlank,
                     _ => ListeningQuestionType.ShortAnswer,
                 },
@@ -293,12 +292,10 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             });
 
             // Options exist for Part B/C MCQ items.
-            if ((q.Type is "multiple_choice_3" or "multiple_choice_4") && q.Options is { Count: > 0 })
+            if (q.Type == "multiple_choice_3" && q.Options is { Count: > 0 })
             {
-                var optionLabels = q.Type == "multiple_choice_4"
-                    ? new[] { "A", "B", "C", "D" }
-                    : new[] { "A", "B", "C" };
-                for (var i = 0; i < q.Options.Count && i < optionLabels.Length; i++)
+                var optionLabels = new[] { "A", "B", "C" };
+                for (var i = 0; i < q.Options.Count && i < 3; i++)
                 {
                     var optionKey = optionLabels[i];
                     var optionText = q.Options[i] ?? string.Empty;
@@ -714,12 +711,10 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 // Recompute what isCorrect would be for incoming options
                 // using the same logic as the main projection loop.
                 var incomingCorrectKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if ((incomingQ.Type is "multiple_choice_3" or "multiple_choice_4") && incomingQ.Options is { Count: > 0 })
+                if (incomingQ.Type == "multiple_choice_3" && incomingQ.Options is { Count: > 0 })
                 {
-                    var optionLabels = incomingQ.Type == "multiple_choice_4"
-                        ? new[] { "A", "B", "C", "D" }
-                        : new[] { "A", "B", "C" };
-                    for (var i = 0; i < incomingQ.Options.Count && i < optionLabels.Length; i++)
+                    var optionLabels = new[] { "A", "B", "C" };
+                    for (var i = 0; i < incomingQ.Options.Count && i < 3; i++)
                     {
                         var optionKey = optionLabels[i];
                         var optionText = incomingQ.Options[i] ?? string.Empty;

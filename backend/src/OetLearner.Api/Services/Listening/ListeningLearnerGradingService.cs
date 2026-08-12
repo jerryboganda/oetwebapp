@@ -104,8 +104,7 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
 
         return question.QuestionType switch
         {
-            ListeningQuestionType.MultipleChoice3 or ListeningQuestionType.MultipleChoice4
-                => Task.FromResult(GradeMcq(attempt, question)),
+            ListeningQuestionType.MultipleChoice3 => Task.FromResult(GradeMcq(attempt, question)),
             // FillInBlank grades identically to ShortAnswer: exact canonical
             // or explicit accepted-variant comparison only.
             ListeningQuestionType.ShortAnswer => Task.FromResult(GradeShortAnswer(attempt, question, markingPolicy)),

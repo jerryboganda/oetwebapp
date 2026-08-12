@@ -45,7 +45,7 @@ function newItem(partCode: ListeningPartCode, number: number): ItemDraft {
     id: makeId(),
     number,
     partCode,
-    type: partCode.startsWith('C') ? 'multiple_choice_4' : partCode === 'B' ? 'multiple_choice_3' : 'short_answer',
+    type: partCode.startsWith('A') ? 'short_answer' : 'multiple_choice_3',
     stem: '',
     optionsCsv: '',
     correctAnswer: '',
@@ -126,7 +126,7 @@ export function StepListening() {
           partCode: i.partCode,
           type: i.type,
           stem: i.stem,
-          options: i.type === 'multiple_choice_3' || i.type === 'multiple_choice_4'
+          options: i.type === 'multiple_choice_3'
             ? i.optionsCsv.split('|').map((s) => s.trim()).filter(Boolean)
             : undefined,
           correctAnswer: i.correctAnswer,
@@ -272,7 +272,7 @@ export function StepListening() {
                   label="Type"
                   value={item.type}
                   onChange={(e) => updateItem(item.id, { type: e.target.value as ListeningQuestionType })}
-                  options={[{ value: item.partCode.startsWith('C') ? 'multiple_choice_4' : item.partCode === 'B' ? 'multiple_choice_3' : 'short_answer', label: item.partCode.startsWith('C') ? 'Multiple choice (4)' : item.partCode === 'B' ? 'Multiple choice (3)' : 'Short answer' }]}
+                  options={[{ value: item.partCode.startsWith('A') ? 'short_answer' : 'multiple_choice_3', label: item.partCode.startsWith('A') ? 'Short answer' : 'Multiple choice (3)' }]}
                 />
                 <Input
                   label="Points"
@@ -289,7 +289,7 @@ export function StepListening() {
                   rows={2}
                 />
               </div>
-              {item.type === 'multiple_choice_3' || item.type === 'multiple_choice_4' ? (
+              {item.type === 'multiple_choice_3' ? (
                 <div className="mt-2">
                   <Input
                     label="Options (separate with |)"

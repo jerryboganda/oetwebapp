@@ -59,26 +59,11 @@ public enum ListeningQuestionType
     ShortAnswer = 0,
     /// <summary>3-option MCQ. Selectable in any sub-section.</summary>
     MultipleChoice3 = 1,
-    /// <summary>4-option MCQ. Required for Listening Part C.</summary>
-    MultipleChoice4 = 3,
     /// <summary>Fill-in-the-blank gap. Authored as a distinct type so admins
     /// can pick it explicitly (one of the 3 platform content types: MCQ /
     /// fill-in-the-blank / free-text), but graded identically to
     /// <see cref="ShortAnswer"/> (canonical + accepted-variants string compare).</summary>
     FillInBlank = 2,
-}
-
-public static class ListeningQuestionTypeExtensions
-{
-    public static bool IsMultipleChoice(this ListeningQuestionType type) =>
-        type is ListeningQuestionType.MultipleChoice3 or ListeningQuestionType.MultipleChoice4;
-
-    public static int? ExpectedOptionCount(this ListeningQuestionType type) => type switch
-    {
-        ListeningQuestionType.MultipleChoice3 => 3,
-        ListeningQuestionType.MultipleChoice4 => 4,
-        _ => null,
-    };
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

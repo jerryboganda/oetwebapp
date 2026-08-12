@@ -82,7 +82,7 @@ interface FormState {
 }
 
 function fromQuestion(q: ListeningAuthoredQuestion): FormState {
-  const isMcq = q.type === 'multiple_choice_3' || q.type === 'multiple_choice_4';
+  const isMcq = q.type === 'multiple_choice_3';
   return {
     stem: q.stem ?? '',
     points: q.points ?? 1,
@@ -195,7 +195,7 @@ export default function AdminListeningQuestionEditorPage() {
     void refresh();
   }, [isAuthenticated, role, refresh]);
 
-  const isMcq = target?.type === 'multiple_choice_3' || target?.type === 'multiple_choice_4';
+  const isMcq = target?.type === 'multiple_choice_3';
   const isPartC = target?.partCode === 'C1' || target?.partCode === 'C2';
   const isPartA = target?.partCode === 'A1' || target?.partCode === 'A2';
   const isTypedAnswer = Boolean(target && !isMcq);

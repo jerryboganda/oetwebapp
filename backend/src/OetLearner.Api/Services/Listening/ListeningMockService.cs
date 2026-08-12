@@ -688,18 +688,10 @@ public sealed class ListeningMockService : IListeningMockService
             var options = question.Options
                 .OrderBy(option => option.DisplayOrder)
                 .ToArray();
-            var expectedType = IsPartB(question)
-                ? ListeningQuestionType.MultipleChoice3
-                : ListeningQuestionType.MultipleChoice4;
-            var expectedKeys = expectedType == ListeningQuestionType.MultipleChoice3
-                ? new[] { "A", "B", "C" }
-                : new[] { "A", "B", "C", "D" };
-            var actualKeys = options
-                .Select(option => option.OptionKey.Trim().ToUpperInvariant())
-                .ToArray();
-            if (question.QuestionType != expectedType
-                || !actualKeys.SequenceEqual(expectedKeys, StringComparer.Ordinal)
+            if (question.QuestionType != ListeningQuestionType.MultipleChoice3
+                || options.Length != 3
                 || options.Any(option => string.IsNullOrWhiteSpace(option.OptionKey))
+                || options.Select(option => option.OptionKey.Trim().ToUpperInvariant()).Distinct(StringComparer.Ordinal).Count() != 3
                 || options.Count(option => option.IsCorrect) != 1
                 || options.Count(option => string.Equals(
                     option.OptionKey.Trim(),
@@ -708,7 +700,7 @@ public sealed class ListeningMockService : IListeningMockService
             {
                 throw ApiException.Conflict(
                     "listening_mock_structure_invalid",
-                    "Listening Part B requires exactly three options (A/B/C), while Part C requires exactly four options (A/B/C/D), with one correct key.");
+                    "Listening Part B/C mock questions must have exactly three unique options and one correct key.");
             }
         }
     }

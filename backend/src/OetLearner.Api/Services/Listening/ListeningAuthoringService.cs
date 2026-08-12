@@ -175,7 +175,7 @@ public sealed record ListeningAuthoredQuestion(
     string Id,
     int Number,
     string PartCode,           // A1 | A2 | B | C1 | C2  (also accepts legacy A / C)
-    string Type,               // "short_answer" | "multiple_choice_3" | "multiple_choice_4"
+    string Type,               // "short_answer" | "multiple_choice_3"
     string Stem,
     IReadOnlyList<string>? Options,
     string CorrectAnswer,
@@ -285,10 +285,10 @@ public sealed record ListeningTranscriptSegmentManifest(
 
 public sealed record ListeningQuestionManifest(
     int Number,
-    string? Type,                                      // gap_fill | short_answer | multiple_choice_3 | multiple_choice_4
+    string? Type,                                      // gap_fill | short_answer | multiple_choice_3
     string? NoteTextBeforeGap,                         // Part A note-completion lead-in
     string? Stem,                                      // Part B/C question stem
-    ListeningOptionsManifest? Options,                 // Part B A/B/C; Part C A/B/C/D options
+    ListeningOptionsManifest? Options,                 // Part B/C A/B/C options
     string? CorrectAnswer,
     IReadOnlyList<string>? AcceptedAnswers,
     string? Explanation,
@@ -304,8 +304,7 @@ public sealed record ListeningQuestionManifest(
 public sealed record ListeningOptionsManifest(
     string? A,
     string? B,
-    string? C,
-    string? D = null);
+    string? C);
 
 public sealed record ListeningStructureImportResult(
     ListeningAuthoredQuestionList Structure,
@@ -710,7 +709,7 @@ public sealed class ListeningAuthoringService(
         ListeningQuestionManifest qm, string partCode, string? speakerAttitude)
     {
         var isMcq = partCode.StartsWith('B') || partCode.StartsWith('C');
-        var type = NormalizeManifestQuestionType(qm.Type, isMcq, partCode);
+        var type = NormalizeManifestQuestionType(qm.Type, isMcq);
 
         // Part A: fold the note lead-in into the stem with a gap marker so the
         // note-completion player has a renderable prompt. Part B/C: use the stem.
@@ -735,10 +734,6 @@ public sealed class ListeningAuthoringService(
                 qm.Options.C ?? string.Empty,
             }
             : new List<string>();
-        if (type == "multiple_choice_4")
-        {
-            options.Add(qm.Options?.D ?? string.Empty);
-        }
 
         // Evidence start/end: prefer explicit ms; otherwise derive a start from a
         // legacy "mm:ss" timestamp so round-tripped excerpts keep a cue point.
@@ -827,15 +822,12 @@ public sealed class ListeningAuthoringService(
         return string.Join("\n", lines);
     }
 
-    private static string NormalizeManifestQuestionType(string? raw, bool isMcq, string partCode)
+    private static string NormalizeManifestQuestionType(string? raw, bool isMcq)
     {
         var n = (raw ?? string.Empty).Trim().ToLowerInvariant();
         if (n is "multiple_choice_3" or "mcq" or "mcq3") return "multiple_choice_3";
-        if (n is "multiple_choice_4" or "mcq4") return "multiple_choice_4";
         if (n is "short_answer" or "gap_fill" or "gapfill" or "note_completion") return "short_answer";
-        return isMcq
-            ? (partCode.StartsWith('C') ? "multiple_choice_4" : "multiple_choice_3")
-            : "short_answer";
+        return isMcq ? "multiple_choice_3" : "short_answer";
     }
 
     private static string NormalizeManifestCorrectAnswer(string? raw, bool isMcq)
@@ -946,8 +938,7 @@ public sealed class ListeningAuthoringService(
             ? new ListeningOptionsManifest(
                 q.Options.ElementAtOrDefault(0),
                 q.Options.ElementAtOrDefault(1),
-                q.Options.ElementAtOrDefault(2),
-                q.Type == "multiple_choice_4" ? q.Options.ElementAtOrDefault(3) : null)
+                q.Options.ElementAtOrDefault(2))
             : null;
 
         return new ListeningQuestionManifest(
@@ -1356,14 +1347,12 @@ public sealed class ListeningAuthoringService(
     {
         var partCode = NormalizePartCode(q.PartCode);
         var type = string.IsNullOrWhiteSpace(q.Type)
-            ? (partCode.StartsWith('A') ? "short_answer" : partCode.StartsWith('C') ? "multiple_choice_4" : "multiple_choice_3")
+            ? (partCode.StartsWith('A') ? "short_answer" : "multiple_choice_3")
             : q.Type.Trim();
 
-        // Part B is MCQ-3 and Part C is MCQ-4; preserve the authored type but
-        // trim any excess option payload before relational projection.
+        // Part B/C are MCQ-3; trim any excess option payload before relational projection.
         var options = (q.Options ?? []).Select(o => o ?? string.Empty).ToList();
-        var maxOptions = type == "multiple_choice_4" ? 4 : type == "multiple_choice_3" ? 3 : 0;
-        if (maxOptions > 0 && options.Count > maxOptions) options = options.Take(maxOptions).ToList();
+        if (type == "multiple_choice_3" && options.Count > 3) options = options.Take(3).ToList();
 
         var accepted = (q.AcceptedAnswers ?? [])
             .Where(a => !string.IsNullOrWhiteSpace(a))

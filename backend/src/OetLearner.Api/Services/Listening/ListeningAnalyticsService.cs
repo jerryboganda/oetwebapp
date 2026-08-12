@@ -943,12 +943,7 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             Id: question.Id,
             Number: question.QuestionNumber,
             PartCode: PartCodeLabel(question.Part?.PartCode ?? ListeningPartCode.A1),
-            Type: question.QuestionType switch
-            {
-                ListeningQuestionType.MultipleChoice3 => "multiple_choice_3",
-                ListeningQuestionType.MultipleChoice4 => "multiple_choice_4",
-                _ => "short_answer",
-            },
+            Type: question.QuestionType == ListeningQuestionType.MultipleChoice3 ? "multiple_choice_3" : "short_answer",
             Options: options.Select(option => option.Text).ToList(),
             CorrectAnswer: correctAnswer,
             AcceptedAnswers: accepted,

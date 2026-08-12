@@ -15,7 +15,7 @@ namespace OetLearner.Api.Services.Listening;
 //
 // Part B/C are PDF-backed: the learner reads the printed MCQ on the question
 // paper; the only authored data per question is the correct option letter
-// (A/B/C for Part B; A/B/C/D for Part C) + an optional "why correct" rationale. This service automates that:
+// (A/B/C) + an optional "why correct" rationale. This service automates that:
 //
 //   1. Mistral OCR the QuestionPaper PDF(s) → Markdown (Part C has two extracts:
 //      C1 + C2, uploaded as two documents).
@@ -40,8 +40,7 @@ public sealed record ListeningPartBCAnswer(
     string? Stem = null,
     string? OptionA = null,
     string? OptionB = null,
-    string? OptionC = null,
-    string? OptionD = null);
+    string? OptionC = null);
 
 public sealed record ListeningPartBCImportResult(
     string Part,
@@ -165,8 +164,7 @@ public sealed class ListeningPartBCExtractionService(
                 continue;
             }
             var letter = (a.CorrectAnswer ?? string.Empty).Trim().ToUpperInvariant();
-            var validLetters = part == "C" ? new[] { "A", "B", "C", "D" } : new[] { "A", "B", "C" };
-            if (!validLetters.Contains(letter, StringComparer.Ordinal))
+            if (letter is not ("A" or "B" or "C"))
             {
                 warnings.Add($"Q{a.Number} has an invalid correct option '{a.CorrectAnswer}'.");
                 continue;
@@ -179,8 +177,7 @@ public sealed class ListeningPartBCExtractionService(
                 Stem: CleanText(a.Stem, 2048),
                 OptionA: CleanText(a.OptionA, 1024),
                 OptionB: CleanText(a.OptionB, 1024),
-                OptionC: CleanText(a.OptionC, 1024),
-                OptionD: CleanText(a.OptionD, 1024));
+                OptionC: CleanText(a.OptionC, 1024));
         }
 
         for (var n = lo; n <= hi; n++)
@@ -196,7 +193,7 @@ public sealed class ListeningPartBCExtractionService(
     private sealed record BcToolOutput(List<BcToolAnswer>? Answers);
     private sealed record BcToolAnswer(
         int Number, string? CorrectAnswer, string? Rationale,
-        string? Stem, string? OptionA, string? OptionB, string? OptionC, string? OptionD);
+        string? Stem, string? OptionA, string? OptionB, string? OptionC);
 
     private static string? CleanText(string? value, int max)
         => string.IsNullOrWhiteSpace(value) ? null : Truncate(value.Trim(), max);
@@ -217,7 +214,7 @@ public sealed class ListeningPartBCExtractionService(
         var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
         if (unsafeReason is not null) throw new InvalidOperationException(unsafeReason);
 
-        var range = part == "B" ? "25-30 (six 3-option MCQs)" : "31-42 (twelve 4-option MCQs)";
+        var range = part == "B" ? "25-30 (six 3-option MCQs)" : "31-42 (twelve 3-option MCQs)";
         var userText =
             $"PART: {part} — questions {range}.\n\n" +
             "QUESTION PAPER (OCR Markdown):\n\n" + questionMarkdown +
@@ -359,19 +356,19 @@ emit_part_bc_answers tool.
 
 OET Listening Part B = questions 25-30: six short 3-option multiple-choice questions
 (options A, B, C), each about a brief workplace extract.
-OET Listening Part C = questions 31-42: twelve 4-option multiple-choice questions
-(options A, B, C, D) across two extracts (31-36, then 37-42).
+OET Listening Part C = questions 31-42: twelve 3-option multiple-choice questions
+(options A, B, C) across two extracts (31-36, then 37-42).
 
-You receive a QUESTION PAPER (the printed MCQs with their part-appropriate options) and an
+You receive a QUESTION PAPER (the printed MCQs with their A/B/C options) and an
 ANSWER KEY (the official correct option per question). You are told which PART to emit.
 
 For EVERY question in the requested part's range, emit one entry with:
   - number: the printed question number.
   - stem: the full question text ("stem") EXACTLY as printed on the QUESTION PAPER — the
     prompt the candidate answers. Do NOT include the A/B/C options inside the stem.
-  - optionA / optionB / optionC (and optionD for Part C): the full text of the options EXACTLY as printed,
+  - optionA / optionB / optionC: the full text of options A, B and C EXACTLY as printed,
     WITHOUT the leading "A."/"B."/"C." label.
-  - correctAnswer: the correct option LETTER — A/B/C for Part B, A/B/C/D for Part C — taken
+  - correctAnswer: the correct option LETTER — exactly one of "A", "B", or "C" — taken
     from the ANSWER KEY (cross-check it against the question paper).
   - rationale: ONE concise sentence (< 240 chars) explaining why that option is correct,
     grounded in the printed options. This is shown to the learner after they submit.
@@ -379,10 +376,10 @@ For EVERY question in the requested part's range, emit one entry with:
 HARD REQUIREMENTS:
   - Emit ONLY questions in the requested part's range (Part B → 25-30; Part C → 31-42).
     Never invent numbers outside that range.
-  - correctAnswer MUST be a single uppercase letter: A/B/C for Part B, A/B/C/D for Part C.
+  - correctAnswer MUST be a single uppercase letter: A, B, or C.
   - Provide EVERY question in the range. If the answer key is unclear for one, use your
     best reading of the question paper and still choose a letter.
-  - Transcribe stem + the part-appropriate option fields VERBATIM from the QUESTION PAPER. If the OCR is unclear,
+  - Transcribe stem + optionA/B/C VERBATIM from the QUESTION PAPER. If the OCR is unclear,
     transcribe your best reading — never invent content. Omit a field only if it is truly
     illegible (the reviewer will fill it in).
   - Do not fabricate. Base each rationale on the actual printed options.
@@ -402,8 +399,7 @@ HARD REQUIREMENTS:
           "optionA": { "type": "string" },
           "optionB": { "type": "string" },
           "optionC": { "type": "string" },
-          "optionD": { "type": "string" },
-          "correctAnswer": { "type": "string", "enum": ["A", "B", "C", "D"] },
+          "correctAnswer": { "type": "string", "enum": ["A", "B", "C"] },
           "rationale": { "type": "string" }
         },
         "required": ["number", "correctAnswer"]

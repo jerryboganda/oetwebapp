@@ -1056,7 +1056,7 @@ function QuestionItem({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const isMcq = question.type === 'multiple_choice_3' || question.type === 'multiple_choice_4';
+  const isMcq = question.type === 'multiple_choice_3';
   return (
     <div className="space-y-3 border-b border-border pb-5 last:border-b-0 last:pb-0">
       <div>
