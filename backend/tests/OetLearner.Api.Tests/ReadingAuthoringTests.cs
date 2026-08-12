@@ -2119,6 +2119,7 @@ public class ReadingAuthoringTests
             .OrderBy(q => q.DisplayOrder)
             .FirstAsync();
         firstShortAnswer.ExplanationMarkdown = "DISCLOSED-EXPLANATION";
+        firstShortAnswer.EvidenceSentence = "The discharge plan lists the approved medication.";
         await db.SaveChangesAsync();
 
         var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
@@ -2142,6 +2143,9 @@ public class ReadingAuthoringTests
             JsonSerializer.Deserialize<string>(firstShortAnswer.CorrectAnswerJson),
             item.GetProperty("correctAnswer").GetString());
         Assert.Equal("DISCLOSED-EXPLANATION", item.GetProperty("explanationMarkdown").GetString());
+        Assert.Equal(
+            "The discharge plan lists the approved medication.",
+            item.GetProperty("evidenceSentence").GetString());
     }
 
     [Fact]
@@ -2161,6 +2165,8 @@ public class ReadingAuthoringTests
             .Where(q => q.Part!.PaperId == paperId)
             .OrderBy(q => q.DisplayOrder)
             .FirstAsync();
+        question.EvidenceSentence = "PRIVATE-SOURCE-EVIDENCE";
+        await db.SaveChangesAsync();
         await attemptSvc.SaveAnswerAsync(userId, started.AttemptId, question.Id, "\"candidate\"", default);
 
         // Simulate stale/prematurely populated grading columns. The learner
@@ -2175,7 +2181,9 @@ public class ReadingAuthoringTests
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         using var response = await client.GetAsync($"/v1/reading-papers/attempts/{started.AttemptId}");
         response.EnsureSuccessStatusCode();
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("PRIVATE-SOURCE-EVIDENCE", payload, StringComparison.Ordinal);
+        using var json = JsonDocument.Parse(payload);
         var saved = Assert.Single(json.RootElement.GetProperty("answers").EnumerateArray());
 
         Assert.Equal("\"candidate\"", saved.GetProperty("userAnswerJson").GetString());

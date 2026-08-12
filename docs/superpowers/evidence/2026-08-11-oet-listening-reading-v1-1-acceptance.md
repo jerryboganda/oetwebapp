@@ -165,8 +165,9 @@ an owner-controlled value that must not be invented in code.
   Focused Listening result/review execution remains pending.
 - Reading grading persistence and learner attempt/result projections now apply
   the same three-field conversion gate, including idempotent existing-result
-  responses and submit responses. Focused Reading result/review execution
-  remains pending.
+  responses and submit responses. The existing endpoint regression now also
+  asserts post-submit `evidenceSentence` disclosure and pre-submit source
+  evidence redaction; fresh backend execution remains pending by request.
 - Reading grading now writes `reading.marking.accepted_variant_used` with the
   matched explicit variant and attempt/question/policy provenance whenever that
   variant earns credit; the focused regression fixture covers both accepted and
