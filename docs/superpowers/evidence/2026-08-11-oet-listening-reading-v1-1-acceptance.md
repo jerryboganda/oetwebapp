@@ -36,6 +36,12 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Listening bulk authoring replacements now apply the same accepted-variant
+  reason invariant as per-question PATCH: any existing typed-answer variant
+  change fails closed without a reason, and successful changes emit the
+  least-privilege actor/time/reason audit tuple without persisting a reusable
+  reason in the question document. The admin editor now collects the reason;
+  focused backend execution remains pending.
 - Mock report aggregation now requires persisted Listening/Reading scaled
   score, conversion-table version, and explicit pass decision before emitting
   governed converted values. The versioned payload, client mapper, and

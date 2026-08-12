@@ -67,6 +67,7 @@ public class ListeningAuthoringServiceTests
             }),
             CreatedAt = now,
             UpdatedAt = now,
+            SourceProvenance = "test-fixture",
         };
         db.ContentPapers.Add(paper);
         await db.SaveChangesAsync();
@@ -133,6 +134,39 @@ public class ListeningAuthoringServiceTests
         var audit = await db.AuditEvents.SingleAsync(a => a.Action == "listening.question.patch");
         Assert.Contains("acceptedVariantChangeReason", audit.Details!);
         Assert.Contains("Explicit UK/US spelling evidence", audit.Details!);
+    }
+
+    [Fact]
+    public async Task ReplaceStructure_RequiresAndAuditsAcceptedVariantReason()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+        var existing = (await svc.GetStructureAsync(paper.Id, default)).Questions.Single();
+
+        var missingReason = await Assert.ThrowsAsync<ApiException>(() => svc.ReplaceStructureAsync(
+            paper.Id,
+            [existing with { AcceptedAnswers = ["alpha", "alfa"] }],
+            adminId: "admin-42",
+            default));
+
+        Assert.Equal("accepted_variant_change_reason_required", missingReason.ErrorCode);
+        Assert.Empty(await db.AuditEvents.ToListAsync());
+
+        var result = await svc.ReplaceStructureAsync(
+            paper.Id,
+            [existing with
+            {
+                AcceptedAnswers = ["alpha", "alfa"],
+                AcceptedVariantChangeReason = "Transcript evidence confirms the accepted spelling variant."
+            }],
+            adminId: "admin-42",
+            default);
+
+        Assert.Equal(["alpha", "alfa"], result.Questions.Single().AcceptedAnswers);
+        var audit = await db.AuditEvents.SingleAsync(a => a.Action == "listening.question.patch");
+        Assert.Equal("lq-1", audit.ResourceId);
+        Assert.Contains("acceptedVariantChangeReason", audit.Details!);
+        Assert.Contains("Transcript evidence confirms", audit.Details!);
     }
 
     [Fact]

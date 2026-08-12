@@ -199,7 +199,11 @@ public sealed record ListeningAuthoredQuestion(
     // status. New/imported questions are draft until an authorised reviewer
     // marks them published through the authoring workflow.
     string ValidationStatus = "draft",
-    string? ValidationNote = null);
+    string? ValidationNote = null,
+    // Required by bulk structure replacement when an existing accepted-answer
+    // variant changes. This is consumed for the audit event and is cleared
+    // before the question document is persisted.
+    string? AcceptedVariantChangeReason = null);
 
 public sealed record ListeningAuthoredQuestionList(
     IReadOnlyList<ListeningAuthoredQuestion> Questions,
@@ -417,7 +421,54 @@ public sealed class ListeningAuthoringService(
             .OrderBy(q => q.Number)
             .ToList();
 
-        var serialized = JsonSerializer.SerializeToElement(normalized, CamelJson);
+        var existing = ReadQuestionsArray(paper.ExtractedTextJson)
+            .Select(NormalizeFromStorage)
+            .ToList();
+        var existingById = existing
+            .GroupBy(q => q.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var existingByNumber = existing
+            .GroupBy(q => q.Number)
+            .ToDictionary(g => g.Key, g => g.First());
+        var acceptedVariantChanges = new List<(ListeningAuthoredQuestion Before, ListeningAuthoredQuestion After, string Reason)>();
+
+        foreach (var question in normalized)
+        {
+            var hasExisting = existingById.TryGetValue(question.Id, out var previous)
+                || existingByNumber.TryGetValue(question.Number, out previous);
+            if (!hasExisting || previous is null)
+            {
+                continue;
+            }
+
+            var acceptedAnswersChanged = !(previous.AcceptedAnswers ?? Array.Empty<string>())
+                .SequenceEqual(question.AcceptedAnswers ?? Array.Empty<string>(), StringComparer.Ordinal);
+            if (!acceptedAnswersChanged)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(question.AcceptedVariantChangeReason))
+            {
+                throw ApiException.Validation(
+                    "accepted_variant_change_reason_required",
+                    $"Explain why the accepted variants are being added, changed, or removed for question {question.Number}.");
+            }
+
+            acceptedVariantChanges.Add((
+                previous,
+                question,
+                question.AcceptedVariantChangeReason.Trim()));
+        }
+
+        // The reason belongs in the audit event, not the authored question
+        // document. This prevents a stale reason from being replayed by a
+        // later bulk save that starts from the returned structure.
+        var persisted = normalized
+            .Select(q => q with { AcceptedVariantChangeReason = null })
+            .ToList();
+
+        var serialized = JsonSerializer.SerializeToElement(persisted, CamelJson);
         root[QuestionsKey] = serialized;
 
         paper.ExtractedTextJson = JsonSerializer.Serialize(root);
@@ -443,6 +494,30 @@ public sealed class ListeningAuthoringService(
             }),
         });
 
+        foreach (var change in acceptedVariantChanges)
+        {
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"audit_{Guid.NewGuid():N}",
+                OccurredAt = paper.UpdatedAt,
+                ActorId = adminId,
+                ActorAuthAccountId = await db.ResolveActorAuthAccountIdAsync(adminId, ct),
+                ActorName = adminId,
+                Action = "listening.question.patch",
+                ResourceType = "ListeningQuestion",
+                ResourceId = change.After.Id,
+                Details = TruncateForAudit(JsonSerializer.Serialize(new
+                {
+                    paperId,
+                    questionId = change.After.Id,
+                    questionNumber = change.After.Number,
+                    acceptedVariantChangeReason = change.Reason,
+                    beforeJson = JsonSerializer.Serialize(change.Before, CamelJson),
+                    afterJson = JsonSerializer.Serialize(change.After with { AcceptedVariantChangeReason = null }, CamelJson),
+                })),
+            });
+        }
+
         try
         {
             await db.SaveChangesAsync(ct);
@@ -460,7 +535,7 @@ public sealed class ListeningAuthoringService(
 
         if (tx is not null) await tx.CommitAsync(ct);
 
-        return new ListeningAuthoredQuestionList(normalized, Tally(normalized));
+        return new ListeningAuthoredQuestionList(persisted, Tally(persisted));
         }
         catch
         {

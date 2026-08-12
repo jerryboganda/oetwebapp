@@ -124,6 +124,8 @@ export interface ListeningAuthoredQuestion {
   // for jump-to-evidence in the post-attempt review player.
   transcriptEvidenceStartMs?: number | null;
   transcriptEvidenceEndMs?: number | null;
+  /** Required by bulk saves when acceptedAnswers changes. */
+  acceptedVariantChangeReason?: string | null;
   /** Section 12 per-question publish-validation state. */
   validationStatus?: ListeningValidationStatus;
   validationNote?: string | null;

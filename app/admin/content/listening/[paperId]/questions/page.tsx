@@ -105,6 +105,7 @@ interface QuestionFormState {
   /** For MCQ this stores the correct option's text; for free text the answer. */
   correctAnswer: string;
   acceptedAnswers: string[];
+  acceptedVariantChangeReason: string;
   explanation: string;
   skillTag: string;
   points: number;
@@ -120,6 +121,7 @@ function emptyForm(number: number, section: ListeningSubSectionCode): QuestionFo
     options: contentType === 'MultipleChoice3' ? ['', '', ''] : [],
     correctAnswer: '',
     acceptedAnswers: [],
+    acceptedVariantChangeReason: '',
     explanation: '',
     skillTag: '',
     points: 1,
@@ -137,6 +139,7 @@ function questionToForm(q: ListeningAuthoredQuestion): QuestionFormState {
     options: isMcq ? (q.options ?? ['', '', '']).slice(0, 3) : [],
     correctAnswer: q.correctAnswer ?? '',
     acceptedAnswers: q.acceptedAnswers ?? [],
+    acceptedVariantChangeReason: '',
     explanation: q.explanation ?? '',
     skillTag: q.skillTag ?? '',
     points: q.points ?? 1,
@@ -161,6 +164,7 @@ function formToQuestion(
     options: isMcq ? form.options.map((o) => o.trim()) : [],
     correctAnswer: form.correctAnswer.trim(),
     acceptedAnswers: isMcq ? [] : form.acceptedAnswers,
+    acceptedVariantChangeReason: form.acceptedVariantChangeReason.trim() || null,
     explanation: form.explanation.trim() ? form.explanation.trim() : null,
     skillTag: form.skillTag.trim() ? form.skillTag.trim() : null,
     points: Math.max(1, form.points),
@@ -367,6 +371,15 @@ export default function AdminListeningQuestionsPage() {
       return;
     }
     const previous = form.id ? questions.find((q) => q.id === form.id) ?? null : null;
+    const acceptedVariantsChanged = previous
+      ? JSON.stringify(previous.acceptedAnswers ?? []) !== JSON.stringify(
+        form.contentType === 'MultipleChoice3' ? [] : form.acceptedAnswers,
+      )
+      : false;
+    if (acceptedVariantsChanged && !form.acceptedVariantChangeReason.trim()) {
+      setToast({ variant: 'error', message: 'Explain why the accepted variants are being added, changed, or removed.' });
+      return;
+    }
     const built = formToQuestion(form, activeSection, previous);
     const next = form.id
       ? questions.map((q) => (q.id === form.id ? built : q))
@@ -628,6 +641,7 @@ export default function AdminListeningQuestionsPage() {
                 <CardContent>
                   <QuestionEditor
                     form={form}
+                    initialAcceptedAnswers={form.id ? questions.find((q) => q.id === form.id)?.acceptedAnswers ?? [] : []}
                     section={activeSection}
                     variantDraft={variantDraft}
                     saving={saving}
@@ -672,6 +686,7 @@ function PartANotice({ paperId }: { paperId: string }) {
 
 function QuestionEditor({
   form,
+  initialAcceptedAnswers,
   section,
   variantDraft,
   saving,
@@ -686,6 +701,7 @@ function QuestionEditor({
   onCancel,
 }: {
   form: QuestionFormState;
+  initialAcceptedAnswers: string[];
   section: ListeningSubSectionCode;
   variantDraft: string;
   saving: boolean;
@@ -798,6 +814,16 @@ function QuestionEditor({
             </div>
           </div>
         </div>
+      )}
+
+      {form.id && JSON.stringify(form.acceptedAnswers) !== JSON.stringify(initialAcceptedAnswers) && (
+        <Textarea
+          label="Reason for accepted-variant change (required)"
+          rows={2}
+          value={form.acceptedVariantChangeReason}
+          onChange={(e) => onChange({ ...form, acceptedVariantChangeReason: e.target.value })}
+          placeholder="Record the evidence or editorial reason for this variant change."
+        />
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
