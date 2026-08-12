@@ -112,6 +112,35 @@ describe('Reading paper results page', () => {
     );
   });
 
+  it('labels a singular-plural mismatch as an incorrect answer form', async () => {
+    mockGetReadingAttemptReview.mockResolvedValueOnce(
+      buildReview({
+        scaledScore: 350,
+        rawScore: 30,
+        gradeLetter: 'B',
+        items: [{
+          questionId: 'q-a-1',
+          partCode: 'A',
+          displayOrder: 1,
+          questionType: 'ShortAnswer',
+          stem: 'Give the required number.',
+          skillTag: 'detail',
+          userAnswer: 'tablets',
+          isCorrect: false,
+          pointsEarned: 0,
+          maxPoints: 1,
+          missReason: 'number_form',
+          correctAnswer: 'tablet',
+        }],
+      }),
+    );
+
+    await renderResults();
+
+    expect(await screen.findByTestId('reading-miss-number_form')).toBeInTheDocument();
+    expect(screen.getByText('Incorrect answer form')).toBeInTheDocument();
+  });
+
   it('renders tutor feedback entries when the attempt returns them', async () => {
     mockGetReadingAttemptReview.mockResolvedValueOnce(
       buildReview({

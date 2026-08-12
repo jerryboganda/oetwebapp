@@ -631,6 +631,11 @@ function formatPercent(value: number): string {
 
 function missReasonLabel(reason: string): { title: string; detail?: string } {
   switch (reason) {
+    case 'number_form':
+      return {
+        title: 'Incorrect answer form',
+        detail: 'The answer used the wrong singular, plural, or number form required by the question.',
+      };
     case 'spelling':
       return {
         title: 'Spelling caused this miss',

@@ -20,6 +20,37 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function missReasonChip(item: ListeningReviewDto['itemReview'][number]): {
+  label: string;
+  hint: string;
+} | null {
+  if (item.isCorrect) return null;
+  const reason = (item.missReason ?? item.errorType ?? '').toString().toLowerCase();
+  if (!reason) return null;
+  switch (reason) {
+    case 'spellingerror':
+    case 'spelling':
+      return { label: 'Spelling', hint: 'The spelling did not match the canonical answer or an approved variant.' };
+    case 'wrongnumber':
+    case 'wrong_number':
+      return { label: 'Number / quantity', hint: 'The number or quantity did not match the required answer.' };
+    case 'extrainfo':
+    case 'extra_info':
+      return { label: 'Incorrect answer form', hint: 'Only the words required for the gap should be entered.' };
+    case 'wrongsection':
+    case 'wrong_section':
+      return { label: 'Wrong gap', hint: 'The response belongs to a different question.' };
+    case 'paraphrase':
+      return { label: 'Paraphrase rejected', hint: 'Typed answers require the exact answer or an explicitly approved variant.' };
+    case 'empty':
+      return { label: 'Unanswered', hint: 'No answer was recorded for this question.' };
+    case 'distractor_confusion':
+      return { label: 'Distractor confusion', hint: 'The selected option was an authored distractor.' };
+    default:
+      return { label: reason.replace(/_/g, ' '), hint: 'Review the authored evidence and explanation for this item.' };
+  }
+}
+
 function ListeningResultsContent() {
   const params = useParams<{ id?: string | string[] }>();
   const id = firstParam(params?.id);
@@ -236,6 +267,7 @@ function ListeningResultsContent() {
           <MotionList className="space-y-4">
             {result.itemReview.map((item, index) => {
               const isExpanded = expandedItems[item.questionId];
+              const missReason = missReasonChip(item);
               return (
                 <MotionItem key={item.questionId} delayIndex={index} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                   <button
@@ -281,6 +313,18 @@ function ListeningResultsContent() {
                               </div>
                             ) : null}
                           </div>
+
+                          {missReason ? (
+                            <div
+                              data-testid={`listening-miss-${item.questionId}`}
+                              className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning"
+                            >
+                              <span className="mb-1 block text-xs font-black uppercase tracking-widest">
+                                Missed because: {missReason.label}
+                              </span>
+                              <p className="text-sm leading-relaxed">{missReason.hint}</p>
+                            </div>
+                          ) : null}
 
                           {!item.isCorrect && item.distractorExplanation ? (
                             <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
