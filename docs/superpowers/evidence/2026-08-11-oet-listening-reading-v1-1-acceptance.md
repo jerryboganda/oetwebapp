@@ -113,6 +113,9 @@ an owner-controlled value that must not be invented in code.
   decision as well as the scaled value and conversion-table key; a missing
   decision remains raw-only while an explicit failed decision still renders the
   owner-converted score.
+- The shared mock evidence guard now treats malformed or structurally invalid
+  report JSON as ineligible rather than allowing a readiness endpoint exception;
+  readiness and pass prediction remain fail-closed on missing evidence.
 - The legacy background mock-report builder is aligned with the same governed
   score gate, withholding Reading/Listening formula grades, mock-wide grade,
   and booking pass advice when owner conversion evidence is absent.

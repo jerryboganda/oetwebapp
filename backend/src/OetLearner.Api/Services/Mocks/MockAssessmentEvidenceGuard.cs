@@ -17,7 +17,11 @@ internal static class MockAssessmentEvidenceGuard
         try
         {
             using var document = JsonDocument.Parse(payloadJson);
-            if (!TryGetSubTests(document.RootElement, out var subTests)) return false;
+            if (!TryGetSubTests(document.RootElement, out var subTests)
+                || subTests.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
 
             foreach (var subTest in subTests.EnumerateArray())
             {
@@ -33,13 +37,22 @@ internal static class MockAssessmentEvidenceGuard
             // but the caller handles malformed payloads through its existing
             // missing-score path.
         }
+        catch (InvalidOperationException)
+        {
+            // A structurally invalid JSON value (for example, a scalar
+            // subTests property) is also ineligible and must fail closed.
+        }
 
         return false;
     }
 
     private static bool TryGetSubTests(JsonElement root, out JsonElement subTests)
-        => root.TryGetProperty("subTests", out subTests)
+    {
+        subTests = default;
+        if (root.ValueKind != JsonValueKind.Object) return false;
+        return root.TryGetProperty("subTests", out subTests)
             || root.TryGetProperty("subtests", out subTests);
+    }
 
     private static string? ReadString(JsonElement element, string propertyName)
         => element.TryGetProperty(propertyName, out var property)
