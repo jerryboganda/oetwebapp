@@ -26,17 +26,6 @@ namespace OetLearner.Api.Services.Reading;
 
 public interface IReadingExplanationService
 {
-    /// <summary>Return a structured explanation for why the correct answer is
-    /// correct and why the learner's <paramref name="wrongOption"/> was wrong.</summary>
-    /// <param name="questionId">String PK of the <see cref="ReadingQuestion"/>.</param>
-    /// <param name="wrongOption">The option key the learner selected (e.g. "A").</param>
-    /// <param name="language">"en" or "ar"; defaults to "en".</param>
-    Task<ExplanationDto> GetExplanationAsync(
-        string questionId,
-        string wrongOption,
-        string language,
-        CancellationToken ct);
-
     /// <summary>
     /// Generate a learner-facing explanation only for an answer stored on the
     /// caller's submitted attempt. The selected answer is read from the
@@ -67,76 +56,7 @@ public sealed class ReadingExplanationService(
     ILogger<ReadingExplanationService>? logger = null)
     : IReadingExplanationService
 {
-    /// <summary>Prefix written into ExplanationMarkdown to signal cached JSON.</summary>
     private const string CachePrefix = ":::json\n";
-
-    public async Task<ExplanationDto> GetExplanationAsync(
-        string questionId,
-        string wrongOption,
-        string language,
-        CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(questionId))
-            throw new ArgumentException("questionId must not be empty.", nameof(questionId));
-
-        var lang = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim().ToLowerInvariant();
-
-        var question = await db.ReadingQuestions
-            .FirstOrDefaultAsync(q => q.Id == questionId, ct)
-            ?? throw new KeyNotFoundException($"ReadingQuestion '{questionId}' not found.");
-
-        // 1. Try pre-generated cache stored in ExplanationMarkdown.
-        if (!string.IsNullOrWhiteSpace(question.ExplanationMarkdown)
-            && question.ExplanationMarkdown.StartsWith(CachePrefix, StringComparison.Ordinal))
-        {
-            var cached = TryDeserializeCachedExplanations(
-                question.ExplanationMarkdown[CachePrefix.Length..]);
-            if (cached is not null)
-            {
-                var key = $"{wrongOption.Trim().ToUpperInvariant()}:{lang}";
-                if (cached.TryGetValue(key, out var hit))
-                    return hit;
-            }
-        }
-
-        // 2. AI-generate the explanation.
-        var correctAnswer = ResolveCorrectAnswer(question);
-        var approvedRationale = await db.AssessmentRationales.AsNoTracking()
-            .Where(r => r.Assessment == "reading"
-                && r.QuestionRevisionId == question.Id
-                && r.Status == AssessmentGovernanceStatus.Effective)
-            .OrderByDescending(r => r.UpdatedAt)
-            .FirstOrDefaultAsync(ct);
-        var sourcePassage = question.ReadingTextId is null
-            ? null
-            : await db.ReadingTexts.AsNoTracking()
-                .Where(t => t.Id == question.ReadingTextId)
-                .Select(t => t.BodyHtml)
-                .SingleOrDefaultAsync(ct);
-        if (approvedRationale is null
-            || string.IsNullOrWhiteSpace(approvedRationale.RationaleText)
-            || string.IsNullOrWhiteSpace(approvedRationale.SourceSentence))
-        {
-            // AI advisory output is unavailable until an author-approved
-            // rationale exists; deterministic review remains available.
-            return BuildFallbackExplanation(question, correctAnswer, wrongOption, lang);
-        }
-        var generated = await GenerateExplanationAsync(
-            question,
-            correctAnswer,
-            wrongOption,
-            lang,
-            approvedRationale.RationaleText,
-            approvedRationale.SourceSentence,
-            sourcePassage,
-            userId: null,
-            ct);
-
-        // 3. Cache back onto the entity (append to existing cache blob).
-        await PersistCacheAsync(question, wrongOption, lang, generated, ct);
-
-        return generated;
-    }
 
     // ── AI generation ───────────────────────────────────────────────────────
 

@@ -211,6 +211,13 @@ an owner-controlled value that must not be invented in code.
   immutable question, key, option, rationale, transcript-evidence, and version
   snapshots and grades against them instead of mutable live rows. Focused
   execution and deployed mock verification remain pending.
+- Reading grounded explanations now have a post-submit-only service contract;
+  the question-only generation surface and cache path are no longer exposed
+  through `IReadingExplanationService`. Learner explanations require an owned,
+  submitted attempt and its stored answer before approved evidence is sent to
+  the grounded gateway. The deterministic gateway-failure test now exercises
+  that submitted-attempt path; focused execution and deployed verification
+  remain pending.
 - Reading now has a source-level scoring-path audit matching the Listening
   audit: Reading services must not reference the legacy raw-to-scaled helper
   and the governed grader must use `IAssessmentScoreConversionService`.

@@ -14,6 +14,15 @@ public sealed class ListeningReadingExplanationFailureTests
     public async Task ReadingExplanation_gateway_failure_returns_deterministic_fallback()
     {
         await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.ReadingParts.Add(new ReadingPart
+        {
+            Id = "reading-part-a",
+            PaperId = "reading-paper-1",
+            PartCode = ReadingPartCode.A,
+            TimeLimitMinutes = 15,
+            MaxRawScore = 1,
+        });
         db.ReadingQuestions.Add(new ReadingQuestion
         {
             Id = "reading-explanation-q1",
@@ -22,6 +31,27 @@ public sealed class ListeningReadingExplanationFailureTests
             Stem = "Which option is supported?",
             OptionsJson = "[\"A\",\"B\",\"C\"]",
             CorrectAnswerJson = "\"A\"",
+        });
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "reading-explanation-attempt-1",
+            UserId = "learner-1",
+            PaperId = "reading-paper-1",
+            StartedAt = now.AddMinutes(-10),
+            LastActivityAt = now,
+            SubmittedAt = now,
+            Status = ReadingAttemptStatus.Submitted,
+            MaxRawScore = 1,
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "reading-explanation-answer-1",
+            ReadingAttemptId = "reading-explanation-attempt-1",
+            ReadingQuestionId = "reading-explanation-q1",
+            UserAnswerJson = "\"B\"",
+            AnsweredAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         db.AssessmentRationales.Add(EffectiveRationale("reading", "reading-explanation-q1"));
         await db.SaveChangesAsync();
@@ -32,8 +62,8 @@ public sealed class ListeningReadingExplanationFailureTests
             new ThrowingGateway(),
             NullLogger<ReadingExplanationService>.Instance);
 
-        var result = await service.GetExplanationAsync(
-            "reading-explanation-q1", "B", "en", default);
+        var result = await service.GetSubmittedAttemptExplanationAsync(
+            "learner-1", "reading-explanation-attempt-1", "reading-explanation-q1", "en", default);
 
         Assert.Equal("A", result.WhyCorrect.Split('\'')[1]);
         Assert.Contains("B", result.WhyWrong);
