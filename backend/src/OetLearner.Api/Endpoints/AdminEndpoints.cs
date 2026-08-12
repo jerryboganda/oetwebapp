@@ -1987,6 +1987,7 @@ public static class AdminEndpoints
             db.AdminPermissionGrants.RemoveRange(existingGrants);
 
             var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var actorName = http.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
             var grantedAt = DateTimeOffset.UtcNow;
             foreach (var permission in role.Permissions.Distinct(StringComparer.OrdinalIgnoreCase))
             {
@@ -2000,11 +2001,24 @@ public static class AdminEndpoints
                 });
             }
 
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = grantedAt,
+                ActorId = actorId,
+                ActorAuthAccountId = actorId,
+                ActorName = actorName,
+                Action = "AssignAdminRole",
+                ResourceType = "AdminRole",
+                ResourceId = userId,
+                Details = $"role={role.Id};permissions={string.Join(",", role.Permissions)}"
+            });
+
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { assigned = true, userId, roleId = role.Id, permissions = role.Permissions });
         }).WithAdminWrite("AdminSystemAdmin");
 
-        admin.MapDelete("/roles/{roleId}/users/{userId}", async (string roleId, string userId, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapDelete("/roles/{roleId}/users/{userId}", async (string roleId, string userId, HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
             var user = await db.AdminUsers.FindAsync([userId], ct);
             if (user == null) return Results.NotFound(new { error = "USER_NOT_FOUND" });
@@ -2020,6 +2034,21 @@ public static class AdminEndpoints
                 .Where(grant => grant.AdminUserId == userId)
                 .ToListAsync(ct);
             db.AdminPermissionGrants.RemoveRange(grants);
+
+            var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var actorName = http.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = actorId,
+                ActorAuthAccountId = actorId,
+                ActorName = actorName,
+                Action = "RemoveAdminRole",
+                ResourceType = "AdminRole",
+                ResourceId = userId,
+                Details = $"role={roleId};revokedPermissions={string.Join(",", grants.Select(grant => grant.Permission))}"
+            });
 
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { removed = true, userId, roleId, revokedPermissions = grants.Select(grant => grant.Permission).ToArray() });
