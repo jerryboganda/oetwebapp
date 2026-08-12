@@ -229,6 +229,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
     public DbSet<LaunchReadinessSettings> LaunchReadinessSettings => Set<LaunchReadinessSettings>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<CustomerSupportCase> CustomerSupportCases => Set<CustomerSupportCase>();
 
     // Security spec §4.4: machine-generated security telemetry (auth
     // lifecycle, session/device changes, playback, risk signals, admin
@@ -1364,6 +1365,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Recall-set allow-lists (partial; see LearnerDbContext.UserAccess.cs).
         OnModelCreatingUserAccess(modelBuilder);
 
+        // Ticket-linked, time-limited customer-support candidate access.
+        OnModelCreatingCustomerSupport(modelBuilder);
+
         // Billing region pricing + gateway routing (partial; see LearnerDbContext.BillingRegion.cs).
         OnModelCreatingBillingRegion(modelBuilder);
 
@@ -1517,6 +1521,8 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.UserAccess.cs (partial).
     /// </summary>
     partial void OnModelCreatingUserAccess(ModelBuilder modelBuilder);
+
+    partial void OnModelCreatingCustomerSupport(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.BillingRegion.cs (partial).

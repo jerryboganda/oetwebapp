@@ -840,6 +840,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminSecurityWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "security:write", "system_admin")));
+    options.AddPolicy("AdminCustomerSupportRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "support:ticket_read", "system_admin")));
+    options.AddPolicy("AdminCustomerSupportWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "support:ticket_write", "system_admin")));
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
@@ -1086,6 +1092,7 @@ builder.Services.AddScoped<AdminAlertService>();
 builder.Services.AddScoped<LearnerActionsService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<AdminSecurityService>();
+builder.Services.AddScoped<CustomerSupportCaseService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.UserAccessAllocationService>();
 builder.Services.AddScoped<ILaunchReadinessService, LaunchReadinessService>();
 builder.Services.AddScoped<SponsorService>();
@@ -2384,6 +2391,7 @@ app.MapAdminEndpoints();
 app.MapVoiceDesignAdminEndpoints();
 app.MapAdminAlertEndpoints();
 app.MapAdminSecurityEndpoints();
+app.MapCustomerSupportAdminEndpoints();
 app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();

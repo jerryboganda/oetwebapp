@@ -1912,6 +1912,7 @@ public static class AdminEndpoints
                 new { id = "content_editor", name = "Content Editor", description = "Content read/write access", isBuiltIn = true, permissions = new[] { AdminPermissions.ContentRead, AdminPermissions.ContentWrite } },
                 new { id = "reviewer", name = "Reviewer", description = "Review operations access", isBuiltIn = true, permissions = new[] { AdminPermissions.ContentRead, AdminPermissions.ReviewOps } },
                 new { id = "billing_admin", name = "Billing Admin", description = "Full billing management (legacy superset)", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingWrite } },
+                new { id = "customer_support", name = "Customer Support", description = "Ticket-linked, time-limited candidate support access", isBuiltIn = true, permissions = new[] { AdminPermissions.CustomerSupportRead, AdminPermissions.CustomerSupportWrite } },
                 // Billing-hardening I-7: granular billing role presets.
                 new { id = "refund_specialist", name = "Refund Specialist", description = "Read billing data and issue refunds / handle disputes only", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingRefundWrite } },
                 new { id = "catalog_editor", name = "Catalog Editor", description = "Read billing data and edit plans, add-ons, coupons, wallet tiers, free-tier, score-guarantee", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingCatalogWrite } },
@@ -1941,7 +1942,7 @@ public static class AdminEndpoints
 
         admin.MapPut("/roles/{roleId}", async (string roleId, AdminRoleUpdateRequest request, LearnerDbContext db, CancellationToken ct) =>
         {
-            var builtInIds = new[] { "system_admin", "content_editor", "reviewer", "billing_admin" };
+            var builtInIds = new[] { "system_admin", "content_editor", "reviewer", "billing_admin", "customer_support" };
             if (builtInIds.Contains(roleId))
                 return Results.BadRequest(new { error = "CANNOT_MODIFY_BUILTIN_ROLE" });
             if (string.IsNullOrWhiteSpace(request.Name))
@@ -1954,7 +1955,7 @@ public static class AdminEndpoints
 
         admin.MapDelete("/roles/{roleId}", async (string roleId, LearnerDbContext db, CancellationToken ct) =>
         {
-            var builtInIds = new[] { "system_admin", "content_editor", "reviewer", "billing_admin" };
+            var builtInIds = new[] { "system_admin", "content_editor", "reviewer", "billing_admin", "customer_support" };
             if (builtInIds.Contains(roleId))
                 return Results.BadRequest(new { error = "CANNOT_DELETE_BUILTIN_ROLE" });
             return Results.Ok(new { deleted = true, roleId });

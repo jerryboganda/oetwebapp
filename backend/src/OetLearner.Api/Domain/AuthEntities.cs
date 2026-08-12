@@ -260,6 +260,8 @@ public static class AdminPermissions
     /// <summary>Security spec §4.4: revoke a session/device, reset a user's
     /// trusted device, or block playback immediately.</summary>
     public const string SecurityWrite = "security:write";
+    public const string CustomerSupportRead = "support:ticket_read";
+    public const string CustomerSupportWrite = "support:ticket_write";
 
     /// <summary>Full permission set granted to system administrators.</summary>
     public static readonly string[] All =
@@ -275,7 +277,8 @@ public static class AdminPermissions
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
         FeatureFlags, Notifications, AuditLogs, SystemAdmin,
-        ManagePermissions, SecurityRead, SecurityWrite
+        ManagePermissions, SecurityRead, SecurityWrite,
+        CustomerSupportRead, CustomerSupportWrite
     ];
 }
 

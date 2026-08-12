@@ -26,8 +26,7 @@
 - Modify: `backend/src/OetLearner.Api/Domain/AuthEntities.cs`
 - Modify: `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
 - Create: `backend/src/OetLearner.Api/Data/LearnerDbContext.CustomerSupport.cs`
-- Create: `backend/src/OetLearner.Api/Data/Migrations/20260812120000_AddCustomerSupportCases.cs`
-- Create: `backend/src/OetLearner.Api/Data/Migrations/20260812120000_AddCustomerSupportCases.Designer.cs`
+- Create: `backend/src/OetLearner.Api/Data/Migrations/20260904090000_AddCustomerSupportCases.cs`
 - Modify: `backend/src/OetLearner.Api/Data/Migrations/LearnerDbContextModelSnapshot.cs`
 
 **Interfaces:**

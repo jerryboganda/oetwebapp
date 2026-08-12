@@ -389,17 +389,27 @@ an owner-controlled value that must not be invented in code.
   stricter-than-examiner spelling disclosure as Listening, with a focused page
   regression assertion.
 
-## Remaining role-scope boundary
+## Customer-support ticket boundary
 
-- The repository has no ticket entity, support-case lifecycle, or ticket-bound
-  authorization context. Therefore the PDF role requirement for
-  customer-support access that is both candidate-scoped and time-limited is
-  not claimed as implemented; adding a guessed support workflow would violate
-  the specification's scope and auditability requirements.
-- Candidate, tutor/expert, content, and assessment-governance boundaries that
-  are represented by existing surfaces are enforced in their current API/UI
-  paths; full cross-role acceptance remains pending the missing support
-  workflow and owner-provided release inputs.
+- `CustomerSupportCase` and migration
+  `20260904090000_AddCustomerSupportCases` provide a local ticket-linked grant
+  with a mandatory candidate ID, expiry, open/closed lifecycle, and immutable
+  ticket/candidate uniqueness boundary.
+- `CustomerSupportCaseService` exposes only ticket-scoped case listing and a
+  minimal candidate contact projection while the case is open and unexpired;
+  closed or expired grants fail closed and never fall back to candidate search.
+- `AdminCustomerSupportRead`/`AdminCustomerSupportWrite` and the built-in
+  `customer_support` role isolate support access from content, learner-wide,
+  and assessment-governance permissions.
+- Case creation, candidate projection reads, and closure emit
+  `support.case.created`, `support.case.candidate_read`, and
+  `support.case.closed` audit events without assessment content. Focused
+  service execution and deployed cross-role acceptance remain pending by the
+  owner's bounded-validation instruction.
+- Candidate, tutor/expert, content, assessment-governance, and customer-support
+  boundaries represented by the repository are now enforced in their API paths;
+  owner-provided release inputs and authenticated production acceptance remain
+  separate unresolved gates.
 
 ## Per-section Listening audio start gate
 
