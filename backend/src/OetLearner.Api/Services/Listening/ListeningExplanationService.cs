@@ -117,14 +117,20 @@ public sealed class ListeningExplanationService(
                 UserId = userId,
             }, ct);
             return TryParse(result.Completion, lang)
-                ?? BuildFallback(correctAnswer, storedAnswer, lang);
+                ?? throw new ListeningGroundedExplanationUnavailableException(
+                    "The grounded gateway returned no usable explanation for this question.");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             logger?.LogWarning(ex,
-                "ListeningExplanationService — AI call failed for question '{QuestionId}'; returning fallback.",
+                "ListeningExplanationService — AI call failed for question '{QuestionId}'; explanation unavailable.",
                 question.Id);
-            return BuildFallback(correctAnswer, storedAnswer, lang);
+            throw new ListeningGroundedExplanationUnavailableException(
+                "The grounded explanation is unavailable because the gateway failed.");
         }
     }
 
@@ -182,14 +188,6 @@ public sealed class ListeningExplanationService(
             return null;
         }
     }
-
-    private static ListeningExplanationDto BuildFallback(string correctAnswer, string storedAnswer, string language)
-        => new(
-            $"The correct answer is '{correctAnswer}' based on the approved Listening evidence.",
-            $"Your stored answer was '{storedAnswer}', so it did not match the approved answer for this item.",
-            "Review the evidence",
-            "Listen for the key detail and confirm it against the question before choosing.",
-            language);
 
     private static string ResolveJsonValue(string raw)
     {

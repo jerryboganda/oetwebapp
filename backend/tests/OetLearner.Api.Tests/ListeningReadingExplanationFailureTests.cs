@@ -11,7 +11,7 @@ namespace OetLearner.Api.Tests;
 public sealed class ListeningReadingExplanationFailureTests
 {
     [Fact]
-    public async Task ReadingExplanation_gateway_failure_returns_deterministic_fallback()
+    public async Task ReadingExplanation_gateway_failure_returns_unavailable_without_inventing_rationale()
     {
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
@@ -62,16 +62,15 @@ public sealed class ListeningReadingExplanationFailureTests
             new ThrowingGateway(),
             NullLogger<ReadingExplanationService>.Instance);
 
-        var result = await service.GetSubmittedAttemptExplanationAsync(
-            "learner-1", "reading-explanation-attempt-1", "reading-explanation-q1", "en", default);
+        var exception = await Assert.ThrowsAsync<ReadingGroundedExplanationUnavailableException>(() =>
+            service.GetSubmittedAttemptExplanationAsync(
+                "learner-1", "reading-explanation-attempt-1", "reading-explanation-q1", "en", default));
 
-        Assert.Equal("A", result.WhyCorrect.Split('\'')[1]);
-        Assert.Contains("B", result.WhyWrong);
-        Assert.Equal("en", result.Language);
+        Assert.Contains("gateway failed", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task ListeningExplanation_gateway_failure_returns_deterministic_fallback()
+    public async Task ListeningExplanation_gateway_failure_returns_unavailable_without_inventing_rationale()
     {
         await using var db = CreateDb();
         db.ListeningQuestions.Add(new ListeningQuestion
@@ -113,16 +112,15 @@ public sealed class ListeningReadingExplanationFailureTests
             new ThrowingGateway(),
             NullLogger<ListeningExplanationService>.Instance);
 
-        var result = await service.GetSubmittedAttemptExplanationAsync(
-            "learner-1",
-            "listening-explanation-attempt-1",
-            "listening-explanation-q1",
-            "en",
-            default);
+        var exception = await Assert.ThrowsAsync<ListeningGroundedExplanationUnavailableException>(() =>
+            service.GetSubmittedAttemptExplanationAsync(
+                "learner-1",
+                "listening-explanation-attempt-1",
+                "listening-explanation-q1",
+                "en",
+                default));
 
-        Assert.Contains("A", result.WhyCorrect);
-        Assert.Contains("B", result.WhyWrong);
-        Assert.Equal("en", result.Language);
+        Assert.Contains("gateway failed", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static LearnerDbContext CreateDb()
@@ -152,7 +150,7 @@ public sealed class ListeningReadingExplanationFailureTests
     private sealed class ThrowingGateway : IAiGatewayService
     {
         public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
-            => throw new InvalidOperationException("AI gateway failure for deterministic fallback test.");
+            => throw new InvalidOperationException("AI gateway failure for unavailable explanation test.");
 
         public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
             => new()

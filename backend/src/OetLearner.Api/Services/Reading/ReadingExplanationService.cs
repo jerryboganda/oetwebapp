@@ -97,7 +97,6 @@ public sealed class ReadingExplanationService(
             sourceSentence,
             sourcePassage);
 
-        ExplanationDto? parsed = null;
         try
         {
             var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -110,16 +109,22 @@ public sealed class ReadingExplanationService(
                 UserId = userId,
             }, ct);
 
-            parsed = TryParseExplanation(result.Completion, language);
+            return TryParseExplanation(result.Completion, language)
+                ?? throw new ReadingGroundedExplanationUnavailableException(
+                    "The grounded gateway returned no usable explanation for this question.");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             logger?.LogWarning(ex,
-                "ReadingExplanationService — AI call failed for question '{QuestionId}'; returning fallback.",
+                "ReadingExplanationService — AI call failed for question '{QuestionId}'; explanation unavailable.",
                 question.Id);
+            throw new ReadingGroundedExplanationUnavailableException(
+                "The grounded explanation is unavailable because the gateway failed.");
         }
-
-        return parsed ?? BuildFallbackExplanation(question, correctAnswer, wrongOption, language);
     }
 
     public async Task<ExplanationDto> GetSubmittedAttemptExplanationAsync(
@@ -264,18 +269,6 @@ public sealed class ReadingExplanationService(
             return null;
         }
     }
-
-    private static ExplanationDto BuildFallbackExplanation(
-        ReadingQuestion question,
-        string correctAnswer,
-        string wrongOption,
-        string language)
-        => new(
-            WhyCorrect: $"The correct answer is '{correctAnswer}' based on the text provided.",
-            WhyWrong: $"Option '{wrongOption}' is a distractor; review the passage again carefully.",
-            TrapName: "Unknown",
-            AvoidTip: "Re-read the relevant paragraph and locate the evidence directly.",
-            Language: language);
 
     // ── Cache persistence ───────────────────────────────────────────────────
 

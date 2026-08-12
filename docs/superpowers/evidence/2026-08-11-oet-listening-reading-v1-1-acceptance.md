@@ -207,6 +207,12 @@ an owner-controlled value that must not be invented in code.
   closed for missing/false snapshots; focused endpoint regressions cover both
   null rationale and disabled evidence. Fresh backend execution remains pending
   by request.
+- Listening and Reading grounded explanation services now fail closed when the
+  gateway fails or returns malformed output; they no longer synthesize a
+  fallback explanation from the answer/key. The deterministic submitted result
+  remains available and the existing frontend error state reports the advisory
+  explanation as unavailable. Focused failure regressions now assert this
+  boundary; fresh backend execution remains pending by request.
 - Listening authoring now validates processed uploaded-audio duration and
   authored per-section timing (including legacy JSON extracts), and the shared
   publish path hard-blocks missing audio, duration, cue-window, and section
