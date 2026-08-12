@@ -100,6 +100,33 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Download_published_listening_audio_is_inline_without_download_filename_or_ranges()
+    {
+        var mediaId = $"media-{Guid.NewGuid():N}";
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedPublishedPaperMediaAsync(
+            mediaId,
+            learnerId,
+            hasActiveSubscription: true,
+            role: PaperAssetRole.Audio,
+            subtestCode: "listening",
+            mediaExtension: "mp3",
+            mediaMimeType: "audio/mpeg");
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/media/{mediaId}/content");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("audio/mpeg", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("inline", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Null(response.Content.Headers.ContentDisposition?.FileName);
+        Assert.Equal("none", response.Headers.AcceptRanges.FirstOrDefault());
+
+        var directUrlResponse = await client.GetAsync($"/v1/media/{mediaId}/url");
+        Assert.Equal(HttpStatusCode.NotFound, directUrlResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Download_denies_published_paper_media_when_plan_excludes_paper()
     {
         var mediaId = $"media-{Guid.NewGuid():N}";
@@ -369,9 +396,12 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
         string? billingPlanCode = null,
         string? billingPlanEntitlementsJson = null,
         string paperTagsCsv = "access:premium",
-        PaperAssetRole role = PaperAssetRole.QuestionPaper)
+        PaperAssetRole role = PaperAssetRole.QuestionPaper,
+        string subtestCode = "reading",
+        string mediaExtension = "pdf",
+        string mediaMimeType = "application/pdf")
     {
-        await SeedStandaloneMediaAsync(mediaId, uploadedBy: "admin-1");
+        await SeedStandaloneMediaAsync(mediaId, uploadedBy: "admin-1", extension: mediaExtension, mimeType: mediaMimeType);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -383,7 +413,7 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
         var paper = new ContentPaper
         {
             Id = $"paper-{Guid.NewGuid():N}",
-            SubtestCode = "reading",
+            SubtestCode = subtestCode,
             Title = "Reading entitlement test",
             Slug = $"reading-entitlement-{Guid.NewGuid():N}",
             ProfessionId = "medicine",
@@ -506,21 +536,25 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
         });
     }
 
-    private async Task SeedStandaloneMediaAsync(string mediaId, string uploadedBy)
+    private async Task SeedStandaloneMediaAsync(
+        string mediaId,
+        string uploadedBy,
+        string extension = "pdf",
+        string mimeType = "application/pdf")
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
-        var storageKey = $"uploads/published/security/{mediaId}.pdf";
+        var storageKey = $"uploads/published/security/{mediaId}.{extension}";
         await storage.WriteAsync(storageKey, new MemoryStream([0x25, 0x50, 0x44, 0x46]), default);
 
         db.MediaAssets.Add(new MediaAsset
         {
             Id = mediaId,
-            OriginalFilename = $"{mediaId}.pdf",
-            MimeType = "application/pdf",
-            Format = "pdf",
+            OriginalFilename = $"{mediaId}.{extension}",
+            MimeType = mimeType,
+            Format = extension,
             SizeBytes = 4,
             StoragePath = storageKey,
             Status = MediaAssetStatus.Ready,

@@ -36,6 +36,11 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Published Listening audio now remains behind the authenticated entitlement
+  check while streaming inline with `Accept-Ranges: none` and no download
+  filename; the signed/direct media URL path is refused for the same assets.
+  Non-Listening media retains its existing download behavior. Focused backend
+  execution remains pending.
 - Listening bulk authoring replacements now apply the same accepted-variant
   reason invariant as per-question PATCH: any existing typed-answer variant
   change fails closed without a reason, and successful changes emit the

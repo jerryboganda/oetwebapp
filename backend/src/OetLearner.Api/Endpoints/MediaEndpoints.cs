@@ -257,6 +257,18 @@ public static class MediaEndpoints
         if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
         if (!await access.CanAccessAsync(http.User, media, ct)) return Results.NotFound();
 
+        // Scored Listening audio is a server-controlled playback asset. Do not
+        // expose the generic media download disposition or byte-range seeking
+        // for it; the learner transport fetches the protected bytes into an
+        // in-memory blob and the strict player enforces one-way playback.
+        var isPublishedListeningAudio = await db.ContentPaperAssets
+            .AsNoTracking()
+            .Where(asset => asset.MediaAssetId == id
+                && asset.Role == PaperAssetRole.Audio
+                && asset.Paper != null)
+            .AnyAsync(asset => asset.Paper!.Status == ContentStatus.Published
+                && asset.Paper!.SubtestCode == "listening", ct);
+
         FileStorageReadResult read;
         try
         {
@@ -269,7 +281,16 @@ public static class MediaEndpoints
 
         http.Response.Headers.CacheControl = "private, no-store";
         http.Response.Headers.Vary = "Authorization";
+        http.Response.Headers["X-Content-Type-Options"] = "nosniff";
         http.Response.ContentLength = read.Length;
+
+        if (isPublishedListeningAudio)
+        {
+            http.Response.Headers.ContentDisposition = "inline";
+            http.Response.Headers["Accept-Ranges"] = "none";
+            return Results.Stream(read.Stream, media.MimeType);
+        }
+
         return Results.Stream(read.Stream, media.MimeType, media.OriginalFilename);
     }
 

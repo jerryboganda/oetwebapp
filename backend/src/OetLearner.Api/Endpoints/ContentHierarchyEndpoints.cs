@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 
@@ -282,9 +284,25 @@ public static class ContentHierarchyEndpoints
         // ── Phase 11: Media Normalization ──
 
         learner.MapGet("/media/{assetId}/url", async (string assetId, HttpContext http,
-            MediaNormalizationService mediaService, OetLearner.Api.Services.Content.MediaAssetAccessService access, CancellationToken ct) =>
+            MediaNormalizationService mediaService,
+            OetLearner.Api.Services.Content.MediaAssetAccessService access,
+            LearnerDbContext db,
+            CancellationToken ct) =>
         {
             if (!await access.CanAccessAsync(http.User, assetId, ct)) return Results.NotFound();
+
+            // Published Listening audio must stay on the protected playback
+            // endpoint. Never issue a direct/signed storage path that would
+            // bypass the inline/no-range playback response.
+            var isPublishedListeningAudio = await db.ContentPaperAssets
+                .AsNoTracking()
+                .Where(asset => asset.MediaAssetId == assetId
+                    && asset.Role == PaperAssetRole.Audio
+                    && asset.Paper != null)
+                .AnyAsync(asset => asset.Paper!.Status == ContentStatus.Published
+                    && asset.Paper!.SubtestCode == "listening", ct);
+            if (isPublishedListeningAudio) return Results.NotFound();
+
             return Results.Ok(await mediaService.GetSignedMediaUrlAsync(assetId, UserId(http), ct));
         });
 
