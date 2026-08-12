@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, MessageCircleQuestion, ShoppingCart, Sparkles } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
@@ -18,6 +18,7 @@ import { formatPrice, type PublicCatalogResponseWithPresentation } from '@/lib/c
 import {
   WEBSITE_SECTIONS,
   WEBSITE_PACKAGES,
+  SEPARATE_AI_PACKAGES_GROUP,
   resolveWebsitePackageBySlug,
   resolveWebsitePackageByCode,
   applyWebsitePackageOverlay,
@@ -36,13 +37,23 @@ interface LivePrice {
   profession?: string;
 }
 
-const PROFESSION_ORDER = ['all', 'medicine', 'nursing', 'pharmacy', 'physiotherapy', 'radiography', 'allied_health'];
+const PROFESSION_ORDER = [
+  'all',
+  'medicine',
+  'nursing',
+  'pharmacy',
+  'physiotherapy',
+  'other-allied-health',
+  'radiography',
+  'allied_health',
+];
 const PROFESSION_LABEL: Record<string, string> = {
   all: 'All disciplines',
   medicine: 'Medicine',
   nursing: 'Nursing',
   pharmacy: 'Pharmacy',
   physiotherapy: 'Physiotherapy',
+  'other-allied-health': 'Other Allied health profession',
   radiography: 'Radiography',
   allied_health: 'Allied health',
 };
@@ -310,6 +321,16 @@ export function SubscriptionsCatalog() {
     return grouped;
   }, [activeProfession, ownedPlan, priceMap, websitePackages]);
 
+  // First visible section of the "Separate AI Packages" group — the parent
+  // group heading renders immediately before it.
+  const firstSeparateAiSectionKey = useMemo(
+    () =>
+      SEPARATE_AI_PACKAGES_GROUP.sectionKeys.find(
+        (key) => (packagesBySection.get(key) ?? []).length > 0,
+      ) ?? null,
+    [packagesBySection],
+  );
+
   // Deep-link: /subscriptions?package=<slug|code> from the website CTAs — scroll to
   // and briefly highlight the requested package once the catalogue has loaded.
   useEffect(() => {
@@ -354,7 +375,18 @@ export function SubscriptionsCatalog() {
           const packages = packagesBySection.get(section.key) ?? [];
           if (packages.length === 0) return null;
           return (
-            <section key={section.key} id={`section-${section.key}`} className="space-y-4">
+            <Fragment key={section.key}>
+              {section.key === firstSeparateAiSectionKey ? (
+                <div id="section-separate-ai" className="border-t border-border pt-8">
+                  <h2 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
+                    {SEPARATE_AI_PACKAGES_GROUP.title}
+                  </h2>
+                  <p className="mt-1 text-[13px] text-muted sm:text-sm">
+                    {SEPARATE_AI_PACKAGES_GROUP.description}
+                  </p>
+                </div>
+              ) : null}
+            <section id={`section-${section.key}`} className="space-y-4">
               <LearnerSurfaceSectionHeader
                 title={section.title}
                 description={section.description}
@@ -394,6 +426,7 @@ export function SubscriptionsCatalog() {
                 ))}
               </div>
             </section>
+            </Fragment>
           );
         })
       )}

@@ -17,6 +17,7 @@ import { CartNavButton } from '@/components/cart';
 import {
   resolveWebsitePackageByCode,
   resolveWebsitePackageBySlug,
+  SEPARATE_AI_PACKAGES_GROUP,
   type WebsitePackage,
 } from '@/lib/catalog-website-packages';
 
@@ -268,8 +269,8 @@ export default function AiPackagesPage() {
         <Tabs
           tabs={[
             { id: 'full', label: 'AI Grading Packages', icon: <PackageCheck className="h-4 w-4" /> },
-            { id: 'mock', label: 'Full Mock Exam Packages', icon: <Bot className="h-4 w-4" /> },
             { id: 'separate', label: 'Separate Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
+            { id: 'mock', label: 'Full Mock Exam Packages', icon: <Bot className="h-4 w-4" /> },
           ]}
           activeTab={activeTab}
           onChange={(tab: string) => setActiveTab(tab as PackageTab)}
@@ -288,6 +289,12 @@ export default function AiPackagesPage() {
             </TabPanel>
             <TabPanel id="separate" activeTab={activeTab}>
               <div className="mt-6 space-y-5 sm:space-y-8">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-navy">
+                    {SEPARATE_AI_PACKAGES_GROUP.title}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted">{SEPARATE_AI_PACKAGES_GROUP.description}</p>
+                </div>
                 {SEPARATE_SECTIONS.map((section) => (
                   <section key={section.key}>
                     <h2 className="flex items-center gap-2 text-xl font-semibold text-navy">{section.icon}{section.label}</h2>

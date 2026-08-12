@@ -12,6 +12,7 @@ import { formatMoney } from '@/lib/money';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 import {
   resolveWebsitePackageByCode,
+  SEPARATE_AI_PACKAGES_GROUP,
   type WebsitePackage,
 } from '@/lib/catalog-website-packages';
 
@@ -209,8 +210,8 @@ export function AiPackagesStorefront() {
             {(
               [
                 { id: 'full' as const, label: 'AI Grading Packages' },
-                { id: 'mock' as const, label: 'Full Mock Exam Packages' },
                 { id: 'separate' as const, label: 'Separate Packages' },
+                { id: 'mock' as const, label: 'Full Mock Exam Packages' },
               ]
             ).map((tab) => (
               <button
@@ -253,6 +254,12 @@ export function AiPackagesStorefront() {
             )
           ) : (
             <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-semibold tracking-tight text-navy">
+                  {SEPARATE_AI_PACKAGES_GROUP.title}
+                </h3>
+                <p className="mt-1 text-sm text-muted">{SEPARATE_AI_PACKAGES_GROUP.description}</p>
+              </div>
               {AI_PACKAGE_SUBTEST_SECTIONS.map((sectionDef) => {
                 const sectionPackages = canonicalPackages.separate[sectionDef.key];
                 if (!sectionPackages || sectionPackages.length === 0) return null;
