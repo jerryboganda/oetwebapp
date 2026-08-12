@@ -118,7 +118,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _config = config;
         _environment = environment;
         var initialRow = new RuntimeSettingsRow { Id = "default" };
-        _currentSnapshot = new RuntimeSettingsSnapshot(Merge(initialRow), initialRow);
+        _currentSnapshot = new RuntimeSettingsSnapshot(Merge(initialRow, null), initialRow);
     }
 
     public RuntimeSettingsSnapshot CurrentSnapshot => Volatile.Read(ref _currentSnapshot);
@@ -178,7 +178,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             // database load must not be poisoned by one canceled request.
             var row = await LoadRowAsync(CancellationToken.None)
                 ?? new RuntimeSettingsRow { Id = "default" };
-            var snapshot = new RuntimeSettingsSnapshot(Merge(row), row);
+            var stripeProfile = await LoadDefaultStripeProfileAsync();
+            var snapshot = new RuntimeSettingsSnapshot(Merge(row, stripeProfile), row);
 
             // Never let a load started before Invalidate repopulate the cache
             // or overwrite the last-known view with stale data.
@@ -243,6 +244,27 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         }
     }
 
+    /// <summary>Loads the admin-selected default active Stripe account (spec 2026-08
+    /// §8). Its keys take precedence over the legacy single RuntimeSettings Stripe
+    /// override in <see cref="Merge"/>. Missing table (migration lag during a
+    /// blue/green rollover) degrades to null — the legacy key keeps working.</summary>
+    private async Task<StripeAccountProfile?> LoadDefaultStripeProfileAsync()
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        try
+        {
+            return await db.StripeAccountProfiles.AsNoTracking()
+                .Where(p => p.IsActive && p.IsDefault)
+                .OrderBy(p => p.CreatedAt)
+                .FirstOrDefaultAsync();
+        }
+        catch (DbException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>PostgreSQL <c>undefined_column</c> (42703) — a RuntimeSettings
     /// override column the code expects is not in the table yet.</summary>
     private static bool IsMissingRuntimeSettingsColumn(DbException ex)
@@ -255,7 +277,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
            && (ex.Message.Contains("no such table", StringComparison.OrdinalIgnoreCase)
                || ex.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase));
 
-    private EffectiveSettings Merge(RuntimeSettingsRow r)
+    private EffectiveSettings Merge(RuntimeSettingsRow r, StripeAccountProfile? stripeProfile)
     {
         var brevo = _brevo.Value;
         var billing = _billing.Value;
@@ -265,6 +287,14 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var smtp = _smtp.CurrentValue;
         var scanner = _uploadScanner.Value;
         var zoomOptions = _zoom.Value;
+
+        // Multiple Stripe accounts (spec 2026-08 §8): the admin-selected default
+        // active account outranks the legacy single RuntimeSettings key, which
+        // outranks env/appsettings. One overlay point covers every consumer —
+        // checkout, webhook verification, and admin diagnostics.
+        var stripeProfileSecret = stripeProfile is null ? null : Unprotect(stripeProfile.SecretKeyEncrypted);
+        var stripeProfileWebhook = stripeProfile is null ? null : Unprotect(stripeProfile.WebhookSecretEncrypted);
+        var stripeProfilePublishable = NullIfEmpty(stripeProfile?.PublishableKey);
 
         var email = new EmailSettings(
             BrevoApiKey: Unprotect(r.BrevoApiKeyEncrypted) ?? NullIfEmpty(brevo.ApiKey),
@@ -289,9 +319,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SmtpEnableSsl: r.SmtpEnableSsl ?? smtp.EnableSsl);
 
         var bill = new BillingSettings(
-            StripeSecretKey: Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripeOptions.SecretKey),
-            StripePublishableKey: Coalesce(r.StripePublishableKey, stripeOptions.PublishableKey),
-            StripeWebhookSecret: Unprotect(r.StripeWebhookSecretEncrypted) ?? NullIfEmpty(stripeOptions.WebhookSecret),
+            StripeSecretKey: NullIfEmpty(stripeProfileSecret) ?? Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripeOptions.SecretKey),
+            StripePublishableKey: stripeProfilePublishable ?? Coalesce(r.StripePublishableKey, stripeOptions.PublishableKey),
+            StripeWebhookSecret: NullIfEmpty(stripeProfileWebhook) ?? Unprotect(r.StripeWebhookSecretEncrypted) ?? NullIfEmpty(stripeOptions.WebhookSecret),
             StripeSuccessUrl: Coalesce(r.StripeSuccessUrl, stripeOptions.SuccessUrl),
             StripeCancelUrl: Coalesce(r.StripeCancelUrl, stripeOptions.CancelUrl),
             PayPalClientId: Coalesce(r.PayPalClientId, paypal.ClientId),

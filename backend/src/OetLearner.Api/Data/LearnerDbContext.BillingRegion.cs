@@ -17,6 +17,9 @@ public partial class LearnerDbContext
     public DbSet<BankAccountConfig> BankAccountConfigs => Set<BankAccountConfig>();
     public DbSet<PaymentMethodConfig> PaymentMethodConfigs => Set<PaymentMethodConfig>();
 
+    // ── Multiple Stripe accounts (spec 2026-08 §8) ──
+    public DbSet<StripeAccountProfile> StripeAccountProfiles => Set<StripeAccountProfile>();
+
     // ── Phase 5 ──
     public DbSet<DunningCampaign> DunningCampaigns => Set<DunningCampaign>();
     public DbSet<PaymentMethodUpdateLink> PaymentMethodUpdateLinks => Set<PaymentMethodUpdateLink>();

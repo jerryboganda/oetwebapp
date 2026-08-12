@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   Calendar,
   CheckCircle2,
@@ -265,6 +266,20 @@ export default function BillingPage() {
             { icon: Calendar, label: 'Subscription ends', value: formatOptionalDate(data.nextRenewal) },
           ]}
         />
+
+        {/* Offline payers (bank transfer / wallet) upload their receipt for admin approval. */}
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-muted">
+            <span className="font-medium text-navy">Paid by bank transfer or wallet?</span>{' '}
+            Upload your payment proof — access is granted after admin approval (within 12 hours).
+          </p>
+          <Link
+            href="/billing/manual-payment"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary/90"
+          >
+            Upload payment proof
+          </Link>
+        </div>
 
         {/* Status banners — only render when relevant */}
         {(paymentBanner || isPastDue || freezeLoadFailed || error || success) && (

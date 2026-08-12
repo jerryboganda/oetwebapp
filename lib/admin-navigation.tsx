@@ -351,6 +351,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.BillingRead],
       },
       {
+        href: '/admin/billing/stripe-accounts',
+        label: 'Stripe Accounts',
+        icon: <CreditCard className={iconClassName} />,
+        matchPrefix: '/admin/billing/stripe-accounts',
+        requiredPermissions: [AdminPermission.BillingRead],
+      },
+      {
         href: '/admin/freeze',
         label: 'Subscription Freezes',
         icon: <CreditCard className={iconClassName} />,
@@ -532,6 +539,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/billing/wallet-tiers', title: 'Wallet Tiers' },
   { prefix: '/admin/billing/manual-payments', title: 'Payment Proofs' },
   { prefix: '/admin/billing/payment-methods', title: 'Payment Methods' },
+  { prefix: '/admin/billing/stripe-accounts', title: 'Stripe Accounts' },
   { prefix: '/admin/billing', title: 'Billing Ops' },
   { prefix: '/admin/free-tier', title: 'Free Tier' },
   { prefix: '/admin/credit-lifecycle', title: 'Credit Lifecycle' },

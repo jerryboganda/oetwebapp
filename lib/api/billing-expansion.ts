@@ -46,6 +46,8 @@ export interface ManualPaymentDto {
   accessGrantedSubscriptionId?: string | null;
   /** Fulfilment status of the subscription this proof granted, when it granted one. */
   fulfilmentStatus?: FulfilmentStatus | string | null;
+  /** Pricing quote the proof was submitted against — lets a rejected learner resubmit for the same order. */
+  quoteId?: string | null;
 }
 
 export interface ManualPaymentSubmitRequest {
@@ -370,4 +372,67 @@ export function readBillingMetrics(params: { from: string; to: string; code?: st
 export function rollupBillingMetrics(date?: string): Promise<string> {
   const qs = date ? `?date=${encodeURIComponent(date)}` : '';
   return apiClient.post<string>(`/v1/admin/billing/metrics/rollup${qs}`, {});
+}
+
+// ── Stripe accounts (admin-managed, multi-account) ────────────────
+
+/** Masked admin view of a stored Stripe account — the server never returns
+ * decrypted secrets, only presence flags and a `sk_live_••••1234`-style hint.
+ * The default active account's keys drive checkout AND webhook verification. */
+export interface StripeAccountProfileDto {
+  id: string;
+  label: string;
+  mode: 'test' | 'live' | string;
+  publishableKey: string | null;
+  hasSecretKey: boolean;
+  secretKeyHint: string | null;
+  hasWebhookSecret: boolean;
+  /** acct_… recorded by the last successful test-connection call. */
+  stripeAccountId: string | null;
+  routingCountriesCsv: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+  lastTestResult: string | null;
+  lastTestedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StripeAccountUpsertRequest {
+  label?: string;
+  mode?: 'test' | 'live' | string;
+  publishableKey?: string | null;
+  /** Full sk_… key on create/rotate; omit or send blank on update to keep the stored key. */
+  secretKey?: string | null;
+  /** whsec_…; omit to keep, empty string to clear. */
+  webhookSecret?: string | null;
+  routingCountriesCsv?: string | null;
+  isActive?: boolean | null;
+  isDefault?: boolean;
+}
+
+export function listStripeAccounts(): Promise<StripeAccountProfileDto[]> {
+  return apiClient.get<StripeAccountProfileDto[]>('/v1/admin/billing/stripe-accounts/');
+}
+
+export function createStripeAccount(payload: StripeAccountUpsertRequest): Promise<StripeAccountProfileDto> {
+  return apiClient.post<StripeAccountProfileDto>('/v1/admin/billing/stripe-accounts/', payload);
+}
+
+export function updateStripeAccount(id: string, payload: StripeAccountUpsertRequest): Promise<StripeAccountProfileDto> {
+  return apiClient.put<StripeAccountProfileDto>(`/v1/admin/billing/stripe-accounts/${encodeURIComponent(id)}`, payload);
+}
+
+/** Atomically switch which account powers checkout + webhooks (audited server-side). */
+export function setDefaultStripeAccount(id: string): Promise<StripeAccountProfileDto> {
+  return apiClient.post<StripeAccountProfileDto>(`/v1/admin/billing/stripe-accounts/${encodeURIComponent(id)}/set-default`, {});
+}
+
+/** Calls Stripe GET /v1/account with the stored key and records acct id + result. */
+export function testStripeAccountConnection(id: string): Promise<StripeAccountProfileDto> {
+  return apiClient.post<StripeAccountProfileDto>(`/v1/admin/billing/stripe-accounts/${encodeURIComponent(id)}/test-connection`, {});
+}
+
+export function deleteStripeAccount(id: string): Promise<void> {
+  return apiClient.delete(`/v1/admin/billing/stripe-accounts/${encodeURIComponent(id)}`);
 }

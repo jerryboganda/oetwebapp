@@ -2357,6 +2357,7 @@ app.MapBillingRegionEndpoints();
 app.MapBillingExpansionEndpoints();
 app.MapBillingExpansionV2Endpoints();
 app.MapBillingExpansionV3Endpoints();
+app.MapStripeAccountAdminEndpoints();
 app.MapOet2026CatalogEndpoints();
 app.MapBillingCatalogEndpoints();
 app.MapBillingCartEndpoints();

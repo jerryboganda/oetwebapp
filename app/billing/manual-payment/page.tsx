@@ -118,6 +118,19 @@ function statusVariant(status: string) {
   return 'default' as const;
 }
 
+/** Deep-link that reopens the submission form pre-filled for the same order, so a
+ * learner whose proof was rejected can fix the issue and resubmit in one tap. */
+function buildResubmitHref(row: ManualPaymentDto): string {
+  const params = new URLSearchParams();
+  if (row.quoteId) params.set('quoteId', row.quoteId);
+  if (row.courseName) params.set('course', row.courseName);
+  if (row.amountAmount > 0) params.set('amount', String(row.amountAmount));
+  if (row.currency) params.set('currency', row.currency);
+  if (row.paymentCategory === 'inside_egypt') params.set('region', 'egypt');
+  const query = params.toString();
+  return query ? `/billing/manual-payment?${query}` : '/billing/manual-payment';
+}
+
 function ManualPaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -433,13 +446,37 @@ function ManualPaymentContent() {
         ) : (
           <div className="space-y-2">
             {history.map((row) => (
-              <div key={row.id} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-medium">{row.method.replaceAll('_', ' ')} · {row.amountAmount.toFixed(2)} {row.currency}</p>
-                  <p className="text-xs text-muted">{row.courseName || 'Course not set'} · Ref: {row.reference || '-'}</p>
-                  <p className="text-xs text-muted">{new Date(row.submittedAt).toLocaleString()}</p>
+              <div key={row.id} className="rounded-lg border border-border bg-surface p-3 text-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium">{row.method.replaceAll('_', ' ')} · {row.amountAmount.toFixed(2)} {row.currency}</p>
+                    <p className="text-xs text-muted">{row.courseName || 'Course not set'} · Ref: {row.reference || '-'}</p>
+                    <p className="text-xs text-muted">{new Date(row.submittedAt).toLocaleString()}</p>
+                  </div>
+                  <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
                 </div>
-                <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                {row.status === 'pending' || row.status === 'needs_review' ? (
+                  <p className="mt-2 text-xs text-muted">
+                    Pending admin approval — access will be granted within 12 hours.
+                  </p>
+                ) : null}
+                {row.status === 'rejected' ? (
+                  <div className="mt-2 space-y-2">
+                    <InlineAlert variant="error">
+                      <span className="font-medium">Payment rejected.</span>{' '}
+                      {row.adminNotes?.trim()
+                        ? `Reason: ${row.adminNotes.trim()}`
+                        : 'Please check your payment details and upload a clearer proof.'}
+                    </InlineAlert>
+                    <Link
+                      href={buildResubmitHref(row)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-muted/10"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Fix and resubmit proof
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -448,11 +485,13 @@ function ManualPaymentContent() {
 
       <Modal open={successOpen} onClose={() => setSuccessOpen(false)} title="Payment submitted">
         <div className="space-y-4">
-          <p className="text-sm text-muted">
-            Thanks! Your payment proof was submitted and our team will verify it and activate your access shortly.
+          <p className="text-sm font-medium text-navy">
+            Payment submitted successfully. Your payment is pending admin approval. Access will be
+            granted within 12 hours.
           </p>
           <p className="text-sm text-muted">
-            Tap below to send us a confirmation on WhatsApp — please attach the same screenshot in the chat before sending.
+            Optional: tap below to also send us a confirmation on WhatsApp — attach the same
+            screenshot in the chat before sending.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setSuccessOpen(false)}>Done</Button>

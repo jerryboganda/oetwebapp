@@ -7,6 +7,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Reading;
@@ -371,7 +372,16 @@ public static class LearnerEndpoints
         // PayPal honour sandbox fallbacks (so they appear in dev); the regional
         // gateways (Checkout.com / Paymob / PayTabs) only appear once their live
         // credentials are configured, since they have no sandbox stand-in.
+        //
+        // Region rule (spec 2026-08 §7): EasyKash and the other Egypt-market
+        // gateways are for learners in Egypt ONLY. Outside Egypt the picker must
+        // offer just Stripe and PayPal. Region comes from the learner's stored
+        // billing profile first (same precedence as /v1/billing/region), then
+        // the geo/Accept-Language headers.
         billing.MapGet("/payment-gateways", async (
+            HttpContext http,
+            LearnerDbContext db,
+            IRegionDetector regionDetector,
             IRuntimeSettingsProvider runtimeSettings,
             IOptions<BillingOptions> billingOptions,
             CancellationToken ct) =>
@@ -384,14 +394,20 @@ public static class LearnerEndpoints
             var paypalOk = sandbox || (!string.IsNullOrWhiteSpace(billingSettings.PayPalClientId)
                                        && !string.IsNullOrWhiteSpace(billingSettings.PayPalClientSecret));
 
+            var account = await db.ApplicationUserAccounts.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == http.UserId(), ct);
+            var detection = regionDetector.Detect(
+                http, account?.Country, account?.PreferredRegion, account?.PreferredCurrency);
+            var inEgypt = string.Equals(detection.Region, BillingRegions.Egypt, StringComparison.OrdinalIgnoreCase);
+
             var candidates = new (string Name, string Label, string IconName, string Mode, bool Available)[]
             {
                 ("stripe", "Credit or debit card", "credit-card", "redirect", stripeOk),
                 ("paypal", "PayPal", "paypal", "embedded", paypalOk),
-                ("easykash", "EasyKash", "wallet", "redirect", effective.EasyKash.IsConfigured),
-                ("checkoutcom", "Card (Checkout.com)", "credit-card", "redirect", effective.CheckoutCom.IsConfigured),
-                ("paymob", "Paymob (cards & wallets)", "wallet", "redirect", effective.Paymob.IsConfigured),
-                ("paytabs", "PayTabs", "credit-card", "redirect", effective.PayTabs.IsConfigured),
+                ("easykash", "EasyKash", "wallet", "redirect", inEgypt && effective.EasyKash.IsConfigured),
+                ("checkoutcom", "Card (Checkout.com)", "credit-card", "redirect", inEgypt && effective.CheckoutCom.IsConfigured),
+                ("paymob", "Paymob (cards & wallets)", "wallet", "redirect", inEgypt && effective.Paymob.IsConfigured),
+                ("paytabs", "PayTabs", "credit-card", "redirect", inEgypt && effective.PayTabs.IsConfigured),
             };
 
             var available = candidates.Where(c => c.Available).ToList();

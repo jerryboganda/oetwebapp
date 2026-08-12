@@ -620,7 +620,8 @@ public sealed record ManualPaymentDto(
     string? CourseId,
     string PaymentCategory,
     string? AccessGrantedSubscriptionId,
-    string? FulfilmentStatus)
+    string? FulfilmentStatus,
+    string? QuoteId)
 {
     public static ManualPaymentDto FromEntity(ManualPaymentRequest r, string? fulfilmentStatus = null) => new(
         r.Id,
@@ -646,7 +647,8 @@ public sealed record ManualPaymentDto(
         r.CourseId,
         r.PaymentCategory,
         r.AccessGrantedSubscriptionId,
-        fulfilmentStatus);
+        fulfilmentStatus,
+        r.QuoteId);
 }
 
 public sealed record ManualPaymentListResponse(
