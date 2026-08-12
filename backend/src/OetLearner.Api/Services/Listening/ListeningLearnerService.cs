@@ -588,6 +588,7 @@ public sealed class ListeningLearnerService(
                     listeningPolicy.FullPaperTimerMinutes,
                     listeningPolicy.GracePeriodSeconds,
                     listeningPolicy.OnExpirySubmitPolicy,
+                    listeningPolicy.LearningEvidenceLoopEnabled,
                 },
                 audioLockMode = audioTransport.LockMode,
                 canPause = audioTransport.CanPause,
@@ -1321,6 +1322,7 @@ public sealed class ListeningLearnerService(
                 policy.FullPaperTimerMinutes,
                 policy.GracePeriodSeconds,
                 policy.OnExpirySubmitPolicy,
+                policy.LearningEvidenceLoopEnabled,
                 mode = normalizedMode,
                 audioLockMode = audioTransport.LockMode,
                 canPause = audioTransport.CanPause,
@@ -2577,7 +2579,8 @@ public sealed class ListeningLearnerService(
             ScoreConversionTableVersionKey: evaluation?.ScoreConversionTableVersionKey,
             ScoreConversionErrorCode: evaluation?.ScaledScore is null ? "score_conversion_unavailable" : null,
             PersistedScoreConversionGrade: evaluation?.ScoreConversionGrade,
-            PersistedScoreConversionPassed: evaluation?.ScoreConversionPassed);
+            PersistedScoreConversionPassed: evaluation?.ScoreConversionPassed,
+            EvidenceLoopEnabled: ResolveTranscriptEvidencePolicy(attempt.PolicySnapshotJson));
 
     private ListeningReviewDto BuildReview(
         ListeningAttempt attempt,
@@ -2601,7 +2604,8 @@ public sealed class ListeningLearnerService(
                 ?? (attempt.ScaledScore is null ? "score_conversion_unavailable" : null),
             PersistedScoreConversionGrade: attempt.ScoreConversionGrade,
             PersistedScoreConversionPassed: attempt.ScoreConversionPassed,
-            DeterministicAnswers: deterministicAnswers);
+            DeterministicAnswers: deterministicAnswers,
+            EvidenceLoopEnabled: ResolveTranscriptEvidencePolicy(attempt.PolicySnapshotJson));
 
     private ListeningReviewDto BuildReviewCore(
         string AttemptId,
@@ -2617,7 +2621,8 @@ public sealed class ListeningLearnerService(
         string? ScoreConversionErrorCode = null,
         string? PersistedScoreConversionGrade = null,
         bool? PersistedScoreConversionPassed = null,
-        IReadOnlyDictionary<string, ListeningAnswer>? DeterministicAnswers = null)
+        IReadOnlyDictionary<string, ListeningAnswer>? DeterministicAnswers = null,
+        bool EvidenceLoopEnabled = false)
     {
         var orderedQuestions = Source.Questions.OrderBy(q => q.Number).ToList();
         var items = orderedQuestions
@@ -2625,7 +2630,8 @@ public sealed class ListeningLearnerService(
                 q,
                 Answers.GetValueOrDefault(q.Id),
                 orderedQuestions,
-                DeterministicAnswers?.GetValueOrDefault(q.Id)))
+                DeterministicAnswers?.GetValueOrDefault(q.Id),
+                EvidenceLoopEnabled))
             .Select(item => ApplyHumanScoreOverride(item, ScoreOverrides))
             .ToList();
         var maxRaw = PersistedMaxRawScore is int persistedMax
@@ -2686,7 +2692,8 @@ public sealed class ListeningLearnerService(
         ListeningQuestion q,
         string? learnerAnswer,
         IReadOnlyList<ListeningQuestion> allQuestions,
-        ListeningAnswer? deterministicAnswer = null)
+        ListeningAnswer? deterministicAnswer = null,
+        bool transcriptEvidenceAllowed = false)
     {
         var authoredMatch = q.AcceptedAnswers.Any(answer => MatchesObjectiveAnswer(learnerAnswer, answer));
         var isCorrect = deterministicAnswer?.IsCorrect ?? authoredMatch;
@@ -2698,7 +2705,7 @@ public sealed class ListeningLearnerService(
         var pointsEarned = deterministicAnswer is null
             ? isCorrect ? q.Points : 0
             : Math.Clamp(deterministicAnswer.PointsEarned, 0, Math.Max(0, q.Points));
-        var transcript = q.AllowTranscriptReveal
+        var transcript = transcriptEvidenceAllowed && q.AllowTranscriptReveal
             ? new ListeningTranscriptSnippetDto(
                 Allowed: true,
                 Excerpt: q.TranscriptExcerpt,
@@ -2731,6 +2738,37 @@ public sealed class ListeningLearnerService(
             TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs,
             ScoreOverride: null,
             MissReason: deterministicAnswer?.MissReason);
+    }
+
+    private static bool ResolveTranscriptEvidencePolicy(string? policySnapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(policySnapshotJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            if (root.TryGetProperty("learningEvidenceLoopEnabled", out var direct)
+                && direct.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                return direct.GetBoolean();
+            }
+
+            if (root.TryGetProperty("listeningPolicy", out var nested)
+                && nested.ValueKind == JsonValueKind.Object
+                && nested.TryGetProperty("learningEvidenceLoopEnabled", out var captured)
+                && captured.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                return captured.GetBoolean();
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private static string MissReasonErrorType(ListeningMissReason missReason) => missReason switch

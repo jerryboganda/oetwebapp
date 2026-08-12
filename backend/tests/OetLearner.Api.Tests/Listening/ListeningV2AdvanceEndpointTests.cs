@@ -385,6 +385,47 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         Assert.Equal(JsonValueKind.Null, explanation.ValueKind);
     }
 
+    [Fact]
+    public async Task Submit_review_hides_transcript_when_snapshot_disables_evidence_loop()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        var questionId = await SeedRelationalAttemptAsync(userId, attemptId);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt = await db.ListeningAttempts.FindAsync([attemptId], CancellationToken.None);
+            Assert.NotNull(attempt);
+            attempt!.PolicySnapshotJson = "{\"learningEvidenceLoopEnabled\":false}";
+            await db.SaveChangesAsync();
+        }
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var saveResponse = await client.PutAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/answers/{questionId}",
+            new { userAnswer = "five" });
+        saveResponse.EnsureSuccessStatusCode();
+
+        var submitResponse = await client.PostAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/submit",
+            null);
+        submitResponse.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        var item = json.RootElement.GetProperty("itemReview")[0];
+
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("transcript").ValueKind);
+        Assert.DoesNotContain(
+            questionId,
+            json.RootElement.GetProperty("transcriptAccess").GetProperty("allowedQuestionIds")
+                .EnumerateArray()
+                .Select(value => value.GetString()),
+            StringComparer.Ordinal);
+    }
+
     // WS4 regression — a paper WITHOUT an authored sequence must yield the
     // exact same window duration the legacy policy-only timing produced.
     [Fact]
@@ -654,7 +695,7 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
             Status = ListeningAttemptStatus.InProgress,
             Mode = ListeningAttemptMode.Paper,
             MaxRawScore = 1,
-            PolicySnapshotJson = "{}",
+            PolicySnapshotJson = "{\"learningEvidenceLoopEnabled\":true}",
             LastQuestionVersionMapJson = "{}",
         });
 
