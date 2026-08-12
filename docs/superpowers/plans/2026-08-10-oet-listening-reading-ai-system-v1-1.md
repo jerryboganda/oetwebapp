@@ -12,7 +12,7 @@
 
 - Website computer-based delivery is in scope. Native mobile packaging and a paper-exam simulation are not acceptance substitutes.
 - Marking is deterministic and server authoritative. AI may explain stored marking evidence after submission, but never scores, changes a response, alters a timer/lock, reconstructs audio, reveals answers before submission, or claims an official OET result.
-- Listening contains 42 marks: Part A 24 typed responses, Part B 6 three-option MCQs, Part C 12 four-option MCQs. Reading contains 42 marks: Part A 20, Part B 6 three-option MCQs, Part C 16 four-option MCQs.
+- Listening contains 42 marks: Part A 24 typed responses, Part B 6 three-option MCQs, Part C 12 three-option MCQs. Reading contains 42 marks: Part A 20, Part B 6 three-option MCQs, Part C 16 four-option MCQs.
 - Every attempt stores immutable test, question, answer-key, marking-policy, score-conversion, and rationale references/snapshots needed to reproduce the outcome.
 - No unapproved scaled score or pass claim is emitted. Missing conversion data produces an explicit unavailable state and an admin release error; it never falls back to the current piecewise formula in `backend/src/OetLearner.Api/Services/OetScoring.cs` or `lib/scoring.ts` for Listening/Reading.
 - Exact answer labels, error categories, strict-spelling disclosure, and `AI Practice Score — not an official OET result.` are treated as contract strings and covered by tests.

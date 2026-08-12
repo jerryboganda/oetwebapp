@@ -54,6 +54,12 @@ an owner-controlled value that must not be invented in code.
   --check` passed, and the bounded backend build was stopped after producing
   no output within the requested lightweight-check window. Backend compilation,
   focused execution, and deployed cross-role acceptance remain pending.
+- A follow-up source audit corrected the remaining learner-facing Listening
+  Part C practice copy from four-option to three-option MCQs and corrected the
+  internal implementation-plan statement. The repository-wide option-type
+  audit now leaves four-option references only on Reading Part C and Reading
+  fixtures; the Listening starter-copy sanitizer already removes its stale
+  illustrative fourth option before publication.
 - Listening V2 navigation repair now preserves existing `WindowStartedAt` and
   `WindowDurationMs` values when reconnect/refresh encounters malformed state;
   only legacy rows missing an anchor are initialized. This prevents repair

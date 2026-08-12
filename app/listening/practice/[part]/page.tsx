@@ -37,7 +37,7 @@ const PART_DETAILS: Record<PartCode, { title: string; subtitle: string; descript
     title: 'Practice Part C',
     subtitle: 'Healthcare presentations',
     description:
-      'Two longer extracts: an interview or presentation on a healthcare topic. You answer six four-option multiple-choice questions per extract (12 items total).',
+      'Two longer extracts: an interview or presentation on a healthcare topic. You answer six three-option multiple-choice questions per extract (12 items total).',
   },
 };
 
