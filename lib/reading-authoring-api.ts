@@ -320,6 +320,8 @@ export interface ReadingAttemptGraded {
     isCorrect: boolean;
     pointsEarned: number;
     maxPoints: number;
+    /** Authored source sentence disclosed only in submitted review payloads. */
+    evidenceSentence?: string | null;
   }>;
   reviewRoute?: string | null;
 }

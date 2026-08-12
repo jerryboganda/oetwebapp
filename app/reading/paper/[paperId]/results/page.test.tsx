@@ -93,6 +93,7 @@ describe('Reading paper results page', () => {
             missReason: 'spelling',
             correctAnswer: 'aspirin',
             explanationMarkdown: 'The accepted spelling is "aspirin".',
+            evidenceSentence: 'The discharge plan lists aspirin as the medication.',
             elapsedMs: 42000,
           },
         ],
@@ -106,6 +107,9 @@ describe('Reading paper results page', () => {
     expect(screen.getByTestId('reading-part-accuracy-A')).toHaveTextContent('75% correct');
     expect(screen.getByText('aspirin')).toBeInTheDocument();
     expect(screen.getByTestId('reading-explanation')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-source-evidence')).toHaveTextContent(
+      'The discharge plan lists aspirin as the medication.',
+    );
   });
 
   it('renders tutor feedback entries when the attempt returns them', async () => {

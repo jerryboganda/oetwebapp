@@ -42,6 +42,7 @@ type ReviewItem = ReadingAttemptReviewDto['items'][number] & {
   explanationMarkdown?: string | null;
   selectedDistractorCategory?: string | null;
   missReason?: string | null;
+  evidenceSentence?: string | null;
   elapsedMs?: number | null;
   totalElapsedMs?: number | null;
   boxExplanations?: Record<string, string> | null;
@@ -558,6 +559,12 @@ function ReviewItemDetails({ attemptId, item }: { attemptId: string; item: Revie
               <p className="mt-1 text-sm leading-6 text-navy dark:text-white">{text}</p>
             </div>
           ))}
+        </div>
+      ) : null}
+      {item.evidenceSentence ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-400/30 dark:bg-blue-950/20" data-testid="reading-source-evidence">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">Source evidence</p>
+          <p className="mt-1 text-sm leading-6 text-navy dark:text-white/90">{item.evidenceSentence}</p>
         </div>
       ) : null}
       <GroundedReadingExplanation attemptId={attemptId} item={item} unanswered={unanswered} />

@@ -714,6 +714,7 @@ public static class ReadingLearnerEndpoints
                             MaxPoints = q.Points,
                             CorrectAnswer = showCorrectAnswer ? DecodeCorrectAnswer(q.CorrectAnswerJson) : null,
                             ExplanationMarkdown = includeExplanation ? q.ExplanationMarkdown : null,
+                            EvidenceSentence = showCorrectAnswer ? q.EvidenceSentence : null,
                             SelectedDistractorCategory = answer?.SelectedDistractorCategory?.ToString(),
                             MissReason = answer?.MissReason,
                             ElapsedMs = answer?.ElapsedMs,
@@ -1729,6 +1730,8 @@ public static class ReadingLearnerEndpoints
         public string? CorrectAnswer { get; init; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? ExplanationMarkdown { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? EvidenceSentence { get; init; }
         public string? SelectedDistractorCategory { get; init; }
         public string? MissReason { get; init; }
         public int? ElapsedMs { get; init; }
