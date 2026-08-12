@@ -792,18 +792,17 @@ public sealed class ListeningGradingService
         return map;
     }
 
-    private static Task<AssessmentMarkingPolicyDocument> ResolveMarkingPolicyAsync(
+    private async Task<AssessmentMarkingPolicyDocument> ResolveMarkingPolicyAsync(
         ListeningAttempt attempt,
         CancellationToken ct)
     {
-        _ = ct;
         var requiresGovernedSnapshot = !string.IsNullOrWhiteSpace(attempt.MarkingPolicyVersionId);
         if (string.IsNullOrWhiteSpace(attempt.PolicySnapshotJson))
         {
             if (requiresGovernedSnapshot)
                 throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
 
-            return Task.FromResult(new AssessmentMarkingPolicyDocument());
+            return new AssessmentMarkingPolicyDocument();
         }
 
         try
@@ -812,10 +811,30 @@ public sealed class ListeningGradingService
             if (document.RootElement.ValueKind == JsonValueKind.Object
                 && document.RootElement.TryGetProperty("markingPolicy", out var policyElement))
             {
+                if (requiresGovernedSnapshot)
+                {
+                    var versionKey = document.RootElement.TryGetProperty("markingPolicyVersionKey", out var versionElement)
+                        && versionElement.ValueKind == JsonValueKind.String
+                        ? versionElement.GetString()?.Trim()
+                        : null;
+                    if (string.IsNullOrWhiteSpace(versionKey))
+                        throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+
+                    var storedVersionKey = await _db.AssessmentMarkingPolicyVersions
+                        .AsNoTracking()
+                        .Where(policy => policy.Id == attempt.MarkingPolicyVersionId)
+                        .Select(policy => policy.VersionKey)
+                        .SingleOrDefaultAsync(ct);
+                    if (string.IsNullOrWhiteSpace(storedVersionKey))
+                        throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid");
+                    if (!string.Equals(storedVersionKey, versionKey, StringComparison.Ordinal))
+                        throw new InvalidOperationException("assessment_marking_policy_snapshot_version_mismatch");
+                }
+
                 var policyJson = policyElement.ValueKind == JsonValueKind.String
                     ? policyElement.GetString()
                     : policyElement.GetRawText();
-                return Task.FromResult(AssessmentMarkingPolicyDocument.Parse(policyJson));
+                return AssessmentMarkingPolicyDocument.Parse(policyJson);
             }
 
             if (requiresGovernedSnapshot)
@@ -829,7 +848,7 @@ public sealed class ListeningGradingService
 
         // Legacy attempts created before governed policy versioning retain the
         // conservative historical defaults. Governed attempts fail closed.
-        return Task.FromResult(new AssessmentMarkingPolicyDocument());
+        return new AssessmentMarkingPolicyDocument();
     }
 
     private static string? TryReadString(string? json)

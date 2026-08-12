@@ -1241,6 +1241,26 @@ public sealed class ReadingGradingService(
                 return await policyService.ResolveForUserAsync(attempt.UserId, ct);
             }
 
+            if (requiresGovernedSnapshot)
+            {
+                var versionKey = document.RootElement.TryGetProperty("markingPolicyVersionKey", out var versionElement)
+                    && versionElement.ValueKind == JsonValueKind.String
+                    ? versionElement.GetString()?.Trim()
+                    : null;
+                if (string.IsNullOrWhiteSpace(versionKey))
+                    throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+
+                var storedVersionKey = await db.AssessmentMarkingPolicyVersions
+                    .AsNoTracking()
+                    .Where(policy => policy.Id == attempt.MarkingPolicyVersionId)
+                    .Select(policy => policy.VersionKey)
+                    .SingleOrDefaultAsync(ct);
+                if (string.IsNullOrWhiteSpace(storedVersionKey))
+                    throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid");
+                if (!string.Equals(storedVersionKey, versionKey, StringComparison.Ordinal))
+                    throw new InvalidOperationException("assessment_marking_policy_snapshot_version_mismatch");
+            }
+
             var snapshot = JsonSerializer.Deserialize<ReadingResolvedPolicy>(attempt.PolicySnapshotJson);
             if (snapshot is not null
                 && !string.IsNullOrWhiteSpace(snapshot.PartATimerStrictness)

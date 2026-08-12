@@ -119,6 +119,75 @@ public class ListeningGradingServiceTests
     }
 
     [Fact]
+    public async Task GradeAsync_rejects_governed_policy_snapshot_version_mismatch()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
+        {
+            Id = "policy-listening-v1",
+            Assessment = "listening",
+            ScopeKey = "default",
+            VersionKey = "v1",
+            PolicyJson = new AssessmentMarkingPolicyDocument().Serialize(),
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = now.AddMinutes(-1),
+            CreatedByUserId = "owner",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-policy-mismatch", SubtestCode = "listening", Title = "T", Slug = "t",
+            Status = ContentStatus.Published, Difficulty = "standard", CreatedAt = now,
+            UpdatedAt = now, ExtractedTextJson = "{}",
+        });
+        db.ListeningParts.Add(new ListeningPart
+        {
+            Id = "part-policy-mismatch", PaperId = "paper-policy-mismatch", PartCode = ListeningPartCode.A1,
+            MaxRawScore = 1, CreatedAt = now, UpdatedAt = now,
+        });
+        db.ListeningExtracts.Add(new ListeningExtract
+        {
+            Id = "extract-policy-mismatch", ListeningPartId = "part-policy-mismatch", DisplayOrder = 0,
+            Kind = ListeningExtractKind.Consultation, Title = "E", AccentCode = "en-GB",
+            SpeakersJson = "[]", TranscriptSegmentsJson = "[]", CreatedAt = now, UpdatedAt = now,
+        });
+        db.ListeningQuestions.Add(new ListeningQuestion
+        {
+            Id = "question-policy-mismatch", PaperId = "paper-policy-mismatch",
+            ListeningPartId = "part-policy-mismatch", ListeningExtractId = "extract-policy-mismatch",
+            QuestionNumber = 1, DisplayOrder = 1, Points = 1, QuestionType = ListeningQuestionType.ShortAnswer,
+            Stem = "Dose: ____", CorrectAnswerJson = "\"five\"", AcceptedSynonymsJson = "[]",
+            CaseSensitive = false, CreatedAt = now, UpdatedAt = now,
+        });
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = "attempt-policy-mismatch", UserId = "learner-policy-mismatch",
+            PaperId = "paper-policy-mismatch", StartedAt = now, LastActivityAt = now,
+            Status = ListeningAttemptStatus.InProgress, Mode = ListeningAttemptMode.Exam, MaxRawScore = 1,
+            MarkingPolicyVersionId = "policy-listening-v1",
+            PolicySnapshotJson = JsonSerializer.Serialize(new
+            {
+                markingPolicy = new AssessmentMarkingPolicyDocument(),
+                markingPolicyVersionKey = "v2",
+            }),
+            LastQuestionVersionMapJson = "{\"question-policy-mismatch\":1}",
+        });
+        db.ListeningAnswers.Add(new ListeningAnswer
+        {
+            Id = "answer-policy-mismatch", ListeningAttemptId = "attempt-policy-mismatch",
+            ListeningQuestionId = "question-policy-mismatch", UserAnswerJson = "\"five\"",
+        });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ListeningGradingService(db).GradeAsync("attempt-policy-mismatch", CancellationToken.None));
+
+        Assert.Equal("assessment_marking_policy_snapshot_version_mismatch", ex.Message);
+    }
+
+    [Fact]
     public async Task GradeAsync_zero_correct_preserves_raw_only_without_owner_table()
     {
         await using var db = NewDb();
