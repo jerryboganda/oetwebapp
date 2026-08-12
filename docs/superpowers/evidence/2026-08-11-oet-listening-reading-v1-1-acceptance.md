@@ -187,6 +187,13 @@ an owner-controlled value that must not be invented in code.
   `preview-structure` projection plus a separate marking preview console for
   the Section 12 candidate/marking review gate; focused UI/API execution is
   still pending.
+- The Reading admin authoring flow now exposes the same two-way review gate:
+  its candidate preview consumes the learner-safe projection, while the
+  protected marking preview reads the admin answer/rationale/evidence
+  projection. Focused UI execution passed in `d95d92503` (10 tests).
+- Listening manifest export now declares `modeSupport: ["computer"]`; the
+  retired paper simulation is no longer advertised by the v1.1 authoring
+  contract. The focused export/import regression passed in `d52d7995c`.
 - Listening authoring now validates processed uploaded-audio duration and
   authored per-section timing (including legacy JSON extracts), and the shared
   publish path hard-blocks missing audio, duration, cue-window, and section

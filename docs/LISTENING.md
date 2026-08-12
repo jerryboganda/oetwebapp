@@ -65,7 +65,6 @@ exam surface in stale client links.
 |---|---|---|---|---|---|
 |**Exam (CBT)**|❌|✅|❌|✅|✅|
 |**OET-Home**|❌|✅|❌|✅|✅|
-|**Paper**|✅|❌|❌|✅|❌|
 |**Learning**|✅|❌|✅|❌|❌|
 |**Diagnostic**|✅|❌|❌|❌|❌|
 
@@ -178,8 +177,7 @@ mapping in `LearnerDbContext.OnModelCreating`) and **never LINQ-queried**
   closed with a paused player warning on validation failure. Section cue
   enforcement uses the full authored extract window for multi-extract sections
   such as Part B. The route lists exact unanswered question numbers before
-  strict section locks and final submit, and paper mode keeps all sections
-  editable with free navigation during all-parts review. R08 Part B/C
+  strict section locks and final submit. R08 Part B/C
   annotation behavior is delegated to
   [`BCQuestionRenderer.tsx`](../components/domain/listening/BCQuestionRenderer.tsx)
   and in-app zoom is delegated to
