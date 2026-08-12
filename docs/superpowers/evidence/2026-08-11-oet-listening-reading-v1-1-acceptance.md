@@ -183,6 +183,12 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest computer-only delivery checkpoint - 2026-08-12
 
+- The canonical Listening paper-route sub-section audio now enforces the
+  strict one-play contract at the media-event layer as well as by hiding
+  native controls: unauthorized pause resumes, replay is halted, every
+  non-programmatic seek snaps to the last known playhead, and playback-rate
+  changes are reset to normal speed. The focused audio-integrity regression
+  passed 9 tests; deployed browser acceptance remains separate.
 - Reading paper presentation is now fail-closed at the policy service and
   database default. Existing persisted enablement is reset by the migration;
   the admin control and learner preview now report computer-based delivery

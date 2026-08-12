@@ -59,6 +59,7 @@ import {
   LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
   type ListeningExamSubSection,
 } from '@/lib/listening-exam-sections';
+import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
 type AnswerSaveResult = 'server' | 'offline';
@@ -915,6 +916,9 @@ function SubSectionAudio({
   );
   const [audioError, setAudioError] = useState<string | null>(null);
   const [hasPlayedToEnd, setHasPlayedToEnd] = useState(false);
+  const lastKnownTimeRef = useRef(0);
+  const allowedProgrammaticPauseRef = useRef(false);
+  const hasStartedRef = useRef(false);
 
   // Resolve an authenticated media URL into a local blob URL once per section.
   useEffect(() => {
@@ -966,12 +970,6 @@ function SubSectionAudio({
     );
   }
 
-  // One-play: graded exams hide native media controls entirely. Replay is
-  // blocked by snapping any post-completion seek back to the end; volume and
-  // playback state remain governed by the exam surface rather than browser
-  // media controls.
-  const blockReplay = onePlayOnly && hasPlayedToEnd;
-
   return (
     <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -987,15 +985,55 @@ function SubSectionAudio({
           src={resolvedSrc}
           autoPlay
           controls={!onePlayOnly}
-          controlsList={onePlayOnly ? 'nodownload noplaybackrate' : undefined}
+          controlsList={onePlayOnly ? 'nodownload noplaybackrate nofullscreen noremoteplayback' : undefined}
           preload="auto"
           className="w-full"
-          onEnded={() => setHasPlayedToEnd(true)}
-          onError={() => setAudioError('Audio failed to load. The media asset may still be processing.')}
-          onSeeking={() => {
-            // Forward-only / one-play: block any rewind once the clip has ended.
+          onTimeUpdate={() => {
             const el = audioRef.current;
-            if (blockReplay && el) el.currentTime = el.duration || el.currentTime;
+            if (!el || el.seeking || !onePlayOnly) return;
+            if (el.currentTime > lastKnownTimeRef.current) lastKnownTimeRef.current = el.currentTime;
+          }}
+          onEnded={() => {
+            hasStartedRef.current = false;
+            setHasPlayedToEnd(true);
+          }}
+          onError={() => setAudioError('Audio failed to load. The media asset may still be processing.')}
+          onRateChange={() => {
+            const el = audioRef.current;
+            if (onePlayOnly && el && el.playbackRate !== 1) el.playbackRate = 1;
+          }}
+          onPlay={() => {
+            const el = audioRef.current;
+            if (!el || !onePlayOnly) return;
+            if (hasPlayedToEnd) {
+              allowedProgrammaticPauseRef.current = true;
+              el.pause();
+              return;
+            }
+            hasStartedRef.current = true;
+          }}
+          onPause={() => {
+            const el = audioRef.current;
+            if (!el || !shouldResumeAfterBlockedPause({
+              canPause: !onePlayOnly,
+              phase: 'audio',
+              hasStarted: hasStartedRef.current,
+              hasReachedEnd: hasPlayedToEnd,
+              allowedProgrammaticPause: allowedProgrammaticPauseRef.current,
+            })) return;
+            allowedProgrammaticPauseRef.current = false;
+            el.play().catch((err: unknown) => handleAudioPlaybackError(err, setAudioError));
+          }}
+          onSeeking={() => {
+            const el = audioRef.current;
+            if (!el || !onePlayOnly) return;
+            const blockedTarget = resolveBlockedSeekTarget({
+              canScrub: false,
+              requestedTime: el.currentTime,
+              lastKnownTime: hasPlayedToEnd ? (el.duration || lastKnownTimeRef.current) : lastKnownTimeRef.current,
+              allowedProgrammaticTarget: null,
+            });
+            if (blockedTarget !== null) el.currentTime = blockedTarget;
           }}
         />
       ) : (
