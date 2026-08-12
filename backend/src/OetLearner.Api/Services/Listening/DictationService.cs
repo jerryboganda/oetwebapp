@@ -12,11 +12,10 @@ namespace OetLearner.Api.Services.Listening;
 // OET Listening Module Pathway — Phase 4 (§14): Dictation Drill subsystem.
 //
 // A dictation drill plays a short healthcare audio clip and asks the learner
-// to transcribe it. Grading is *spelling-tolerant within reason* — common
-// healthcare misspellings (off-by-one typos) are flagged with a "did you mean"
-// hint rather than counted as a hard fail, but anything further from the
-// canonical transcript is treated as a wrong answer with the correct form
-// surfaced for study.
+// to transcribe it. Grading is strict: only the canonical transcript or an
+// explicitly authored variant earns credit. An off-by-one typo is classified
+// diagnostically so the learner can study the error, but it remains wrong and
+// never changes the mark.
 //
 // Scheduling follows a simplified spaced-repetition model:
 //   • First correct (Attempts becomes 1): NextReviewAt = now + 3 days.
@@ -56,7 +55,7 @@ public sealed record DictationStatsDto(
 
 /// <summary>
 /// Dictation drill orchestration: picks a mixed set, grades answers with
-/// healthcare-spelling tolerance, and rolls forward the spaced-repetition
+/// strict canonical/explicit-variant marking, and rolls forward the spaced-repetition
 /// schedule. See <see cref="DictationService"/>.
 /// </summary>
 public interface IDictationService
@@ -293,11 +292,10 @@ public sealed class DictationService : IDictationService
     }
 
     /// <summary>
-    /// Returns <c>(isCorrect, offByOneTypo)</c>. A direct match (after
-    /// normalisation) against the canonical transcript or any accepted variant
-    /// is correct. A Levenshtein distance of 1 against the canonical or any
-    /// variant is treated as "wrong but close" so the UI can show a "Did you
-    /// mean…?" hint. Anything larger is a hard miss.
+    /// Returns <c>(isCorrect, offByOneTypo)</c>. A direct match (after the
+    /// owner-approved normalization) against the canonical transcript or an
+    /// explicitly authored variant is correct. A Levenshtein distance of 1 is
+    /// diagnostic only; it remains wrong and cannot earn credit.
     /// </summary>
     private static (bool isCorrect, bool offByOneTypo) Grade(
         string typed,
@@ -402,36 +400,15 @@ public sealed class DictationService : IDictationService
     // ─────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Normalise an answer for tolerant comparison: NFC, trim, collapse
-    /// runs of whitespace, lowercase. Punctuation is preserved so that a
-    /// learner who omits a trailing full stop is still graded as correct
-    /// against a transcript stored without one (the canonical form is
-    /// stripped the same way).
+    /// Normalize only formatting that the v1.1 contract permits unconditionally:
+    /// Unicode NFC and surrounding-space trimming. Internal whitespace,
+    /// capitalization, punctuation, and word form remain exact unless an
+    /// explicit authored variant contains the alternative.
     /// </summary>
     private static string Normalise(string? input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-        var s = input.Normalize(NormalizationForm.FormC).Trim();
-        // Lowercase + collapse internal whitespace.
-        var sb = new StringBuilder(s.Length);
-        var inWhitespace = false;
-        foreach (var ch in s)
-        {
-            if (char.IsWhiteSpace(ch))
-            {
-                if (!inWhitespace)
-                {
-                    sb.Append(' ');
-                    inWhitespace = true;
-                }
-            }
-            else
-            {
-                sb.Append(char.ToLowerInvariant(ch));
-                inWhitespace = false;
-            }
-        }
-        return sb.ToString();
+        return input.Normalize(NormalizationForm.FormC).Trim();
     }
 
     /// <summary>

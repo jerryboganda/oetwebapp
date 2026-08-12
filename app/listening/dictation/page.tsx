@@ -214,8 +214,9 @@ export default function DictationDrillPage() {
             Dictation Drills
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Train your ear and your spelling at the same time. We grade healthcare
-            vocabulary with typo tolerance, and every correct keystroke counts.
+            Train your ear and your spelling at the same time. Dictation uses the
+            same strict marking contract as Listening: only the canonical answer
+            or an explicitly authorised variant receives credit.
           </p>
         </section>
 
@@ -527,11 +528,11 @@ function ReviewBlock({ result }: { result: DictationResult }) {
           <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="space-y-1">
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-              Did you mean &ldquo;{result.correctAnswer}&rdquo;?
+              Incorrect — expected &ldquo;{result.correctAnswer}&rdquo;
             </p>
             <p className="text-sm text-amber-800 dark:text-amber-200/80">
-              Very close, just a one-letter slip. We&apos;ll resurface this one soon so you can
-              nail the spelling.
+              This answer receives zero credit. The one-letter difference is shown only as a
+              study hint, and we&apos;ll resurface it soon so you can nail the spelling.
             </p>
             <SpellingDiffLine canonical={result.correctAnswer} typed={result.learnerAnswer} />
           </div>

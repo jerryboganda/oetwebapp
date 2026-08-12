@@ -11,9 +11,9 @@ namespace OetLearner.Api.Services.Listening;
 //
 // Idempotently inserts the 8 foundation lessons (one per L1..L8 sub-skill) and
 // 12 strategy articles (2 per category × 6 categories) the learner-facing
-// lesson player and strategy library render against. Re-runs are no-ops: the
-// seeder matches existing rows by Slug and only upserts the body when the
-// row is missing.
+// lesson player and strategy library render against. Re-runs preserve existing
+// authored rows by Slug, while repairing only narrowly-scoped legacy copy that
+// would contradict the strict marking policy.
 //
 // Enable via:   Seed:ListeningContent:Enabled = true
 //
@@ -78,20 +78,23 @@ public sealed class ListeningContentSeeder(
     {
         var lessons = BuildLessons();
 
-        // Pull existing slugs once so we know which ones to skip without
-        // round-tripping per lesson.
-        var existingSlugs = await db.ListeningLessons
-            .AsNoTracking()
+        // Load existing starter rows once. Existing rows are not overwritten,
+        // except for the narrowly-scoped strict-marking copy repair below.
+        var existing = await db.ListeningLessons
             .Where(l => lessons.Select(x => x.Slug).Contains(l.Slug))
-            .Select(l => l.Slug)
-            .ToListAsync(ct);
-        var existingSet = new HashSet<string>(existingSlugs, StringComparer.Ordinal);
+            .ToDictionaryAsync(l => l.Slug, StringComparer.Ordinal, ct);
 
         var added = 0;
         foreach (var lesson in lessons)
         {
-            if (existingSet.Contains(lesson.Slug))
+            if (existing.TryGetValue(lesson.Slug, out var current))
             {
+                var repaired = ApplyStrictMarkingCopy(current.BodyMarkdownEn);
+                if (!string.Equals(current.BodyMarkdownEn, repaired, StringComparison.Ordinal))
+                {
+                    current.BodyMarkdownEn = repaired;
+                    added++;
+                }
                 continue;
             }
             db.ListeningLessons.Add(lesson);
@@ -197,7 +200,7 @@ public sealed class ListeningContentSeeder(
             OrderIndex = orderIndex,
             EstimatedMinutes = 30,
             VideoUrl = null,
-            BodyMarkdownEn = bodyMarkdownEn,
+            BodyMarkdownEn = ApplyStrictMarkingCopy(bodyMarkdownEn),
             BodyMarkdownAr = string.Empty,
             DrillQuestionIdsJson = JsonSerializer.Serialize(drillIds, JsonOpts),
             QuizQuestionIdsJson = JsonSerializer.Serialize(quizIds, JsonOpts),
@@ -227,18 +230,21 @@ public sealed class ListeningContentSeeder(
     {
         var strategies = BuildStrategies();
 
-        var existingSlugs = await db.ListeningStrategies
-            .AsNoTracking()
+        var existing = await db.ListeningStrategies
             .Where(s => strategies.Select(x => x.Slug).Contains(s.Slug))
-            .Select(s => s.Slug)
-            .ToListAsync(ct);
-        var existingSet = new HashSet<string>(existingSlugs, StringComparer.Ordinal);
+            .ToDictionaryAsync(s => s.Slug, StringComparer.Ordinal, ct);
 
         var added = 0;
         foreach (var strategy in strategies)
         {
-            if (existingSet.Contains(strategy.Slug))
+            if (existing.TryGetValue(strategy.Slug, out var current))
             {
+                var repaired = ApplyStrictMarkingCopy(current.BodyMarkdownEn);
+                if (!string.Equals(current.BodyMarkdownEn, repaired, StringComparison.Ordinal))
+                {
+                    current.BodyMarkdownEn = repaired;
+                    added++;
+                }
                 continue;
             }
             db.ListeningStrategies.Add(strategy);
@@ -375,7 +381,7 @@ public sealed class ListeningContentSeeder(
             Category = category,
             ApplicablePartsJson = JsonSerializer.Serialize(applicableParts, JsonOpts),
             EstimatedReadMinutes = 5,
-            BodyMarkdownEn = body,
+            BodyMarkdownEn = ApplyStrictMarkingCopy(body),
             BodyMarkdownAr = string.Empty,
             VideoUrl = null,
             AudioUrl = null,
@@ -385,4 +391,39 @@ public sealed class ListeningContentSeeder(
             IsPublished = true,
         };
     }
+
+    /// <summary>
+    /// Keeps legacy starter copy aligned with the v1.1 deterministic marking
+    /// contract. The source catalogue predates the strict platform policy and
+    /// contains a few study tips that describe examiner discretion or generic
+    /// MCQ heuristics. Those tips must never be published to learners as
+    /// platform marking rules.
+    /// </summary>
+    private static string ApplyStrictMarkingCopy(string body)
+        => body
+            .Replace("Spelling tolerance is on; you just have to get the digits right.",
+                "Marking is strict: digits, units, and spelling must match the canonical answer or an explicitly authorised variant.",
+                StringComparison.Ordinal)
+            .Replace("A 25% guess on a 4-option MCQ is worth +0.25 marks on average; over the 42 items in a full mock, the discipline is worth 3+ marks.",
+                "Each MCQ has one correct option and earns one mark only when the selected key matches; an uncertain candidate should still record the option best supported by the audio.",
+                StringComparison.Ordinal)
+            .Replace("For each blank, pick the longest option (statistically slightly more likely to be correct in OET style).",
+                "For each MCQ, choose the option best supported by the audio; option length is not evidence.",
+                StringComparison.Ordinal)
+            .Replace("Partial credit on Part A is rare but possible.",
+                "A partial typed answer scores zero unless that exact form is an explicitly authorised variant.",
+                StringComparison.Ordinal)
+            .Replace("**Erasing a partial answer.** Partial is better than blank.",
+                "**Assuming a partial typed answer earns partial credit.** Listening items receive one mark only when the exact answer or an explicitly authorised variant matches.",
+                StringComparison.Ordinal)
+            .Replace("trust the spelling tolerance to forgive minor mismatches.",
+                "platform marking rejects unapproved spelling variants; only the canonical answer or an explicitly authorised variant can receive credit.",
+                StringComparison.Ordinal)
+            .Replace("*Haemoglobin* (UK) vs *hemoglobin* (US) — both accepted, but pick a register and stay there.",
+                "*Haemoglobin* (UK) vs *hemoglobin* (US) — either can receive credit only when the authored answer key explicitly lists it as an accepted variant; do not assume register substitutions are accepted.",
+                StringComparison.Ordinal)
+            .Replace("4–6 of the 18 MCQs", "a subset of the 12 Part C MCQs", StringComparison.Ordinal)
+            .Replace(", (d) The shortest available antibiotic course *— partial truth*.", ".", StringComparison.Ordinal)
+            .Replace(", (d) outright endorsement of flexibility.", ".", StringComparison.Ordinal)
+            .Replace(", (d) neutral reporting only.", ".", StringComparison.Ordinal);
 }
