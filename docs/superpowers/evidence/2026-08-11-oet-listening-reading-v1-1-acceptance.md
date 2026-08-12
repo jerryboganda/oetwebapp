@@ -45,6 +45,15 @@ an owner-controlled value that must not be invented in code.
   excluding the user-owned `pdf-policy-release/` and `pdf-policy-release2/`
   copies from Vitest discovery. Deployment and browser verification remain
   pending.
+- The built-in admin role catalog now includes explicit v1.1 Content Author,
+  Clinical Reviewer, and Language Assessor presets. Assigning a built-in role
+  is fail-closed for unknown roles and non-admin targets, replaces stale
+  permission grants with the catalog's least-privilege set, and records the
+  assigning actor/time in each grant; legacy content-editor and billing role
+  IDs remain available. The role catalog regression was added, `git diff
+  --check` passed, and the bounded backend build was stopped after producing
+  no output within the requested lightweight-check window. Backend compilation,
+  focused execution, and deployed cross-role acceptance remain pending.
 - Listening V2 navigation repair now preserves existing `WindowStartedAt` and
   `WindowDurationMs` values when reconnect/refresh encounters malformed state;
   only legacy rows missing an anchor are initialized. This prevents repair
@@ -546,6 +555,11 @@ an owner-controlled value that must not be invented in code.
 - `AdminCustomerSupportRead`/`AdminCustomerSupportWrite` and the built-in
   `customer_support` role isolate support access from content, learner-wide,
   and assessment-governance permissions.
+- `AdminRoleCatalog` now makes the v1.1 Content Author, Clinical Reviewer, and
+  Language Assessor scopes explicit, and built-in role assignment synchronizes
+  the persisted `AdminPermissionGrant` rows consumed by authentication rather
+  than only changing legacy role metadata. Tutor access remains on the Expert
+  assigned-candidate paths; it is not granted through admin role presets.
 - Case creation, candidate projection reads, and closure emit
   `support.case.created`, `support.case.candidate_read`, and
   `support.case.closed` audit events without assessment content. Focused

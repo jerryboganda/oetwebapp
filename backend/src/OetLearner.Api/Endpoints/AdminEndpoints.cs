@@ -1906,18 +1906,14 @@ public static class AdminEndpoints
 
         admin.MapGet("/roles", async (LearnerDbContext db, CancellationToken ct) =>
         {
-            var builtInRoles = new[]
+            var builtInRoles = AdminRoleCatalog.BuiltInRoles.Select(role => new
             {
-                new { id = "system_admin", name = "System Admin", description = "Full system access", isBuiltIn = true, permissions = AdminPermissions.All },
-                new { id = "content_editor", name = "Content Editor", description = "Content read/write access", isBuiltIn = true, permissions = new[] { AdminPermissions.ContentRead, AdminPermissions.ContentWrite } },
-                new { id = "reviewer", name = "Reviewer", description = "Review operations access", isBuiltIn = true, permissions = new[] { AdminPermissions.ContentRead, AdminPermissions.ReviewOps } },
-                new { id = "billing_admin", name = "Billing Admin", description = "Full billing management (legacy superset)", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingWrite } },
-                new { id = "customer_support", name = "Customer Support", description = "Ticket-linked, time-limited candidate support access", isBuiltIn = true, permissions = new[] { AdminPermissions.CustomerSupportRead, AdminPermissions.CustomerSupportWrite } },
-                // Billing-hardening I-7: granular billing role presets.
-                new { id = "refund_specialist", name = "Refund Specialist", description = "Read billing data and issue refunds / handle disputes only", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingRefundWrite } },
-                new { id = "catalog_editor", name = "Catalog Editor", description = "Read billing data and edit plans, add-ons, coupons, wallet tiers, free-tier, score-guarantee", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingCatalogWrite } },
-                new { id = "subscription_manager", name = "Subscription Manager", description = "Read billing data and manage subscriptions + wallet spend only", isBuiltIn = true, permissions = new[] { AdminPermissions.BillingRead, AdminPermissions.BillingSubscriptionWrite } }
-            };
+                id = role.Id,
+                name = role.Name,
+                description = role.Description,
+                isBuiltIn = true,
+                permissions = role.Permissions
+            });
             return Results.Ok(new { roles = builtInRoles });
         }).WithAdminRead("AdminSystemAdmin");
 
@@ -1942,8 +1938,7 @@ public static class AdminEndpoints
 
         admin.MapPut("/roles/{roleId}", async (string roleId, AdminRoleUpdateRequest request, LearnerDbContext db, CancellationToken ct) =>
         {
-            var builtInIds = new[] { "system_admin", "content_editor", "reviewer", "billing_admin", "customer_support" };
-            if (builtInIds.Contains(roleId))
+            if (AdminRoleCatalog.BuiltInRoleIds.Contains(roleId))
                 return Results.BadRequest(new { error = "CANNOT_MODIFY_BUILTIN_ROLE" });
             if (string.IsNullOrWhiteSpace(request.Name))
                 return Results.BadRequest(new { error = "ROLE_NAME_REQUIRED" });
@@ -1955,8 +1950,7 @@ public static class AdminEndpoints
 
         admin.MapDelete("/roles/{roleId}", async (string roleId, LearnerDbContext db, CancellationToken ct) =>
         {
-            var builtInIds = new[] { "system_admin", "content_editor", "reviewer", "billing_admin", "customer_support" };
-            if (builtInIds.Contains(roleId))
+            if (AdminRoleCatalog.BuiltInRoleIds.Contains(roleId))
                 return Results.BadRequest(new { error = "CANNOT_DELETE_BUILTIN_ROLE" });
             return Results.Ok(new { deleted = true, roleId });
         }).WithAdminWrite("AdminSystemAdmin");
@@ -1970,13 +1964,44 @@ public static class AdminEndpoints
             return Results.Ok(new { roleId, users });
         }).WithAdminRead("AdminSystemAdmin");
 
-        admin.MapPost("/roles/{roleId}/users/{userId}", async (string roleId, string userId, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapPost("/roles/{roleId}/users/{userId}", async (string roleId, string userId, HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
+            var role = AdminRoleCatalog.Find(roleId);
+            if (role is null)
+                return Results.BadRequest(new { error = "BUILTIN_ROLE_NOT_FOUND", roleId });
+
             var user = await db.AdminUsers.FindAsync([userId], ct);
             if (user == null) return Results.NotFound(new { error = "USER_NOT_FOUND" });
-            user.Role = roleId;
+
+            var account = await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(account => account.Id == userId, ct);
+            if (account is null || !string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = "ROLE_TARGET_MUST_BE_ADMIN", userId });
+
+            user.Role = role.Id;
+
+            var existingGrants = await db.AdminPermissionGrants
+                .Where(grant => grant.AdminUserId == userId)
+                .ToListAsync(ct);
+            db.AdminPermissionGrants.RemoveRange(existingGrants);
+
+            var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var grantedAt = DateTimeOffset.UtcNow;
+            foreach (var permission in role.Permissions.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                db.AdminPermissionGrants.Add(new AdminPermissionGrant
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    AdminUserId = userId,
+                    Permission = permission,
+                    GrantedBy = actorId,
+                    GrantedAt = grantedAt
+                });
+            }
+
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new { assigned = true, userId, roleId });
+            return Results.Ok(new { assigned = true, userId, roleId = role.Id, permissions = role.Permissions });
         }).WithAdminWrite("AdminSystemAdmin");
 
         admin.MapDelete("/roles/{roleId}/users/{userId}", async (string roleId, string userId, LearnerDbContext db, CancellationToken ct) =>
