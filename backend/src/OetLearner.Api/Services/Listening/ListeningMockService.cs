@@ -231,6 +231,9 @@ public sealed class ListeningMockService : IListeningMockService
         var scoreConversionSnapshot = AssessmentScoreConversionSnapshot
             .Capture(scoreConversionAtStart)
             .Serialize();
+        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(
+            "practice",
+            markingPolicyAtStart.Document);
         var session = new ListeningPracticeSession
         {
             Id = Guid.NewGuid(),
@@ -256,6 +259,10 @@ public sealed class ListeningMockService : IListeningMockService
                 markingPolicyVersionId = markingPolicyAtStart.PolicyId,
                 markingPolicyVersionKey = markingPolicyAtStart.PolicyVersionKey,
                 markingPolicy = markingPolicyAtStart.Document,
+                audioLockMode = audioTransport.LockMode,
+                canPause = audioTransport.CanPause,
+                canScrub = audioTransport.CanScrub,
+                onePlayOnly = audioTransport.OnePlayOnly,
             }),
         };
         _db.ListeningPracticeSessions.Add(session);

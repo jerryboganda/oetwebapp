@@ -418,6 +418,11 @@ public sealed class ListeningLearnerService(
         var effectiveMode = relationalAttempt is not null
             ? ToApiMode(relationalAttempt.Mode)
             : attempt?.Mode ?? normalizedMode;
+        var audioTransport = relationalAttempt is not null
+            ? ListeningAudioTransportPolicy.FromSnapshot(effectiveMode, relationalAttempt.PolicySnapshotJson)
+            : attempt is not null
+                ? ListeningAudioTransportPolicy.FromSnapshot(effectiveMode, attempt.PolicySnapshotJson)
+                : await ResolveCurrentAudioTransportPolicyAsync(effectiveMode, ct);
         return new
         {
             paper = SourceDto(source),
@@ -428,14 +433,13 @@ public sealed class ListeningLearnerService(
             modePolicy = new
             {
                 mode = effectiveMode,
-                // Audio is non-pausable in every mode: once a section's audio
-                // starts it plays start-to-end with no pause, no scrub, no
-                // replay, then auto-advances. (Owner directive 2026-06-27 —
-                // real-exam integrity for all Listening sessions.) Navigation /
-                // notes / chrome hints below stay per-mode.
-                canPause = false,
-                canScrub = false,
-                onePlayOnly = true,
+                // These values come from the approved policy snapshot for an
+                // existing attempt. Before start, the current effective policy
+                // is used; unavailable or malformed policy stays strict.
+                canPause = audioTransport.CanPause,
+                canScrub = audioTransport.CanScrub,
+                onePlayOnly = audioTransport.OnePlayOnly,
+                audioLockMode = audioTransport.LockMode,
                 autosave = true,
                 transcriptPolicy = "per_item_post_attempt",
                 // Phase 9 tail: presentation hints so the player can render
@@ -534,6 +538,7 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
+        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(normalizedMode, markingPolicy.Document);
         var listeningPolicy = await ResolveListeningPolicyAsync(ct);
         var startedAt = DateTimeOffset.UtcNow;
         var deadlineAt = IsExamMode(normalizedMode)
@@ -584,6 +589,10 @@ public sealed class ListeningLearnerService(
                     listeningPolicy.GracePeriodSeconds,
                     listeningPolicy.OnExpirySubmitPolicy,
                 },
+                audioLockMode = audioTransport.LockMode,
+                canPause = audioTransport.CanPause,
+                canScrub = audioTransport.CanScrub,
+                onePlayOnly = audioTransport.OnePlayOnly,
                 deadlineAt,
             })
         };
@@ -1263,6 +1272,7 @@ public sealed class ListeningLearnerService(
             rawScore: 0,
             scopeKey: "default",
             cancellationToken: ct);
+        var audioTransport = ListeningAudioTransportPolicy.FromPolicy(normalizedMode, markingPolicy.Document);
 
         // Listening test-credit allowance. Governance must be resolved before
         // this debit: failed owner-controlled marking or conversion gates do
@@ -1312,8 +1322,10 @@ public sealed class ListeningLearnerService(
                 policy.GracePeriodSeconds,
                 policy.OnExpirySubmitPolicy,
                 mode = normalizedMode,
-                // Non-pausable / one-play in every mode (see modePolicy above).
-                onePlayOnly = true,
+                audioLockMode = audioTransport.LockMode,
+                canPause = audioTransport.CanPause,
+                canScrub = audioTransport.CanScrub,
+                onePlayOnly = audioTransport.OnePlayOnly,
                 presentationStyle = normalizedMode == "home"
                     ? "kiosk_fullscreen"
                     : normalizedMode,
@@ -3459,6 +3471,17 @@ public sealed class ListeningLearnerService(
 
     private static Dictionary<string, string?> DeserializeAnswers(string json)
         => JsonSupport.Deserialize<Dictionary<string, string?>>(json, new Dictionary<string, string?>());
+
+    private async Task<ListeningAudioTransportPolicy> ResolveCurrentAudioTransportPolicyAsync(
+        string mode,
+        CancellationToken ct)
+    {
+        var resolver = markingPolicyService ?? new AssessmentMarkingPolicyService(db);
+        var resolution = await resolver.ResolveAsync("listening", "default", cancellationToken: ct);
+        return resolution.IsAvailable && resolution.ErrorCode is null
+            ? ListeningAudioTransportPolicy.FromPolicy(mode, resolution.Document)
+            : ListeningAudioTransportPolicy.Strict;
+    }
 
     private static bool HasAnsweredValue(string? value)
     {

@@ -193,6 +193,13 @@ an owner-controlled value that must not be invented in code.
   scale and hides the 350 reference marker until an owner-approved conversion
   exists; no client formula represents an unapproved scaled result. The
   focused graph regression covers both approved and raw-only states.
+- Listening audio transport is now derived from the owner-approved marking
+  policy captured in the attempt snapshot. Exam, home, and diagnostic modes
+  remain fail-closed one-play/no-pause/no-scrub; practice transport controls
+  can relax only when the snapshot explicitly selects practice lock mode and
+  allows replay. Malformed or legacy snapshots remain strict. Focused policy
+  unit coverage was added; backend execution and deployed browser verification
+  remain pending.
 - Reading now has a source-level scoring-path audit matching the Listening
   audit: Reading services must not reference the legacy raw-to-scaled helper
   and the governed grader must use `IAssessmentScoreConversionService`.
