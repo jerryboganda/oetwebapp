@@ -923,7 +923,9 @@ public sealed class ListeningAuthoringService(
 
         return new ListeningStructureManifest(
             TestTitle: testTitle,
-            ModeSupport: new[] { "paper", "computer" },
+            // v1.1 is computer-delivered only; do not advertise the retired
+            // paper simulation in the exported authoring contract.
+            ModeSupport: new[] { "computer" },
             StrictMock: true,
             PartA: BuildPart("A1", "A2"),
             // Part B is six independent sub-sections (B1..B6), each its own

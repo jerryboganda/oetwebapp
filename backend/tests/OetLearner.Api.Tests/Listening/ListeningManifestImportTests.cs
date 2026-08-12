@@ -353,6 +353,7 @@ public class ListeningManifestImportTests
         Assert.NotNull(exported.PartA);
         Assert.NotNull(exported.PartB);
         Assert.NotNull(exported.PartC);
+        Assert.Equal(new[] { "computer" }, exported.ModeSupport);
         Assert.Equal(2, exported.PartA!.Extracts.Count);
         Assert.Equal(6, exported.PartB!.Extracts.Count); // 6 independent B sub-sections (B1..B6)
         Assert.Equal(2, exported.PartC!.Extracts.Count);
