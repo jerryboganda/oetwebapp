@@ -2222,6 +2222,73 @@ public class ReadingAuthoringTests
         Assert.Equal(persistedDeadlineAt, json.RootElement.GetProperty("deadlineAt").GetDateTimeOffset());
     }
 
+    [Fact]
+    public async Task ReMark_endpoint_enforces_key_provenance_and_stores_canonical_snapshots()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "remark-key-provenance-paper";
+        const string userId = "remark-key-provenance-user";
+
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+        var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
+        var started = await attemptSvc.StartInModeAsync(userId, paperId, ReadingAttemptMode.Learning, null, default);
+        var question = await db.ReadingQuestions
+            .Where(row => row.Part!.PaperId == paperId)
+            .OrderBy(row => row.DisplayOrder)
+            .FirstAsync();
+        var attempt = await db.ReadingAttempts.SingleAsync(row => row.Id == started.AttemptId);
+        attempt.Status = ReadingAttemptStatus.Submitted;
+        attempt.SubmittedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "remark-admin");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+        client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+        var response = await client.PostAsJsonAsync(
+            "/v1/admin/assessment-governance/re-mark-jobs",
+            new
+            {
+                assessment = "reading",
+                attemptId = started.AttemptId,
+                questionRevisionId = question.Id,
+                reason = "Correct a reviewed answer key.",
+                originalKeySnapshotJson = "{\"correctAnswerJson\":\"\\\"not-the-published-answer\\\"\"}",
+                newKeySnapshotJson = "{\"correctAnswerJson\":\"\\\"replacement-answer\\\"\"}",
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("remark_original_key_snapshot_mismatch", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(await db.AssessmentReMarkJobs.Where(job => job.AttemptId == started.AttemptId).ToListAsync());
+
+        var validResponse = await client.PostAsJsonAsync(
+            "/v1/admin/assessment-governance/re-mark-jobs",
+            new
+            {
+                assessment = "reading",
+                attemptId = started.AttemptId,
+                questionRevisionId = question.Id,
+                reason = "Correct a reviewed answer key.",
+                originalKeySnapshotJson = JsonSerializer.Serialize(new
+                {
+                    correctAnswerJson = question.CorrectAnswerJson,
+                    acceptedSynonymsJson = question.AcceptedSynonymsJson,
+                }),
+                newKeySnapshotJson = JsonSerializer.Serialize(new { correctAnswer = "replacement-answer" }),
+            });
+
+        Assert.Equal(HttpStatusCode.Created, validResponse.StatusCode);
+        var job = await db.AssessmentReMarkJobs.SingleAsync(row => row.AttemptId == started.AttemptId);
+        using var storedOriginal = JsonDocument.Parse(job.OriginalKeySnapshotJson);
+        using var storedNew = JsonDocument.Parse(job.NewKeySnapshotJson);
+        Assert.Equal(question.CorrectAnswerJson, storedOriginal.RootElement.GetProperty("correctAnswerJson").GetString());
+        Assert.Equal("\"replacement-answer\"", storedNew.RootElement.GetProperty("correctAnswerJson").GetString());
+        Assert.Equal(JsonValueKind.Null, storedNew.RootElement.GetProperty("acceptedSynonymsJson").ValueKind);
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Attempt lifecycle
     // ════════════════════════════════════════════════════════════════════

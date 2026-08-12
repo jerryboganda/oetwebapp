@@ -395,18 +395,36 @@ public static class AssessmentGovernanceEndpoints
                 return Results.NotFound(new { error = "submitted_attempt_not_found" });
 
             var questionRevisionId = request.QuestionRevisionId.Trim();
-            var questionExists = assessment == "reading"
+            var currentKey = assessment == "reading"
                 ? await (
                     from question in db.ReadingQuestions
                     join part in db.ReadingParts on question.ReadingPartId equals part.Id
                     where question.Id == questionRevisionId && part.PaperId == paperId
-                    select question.Id)
-                    .AnyAsync(ct)
-                : await db.ListeningQuestions.AnyAsync(
-                    question => question.Id == questionRevisionId && question.PaperId == paperId,
-                    ct);
-            if (!questionExists)
+                    select new CurrentKeySnapshot(question.CorrectAnswerJson, question.AcceptedSynonymsJson))
+                    .SingleOrDefaultAsync(ct)
+                : await db.ListeningQuestions
+                    .Where(question => question.Id == questionRevisionId && question.PaperId == paperId)
+                    .Select(question => new CurrentKeySnapshot(question.CorrectAnswerJson, question.AcceptedSynonymsJson))
+                    .SingleOrDefaultAsync(ct);
+            if (currentKey is null)
                 return Results.NotFound(new { error = "remark_question_revision_not_found" });
+
+            if (!TryCanonicalizeKeySnapshot(
+                    request.OriginalKeySnapshotJson,
+                    currentKey,
+                    requireMatch: true,
+                    out var originalKeySnapshot))
+            {
+                return Results.Conflict(new { error = "remark_original_key_snapshot_mismatch" });
+            }
+            if (!TryCanonicalizeKeySnapshot(
+                    request.NewKeySnapshotJson,
+                    currentKey,
+                    requireMatch: false,
+                    out var newKeySnapshot))
+            {
+                return Results.BadRequest(new { error = "remark_new_key_snapshot_invalid" });
+            }
 
             var active = await db.AssessmentReMarkJobs.AnyAsync(x =>
                 x.Assessment == assessment
@@ -424,8 +442,8 @@ public static class AssessmentGovernanceEndpoints
                 AttemptId = attemptId,
                 QuestionRevisionId = questionRevisionId,
                 Reason = request.Reason.Trim(),
-                OriginalKeySnapshotJson = request.OriginalKeySnapshotJson,
-                NewKeySnapshotJson = request.NewKeySnapshotJson,
+                OriginalKeySnapshotJson = originalKeySnapshot,
+                NewKeySnapshotJson = newKeySnapshot,
                 RequestedByUserId = actorId,
                 Status = AssessmentGovernanceStatus.InReview,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -538,19 +556,169 @@ public static class AssessmentGovernanceEndpoints
 
     private static bool IsValidKeySnapshot(string? value)
     {
+        return TryReadKeySnapshot(value, out _);
+    }
+
+    private sealed record CurrentKeySnapshot(string CorrectAnswerJson, string? AcceptedSynonymsJson);
+
+    private sealed record KeySnapshotProjection(
+        bool HasCorrectAnswer,
+        string? CorrectAnswerJson,
+        bool HasAcceptedVariants,
+        string? AcceptedSynonymsJson);
+
+    private static bool TryCanonicalizeKeySnapshot(
+        string? value,
+        CurrentKeySnapshot current,
+        bool requireMatch,
+        out string canonical)
+    {
+        canonical = string.Empty;
+        if (!TryReadKeySnapshot(value, out var projection)
+            || !TryNormalizeJsonText(
+                projection.HasCorrectAnswer ? projection.CorrectAnswerJson : current.CorrectAnswerJson,
+                rejectNull: true,
+                out var correctAnswerJson))
+        {
+            return false;
+        }
+
+        var acceptedVariantsJson = projection.HasAcceptedVariants
+            ? projection.AcceptedSynonymsJson
+            : current.AcceptedSynonymsJson;
+        if (acceptedVariantsJson is not null)
+        {
+            if (!TryNormalizeStringArrayJson(acceptedVariantsJson, out var normalizedAcceptedVariantsJson))
+                return false;
+            acceptedVariantsJson = normalizedAcceptedVariantsJson;
+        }
+
+        canonical = JsonSerializer.Serialize(new
+        {
+            correctAnswerJson,
+            acceptedSynonymsJson = acceptedVariantsJson,
+        });
+
+        if (!requireMatch) return true;
+
+        if (!TryNormalizeJsonText(current.CorrectAnswerJson, rejectNull: true, out var currentAnswerJson))
+            return false;
+        string? currentAcceptedVariantsJson = null;
+        if (current.AcceptedSynonymsJson is not null
+            && !TryNormalizeStringArrayJson(current.AcceptedSynonymsJson, out currentAcceptedVariantsJson))
+        {
+            return false;
+        }
+
+        return string.Equals(correctAnswerJson, currentAnswerJson, StringComparison.Ordinal)
+            && string.Equals(acceptedVariantsJson, currentAcceptedVariantsJson, StringComparison.Ordinal);
+    }
+
+    private static bool TryReadKeySnapshot(string? value, out KeySnapshotProjection projection)
+    {
+        projection = default;
         if (string.IsNullOrWhiteSpace(value)) return false;
         try
         {
             using var document = JsonDocument.Parse(value);
-            if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
             var root = document.RootElement;
-            return root.TryGetProperty("correctAnswerJson", out _)
-                || root.TryGetProperty("correctAnswer", out _)
-                || root.TryGetProperty("acceptedSynonymsJson", out _)
-                || root.TryGetProperty("acceptedVariants", out _);
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            var hasCorrectJson = root.TryGetProperty("correctAnswerJson", out var correctJson);
+            var hasCorrect = root.TryGetProperty("correctAnswer", out var correct);
+            if (hasCorrectJson && hasCorrect) return false;
+
+            var hasAcceptedJson = root.TryGetProperty("acceptedSynonymsJson", out var acceptedJson);
+            var hasAccepted = root.TryGetProperty("acceptedVariants", out var accepted);
+            if (hasAcceptedJson && hasAccepted) return false;
+            if (!hasCorrectJson && !hasCorrect && !hasAcceptedJson && !hasAccepted) return false;
+
+            string? correctAnswerJson = null;
+            if (hasCorrectJson)
+            {
+                if (correctJson.ValueKind == JsonValueKind.Null) return false;
+                correctAnswerJson = correctJson.ValueKind == JsonValueKind.String
+                    ? correctJson.GetString()
+                    : correctJson.GetRawText();
+            }
+            else if (hasCorrect)
+            {
+                if (correct.ValueKind == JsonValueKind.Null) return false;
+                correctAnswerJson = correct.GetRawText();
+            }
+
+            string? acceptedVariantsJson = null;
+            if (hasAcceptedJson)
+            {
+                acceptedVariantsJson = acceptedJson.ValueKind == JsonValueKind.Null
+                    ? null
+                    : acceptedJson.ValueKind == JsonValueKind.String
+                        ? acceptedJson.GetString()
+                        : acceptedJson.GetRawText();
+            }
+            else if (hasAccepted)
+            {
+                acceptedVariantsJson = accepted.ValueKind == JsonValueKind.Null
+                    ? null
+                    : accepted.GetRawText();
+            }
+
+            projection = new KeySnapshotProjection(
+                HasCorrectAnswer: hasCorrectJson || hasCorrect,
+                CorrectAnswerJson: correctAnswerJson,
+                HasAcceptedVariants: hasAcceptedJson || hasAccepted,
+                AcceptedSynonymsJson: acceptedVariantsJson);
+            return true;
         }
         catch (JsonException)
         {
+            return false;
+        }
+    }
+
+    private static bool TryNormalizeJsonText(
+        string? value,
+        bool rejectNull,
+        out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(value);
+            if (rejectNull && document.RootElement.ValueKind == JsonValueKind.Null) return false;
+            normalized = JsonSerializer.Serialize(document.RootElement);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryNormalizeStringArrayJson(
+        string value,
+        out string normalized)
+    {
+        normalized = string.Empty;
+        if (!TryNormalizeJsonText(value, rejectNull: true, out normalized)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(normalized);
+            if (document.RootElement.ValueKind != JsonValueKind.Array
+                || document.RootElement.EnumerateArray().Any(item =>
+                    item.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(item.GetString())))
+            {
+                normalized = string.Empty;
+                return false;
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            normalized = string.Empty;
             return false;
         }
     }
