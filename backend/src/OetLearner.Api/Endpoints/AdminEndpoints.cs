@@ -2008,11 +2008,21 @@ public static class AdminEndpoints
         {
             var user = await db.AdminUsers.FindAsync([userId], ct);
             if (user == null) return Results.NotFound(new { error = "USER_NOT_FOUND" });
-            if (user.Role != roleId)
+            if (!string.Equals(user.Role, roleId, StringComparison.OrdinalIgnoreCase))
                 return Results.BadRequest(new { error = "USER_NOT_IN_ROLE" });
             user.Role = "unassigned";
+
+            // Admin policies consume AdminPermissionGrant rows, not the legacy
+            // AdminUser.Role metadata. Removing a role must revoke those rows
+            // or the account would retain effective access after the UI says it
+            // was removed from the role.
+            var grants = await db.AdminPermissionGrants
+                .Where(grant => grant.AdminUserId == userId)
+                .ToListAsync(ct);
+            db.AdminPermissionGrants.RemoveRange(grants);
+
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new { removed = true, userId, roleId });
+            return Results.Ok(new { removed = true, userId, roleId, revokedPermissions = grants.Select(grant => grant.Permission).ToArray() });
         }).WithAdminWrite("AdminSystemAdmin");
 
         admin.MapGet("/roles/permissions", (LearnerDbContext db, CancellationToken ct) =>

@@ -564,8 +564,10 @@ an owner-controlled value that must not be invented in code.
 - `AdminRoleCatalog` now makes the v1.1 Content Author, Clinical Reviewer, and
   Language Assessor scopes explicit, and built-in role assignment synchronizes
   the persisted `AdminPermissionGrant` rows consumed by authentication rather
-  than only changing legacy role metadata. Tutor access remains on the Expert
-  assigned-candidate paths; it is not granted through admin role presets.
+  than only changing legacy role metadata. Role removal now revokes those
+  effective grants as well, including system-admin grants. Tutor access remains
+  on the Expert assigned-candidate paths; it is not granted through admin role
+  presets.
 - Case creation, candidate projection reads, and closure emit
   `support.case.created`, `support.case.candidate_read`, and
   `support.case.closed` audit events without assessment content. Focused
