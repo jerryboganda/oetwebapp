@@ -36,6 +36,10 @@ an owner-controlled value that must not be invented in code.
 
 ## Latest implementation slice
 
+- Listening V2 navigation repair now preserves existing `WindowStartedAt` and
+  `WindowDurationMs` values when reconnect/refresh encounters malformed state;
+  only legacy rows missing an anchor are initialized. This prevents repair
+  from granting extra time. Focused backend execution remains pending.
 - Published Listening audio now remains behind the authenticated entitlement
   check while streaming inline with `Accept-Ranges: none` and no download
   filename; the signed/direct media URL path is refused for the same assets.

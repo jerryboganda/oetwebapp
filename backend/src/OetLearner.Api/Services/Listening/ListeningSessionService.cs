@@ -67,8 +67,12 @@ public sealed class ListeningSessionService
         if (shouldRepairNavigation)
         {
             attempt.NavigationStateJson = JsonSerializer.Serialize(nav);
-            attempt.WindowStartedAt = _clock.GetUtcNow();
-            attempt.WindowDurationMs = await ComputeWindowMsAsync(attempt.PaperId, nav.State, policy, mode, ct);
+            // Repairing a corrupt navigation payload must never restart an
+            // already-running timer. Only initialize missing anchors (for
+            // legacy rows that never had them); preserve both values on
+            // refresh/reconnect so the authoritative deadline cannot move.
+            attempt.WindowStartedAt ??= _clock.GetUtcNow();
+            attempt.WindowDurationMs ??= await ComputeWindowMsAsync(attempt.PaperId, nav.State, policy, mode, ct);
             await _db.SaveChangesAsync(ct);
         }
 

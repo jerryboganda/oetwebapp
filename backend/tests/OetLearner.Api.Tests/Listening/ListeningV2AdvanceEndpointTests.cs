@@ -254,6 +254,41 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
     }
 
     [Fact]
+    public async Task State_repair_preserves_existing_window_anchor_and_duration()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await SeedStrictAttemptAsync(userId, attemptId, navigationStateJson: "{not-json");
+
+        var originalStartedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+        const int originalDurationMs = 45_000;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt = await db.ListeningAttempts.FindAsync([attemptId], CancellationToken.None);
+            Assert.NotNull(attempt);
+            attempt!.WindowStartedAt = originalStartedAt;
+            attempt.WindowDurationMs = originalDurationMs;
+            await db.SaveChangesAsync();
+        }
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        var response = await client.GetAsync($"/v1/listening/v2/attempts/{attemptId}/state");
+        response.EnsureSuccessStatusCode();
+
+        await using var verifyScope = _factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var repaired = await verifyDb.ListeningAttempts.FindAsync([attemptId], CancellationToken.None);
+        Assert.NotNull(repaired);
+        Assert.Equal(originalStartedAt, repaired!.WindowStartedAt);
+        Assert.Equal(originalDurationMs, repaired.WindowDurationMs);
+    }
+
+    [Fact]
     public async Task Free_navigation_rejects_unknown_destination_state()
     {
         var userId = $"listener-{Guid.NewGuid():N}";
