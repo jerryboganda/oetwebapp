@@ -132,6 +132,14 @@ an owner-controlled value that must not be invented in code.
   transitions, expired readiness rejection, and recording advisory device,
   browser, network, display, and audio-output signals without blocking on
   those advisory values. Deployed browser verification remains pending.
+- Lightweight frontend contracts also pass: `pnpm exec vitest run
+  tests/unit/listening/audio-integrity.test.ts
+  components/domain/results/score-band-graph.test.tsx
+  lib/mobile/offline-answer-reconciliation.test.ts --reporter=dot`
+  passed 5 files and 14 tests. This covers client-side seek/replay blocking,
+  branded practice-score graph rendering, and encrypted-queue reconciliation
+  decision behavior; full browser reconnect and deployed acceptance remain
+  separate gates.
 - Listening and Reading pathway `bestScaledScore` values now also require an
   explicit persisted conversion decision, preventing pathway branching or
   milestone display from relying on table-key-only metadata. Focused pathway
