@@ -354,6 +354,37 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         Assert.Equal(ListeningAttemptStatus.Submitted, attempt.Status);
     }
 
+    [Fact]
+    public async Task Submit_review_does_not_fabricate_rationale_when_authored_explanation_is_missing()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        var questionId = await SeedRelationalAttemptAsync(
+            userId,
+            attemptId,
+            explanation: null);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        var saveResponse = await client.PutAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/answers/{questionId}",
+            new { userAnswer = "five" });
+        saveResponse.EnsureSuccessStatusCode();
+
+        var submitResponse = await client.PostAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/submit",
+            null);
+        submitResponse.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        var item = json.RootElement.GetProperty("itemReview")[0];
+
+        Assert.True(item.TryGetProperty("explanation", out var explanation));
+        Assert.Equal(JsonValueKind.Null, explanation.ValueKind);
+    }
+
     // WS4 regression — a paper WITHOUT an authored sequence must yield the
     // exact same window duration the legacy policy-only timing produced.
     [Fact]
@@ -543,7 +574,10 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         await db.SaveChangesAsync();
     }
 
-    private async Task<string> SeedRelationalAttemptAsync(string userId, string attemptId)
+    private async Task<string> SeedRelationalAttemptAsync(
+        string userId,
+        string attemptId,
+        string? explanation = "The speaker says five milligrams.")
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -606,7 +640,7 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
             CorrectAnswerJson = "\"five\"",
             AcceptedSynonymsJson = "[\"5\"]",
             CaseSensitive = false,
-            ExplanationMarkdown = "The speaker says five milligrams.",
+            ExplanationMarkdown = explanation,
             CreatedAt = now,
             UpdatedAt = now,
         });

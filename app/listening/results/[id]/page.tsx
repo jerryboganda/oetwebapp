@@ -292,9 +292,15 @@ function ListeningResultsContent() {
                             </div>
                           ) : null}
 
-                          <div>
+                          <div className="rounded-xl border border-border bg-surface p-4">
                             <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">Explanation</span>
-                            <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
+                            {item.explanation ? (
+                              <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
+                            ) : (
+                              <p className="text-sm leading-relaxed text-muted">
+                                No approved explanation is available for this item.
+                              </p>
+                            )}
                           </div>
 
                           <GroundedListeningAiExplanation

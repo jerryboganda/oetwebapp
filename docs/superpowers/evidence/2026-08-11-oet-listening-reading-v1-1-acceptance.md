@@ -200,6 +200,11 @@ an owner-controlled value that must not be invented in code.
   answer/rationale review. The canonical focused UI test passed (6/6); the
   untracked `pdf-policy-release*` copies were explicitly excluded and were not
   modified.
+- Listening learner review no longer fabricates rationale text when an authored
+  explanation is absent. The result contract carries a nullable explanation and
+  the UI states that no approved explanation is available; a focused endpoint
+  regression covers the null boundary. Fresh backend execution remains pending
+  by request.
 - Listening authoring now validates processed uploaded-audio duration and
   authored per-section timing (including legacy JSON extracts), and the shared
   publish path hard-blocks missing audio, duration, cue-window, and section

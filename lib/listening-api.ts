@@ -326,7 +326,8 @@ export interface ListeningReviewItemDto {
   isCorrect: boolean;
   pointsEarned: number;
   maxPoints: number;
-  explanation: string;
+  /** Author-approved rationale; null means no approved explanation exists. */
+  explanation: string | null;
   errorType: string | null;
   /**
    * Structured miss classification from the relational grader. Drives the

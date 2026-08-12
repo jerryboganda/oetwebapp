@@ -2716,7 +2716,11 @@ public sealed class ListeningLearnerService(
             IsCorrect: isCorrect,
             PointsEarned: pointsEarned,
             MaxPoints: q.Points,
-            Explanation: q.Explanation ?? (isCorrect ? "Correct." : "Review the transcript clue and answer key."),
+            // Never invent rationale text when an older or otherwise
+            // incomplete authored item has no approved explanation. The
+            // learner projection carries null so the UI can state the
+            // unavailable-evidence condition without implying a reason.
+            Explanation: q.Explanation,
             ErrorType: errorType,
             Options: q.Options,
             Transcript: transcript,
@@ -3972,7 +3976,7 @@ public sealed class ListeningLearnerService(
         bool IsCorrect,
         int PointsEarned,
         int MaxPoints,
-        string Explanation,
+        string? Explanation,
         string? ErrorType,
         IReadOnlyList<string> Options,
         ListeningTranscriptSnippetDto? Transcript,
