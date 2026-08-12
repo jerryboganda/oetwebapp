@@ -337,6 +337,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   rawScore={raw}
                   maxRawScore={review.attempt.maxRawScore}
                   scaledScore={scaled}
+                  passed={review.attempt.passed}
                   grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
                   tableVersion={review.attempt.scoreConversionTableVersionKey}
                 />

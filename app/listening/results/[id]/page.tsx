@@ -184,6 +184,7 @@ function ListeningResultsContent() {
                 rawScore={result.rawScore}
                 maxRawScore={result.maxRawScore}
                 scaledScore={result.scaledScore}
+                passed={result.passed}
                 grade={hasApprovedConversion ? result.grade : null}
                 tableVersion={result.scoreConversionTableVersionKey}
               />

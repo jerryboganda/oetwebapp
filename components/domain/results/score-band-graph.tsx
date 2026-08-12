@@ -4,6 +4,7 @@ export interface ScoreBandGraphProps {
   rawScore: number;
   maxRawScore: number;
   scaledScore: number | null;
+  passed?: boolean | null;
   grade?: string | null;
   tableVersion?: string | null;
   className?: string;
@@ -20,11 +21,12 @@ export function ScoreBandGraph({
   rawScore,
   maxRawScore,
   scaledScore,
+  passed,
   grade,
   tableVersion,
   className,
 }: ScoreBandGraphProps) {
-  const hasConversion = scaledScore !== null && tableVersion != null;
+  const hasConversion = scaledScore !== null && tableVersion != null && passed != null;
   const boundedScore = hasConversion
     ? Math.min(500, Math.max(0, scaledScore ?? 0))
     : 0;

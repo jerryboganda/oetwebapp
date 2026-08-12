@@ -109,6 +109,10 @@ an owner-controlled value that must not be invented in code.
   builder now withhold the mock-wide overall score while any Reading/Listening
   module lacks owner-approved conversion evidence, preventing a partial mean
   from being presented as a completed mock result.
+- Shared Listening/Reading score graphs now require the explicit persisted pass
+  decision as well as the scaled value and conversion-table key; a missing
+  decision remains raw-only while an explicit failed decision still renders the
+  owner-converted score.
 - The legacy background mock-report builder is aligned with the same governed
   score gate, withholding Reading/Listening formula grades, mock-wide grade,
   and booking pass advice when owner conversion evidence is absent.

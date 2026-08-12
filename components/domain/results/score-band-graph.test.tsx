@@ -9,6 +9,7 @@ describe('ScoreBandGraph', () => {
         rawScore={32}
         maxRawScore={42}
         scaledScore={380}
+        passed={true}
         grade="B"
         tableVersion="lr-2026-v1"
       />,
