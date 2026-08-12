@@ -20,7 +20,7 @@ import type {
 // ── Listening structure ────────────────────────────────────────────────
 
 export type ListeningPartCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
-export type ListeningQuestionType = 'short_answer' | 'multiple_choice_3';
+export type ListeningQuestionType = 'short_answer' | 'multiple_choice_3' | 'multiple_choice_4';
 
 export interface ListeningAuthoredQuestion {
   id: string;

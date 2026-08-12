@@ -75,7 +75,7 @@ export default function AdminListeningStructurePage() {
       header: 'Type',
       render: (q) => (
         <span className="text-xs uppercase tracking-widest text-admin-fg-muted">
-          {q.type === 'multiple_choice_3' ? 'MCQ' : 'Gap fill'}
+          {q.type === 'multiple_choice_4' ? 'MCQ (4)' : q.type === 'multiple_choice_3' ? 'MCQ (3)' : 'Gap fill'}
         </span>
       ),
     },

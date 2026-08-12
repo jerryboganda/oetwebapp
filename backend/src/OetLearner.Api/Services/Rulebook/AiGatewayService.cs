@@ -1412,7 +1412,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("    {");
                 sb.AppendLine("      \"number\": 1,                      // 1..42, contiguous");
                 sb.AppendLine("      \"partCode\": \"A1|A2|B|C1|C2\",   // A1 = Q1-12, A2 = Q13-24, B = Q25-30, C1 = Q31-36, C2 = Q37-42");
-                sb.AppendLine("      \"type\": \"short_answer|multiple_choice_3\",");
+                sb.AppendLine("      \"type\": \"short_answer|multiple_choice_3|multiple_choice_4\",");
                 sb.AppendLine("      \"stem\": \"...\",                    // exact wording from the question paper");
                 sb.AppendLine("      \"options\": [\"A\",\"B\",\"C\"],     // 3 options for MCQ; [] for short_answer");
                 sb.AppendLine("      \"correctAnswer\": \"...\",           // letter (A/B/C) for MCQ; canonical text for short_answer");

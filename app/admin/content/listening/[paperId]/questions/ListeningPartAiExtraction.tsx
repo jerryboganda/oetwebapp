@@ -4,7 +4,7 @@
  * Listening Part B / Part C — AI extraction (OCR).
  *
  * Part B/C is PDF-backed: the learner reads the MCQ on the question paper and the
- * admin only records the correct option (A/B/C) + an optional rationale. This panel
+ * admin only records the correct option (A/B/C for Part B; A/B/C/D for Part C) + an optional rationale. This panel
  * automates that for a WHOLE part in one go: upload the part's question paper
  * (Part C also uploads C2) + the answer-key PDF, the server OCRs + Claude-structures
  * them, and the admin proofreads the pre-filled answers and clicks one Save.
@@ -39,17 +39,19 @@ export interface ListeningPartAiExtractionProps {
   onNotify: (variant: 'success' | 'error', message: string) => void;
 }
 
-const MCQ_LETTERS = ['A', 'B', 'C'] as const;
+const MCQ3_LETTERS = ['A', 'B', 'C'] as const;
+const MCQ4_LETTERS = ['A', 'B', 'C', 'D'] as const;
 const MCQ3_OPTIONS = ['Option A', 'Option B', 'Option C'];
+const MCQ4_OPTIONS = ['Option A', 'Option B', 'Option C', 'Option D'];
 const SEE_PDF_SENTINEL = 'See PDF';
 const PDF_ACCEPT = 'application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp';
 
 function isSentinelStem(stem: string | undefined): boolean {
   return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
 }
-function isPlaceholderOption(text: string | undefined, index: number): boolean {
+function isPlaceholderOption(text: string | undefined, index: number, options: readonly string[]): boolean {
   const trimmed = (text ?? '').trim();
-  return trimmed.length === 0 || trimmed.toLowerCase() === MCQ3_OPTIONS[index].toLowerCase();
+  return trimmed.length === 0 || trimmed.toLowerCase() === options[index].toLowerCase();
 }
 
 const PART_RANGE: Record<ListeningExtractionPart, [number, number]> = { B: [25, 30], C: [31, 42] };
@@ -61,13 +63,13 @@ function subSectionFor(part: ListeningExtractionPart, number: number): Listening
 }
 
 /** Resolve an existing question's stored correct answer to a letter A/B/C. */
-function correctLetterOf(q: ListeningAuthoredQuestion): string {
+function correctLetterOf(q: ListeningAuthoredQuestion, letters: readonly string[]): string {
   const raw = (q.correctAnswer ?? '').trim();
   if (!raw) return '';
   const upper = raw.toUpperCase();
-  if (MCQ_LETTERS.includes(upper as (typeof MCQ_LETTERS)[number])) return upper;
+  if (letters.some((letter) => letter === upper)) return upper;
   const index = (q.options ?? []).findIndex((opt) => opt.trim() === raw);
-  return index >= 0 ? MCQ_LETTERS[index] ?? '' : '';
+  return index >= 0 ? letters[index] ?? '' : '';
 }
 
 interface Row {
@@ -115,17 +117,19 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
         const seedStem = ai?.stem?.trim()
           ? ai.stem.trim()
           : existing && !isSentinelStem(existing.stem) ? (existing.stem ?? '') : '';
-        const aiOptions = [ai?.optionA, ai?.optionB, ai?.optionC];
-        const seedOptions = MCQ_LETTERS.map((_, i) => {
+        const letters = part === 'C' ? MCQ4_LETTERS : MCQ3_LETTERS;
+        const placeholders = part === 'C' ? MCQ4_OPTIONS : MCQ3_OPTIONS;
+        const aiOptions = [ai?.optionA, ai?.optionB, ai?.optionC, ai?.optionD];
+        const seedOptions = letters.map((_, i) => {
           if (aiOptions[i]?.trim()) return aiOptions[i]!.trim();
           const opt = existing?.options?.[i];
-          return isPlaceholderOption(opt, i) ? '' : (opt ?? '');
+          return isPlaceholderOption(opt, i, placeholders) ? '' : (opt ?? '');
         });
         seeded.push({
           number: n,
           stem: seedStem,
           options: seedOptions,
-          correctAnswer: ai?.correctAnswer ?? (existing ? correctLetterOf(existing) : ''),
+          correctAnswer: ai?.correctAnswer ?? (existing ? correctLetterOf(existing, letters) : ''),
           rationale: ai?.rationale ?? existing?.explanation ?? '',
         });
       }
@@ -171,9 +175,10 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
           id: previous?.id ?? `lq-${row.number}`,
           number: row.number,
           partCode: subSectionFor(part, row.number),
-          type: 'multiple_choice_3',
+          type: part === 'C' ? 'multiple_choice_4' : 'multiple_choice_3',
           stem: row.stem.trim() || SEE_PDF_SENTINEL,
-          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() || MCQ3_OPTIONS[i]),
+          options: (part === 'C' ? MCQ4_LETTERS : MCQ3_LETTERS)
+            .map((_, i) => row.options[i]?.trim() || (part === 'C' ? MCQ4_OPTIONS : MCQ3_OPTIONS)[i]),
           correctAnswer: row.correctAnswer,
           acceptedAnswers: [],
           explanation: row.rationale.trim() ? row.rationale.trim() : null,
@@ -287,7 +292,7 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
                       <Select
                         aria-label={`Correct answer for question ${row.number}`}
                         placeholder="Mark correct option"
-                        options={MCQ_LETTERS.map((letter, i) => ({
+                        options={(part === 'C' ? MCQ4_LETTERS : MCQ3_LETTERS).map((letter, i) => ({
                           value: letter,
                           label: row.options[i]?.trim() ? `${letter}. ${row.options[i].trim()}` : `Option ${letter}`,
                         }))}
@@ -304,7 +309,7 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
                     placeholder="Question text — shown as the heading on the learner card"
                   />
                   <div className="grid gap-2">
-                    {MCQ_LETTERS.map((letter, i) => (
+                    {(part === 'C' ? MCQ4_LETTERS : MCQ3_LETTERS).map((letter, i) => (
                       <div key={letter} className="flex items-center gap-2">
                         <span className="w-5 shrink-0 text-center text-xs font-black text-admin-fg-muted">{letter}</span>
                         <Input

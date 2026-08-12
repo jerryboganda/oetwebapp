@@ -343,6 +343,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Question numbers must be unique across the paper; {duplicateNumbers} duplicate number group(s) found."));
         }
 
+        if (wrongPartTypes > 0)
+        {
+            warnings.Add(new("listening_part_question_type", "error",
+                $"Listening question types must match the paper: Part A typed responses, Part B multiple_choice_3, and Part C multiple_choice_4; {wrongPartTypes} item(s) violate this."));
+        }
+
         // 2026-05-27 audit fix — Listening rule L01.1 (contiguous numbering
         // 1..42). The existing duplicate check is necessary but not sufficient;
         // an authored paper could have all-unique numbers but skip 7 and still
@@ -435,19 +441,29 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
         }
 
-        // Any sub-section may now use any of the 3 content types (MCQ /
-        // fill-in-the-blank / free-text), so the old per-part type-coupling
-        // rules (listening_part_a_type / listening_part_b_mcq_shape /
-        // listening_part_c_mcq_shape) are dropped. We still validate that an
-        // item which IS typed MultipleChoice3 has a valid 3-option single-select
-        // shape, regardless of which part it lives in.
+        // The supplied v1.1 paper fixes the Listening question shape by part:
+        // Part A typed responses, Part B three-option MCQs, and Part C
+        // four-option MCQs. Keep this gate server-authoritative so an invalid
+        // authored paper cannot be published and later misgraded.
+        var wrongPartTypes = rows.Count(row =>
+            ((row.PartCode is ListeningPartCode.A1 or ListeningPartCode.A2)
+                && row.QuestionType is not (ListeningQuestionType.ShortAnswer or ListeningQuestionType.FillInBlank))
+            || (IsPartB(row.PartCode) && row.QuestionType != ListeningQuestionType.MultipleChoice3)
+            || ((row.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2)
+                && row.QuestionType != ListeningQuestionType.MultipleChoice4));
+        if (wrongPartTypes > 0)
+        {
+            warnings.Add(new("listening_part_question_type", "error",
+                $"Listening question types must match the paper: Part A typed responses, Part B MultipleChoice3, and Part C MultipleChoice4; {wrongPartTypes} item(s) violate this."));
+        }
+
         var mcqItemsWithBadShape = rows.Count(row =>
-            row.QuestionType == ListeningQuestionType.MultipleChoice3
+            row.QuestionType.IsMultipleChoice()
             && !HasValidMcqShape(row.QuestionType, ReadJsonString(row.CorrectAnswerJson), row.Options));
         if (mcqItemsWithBadShape > 0)
         {
             warnings.Add(new("listening_mcq_shape", "error",
-                $"Every MCQ item requires single-select shape with exactly 3 options and one matching correct answer; {mcqItemsWithBadShape} item(s) violate this."));
+                $"Every Listening MCQ requires its exact single-select shape (Part B: 3 options; Part C: 4 options) and one matching correct answer; {mcqItemsWithBadShape} item(s) violate this."));
         }
 
         var missingExtractLinks = rows.Count(row => string.IsNullOrWhiteSpace(row.ListeningExtractId)
@@ -583,7 +599,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         }
 
         var wrongOptionsMissingDistractorCategory = rows
-            .Where(row => row.QuestionType == ListeningQuestionType.MultipleChoice3)
+            .Where(row => row.QuestionType.IsMultipleChoice())
             .SelectMany(row => row.Options)
             .Count(option => !option.IsCorrect && option.DistractorCategory is null);
         if (wrongOptionsMissingDistractorCategory > 0)
@@ -847,6 +863,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         int authoredPartAMarks = 0, authoredPartBMarks = 0, authoredPartCMarks = 0;
         var bSub = new int[6]; // B1..B6 counts
         var mcqItemsWithBadShape = 0;
+        var wrongPartTypes = 0;
         var blankAnswers = 0;
         var blankStems = 0;
         var numbers = new Dictionary<int, int>();
@@ -900,14 +917,28 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             var points = TryGetInt(q, "points") ?? 1;
 
             // Any sub-section may use any of the 3 content types — only validate
-            // 3-option shape on items that ARE typed MCQ (parity with relational
-            // path's listening_mcq_shape). Distractor-category checks likewise
-            // apply to any MCQ-typed item.
+            // Part B uses three options and Part C uses four; distractor
+            // category checks apply to both governed MCQ types.
             var qType = (ReadString(q, "type") ?? ReadString(q, "questionType") ?? string.Empty).Trim();
-            var isMcq = string.Equals(qType, "multiple_choice_3", StringComparison.OrdinalIgnoreCase);
+            var isMcq = qType.Equals("multiple_choice_3", StringComparison.OrdinalIgnoreCase)
+                || qType.Equals("multiple_choice_4", StringComparison.OrdinalIgnoreCase);
+            var expectedType = partCode.StartsWith("C", StringComparison.Ordinal)
+                ? "multiple_choice_4"
+                : partCode.StartsWith("B", StringComparison.Ordinal)
+                    ? "multiple_choice_3"
+                    : null;
+            if (expectedType is not null
+                ? !qType.Equals(expectedType, StringComparison.OrdinalIgnoreCase)
+                : partCode.StartsWith("A", StringComparison.Ordinal)
+                    && !qType.Equals("short_answer", StringComparison.OrdinalIgnoreCase)
+                    && !qType.Equals("fill_in_blank", StringComparison.OrdinalIgnoreCase)
+                    && !qType.Equals("gap_fill", StringComparison.OrdinalIgnoreCase))
+            {
+                wrongPartTypes++;
+            }
             if (isMcq)
             {
-                if (!HasValidMcqShape(q)) mcqItemsWithBadShape++;
+                if (!HasValidMcqShape(q, expectedType ?? qType)) mcqItemsWithBadShape++;
                 var distractorIssues = CountJsonDistractorCategoryIssues(q);
                 wrongOptionsMissingDistractorCategory += distractorIssues.Missing;
                 wrongOptionsInvalidDistractorCategory += distractorIssues.Invalid;
@@ -1128,13 +1159,14 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         return (a, b, c, a + b + c, warnings);
     }
 
-    private static bool HasValidMcqShape(Dictionary<string, object?> question)
+    private static bool HasValidMcqShape(Dictionary<string, object?> question, string expectedType)
     {
         var type = ReadString(question, "type") ?? ReadString(question, "questionType");
         var options = ReadOptions(question);
         var correctAnswer = ReadString(question, "correctAnswer")?.Trim();
-        if (!string.Equals(type?.Trim(), "multiple_choice_3", StringComparison.OrdinalIgnoreCase)
-            || options.Count != 3
+        var expectedOptionCount = string.Equals(expectedType, "multiple_choice_4", StringComparison.OrdinalIgnoreCase) ? 4 : 3;
+        if (!string.Equals(type?.Trim(), expectedType, StringComparison.OrdinalIgnoreCase)
+            || options.Count != expectedOptionCount
             || options.Select(option => option.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != options.Count
             || string.IsNullOrWhiteSpace(correctAnswer))
         {
@@ -1158,8 +1190,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         IReadOnlyCollection<RelationalOption> options)
     {
         var normalizedCorrectAnswer = correctAnswer?.Trim();
-        if (questionType != ListeningQuestionType.MultipleChoice3
-            || options.Count != 3
+        var expectedOptionCount = questionType.ExpectedOptionCount();
+        if (expectedOptionCount is null
+            || options.Count != expectedOptionCount.Value
             || string.IsNullOrWhiteSpace(normalizedCorrectAnswer))
         {
             return false;

@@ -11,7 +11,7 @@
 import { apiClient } from './api';
 
 export type ListeningPartCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
-export type ListeningQuestionType = 'short_answer' | 'fill_in_blank' | 'multiple_choice_3';
+export type ListeningQuestionType = 'short_answer' | 'fill_in_blank' | 'multiple_choice_3' | 'multiple_choice_4';
 export type ListeningExtractKind = 'consultation' | 'workplace' | 'presentation';
 export type ListeningValidationStatus = 'draft' | 'in_review' | 'validated' | 'published' | 'rejected';
 
@@ -42,16 +42,18 @@ export const LISTENING_SUB_SECTION_QUESTION_TARGETS: Record<ListeningSubSectionC
 /**
  * Admin-facing content types offered in every sub-section, mapped to the
  * backend wire `type`. There are three distinct stored types:
- * `multiple_choice_3` (MCQ), `fill_in_blank`, and `short_answer` (free text).
+ * `multiple_choice_3` (Part B MCQ), `multiple_choice_4` (Part C MCQ),
+ * `fill_in_blank`, and `short_answer` (free text).
  * `FillInBlank` and `ShortAnswer` are grading-identical (stem + correct answer
  * + accepted variants, no options) and both render as a text box for the
  * learner, but they persist distinctly so the admin round-trips the author's
  * choice (the backend projects `fill_in_blank` → `ListeningQuestionType.FillInBlank`).
  */
-export type ListeningContentType = 'MultipleChoice3' | 'FillInBlank' | 'ShortAnswer';
+export type ListeningContentType = 'MultipleChoice3' | 'MultipleChoice4' | 'FillInBlank' | 'ShortAnswer';
 
 export const LISTENING_CONTENT_TYPE_LABELS: Record<ListeningContentType, string> = {
   MultipleChoice3: 'Multiple choice (3 options)',
+  MultipleChoice4: 'Multiple choice (4 options)',
   FillInBlank: 'Fill in the blank',
   ShortAnswer: 'Short answer',
 };
@@ -60,6 +62,7 @@ export const LISTENING_CONTENT_TYPE_LABELS: Record<ListeningContentType, string>
 export function contentTypeToWire(type: ListeningContentType): ListeningQuestionType {
   switch (type) {
     case 'MultipleChoice3': return 'multiple_choice_3';
+    case 'MultipleChoice4': return 'multiple_choice_4';
     case 'FillInBlank': return 'fill_in_blank';
     default: return 'short_answer';
   }
@@ -72,6 +75,7 @@ export function contentTypeToWire(type: ListeningContentType): ListeningQuestion
 export function wireToContentType(type: string | null | undefined): ListeningContentType {
   switch (type) {
     case 'multiple_choice_3': return 'MultipleChoice3';
+    case 'multiple_choice_4': return 'MultipleChoice4';
     case 'fill_in_blank': return 'FillInBlank';
     default: return 'ShortAnswer';
   }
@@ -540,7 +544,7 @@ export const importListeningPartAFromUpload = (
 
 export interface ListeningPartBCAnswer {
   number: number;
-  /** Correct option letter: 'A' | 'B' | 'C'. */
+  /** Correct option letter: A/B/C for Part B; A/B/C/D for Part C. */
   correctAnswer: string;
   /** AI-drafted "why correct" rationale (learner-visible on review), or null. */
   rationale: string | null;
@@ -550,6 +554,7 @@ export interface ListeningPartBCAnswer {
   optionA?: string | null;
   optionB?: string | null;
   optionC?: string | null;
+  optionD?: string | null;
 }
 
 export interface ListeningPartBCImportResult {
@@ -770,7 +775,7 @@ export function buildCanonicalListeningSkeleton(): ListeningAuthoredQuestion[] {
     partCode,
     type,
     stem: '',
-    options: type === 'multiple_choice_3' ? ['', '', ''] : [],
+    options: type === 'multiple_choice_4' ? ['', '', '', ''] : type === 'multiple_choice_3' ? ['', '', ''] : [],
     correctAnswer: '',
     acceptedAnswers: [],
     explanation: null,
@@ -778,8 +783,8 @@ export function buildCanonicalListeningSkeleton(): ListeningAuthoredQuestion[] {
     transcriptExcerpt: null,
     distractorExplanation: null,
     points: 1,
-    optionDistractorWhy: type === 'multiple_choice_3' ? [null, null, null] : [],
-    optionDistractorCategory: type === 'multiple_choice_3' ? [null, null, null] : [],
+    optionDistractorWhy: type === 'multiple_choice_4' ? [null, null, null, null] : type === 'multiple_choice_3' ? [null, null, null] : [],
+    optionDistractorCategory: type === 'multiple_choice_4' ? [null, null, null, null] : type === 'multiple_choice_3' ? [null, null, null] : [],
     speakerAttitude: null,
     transcriptEvidenceStartMs: null,
     transcriptEvidenceEndMs: null,
@@ -787,8 +792,8 @@ export function buildCanonicalListeningSkeleton(): ListeningAuthoredQuestion[] {
   for (let i = 1; i <= 12; i++) items.push(blank(i, 'A1', 'short_answer'));
   for (let i = 13; i <= 24; i++) items.push(blank(i, 'A2', 'short_answer'));
   for (let i = 25; i <= 30; i++) items.push(blank(i, 'B', 'multiple_choice_3'));
-  for (let i = 31; i <= 36; i++) items.push(blank(i, 'C1', 'multiple_choice_3'));
-  for (let i = 37; i <= 42; i++) items.push(blank(i, 'C2', 'multiple_choice_3'));
+  for (let i = 31; i <= 36; i++) items.push(blank(i, 'C1', 'multiple_choice_4'));
+  for (let i = 37; i <= 42; i++) items.push(blank(i, 'C2', 'multiple_choice_4'));
   return items;
 }
 
@@ -904,7 +909,7 @@ export interface ListeningManifestTranscriptSegment {
 
 export interface ListeningManifestQuestion {
   number: number;
-  type?: string | null;                 // gap_fill | short_answer | multiple_choice_3
+  type?: string | null;                 // gap_fill | short_answer | multiple_choice_3 | multiple_choice_4
   noteTextBeforeGap?: string | null;     // Part A note lead-in
   stem?: string | null;                  // Part B/C question stem
   options?: ListeningManifestOptions | null;

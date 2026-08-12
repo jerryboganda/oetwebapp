@@ -316,7 +316,7 @@ public sealed class ListeningGradingService
             }
 
             var gradingQuestion = gradingQuestions.First(candidate => candidate.Id == q.Id);
-            if (gradingQuestion.QuestionType == ListeningQuestionType.MultipleChoice3
+            if (gradingQuestion.QuestionType.IsMultipleChoice()
                 && TryReadMultipleSelections(ans.UserAnswerJson, out var selections))
             {
                 multipleSelectionIssues.Add(new MultipleSelectionIntegrityIssue(
@@ -534,6 +534,7 @@ public sealed class ListeningGradingService
         switch (q.QuestionType)
         {
             case ListeningQuestionType.MultipleChoice3:
+            case ListeningQuestionType.MultipleChoice4:
             {
                 var selected = TryReadString(ans.UserAnswerJson);
                 if (string.IsNullOrEmpty(selected)) return (false, null, null);

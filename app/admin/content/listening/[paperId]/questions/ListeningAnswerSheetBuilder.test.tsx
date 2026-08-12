@@ -87,7 +87,7 @@ describe('ListeningAnswerSheetBuilder', () => {
     });
   });
 
-  it('generates six MCQ-3 items for Part C section C2 at numbers 37..42 (3 options)', async () => {
+  it('generates six MCQ-4 items for Part C section C2 at numbers 37..42 (4 options)', async () => {
     const user = userEvent.setup();
     render(
       <ListeningAnswerSheetBuilder
@@ -108,7 +108,7 @@ describe('ListeningAnswerSheetBuilder', () => {
 
     const saved = savedQuestions().sort((a, b) => a.number - b.number);
     expect(saved.map((q) => q.number)).toEqual([37, 38, 39, 40, 41, 42]);
-    expect(saved.every((q) => q.type === 'multiple_choice_3' && q.options.length === 3)).toBe(true);
+    expect(saved.every((q) => q.type === 'multiple_choice_4' && q.options.length === 4)).toBe(true);
     expect(saved.every((q) => q.correctAnswer === 'B')).toBe(true);
   });
 

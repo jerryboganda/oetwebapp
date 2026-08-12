@@ -207,7 +207,8 @@ an owner-controlled value that must not be invented in code.
   execution and deployed mock verification remain pending.
 - Legacy Listening mock start now fails closed unless the published template
   resolves to exactly 42 distinct questions with canonical Part A 24 / Part B 6
-  / Part C 12 coverage, one-mark items, and valid three-option MCQs. It stores
+  / Part C 12 coverage, one-mark items, Part B three-option A/B/C MCQs, and
+  Part C four-option A/B/C/D MCQs. It stores
   immutable question, key, option, rationale, transcript-evidence, and version
   snapshots and grades against them instead of mutable live rows. Focused
   execution and deployed mock verification remain pending.
