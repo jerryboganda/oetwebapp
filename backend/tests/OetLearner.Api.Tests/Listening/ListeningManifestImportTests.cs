@@ -149,10 +149,10 @@ public class ListeningManifestImportTests
             {
                 questions.Add(new ListeningQuestionManifest(
                     Number: number,
-                    Type: "multiple_choice_3",
+                    Type: "multiple_choice_4",
                     NoteTextBeforeGap: null,
                     Stem: $"Part C question {number}",
-                    Options: new ListeningOptionsManifest("Choice A", "Choice B", "Choice C"),
+                    Options: new ListeningOptionsManifest("Choice A", "Choice B", "Choice C", "Choice D"),
                     CorrectAnswer: "C",
                     AcceptedAnswers: null,
                     Explanation: "Because C.",
@@ -163,7 +163,7 @@ public class ListeningManifestImportTests
                     TranscriptEvidenceEndMs: 5000,
                     TranscriptExcerpt: "C is right here",
                     OptionDistractorWhy: null,
-                    OptionDistractorCategory: new string?[] { "reused_keyword", "opposite_meaning", null }));
+                    OptionDistractorCategory: new string?[] { "reused_keyword", "opposite_meaning", null, "too_weak" }));
             }
             partCExtracts.Add(new ListeningExtractManifest(
                 ExtractNumber: extractNumber,
@@ -238,7 +238,8 @@ public class ListeningManifestImportTests
 
         // Part C carries the extract-level speaker attitude onto each question.
         var c = questions.Single(q => q.Number == 31);
-        Assert.Equal("multiple_choice_3", c.Type);
+        Assert.Equal("multiple_choice_4", c.Type);
+        Assert.Equal(new[] { "Choice A", "Choice B", "Choice C", "Choice D" }, c.Options);
         Assert.Equal("C", c.CorrectAnswer);
         Assert.Equal("critical", c.SpeakerAttitude);
 

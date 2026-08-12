@@ -57,13 +57,15 @@ public enum ListeningQuestionType
     /// canonical-answer + accepted-variants string compare. Selectable in any
     /// sub-section (one of the 3 platform content types).</summary>
     ShortAnswer = 0,
-    /// <summary>3-option MCQ. Selectable in any sub-section.</summary>
+    /// <summary>3-option MCQ used by Listening Part B.</summary>
     MultipleChoice3 = 1,
     /// <summary>Fill-in-the-blank gap. Authored as a distinct type so admins
     /// can pick it explicitly (one of the 3 platform content types: MCQ /
     /// fill-in-the-blank / free-text), but graded identically to
     /// <see cref="ShortAnswer"/> (canonical + accepted-variants string compare).</summary>
     FillInBlank = 2,
+    /// <summary>4-option MCQ used by Listening Part C.</summary>
+    MultipleChoice4 = 3,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

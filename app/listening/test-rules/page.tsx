@@ -30,7 +30,7 @@ const DEFAULT_RULES: ListeningTestRulesPolicyDto = {
   durationMinutes: 40,
   partA: { items: 24, extracts: 2, itemType: 'short-answer' },
   partB: { items: 6, extracts: 6, itemType: 'mcq-3-option' },
-  partC: { items: 12, extracts: 2, itemType: 'mcq-3-option' },
+  partC: { items: 12, extracts: 2, itemType: 'mcq-4-option' },
   passRawAnchor: null,
   passScaledAnchor: null,
   scaledMax: 500,
