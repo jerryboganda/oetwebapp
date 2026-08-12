@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Clock3, Eye, Play, RotateCcw } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock3, Eye, KeyRound, Play, RotateCcw, ShieldCheck } from 'lucide-react';
 
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { Button } from '@/components/admin/ui/button';
@@ -12,7 +12,9 @@ import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import {
+  getReadingStructureAdmin,
   getReadingStructureAdminPreview,
+  type ReadingStructureAdminDto,
   type ReadingLearnerStructureDto,
 } from '@/lib/reading-authoring-api';
 import { readingPublicDisplayNumber } from '@/lib/reading-display-number';
@@ -34,6 +36,7 @@ const SECTION_LABELS: Record<PreviewSectionCode, string> = {
 
 type PreviewPartCode = 'A' | 'B' | 'C';
 type PreviewTimerWindow = 'A' | 'BC';
+type PreviewMode = 'candidate' | 'marking';
 
 function timerWindowForPart(partCode: PreviewPartCode): PreviewTimerWindow {
   return partCode === 'A' ? 'A' : 'BC';
@@ -103,8 +106,10 @@ export default function ReadingPreviewAsStudentPage() {
   const paperId = params?.paperId ?? '';
 
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
+  const [markingStructure, setMarkingStructure] = useState<ReadingStructureAdminDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('candidate');
   const [previewStarted, setPreviewStarted] = useState(false);
   const [activePart, setActivePart] = useState<PreviewPartCode>('A');
   const [activeSection, setActiveSection] = useState<PreviewSectionCode | null>(null);
@@ -116,9 +121,14 @@ export default function ReadingPreviewAsStudentPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getReadingStructureAdminPreview(paperId)
-      .then((data) => {
-        if (!cancelled) setStructure(data);
+    Promise.all([
+      getReadingStructureAdminPreview(paperId),
+      getReadingStructureAdmin(paperId),
+    ])
+      .then(([candidateData, adminData]) => {
+        if (cancelled) return;
+        setStructure(candidateData);
+        setMarkingStructure(adminData);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load preview');
@@ -161,7 +171,7 @@ export default function ReadingPreviewAsStudentPage() {
   return (
     <AdminSettingsLayout
       title="Preview as student"
-      description="Read-only rendering using the learner endpoint. Correct answers are never exposed here."
+      description="Review the learner-safe candidate rendering and the protected marking projection before publishing."
       eyebrow="Reading authoring"
       icon={<Eye className="h-5 w-5" />}
       breadcrumbs={[
@@ -178,11 +188,34 @@ export default function ReadingPreviewAsStudentPage() {
       }
     >
       <div className="space-y-6">
-        <InlineAlert variant="info">
-          This preview is built from the same learner-safe projection used in the student player. It never exposes correct answers, explanations, or accepted variants.
-        </InlineAlert>
+        {previewMode === 'candidate' ? (
+          <InlineAlert variant="info">
+            This candidate preview is built from the same learner-safe projection used in the student player. It never exposes correct answers, explanations, or accepted variants.
+          </InlineAlert>
+        ) : null}
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
+
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Reading preview mode">
+          <Button
+            type="button"
+            variant={previewMode === 'candidate' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setPreviewMode('candidate')}
+            startIcon={<ShieldCheck className="h-4 w-4" />}
+          >
+            Candidate preview
+          </Button>
+          <Button
+            type="button"
+            variant={previewMode === 'marking' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setPreviewMode('marking')}
+            startIcon={<KeyRound className="h-4 w-4" />}
+          >
+            Marking preview
+          </Button>
+        </div>
 
         {loading ? (
           <div className="space-y-4">
@@ -190,6 +223,11 @@ export default function ReadingPreviewAsStudentPage() {
             <Skeleton variant="card" />
           </div>
         ) : structure ? (
+          previewMode === 'marking' ? (
+            markingStructure ? <ReadingMarkingPreview structure={markingStructure} /> : (
+              <InlineAlert variant="warning">The protected marking projection is unavailable. No answer key is shown.</InlineAlert>
+            )
+          ) : (
           <>
             <div>
               <h2 className="text-lg font-semibold text-admin-fg-strong">{structure.paper.title}</h2>
@@ -337,9 +375,99 @@ export default function ReadingPreviewAsStudentPage() {
               </SettingsSection>
             ))}
           </>
+          )
         ) : null}
       </div>
     </AdminSettingsLayout>
+  );
+}
+
+function parseJsonValue(value: string | null | undefined): unknown {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function formatAnswer(value: string | null | undefined): string {
+  const parsed = parseJsonValue(value);
+  if (Array.isArray(parsed)) return parsed.map((item) => String(item)).join(', ');
+  if (parsed && typeof parsed === 'object') return JSON.stringify(parsed);
+  return parsed == null ? 'Not authored' : String(parsed);
+}
+
+function formatAcceptedVariants(value: string | null | undefined): string[] {
+  const parsed = parseJsonValue(value);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((item) => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object' && 'value' in item) return String((item as { value?: unknown }).value ?? '');
+    return String(item);
+  }).filter(Boolean);
+}
+
+function markingOptions(value: string): string[] {
+  const parsed = parseJsonValue(value);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((option) => {
+    if (typeof option === 'string') return option;
+    if (option && typeof option === 'object' && 'label' in option) return String((option as { label?: unknown }).label ?? '');
+    return String(option);
+  }).filter(Boolean);
+}
+
+function ReadingMarkingPreview({ structure }: { structure: ReadingStructureAdminDto }) {
+  return (
+    <div className="space-y-6">
+      <InlineAlert variant="warning">
+        This admin-only marking projection contains the versioned answer key and authored evidence. It is never used as a learner projection.
+      </InlineAlert>
+      {structure.parts.map((part) => (
+        <SettingsSection
+          key={part.id}
+          title={`Part ${part.partCode} marking preview`}
+          description={`${part.questions.length} questions · ${part.timeLimitMinutes} minutes`}
+        >
+          <ol className="space-y-3">
+            {part.questions.map((question) => {
+              const options = markingOptions(question.optionsJson);
+              const variants = formatAcceptedVariants(question.acceptedSynonymsJson);
+              return (
+                <li key={question.id} className="rounded-lg border border-admin-border bg-admin-bg-surface p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="font-mono text-xs text-admin-fg-muted">
+                      Q{readingPublicDisplayNumber(part.partCode, question.displayOrder)}
+                    </span>
+                    <p className="flex-1 text-sm font-semibold text-admin-fg-strong">{question.stem || 'Untitled question'}</p>
+                    <Badge variant="muted" size="sm">{question.points}pt</Badge>
+                  </div>
+                  {options.length > 0 ? (
+                    <ul className="mt-3 space-y-1 pl-7">
+                      {options.map((option, index) => (
+                        <li key={`${question.id}-option-${index}`} className="text-sm text-admin-fg-default">
+                          <span className="font-medium">{OPTION_LABELS[index] ?? index + 1}.</span> {option}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-3 rounded-admin-md border border-[var(--admin-success)]/30 bg-[var(--admin-success)]/5 p-3 text-sm">
+                    <p className="flex items-center gap-1.5 font-semibold text-[var(--admin-success)]">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Correct answer: {formatAnswer(question.correctAnswerJson)}
+                    </p>
+                    {variants.length > 0 ? <p className="mt-1 text-admin-fg-muted">Accepted variants: {variants.join(', ')}</p> : null}
+                    {question.explanationMarkdown ? <p className="mt-1 text-admin-fg-muted">Rationale: {question.explanationMarkdown}</p> : null}
+                    {question.evidenceSentence ? <p className="mt-1 text-admin-fg-muted">Evidence: {question.evidenceSentence}</p> : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </SettingsSection>
+      ))}
+    </div>
   );
 }
 

@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const { mockGetReadingStructureAdminPreview } = vi.hoisted(() => ({
+const { mockGetReadingStructureAdmin, mockGetReadingStructureAdminPreview } = vi.hoisted(() => ({
+  mockGetReadingStructureAdmin: vi.fn(),
   mockGetReadingStructureAdminPreview: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock('@/components/admin/layout/admin-settings-layout', () => ({
 }));
 
 vi.mock('@/lib/reading-authoring-api', () => ({
+  getReadingStructureAdmin: mockGetReadingStructureAdmin,
   getReadingStructureAdminPreview: mockGetReadingStructureAdminPreview,
 }));
 
@@ -75,6 +77,41 @@ function part(partCode: 'A' | 'B' | 'C', questionCount: number) {
 describe('Admin Reading preview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetReadingStructureAdmin.mockResolvedValue({
+      paperId: 'paper-1',
+      parts: [
+        {
+          id: 'admin-part-a',
+          partCode: 'A',
+          timeLimitMinutes: 15,
+          maxRawScore: 20,
+          instructions: 'Marking instructions',
+          texts: [],
+          questions: [
+            {
+              id: 'admin-q-a-1',
+              readingPartId: 'admin-part-a',
+              readingSectionId: null,
+              readingTextId: null,
+              displayOrder: 1,
+              points: 1,
+              questionType: 'ShortAnswer',
+              stem: 'Admin question A1',
+              optionsJson: '[]',
+              correctAnswerJson: '"approved answer"',
+              acceptedSynonymsJson: '["approved variant"]',
+              caseSensitive: false,
+              explanationMarkdown: 'Approved rationale',
+              skillTag: null,
+              optionDistractorsJson: null,
+              reviewState: 'Published',
+              latestReviewNote: null,
+              evidenceSentence: 'Source evidence sentence',
+            },
+          ],
+        },
+      ],
+    });
     mockGetReadingStructureAdminPreview.mockResolvedValue({
       paper: {
         id: 'paper-1',
@@ -170,5 +207,20 @@ describe('Admin Reading preview', () => {
     // Part C section C1 (internal display orders 1..8) renders public Q7..Q14.
     expect(within(consolePanel).getByText('Part C C1 - Q7')).toBeInTheDocument();
     expect(within(consolePanel).queryByText('Part C C1 - Q1')).not.toBeInTheDocument();
+  });
+
+  it('provides a separate protected marking preview with the answer key and rationale', async () => {
+    const user = userEvent.setup();
+    render(<AdminReadingPreviewPage />);
+
+    await screen.findByRole('heading', { name: 'Reading Sample Paper' });
+    await user.click(screen.getByRole('button', { name: /marking preview/i }));
+
+    expect(screen.getByRole('region', { name: 'Part A marking preview' })).toBeInTheDocument();
+    expect(screen.getByText('Correct answer: approved answer')).toBeInTheDocument();
+    expect(screen.getByText('Accepted variants: approved variant')).toBeInTheDocument();
+    expect(screen.getByText('Rationale: Approved rationale')).toBeInTheDocument();
+    expect(screen.getByText('Evidence: Source evidence sentence')).toBeInTheDocument();
+    expect(screen.queryByText('SECRET-OPTION')).not.toBeInTheDocument();
   });
 });
