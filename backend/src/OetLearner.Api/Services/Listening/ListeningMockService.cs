@@ -9,6 +9,32 @@ using OetLearner.Api.Services.Assessment;
 
 namespace OetLearner.Api.Services.Listening;
 
+internal sealed record ListeningMockOptionSnapshot(
+    string Id,
+    string OptionKey,
+    int DisplayOrder,
+    string Text,
+    bool IsCorrect,
+    int Version,
+    ListeningDistractorCategory? DistractorCategory,
+    string? WhyWrongMarkdown);
+
+internal sealed record ListeningMockQuestionSnapshot(
+    int Version,
+    int QuestionNumber,
+    int Points,
+    ListeningQuestionType QuestionType,
+    string CorrectAnswerJson,
+    string? AcceptedSynonymsJson,
+    bool CaseSensitive,
+    string? SubSkillTagsCsv,
+    string? Accent,
+    string? ExplanationMarkdown,
+    string? TranscriptEvidenceText,
+    int? TranscriptEvidenceStartMs,
+    int? TranscriptEvidenceEndMs,
+    IReadOnlyList<ListeningMockOptionSnapshot> Options);
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Listening Module Pathway — Phase 5 Mock Test Service
 //
@@ -200,6 +226,27 @@ public sealed class ListeningMockService : IListeningMockService
                 $"Mock template '{template.Title}' has no questions.");
         }
 
+        if (questionIds.Count != MockTotalQuestions
+            || questionIds.Distinct(StringComparer.Ordinal).Count() != MockTotalQuestions
+            || questionIds.Any(string.IsNullOrWhiteSpace))
+        {
+            throw ApiException.Conflict(
+                "listening_mock_structure_invalid",
+                "A Listening mock must contain exactly 42 distinct questions.");
+        }
+
+        var authoredQuestions = await _db.ListeningQuestions
+            .AsNoTracking()
+            .Include(q => q.Part)
+            .Include(q => q.Options)
+            .Where(q => questionIds.Contains(q.Id))
+            .ToListAsync(ct);
+        ValidateMockQuestionSet(authoredQuestions, questionIds, template.Title);
+        var questionSnapshots = authoredQuestions.ToDictionary(
+            q => q.Id,
+            BuildQuestionSnapshot,
+            StringComparer.Ordinal);
+
         // ── 3. Resolve audio extract ids for the session metadata ───────
         // Mirrors ListeningLearnerPathwayService.StartDiagnosticAsync so the
         // audio scoping query can still locate extracts during review.
@@ -263,6 +310,7 @@ public sealed class ListeningMockService : IListeningMockService
                 canPause = audioTransport.CanPause,
                 canScrub = audioTransport.CanScrub,
                 onePlayOnly = audioTransport.OnePlayOnly,
+                questionSnapshots,
             }),
         };
         _db.ListeningPracticeSessions.Add(session);
@@ -326,7 +374,7 @@ public sealed class ListeningMockService : IListeningMockService
             .AsNoTracking()
             .Where(q => questionIds.Contains(q.Id))
             .ToListAsync(ct);
-        var questionsById = questions.ToDictionary(q => q.Id, StringComparer.Ordinal);
+        var questionsById = BuildSnapshotQuestions(questions, metadata.QuestionSnapshots);
 
         // ── 3. Grade each attempt then roll up ───────────────────────────
         foreach (var attempt in attempts)
@@ -402,12 +450,12 @@ public sealed class ListeningMockService : IListeningMockService
             .AsNoTracking()
             .Where(q => questionIds.Contains(q.Id))
             .ToListAsync(ct);
-        var questionsById = questions.ToDictionary(q => q.Id, StringComparer.Ordinal);
+        var metadata = ReadSessionMetadata(session);
+        var questionsById = BuildSnapshotQuestions(questions, metadata.QuestionSnapshots);
 
         // Persisted attempts already carry IsCorrect flags from the submit
         // path, so we only roll up the session-level buckets here.
         var grading = await _grading.GradeSessionAsync(attempts, questionsById, ct);
-        var metadata = ReadSessionMetadata(session);
         var timedOut = GetSessionDeadlineAt(session, metadata) is { } deadlineAt
             && session.CompletedAt is { } completedAt
             && completedAt >= deadlineAt;
@@ -578,6 +626,165 @@ public sealed class ListeningMockService : IListeningMockService
         }
     }
 
+    private static void ValidateMockQuestionSet(
+        IReadOnlyList<ListeningQuestion> questions,
+        IReadOnlyList<string> questionIds,
+        string templateTitle)
+    {
+        if (questions.Count != MockTotalQuestions
+            || questions.Select(q => q.Id).Distinct(StringComparer.Ordinal).Count() != MockTotalQuestions)
+        {
+            throw ApiException.Conflict(
+                "listening_mock_structure_invalid",
+                $"Published Listening mock '{templateTitle}' references missing or duplicate questions.");
+        }
+
+        var questionNumbers = questions
+            .Select(q => q.QuestionNumber)
+            .OrderBy(number => number)
+            .ToArray();
+        if (!Enumerable.Range(1, MockTotalQuestions).SequenceEqual(questionNumbers))
+        {
+            throw ApiException.Conflict(
+                "listening_mock_structure_invalid",
+                "Listening mock questions must cover question numbers 1 through 42 exactly once.");
+        }
+
+        var partA = questions.Where(IsPartA).ToArray();
+        var partBC = questions.Where(q => !IsPartA(q)).ToArray();
+        var partB = questions.Where(IsPartB).ToArray();
+        var partC = questions.Where(IsPartC).ToArray();
+        if (partA.Length != 24 || partB.Length != 6 || partC.Length != 12
+            || partBC.Length != 18
+            || questionIds.Count != questions.Count)
+        {
+            throw ApiException.Conflict(
+                "listening_mock_structure_invalid",
+                "Listening mock structure must contain Part A 24, Part B 6, and Part C 12 questions.");
+        }
+
+        foreach (var question in questions)
+        {
+            var canonical = TryReadString(question.CorrectAnswerJson)?.Trim();
+            if (question.Points != 1 || string.IsNullOrWhiteSpace(canonical))
+            {
+                throw ApiException.Conflict(
+                    "listening_mock_structure_invalid",
+                    "Every Listening mock question must be one mark and have a canonical answer.");
+            }
+
+            if (IsPartA(question))
+            {
+                if (question.QuestionType is not (ListeningQuestionType.ShortAnswer or ListeningQuestionType.FillInBlank))
+                {
+                    throw ApiException.Conflict(
+                        "listening_mock_structure_invalid",
+                        "Listening Part A mock questions must be typed responses.");
+                }
+
+                continue;
+            }
+
+            var options = question.Options
+                .OrderBy(option => option.DisplayOrder)
+                .ToArray();
+            if (question.QuestionType != ListeningQuestionType.MultipleChoice3
+                || options.Length != 3
+                || options.Any(option => string.IsNullOrWhiteSpace(option.OptionKey))
+                || options.Select(option => option.OptionKey.Trim().ToUpperInvariant()).Distinct(StringComparer.Ordinal).Count() != 3
+                || options.Count(option => option.IsCorrect) != 1
+                || options.Count(option => string.Equals(
+                    option.OptionKey.Trim(),
+                    canonical,
+                    StringComparison.OrdinalIgnoreCase)) != 1)
+            {
+                throw ApiException.Conflict(
+                    "listening_mock_structure_invalid",
+                    "Listening Part B/C mock questions must have exactly three unique options and one correct key.");
+            }
+        }
+    }
+
+    private static bool IsPartA(ListeningQuestion question) =>
+        question.Part?.PartCode is ListeningPartCode.A1 or ListeningPartCode.A2;
+
+    private static bool IsPartB(ListeningQuestion question) =>
+        question.Part?.PartCode is ListeningPartCode.B1
+            or ListeningPartCode.B2
+            or ListeningPartCode.B3
+            or ListeningPartCode.B4
+            or ListeningPartCode.B5
+            or ListeningPartCode.B6;
+
+    private static bool IsPartC(ListeningQuestion question) =>
+        question.Part?.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2;
+
+    private static ListeningMockQuestionSnapshot BuildQuestionSnapshot(ListeningQuestion question)
+        => new(
+            question.Version,
+            question.QuestionNumber,
+            question.Points,
+            question.QuestionType,
+            question.CorrectAnswerJson,
+            question.AcceptedSynonymsJson,
+            question.CaseSensitive,
+            question.SubSkillTagsCsv,
+            question.Accent,
+            question.ExplanationMarkdown,
+            question.TranscriptEvidenceText,
+            question.TranscriptEvidenceStartMs,
+            question.TranscriptEvidenceEndMs,
+            question.Options
+                .OrderBy(option => option.DisplayOrder)
+                .Select(option => new ListeningMockOptionSnapshot(
+                    option.Id,
+                    option.OptionKey,
+                    option.DisplayOrder,
+                    option.Text,
+                    option.IsCorrect,
+                    option.Version,
+                    option.DistractorCategory,
+                    option.WhyWrongMarkdown))
+                .ToArray());
+
+    private static Dictionary<string, ListeningQuestion> BuildSnapshotQuestions(
+        IReadOnlyList<ListeningQuestion> currentQuestions,
+        IReadOnlyDictionary<string, ListeningMockQuestionSnapshot>? snapshots)
+    {
+        if (snapshots is null)
+        {
+            throw ApiException.Conflict(
+                "listening_mock_snapshot_missing",
+                "This Listening mock has no immutable question snapshot and cannot be graded.");
+        }
+
+        var result = new Dictionary<string, ListeningQuestion>(StringComparer.Ordinal);
+        foreach (var current in currentQuestions)
+        {
+            if (!snapshots.TryGetValue(current.Id, out var snapshot))
+            {
+                throw ApiException.Conflict(
+                    "listening_mock_snapshot_missing",
+                    "A Listening mock question snapshot is incomplete; grading is held for review.");
+            }
+
+            result[current.Id] = new ListeningQuestion
+            {
+                Id = current.Id,
+                QuestionNumber = snapshot.QuestionNumber,
+                Points = snapshot.Points,
+                QuestionType = snapshot.QuestionType,
+                CorrectAnswerJson = snapshot.CorrectAnswerJson,
+                AcceptedSynonymsJson = snapshot.AcceptedSynonymsJson,
+                CaseSensitive = snapshot.CaseSensitive,
+                SubSkillTagsCsv = snapshot.SubSkillTagsCsv,
+                Accent = snapshot.Accent,
+            };
+        }
+
+        return result;
+    }
+
     private static DateTimeOffset? GetSessionDeadlineAt(
         ListeningPracticeSession session,
         MockSessionMetadata metadata)
@@ -596,7 +803,8 @@ public sealed class ListeningMockService : IListeningMockService
         string? ScoreConversionTableVersionKey = null,
         string? MarkingPolicyVersionId = null,
         string? MarkingPolicyVersionKey = null,
-        AssessmentMarkingPolicyDocument? MarkingPolicy = null);
+        AssessmentMarkingPolicyDocument? MarkingPolicy = null,
+        IReadOnlyDictionary<string, ListeningMockQuestionSnapshot>? QuestionSnapshots = null);
 
     /// <summary>Recompute the learner's readiness score on
     /// LearnerListeningProfile based on the latest skill + accent state. This
@@ -687,6 +895,19 @@ public sealed class ListeningMockService : IListeningMockService
         catch (JsonException)
         {
             return 0;
+        }
+    }
+
+    private static string? TryReadString(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<string>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

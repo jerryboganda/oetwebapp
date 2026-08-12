@@ -205,6 +205,12 @@ an owner-controlled value that must not be invented in code.
   or explicitly authored variants; near-spelling classification is diagnostic
   only and remains zero-credit. Focused policy tests were added; backend
   execution and deployed mock verification remain pending.
+- Legacy Listening mock start now fails closed unless the published template
+  resolves to exactly 42 distinct questions with canonical Part A 24 / Part B 6
+  / Part C 12 coverage, one-mark items, and valid three-option MCQs. It stores
+  immutable question, key, option, rationale, transcript-evidence, and version
+  snapshots and grades against them instead of mutable live rows. Focused
+  execution and deployed mock verification remain pending.
 - Reading now has a source-level scoring-path audit matching the Listening
   audit: Reading services must not reference the legacy raw-to-scaled helper
   and the governed grader must use `IAssessmentScoreConversionService`.
