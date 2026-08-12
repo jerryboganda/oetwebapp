@@ -2192,6 +2192,36 @@ public class ReadingAuthoringTests
         Assert.False(json.RootElement.GetProperty("showExplanations").GetBoolean());
     }
 
+    [Fact]
+    public async Task Resume_endpoint_preserves_persisted_timing_anchors()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "resume-timing-anchor-paper";
+        const string userId = "resume-timing-anchor-user";
+
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+        var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
+        var started = await attemptSvc.StartInModeAsync(userId, paperId, ReadingAttemptMode.Learning, null, default);
+        var persistedStartedAt = new DateTimeOffset(2026, 8, 1, 9, 0, 0, TimeSpan.Zero);
+        var persistedDeadlineAt = persistedStartedAt.AddHours(4);
+        var attempt = await db.ReadingAttempts.SingleAsync(row => row.Id == started.AttemptId);
+        attempt.StartedAt = persistedStartedAt;
+        attempt.DeadlineAt = persistedDeadlineAt;
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        using var response = await client.GetAsync($"/v1/reading-papers/attempts/{started.AttemptId}");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(persistedStartedAt, json.RootElement.GetProperty("startedAt").GetDateTimeOffset());
+        Assert.Equal(persistedDeadlineAt, json.RootElement.GetProperty("deadlineAt").GetDateTimeOffset());
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Attempt lifecycle
     // ════════════════════════════════════════════════════════════════════
