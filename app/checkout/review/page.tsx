@@ -414,6 +414,7 @@ function CheckoutReviewContent() {
                   setPayRegion(r);
                 }}
                 egyptHref={egyptHref}
+                manualPaymentHref={manualPaymentHref}
                 disabled={!quote}
               >
                 {!quote ? (

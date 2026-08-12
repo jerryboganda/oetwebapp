@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Globe2, Landmark, MapPin, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronDown, Globe2, Landmark, MapPin, ShieldCheck, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CopyField } from './copy-field';
 
@@ -71,7 +72,12 @@ const BANKS: Bank[] = [
 
 type Scope = 'insideUk' | 'international';
 
-export function UkBankTransfer() {
+interface UkBankTransferProps {
+  /** Pre-filled link to /billing/manual-payment where the learner uploads the transfer receipt. */
+  uploadHref?: string;
+}
+
+export function UkBankTransfer({ uploadHref }: UkBankTransferProps) {
   const [open, setOpen] = useState(false);
   const [bankId, setBankId] = useState<string>(BANKS[0]!.id);
   const [scope, setScope] = useState<Scope>('insideUk');
@@ -146,9 +152,19 @@ export function UkBankTransfer() {
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <span>
               Use your <strong className="font-semibold text-navy">full name + course</strong> as the transfer reference,
-              then email your receipt to activate access.
+              then upload your receipt so we can verify it and activate access.
             </span>
           </p>
+
+          {uploadHref ? (
+            <Link
+              href={uploadHref}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-primary/90"
+            >
+              <Upload className="h-4 w-4" />
+              I&apos;ve transferred — upload my receipt
+            </Link>
+          ) : null}
         </div>
       ) : null}
     </div>

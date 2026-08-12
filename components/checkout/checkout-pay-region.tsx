@@ -11,12 +11,21 @@ interface CheckoutPayRegionProps {
   value: PayRegion;
   onChange: (value: PayRegion) => void;
   egyptHref: string;
+  /** Pre-filled link to /billing/manual-payment for uploading an offline transfer receipt. */
+  manualPaymentHref?: string;
   disabled?: boolean;
   /** The card / PayPal flow rendered inside the "Pay globally" route. */
   children: React.ReactNode;
 }
 
-export function CheckoutPayRegion({ value, onChange, egyptHref, disabled, children }: CheckoutPayRegionProps) {
+export function CheckoutPayRegion({
+  value,
+  onChange,
+  egyptHref,
+  manualPaymentHref,
+  disabled,
+  children,
+}: CheckoutPayRegionProps) {
   return (
     <div>
       {/* Two prominent, mutually-exclusive payment routes */}
@@ -42,7 +51,7 @@ export function CheckoutPayRegion({ value, onChange, egyptHref, disabled, childr
           <div className="space-y-4">
             {children}
             <Divider label="Or pay by bank transfer" />
-            <UkBankTransfer />
+            <UkBankTransfer uploadHref={manualPaymentHref} />
           </div>
         ) : (
           <EgyptPaymentMethods egyptHref={egyptHref} disabled={disabled} />
