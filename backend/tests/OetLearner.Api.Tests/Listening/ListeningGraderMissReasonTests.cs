@@ -119,11 +119,11 @@ public class ListeningGraderMissReasonTests
     }
 
     [Fact]
-    public void StringsMatch_trim_collapse_default_normalisation()
+    public void StringsMatch_explicit_trim_collapse_normalisation()
     {
         Assert.True(ListeningGradingService.StringsMatch(
             "  the   aspirin   ", "the aspirin", caseSensitive: false,
-            normalisation: ListeningGradingService.DefaultNormalisation));
+            normalisation: "trim_collapse"));
     }
 
     // ─────────────────────────────────────────────────────────────────────

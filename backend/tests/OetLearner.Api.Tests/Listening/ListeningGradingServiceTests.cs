@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Tests.Listening;
@@ -639,6 +641,11 @@ public class ListeningGradingServiceTests
             RawScore = submitted ? 1 : null,
             ScaledScore = null,
             MaxRawScore = 2,
+            PolicySnapshotJson = JsonSerializer.Serialize(new
+            {
+                markingPolicy = new AssessmentMarkingPolicyDocument(
+                    CollapseInternalWhitespace: true),
+            }),
             LastQuestionVersionMapJson = "{\"q-override-wrong\":1,\"q-override-correct\":1}",
         };
 
