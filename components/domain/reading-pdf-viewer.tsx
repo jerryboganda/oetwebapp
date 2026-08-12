@@ -93,6 +93,8 @@ export function ReadingPdfViewer({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -108,6 +110,16 @@ export function ReadingPdfViewer({
     [annotations, asset],
   );
   const documentLabel = partCode.length > 1 ? 'Section' : 'Part';
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const updateWidth = () => setViewportWidth(viewport.clientWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
 
   // Reading media is served by the authenticated /v1/media/{id}/content endpoint
   // (Bearer token, behind the same-origin /api/backend proxy). pdf.js cannot
@@ -216,7 +228,10 @@ export function ReadingPdfViewer({
         // zoom; the CSS size stays logical so the %-based annotation overlay layer
         // and getBoundingClientRect() pointer math are unaffected.
         const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
-        const viewport = page.getViewport({ scale: (zoom / 100) * dpr });
+        const availableWidth = viewportWidth > 0 ? Math.max(0, viewportWidth - 32) : 0;
+        const baseScale = availableWidth > 0 ? Math.min(1, availableWidth / info.width) : 1;
+        const fitScale = (zoom / 100) * baseScale;
+        const viewport = page.getViewport({ scale: fitScale * dpr });
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
         canvas.width = Math.floor(viewport.width);
@@ -228,7 +243,7 @@ export function ReadingPdfViewer({
     }
     void renderPages();
     return () => { cancelled = true; };
-  }, [asset, assetKind, pages, zoom]);
+  }, [asset, assetKind, pages, viewportWidth, zoom]);
 
   const pushCreate = useCallback(async (pageNumber: number, kind: ReadingPaperAnnotationKind, geometryJson: unknown) => {
     if (!asset || readOnly || !onCreateAnnotation) return;
@@ -333,10 +348,13 @@ export function ReadingPdfViewer({
       </div>
       {error ? <p className="p-4 text-sm text-danger">{error}</p> : null}
       {loading ? <p className="p-4 text-sm text-muted">Loading document…</p> : null}
-      <div className="max-h-[72vh] space-y-4 overflow-auto bg-background-light p-4">
+      <div ref={viewportRef} className="max-h-[72vh] space-y-4 overflow-auto bg-background-light p-4">
         {pages.map((page) => {
-          const width = page.width * (zoom / 100);
-          const height = page.height * (zoom / 100);
+          const availableWidth = viewportWidth > 0 ? Math.max(0, viewportWidth - 32) : 0;
+          const baseScale = availableWidth > 0 ? Math.min(1, availableWidth / page.width) : 1;
+          const fitScale = (zoom / 100) * baseScale;
+          const width = page.width * fitScale;
+          const height = page.height * fitScale;
           const pageAnnotations = assetAnnotations.filter((annotation) => annotation.pageNumber === page.pageNumber);
           return (
             <div
